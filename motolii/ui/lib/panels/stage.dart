@@ -11,21 +11,45 @@ import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 
+/// One tab per view: `Stage` looks through the observer, `Camera` through the
+/// document camera. The tab that is showing tells native which one to draw.
 class StagePanel extends StatefulWidget {
-  const StagePanel({super.key, required this.controller});
+  const StagePanel({super.key, required this.controller, this.view = 'User'});
   final EditorSession controller;
+  final String view;
   @override
   State<StagePanel> createState() => _StagePanelState();
 }
 
 class _StagePanelState extends State<StagePanel> {
   EditorSession get c => widget.controller;
-  Map<String, dynamic> get _state => c.renderedIsFresh
-      ? {...c.state, ...c.rendered.value, 'layers': c.liveLayers()}
-      : c.state;
 
-  List<Map<String, dynamic>> get _layers =>
-      EditorSession.maps(_state['layers']);
+  /// The document with the rendered frame laid over it: one copy per
+  /// (document, frame). Every conversion and hit test on the Stage reads it,
+  /// so a hover or a scrub frame must not pay for the overlay again.
+  Map<String, dynamic>? _stateCache, _stateFrom, _renderedFrom;
+  Map<String, dynamic> get _state {
+    if (!c.renderedIsFresh) return c.state;
+    final state = c.state, rendered = c.rendered.value;
+    if (!identical(state, _stateFrom) || !identical(rendered, _renderedFrom)) {
+      _stateFrom = state;
+      _renderedFrom = rendered;
+      _stateCache = {...state, ...rendered, 'layers': c.liveLayers()};
+    }
+    return _stateCache!;
+  }
+
+  List<Map<String, dynamic>>? _layersCache;
+  Map<String, dynamic>? _layersFrom;
+  List<Map<String, dynamic>> get _layers {
+    final state = _state;
+    if (!identical(state, _layersFrom)) {
+      _layersFrom = state;
+      _layersCache = EditorSession.maps(state['layers']);
+    }
+    return _layersCache!;
+  }
+
   Map<String, dynamic>? get _active {
     for (final layer in _layers) {
       if (c.selectedIds.isNotEmpty && layer['id'] == c.selectedIds.last)
@@ -41,7 +65,51 @@ class _StagePanelState extends State<StagePanel> {
     HardwareKeyboard.instance.addHandler(_heldKey);
   }
 
+  /// The dock keeps every tab built. A tab that comes into view takes its own
+  /// texture; the Stage tab also places its window, and withdraws it when hidden
+  /// so native draws only the pictures somebody is looking at.
+  bool _shown = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shown = Visibility.of(context);
+    if (shown == _shown) return;
+    _shown = shown;
+    if (shown) {
+      c.attachView(widget.view);
+    } else if (_userStage) {
+      _sentWindow = null;
+      if (c.supports('stageWindow'))
+        c.command('stageWindow', {'width': 0, 'height': 0});
+    }
+  }
+
+  /// What the Stage tab asks native to draw: its own pixel size and the part of
+  /// the composition image its zoom and pan put on screen. Sent only on change.
+  Map<String, dynamic>? _sentWindow;
+  void _syncWindow() {
+    if (!_userStage || !_shown || !mounted || !c.supports('stageWindow'))
+      return;
+    if (_viewport.isEmpty) return;
+    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
+    final origin = _origin, scale = _scale;
+    final window = {
+      'width': (_viewport.width * ratio).round(),
+      'height': (_viewport.height * ratio).round(),
+      'roi': [
+        -origin.dx / scale,
+        -origin.dy / scale,
+        _viewport.width / scale,
+        _viewport.height / scale,
+      ],
+    };
+    if (sameValue(window, _sentWindow)) return;
+    _sentWindow = window;
+    c.command('stageWindow', window);
+  }
+
   void _viewCommand() {
+    if (!Visibility.of(context)) return;
     final action = c.viewCommand.value;
     switch (action) {
       case 'Fit':
@@ -55,18 +123,10 @@ class _StagePanelState extends State<StagePanel> {
         _zoomAt(_scale * 1.2, _viewport.center(Offset.zero));
       case 'Out':
         _zoomAt(_scale / 1.2, _viewport.center(Offset.zero));
-      case '3D':
-      case 'Output':
-        if (c.supports('stageView')) {
-          c.command('stageView', {'mode': action});
-        } else {
-          c.error.value =
-              '${action} view is not available in this comparison yet';
-        }
     }
   }
 
-  bool get _userStage => c.state['stageView'] == 'User';
+  bool get _userStage => widget.view == 'User';
   bool _orbiting = false, _orbitSending = false;
   List<double>? _orbitPending;
   List<double> _orbitAngles = [-15, 30];
@@ -92,7 +152,7 @@ class _StagePanelState extends State<StagePanel> {
   Object? _meshRaw;
   _SpatialMesh? _meshParsed;
   _SpatialMesh? get _mesh {
-    final raw = _state['spatialGizmo'];
+    final raw = _state[_userStage ? 'stageSpatialGizmo' : 'spatialGizmo'];
     if (!identical(raw, _meshRaw)) {
       _meshRaw = raw;
       _meshParsed = _SpatialMesh.parse(raw);
@@ -217,8 +277,12 @@ class _StagePanelState extends State<StagePanel> {
   Offset? _point(dynamic p) => p is List && p.length >= 2
       ? _toScreen(Offset(_num(p[0]), _num(p[1])))
       : null;
+
+  /// The box on the look plane: four corners, always. The eye is drawn only
+  /// when it lies in front of the observer.
   List<Offset> _cameraPoints(Map<String, dynamic> camera) =>
       (camera['points'] as List).map((p) => _point(p)!).toList();
+  Offset? _cameraEye(Map<String, dynamic> camera) => _point(camera['eye']);
 
   /// 箱で author できるのは、正面を向いて注視点が自前のカメラだけ。回した物と層を見ている物は eye と frustum を見せるだけ。
   Map<String, dynamic>? get _selectedCamera {
@@ -233,7 +297,7 @@ class _StagePanelState extends State<StagePanel> {
 
   /// Boxcam: 正面で見る時、カメラは comp 面に置いた箱。辺で掴んで Center、角で Zoom、上の取っ手で Roll。
   Map<String, Offset> _cameraHandles(Map<String, dynamic> camera) {
-    final box = _cameraPoints(camera).sublist(1);
+    final box = _cameraPoints(camera);
     final centre = box.reduce((a, b) => a + b) / 4;
     final top = (box[0] + box[1]) / 2;
     final up = top - centre;
@@ -253,7 +317,7 @@ class _StagePanelState extends State<StagePanel> {
   }
 
   bool _onCameraEdge(Map<String, dynamic> camera, Offset p) {
-    final box = _cameraPoints(camera).sublist(1);
+    final box = _cameraPoints(camera);
     for (var i = 0; i < 4; i++) {
       if (_segmentDistance(p, box[i], box[(i + 1) % 4]) < 6) return true;
     }
@@ -308,7 +372,7 @@ class _StagePanelState extends State<StagePanel> {
   void _moveCamera(Offset screen) {
     if (_extentDrag != null) return _moveExtent(screen);
     final camera = _cameraDrag!;
-    final centre = _cameraPoints(camera).sublist(1).reduce((a, b) => a + b) / 4;
+    final centre = _cameraPoints(camera).reduce((a, b) => a + b) / 4;
     final start = _startScreen!;
     final edits = <Map<String, dynamic>>[];
     switch (_cameraHandle) {
@@ -417,7 +481,10 @@ class _StagePanelState extends State<StagePanel> {
       HardwareKeyboard.instance.isControlPressed;
   List<Offset> _rawCorners(Map<String, dynamic> layer) {
     final values =
-        EditorSession.map(layer['bounds'])['corners'] ?? layer['corners'];
+        EditorSession.map(
+          layer[_userStage ? 'stageBounds' : 'bounds'],
+        )['corners'] ??
+        layer['corners'];
     if (values is! List) return [];
     final points = <Offset>[];
     for (final v in values) {
@@ -506,6 +573,7 @@ class _StagePanelState extends State<StagePanel> {
 
   Map<String, dynamic> _gesture(String phase, Offset point) => {
     'phase': phase,
+    'view': widget.view,
     'mode': _mode,
     'ids': _ids,
     'start': [_startComp!.dx, _startComp!.dy],
@@ -749,6 +817,7 @@ class _StagePanelState extends State<StagePanel> {
   void _sendHover(Offset? point) {
     _hoverPending = {
       'phase': 'hover',
+      'view': widget.view,
       'point': point == null ? null : [point.dx, point.dy],
       'viewScale': _scale,
       'held': _held,
@@ -853,6 +922,8 @@ class _StagePanelState extends State<StagePanel> {
       _drained.whenComplete(() => c.command('stageGesture', args));
     }
     c.viewCommand.removeListener(_viewCommand);
+    if (_userStage && _sentWindow != null && c.supports('stageWindow'))
+      c.command('stageWindow', {'width': 0, 'height': 0});
     _focus.dispose();
     super.dispose();
   }
@@ -879,8 +950,8 @@ class _StagePanelState extends State<StagePanel> {
     'height',
     'observer',
     'spatialGizmo',
+    'stageSpatialGizmo',
     'cameraGizmos',
-    'stageView',
     'pickedColor',
     'capabilities',
     'contentRevision',
@@ -891,7 +962,6 @@ class _StagePanelState extends State<StagePanel> {
   /// so a moved layer, and every frame drawn while it moves, leaves the bars
   /// standing instead of re-measuring their intrinsic widths.
   DocumentSlice get _chrome => c.slice('stage:chrome', const [
-    'stageView',
     'observer',
     'width',
     'height',
@@ -899,305 +969,345 @@ class _StagePanelState extends State<StagePanel> {
   ]);
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      AnimatedBuilder(
-        animation: _chrome,
-        builder: (context, _) => EditorBar(
-          decoration: const BoxDecoration(
-            color: EditorTheme.panel,
-            border: Border(bottom: BorderSide(color: EditorTheme.line)),
-          ),
+  Widget build(BuildContext context) => !Visibility.of(context)
+      ? const SizedBox.shrink()
+      : Column(
           children: [
-            const SizedBox(width: EditorMetrics.s8),
-            _button(
-              _userStage ? '● User Stage' : 'User Stage',
-              () => c.command('stageView', {'mode': 'User'}),
-            ),
-            _button(
-              !_userStage ? '● Camera View' : 'Camera View',
-              () => c.command('stageView', {'mode': 'Camera'}),
-            ),
-            if (_userStage)
-              _button(
-                'Front',
-                _home ? null : () => c.command('stageView', {'reset': true}),
+            AnimatedBuilder(
+              animation: _chrome,
+              builder: (context, _) => EditorBar(
+                decoration: const BoxDecoration(
+                  color: EditorTheme.panel,
+                  border: Border(bottom: BorderSide(color: EditorTheme.line)),
+                ),
+                children: [
+                  const SizedBox(width: EditorMetrics.s8),
+                  if (_userStage)
+                    _button(
+                      'Front',
+                      _home
+                          ? null
+                          : () => c.command('stageView', {'reset': true}),
+                    ),
+                  const Spacer(),
+                  _button('Fit', _fit),
+                  _button(
+                    '100%',
+                    () => setState(() {
+                      _zoom = 1;
+                      _pan = Offset.zero;
+                    }),
+                  ),
+                  _button(
+                    '−',
+                    () => _zoomAt(
+                      ((_scale * 100).round() - 1) / 100,
+                      _viewport.center(Offset.zero),
+                    ),
+                  ),
+                  EditorPercentField(
+                    value: _scale * 100,
+                    min: 2,
+                    max: 1600,
+                    label: 'Stage zoom',
+                    onChanged: (v) =>
+                        _zoomAt(v / 100, _viewport.center(Offset.zero)),
+                  ),
+                  _button(
+                    '+',
+                    () => _zoomAt(
+                      ((_scale * 100).round() + 1) / 100,
+                      _viewport.center(Offset.zero),
+                    ),
+                  ),
+                ],
               ),
-            const Spacer(),
-            _button('Fit', _fit),
-            _button(
-              '100%',
-              () => setState(() {
-                _zoom = 1;
-                _pan = Offset.zero;
-              }),
             ),
-            _button(
-              '−',
-              () => _zoomAt(
-                ((_scale * 100).round() - 1) / 100,
-                _viewport.center(Offset.zero),
-              ),
-            ),
-            EditorPercentField(
-              value: _scale * 100,
-              min: 2,
-              max: 1600,
-              label: 'Stage zoom',
-              onChanged: (v) => _zoomAt(v / 100, _viewport.center(Offset.zero)),
-            ),
-            _button(
-              '+',
-              () => _zoomAt(
-                ((_scale * 100).round() + 1) / 100,
-                _viewport.center(Offset.zero),
-              ),
-            ),
-          ],
-        ),
-      ),
-      Expanded(
-        child: AnimatedBuilder(
-          animation: Listenable.merge([
-            _slice,
-            c.rendered,
-            c.textureId,
-            c.playing,
-            c.anchorPreview,
-          ]),
-          builder: (context, _) => LayoutBuilder(
-            builder: (context, box) {
-              final resized = _viewport != box.biggest;
-              _viewport = box.biggest;
-              if (!_initialFrameRequested || resized) {
-                final needsFrame = !_initialFrameRequested;
-                _initialFrameRequested = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  setState(() {});
-                  if (needsFrame) c.refreshPreview();
-                });
-              }
-              final origin = _origin;
-              final scale = _scale;
-              final gizmos = !c.playing.value;
-              final outlines = <List<Offset>>[];
-              Offset? anchorPreview;
-              for (final layer in _visible.where(
-                (l) => gizmos && c.selectedIds.contains(l['id']),
-              )) {
-                final points = _corners(layer);
-                if (points.isNotEmpty)
-                  outlines.add(points.map(_toScreen).toList());
-                // Where a hovered anchor would sit: bilinear in the corners.
-                final f = c.anchorPreview.value;
-                if (f != null && points.length >= 4 && anchorPreview == null) {
-                  final u = f[0], v = f[1];
-                  final top = points[0] + (points[1] - points[0]) * u;
-                  final bottom = points[3] + (points[2] - points[3]) * u;
-                  anchorPreview = _toScreen(top + (bottom - top) * v);
-                }
-              }
-              return Focus(
-                focusNode: _focus,
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.escape &&
-                      (_pointer != null || _dragging)) {
-                    _finish(true);
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: _down,
-                  onPointerMove: _move,
-                  onPointerUp: _up,
-                  onPointerHover: _hover,
-                  onPointerCancel: (_) => _finish(true),
-                  onPointerSignal: (event) {
-                    if (event is PointerScrollEvent) {
-                      GestureBinding.instance.pointerSignalResolver.register(
-                        event,
-                        (signal) {
-                          final scroll = signal as PointerScrollEvent;
-                          _zoomAt(
-                            _scale * math.exp(-scroll.scrollDelta.dy * .0015),
-                            scroll.localPosition,
-                          );
-                        },
-                      );
+            Expanded(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([
+                  _slice,
+                  c.rendered,
+                  c.textureIds,
+                  c.playing,
+                  c.anchorPreview,
+                ]),
+                builder: (context, _) => LayoutBuilder(
+                  builder: (context, box) {
+                    final resized = _viewport != box.biggest;
+                    _viewport = box.biggest;
+                    if (!_initialFrameRequested || resized) {
+                      final needsFrame = !_initialFrameRequested;
+                      _initialFrameRequested = true;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() {});
+                        if (needsFrame) c.refreshPreview();
+                      });
                     }
-                  },
-                  child: ClipRect(
-                    child: ColoredBox(
-                      color: EditorTheme.app,
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            left: origin.dx,
-                            top: origin.dy,
-                            width: _width * scale,
-                            height: _height * scale,
-                            // 地が無い枠は市松で見せる。枠そのものの見え方なので、
-                            // 描いた絵の有無に関わらず枠いっぱいに敷く(書き出しには乗らない)。
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                if (_transparentGround)
-                                  const CustomPaint(painter: CheckerPainter()),
-                                ValueListenableBuilder<int?>(
-                                  valueListenable: c.textureId,
-                                  builder: (context, id, _) => id == null
-                                      ? const Center(
-                                          child: Text(
-                                            'No rendered texture',
-                                            style: TextStyle(
-                                              fontSize: EditorMetrics.font,
-                                              color: EditorTheme.muted,
-                                            ),
-                                          ),
-                                        )
-                                      : Texture(
-                                          textureId: id,
-                                          filterQuality: FilterQuality.low,
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _syncWindow(),
+                    );
+                    final origin = _origin;
+                    final scale = _scale;
+                    // The Stage is drawn at the tab's own size, the frame
+                    // inside it; the Camera is the output picture itself.
+                    final picture = _userStage
+                        ? Offset.zero & _viewport
+                        : Rect.fromLTWH(
+                            origin.dx,
+                            origin.dy,
+                            _width * scale,
+                            _height * scale,
+                          );
+                    final gizmos = !c.playing.value;
+                    final outlines = <List<Offset>>[];
+                    Offset? anchorPreview;
+                    for (final layer in _visible.where(
+                      (l) => gizmos && c.selectedIds.contains(l['id']),
+                    )) {
+                      final points = _corners(layer);
+                      if (points.isNotEmpty)
+                        outlines.add(points.map(_toScreen).toList());
+                      // Where a hovered anchor would sit: bilinear in the corners.
+                      final f = c.anchorPreview.value;
+                      if (f != null &&
+                          points.length >= 4 &&
+                          anchorPreview == null) {
+                        final u = f[0], v = f[1];
+                        final top = points[0] + (points[1] - points[0]) * u;
+                        final bottom = points[3] + (points[2] - points[3]) * u;
+                        anchorPreview = _toScreen(top + (bottom - top) * v);
+                      }
+                    }
+                    return Focus(
+                      focusNode: _focus,
+                      onKeyEvent: (_, event) {
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.escape &&
+                            (_pointer != null || _dragging)) {
+                          _finish(true);
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: Listener(
+                        behavior: HitTestBehavior.opaque,
+                        onPointerDown: _down,
+                        onPointerMove: _move,
+                        onPointerUp: _up,
+                        onPointerHover: _hover,
+                        onPointerCancel: (_) => _finish(true),
+                        onPointerSignal: (event) {
+                          if (event is PointerScrollEvent) {
+                            GestureBinding.instance.pointerSignalResolver
+                                .register(event, (signal) {
+                                  final scroll = signal as PointerScrollEvent;
+                                  _zoomAt(
+                                    _scale *
+                                        math.exp(
+                                          -scroll.scrollDelta.dy * .0015,
                                         ),
+                                    scroll.localPosition,
+                                  );
+                                });
+                          }
+                        },
+                        child: ClipRect(
+                          child: ColoredBox(
+                            color: EditorTheme.app,
+                            child: Stack(
+                              children: [
+                                // 地が無い枠は市松で見せる。枠そのものの見え方なので、
+                                // 描いた絵の有無に関わらず枠いっぱいに敷く(書き出しには乗らない)。
+                                if (_transparentGround)
+                                  Positioned.fromRect(
+                                    rect: Rect.fromLTWH(
+                                      origin.dx,
+                                      origin.dy,
+                                      _width * scale,
+                                      _height * scale,
+                                    ),
+                                    child: const CustomPaint(
+                                      painter: CheckerPainter(),
+                                    ),
+                                  ),
+                                Positioned.fromRect(
+                                  rect: picture,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ValueListenableBuilder<Map<String, int>>(
+                                        valueListenable: c.textureIds,
+                                        builder: (context, ids, _) =>
+                                            switch (ids[widget.view]) {
+                                              null => const Center(
+                                                child: Text(
+                                                  'No rendered texture',
+                                                  style: TextStyle(
+                                                    fontSize:
+                                                        EditorMetrics.font,
+                                                    color: EditorTheme.muted,
+                                                  ),
+                                                ),
+                                              ),
+                                              final id => Texture(
+                                                textureId: id,
+                                                filterQuality:
+                                                    FilterQuality.low,
+                                              ),
+                                            },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: CustomPaint(
+                                      painter: _StageOverlay(
+                                        dimOutside: _userStage,
+                                        anchorPreview: anchorPreview,
+                                        cameras: gizmos
+                                            ? _cameras
+                                                  .map(_cameraPoints)
+                                                  .toList()
+                                            : const [],
+                                        cameraEyes: gizmos
+                                            ? _cameras.map(_cameraEye).toList()
+                                            : const [],
+                                        cameraTargets: [
+                                          if (gizmos)
+                                            for (final camera in _cameras)
+                                              ?_point(camera['target']),
+                                        ],
+                                        cameraHandles:
+                                            gizmos &&
+                                                _front &&
+                                                _selectedCamera != null
+                                            ? _cameraHandles(_selectedCamera!)
+                                            : const {},
+                                        front: _front,
+                                        extent: _extentPoints(),
+                                        extendable: _front && _extend,
+                                        observerTarget: _front
+                                            ? null
+                                            : _point(_observer['target']),
+                                        outlines: _outlinesCopy(outlines),
+                                        handles: gizmos ? _handles() : const {},
+                                        spatialMesh: gizmos && _spatialActive
+                                            ? _screenMesh()
+                                            : null,
+                                        marquee: _marquee == null
+                                            ? null
+                                            : Rect.fromPoints(
+                                                _toScreen(_marquee!.topLeft),
+                                                _toScreen(
+                                                  _marquee!.bottomRight,
+                                                ),
+                                              ),
+                                        frame: [
+                                          for (final p
+                                              in (_observer['frame']
+                                                      as List?) ??
+                                                  [])
+                                            ?_point(p),
+                                        ],
+                                        viewport: Rect.fromLTWH(
+                                          origin.dx,
+                                          origin.dy,
+                                          _width * scale,
+                                          _height * scale,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: CustomPaint(
-                                painter: _StageOverlay(
-                                  anchorPreview: anchorPreview,
-                                  cameras: gizmos
-                                      ? _cameras.map(_cameraPoints).toList()
-                                      : const [],
-                                  cameraTargets: [
-                                    if (gizmos)
-                                      for (final camera in _cameras)
-                                        ?_point(camera['target']),
-                                  ],
-                                  cameraHandles:
-                                      gizmos &&
-                                          _front &&
-                                          _selectedCamera != null
-                                      ? _cameraHandles(_selectedCamera!)
-                                      : const {},
-                                  front: _front,
-                                  extent: _extentPoints(),
-                                  extendable: _front && _extend,
-                                  observerTarget: _front
-                                      ? null
-                                      : _point(_observer['target']),
-                                  outlines: _outlinesCopy(outlines),
-                                  handles: gizmos ? _handles() : const {},
-                                  spatialMesh: gizmos && _spatialActive
-                                      ? _screenMesh()
-                                      : null,
-                                  marquee: _marquee == null
-                                      ? null
-                                      : Rect.fromPoints(
-                                          _toScreen(_marquee!.topLeft),
-                                          _toScreen(_marquee!.bottomRight),
-                                        ),
-                                  frame: [
-                                    for (final p
-                                        in (_observer['frame'] as List?) ?? [])
-                                      ?_point(p),
-                                  ],
-                                  viewport: Rect.fromLTWH(
-                                    origin.dx,
-                                    origin.dy,
-                                    _width * scale,
-                                    _height * scale,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _chrome,
+              builder: (context, _) => EditorBar(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EditorMetrics.s8,
+                ),
+                children: [
+                  Text(
+                    '${_width.toInt()} × ${_height.toInt()}',
+                    style: const TextStyle(
+                      fontSize: EditorMetrics.dense,
+                      color: EditorTheme.muted,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: EditorMetrics.s8),
+                    child: EditorSwitch(
+                      key: const ValueKey('stage:transparentGround'),
+                      on: _transparentGround,
+                      compact: true,
+                      glyph: Icons.grid_on,
+                      label: _transparentGround
+                          ? 'The frame has no ground; the export carries alpha'
+                          : 'Drop the ground so the export carries alpha',
+                      onChanged: c.supports('composition')
+                          ? (_) => _toggleGround()
+                          : null,
+                    ),
+                  ),
+                  if (_userStage)
+                    Padding(
+                      padding: const EdgeInsets.only(left: EditorMetrics.s8),
+                      child: ValueListenableBuilder<Map<String, dynamic>>(
+                        valueListenable: c.deskWork,
+                        builder: (context, _, _) => _button(
+                          _extend ? '● Extend' : 'Extend',
+                          _toggleExtend,
+                        ),
+                      ),
+                    ),
+                  const Spacer(),
+                  ValueListenableBuilder<int>(
+                    valueListenable: c.frame,
+                    builder: (context, frame, _) => Text(
+                      'Frame $frame',
+                      style: const TextStyle(
+                        fontSize: EditorMetrics.dense,
+                        color: EditorTheme.muted,
                       ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-      AnimatedBuilder(
-        animation: _chrome,
-        builder: (context, _) => EditorBar(
-          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-          children: [
-            Text(
-              '${_width.toInt()} × ${_height.toInt()}',
-              style: const TextStyle(
-                fontSize: EditorMetrics.dense,
-                color: EditorTheme.muted,
+                  if (!c.supports('stageGesture'))
+                    const Padding(
+                      padding: EdgeInsets.only(left: EditorMetrics.s8),
+                      child: Text(
+                        'Transform gestures unavailable',
+                        style: TextStyle(
+                          fontSize: EditorMetrics.dense,
+                          color: EditorTheme.muted,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: EditorMetrics.s8),
-              child: EditorSwitch(
-                key: const ValueKey('stage:transparentGround'),
-                on: _transparentGround,
-                compact: true,
-                glyph: Icons.grid_on,
-                label: _transparentGround
-                    ? 'The frame has no ground; the export carries alpha'
-                    : 'Drop the ground so the export carries alpha',
-                onChanged: c.supports('composition')
-                    ? (_) => _toggleGround()
-                    : null,
-              ),
-            ),
-            if (_userStage)
-              Padding(
-                padding: const EdgeInsets.only(left: EditorMetrics.s8),
-                child: ValueListenableBuilder<Map<String, dynamic>>(
-                  valueListenable: c.deskWork,
-                  builder: (context, _, _) =>
-                      _button(_extend ? '● Extend' : 'Extend', _toggleExtend),
-                ),
-              ),
-            const Spacer(),
-            ValueListenableBuilder<int>(
-              valueListenable: c.frame,
-              builder: (context, frame, _) => Text(
-                'Frame $frame',
-                style: const TextStyle(
-                  fontSize: EditorMetrics.dense,
-                  color: EditorTheme.muted,
-                ),
-              ),
-            ),
-            if (!c.supports('stageGesture'))
-              const Padding(
-                padding: EdgeInsets.only(left: EditorMetrics.s8),
-                child: Text(
-                  'Transform gestures unavailable',
-                  style: TextStyle(
-                    fontSize: EditorMetrics.dense,
-                    color: EditorTheme.muted,
-                  ),
-                ),
-              ),
           ],
-        ),
-      ),
-    ],
-  );
+        );
   List<List<Offset>> _outlinesCopy(List<List<Offset>> p) =>
       p.map((v) => List<Offset>.of(v)).toList();
 }
 
 class _StageOverlay extends CustomPainter {
   const _StageOverlay({
+    this.dimOutside = false,
     this.cameras = const [],
+    this.cameraEyes = const [],
     this.cameraTargets = const [],
     this.cameraHandles = const {},
     this.front = true,
@@ -1213,8 +1323,13 @@ class _StageOverlay extends CustomPainter {
     this.marquee,
   });
   final List<List<Offset>> outlines, cameras;
+  final List<Offset?> cameraEyes;
   final List<Offset> cameraTargets, frame, extent;
   final bool extendable;
+
+  /// The Stage keeps the world around the frame visible and greys it: the
+  /// frame is a reference, not a crop (Boxcam).
+  final bool dimOutside;
   final Map<String, Offset> handles, cameraHandles;
   final bool front;
   final Offset? observerTarget;
@@ -1237,11 +1352,19 @@ class _StageOverlay extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..color = EditorTheme.line
       ..strokeWidth = 1;
-    if (frame.length == 4) {
-      canvas.drawPath(Path()..addPolygon(frame, true), framePaint);
-    } else {
-      canvas.drawRect(viewport, framePaint);
+    final framePath = frame.length == 4
+        ? (Path()..addPolygon(frame, true))
+        : (Path()..addRect(viewport));
+    if (dimOutside) {
+      canvas.drawPath(
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Offset.zero & size)
+          ..addPath(framePath, Offset.zero),
+        Paint()..color = EditorTheme.app.withValues(alpha: .55),
+      );
     }
+    canvas.drawPath(framePath, framePaint);
     final line = Paint()
       ..style = PaintingStyle.stroke
       ..color = EditorTheme.accent
@@ -1284,17 +1407,18 @@ class _StageOverlay extends CustomPainter {
         canvas.drawRect(rect, cameraLine);
       }
     }
-    for (final points in cameras) {
-      if (points.length != 5) continue;
-      canvas.drawPath(Path()..addPolygon(points.sublist(1), true), cameraLine);
-      if (front) continue;
-      for (var i = 1; i < 5; i++) {
-        canvas.drawLine(points[0], points[i], cameraLine);
+    for (final (index, box) in cameras.indexed) {
+      if (box.length != 4) continue;
+      canvas.drawPath(Path()..addPolygon(box, true), cameraLine);
+      final eye = index < cameraEyes.length ? cameraEyes[index] : null;
+      if (front || eye == null) continue;
+      for (final corner in box) {
+        canvas.drawLine(eye, corner, cameraLine);
       }
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromCenter(
-            center: points[0],
+            center: eye,
             width: EditorMetrics.s16,
             height: EditorMetrics.s12,
           ),
@@ -1303,18 +1427,18 @@ class _StageOverlay extends CustomPainter {
         cameraLine,
       );
       canvas.drawLine(
-        points[0] + const Offset(8, -4),
-        points[0] + const Offset(13, -7),
+        eye + const Offset(8, -4),
+        eye + const Offset(13, -7),
         cameraLine,
       );
       canvas.drawLine(
-        points[0] + const Offset(13, -7),
-        points[0] + const Offset(13, 7),
+        eye + const Offset(13, -7),
+        eye + const Offset(13, 7),
         cameraLine,
       );
       canvas.drawLine(
-        points[0] + const Offset(13, 7),
-        points[0] + const Offset(8, 4),
+        eye + const Offset(13, 7),
+        eye + const Offset(8, 4),
         cameraLine,
       );
     }
@@ -1356,12 +1480,14 @@ class _StageOverlay extends CustomPainter {
   @override
   bool shouldRepaint(covariant _StageOverlay old) =>
       old.cameras.toString() != cameras.toString() ||
+      old.cameraEyes.toString() != cameraEyes.toString() ||
       old.cameraTargets.toString() != cameraTargets.toString() ||
       old.cameraHandles.toString() != cameraHandles.toString() ||
       old.front != front ||
       old.extent.toString() != extent.toString() ||
       old.extendable != extendable ||
       old.observerTarget != observerTarget ||
+      old.dimOutside != dimOutside ||
       old.frame.toString() != frame.toString() ||
       old.viewport != viewport ||
       old.marquee != marquee ||

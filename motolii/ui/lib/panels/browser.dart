@@ -8,6 +8,8 @@ import 'dart:ui'
     as ui
     show Vertices, VertexMode, instantiateImageCodec, ImageByteFormat;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -34,6 +36,8 @@ class BrowserPanel extends StatefulWidget {
   State<BrowserPanel> createState() => _BrowserPanelState();
 }
 
+final _dataUriCache = <String, Uint8List>{};
+
 class _BrowserPanelState extends State<BrowserPanel> {
   static const tabs = ['Create', 'Media', 'Effects', 'Colors', 'Files'];
   String tab = 'Create';
@@ -49,6 +53,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
   List<List<double>> stops = [];
   final scroll = ScrollController();
   List<Map<String, dynamic>> visible = [];
+
+  /// The current tab's selection as a signal: [selected] is the store, this
+  /// is what a tile and the count watch, so a pick redraws only them.
+  final picked = ValueNotifier<Set<String>>(const {});
+  late final DocumentSlice _slice;
   int columns = 1;
 
   /// One tile's width at the shelf's current size. The grid already knows it,
@@ -102,6 +111,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
     }
     folder = path;
     selected['Files']?.clear();
+    _publish();
     _reload();
   }
 
@@ -122,13 +132,18 @@ class _BrowserPanelState extends State<BrowserPanel> {
     if (parent != folder) _go(parent);
   }
 
+  void _reload() {
+    if (!_read()) return;
+    setState(_derive);
+  }
+
   /// Read the folder: folders first, then files the shelf can take, by name.
   /// Hidden entries and everything else stay out of sight. The read is
   /// synchronous: a folder of a few hundred entries lists in a millisecond,
   /// and the answer is on screen in the same frame as the press.
-  void _reload() {
+  bool _read() {
     final path = folder;
-    if (path == null) return;
+    if (path == null) return false;
     final allowed = (widget.controller.state['importExtensions'] as List? ?? [])
         .map((e) => '$e'.toLowerCase())
         .toSet();
@@ -164,15 +179,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
     } catch (e) {
       error = 'Cannot read this folder';
     }
-    if (!mounted) return;
     int byName(Map<String, dynamic> a, Map<String, dynamic> b) =>
         '${a['name']}'.toLowerCase().compareTo('${b['name']}'.toLowerCase());
     folders.sort(byName);
     files.sort(byName);
-    setState(() {
-      listing = [...folders, ...files];
-      listingError = error;
-    });
+    listing = [...folders, ...files];
+    listingError = error;
+    return true;
   }
 
   /// A rough MIME from the extension, enough to colour the badge and pick
@@ -238,11 +251,82 @@ class _BrowserPanelState extends State<BrowserPanel> {
     tab = widget.fixedTab ?? 'Create';
     widget.controller.importedAssets.addListener(_revealImported);
     widget.controller.deskWork.addListener(_redraw);
+    _slice = widget.controller.slice(
+      'browser',
+      const [
+        'assets',
+        'backgrounds',
+        'primitives',
+        'catalog',
+        'palette',
+        'colorTarget',
+        'importExtensions',
+        'capabilities',
+      ],
+      // The shelf reads the selection twice only: the colour it would edit,
+      // and whether there is anything to apply to. Naming those instead of
+      // the selection keeps the shelves still while layers are picked.
+      derived: () => [
+        _colorTarget(widget.controller),
+        widget.controller.selectedIds.isEmpty,
+        // The fill being edited: its kind, stops and direction redraw the
+        // editor at the top of the Colors panel.
+        _targetFill(widget.controller, _colorTarget(widget.controller)),
+        _targetLayer(
+          widget.controller,
+          _colorTarget(widget.controller),
+        )?['name'],
+      ],
+    );
+    _slice.addListener(_onDocument);
+    _enter();
   }
 
-  void _redraw() {
-    if (mounted) setState(() {});
+  void _onDocument() {
+    if (mounted) setState(_derive);
   }
+
+  /// Saved swatches are the one thing the desk feeds the list.
+  void _redraw() {
+    if (mounted) setState(() => tab == 'Colors' ? _derive() : null);
+  }
+
+  /// Files opens on a folder; every tab opens on its own list and selection.
+  void _enter() {
+    if (tab == 'Files' && folder == null) {
+      folder = widget.initialFolder ?? _home;
+      _read();
+    }
+    _derive();
+    _publish();
+  }
+
+  /// The rail entry in force: a place for Files, a category elsewhere.
+  String get _chosen => tab == 'Files'
+      ? (_places.entries
+                .where((e) => e.value == folder)
+                .map((e) => e.key)
+                .firstOrNull ??
+            '')
+      : (classifications[tab] ?? 'All');
+
+  /// The list as the shelf shows it, held rather than computed on draw: a
+  /// pick or a hover redraws its tile and nothing here.
+  void _derive() {
+    final all = items(widget.controller.state);
+    final chosen = _chosen;
+    final query = search.text.trim().toLowerCase();
+    total = all.length;
+    visible = all.where((item) {
+      final label = '${item['name'] ?? item['hex'] ?? item['id']}'
+          .toLowerCase();
+      return label.contains(query) &&
+          (tab == 'Files' || chosen == 'All' || classification(item) == chosen);
+    }).toList();
+  }
+
+  void _publish() =>
+      picked.value = Set.unmodifiable(selected[tab] ?? const <String>{});
 
   /// 取り込んだ物は Media に居る。開いて、絞り込みを外して、選んでおく。
   void _revealImported() {
@@ -257,6 +341,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
       classifications['Media'] = 'All';
       selected['Media'] = ids.toSet();
       active['Media'] = ids.first;
+      _derive();
+      _publish();
     });
   }
 
@@ -264,6 +350,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
   void dispose() {
     widget.controller.importedAssets.removeListener(_revealImported);
     widget.controller.deskWork.removeListener(_redraw);
+    _slice.removeListener(_onDocument);
+    picked.dispose();
     search.dispose();
     searchFocus.dispose();
     panelFocus.dispose();
@@ -276,6 +364,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
       queries[tab] = search.text;
       tab = value;
       search.text = queries[value] ?? '';
+      _enter();
     });
   }
 
@@ -442,28 +531,27 @@ class _BrowserPanelState extends State<BrowserPanel> {
     final key = id(item);
     final multi = tab == 'Media' || tab == 'Effects';
     final modifiers = HardwareKeyboard.instance;
-    setState(() {
-      final chosen = selected.putIfAbsent(tab, () => <String>{});
-      if (multi && modifiers.isShiftPressed && active[tab] != null) {
-        final from = visible.indexWhere((e) => id(e) == active[tab]);
-        final to = visible.indexWhere((e) => id(e) == key);
-        if (from >= 0 && to >= 0) {
-          if (!modifiers.isMetaPressed && !modifiers.isControlPressed)
-            chosen.clear();
-          chosen.addAll(
-            visible.sublist(math.min(from, to), math.max(from, to) + 1).map(id),
-          );
-        }
-      } else if (multi &&
-          (modifiers.isMetaPressed || modifiers.isControlPressed)) {
-        chosen.contains(key) ? chosen.remove(key) : chosen.add(key);
-      } else {
-        chosen
-          ..clear()
-          ..add(key);
+    final chosen = selected.putIfAbsent(tab, () => <String>{});
+    if (multi && modifiers.isShiftPressed && active[tab] != null) {
+      final from = visible.indexWhere((e) => id(e) == active[tab]);
+      final to = visible.indexWhere((e) => id(e) == key);
+      if (from >= 0 && to >= 0) {
+        if (!modifiers.isMetaPressed && !modifiers.isControlPressed)
+          chosen.clear();
+        chosen.addAll(
+          visible.sublist(math.min(from, to), math.max(from, to) + 1).map(id),
+        );
       }
-      active[tab] = key;
-    });
+    } else if (multi &&
+        (modifiers.isMetaPressed || modifiers.isControlPressed)) {
+      chosen.contains(key) ? chosen.remove(key) : chosen.add(key);
+    } else {
+      chosen
+        ..clear()
+        ..add(key);
+    }
+    active[tab] = key;
+    _publish();
   }
 
   Future<void> apply(Map<String, dynamic> item) async {
@@ -531,20 +619,21 @@ class _BrowserPanelState extends State<BrowserPanel> {
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.escape) {
-      setState(() {
-        if (search.text.isNotEmpty) {
-          search.clear();
-        } else {
-          selected[tab]?.clear();
-          active.remove(tab);
-        }
-      });
+      if (search.text.isNotEmpty) {
+        search.clear();
+        setState(_derive);
+      } else {
+        selected[tab]?.clear();
+        active.remove(tab);
+        _publish();
+      }
       return KeyEventResult.handled;
     }
     if (primary &&
         k == LogicalKeyboardKey.keyA &&
         (tab == 'Media' || tab == 'Effects')) {
-      setState(() => selected[tab] = visible.map(id).toSet());
+      selected[tab] = visible.map(id).toSet();
+      _publish();
       return KeyEventResult.handled;
     }
     if (visible.isEmpty) return KeyEventResult.ignored;
@@ -575,452 +664,396 @@ class _BrowserPanelState extends State<BrowserPanel> {
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) => ValueListenableBuilder<Map<String, dynamic>>(
-    valueListenable: widget.controller.slice(
-      'browser',
-      const [
-        'assets',
-        'backgrounds',
-        'primitives',
-        'catalog',
-        'palette',
-        'colorTarget',
-        'importExtensions',
-        'capabilities',
+  Widget build(BuildContext context) {
+    final rails = switch (tab) {
+      'Create' => ['All', 'Text', 'Shapes', 'Paths', '3D', 'Helpers'],
+      'Media' => ['All', 'Video', 'Images', 'HDR', 'Audio', '3D'],
+      'Effects' => [
+        'All',
+        'Blur',
+        'Light',
+        'Color',
+        'Stylize',
+        'Distort',
+        '3D',
+        'Path',
+        'Place',
+        'Other',
       ],
-      // The shelf reads the selection twice only: the colour it would edit,
-      // and whether there is anything to apply to. Naming those instead of
-      // the selection keeps the shelves still while layers are picked.
-      derived: () => [
-        _colorTarget(widget.controller),
-        widget.controller.selectedIds.isEmpty,
-        // The fill being edited: its kind, stops and direction redraw the
-        // editor at the top of the Colors panel.
-        _targetFill(widget.controller, _colorTarget(widget.controller)),
-        _targetLayer(
-          widget.controller,
-          _colorTarget(widget.controller),
-        )?['name'],
-      ],
-    ),
-    builder: (context, state, _) {
-      final all = items(state);
-      final rails = switch (tab) {
-        'Create' => ['All', 'Text', 'Shapes', 'Paths', '3D', 'Helpers'],
-        'Media' => ['All', 'Video', 'Images', 'HDR', 'Audio', '3D'],
-        'Effects' => [
-          'All',
-          'Blur',
-          'Light',
-          'Color',
-          'Stylize',
-          'Distort',
-          '3D',
-          'Path',
-          'Place',
-          'Other',
-        ],
-        'Files' => _places.keys.toList(),
-        _ => ['All', 'Saved', 'Used here', 'Starter'],
-      };
-      if (tab == 'Files' && folder == null) {
-        folder = widget.initialFolder ?? _home;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
-      }
-      final chosen = tab == 'Files'
-          ? (_places.entries
-                    .where((e) => e.value == folder)
-                    .map((e) => e.key)
-                    .firstOrNull ??
-                '')
-          : (classifications[tab] ?? 'All');
-      total = all.length;
-      visible = all.where((item) {
-        final label = '${item['name'] ?? item['hex'] ?? item['id']}'
-            .toLowerCase();
-        return label.contains(search.text.trim().toLowerCase()) &&
-            (tab == 'Files' ||
-                chosen == 'All' ||
-                classification(item) == chosen);
-      }).toList();
-      final target = _colorTarget(widget.controller);
-      return Focus(
-        focusNode: panelFocus,
-        onKeyEvent: key,
-        child: ColoredBox(
-          color: EditorTheme.panel,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Column(
-                children: [
-                  if (widget.showTabs)
-                    SizedBox(
-                      height: EditorMetrics.section,
-                      child: Row(
-                        children: [
-                          for (final value in tabs)
-                            Expanded(
-                              child: _smallButton(
-                                value,
-                                () => changeTab(value),
-                                selected: value == tab,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  Container(
-                    height: EditorMetrics.tall,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _inset,
-                      vertical: EditorMetrics.s4,
-                    ),
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: EditorTheme.line),
-                      ),
-                    ),
+      'Files' => _places.keys.toList(),
+      _ => ['All', 'Saved', 'Used here', 'Starter'],
+    };
+    final chosen = _chosen;
+    final target = _colorTarget(widget.controller);
+    return Focus(
+      focusNode: panelFocus,
+      onKeyEvent: key,
+      child: ColoredBox(
+        color: EditorTheme.panel,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Column(
+              children: [
+                if (widget.showTabs)
+                  SizedBox(
+                    height: EditorMetrics.section,
                     child: Row(
                       children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: EditorTheme.app,
-                              border: Border.all(
-                                color: searchFocus.hasFocus
-                                    ? EditorTheme.border
-                                    : EditorTheme.line,
-                              ),
-                            ),
-                            child: TextField(
-                              controller: search,
-                              focusNode: searchFocus,
-                              style: const TextStyle(
-                                fontSize: EditorMetrics.font,
-                                color: EditorTheme.ink,
-                              ),
-                              decoration: InputDecoration(
-                                isDense: true,
-                                prefixIcon: const Icon(
-                                  Icons.search,
-                                  size: EditorMetrics.s14,
-                                  color: EditorTheme.muted,
-                                ),
-                                prefixIconConstraints: const BoxConstraints(
-                                  minWidth: EditorMetrics.control,
-                                  minHeight: EditorMetrics.row,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: EditorMetrics.s4,
-                                  vertical: EditorMetrics.s4,
-                                ),
-                                hintText: 'Search $tab',
-                                hintStyle: const TextStyle(
-                                  fontSize: EditorMetrics.font,
-                                  color: EditorTheme.muted,
-                                ),
-                                border: InputBorder.none,
-                              ),
-                              onChanged: (_) => setState(() {}),
+                        for (final value in tabs)
+                          Expanded(
+                            child: _smallButton(
+                              value,
+                              () => changeTab(value),
+                              selected: value == tab,
                             ),
                           ),
-                        ),
-                        if (tab == 'Media') ...[
-                          const SizedBox(width: EditorMetrics.s6),
-                          _action(
-                            'Import',
-                            has('import')
-                                ? widget.controller.importFiles
-                                : null,
-                          ),
-                        ],
-                        if (tab != 'Colors') ...[
-                          const SizedBox(width: EditorMetrics.s6),
-                          _views(),
-                        ],
-                        if (tab == 'Colors') ...[
-                          const SizedBox(width: EditorMetrics.s6),
-                          _action('From image', _paletteFromFile),
-                        ],
                       ],
                     ),
                   ),
-                  if (tab == 'Files') _pathRow(),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (rail >= railMin)
-                          Container(
-                            width: rail,
-                            clipBehavior: Clip.hardEdge,
-                            decoration: const BoxDecoration(),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    _inset,
-                                    EditorMetrics.s8,
-                                    EditorMetrics.s4,
-                                    EditorMetrics.s4,
+                Container(
+                  height: EditorMetrics.tall,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: _inset,
+                    vertical: EditorMetrics.s4,
+                  ),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: EditorTheme.line)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: EditorTheme.app,
+                            border: Border.all(
+                              color: searchFocus.hasFocus
+                                  ? EditorTheme.border
+                                  : EditorTheme.line,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: search,
+                            focusNode: searchFocus,
+                            style: const TextStyle(
+                              fontSize: EditorMetrics.font,
+                              color: EditorTheme.ink,
+                            ),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                size: EditorMetrics.s14,
+                                color: EditorTheme.muted,
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: EditorMetrics.control,
+                                minHeight: EditorMetrics.row,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: EditorMetrics.s4,
+                                vertical: EditorMetrics.s4,
+                              ),
+                              hintText: 'Search $tab',
+                              hintStyle: const TextStyle(
+                                fontSize: EditorMetrics.font,
+                                color: EditorTheme.muted,
+                              ),
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (_) => setState(_derive),
+                          ),
+                        ),
+                      ),
+                      if (tab == 'Media') ...[
+                        const SizedBox(width: EditorMetrics.s6),
+                        _action(
+                          'Import',
+                          has('import') ? widget.controller.importFiles : null,
+                        ),
+                      ],
+                      if (tab != 'Colors') ...[
+                        const SizedBox(width: EditorMetrics.s6),
+                        _views(),
+                      ],
+                      if (tab == 'Colors') ...[
+                        const SizedBox(width: EditorMetrics.s6),
+                        _action('From image', _paletteFromFile),
+                      ],
+                    ],
+                  ),
+                ),
+                if (tab == 'Files') _pathRow(),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (rail >= railMin)
+                        Container(
+                          width: rail,
+                          clipBehavior: Clip.hardEdge,
+                          decoration: const BoxDecoration(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  _inset,
+                                  EditorMetrics.s8,
+                                  EditorMetrics.s4,
+                                  EditorMetrics.s4,
+                                ),
+                                child: Text(
+                                  tab.toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                  style: const TextStyle(
+                                    fontSize: EditorMetrics.micro,
+                                    letterSpacing: 1,
+                                    color: EditorTheme.muted,
                                   ),
-                                  child: Text(
-                                    tab.toUpperCase(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.clip,
-                                    style: const TextStyle(
-                                      fontSize: EditorMetrics.micro,
-                                      letterSpacing: 1,
+                                ),
+                              ),
+                              for (final rail in rails)
+                                _smallButton(rail, () {
+                                  if (tab == 'Files') {
+                                    _go(_places[rail]!);
+                                  } else {
+                                    setState(() {
+                                      classifications[tab] = rail;
+                                      _derive();
+                                    });
+                                  }
+                                }, selected: chosen == rail),
+                            ],
+                          ),
+                        ),
+                      if (rail < railMin)
+                        EditorTooltip(
+                          message: 'Show ${tab.toLowerCase()} categories',
+                          child: InkWell(
+                            key: const ValueKey('browser:rail-tab'),
+                            onTap: () => widget.controller.storeDesk(
+                              'browserRail',
+                              EditorMetrics.s96,
+                            ),
+                            child: SizedBox(
+                              width: EditorMetrics.row,
+                              child: Column(
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(
+                                      top: EditorMetrics.s4,
+                                    ),
+                                    child: Icon(
+                                      Icons.chevron_right,
+                                      size: EditorMetrics.s14,
                                       color: EditorTheme.muted,
                                     ),
                                   ),
-                                ),
-                                for (final rail in rails)
-                                  _smallButton(rail, () {
-                                    if (tab == 'Files') {
-                                      _go(_places[rail]!);
-                                    } else {
-                                      setState(
-                                        () => classifications[tab] = rail,
-                                      );
-                                    }
-                                  }, selected: chosen == rail),
-                              ],
-                            ),
-                          ),
-                        if (rail < railMin)
-                          EditorTooltip(
-                            message: 'Show ${tab.toLowerCase()} categories',
-                            child: InkWell(
-                              key: const ValueKey('browser:rail-tab'),
-                              onTap: () => widget.controller.storeDesk(
-                                'browserRail',
-                                EditorMetrics.s96,
-                              ),
-                              child: SizedBox(
-                                width: EditorMetrics.row,
-                                child: Column(
-                                  children: [
-                                    const Padding(
-                                      padding: EdgeInsets.only(
-                                        top: EditorMetrics.s4,
-                                      ),
-                                      child: Icon(
-                                        Icons.chevron_right,
-                                        size: EditorMetrics.s14,
-                                        color: EditorTheme.muted,
+                                  RotatedBox(
+                                    quarterTurns: 1,
+                                    child: Text(
+                                      chosen == 'All' ? tab : chosen,
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        fontSize: EditorMetrics.micro,
+                                        color: EditorTheme.accent,
                                       ),
                                     ),
-                                    RotatedBox(
-                                      quarterTurns: 1,
-                                      child: Text(
-                                        chosen == 'All' ? tab : chosen,
-                                        maxLines: 1,
-                                        style: const TextStyle(
-                                          fontSize: EditorMetrics.micro,
-                                          color: EditorTheme.accent,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        _grip(
-                          key: const ValueKey('browser:rail-grip'),
-                          onDrag: (dx) => setState(
-                            () => railDrag = (rail + dx).clamp(
-                              0.0,
-                              EditorMetrics.s200,
-                            ),
-                          ),
-                          onEnd: () {
-                            final width = rail < railMin ? 0.0 : rail;
-                            railDrag = null;
-                            widget.controller.storeDesk('browserRail', width);
-                          },
-                          onDoubleTap: () => widget.controller.storeDesk(
-                            'browserRail',
-                            rail >= railMin ? 0.0 : EditorMetrics.s96,
-                          ),
-                        ),
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              columns = math.max(
-                                1,
-                                (constraints.maxWidth /
-                                        (tab == 'Colors' ? tile * .6 : tile))
-                                    .floor(),
-                              );
-                              if (viewMode == 1 && tab != 'Colors') columns = 1;
-                              tileWidth =
-                                  (constraints.maxWidth -
-                                      _gutter * (columns - 1)) /
-                                  columns;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (tab == 'Colors') ...[
-                                    // What the wheel edits: the layer and its
-                                    // slot, in words. A shape's fill also gets
-                                    // its kind, stops and direction here, so
-                                    // the panel is the one place colour is made.
-                                    if (target != null)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: EditorMetrics.s6,
-                                          vertical: EditorMetrics.s3,
-                                        ),
-                                        child: Text(
-                                          _targetTitle(
-                                            widget.controller,
-                                            target,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: EditorMetrics.dense,
-                                            color: EditorTheme.ink,
-                                          ),
-                                        ),
-                                      ),
-                                    if (_targetFill(widget.controller, target)
-                                        case final fill?)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: EditorMetrics.s6,
-                                        ),
-                                        child: GradientInspector(
-                                          key: ValueKey(
-                                            'colors-fill:${target!['layer']}',
-                                          ),
-                                          controller: widget.controller,
-                                          layer: _targetLayer(
-                                            widget.controller,
-                                            target,
-                                          )!,
-                                          fill: fill,
-                                          inPanel: true,
-                                        ),
-                                      ),
-                                    _ColorPicker(
-                                      controller: widget.controller,
-                                      target: target,
-                                      enabled: has('setColor'),
-                                      size: wheelSize,
-                                      stops: stops,
-                                      onStops: (next) =>
-                                          setState(() => stops = next),
-                                    ),
-                                    _grip(
-                                      key: const ValueKey(
-                                        'browser:picker-grip',
-                                      ),
-                                      vertical: true,
-                                      onDrag: (d) => setState(
-                                        () => wheelDrag = wheelSize + d,
-                                      ),
-                                      onEnd: () {
-                                        final size = wheelSize;
-                                        wheelDrag = null;
-                                        widget.controller.storeDesk(
-                                          'browserWheel',
-                                          size,
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                  Expanded(
-                                    child: visible.isEmpty
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(
-                                              EditorMetrics.s8,
-                                            ),
-                                            child: Text(
-                                              'No matches',
-                                              style: TextStyle(
-                                                color: EditorTheme.muted,
-                                                fontSize: EditorMetrics.dense,
-                                              ),
-                                            ),
-                                          )
-                                        : ColoredBox(
-                                            color: tab == 'Colors'
-                                                ? EditorTheme.panel
-                                                : EditorTheme.line,
-                                            child: GridView.builder(
-                                              controller: scroll,
-                                              padding: EdgeInsets.all(
-                                                tab == 'Colors'
-                                                    ? EditorMetrics.s6
-                                                    : 0,
-                                              ),
-                                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                                crossAxisCount: columns,
-                                                mainAxisExtent: tab == 'Colors'
-                                                    ? tile * .55
-                                                    : viewMode == 1
-                                                    ? EditorMetrics.s48
-                                                    : (constraints.maxWidth -
-                                                                  _gutter *
-                                                                      (columns -
-                                                                          1)) /
-                                                              columns *
-                                                              9 /
-                                                              16 +
-                                                          (viewMode == 2
-                                                              ? 0
-                                                              : captionHeight),
-                                                crossAxisSpacing:
-                                                    tab == 'Colors'
-                                                    ? EditorMetrics.s4
-                                                    : _gutter,
-                                                mainAxisSpacing: tab == 'Colors'
-                                                    ? EditorMetrics.s4
-                                                    : _gutter,
-                                              ),
-                                              itemCount: visible.length,
-                                              itemBuilder: (context, index) =>
-                                                  tab == 'Colors'
-                                                  ? Align(
-                                                      alignment:
-                                                          Alignment.topLeft,
-                                                      child: SizedBox(
-                                                        width: double.infinity,
-                                                        height: tile * .55,
-                                                        child: card(
-                                                          visible[index],
-                                                        ),
-                                                      ),
-                                                    )
-                                                  : card(visible[index]),
-                                            ),
-                                          ),
                                   ),
-                                  _zoomBar(),
                                 ],
-                              );
-                            },
+                              ),
+                            ),
                           ),
                         ),
-                      ],
-                    ),
+                      _grip(
+                        key: const ValueKey('browser:rail-grip'),
+                        onDrag: (dx) => setState(
+                          () => railDrag = (rail + dx).clamp(
+                            0.0,
+                            EditorMetrics.s200,
+                          ),
+                        ),
+                        onEnd: () {
+                          final width = rail < railMin ? 0.0 : rail;
+                          railDrag = null;
+                          widget.controller.storeDesk('browserRail', width);
+                        },
+                        onDoubleTap: () => widget.controller.storeDesk(
+                          'browserRail',
+                          rail >= railMin ? 0.0 : EditorMetrics.s96,
+                        ),
+                      ),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            columns = math.max(
+                              1,
+                              (constraints.maxWidth /
+                                      (tab == 'Colors' ? tile * .6 : tile))
+                                  .floor(),
+                            );
+                            if (viewMode == 1 && tab != 'Colors') columns = 1;
+                            tileWidth =
+                                (constraints.maxWidth -
+                                    _gutter * (columns - 1)) /
+                                columns;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (tab == 'Colors') ...[
+                                  // What the wheel edits: the layer and its
+                                  // slot, in words. A shape's fill also gets
+                                  // its kind, stops and direction here, so
+                                  // the panel is the one place colour is made.
+                                  if (target != null)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: EditorMetrics.s6,
+                                        vertical: EditorMetrics.s3,
+                                      ),
+                                      child: Text(
+                                        _targetTitle(widget.controller, target),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: EditorMetrics.dense,
+                                          color: EditorTheme.ink,
+                                        ),
+                                      ),
+                                    ),
+                                  if (_targetFill(widget.controller, target)
+                                      case final fill?)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: EditorMetrics.s6,
+                                      ),
+                                      child: GradientInspector(
+                                        key: ValueKey(
+                                          'colors-fill:${target!['layer']}',
+                                        ),
+                                        controller: widget.controller,
+                                        layer: _targetLayer(
+                                          widget.controller,
+                                          target,
+                                        )!,
+                                        fill: fill,
+                                        inPanel: true,
+                                      ),
+                                    ),
+                                  _ColorPicker(
+                                    controller: widget.controller,
+                                    target: target,
+                                    enabled: has('setColor'),
+                                    size: wheelSize,
+                                    stops: stops,
+                                    onStops: (next) =>
+                                        setState(() => stops = next),
+                                  ),
+                                  _grip(
+                                    key: const ValueKey('browser:picker-grip'),
+                                    vertical: true,
+                                    onDrag: (d) => setState(
+                                      () => wheelDrag = wheelSize + d,
+                                    ),
+                                    onEnd: () {
+                                      final size = wheelSize;
+                                      wheelDrag = null;
+                                      widget.controller.storeDesk(
+                                        'browserWheel',
+                                        size,
+                                      );
+                                    },
+                                  ),
+                                ],
+                                Expanded(
+                                  child: visible.isEmpty
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(
+                                            EditorMetrics.s8,
+                                          ),
+                                          child: Text(
+                                            'No matches',
+                                            style: TextStyle(
+                                              color: EditorTheme.muted,
+                                              fontSize: EditorMetrics.dense,
+                                            ),
+                                          ),
+                                        )
+                                      : ColoredBox(
+                                          color: tab == 'Colors'
+                                              ? EditorTheme.panel
+                                              : EditorTheme.line,
+                                          child: GridView.builder(
+                                            controller: scroll,
+                                            padding: EdgeInsets.all(
+                                              tab == 'Colors'
+                                                  ? EditorMetrics.s6
+                                                  : 0,
+                                            ),
+                                            gridDelegate:
+                                                SliverGridDelegateWithFixedCrossAxisCount(
+                                                  crossAxisCount: columns,
+                                                  mainAxisExtent:
+                                                      tab == 'Colors'
+                                                      ? tile * .55
+                                                      : viewMode == 1
+                                                      ? EditorMetrics.s48
+                                                      : (constraints.maxWidth -
+                                                                    _gutter *
+                                                                        (columns -
+                                                                            1)) /
+                                                                columns *
+                                                                9 /
+                                                                16 +
+                                                            (viewMode == 2
+                                                                ? 0
+                                                                : captionHeight),
+                                                  crossAxisSpacing:
+                                                      tab == 'Colors'
+                                                      ? EditorMetrics.s4
+                                                      : _gutter,
+                                                  mainAxisSpacing:
+                                                      tab == 'Colors'
+                                                      ? EditorMetrics.s4
+                                                      : _gutter,
+                                                ),
+                                            itemCount: visible.length,
+                                            itemBuilder: (context, index) =>
+                                                tab == 'Colors'
+                                                ? Align(
+                                                    alignment:
+                                                        Alignment.topLeft,
+                                                    child: SizedBox(
+                                                      width: double.infinity,
+                                                      height: tile * .55,
+                                                      child: card(
+                                                        visible[index],
+                                                      ),
+                                                    ),
+                                                  )
+                                                : card(visible[index]),
+                                          ),
+                                        ),
+                                ),
+                                _zoomBar(),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              if (tab == 'Media') _dropHint(),
-            ],
-          ),
+                ),
+              ],
+            ),
+            if (tab == 'Media') _dropHint(),
+          ],
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 
   /// While files are carried over the window, the shelf says where they go.
   /// It fades in and out, and never takes the pointer.
@@ -1120,7 +1153,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
           'stops': [c],
         },
     ]);
-    if (mounted) setState(() => classifications['Colors'] = 'Saved');
+    if (mounted)
+      setState(() {
+        classifications['Colors'] = 'Saved';
+        _derive();
+      });
   }
 
   /// Tile size as a percentage of its default.
@@ -1152,17 +1189,20 @@ class _BrowserPanelState extends State<BrowserPanel> {
               ),
               child: Padding(
                 padding: const EdgeInsets.only(left: EditorMetrics.s8),
-                child: EditorTooltip(
-                  message: _countTip(),
-                  child: Text(
-                    compact ? '${visible.length}' : _countLabel(),
-                    key: const ValueKey('browser:count'),
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: EditorMetrics.dense,
-                      color: EditorTheme.muted,
+                child: ValueListenableBuilder<Set<String>>(
+                  valueListenable: picked,
+                  builder: (context, _, _) => EditorTooltip(
+                    message: _countTip(),
+                    child: Text(
+                      compact ? '${visible.length}' : _countLabel(),
+                      key: const ValueKey('browser:count'),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: EditorMetrics.dense,
+                        color: EditorTheme.muted,
+                      ),
                     ),
                   ),
                 ),
@@ -1405,7 +1445,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           enabled: false,
           child: Text(fact, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
-      const PopupMenuDivider(height: EditorMetrics.s8),
+      const EditorMenuDivider(),
       EditorMenuItem<String>(
         value: 'apply',
         child: Text(
@@ -1575,10 +1615,14 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   /// The pointer on any part of the card is the card's hover: the name
   /// slides, and a picture-only card shows its band.
-  Widget card(Map<String, dynamic> item) =>
-      _Hover(builder: (hovered) => _card(item, hovered));
+  Widget card(Map<String, dynamic> item) => _Picked(
+    of: picked,
+    id: id(item),
+    builder: (isSelected) =>
+        _Hover(builder: (hovered) => _card(item, hovered, isSelected)),
+  );
 
-  Widget _card(Map<String, dynamic> item, bool hovered) {
+  Widget _card(Map<String, dynamic> item, bool hovered, bool isSelected) {
     final supported = switch (tab) {
       'Create' => has('create'),
       'Media' =>
@@ -1595,7 +1639,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
         (_stops(item).length > 1 ? has('setGradient') : has('applyPalette')) &&
             widget.controller.selectedIds.isNotEmpty,
     };
-    final isSelected = selected[tab]?.contains(id(item)) ?? false;
     final isColor = tab == 'Colors';
     final identityColor = EditorTheme.kindColor(
       tab == 'Media' || tab == 'Files' ? family(item) : id(item),
@@ -1753,80 +1796,85 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   : 'Double-click or Enter to apply · Right-click for actions')
             : 'Apply unavailable',
       ].join('\n'),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        // Selection happens on the press itself: with a double-tap handler
-        // beside it, onTap would wait out the double-tap window first.
-        onTapDown: (_) => select(item),
-        onTap: isColor && supported ? () => apply(item) : null,
-        onSecondaryTapDown: (event) => _menu(item, event.globalPosition),
-        onDoubleTap: isColor ? null : () => apply(item),
-        child: Container(
-          decoration: BoxDecoration(
-            color: EditorTheme.panel,
-            border: Border.all(
-              color: isSelected ? EditorTheme.spatial : Colors.transparent,
+      // The pick is on the press itself, below the gesture arena: a tap
+      // recognizer beside a double-tap one reports its down only after the
+      // press deadline.
+      child: Listener(
+        onPointerDown: (e) {
+          if (e.buttons == kPrimaryButton) select(item);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: isColor && supported ? () => apply(item) : null,
+          onSecondaryTapDown: (event) => _menu(item, event.globalPosition),
+          onDoubleTap: isColor ? null : () => apply(item),
+          child: Container(
+            decoration: BoxDecoration(
+              color: EditorTheme.panel,
+              border: Border.all(
+                color: isSelected ? EditorTheme.spatial : Colors.transparent,
+              ),
             ),
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: isColor
-                    ? preview
-                    : viewMode == 2
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          preview,
-                          // The chosen card says its name, and so does the
-                          // one under the pointer: a band over the picture's
-                          // foot, so the picture stays the point.
-                          if (isSelected || hovered)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: Container(
-                                key: ValueKey('browser:band:${id(item)}'),
-                                height: EditorMetrics.row * tileScale,
-                                padding: EdgeInsets.only(
-                                  left: air,
-                                  right: badgeRoom + air,
-                                ),
-                                alignment: Alignment.centerLeft,
-                                color: EditorTheme.app.withValues(alpha: .75),
-                                child: _FittedName(
-                                  _displayName(item),
-                                  tileWidth - air * 2 - badgeRoom,
-                                  size: captionSize,
-                                  sliding: hovered,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: isColor
+                      ? preview
+                      : viewMode == 2
+                      ? Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            preview,
+                            // The chosen card says its name, and so does the
+                            // one under the pointer: a band over the picture's
+                            // foot, so the picture stays the point.
+                            if (isSelected || hovered)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  key: ValueKey('browser:band:${id(item)}'),
+                                  height: EditorMetrics.row * tileScale,
+                                  padding: EdgeInsets.only(
+                                    left: air,
+                                    right: badgeRoom + air,
+                                  ),
+                                  alignment: Alignment.centerLeft,
+                                  color: EditorTheme.app.withValues(alpha: .75),
+                                  child: _FittedName(
+                                    _displayName(item),
+                                    tileWidth - air * 2 - badgeRoom,
+                                    size: captionSize,
+                                    sliding: hovered,
+                                  ),
                                 ),
                               ),
+                            if (badge != null)
+                              Positioned(right: air, bottom: air, child: badge),
+                          ],
+                        )
+                      : viewMode == 1
+                      ? Row(
+                          children: [
+                            SizedBox(width: EditorMetrics.s76, child: preview),
+                            Expanded(child: caption),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: preview,
+                              ),
                             ),
-                          if (badge != null)
-                            Positioned(right: air, bottom: air, child: badge),
-                        ],
-                      )
-                    : viewMode == 1
-                    ? Row(
-                        children: [
-                          SizedBox(width: EditorMetrics.s76, child: preview),
-                          Expanded(child: caption),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: preview,
-                            ),
-                          ),
-                          caption,
-                        ],
-                      ),
-              ),
-            ],
+                            caption,
+                          ],
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1891,7 +1939,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
     try {
       if (path.startsWith('data:'))
         return Image.memory(
-          Uri.parse(path).data!.contentAsBytes(),
+          // The same bytes each draw, so the image cache recognises them.
+          _dataUriCache.putIfAbsent(
+            path,
+            () => Uri.parse(path).data!.contentAsBytes(),
+          ),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => fallback,
@@ -3062,6 +3114,51 @@ class _LeftHalf extends CustomClipper<Rect> {
   Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width / 2, size.height);
   @override
   bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
+/// Rebuilds only when this id enters or leaves the picked set: a pick of one
+/// tile in a shelf of hundreds redraws two.
+class _Picked extends StatefulWidget {
+  const _Picked({required this.of, required this.id, required this.builder});
+  final ValueListenable<Set<String>> of;
+  final String id;
+  final Widget Function(bool picked) builder;
+  @override
+  State<_Picked> createState() => _PickedState();
+}
+
+class _PickedState extends State<_Picked> {
+  late bool on = widget.of.value.contains(widget.id);
+
+  void _check() {
+    final now = widget.of.value.contains(widget.id);
+    if (now != on) setState(() => on = now);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.of.addListener(_check);
+  }
+
+  @override
+  void didUpdateWidget(_Picked old) {
+    super.didUpdateWidget(old);
+    if (old.of != widget.of) {
+      old.of.removeListener(_check);
+      widget.of.addListener(_check);
+    }
+    on = widget.of.value.contains(widget.id);
+  }
+
+  @override
+  void dispose() {
+    widget.of.removeListener(_check);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(on);
 }
 
 class _Hover extends StatefulWidget {

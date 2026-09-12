@@ -50,7 +50,9 @@ Future<_Cost> _cost(WidgetTester tester, Future<void> Function() act) async {
       b.name.startsWith('Render') || b.name.startsWith('_Render');
   return _Cost(
     blocks.where(laidOut).fold(0, (sum, b) => sum + b.count),
-    blocks.where((b) => !laidOut(b) && b.name != 'BUILD').fold(0, (sum, b) => sum + b.count),
+    blocks
+        .where((b) => !laidOut(b) && b.name != 'BUILD')
+        .fold(0, (sum, b) => sum + b.count),
     blocks,
   );
 }
@@ -217,11 +219,12 @@ const _panels = <String, Size>{
 /// `(widgets rebuilt, layouts on the update, layouts when laid out whole)`.
 /// Held so no panel goes back to measuring itself once per card, to
 /// rebuilding its bar for every rendered frame, or to redrawing a shelf that
-/// the update did not touch.
+/// the update did not touch. A Browser card carries one pointer listener so
+/// the pick lands on the press; that is one proxy box per card.
 const _budget = <String, (int, int, int)>{
-  'Create': (2, 2, 260),
+  'Create': (2, 2, 271),
   'Media': (2, 2, 300),
-  'Effects': (2, 2, 270),
+  'Effects': (2, 2, 292),
   'Colors': (2, 2, 320),
   'Fonts': (2, 2, 120),
   'Stage': (60, 8, 80),
@@ -279,7 +282,7 @@ Future<String> _window(WidgetTester tester, int layers) async {
   await tester.pumpWidget(const SizedBox());
   return '${'Window'.padRight(10)} '
       'update ${update.calls.toString().padLeft(5)}   '
-          'builds ${update.builds.toString().padLeft(5)}   '
+      'builds ${update.builds.toString().padLeft(5)}   '
       'whole ${whole.calls.toString().padLeft(5)}   '
       '${whole.top}';
 }
@@ -299,6 +302,9 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final report = <String>[];
+      // Every panel is measured and printed before any is judged, so one run
+      // names every panel over budget.
+      final over = <String>[];
       report.add(await _window(tester, layers));
       for (final entry in _panels.entries) {
         final c = EditorSession();
@@ -343,27 +349,102 @@ void main() {
           '${whole.top}',
         );
         final (rebuilt, perUpdate, perLayout) = _budget[entry.key]!;
-        expect(
-          update.builds,
-          lessThanOrEqualTo(rebuilt),
-          reason: '${entry.key} rebuilds too much for one status update',
-        );
-        expect(
-          update.calls,
-          lessThanOrEqualTo(perUpdate),
-          reason: '${entry.key} lays out too much for one status update',
-        );
-        expect(
-          whole.calls,
-          lessThanOrEqualTo(perLayout),
-          reason: '${entry.key} lays out too much when laid out whole',
-        );
+        if (update.builds > rebuilt)
+          over.add(
+            '${entry.key} rebuilds ${update.builds} > $rebuilt '
+            'for one status update',
+          );
+        if (update.calls > perUpdate)
+          over.add(
+            '${entry.key} lays out ${update.calls} > $perUpdate '
+            'for one status update',
+          );
+        if (whole.calls > perLayout)
+          over.add(
+            '${entry.key} lays out ${whole.calls} > $perLayout '
+            'when laid out whole',
+          );
         await tester.pumpWidget(const SizedBox());
       }
       debugPrint('LAYOUT CALLS, $layers layers\n${report.join('\n')}');
+      expect(over, isEmpty);
     });
   }
   _switchMain();
+  _shelfMain();
+}
+
+/// The Browser tile under the pointer, by asset id.
+Finder _tile(String id) => find.byKey(ValueKey('browser:Media:$id'));
+
+/// One click in a shelf of five hundred: the frame between the press and the
+/// second press of a double-click. The shelf may redraw the tile that lost
+/// the pick and the one that took it, and the count that names it — not the
+/// list, not the other tiles, and nothing it decodes.
+void _shelfMain() {
+  testWidgets('the first frame of a click in a shelf of 500', (tester) async {
+    tester.view.physicalSize = const Size(1280, 796);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = EditorSession();
+    addTearDown(c.dispose);
+    c.document.value = {
+      ..._status(3, 0),
+      'assets': [
+        for (var i = 0; i < 500; i++)
+          {
+            'id': 'a$i',
+            'name': 'clip$i.mp4',
+            'mime': 'video/mp4',
+            'path': '/m/clip$i.mp4',
+          },
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: EditorTheme.data,
+        builder: EditorApp.noHover,
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox.fromSize(
+              size: _panels['Media'],
+              child: buildPanel('Media', c, const ValueKey('panel')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Warm: the first pick has no tile to unpick.
+    await tester.tap(_tile('a1'));
+    await tester.pump(const Duration(milliseconds: 400));
+    final click = await _cost(tester, () async {
+      await tester.tap(_tile('a2'));
+      await tester.pump();
+    });
+    // The pick is on screen in the frame of the press, not after the
+    // double-tap window.
+    expect(find.byKey(const ValueKey('browser:band:a2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('browser:band:a1')), findsNothing);
+    // The double-tap window closes before the test does.
+    await tester.pump(const Duration(milliseconds: 400));
+    debugPrint(
+      'SHELF CLICK  builds ${click.builds}   layouts ${click.calls}   '
+      '${click.top}',
+    );
+    expect(
+      click.builds,
+      lessThanOrEqualTo(100),
+      reason: 'a click rebuilds more than the two tiles it touches',
+    );
+    expect(
+      click.calls,
+      lessThanOrEqualTo(20),
+      reason: 'a click lays out more than the two tiles it touches',
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 }
 
 /// The panels that read the selection, and the pixels the dock gives them.
@@ -453,6 +534,7 @@ void _switchMain() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final report = <String>[await _windowSwitch(tester)];
+    final over = <String>[];
     for (final entry in _switching.entries) {
       final c = EditorSession();
       addTearDown(c.dispose);
@@ -491,19 +573,20 @@ void _switchMain() {
         '${pick.laid}',
       );
       final (rebuilt, laidOut) = _switchBudget[entry.key]!;
-      expect(
-        pick.builds,
-        lessThanOrEqualTo(rebuilt),
-        reason: '${entry.key} rebuilds too much on one selection change',
-      );
-      expect(
-        pick.calls,
-        lessThanOrEqualTo(laidOut),
-        reason: '${entry.key} lays out too much on one selection change',
-      );
+      if (pick.builds > rebuilt)
+        over.add(
+          '${entry.key} rebuilds ${pick.builds} > $rebuilt '
+          'on one selection change',
+        );
+      if (pick.calls > laidOut)
+        over.add(
+          '${entry.key} lays out ${pick.calls} > $laidOut '
+          'on one selection change',
+        );
       await tester.pumpWidget(const SizedBox());
     }
     debugPrint('SELECTION CHANGE\n${report.join('\n')}');
+    expect(over, isEmpty);
   });
 
   testWidgets('the first frame of a pane taking the ring', (tester) async {

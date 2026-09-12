@@ -37,7 +37,8 @@ class _TrackRow {
     return out;
   }
 
-  List<int> get summaryFrames =>
+  // Rows are rebuilt whenever the document moves, so once per row is enough.
+  late final List<int> summaryFrames =
       allKeys.map((k) => (k['frame'] as num).toInt()).toSet().toList()..sort();
 }
 

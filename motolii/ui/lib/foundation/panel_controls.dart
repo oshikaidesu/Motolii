@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
@@ -90,6 +89,7 @@ class EditorChoice<T> extends StatelessWidget {
         .map((e) => e.value)
         .firstOrNull;
     return MenuAnchor(
+      animated: false,
       crossAxisUnconstrained: false,
       style: EditorTheme.menuSheet,
       menuChildren: [
@@ -421,10 +421,6 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   /// so sideways is the number's and up-and-down stays the list's.
   Timer? _settle;
   void _panUpdate(DragUpdateDetails details) {
-    File('/tmp/motolii-diag.log').writeAsStringSync(
-      '${DateTime.now().toIso8601String()} panUpdate dx=${details.delta.dx} dragging=$_dragging pointer=$_pointer ending=$_ending\n',
-      mode: FileMode.append,
-    ); // DIAG(temp)
     if (!widget.enabled || _editing || _ending || _pointer != null) return;
     final by = HardwareKeyboard.instance.isShiftPressed ? 10 : 1;
     // The pan is reported as the content's motion (natural scrolling), the
@@ -437,18 +433,10 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   }
 
   void _panEnd() {
-    File('/tmp/motolii-diag.log').writeAsStringSync(
-      '${DateTime.now().toIso8601String()} panEnd dragging=$_dragging pointer=$_pointer\n',
-      mode: FileMode.append,
-    ); // DIAG(temp)
     if (_pointer == null) _end(false);
   }
 
   void _pointerSignal(PointerSignalEvent event) {
-    File('/tmp/motolii-diag.log').writeAsStringSync(
-      '${DateTime.now().toIso8601String()} signal ${event.runtimeType} ${event is PointerScrollEvent ? event.scrollDelta : ''} kind=${event.kind}\n',
-      mode: FileMode.append,
-    ); // DIAG(temp)
     if (event is! PointerScrollEvent) return;
     if (!widget.enabled || _editing || _ending) return;
     final held = _pointer != null;

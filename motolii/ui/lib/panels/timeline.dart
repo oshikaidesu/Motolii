@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -149,6 +150,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
     widget.controller.frame.addListener(frameMoved);
     // 一番に並びを組む。目盛りもレーンも横帯も、後から同じ書類を見る。
     _timeline.addListener(_relane);
+    _relane();
   }
 
   /// 今のコマが帯の端を越えたら、見えている幅の 2 倍ぶんまとめて伸ばす(尺は壁ではない)。
@@ -286,6 +288,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
           expanded.contains(row.id)
               ? expanded.remove(row.id)
               : expanded.add(row.id);
+          _relane();
         });
         gesture = null;
         return;
@@ -297,6 +300,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
           collapsedGroups.contains(row.id)
               ? collapsedGroups.remove(row.id)
               : collapsedGroups.add(row.id);
+          _relane();
         });
         gesture = null;
         return;
@@ -867,32 +871,30 @@ class _TimelinePanelState extends State<TimelinePanel> {
             value: 'lanes:hide',
             child: Text('Hide properties'),
           ),
-          const PopupMenuDivider(),
+          const EditorMenuDivider(),
         ],
         for (final entry in actions.entries)
           EditorMenuItem<String>(
             value: entry.key,
             enabled: has(entry.key),
-            child: SizedBox(
-              width: EditorMetrics.s244,
-              child: Row(
-                children: [
-                  Expanded(child: Text(entry.value)),
-                  Text(
-                    const {
-                          'copy': '⌘C',
-                          'cut': '⌘X',
-                          'paste': '⌘V',
-                          'duplicate': '⌘D',
-                          'delete': '⌫',
-                          'group': '⌘G',
-                          'ungroup': '⇧⌘G',
-                          'split': '⌘K',
-                        }[entry.key] ??
-                        '',
-                  ),
-                ],
-              ),
+            child: Row(
+              children: [
+                Expanded(child: Text(entry.value)),
+                const SizedBox(width: EditorMetrics.s16),
+                Text(
+                  const {
+                        'copy': '⌘C',
+                        'cut': '⌘X',
+                        'paste': '⌘V',
+                        'duplicate': '⌘D',
+                        'delete': '⌫',
+                        'group': '⌘G',
+                        'ungroup': '⇧⌘G',
+                        'split': '⌘K',
+                      }[entry.key] ??
+                      '',
+                ),
+              ],
             ),
           ),
       ],
@@ -906,6 +908,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
           expanded.add(target);
           if (chosen == 'lanes:all') allProperties.add(target);
         }
+        _relane();
       });
     } else if (chosen != null)
       widget.controller.command(chosen);
@@ -945,6 +948,11 @@ class _TimelinePanelState extends State<TimelinePanel> {
     tracks = layout.rows;
     if (activeLane != null && !tracks.any((row) => row.laneId == activeLane))
       activeLane = null;
+    _reportVisible();
+  }
+
+  /// How many frames the bar shows, for the session's zoom-to-fit.
+  void _reportVisible() {
     final visible = ((viewportWidth - labelWidth) / pixelsPerFrame).round();
     if (widget.controller.visibleFrames.value != visible)
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -962,7 +970,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
       child: LayoutBuilder(
         builder: (context, bounds) {
           viewportWidth = bounds.maxWidth;
-          _relane();
+          _reportVisible();
           return navigation(
             ListenableBuilder(
               listenable: _timeline,
@@ -1162,10 +1170,16 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                       e.globalPosition.dx -
                                       resizePointerStart)
                                   .clamp(114.0 - layout.indentation, 162.0);
+                          _relane();
                         }),
-                        onHorizontalDragCancel: () =>
-                            setState(() => baseNameWidth = resizeStart),
-                        onDoubleTap: () => setState(() => baseNameWidth = 138),
+                        onHorizontalDragCancel: () => setState(() {
+                          baseNameWidth = resizeStart;
+                          _relane();
+                        }),
+                        onDoubleTap: () => setState(() {
+                          baseNameWidth = 138;
+                          _relane();
+                        }),
                         child: const SizedBox.expand(),
                       ),
                     ),
@@ -1304,6 +1318,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
   );
 }
 
+/// Laid-out labels kept across paints: a row's name is the same text at the
+/// same width on every frame of playback.
+final _labels = <(String, Color, double, double, FontWeight), TextPainter>{};
+
 class _TimelinePainter extends CustomPainter {
   _TimelinePainter({
     required this.rows,
@@ -1355,7 +1373,8 @@ class _TimelinePainter extends CustomPainter {
     bool centered = false,
     FontWeight weight = FontWeight.w400,
   }) {
-    final p = TextPainter(
+    if (_labels.length >= 512) _labels.clear();
+    final p = _labels[(text, color, width, size, weight)] ??= TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
@@ -1919,7 +1938,26 @@ class _TimelinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TimelinePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _TimelinePainter old) =>
+      !identical(rows, old.rows) ||
+      !listEquals(selected, old.selected) ||
+      !listEquals(keys, old.keys) ||
+      frame != old.frame ||
+      scale != old.scale ||
+      offset != old.offset ||
+      duration != old.duration ||
+      !listEquals(markers, old.markers) ||
+      rowDropGuide != old.rowDropGuide ||
+      rowDropInside != old.rowDropInside ||
+      labelWidth != old.labelWidth ||
+      !identical(containers, old.containers) ||
+      activeLane != old.activeLane ||
+      fps != old.fps ||
+      ruler != old.ruler ||
+      marquee != old.marquee ||
+      !listEquals(dragKeys, old.dragKeys) ||
+      delta != old.delta ||
+      !identical(dragLayer, old.dragLayer);
 }
 
 class _ArrangementOverview extends CustomPainter {
@@ -1999,5 +2037,12 @@ class _ArrangementOverview extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ArrangementOverview oldDelegate) => true;
+  bool shouldRepaint(covariant _ArrangementOverview old) =>
+      !identical(layers, old.layers) ||
+      duration != old.duration ||
+      extent != old.extent ||
+      frame != old.frame ||
+      offset != old.offset ||
+      scale != old.scale ||
+      viewportWidth != old.viewportWidth;
 }

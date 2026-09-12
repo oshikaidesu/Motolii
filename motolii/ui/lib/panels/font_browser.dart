@@ -15,13 +15,34 @@ class FontBrowser extends StatefulWidget {
 
 class _FontBrowserState extends State<FontBrowser> {
   String query = '';
+
+  /// The families in shelf order, sorted once per list the session hands
+  /// over; a keystroke or a selection only filters it.
+  List<String> _sorted = const [];
+  List? _sortedFrom;
+  List<String> _families(List? raw) {
+    if (!identical(raw, _sortedFrom)) {
+      _sortedFrom = raw;
+      _sorted = (raw ?? []).whereType<String>().toList()
+        ..sort((a, b) {
+          final private = (a.startsWith('.') ? 1 : 0).compareTo(
+            b.startsWith('.') ? 1 : 0,
+          );
+          return private != 0
+              ? private
+              : a.toLowerCase().compareTo(b.toLowerCase());
+        });
+    }
+    return _sorted;
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.controller.slice(
-      'fonts',
-      const ['fontFamilies', 'path', 'capabilities'],
-      derived: () => fontReading(widget.controller),
-    ),
+    animation: widget.controller.slice('fonts', const [
+      'fontFamilies',
+      'path',
+      'capabilities',
+    ], derived: () => fontReading(widget.controller)),
     builder: (context, _) {
       final c = widget.controller;
       final layer = c.activeLayer;
@@ -32,19 +53,11 @@ class _FontBrowserState extends State<FontBrowser> {
           layer['locked'] != true &&
           c.supports('setFont');
       final family = text['fontFamily'];
-      final names =
-          (c.state['fontFamilies'] as List? ?? [])
-              .whereType<String>()
-              .where((name) => name.toLowerCase().contains(query.toLowerCase()))
-              .toList()
-            ..sort((a, b) {
-              final private = (a.startsWith('.') ? 1 : 0).compareTo(
-                b.startsWith('.') ? 1 : 0,
-              );
-              return private != 0
-                  ? private
-                  : a.toLowerCase().compareTo(b.toLowerCase());
-            });
+      final sampleKey = fontSampleKey(text);
+      final needle = query.toLowerCase();
+      final names = _families(c.state['fontFamilies'] as List?)
+          .where((name) => name.toLowerCase().contains(needle))
+          .toList();
       return ColoredBox(
         color: EditorTheme.app,
         child: Column(
@@ -128,7 +141,7 @@ class _FontBrowserState extends State<FontBrowser> {
                                         'kind': 'font',
                                         'layer': layer['id'],
                                         'family': name,
-                                        'sampleKey': fontSampleKey(text),
+                                        'sampleKey': sampleKey,
                                         'path': c.state['path'],
                                       },
                                     ),
