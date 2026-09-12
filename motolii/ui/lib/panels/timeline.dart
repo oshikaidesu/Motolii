@@ -114,6 +114,8 @@ class _TimelinePanelState extends State<TimelinePanel> {
   int deltaFrames = 0;
   List<Map<String, dynamic>> initialKeys = [];
   List<int> initialIds = [];
+  List<Map<String, dynamic>> settlingKeys = const [];
+  int settlingDelta = 0;
   bool additive = false;
   bool get primary =>
       HardwareKeyboard.instance.isMetaPressed ||
@@ -471,6 +473,13 @@ class _TimelinePanelState extends State<TimelinePanel> {
         if (gesture == 'move')
           deltaFrames = math.max(deltaFrames, -starts.reduce(math.min));
       }
+      // Keys stop at frame 0 the way the bars do, and native clamps the same
+      // way, so what is drawn is what lands.
+      if (gesture == 'keys' && initialKeys.isNotEmpty)
+        deltaFrames = math.max(
+          deltaFrames,
+          -initialKeys.map((k) => (k['frame'] as num).toInt()).reduce(math.min),
+        );
     });
     if (timingRows.isNotEmpty &&
         has('previewTimings') &&
@@ -600,9 +609,21 @@ class _TimelinePanelState extends State<TimelinePanel> {
       resetGesture();
       return;
     }
-    if (gesture == 'keys' && deltaFrames != 0)
-      widget.controller.command('moveKeys', {'deltaFrames': deltaFrames});
-    else if (['move', 'trimIn', 'trimOut', 'slip'].contains(gesture) &&
+    if (gesture == 'keys' && deltaFrames != 0) {
+      // The shift stays drawn until the document carries it; otherwise the
+      // keys jump back for the frames between the release and the reply.
+      settlingKeys = initialKeys;
+      settlingDelta = deltaFrames;
+      widget.controller
+          .command('moveKeys', {'deltaFrames': deltaFrames})
+          .whenComplete(() {
+            if (!mounted) return;
+            setState(() {
+              settlingKeys = const [];
+              settlingDelta = 0;
+            });
+          });
+    } else if (['move', 'trimIn', 'trimOut', 'slip'].contains(gesture) &&
         deltaFrames != 0 &&
         dragRow != null)
       finishTiming(timingRows.map(timing).toList());
@@ -1092,18 +1113,28 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                           : null,
                                       dragKeys: gesture == 'keys'
                                           ? initialKeys
-                                          : const [],
-                                      delta: deltaFrames,
-                                      dragLayer:
-                                          dragRow != null &&
-                                              [
-                                                'move',
-                                                'trimIn',
-                                                'trimOut',
-                                                'slip',
-                                              ].contains(gesture)
-                                          ? timing(dragRow!)
-                                          : null,
+                                          : settlingKeys,
+                                      delta: gesture == 'keys'
+                                          ? deltaFrames
+                                          : settlingDelta,
+                                      // Every bar in the grip is drawn from
+                                      // its press-time timing plus the delta:
+                                      // the document's rows only catch up
+                                      // when the preview reply lands, and a
+                                      // bar that waits for that trails the
+                                      // one under the pointer.
+                                      dragLayers:
+                                          [
+                                            'move',
+                                            'trimIn',
+                                            'trimOut',
+                                            'slip',
+                                          ].contains(gesture)
+                                          ? {
+                                              for (final r in timingRows)
+                                                r.id: timing(r),
+                                            }
+                                          : const {},
                                     ),
                                   ),
                                 ),
@@ -1350,7 +1381,7 @@ class _TimelinePainter extends CustomPainter {
     this.marquee,
     this.dragKeys = const [],
     this.delta = 0,
-    this.dragLayer,
+    this.dragLayers = const {},
   });
   final Rect? rowDropGuide;
   final bool rowDropInside;
@@ -1370,7 +1401,7 @@ class _TimelinePainter extends CustomPainter {
   final double scale, offset, fps;
   final bool ruler;
   final Rect? marquee;
-  final Map<String, dynamic>? dragLayer;
+  final Map<int, Map<String, dynamic>> dragLayers;
   void text(
     Canvas canvas,
     String text,
@@ -1548,7 +1579,7 @@ class _TimelinePainter extends CustomPainter {
             );
           }
         } else if (row.property == null) {
-          final timing = dragLayer?['layer'] == row.id ? dragLayer! : row.layer;
+          final timing = dragLayers[row.id] ?? row.layer;
           final x =
               label +
               (timing['start'] as num? ?? 0).toDouble() * scale -
@@ -1615,26 +1646,36 @@ class _TimelinePainter extends CustomPainter {
             for (final f in row.summaryFrames) {
               bool at(List<Map<String, dynamic>> sel) =>
                   sel.any((s) => s['layer'] == row.id && s['frame'] == f);
-              final shift = at(dragKeys) ? delta : 0;
-              final kx = label + (f + shift) * scale - offset;
               final cy = y + h / 2;
-              final diamond = Path()
-                ..moveTo(kx, cy - 3.5)
-                ..lineTo(kx + 3.5, cy)
-                ..lineTo(kx, cy + 3.5)
-                ..lineTo(kx - 3.5, cy)
-                ..close();
-              canvas.drawPath(
-                diamond,
-                Paint()
-                  ..color = at(keys) ? EditorTheme.keyAccent : EditorTheme.ink,
-              );
-              canvas.drawPath(
-                diamond,
-                Paint()
-                  ..color = Colors.black
-                  ..strokeWidth = 1
-                  ..style = PaintingStyle.stroke,
+              void diamond(double kx, Color fill) {
+                final path = Path()
+                  ..moveTo(kx, cy - 3.5)
+                  ..lineTo(kx + 3.5, cy)
+                  ..lineTo(kx, cy + 3.5)
+                  ..lineTo(kx - 3.5, cy)
+                  ..close();
+                canvas.drawPath(path, Paint()..color = fill);
+                canvas.drawPath(
+                  path,
+                  Paint()
+                    ..color = Colors.black
+                    ..strokeWidth = 1
+                    ..style = PaintingStyle.stroke,
+                );
+              }
+
+              // One diamond stands for every key at this frame. When only
+              // some of them are in the grip, the ones staying keep their
+              // diamond where it is and the grip carries the rest.
+              final gripped = dragKeys
+                  .where((s) => s['layer'] == row.id && s['frame'] == f)
+                  .length;
+              if (gripped > 0 &&
+                  gripped < row.allKeys.where((k) => k['frame'] == f).length)
+                diamond(label + f * scale - offset, EditorTheme.ink);
+              diamond(
+                label + (f + (gripped > 0 ? delta : 0)) * scale - offset,
+                at(keys) ? EditorTheme.keyAccent : EditorTheme.ink,
               );
             }
         } else {
@@ -1965,7 +2006,7 @@ class _TimelinePainter extends CustomPainter {
       marquee != old.marquee ||
       !listEquals(dragKeys, old.dragKeys) ||
       delta != old.delta ||
-      !identical(dragLayer, old.dragLayer);
+      !identical(dragLayers, old.dragLayers);
 }
 
 class _ArrangementOverview extends CustomPainter {

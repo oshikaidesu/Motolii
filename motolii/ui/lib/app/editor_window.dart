@@ -352,27 +352,30 @@ class _EditorWindowState extends State<EditorWindow> {
     }
   }
 
-  Widget topMenu(String label, List<String> items) => PopupMenuButton<String>(
-    tooltip: label,
-    onSelected: menu,
-    itemBuilder: (_) => [
-      for (final item in items)
-        EditorMenuItem(
-          value: item,
-          child: Text(
-            item,
-            style: const TextStyle(fontSize: EditorMetrics.font),
-          ),
+  Widget topMenu(String label, List<String> items) => Builder(
+    builder: (context) => GestureDetector(
+      onTapDown: (_) async {
+        final box = context.findRenderObject() as RenderBox;
+        final chosen = await showEditorMenu<String>(
+          context,
+          box.localToGlobal(box.size.bottomLeft(Offset.zero)),
+          [
+            for (final item in items)
+              EditorMenuItem(value: item, child: Text(item)),
+          ],
+        );
+        if (chosen != null) menu(chosen);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: EditorMetrics.s7,
+          vertical: EditorMetrics.s4,
         ),
-    ],
-    child: Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: EditorMetrics.s7,
-        vertical: EditorMetrics.s4,
+        child: Text(label),
       ),
-      child: Text(label),
     ),
   );
+
   Widget pane(String name) =>
       buildPanel(name, c, paneKeys.putIfAbsent(name, () => GlobalKey()));
   @override

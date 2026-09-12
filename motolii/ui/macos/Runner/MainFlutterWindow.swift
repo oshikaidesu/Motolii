@@ -74,7 +74,7 @@ private enum ProbeFailure: Error {
 private final class ProbeRuntime {
   typealias Open = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
   typealias Request = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>) -> UnsafePointer<CChar>?
-  typealias Render = @convention(c) (UnsafeMutableRawPointer, UInt32) -> Int32
+  typealias Render = @convention(c) (UnsafeMutableRawPointer, UInt32, UnsafePointer<CChar>) -> Int32
   typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
   private var library: UnsafeMutableRawPointer?
   private var context: UnsafeMutableRawPointer?
@@ -137,38 +137,47 @@ private final class ProbeRuntime {
 
   func status() throws -> [String: Any] { try request("{\"op\":\"status\",\"bootstrap\":true}") }
 
-  func render(known: Any? = nil, references: Any? = nil) throws -> (CVPixelBuffer, [String: Any], Int) {
+  /// Every view Rust lists (Camera always; Stage while its tab holds a window) gets its own
+  /// surface and one render. Two pictures of one world, both live.
+  func render(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
     let state = try request("{\"op\":\"renderInfo\"}")
-    guard let width = (state["width"] as? NSNumber)?.intValue,
-          let height = (state["height"] as? NSNumber)?.intValue,
-          width > 0, height > 0, width <= 16384, height <= 16384 else {
-      throw ProbeFailure.message("Document dimensions missing or outside probe allocation limit")
+    guard let views = state["views"] as? [[String: Any]], !views.isEmpty else {
+      throw ProbeFailure.message("Document dimensions missing")
     }
-    let properties: [String: Any] = [
-      kIOSurfaceWidth as String: width,
-      kIOSurfaceHeight as String: height,
-      kIOSurfaceBytesPerElement as String: 4,
-      kIOSurfacePixelFormat as String: kCVPixelFormatType_32BGRA,
-    ]
-    guard let surface = IOSurfaceCreate(properties as CFDictionary) else {
-      throw ProbeFailure.message("IOSurface allocation failed")
-    }
-    let attributes = [kCVPixelBufferMetalCompatibilityKey as String: true] as CFDictionary
-    var unmanaged: Unmanaged<CVPixelBuffer>?
-    let outcome = CVPixelBufferCreateWithIOSurface(kCFAllocatorDefault, surface, attributes, &unmanaged)
-    guard outcome == kCVReturnSuccess, let unmanaged else {
-      throw ProbeFailure.message("CVPixelBuffer wrapping failed: \(outcome)")
-    }
-    let buffer = unmanaged.takeRetainedValue()
     guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
-    let code = renderFunction(context, IOSurfaceGetID(surface))
-    guard code == 0 else { throw ProbeFailure.message("Rust render failed: \(code)") }
+    var buffers: [String: CVPixelBuffer] = [:]
+    for entry in views {
+      guard let view = entry["view"] as? String,
+            let width = (entry["width"] as? NSNumber)?.intValue,
+            let height = (entry["height"] as? NSNumber)?.intValue,
+            width > 0, height > 0, width <= 16384, height <= 16384 else {
+        throw ProbeFailure.message("View dimensions missing or outside probe allocation limit")
+      }
+      let properties: [String: Any] = [
+        kIOSurfaceWidth as String: width,
+        kIOSurfaceHeight as String: height,
+        kIOSurfaceBytesPerElement as String: 4,
+        kIOSurfacePixelFormat as String: kCVPixelFormatType_32BGRA,
+      ]
+      guard let surface = IOSurfaceCreate(properties as CFDictionary) else {
+        throw ProbeFailure.message("IOSurface allocation failed")
+      }
+      let attributes = [kCVPixelBufferMetalCompatibilityKey as String: true] as CFDictionary
+      var unmanaged: Unmanaged<CVPixelBuffer>?
+      let outcome = CVPixelBufferCreateWithIOSurface(kCFAllocatorDefault, surface, attributes, &unmanaged)
+      guard outcome == kCVReturnSuccess, let unmanaged else {
+        throw ProbeFailure.message("CVPixelBuffer wrapping failed: \(outcome)")
+      }
+      let code = view.withCString { renderFunction(context, IOSurfaceGetID(surface), $0) }
+      guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(view): \(code)") }
+      buffers[view] = unmanaged.takeRetainedValue()
+    }
     rendered += 1
     var query: [String: Any] = ["op": "status"]
     if let known { query["knownSnapshotId"] = known }
     if let references { query["knownReferenceId"] = references }
     let data = try JSONSerialization.data(withJSONObject: query)
-    return (buffer, try request(String(decoding: data, as: UTF8.self)), rendered)
+    return (buffers, try request(String(decoding: data, as: UTF8.self)), rendered)
   }
 
   func close() {
@@ -228,22 +237,22 @@ final class ProbeSession {
   fileprivate let hosts = NSHashTable<ProbeHost>.weakObjects()
   fileprivate var paneState: [String: Any] = [:]
   fileprivate var epoch: UInt64 = 0
-  fileprivate var latest: CVPixelBuffer?
+  fileprivate var latest: [String: CVPixelBuffer] = [:]
   fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
   private var confirming = false
   var terminationApproved = false
 
-  fileprivate func broadcast(_ state: [String: Any], buffer: CVPixelBuffer? = nil, origin: ProbeHost? = nil, frameOnly: Bool = false) {
+  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameOnly: Bool = false) {
     precondition(Thread.isMainThread)
     self.state.merge(state) { _, next in next }
-    if let buffer { latest = buffer }
+    latest.merge(buffers) { _, next in next }
     for host in hosts.allObjects where !host.closed {
       do {
-        try host.ensureTexture()
-        if let buffer { host.publish(buffer) }
+        try host.ensureTexture(ProbeHost.outputView)
+        for (view, buffer) in buffers { host.publish(view, buffer) }
         if host !== origin {
-          var event = host.envelope(state, frameReady: buffer != nil)
+          var event = host.envelope(state, frameReady: !buffers.isEmpty)
           event["frameOnly"] = frameOnly
           host.channel.invokeMethod("documentChanged", arguments: event)
         }
@@ -254,7 +263,7 @@ final class ProbeSession {
   }
 
   fileprivate func clearFrames() {
-    latest = nil
+    latest = [:]
     for host in hosts.allObjects { host.detachTexture() }
   }
 
@@ -317,8 +326,10 @@ final class ProbeHost: NSObject {
   private let session = ProbeSession.shared
   private let registry: FlutterTextureRegistry
   fileprivate let channel: FlutterMethodChannel
-  private var texture: ProbeTexture?
-  private var textureID: Int64?
+  /// One Flutter texture per view this window shows: "Camera" (the output) and "User" (the Stage).
+  static let outputView = "Camera"
+  private var textures: [String: ProbeTexture] = [:]
+  private var textureIDs: [String: Int64] = [:]
   fileprivate weak var window: NSWindow?
   fileprivate var closed = false
   let id: String
@@ -348,37 +359,38 @@ final class ProbeHost: NSObject {
     }
   }
 
-  fileprivate func ensureTexture() throws {
-    guard textureID == nil else { return }
+  fileprivate func ensureTexture(_ view: String) throws {
+    guard textureIDs[view] == nil else { return }
     let next = ProbeTexture()
     let id = registry.register(next)
     guard id != 0 else { throw ProbeFailure.message("Flutter texture registration failed") }
-    texture = next
-    textureID = id
-    if let latest = session.latest { publish(latest) }
+    textures[view] = next
+    textureIDs[view] = id
+    if let latest = session.latest[view] { publish(view, latest) }
   }
 
-  fileprivate func publish(_ buffer: CVPixelBuffer) {
-    guard let texture, let textureID else { return }
+  fileprivate func publish(_ view: String, _ buffer: CVPixelBuffer) {
+    guard let texture = textures[view], let textureID = textureIDs[view] else { return }
     texture.publish(buffer)
     registry.textureFrameAvailable(textureID)
   }
 
   fileprivate func envelope(_ status: [String: Any], frameReady: Bool = false) -> [String: Any] {
     var reply: [String: Any] = ["status": status, "windowId": id, "frameReady": frameReady]
-    if let textureID { reply["textureId"] = textureID }
+    if let textureID = textureIDs[ProbeHost.outputView] { reply["textureId"] = textureID }
+    reply["textureIds"] = textureIDs
     if let width = status["width"] { reply["width"] = width }
     if let height = status["height"] { reply["height"] = height }
-    if let texture { reply.merge(texture.counters()) { _, new in new } }
+    if let texture = textures[ProbeHost.outputView] { reply.merge(texture.counters()) { _, new in new } }
     return reply
   }
 
   fileprivate func detachTexture() {
     precondition(Thread.isMainThread)
-    if let textureID { registry.unregisterTexture(textureID) }
-    texture?.clear()
-    texture = nil
-    textureID = nil
+    for id in textureIDs.values { registry.unregisterTexture(id) }
+    for texture in textures.values { texture.clear() }
+    textures = [:]
+    textureIDs = [:]
   }
 
   func filesDropped(_ paths: [String], point: [CGFloat]) {
@@ -471,8 +483,9 @@ final class ProbeHost: NSObject {
       guard !requested.isEmpty else { fail(result, "No supported panels requested"); return }
       result(session.openPanelWindow(requested))
     case "attach":
+      let view = args["view"] as? String ?? ProbeHost.outputView
       perform(result, work: { try self.session.runtime.status() }) { status in
-        try self.ensureTexture()
+        try self.ensureTexture(view)
         return self.envelope(status)
       }
     case "pickOpen", "pickImport":
@@ -556,8 +569,8 @@ final class ProbeHost: NSObject {
           _ = try self.session.runtime.request("{\"op\":\"seek\",\"quiet\":true,\"frame\":\(frame.int64Value)}")
         }
         return try self.session.runtime.render(known: args["knownSnapshotId"], references: args["knownReferenceId"])
-      }) { buffer, status, rendered in
-        self.session.broadcast(status, buffer: buffer, origin: self, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
+      }) { buffers, status, rendered in
+        self.session.broadcast(status, buffers: buffers, origin: self, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
         var reply = self.envelope(status, frameReady: true)
         reply["renderedFrames"] = rendered
         reply["frameOnly"] = args["frame"] != nil || args["playing"] as? Bool == true

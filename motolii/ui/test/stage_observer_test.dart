@@ -8,6 +8,7 @@ import '../lib/foundation/theme.dart';
 /// rerun 3D view の取説: object をダブルクリックで Focus、背景をダブルクリックで Reset view。
 class ObserverSession extends EditorSession {
   final commands = <(String, Map<String, dynamic>)>[];
+  final attached = <String>[];
   @override
   Future<void> refreshPreview() async {}
   @override
@@ -22,7 +23,10 @@ class ObserverSession extends EditorSession {
   Future<dynamic> native(
     String method, [
     Map<String, dynamic> args = const {},
-  ]) async => <String, dynamic>{};
+  ]) async {
+    if (method == 'attach') attached.add('${args['view'] ?? 'Camera'}');
+    return <String, dynamic>{};
+  }
 }
 
 void main() {
@@ -43,7 +47,7 @@ void main() {
         'layers': [
           {
             'id': 7,
-            'bounds': {
+            'stageBounds': {
               'corners': [
                 [0, 0],
                 [200, 0],
@@ -178,7 +182,7 @@ void main() {
             [200, 200],
             [0, 200],
           ],
-          'bounds': {
+          'stageBounds': {
             'corners': [
               [0, 0],
               [200, 0],
@@ -216,4 +220,65 @@ void main() {
     expect((overlay().painter as dynamic).anchorPreview, isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  /// 別タブ 2 枚同時: 見えたタブは自分の view の texture を取り、Stage タブはタブの寸法と
+  /// zoom/pan の関心域を窓として native へ置き、隠れると窓を引く。Camera は窓を置かない。
+  testWidgets(
+    'each shown tab takes its own texture; the Stage places its window',
+    (tester) async {
+      final c = ObserverSession();
+      c.document.value = {
+        'width': 400,
+        'height': 400,
+        'capabilities': ['stageView', 'stageWindow'],
+        'layers': [],
+        'selectedIds': [],
+      };
+      var index = 1;
+      late StateSetter show;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: EditorTheme.data,
+          home: Scaffold(
+            body: SizedBox(
+              width: 464,
+              height: 480,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  show = setState;
+                  return IndexedStack(
+                    index: index,
+                    children: [
+                      StagePanel(controller: c, view: 'User'),
+                      StagePanel(controller: c, view: 'Camera'),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(c.attached, ['Camera']);
+      expect(c.commands.where((c) => c.$1 == 'stageWindow'), isEmpty);
+      show(() => index = 0);
+      await tester.pump();
+      await tester.pump();
+      expect(c.attached, ['Camera', 'User']);
+      final placed = c.commands.lastWhere((c) => c.$1 == 'stageWindow').$2;
+      // 464×(480−bars) の窓、関心域は fit した comp を中央に含む comp px の矩形。
+      expect(placed['width'], greaterThan(0));
+      expect(placed['height'], greaterThan(0));
+      final roi = (placed['roi'] as List).cast<double>();
+      expect(roi[0], lessThan(0));
+      expect(roi[2], greaterThan(400));
+      show(() => index = 1);
+      await tester.pump();
+      expect(c.commands.last.$1, 'stageWindow');
+      expect(c.commands.last.$2, {'width': 0, 'height': 0});
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

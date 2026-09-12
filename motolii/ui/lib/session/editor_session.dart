@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -92,6 +91,12 @@ class EditorSession {
     'shape': newKeyShape,
   });
 
+  Future<void> focusColor(Map<String, dynamic> args) async {
+    await command('focusColor', args);
+    browserTab.value = 'Colors';
+    await placePanel('Colors', 'show');
+  }
+
   /// The key selection before the current one, with the layers it sits on,
   /// so a shortcut can bring a motion back without a trip to the Timeline.
   Map<String, dynamic>? previousKeys;
@@ -155,7 +160,11 @@ class EditorSession {
     take(document, next);
   }
 
+  /// The output picture (Camera view). Playback gates on it.
   final textureId = ValueNotifier<int?>(null);
+
+  /// One Flutter texture per live view: `Camera` (the output) and `User` (the Stage).
+  final textureIds = ValueNotifier<Map<String, int>>({});
   final frame = ValueNotifier<int>(0);
   final rendered = ValueNotifier<Map<String, dynamic>>({});
   Future<bool> Function()? confirmClose;
@@ -316,6 +325,13 @@ class EditorSession {
     }
     if (envelope['textureId'] is num)
       textureId.value = (envelope['textureId'] as num).toInt();
+    if (envelope['textureIds'] is Map) {
+      final ids = {
+        for (final e in (envelope['textureIds'] as Map).entries)
+          if (e.value is num) '${e.key}': (e.value as num).toInt(),
+      };
+      if (!sameValue(ids, textureIds.value)) textureIds.value = ids;
+    }
     if (envelope['frameReady'] == true) {
       if (next['frame'] is num) frame.value = (next['frame'] as num).toInt();
       rendered.value = next;
@@ -472,6 +488,10 @@ class EditorSession {
 
   Future<void> refreshPreview() => _serial(() => _render(), displayBusy: false);
 
+  /// A Stage tab that comes into view asks for its own texture.
+  Future<void> attachView(String view) =>
+      _serial(() async => _accept(await native('attach', {'view': view})));
+
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
     if (op == 'save') {
@@ -507,11 +527,6 @@ class EditorSession {
       if (requiresPause && playing.value)
         throw StateError('Playback did not stop before $op');
       final response = map(await _request(operation, args));
-      // DIAG(temp)
-      File('/tmp/motolii-diag.log').writeAsStringSync(
-        '${DateTime.now().toIso8601String()} $op $args -> err=${map(response['status'])['error'] ?? response['error']} rev=${map(response['status'])['contentRevision'] ?? response['contentRevision']}\n',
-        mode: FileMode.append,
-      );
       final needsRender =
           response['needsRender'] as bool? ?? operation.requiresRender;
       // 状態を持たない返信は 2 つだけ — 繰り延べた {"needsRender":true} と
@@ -685,6 +700,7 @@ class EditorSession {
     document.removeListener(_spreadDocument);
     document.dispose();
     textureId.dispose();
+    textureIds.dispose();
     frame.dispose();
     rendered.dispose();
     playing.dispose();

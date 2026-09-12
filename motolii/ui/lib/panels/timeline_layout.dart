@@ -20,7 +20,8 @@ class _TrackRow {
 
   /// Folded layer row: every key of the layer (properties, content, effect
   /// params) as selection entries, so the bar can show and move them like AE.
-  List<Map<String, dynamic>> get allKeys {
+  late final List<Map<String, dynamic>> allKeys = _allKeys();
+  List<Map<String, dynamic>> _allKeys() {
     if (property != null) return const [];
     final out = <Map<String, dynamic>>[];
     void add(String? prop, dynamic keys) {

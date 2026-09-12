@@ -11,7 +11,12 @@ import '../session/editor_session.dart';
 class StyledTextController extends TextEditingController {
   StyledTextController({required super.text});
   List<Map<String, dynamic>> styles = [], runs = [];
-  double zoom = 1;
+
+  /// The one family the box draws in — a glance at the face, nothing more.
+  /// Null while the text carries more than one family, or while the family
+  /// is not one the machine reported: an unknown name only costs a lookup
+  /// and gives back the same fallback face.
+  String? previewFamily;
   Set<int> highlighted = {};
   List<Map<String, dynamic>> characterStyles() {
     final count = text.characters.length;
@@ -29,71 +34,49 @@ class StyledTextController extends TextEditingController {
     return result;
   }
 
+  // The box is a text field, not the composition: one face, one UI size, one
+  // line height. The class highlight is the only reason to break the string,
+  // and while the IME is composing even that stands aside — so a keystroke
+  // lays out one span, not one per grapheme.
   @override
   TextSpan buildTextSpan({
     required BuildContext context,
     TextStyle? style,
     required bool withComposing,
   }) {
-    final formats = characterStyles();
-    var offset = 0, index = 0;
+    final base = previewFamily == null
+        ? style
+        : (style ?? const TextStyle()).copyWith(fontFamily: previewFamily);
+    if (highlighted.isEmpty || (withComposing && value.composing.isValid))
+      return super.buildTextSpan(
+        context: context,
+        style: base,
+        withComposing: withComposing,
+      );
+    final marked = (base ?? const TextStyle()).copyWith(
+      backgroundColor: EditorTheme.select,
+      color: EditorTheme.selectInk,
+    );
     final children = <TextSpan>[];
-    TextStyle? previousStyle;
-    var buffer = StringBuffer();
+    final buffer = StringBuffer();
+    bool? was;
+    var index = 0;
     void flush() {
       if (buffer.isNotEmpty)
-        children.add(TextSpan(text: buffer.toString(), style: previousStyle));
-      buffer = StringBuffer();
+        children.add(
+          TextSpan(text: buffer.toString(), style: was! ? marked : null),
+        );
+      buffer.clear();
     }
 
-    // A run's graphemes share one style object, so a style is built where
-    // the format, the highlight or the composing mark changes — not per
-    // grapheme on every keystroke.
-    Map<String, dynamic>? previousFormat;
-    bool previousHighlight = false, previousComposing = false;
     for (final g in text.characters) {
-      final highlight = highlighted.contains(index);
-      final format = formats[index++];
-      final end = offset + g.length;
-      final composing =
-          withComposing &&
-          value.composing.isValid &&
-          value.composing.start < end &&
-          value.composing.end > offset;
-      if (!identical(format, previousFormat) ||
-          highlight != previousHighlight ||
-          composing != previousComposing) {
-        previousFormat = format;
-        previousHighlight = highlight;
-        previousComposing = composing;
-        final size = (format['size'] as num? ?? 24).toDouble();
-        final nextStyle = TextStyle(
-          fontFamily: EditorSession.map(format['font'])['family'] as String?,
-          fontSize: size * zoom,
-          height: (format['line_height'] as num?)?.toDouble() == null
-              ? 1.2
-              : (format['line_height'] as num).toDouble() / math.max(1, size),
-          letterSpacing:
-              (format['tracking'] as num? ?? 0).toDouble() / 1000 * size * zoom,
-          fontFeatures: [
-            for (final f in EditorSession.maps(format['features']))
-              if ('${f['tag']}'.length == 4)
-                FontFeature('${f['tag']}', (f['value'] as num? ?? 1).toInt()),
-          ],
-          decoration: composing ? TextDecoration.underline : null,
-          backgroundColor: highlight ? EditorTheme.select : null,
-          color: highlight ? EditorTheme.selectInk : null,
-        );
-        if (nextStyle != previousStyle) {
-          flush();
-          previousStyle = nextStyle;
-        }
-      }
+      final on = highlighted.contains(index++);
+      if (was != null && on != was) flush();
+      was = on;
       buffer.write(g);
-      offset = end;
     }
     flush();
-    return TextSpan(style: style, children: children);
+    return TextSpan(style: base, children: children);
   }
 }
 
@@ -116,7 +99,19 @@ class _RichTextEditorState extends State<RichTextEditor> {
   );
   final _focus = FocusNode();
   String _scope = 'all', _baseline = '';
-  double? _viewZoom;
+  List? _knownFrom;
+  Set<String> _known = const {};
+
+  /// The families the machine reported, as a set built once per list it
+  /// hands over — a name outside it is never asked of the font machinery.
+  Set<String> _knownFamilies(List? raw) {
+    if (!identical(raw, _knownFrom)) {
+      _knownFrom = raw;
+      _known = (raw ?? const []).whereType<String>().toSet();
+    }
+    return _known;
+  }
+
   bool _wasComposing = false;
   bool _dirty = false, _syncing = false, _committing = false;
   Future<void>? _commitFlight;
@@ -191,8 +186,6 @@ class _RichTextEditorState extends State<RichTextEditor> {
         },
       ];
     _text.runs = EditorSession.maps(widget.text['runs']);
-    final base = (_text.styles.first['size'] as num? ?? 24).toDouble();
-    _text.zoom = _viewZoom ??= math.min(1, 24 / math.max(1, base));
   }
 
   void _changed() {
@@ -347,7 +340,16 @@ class _RichTextEditorState extends State<RichTextEditor> {
         .map((s) => '${EditorSession.map(s['font'])['family'] ?? ''}')
         .toSet();
     final canFormat = _enabled && picked.isNotEmpty;
-    final names = (c.state['fontFamilies'] as List? ?? []).whereType<String>();
+    final known = _knownFamilies(c.state['fontFamilies'] as List?);
+    // The box draws in the text's own face only while the whole text wears
+    // one — a mixed text falls back to the panel's, and so does a face the
+    // machine does not list.
+    final whole = _text.styles
+        .map((s) => '${EditorSession.map(s['font'])['family'] ?? ''}')
+        .toSet();
+    _text.previewFamily = whole.length == 1 && known.contains(whole.single)
+        ? whole.single
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -369,7 +371,11 @@ class _RichTextEditorState extends State<RichTextEditor> {
             focusNode: _focus,
             enabled: widget.layer['locked'] != true,
             maxLines: null,
-            style: const TextStyle(color: EditorTheme.ink),
+            style: const TextStyle(
+              fontSize: EditorMetrics.title,
+              height: 1.3,
+              color: EditorTheme.ink,
+            ),
             decoration: const InputDecoration.collapsed(hintText: 'Type here'),
             onChanged: _typed,
           ),
@@ -396,54 +402,51 @@ class _RichTextEditorState extends State<RichTextEditor> {
                       }),
               ),
             ),
-            const SizedBox(width: EditorMetrics.s6),
-            SizedBox(
-              width: EditorMetrics.s70,
-              child: EditorTooltip(
-                message: 'Editing zoom',
-                child: EditorChoice<double>(
-                  value: _text.zoom,
-                  choices: {
-                    0.25,
-                    0.5,
-                    1.0,
-                    _text.zoom,
-                  }.map((z) => MapEntry(z, '${(z * 100).round()}%')).toList(),
-                  onChanged: (z) => setState(() {
-                    _viewZoom = z;
-                    _text.zoom = z;
-                  }),
-                ),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: EditorMetrics.s6),
-        Autocomplete<String>(
-          key: ValueKey('font:${families.join('|')}'),
-          initialValue: TextEditingValue(
-            text: families.length == 1 ? families.single : '',
-          ),
-          optionsBuilder: (value) => !canFormat
-              ? const Iterable<String>.empty()
-              : names.where(
-                  (n) => n.toLowerCase().contains(value.text.toLowerCase()),
+        EditorTooltip(
+          message: 'Font',
+          child: Container(
+            height: EditorMetrics.row,
+            alignment: Alignment.centerLeft,
+            decoration: BoxDecoration(
+              color: EditorTheme.app,
+              border: Border.all(color: EditorTheme.line),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+            child: Autocomplete<String>(
+              key: ValueKey('font:${families.join('|')}'),
+              initialValue: TextEditingValue(
+                text: families.length == 1 ? families.single : '',
+              ),
+              optionsBuilder: (value) => !canFormat || value.text.isEmpty
+                  ? const Iterable<String>.empty()
+                  : known
+                        .where(
+                          (n) => n.toLowerCase().contains(
+                            value.text.toLowerCase(),
+                          ),
+                        )
+                        .take(40),
+              onSelected: (family) => _format({'family': family}),
+              fieldViewBuilder: (context, text, focus, submit) => TextField(
+                controller: text,
+                focusNode: focus,
+                enabled: canFormat,
+                style: const TextStyle(
+                  fontSize: EditorMetrics.font,
+                  color: EditorTheme.ink,
                 ),
-          onSelected: (family) => _format({'family': family}),
-          fieldViewBuilder: (context, text, focus, submit) => TextField(
-            controller: text,
-            focusNode: focus,
-            enabled: canFormat,
-            style: const TextStyle(
-              fontSize: EditorMetrics.font,
-              color: EditorTheme.ink,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                  border: InputBorder.none,
+                  hintText: families.length > 1 ? 'Mixed fonts' : 'Font',
+                ),
+                onSubmitted: (_) => submit(),
+              ),
             ),
-            decoration: InputDecoration(
-              isDense: true,
-              labelText: 'Font',
-              hintText: families.length > 1 ? 'Mixed fonts' : 'Search fonts',
-            ),
-            onSubmitted: (_) => submit(),
           ),
         ),
         const SizedBox(height: EditorMetrics.s6),

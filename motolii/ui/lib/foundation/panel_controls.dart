@@ -412,11 +412,17 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
         widget.max ?? double.infinity,
       )
       .toDouble();
+  /// What the well reads right now. Typing starts from this exact string —
+  /// the number must not turn into a different one under the caret (0.00 →
+  /// 0.0, -19 → -18.999999).
+  String get _reading =>
+      (_shown ?? widget.value).toStringAsFixed(widget.decimals);
+
   void _open() {
     if (!widget.enabled || _ending) return;
     setState(() {
       _editing = true;
-      _text.text = widget.mixed ? '' : widget.value.toString();
+      _text.text = widget.mixed ? '' : _reading;
       _text.selection = TextSelection(
         baseOffset: 0,
         extentOffset: _text.text.length,
@@ -632,25 +638,62 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
       }
       return KeyEventResult.ignored;
     },
+    // Typing happens inside the well, not in place of it: the same box, the
+    // same digits, right-aligned under the same rider. Only the caret is new.
     child: _editing
-        ? TextField(
-            controller: _text,
-            focusNode: _focus,
-            autofocus: true,
-            style: const TextStyle(
-              fontSize: EditorMetrics.font,
-              color: EditorTheme.ink,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: EditorMetrics.s2,
-                vertical: EditorMetrics.s2,
+        ? EditorTooltip(
+            message: _error ?? widget.label,
+            child: Container(
+              height: EditorMetrics.row,
+              decoration: BoxDecoration(
+                color: EditorTheme.app,
+                border: Border.all(
+                  color: _error == null ? EditorTheme.accent : EditorTheme.error,
+                ),
               ),
-              border: InputBorder.none,
-              errorText: _error,
+              padding: const EdgeInsets.symmetric(
+                horizontal: EditorMetrics.s2,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _text,
+                      focusNode: _focus,
+                      autofocus: true,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: EditorMetrics.font,
+                        color: EditorTheme.ink,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                      cursorWidth: 1,
+                      cursorColor: EditorTheme.ink,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        isCollapsed: true,
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                      ),
+                      onSubmitted: (_) => _commitText(),
+                    ),
+                  ),
+                  if (widget.unit != null) ...[
+                    const SizedBox(width: EditorMetrics.s2),
+                    SizedBox(
+                      width: EditorMetrics.s12,
+                      child: Text(
+                        widget.unit!,
+                        style: const TextStyle(
+                          fontSize: EditorMetrics.micro,
+                          color: EditorTheme.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            onSubmitted: (_) => _commitText(),
           )
         : MouseRegion(
             cursor: widget.enabled
@@ -707,8 +750,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                                   child: Text(
                                     widget.mixed && _shown == null
                                         ? '—'
-                                        : (_shown ?? widget.value)
-                                              .toStringAsFixed(widget.decimals),
+                                        : _reading,
                                     maxLines: 1,
                                     overflow: TextOverflow.clip,
                                     style: TextStyle(

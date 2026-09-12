@@ -15,13 +15,9 @@ class GradientInspector extends StatefulWidget {
     required this.controller,
     required this.layer,
     required this.fill,
-    this.inPanel = false,
   });
   final EditorSession controller;
   final Map<String, dynamic> layer, fill;
-
-  /// Hosted in the Colors panel: the wheel is right below, so no link to it.
-  final bool inPanel;
   @override
   State<GradientInspector> createState() => _GradientInspectorState();
 }
@@ -91,12 +87,10 @@ class _GradientInspectorState extends State<GradientInspector>
   Future<void> focus(int index) async {
     setState(() => selected = index);
     final stop = stops[index];
-    await c.command('focusColor', {
+    await c.focusColor({
       'layer': widget.layer['id'],
       'slot': stop['slot'] ?? widget.fill['slot'],
     });
-    c.browserTab.value = 'Colors';
-    await c.placePanel('Colors', 'show');
   }
 
   Color color(Map<String, dynamic> stop) {
@@ -149,7 +143,13 @@ class _GradientInspectorState extends State<GradientInspector>
         children: [
           Row(
             children: [
-              for (final type in ['solid', 'linear', 'radial', 'angular', 'diamond'])
+              for (final type in [
+                'solid',
+                'linear',
+                'radial',
+                'angular',
+                'diamond',
+              ])
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: EditorMetrics.s4),
@@ -406,24 +406,7 @@ class _GradientInspectorState extends State<GradientInspector>
                 ),
               ],
             ),
-          ] else if (!widget.inPanel)
-            InkWell(
-              onTap: enabled ? () => focus(0) : null,
-              child: SizedBox(
-                height: EditorMetrics.s22,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.palette_outlined,
-                      size: EditorMetrics.s16,
-                      color: color(rows.first),
-                    ),
-                    const SizedBox(width: EditorMetrics.s6),
-                    const Text('Choose color'),
-                  ],
-                ),
-              ),
-            ),
+          ],
         ],
       ),
     );

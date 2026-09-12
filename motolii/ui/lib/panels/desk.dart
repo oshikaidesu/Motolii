@@ -23,11 +23,10 @@ class _DeskPanelState extends State<DeskPanel> {
   EditorSession get c => widget.controller;
   String? _automatic;
   String _selection = '';
-  DocumentSlice get _slice => c.slice(
-    'desk',
-    const ['selectedKeys', 'capabilities'],
-    derived: () => deskIdentity(c),
-  );
+  DocumentSlice get _slice => c.slice('desk', const [
+    'selectedKeys',
+    'capabilities',
+  ], derived: () => deskIdentity(c));
   bool _inside = false;
   String _name(String value) =>
       value == 'Text' || value == 'Reference' ? 'Notes' : value;

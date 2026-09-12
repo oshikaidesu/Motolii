@@ -3,6 +3,46 @@ use crate::render::compositor::*;
 /// 層ごとの (効果後の絵, 余白 px, 溢れ) と、フレーム後に pool へ返す scratch。
 /// 溢れ = coverage の外へ出た分の絵と、その混ぜ方(溢れの法、manifest の `SPILL`)。
 pub(crate) type LayerSpill = Option<(LayerContent, BlendMode)>;
+/// 層の持ち物: 焼いた効果。鍵(素材の texture・効果列の値・枠)が同じ間は焼き直さない。
+/// Stage と Camera の 2 枚も、静止した層の次のコマも、同じ物を覗く(rerun の store と同じ持ち方)。
+/// 2 render 続けて使われなかった物は scratch へ返す。
+#[derive(Default)]
+pub(crate) struct BakedEffects {
+    entries: Vec<BakedEntry>,
+    generation: u64,
+}
+struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame> }
+impl PartialEq for BakedKey {
+    fn eq(&self, other: &Self) -> bool { self.source.handle() == other.source.handle() && self.passes == other.passes && self.frame == other.frame }
+}
+struct BakedEntry { key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill, owned: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>, used: u64 }
+impl BakedEffects {
+    fn hit(&mut self, key: &BakedKey) -> Option<(LayerContent, u32, LayerSpill)> {
+        let generation = self.generation;
+        let entry = self.entries.iter_mut().find(|e| e.key == *key)?;
+        entry.used = generation;
+        Some((entry.content.clone(), entry.padding, entry.spill.clone()))
+    }
+    fn keep(&mut self, key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill, owned: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>) {
+        let used = self.generation;
+        self.entries.push(BakedEntry { key, content, padding, spill, owned, used });
+    }
+    fn sweep(&mut self, scratch: &mut effects::EffectScratch) {
+        let generation = self.generation;
+        self.generation += 1;
+        let (kept, stale): (Vec<_>, Vec<_>) = self.entries.drain(..).partition(|e| e.used + 1 >= generation);
+        self.entries = kept;
+        for entry in stale {
+            for (width, height, format, texture) in entry.owned { scratch.release(width, height, format, texture); }
+        }
+    }
+    pub(crate) fn clear(&mut self, scratch: &mut effects::EffectScratch) {
+        for entry in self.entries.drain(..) {
+            for (width, height, format, texture) in entry.owned { scratch.release(width, height, format, texture); }
+        }
+    }
+}
+
 type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<LayerSpill>, Vec<(u32,u32,wgpu::TextureFormat,wgpu::Texture)>);
 
 impl Compositor {
@@ -63,6 +103,17 @@ impl Compositor {
                     continue;
                 }
             }
+            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame };
+            if let Some((content, padding, spill)) = self.baked_effects.hit(&baked_key) {
+                self.surface_work.baked_hits += 1;
+                previous = Some((layer_texture, lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
+                effective_textures.push(content);
+                effective_paddings.push(padding);
+                effective_spills.push(spill);
+                continue;
+            }
+            self.surface_work.bakes += 1;
+            let mut owned = Vec::new();
             let [width, height] = layer_texture.width_height();
             let padding = lwp
                 .passes
@@ -174,7 +225,7 @@ impl Compositor {
                 let imported = self.ctx.texture_manager_2d.import_gpu_premultiplied(self.next_effect_key, &self.ctx, &outside)
                     .map_err(|error| CompositorError::Effect(error.to_string()))?;
                 spill = Some((if current_linear { LayerContent::LinearTexture(imported) } else { LayerContent::Texture(imported) }, mode));
-                checked_out.push((padded_width, padded_height, outside.format(), outside));
+                owned.push((padded_width, padded_height, outside.format(), outside));
             }
 
             self.next_effect_key += 1;
@@ -184,16 +235,19 @@ impl Compositor {
                 .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &current)
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
             let content = if current_linear { LayerContent::LinearTexture(imported) } else { LayerContent::Texture(imported) };
-            previous = Some((layer_texture, lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
-            effective_textures.push(content);
+            previous = Some((layer_texture.clone(), lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
+            effective_textures.push(content.clone());
             effective_paddings.push(padding);
-            effective_spills.push(spill);
-            checked_out.push((padded_width, padded_height, current.format(), current));
+            effective_spills.push(spill.clone());
+            owned.push((padded_width, padded_height, current.format(), current));
+            self.baked_effects.keep(baked_key, content, padding, spill, owned);
         }
         if let Some(encoder) = copy_encoder {
             self.pending.push(encoder.finish());
         }
         self.flush_pending();
+        let Self { baked_effects, effect_scratch, .. } = self;
+        baked_effects.sweep(effect_scratch);
         Ok((effective_textures, effective_paddings, effective_spills, checked_out))
     }
 
@@ -287,6 +341,7 @@ impl Compositor {
 
         let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
 
+        self.window = crate::render::compositor::Window::output(comp);
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         let frame = self.finalize_readback(comp, camera, background, background_color)?;
 
@@ -309,6 +364,7 @@ impl Compositor {
 
         let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
 
+        self.window = crate::render::compositor::Window::output(comp);
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         let (texture, view) = self.finalize_texture(comp, camera, background, background_color)?;
 

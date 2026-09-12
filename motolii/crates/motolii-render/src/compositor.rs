@@ -251,6 +251,35 @@ pub use matte::MatteMode;
 
 pub use presentable::{check_presentable_target, PRESENTABLE_FORMAT};
 
+/// 描く先の窓: target の画素寸法と、comp 画像(出力寸法の投影)のどの矩形をそこへ写すか。
+/// Camera View は出力そのもの(窓 = comp、関心域 = 全体)。Stage はタブの寸法へ描き、
+/// Flutter の zoom/pan を関心域として受ける(rerun の `viewport_transformation`、pan & scan)。
+/// 世界の座標は変わらない — 変わるのは投影の切り取りだけ。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Window {
+    pub width: u32,
+    pub height: u32,
+    /// comp 画像の px で `[x, y, w, h]`。
+    pub roi: [f32; 4],
+    /// 2D・2.5D を置くカメラ。`None` は作中カメラ(出力 = 箱の中身)。Stage は既定カメラ:
+    /// Boxcam の Original Comp で、作中カメラが動いても世界は動かず、箱だけが動く。
+    pub projection_camera: Option<crate::doc::core::ResolvedCamera>,
+}
+
+impl Window {
+    pub fn output(comp: CompSpec) -> Self {
+        Self { width: comp.width, height: comp.height, roi: [0.0, 0.0, comp.width as f32, comp.height as f32], projection_camera: None }
+    }
+    pub(crate) fn viewport(&self, comp: CompSpec) -> re_renderer::RectTransform {
+        re_renderer::RectTransform {
+            region_of_interest: re_renderer::RectF32 { min: glam::vec2(self.roi[0], self.roi[1]), extent: glam::vec2(self.roi[2], self.roi[3]) },
+            region: re_renderer::RectF32 { min: glam::Vec2::ZERO, extent: glam::vec2(comp.width as f32, comp.height as f32) },
+        }
+    }
+    pub(crate) fn size(&self) -> [u32; 2] { [self.width, self.height] }
+    pub(crate) fn size_f32(&self) -> [f32; 2] { [self.width as f32, self.height as f32] }
+}
+
 pub use re_renderer::resource_managers::GpuTexture2D;
 
 pub use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
@@ -342,6 +371,9 @@ pub struct SurfaceWork {
     pub draw_data_prepare_us: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
+    /// 焼いた効果の持ち物: 使い回した回数と焼いた回数。
+    pub baked_hits: u64,
+    pub bakes: u64,
     pub cache_bypasses: u64,
     pub cache_evictions: u64,
     pub cache_key_us: u64,
@@ -350,6 +382,8 @@ pub struct SurfaceWork {
 
 pub struct Compositor {
     pub(crate) ctx: RenderContext,
+    /// 今描いている窓。`render_into_window` が置く。
+    pub(crate) window: Window,
     pub(crate) measurement_enabled: bool,
     pub(crate) measurement: FrameMeasurement,
     pub(crate) surface_work: SurfaceWork,
@@ -374,6 +408,8 @@ pub struct Compositor {
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
     pub(crate) effect_scratch: effects::EffectScratch,
+    /// 層の持ち物: 焼いた効果。view が何枚でも、静止した層は焼かない。
+    pub(crate) baked_effects: render_effects::BakedEffects,
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
     /// hook の変種。鍵は「field の id | surface の id | catalog の世代」。
     pub(crate) surface_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::SurfaceProgram>>,
@@ -496,6 +532,7 @@ pub(crate) fn outline_mask(id: u8) -> re_renderer::OutlineMaskPreference {
 pub(crate) fn sequential_target_config(
     name: &'static str,
     comp: CompSpec,
+    window: Window,
     view_from_world: macaw::IsoTransform,
     projection: crate::doc::core::CameraProjection,
     environment: Option<&GpuEnvironmentData>,
@@ -503,7 +540,8 @@ pub(crate) fn sequential_target_config(
     TargetConfiguration {
         name: name.into(),
         render_mode: RenderMode::Deterministic,
-        resolution_in_pixel: [comp.width, comp.height],
+        resolution_in_pixel: window.size(),
+        viewport_transformation: window.viewport(comp),
         view_from_world,
         projection_from_view: Projection::Perspective {
             vertical_fov: projection.vertical_fov_radians,
@@ -518,15 +556,15 @@ pub(crate) fn sequential_target_config(
 }
 
 /// 出力そのものを見る view: 画素 1:1、カメラを通さない(形の描画と同じ型)。
-pub(crate) fn screen_target_config(name: &'static str, comp: CompSpec) -> TargetConfiguration {
+pub(crate) fn screen_target_config(name: &'static str, window: Window) -> TargetConfiguration {
     TargetConfiguration {
         name: name.into(),
         render_mode: RenderMode::Deterministic,
-        resolution_in_pixel: [comp.width, comp.height],
+        resolution_in_pixel: window.size(),
         view_from_world: macaw::IsoTransform::IDENTITY,
         projection_from_view: Projection::Orthographic {
             camera_mode: OrthographicCameraMode::TopLeftCornerAndExtendZ,
-            vertical_world_size: comp.height as f32,
+            vertical_world_size: window.height as f32,
             far_plane_distance: 1000.0,
         },
         pixels_per_point: 1.0,
@@ -536,11 +574,11 @@ pub(crate) fn screen_target_config(name: &'static str, comp: CompSpec) -> Target
 }
 
 /// 累算(合成の地)を出力の枠いっぱいに 1 枚。`screen_target_config` の view で描く。
-fn screen_rect(comp: CompSpec, imported: GpuTexture2D) -> TexturedRect {
+fn screen_rect(window: Window, imported: GpuTexture2D) -> TexturedRect {
     TexturedRect {
         top_left_corner_position: glam::Vec3::ZERO,
-        extent_u: glam::vec3(comp.width as f32, 0.0, 0.0),
-        extent_v: glam::vec3(0.0, comp.height as f32, 0.0),
+        extent_u: glam::vec3(window.width as f32, 0.0, 0.0),
+        extent_v: glam::vec3(0.0, window.height as f32, 0.0),
         colormapped_texture: premultiplied_texture(imported),
         options: RectangleOptions {
             multiplicative_tint: Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0),

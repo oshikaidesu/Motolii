@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/panels/rich_text_editor.dart';
+import '../lib/foundation/metrics.dart';
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
 import '../lib/session/editor_session.dart';
@@ -12,8 +13,9 @@ import '../lib/session/editor_session.dart';
 void main() {
   Future<EditorSession> mount(
     WidgetTester tester,
-    List<Map<String, dynamic>> sent,
-  ) async {
+    List<Map<String, dynamic>> sent, {
+    List<Map<String, dynamic>>? styles,
+  }) async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(EditorSession.channel, (call) async {
           if (call.arguments is Map && call.arguments['command'] is String)
@@ -44,13 +46,15 @@ void main() {
                 layer: {'id': 1},
                 text: {
                   'content': 'あカ漢か\u3099😀ab',
-                  'styles': [
-                    {
-                      'id': 0,
-                      'size': 40.0,
-                      'font': {'family': 'Arial'},
-                    },
-                  ],
+                  'styles':
+                      styles ??
+                      [
+                        {
+                          'id': 0,
+                          'size': 40.0,
+                          'font': {'family': 'Arial'},
+                        },
+                      ],
                   'runs': [],
                   'classes': [
                     'hiragana',
@@ -173,5 +177,50 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     expect(c.pendingEditors, isEmpty);
     c.dispose();
+  });
+
+  testWidgets('the box keeps the panel\'s size and borrows one known face', (
+    tester,
+  ) async {
+    await mount(tester, []);
+    final field = find.byKey(const ValueKey('rich-text-content'));
+    final box =
+        tester.widget<TextField>(field).controller! as StyledTextController;
+    expect(box.previewFamily, 'Arial');
+    // The composition's 40px never reaches the box: the span it lays out
+    // carries the style the field was given, and one child per highlight —
+    // never one per grapheme.
+    final span = box.buildTextSpan(
+      context: tester.element(field),
+      style: const TextStyle(fontSize: EditorMetrics.title),
+      withComposing: false,
+    );
+    expect(span.style?.fontFamily, 'Arial');
+    expect(span.style?.fontSize, EditorMetrics.title);
+    expect(span.children?.length ?? 1, lessThan(box.text.characters.length));
+  });
+
+  testWidgets('a face the machine never listed is not asked for', (
+    tester,
+  ) async {
+    await mount(
+      tester,
+      [],
+      styles: [
+        {
+          'id': 0,
+          'size': 40.0,
+          'font': {'family': 'Nowhere Sans'},
+        },
+      ],
+    );
+    final box =
+        tester
+                .widget<TextField>(
+                  find.byKey(const ValueKey('rich-text-content')),
+                )
+                .controller!
+            as StyledTextController;
+    expect(box.previewFamily, isNull);
   });
 }

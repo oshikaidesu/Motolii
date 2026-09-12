@@ -2,7 +2,7 @@
 
 use crate::render::compositor::{
     CompSpec, Compositor, CompositorError,
-    LayerWithPasses, ResolvedCamera,
+    LayerWithPasses, ResolvedCamera, Window,
 };
 
 impl Compositor {
@@ -22,7 +22,21 @@ impl Compositor {
         layers: &[LayerWithPasses],
         background_color: [f32; 4],
     ) -> Result<(), CompositorError> {
-        check_presentable_target(target, comp)?;
+        self.render_into_window(target, comp, camera, layers, background_color, Window::output(comp))
+    }
+
+    /// 出力寸法以外の窓へ描く(Stage: タブの寸法へ、関心域で pan & scan)。
+    pub fn render_into_window(
+        &mut self,
+        target: &wgpu::Texture,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+        background_color: [f32; 4],
+        window: Window,
+    ) -> Result<(), CompositorError> {
+        check_presentable_target(target, window)?;
+        self.window = window;
 
         let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
@@ -58,17 +72,17 @@ pub const PRESENTABLE_FORMAT: wgpu::TextureFormat = if cfg!(feature = "shared-bg
 
 pub fn check_presentable_target(
     target: &wgpu::Texture,
-    comp: CompSpec,
+    window: Window,
 ) -> Result<(), CompositorError> {
     if target.format() != PRESENTABLE_FORMAT {
         return Err(CompositorError::PresentableFormat {
             got: format!("{:?}", target.format()),
         });
     }
-    if target.width() != comp.width || target.height() != comp.height {
+    if target.width() != window.width || target.height() != window.height {
         return Err(CompositorError::PresentableSize {
             got: [target.width(), target.height()],
-            expected: [comp.width, comp.height],
+            expected: window.size(),
         });
     }
     if !target

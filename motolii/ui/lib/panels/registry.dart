@@ -48,7 +48,8 @@ Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
       showTabs: false,
     );
   return switch (name) {
-    'Stage' => StagePanel(key: key, controller: c),
+    'Stage' => StagePanel(key: key, controller: c, view: 'User'),
+    'Camera' => StagePanel(key: key, controller: c, view: 'Camera'),
     'Fonts' => FontBrowser(key: key, controller: c),
     'Inspector' => InspectorPanel(key: key, controller: c),
     'Desk' => DeskPanel(

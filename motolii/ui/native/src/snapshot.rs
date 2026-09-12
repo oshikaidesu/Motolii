@@ -52,10 +52,42 @@ fn source_kind(source:&LayerSource)->&'static str{match source{
     }
 }}
 #[derive(Clone,Copy)]
-struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera}
+struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera,document:crate::doc::core::ResolvedCamera}
+/// 2 枚の絵: Stage(観測者が見る世界、カメラは箱)と Camera(箱の中身 = 出力)。両方同時に生きる。
+#[derive(Clone,Copy,PartialEq,Eq,Hash,Debug)]
+pub(crate) enum View{User,Camera}
+impl View{
+    pub(crate) fn parse(name:&str)->Result<Self,String>{match name{"User"|"Stage"=>Ok(Self::User),"Camera"=>Ok(Self::Camera),_=>Err(format!("Unknown view {name}"))}}
+    pub(crate) fn name(self)->&'static str{match self{Self::User=>"User",Self::Camera=>"Camera"}}
+}
 impl EditorRuntime{
-    pub(crate) fn view_camera(&self)->Result<crate::doc::core::ResolvedCamera,String>{
-        if self.user_stage { Ok(self.user_camera) } else { self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e) }
+    pub(crate) fn view_camera(&self,view:View)->Result<crate::doc::core::ResolvedCamera,String>{
+        match view{View::User=>Ok(self.user_camera),View::Camera=>self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e)}
+    }
+    /// view の描く窓。Camera は出力寸法そのもの、Stage はタブが置いた窓(未設定なら出力寸法)。
+    pub(crate) fn window(&self,view:View)->Result<crate::render::engine::Window,String>{
+        let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?.spec();
+        Ok(match view{View::Camera=>crate::render::engine::Window::output(comp),View::User=>self.stage_window.unwrap_or(crate::render::engine::Window{projection_camera:Some(Default::default()),..crate::render::engine::Window::output(comp)})})
+    }
+    /// 層を置くカメラ。2D は出力の画面の物なのでどの view でも作中カメラの箱に貼り付く。
+    /// 2.5D・3D は世界に居る: Stage は既定(Boxcam の Original Comp)、Camera は作中カメラ。
+    pub(crate) fn projection_camera(&self,view:View,projection:LayerProjection)->Result<crate::doc::core::ResolvedCamera,String>{
+        match (view,projection){(View::User,LayerProjection::TwoD)|(View::Camera,_)=>self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e),(View::User,_)=>Ok(Default::default())}
+    }
+    /// Flutter の Stage タブが窓を置く: 画素寸法と、comp 画像のどこを写すか。幅 0 は「隠れた」。
+    pub(crate) fn set_stage_window(&mut self,j:&Json)->Result<bool,String>{
+        let size=|k:&str|j[k].as_u64().map(|v|v as u32).ok_or_else(||format!("stageWindow needs {k}"));
+        let next=match (size("width")?,size("height")?){
+            (0,_)|(_,0)=>None,
+            (width,height)=>{
+                let roi:[f32;4]=serde_json::from_value(j["roi"].clone()).map_err(|_|"stageWindow needs roi [x, y, w, h]")?;
+                if roi.iter().any(|v|!v.is_finite())||roi[2]<=0.0||roi[3]<=0.0{return Err("Invalid stageWindow roi".into())}
+                Some(crate::render::engine::Window{width,height,roi,projection_camera:Some(Default::default())})
+            }
+        };
+        let changed=self.stage_window!=next;
+        self.stage_window=next;
+        Ok(changed)
     }
     fn depth_layout(&self,resolved:&[crate::doc::store::ResolvedLayer])->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
@@ -98,13 +130,12 @@ impl EditorRuntime{
     /// 観測者の画面へ world 点を写す。カメラの後ろは None。
     fn observer_screen(&self)->Result<impl Fn(glam::Vec3)->Option<[f32;2]>,String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
-        let observer=crate::doc::core::camera_projection(comp,self.view_camera()?);
+        let observer=crate::doc::core::camera_projection(comp,self.user_camera);
         let matrix=observer.projection_matrix()*observer.view_matrix();
         Ok(move|p:glam::Vec3|{let c=matrix*p.extend(1.0);if c.w<=0.0{return None}Some([(c.x/c.w+1.0)*0.5*comp.width as f32,(1.0-c.y/c.w)*0.5*comp.height as f32])})
     }
-    /// User Stage の観測者: 正面か、注視点、comp 面の 4 角。Camera View では Null。
+    /// Stage の観測者: 正面か、注視点、comp 面の 4 角(Stage の comp 画像 px)。
     fn observer_status(&self)->Result<Json,String>{
-        if !self.user_stage { return Ok(Json::Null); }
         let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
         let (w,h)=(comp.width as f32,comp.height as f32);
@@ -115,15 +146,16 @@ impl EditorRuntime{
     }
     /// 3D 層の 3 軸ギズモ。頂点は comp 座標 —— Stage は掴む所も描く所も同じ写像で扱う。
     /// 3D 層を選んでいない時は Null。2D・2.5D の平面ケージはここを通らない。
-    pub(crate) fn spatial_gizmo(&self)->Result<Json,String>{
+    pub(crate) fn spatial_gizmo(&self,seen:View)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
         let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.selected_ids,time) else{return Ok(Json::Null)};
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets,self.stage_pointer,self.stage_view_scale,self.stage_held.as_deref()) else{return Ok(Json::Null)};
+        let pointer=self.stage_pointer.filter(|_|self.stage_view==seen);
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera(seen)?,&targets,pointer,self.stage_view_scale,self.stage_held.as_deref()) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
+    /// Stage に置いた箱(Boxcam): Camera 層ごとの frustum と取っ手。Stage の comp 画像 px。
     fn camera_gizmos(&self)->Result<Json,String>{
-        if !self.user_stage { return Ok(json!([])); }
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
         let resolved=view.resolved_layers(time).map_err(e)?;
@@ -134,44 +166,57 @@ impl EditorRuntime{
             let camera=self.engine.camera_of_layer_in(&view,&resolved,id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
-            // frustum の面は注視点に置く。正面(orbit 0・層ターゲット無し)ではそれが comp 面の箱で、辺・角・取っ手で author できる。
+            // 箱 = カメラが comp 面(z=0)のどこを見ているか: frustum の 4 本の稜線と comp 面の交わり。
+            // 正面(orbit 0・層ターゲット無し)ではそれが枠と同じ形の箱で、辺・角・取っ手で author できる。
+            // 回ったカメラでは面の上の台形になる。稜線が面へ届かない時だけ注視距離の角で代える。
             let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
             let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
-            let points=[glam::Vec3::ZERO,glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
-            let points:Vec<_>=points.into_iter().map(|p|screen(projection.eye+rotation*p)).collect();
+            let corners=[glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
+            let eye=projection.eye;
+            let corners:Vec<_>=corners.into_iter().map(|p|{
+                let ray=rotation*p;
+                let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
+                screen(if t>0.0{eye+ray*t}else{eye+ray})
+            }).collect();
+            // 箱は注視面の 4 角が写れば描く。eye は観測者と同じ深さか後ろに居るのが普通で(正面の観測者は
+            // 既定のカメラと同じ距離に立つ)、写せない。eye と frustum の線は写せた時だけの飾り。
+            let eye=screen(eye);
             let authorable=camera.orbit_degrees==[0.0;2] && view.camera_target_layer(id,time).map_err(e)?.is_none();
-            if points.iter().all(Option::is_some){gizmos.push(json!({"id":id.0,"points":points,"target":screen(camera.target(comp)),"authorable":authorable,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
+            // 届かない角は null。2 角以上写れば箱を出し、Flutter は写った角だけ結ぶ。author できるのは 4 角揃った時だけ。
+            let seen=corners.iter().filter(|c|c.is_some()).count();
+            if seen>=2{gizmos.push(json!({"id":id.0,"points":corners,"eye":eye,"target":screen(camera.target(comp)),"authorable":authorable&&seen==4,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
         }
         Ok(json!(gizmos))
     }
 
-    pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{
+    /// 出力(Camera)で見た枠。anchor など view を問わない用途。
+    pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{ self.bounds_seen(layer,View::Camera) }
+    pub(crate) fn bounds_seen(&self,layer:LayerId,seen:View)->Option<Json>{
         let resolved=self.doc.view().resolved_layers(self.time().ok()?).ok()?;
-        self.bounds_in(&resolved,layer)
+        self.bounds_from(&self.eye(seen)?,resolved.as_slice(),layer,seen)
     }
-    /// 見ている姿勢 —— comp・作中カメラ・観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
-    fn eye(&self)->Option<Eye>{
+    /// 見ている姿勢 —— comp・作中カメラ・その view の観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
+    fn eye(&self,seen:View)->Option<Eye>{
         let view=self.doc.view();let time=self.time().ok()?;
-        Some(Eye{time,comp:view.composition().ok()??.spec(),camera:self.engine.resolve_camera(&view,time).ok()?,observer:self.view_camera().ok()?})
+        Some(Eye{time,comp:view.composition().ok()??.spec(),camera:self.projection_camera(seen,LayerProjection::ThreeD).ok()?,observer:self.view_camera(seen).ok()?,document:self.engine.resolve_camera(&view,time).ok()?})
     }
-    /// 解決済みの層の並びから枠を取る。status は 1 フレームに 1 回だけ解いて、全層でこれを使う。
-    pub(crate) fn bounds_in(&self,resolved:&[crate::doc::store::ResolvedLayer],layer:LayerId)->Option<Json>{
-        self.bounds_from(&self.eye()?,resolved,layer)
-    }
-    /// 描いた直後に GPU の mask から届いた範囲を取り込む。選択が変わるまで使う。
-    pub(crate) fn take_selection_bounds(&mut self){
+    /// 描いた直後に GPU の mask から届いた範囲を、窓の px から comp 画像の px へ戻して取り込む。選択が変わるまで使う。
+    pub(crate) fn take_selection_bounds(&mut self,seen:View,window:crate::render::engine::Window){
         if let Some(found)=self.engine.take_selection_bounds(){
-            self.selection_bounds=found.into_iter().collect();
+            let [x,y,w,h]=window.roi;let (sx,sy)=(w/window.width.max(1) as f32,h/window.height.max(1) as f32);
+            self.selection_bounds.insert(seen,found.into_iter().map(|(id,[x0,y0,x1,y1])|(id,[x+x0*sx,y+y0*sy,x+x1*sx,y+y1*sy])).collect());
         }
     }
-    fn bounds_from(&self,eye:&Eye,resolved:&[crate::doc::store::ResolvedLayer],layer:LayerId)->Option<Json>{
-        let view=self.doc.view();let Eye{time,comp,camera,observer}=*eye;
+    fn bounds_from(&self,eye:&Eye,resolved:&[crate::doc::store::ResolvedLayer],layer:LayerId,seen:View)->Option<Json>{
+        let view=self.doc.view();let Eye{time,comp,camera,observer,document}=*eye;
         let r=resolved.iter().find(|r|r.id==layer&&!r.ghost)?;
+        // 2D は箱に貼り付いているので、どの view でも作中カメラで置く。
+        let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
         let b=self.engine.selected_layer_bounds_in(&view,resolved,layer,time)?;
         let world=crate::doc::core::depth_scaled(r.placement.world_transform?);
         // 選ばれた層は絵そのもの(mask)の広がり: 透視・effect・変位込みで 1 px。届く前は写した点で包む。
         // 2D・2.5D の籠は向きを持たない: こちらを向いた矩形。向きは Inspector が決める。
-        let corners:Vec<_>=match (self.selection_bounds.get(&layer),r.projection){
+        let corners:Vec<_>=match (self.selection_bounds.get(&seen).and_then(|m|m.get(&layer)),r.projection){
             (Some(&[x0,y0,x1,y1]),_)=>vec![[x0 as f64,y0 as f64],[x1 as f64,y0 as f64],[x1 as f64,y1 as f64],[x0 as f64,y1 as f64]],
             (None,projection)=>match projection{
             LayerProjection::ThreeD=>crate::doc::core::projected_screen_corners(comp,camera,observer,r.projection,world,b.min,b.max).iter().map(|p|[p.x as f64,p.y as f64]).collect(),
@@ -185,12 +230,14 @@ impl EditorRuntime{
         Some(json!({"layer":layer.0,"corners":corners,"localMin":b.min,"localMax":b.max,"anchorFraction":fractions}))
     }
     /// 今の姿 —— 観測者と時刻で動く物。cache した行の上へ毎回これを載せる。
-    fn overlay_geometry(&self,row:&mut Json,eye:&Eye,resolved:&[crate::doc::store::ResolvedLayer],id:LayerId,live:bool)->Result<(),String>{
-        let position=self.position(id)?;let bounds=self.bounds_from(eye,resolved,id);
+    /// `bounds` は Camera(出力)、`stageBounds` は Stage(観測者)で見た枠。
+    fn overlay_geometry(&self,row:&mut Json,eyes:&(Eye,Eye),resolved:&[crate::doc::store::ResolvedLayer],id:LayerId,live:bool)->Result<(),String>{
+        let position=self.position(id)?;let bounds=self.bounds_from(&eyes.0,resolved,id,View::Camera);
         row["corners"]=json!(bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|if c.len()==8{vec![c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]}else{c.clone()}));
         row["x"]=json!(position[0]);row["y"]=json!(position[1]);
         if !live {row["anchorFraction"]=bounds.as_ref().map(|b|b["anchorFraction"].clone()).unwrap_or(Json::Null);}
         row["bounds"]=json!(bounds);
+        row["stageBounds"]=json!(self.bounds_from(&eyes.1,resolved,id,View::User));
         Ok(())
     }
     pub(crate) fn build_status(&self)->Result<Json,String>{
@@ -198,7 +245,7 @@ impl EditorRuntime{
         let catalog=crate::render::engine::known_effects();
         let resolved=view.resolved_layers(at).map_err(e)?;
         let clipping=view.clipping_bases().map_err(e)?;
-        let eye=self.eye().ok_or("No composition")?;
+        let eyes=(self.eye(View::Camera).ok_or("No composition")?,self.eye(View::User).ok_or("No composition")?);
         // 再生中で Document が変わっていなければ、時刻で変わる物(値・枠)だけの軽い status にする。
         let revision=format!("{:?}",self.doc.revision());
         let live=self.clock.playing()&&self.full_status_revision.borrow().as_deref()==Some(revision.as_str());
@@ -220,7 +267,7 @@ impl EditorRuntime{
                     built
                 }
             };
-            if let Some(mut row)=row {self.overlay_geometry(&mut row,&eye,&resolved,id,live)?;layers.push(row);}
+            if let Some(mut row)=row {self.overlay_geometry(&mut row,&eyes,&resolved,id,live)?;layers.push(row);}
         }
         self.snapshot_cache.borrow_mut().rows.retain(|id,_|keys.contains_key(id));
         if live {
@@ -231,7 +278,7 @@ impl EditorRuntime{
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
             return Ok(json!({"frame":self.frame,"playing":self.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
                 "selectedId":self.selected.map(|s|s.0),"selectedIds":self.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
-                "stageView":if self.user_stage{"User"}else{"Camera"},"animate":self.animate!=Animate::Off,"renderCount":self.render_count,"pickedColor":self.picked_color,"pickSerial":self.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
+                "animate":self.animate!=Animate::Off,"renderCount":self.render_count,"pickedColor":self.picked_color,"pickSerial":self.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
         }
         *self.full_status_revision.borrow_mut()=Some(revision);
         let assets:Result<Vec<_>,String>=view.assets().map_err(e)?.into_iter().map(|a|{
@@ -263,7 +310,8 @@ impl EditorRuntime{
         status["visualSamples"]=json!(true);
         status["fontFamilies"]=json!(crate::doc::vector::text::font_families());
         status["history"]=self.history.snapshot(self.doc.edit_head());
-        status["spatialGizmo"]=self.spatial_gizmo()?;
+        status["spatialGizmo"]=self.spatial_gizmo(View::Camera)?;
+        status["stageSpatialGizmo"]=self.spatial_gizmo(View::User)?;
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&resolved)?;
         status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());
@@ -406,13 +454,13 @@ mod frame_cost_probe {
         let before = rt.full_status_revision.borrow().clone();
         let reply = unsafe { crate::motolii_probe_request(&mut rt, c"{\"op\":\"renderInfo\"}".as_ptr()) };
         let info: serde_json::Value = serde_json::from_str(unsafe { std::ffi::CStr::from_ptr(reply) }.to_str().unwrap()).unwrap();
-        assert_eq!(info.as_object().unwrap().len(), 2);
+        assert_eq!(info.as_object().unwrap().len(), 3, "width, height, views");
         assert_eq!(info["width"], rt.status().unwrap()["width"]);
         assert_eq!(*rt.full_status_revision.borrow(), before);
         rt.request(serde_json::json!({"op":"composition","width":640,"height":480})).unwrap();
         let reply = unsafe { crate::motolii_probe_request(&mut rt, c"{\"op\":\"renderInfo\"}".as_ptr()) };
         let info: serde_json::Value = serde_json::from_str(unsafe { std::ffi::CStr::from_ptr(reply) }.to_str().unwrap()).unwrap();
-        assert_eq!(info, serde_json::json!({"width":640,"height":480}));
+        assert_eq!(info, serde_json::json!({"width":640,"height":480,"views":[{"view":"Camera","width":640,"height":480}]}));
     }
 
     #[test]
@@ -518,7 +566,7 @@ mod camera_view_cage_tests {
         let comp=rt.doc.view().composition().unwrap().unwrap().spec();
         for (projection,orbit) in [("2.5D",[0.0,0.0]),("2.5D",[-20.0,40.0]),("2.5D",[35.0,-120.0]),("2D",[-20.0,40.0])] {
             request(&mut rt,json!({"op":"setAttrs","layers":[text.0],"patch":{"projection":projection}}));
-            rt.user_stage=true;rt.user_camera=crate::doc::core::ResolvedCamera{orbit_degrees:orbit,..Default::default()};
+            rt.user_camera=crate::doc::core::ResolvedCamera{orbit_degrees:orbit,..Default::default()};
             let time=rt.time().unwrap();
             let pixels=rt.engine.render_with_camera_override(&rt.doc.view(),time,true,Some(rt.user_camera)).unwrap();
             let background=&pixels[0..4];
@@ -527,7 +575,7 @@ mod camera_view_cage_tests {
                 if px[..3]!=background[..3]{let x=(i as u32%comp.width) as f64;let y=(i as u32/comp.width) as f64;px0=px0.min(x);py0=py0.min(y);px1=px1.max(x);py1=py1.max(y);}
             }
             assert!(px0<px1,"{projection} {orbit:?}: the text is drawn");
-            let bounds=rt.bounds(text).unwrap();
+            let bounds=rt.bounds_seen(text,View::User).unwrap();
             let (mut cx0,mut cy0,mut cx1,mut cy1)=(f64::MAX,f64::MAX,f64::MIN,f64::MIN);
             for c in bounds["corners"].as_array().unwrap(){let x=c[0].as_f64().unwrap();let y=c[1].as_f64().unwrap();cx0=cx0.min(x);cy0=cy0.min(y);cx1=cx1.max(x);cy1=cy1.max(y);}
             // 絵は籠からはみ出さない。活字の局所 bounds は縁取りの余白ぶん(8 px 弱)絵より広く、
@@ -538,6 +586,78 @@ mod camera_view_cage_tests {
             assert!(px0-cx0<=loose&&py0-cy0<=loose&&cx1-px1<=loose&&cy1-py1<=loose,
                 "{projection} {orbit:?}: the cage [{cx0:.1},{cy0:.1}]-[{cx1:.1},{cy1:.1}] is loose around the drawn [{px0},{py0}]-[{px1},{py1}]");
         }
+    }
+    /// Stage は世界そのもの(Boxcam): 出力枠の外に置いた層も Stage の窓には描かれ、mask から戻る枠は
+    /// comp 画像の px。Camera(出力)の絵には載らない。両方の絵が同時に生きる。
+    #[test]
+    fn the_stage_window_draws_beyond_the_frame_and_the_camera_does_not(){
+        let mut rt=EditorRuntime::open("").unwrap();
+        request(&mut rt,json!({"op":"create","kind":"text"}));
+        let text=rt.selected.unwrap();
+        request(&mut rt,json!({"op":"setText","layer":text.0,"content":"Outside"}));
+        request(&mut rt,json!({"op":"styleText","layer":text.0,"scope":"all","size":200.0}));
+        request(&mut rt,json!({"op":"setProperty","layer":text.0,"property":"position","value":[-1500.0,300.0]}));
+        let comp=rt.doc.view().composition().unwrap().unwrap().spec();
+        let make=|rt:&EditorRuntime,width,height|rt.engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
+            label:Some("two views test"),size:wgpu::Extent3d{width,height,depth_or_array_layers:1},mip_level_count:1,sample_count:1,
+            dimension:wgpu::TextureDimension::D2,format:crate::render::compositor::PRESENTABLE_FORMAT,usage:wgpu::TextureUsages::RENDER_ATTACHMENT|wgpu::TextureUsages::TEXTURE_BINDING,view_formats:&[],
+        });
+        // Stage の窓: 出力枠の 4 倍を中央に、960×540 の texture へ。
+        let (w,h)=(comp.width as f32,comp.height as f32);
+        let reply=request(&mut rt,json!({"op":"stageWindow","width":960,"height":540,"roi":[-w*1.5,-h*1.5,w*4.0,h*4.0]}));
+        assert_eq!(reply,json!({"needsRender":true}));
+        let window=rt.window(View::User).unwrap();
+        let stage=make(&rt,960,540);
+        rt.render_into(&stage,View::User,window).unwrap();
+        let b=rt.selection_bounds[&View::User].get(&text).copied().expect("the text is drawn in the Stage window");
+        assert!(b[0]<0.0&&b[2]<0.0&&b[2]>b[0],"the cage sits left of the frame in comp px: {b:?}");
+        assert!(b[1]>0.0&&b[3]<h,"the cage keeps the comp's vertical placement: {b:?}");
+        let output=make(&rt,comp.width,comp.height);
+        rt.render_into(&output,View::Camera,crate::render::engine::Window::output(comp)).unwrap();
+        assert!(rt.selection_bounds[&View::Camera].get(&text).is_none_or(|b|b[2]<=b[0]),"the output never shows what lies outside the frame");
+        let status=rt.build_status().unwrap();
+        let row=status["layers"].as_array().unwrap().iter().find(|l|l["id"]==text.0).unwrap();
+        assert!(row["stageBounds"]["corners"].is_array(),"the Stage cage rides on the row");
+        assert!(status["observer"].is_object()&&status["cameraGizmos"].is_array(),"the Stage chrome is always there");
+        // 正面の観測者は既定のカメラと同じ所に立つ。eye は写せなくても、箱(comp 面の 4 角)は必ず出る。
+        request(&mut rt,json!({"op":"create","kind":"camera"}));
+        let camera=rt.selected.unwrap();
+        let gizmos=rt.camera_gizmos().unwrap();
+        let g=gizmos.as_array().unwrap().first().expect("the camera box is drawn front-on");
+        assert_eq!(g["points"].as_array().unwrap().len(),4,"{g}");
+        assert!(g["eye"].is_null(),"the eye sits at the observer and cannot be projected: {g}");
+        let corner=|i:usize|[g["points"][i][0].as_f64().unwrap(),g["points"][i][1].as_f64().unwrap()];
+        let (xs,ys):(Vec<f64>,Vec<f64>)=(0..4).map(corner).map(|c|(c[0],c[1])).unzip();
+        let span=|v:&[f64]|(v.iter().cloned().fold(f64::MAX,f64::min),v.iter().cloned().fold(f64::MIN,f64::max));
+        assert!(span(&xs).0.abs()<1.0&&(span(&xs).1-w as f64).abs()<1.0&&span(&ys).0.abs()<1.0&&(span(&ys).1-h as f64).abs()<1.0,"a default camera's box is the frame: {g}");
+        // Boxcam: 作中カメラが回っても Stage(Original Comp)は動かない。動くのは箱だけ。
+        request(&mut rt,json!({"op":"setProperty","layer":text.0,"property":"position","value":[400.0,300.0]}));
+        let still=|rt:&mut EditorRuntime|{
+            request(rt,json!({"op":"select","ids":[text.0]}));
+            let window=crate::render::engine::Window{projection_camera:Some(Default::default()),..crate::render::engine::Window::output(comp)};
+            rt.stage_window=Some(window);
+            let stage=make(rt,comp.width,comp.height);
+            rt.render_into(&stage,View::User,window).unwrap();
+            rt.selection_bounds[&View::User][&text]
+        };
+        let before=still(&mut rt);
+        request(&mut rt,json!({"op":"setProperty","layer":camera.0,"property":"camera.orbit","value":[-20.0,40.0]}));
+        let after=still(&mut rt);
+        assert!(before.iter().zip(after.iter()).all(|(a,b)|(a-b).abs()<1.0),"the Stage never moves with the camera: {before:?} vs {after:?}");
+        let output=make(&rt,comp.width,comp.height);
+        rt.render_into(&output,View::Camera,crate::render::engine::Window::output(comp)).unwrap();
+        let seen=rt.selection_bounds[&View::Camera][&text];
+        assert!(seen.iter().zip(after.iter()).any(|(a,b)|(a-b).abs()>1.0),"the box's contents do follow the camera: {seen:?}");
+        // 2D は出力の画面の物: Stage でも箱に貼り付き、箱(カメラ)と一緒に動く。
+        request(&mut rt,json!({"op":"setProperty","layer":camera.0,"property":"camera.orbit","value":[0.0,0.0]}));
+        request(&mut rt,json!({"op":"setAttrs","layers":[text.0],"patch":{"projection":"2D"}}));
+        let flat_before=still(&mut rt);
+        request(&mut rt,json!({"op":"setProperty","layer":camera.0,"property":"camera.center","value":[300.0,0.0]}));
+        let flat_after=still(&mut rt);
+        assert!((flat_after[0]-flat_before[0]).abs()>100.0,"a 2D layer rides with the camera box in the Stage: {flat_before:?} vs {flat_after:?}");
+        let cage=rt.bounds_seen(text,View::User).unwrap();
+        let c:Vec<[f64;2]>=serde_json::from_value(cage["corners"].clone()).unwrap();
+        assert!((c[0][0]-flat_after[0] as f64).abs()<3.0,"the Stage cage follows the moved 2D layer: {c:?} vs {flat_after:?}");
     }
     /// 選ばれた層の籠は、描いた画素そのものの範囲(GPU の mask)。3D を透視で回しても 1 px で合う。
     #[test]
@@ -551,18 +671,17 @@ mod camera_view_cage_tests {
         let camera=rt.selected.unwrap();
         request(&mut rt,json!({"op":"setProperty","layer":camera.0,"property":"camera.orbit","value":[-20.0,40.0]}));
         request(&mut rt,json!({"op":"select","ids":[mesh.0]}));
-        rt.user_stage=false;
         let comp=rt.doc.view().composition().unwrap().unwrap().spec();
         let texture=rt.engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
             label:Some("selected cage test"),size:wgpu::Extent3d{width:comp.width,height:comp.height,depth_or_array_layers:1},mip_level_count:1,sample_count:1,
             dimension:wgpu::TextureDimension::D2,format:crate::render::compositor::PRESENTABLE_FORMAT,usage:wgpu::TextureUsages::RENDER_ATTACHMENT|wgpu::TextureUsages::TEXTURE_BINDING,view_formats:&[],
         });
         let time=rt.time().unwrap();
-        let observer=rt.view_camera().unwrap();
+        let observer=rt.view_camera(View::Camera).unwrap();
         rt.engine.render_frame_into_with_camera(&rt.doc.view(),time,&texture,observer,true,&[mesh]).unwrap();
         rt.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).unwrap();
-        rt.take_selection_bounds();
-        assert!(rt.selection_bounds.contains_key(&mesh),"the mask reached the bridge");
+        rt.take_selection_bounds(View::Camera,crate::render::engine::Window::output(comp));
+        assert!(rt.selection_bounds[&View::Camera].contains_key(&mesh),"the mask reached the bridge");
         let pixels=rt.engine.render_frame(&rt.doc.view(),time).unwrap();
         let background=&pixels[0..4];
         let (mut px0,mut py0,mut px1,mut py1)=(f64::MAX,f64::MAX,f64::MIN,f64::MIN);
@@ -589,7 +708,6 @@ mod camera_view_cage_tests {
         request(&mut rt,json!({"op":"create","kind":"camera"}));
         let camera=rt.selected.unwrap();
         request(&mut rt,json!({"op":"select","ids":[mesh.0]}));
-        rt.user_stage=false;
         let comp=rt.doc.view().composition().unwrap().unwrap().spec();
         for (projection,orbit,distance) in [("3D",[0.0,0.0],1.0),("3D",[-20.0,146.0],1.0),("3D",[-20.0,-166.0],4.58),("3D",[-20.0,40.0],0.5),("3D",[35.0,-120.0],0.7),
                                             ("2D",[0.0,0.0],1.0),("2D",[-20.0,40.0],0.7),("2.5D",[0.0,0.0],1.0),("2.5D",[-20.0,40.0],0.7),("2.5D",[35.0,-120.0],1.3)] {
@@ -624,10 +742,10 @@ mod camera_view_cage_tests {
             let view=rt.doc.view();
             let world=view.world_transform3d(mesh,time).unwrap();
             let anchor=match view.value_at(mesh,&PropertyId::new(property::ANCHOR).unwrap(),time).unwrap(){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
-            let projection=crate::doc::core::camera_projection(comp,rt.view_camera().unwrap());
+            let projection=crate::doc::core::camera_projection(comp,rt.view_camera(View::Camera).unwrap());
             let c=projection.projection_matrix()*projection.view_matrix()*world.transform_point3(glam::vec3(anchor[0]as f32,anchor[1]as f32,0.0)).extend(1.0);
             let hub=[((c.x/c.w+1.0)*0.5*comp.width as f32)as f64,((1.0-c.y/c.w)*0.5*comp.height as f32)as f64];
-            let gizmo=rt.spatial_gizmo().unwrap();
+            let gizmo=rt.spatial_gizmo(View::Camera).unwrap();
             let vertices=gizmo["vertices"].as_array().unwrap_or_else(||panic!("{orbit:?}/{distance}: no 3-axis gizmo: {gizmo}"));
             let (mut gx0,mut gy0,mut gx1,mut gy1)=(f64::MAX,f64::MAX,f64::MIN,f64::MIN);
             for v in vertices{let x=v[0].as_f64().unwrap();let y=v[1].as_f64().unwrap();if x.is_finite()&&y.is_finite(){gx0=gx0.min(x);gy0=gy0.min(y);gx1=gx1.max(x);gy1=gy1.max(y);}}
@@ -650,9 +768,9 @@ mod camera_view_cage_tests {
         rt.engine.render_frame(&rt.doc.view(),time).unwrap();
         for (projection,observer) in [("2D",crate::doc::core::ResolvedCamera::default()),("2.5D",crate::doc::core::ResolvedCamera{orbit_degrees:[-15.0,35.0],distance_scale:1.4,..Default::default()})] {
             request(&mut rt,json!({"op":"setAttrs","layers":[layer.0],"patch":{"projection":projection}}));
-            rt.user_stage=true;rt.user_camera=observer;
+            rt.user_camera=observer;
             let time=rt.time().unwrap();
-            let bounds=rt.bounds(layer).unwrap();
+            let bounds=rt.bounds_seen(layer,View::User).unwrap();
             let c:Vec<[f64;2]>=serde_json::from_value(bounds["corners"].clone()).unwrap();
             assert_eq!(c.len(),4,"{projection}: a planar layer gets the 4-corner frame");
             assert!((c[0][1]-c[1][1]).abs()<1e-3&&(c[1][0]-c[2][0]).abs()<1e-3&&(c[2][1]-c[3][1]).abs()<1e-3&&(c[3][0]-c[0][0]).abs()<1e-3,"{projection}: the frame faces the observer: {c:?}");
@@ -666,14 +784,14 @@ mod camera_view_cage_tests {
             assert!((c[1][0]-c[0][0])>1.0&&(c[3][1]-c[0][1])>1.0,"{projection}: the frame is not edge-on even though the plane may be");
             // 角を外へ引く → scale が伸びる。
             let se=[c[2][0],c[2][1]];let nw=[c[0][0],c[0][1]];
-            let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"scale","se",se,time,observer,1.0,None).unwrap();
+            let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"scale","se",se,time,observer,Default::default(),1.0,None).unwrap();
             let far=[nw[0]+(se[0]-nw[0])*2.0,nw[1]+(se[1]-nw[1])*2.0];
             let edits=drag.edits(&rt.doc,far,false,false,Animate::Off).unwrap();
             let scale=edits.iter().find_map(|i|match i{Intent::SetConstant{property,value:Value::Vec2(v),..} if *property==PropertyId::new(property::SCALE).unwrap()=>Some(*v),_=>None}).expect("scale edit");
             assert!(scale[0]>1.5&&scale[1]>1.5,"{projection}: pulling the corner out grows the layer: {scale:?}");
             // 上の取っ手を画面で 90° 回す → rotation が 90° 動く(相似で結ぶので画面の角度がそのまま値)。
             let top=[(c[0][0]+c[1][0])*0.5,c[0][1]-22.0];
-            let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"rotate","",top,time,observer,1.0,None).unwrap();
+            let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"rotate","",top,time,observer,Default::default(),1.0,None).unwrap();
             // 回転の軸は anchor を写した点(取っ手と同じ写像: 中間奥行きの面の 4 角を anchor の比で結ぶ)。
             let m:Vec<[f64;2]>=(0..4).map(|i|[((projected[i].x+projected[i+4].x)*0.5)as f64,((projected[i].y+projected[i+4].y)*0.5)as f64]).collect();
             let f:[f64;2]=serde_json::from_value(bounds["anchorFraction"].clone()).unwrap();

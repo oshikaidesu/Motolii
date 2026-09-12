@@ -4,6 +4,7 @@ enum DocumentOperation {
   status('status'),
   notes('notes'),
   stageView('stageView'),
+  stageWindow('stageWindow'),
   select('select'),
   setProperty('setProperty'),
   previewProperties('previewProperties'),

@@ -23,7 +23,7 @@ class GestureSession extends EditorSession {
 Map<String, dynamic> _layer(int id, String projection) => {
   'id': id,
   'projection': projection,
-  'bounds': {
+  'stageBounds': {
     'corners': [
       [100, 100],
       [300, 100],
@@ -50,10 +50,7 @@ const _mesh = {
   'indices': [0, 1, 2, 0, 2, 3],
 };
 
-Map<String, dynamic> _doc({
-  required String projection,
-  bool mesh = true,
-}) => {
+Map<String, dynamic> _doc({required String projection, bool mesh = true}) => {
   'width': 400,
   'height': 400,
   'frame': 0,
@@ -64,19 +61,17 @@ Map<String, dynamic> _doc({
   'layers': [_layer(7, projection)],
   'selectedId': 7,
   'selectedIds': [7],
-  if (mesh) 'spatialGizmo': _mesh,
+  if (mesh) 'stageSpatialGizmo': _mesh,
 };
 
-/// comp 座標 → 画面。合成の矩形は「描かれていない」札が占める所と同じ。
+/// comp 座標 → 画面。Stage はタブいっぱいに描くので、合成の矩形は overlay が持つ枠から取る。
 Offset Function(double, double) _screen(WidgetTester tester) {
-  final rect = tester.getRect(
-    find
-        .ancestor(
-          of: find.text('No rendered texture'),
-          matching: find.byType(Center),
-        )
-        .first,
+  final overlay = find.byWidgetPredicate(
+    (w) => w is CustomPaint && '${w.painter.runtimeType}' == '_StageOverlay',
   );
+  final frame =
+      (tester.widget<CustomPaint>(overlay).painter as dynamic).viewport as Rect;
+  final rect = frame.shift(tester.getTopLeft(overlay));
   final scale = rect.width / 400;
   return (double x, double y) => rect.topLeft + Offset(x, y) * scale;
 }

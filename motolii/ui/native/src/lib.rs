@@ -11,7 +11,8 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Instant;
 
 use motolii_doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, Value};
-use motolii_render::engine::Engine;
+use motolii_render::engine::{Engine, Window};
+use snapshot::View;
 use objc2_io_surface::IOSurfaceRef;
 use objc2_metal::{MTLDevice, MTLPixelFormat, MTLStorageMode, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
 use serde_json::json;
@@ -22,7 +23,8 @@ pub struct EditorRuntime {
     selected: Option<LayerId>,
     selected_ids: Vec<LayerId>,
     /// 直前の Stage 描画で選ばれた層が描かれた画面上の範囲(絵そのものの籠)。
-    selection_bounds: std::collections::HashMap<LayerId, [f32; 4]>,
+    /// view ごと、描いた画素から届いた選択の広がり(comp 画像の px)。
+    selection_bounds: std::collections::HashMap<View, std::collections::HashMap<LayerId, [f32; 4]>>,
     selected_keys: Vec<editor::session::KeySel>,
     clipboard: editor::clipboard::Clipboard,
     path: Option<String>,
@@ -47,7 +49,10 @@ pub struct EditorRuntime {
     stage_view_scale: f64,
     /// 押している P / R / S。3D ギズモをその 1 種に絞る。
     stage_held: Option<String>,
-    user_stage: bool,
+    /// Stage タブの窓(タブの画素寸法と関心域)。無ければ Stage は隠れていて描かない。
+    stage_window: Option<Window>,
+    /// 最後に pointer が乗った view。3D ギズモの hover はその view にだけ出る。
+    stage_view: View,
     pub(crate) animate: Animate,
     /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
     pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
@@ -76,7 +81,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history })
     }
 
     fn time(&self) -> Result<RationalTime, String> {
@@ -126,11 +131,11 @@ impl EditorRuntime {
 
 
 
-    fn render(&mut self, surface_id: u32) -> Result<(), String> {
+    fn render(&mut self, surface_id: u32, view: View) -> Result<(), String> {
         let surface = IOSurfaceRef::lookup(surface_id).ok_or("IOSurface lookup failed")?;
-        let comp = self.doc.view().composition().map_err(|e| e.to_string())?.ok_or("No composition")?;
-        if surface.width() != comp.width as usize || surface.height() != comp.height as usize {
-            return Err("IOSurface dimensions differ from composition".into());
+        let window = self.window(view)?;
+        if surface.width() != window.width as usize || surface.height() != window.height as usize {
+            return Err(format!("IOSurface dimensions differ from the {} window", view.name()));
         }
         if surface.pixel_format() != u32::from_be_bytes(*b"BGRA") { return Err("IOSurface must be BGRA".into()); }
         let device = self.engine.gpu_device();
@@ -138,8 +143,8 @@ impl EditorRuntime {
         unsafe {
             descriptor.setTextureType(MTLTextureType::Type2D);
             descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-            descriptor.setWidth(comp.width as usize);
-            descriptor.setHeight(comp.height as usize);
+            descriptor.setWidth(window.width as usize);
+            descriptor.setHeight(window.height as usize);
             descriptor.setMipmapLevelCount(1);
         }
         descriptor.setStorageMode(MTLStorageMode::Shared);
@@ -147,7 +152,7 @@ impl EditorRuntime {
         let hal = unsafe { device.as_hal::<wgpu::hal::api::Metal>() }.ok_or("Metal device unavailable")?;
         let raw = hal.raw_device().newTextureWithDescriptor_iosurface_plane(&descriptor, &surface, 0)
             .ok_or("Metal could not bind IOSurface")?;
-        let size = wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 };
+        let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
         // Same-device imported attachment. The host exclusively owns a fresh surface;
         // the existing compositor clears and writes it before this function publishes it.
         let texture = unsafe {
@@ -160,18 +165,20 @@ impl EditorRuntime {
             })
         };
         drop(hal);
-        self.render_into(&texture)
+        self.render_into(&texture, view, window)
     }
 
-    fn render_into(&mut self, texture: &wgpu::Texture) -> Result<(), String> {
+    fn render_into(&mut self, texture: &wgpu::Texture, view: View, window: Window) -> Result<(), String> {
         let started = Instant::now();
         let time = self.time()?;
-        let view_camera = self.view_camera()?;
+        let view_camera = self.view_camera(view)?;
         self.engine.set_realtime(self.clock.playing());
-        self.engine.render_frame_into_with_camera(&self.doc.view(), time, texture, view_camera, true, &self.selected_ids).map_err(|e|e.to_string())?;
+        // 再生中はギズモを出さないので、選択の mask も焼かない。
+        let outline: &[LayerId] = if self.clock.playing() { &[] } else { &self.selected_ids };
+        self.engine.render_frame_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window).map_err(|e|e.to_string())?;
         if self.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
         self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).map_err(|e|e.to_string())?;
-        self.take_selection_bounds();
+        self.take_selection_bounds(view, window);
         self.snapshot_cache.borrow_mut().invalidate_geometry();
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -216,8 +223,16 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         if value["bootstrap"] == true { *probe.full_status_revision.borrow_mut() = None; }
         if value["op"] == "renderInfo" {
             model_reply = Some(probe.doc.view().composition().map_err(|e|e.to_string()).and_then(|comp| {
-                comp.map(|c|json!({"width":c.width,"height":c.height})).ok_or("No composition".into())
+                let c = comp.ok_or("No composition")?;
+                // 描く窓の一覧。Camera は出力そのもの、Stage はタブが窓を置いている間だけ。
+                let mut views = vec![json!({"view":View::Camera.name(),"width":c.width,"height":c.height})];
+                if let Some(w) = probe.stage_window { views.push(json!({"view":View::User.name(),"width":w.width,"height":w.height})); }
+                Ok(json!({"width":c.width,"height":c.height,"views":views}))
             }));
+            return Ok(());
+        }
+        if value["op"] == "stageWindow" {
+            model_reply = Some(probe.set_stage_window(&value).map(|changed| json!({"needsRender": changed})));
             return Ok(());
         }
         if value["op"] == "visualSample" {
@@ -233,7 +248,10 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         // hover の時は、ギズモの絵だけ返す。status 全体を組み直さない。
         let hover = value["op"] == "stageGesture" && value["phase"] == "hover";
         probe.request(value)?;
-        if hover { model_reply = Some(probe.spatial_gizmo().map(|gizmo| json!({"spatialGizmo": gizmo, "needsRender": false}))); }
+        if hover {
+            let seen = probe.stage_view;
+            model_reply = Some(probe.spatial_gizmo(seen).map(|gizmo| json!({(if seen == View::User { "stageSpatialGizmo" } else { "spatialGizmo" }): gizmo, "needsRender": false})));
+        }
         Ok(())
     }));
     match outcome {
@@ -263,10 +281,11 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_id: u32) -> i32 {
+pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_id: u32, view: *const c_char) -> i32 {
     if ctx.is_null() { return -1; }
     let probe = unsafe { &mut *ctx };
-    match catch_unwind(AssertUnwindSafe(|| probe.render(surface_id))) {
+    let view = (!view.is_null()).then(|| unsafe { CStr::from_ptr(view) }.to_str().ok()).flatten().unwrap_or("Camera");
+    match catch_unwind(AssertUnwindSafe(|| View::parse(view).and_then(|view| probe.render(surface_id, view)))) {
         Ok(Ok(())) => 0,
         Ok(Err(error)) => { probe.error=Some(error); -1 },
         Err(_) => { probe.error=Some("Rust render panic".into()); -2 },

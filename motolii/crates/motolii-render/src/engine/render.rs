@@ -6,7 +6,7 @@ use crate::doc::store::{
     TextDocument,
 };
 use crate::render::compositor::{
-    BlendMode as CompositeBlendMode, EffectPass, Layer, LayerContent, LayerWithPasses,
+    BlendMode as CompositeBlendMode, EffectPass, Layer, LayerContent, LayerWithPasses, Window,
 };
 
 use crate::render::engine::translate::{
@@ -353,6 +353,21 @@ impl Engine {
         include_background: bool,
         outline: &[LayerId],
     ) -> Result<(), EngineError> {
+        let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
+        self.render_frame_into_window(view, t, target, camera, include_background, outline, Window::output(comp))
+    }
+
+    /// 同じ世界を、出力寸法以外の窓へ(Stage のタブ: 寸法と関心域は窓が言う)。
+    pub fn render_frame_into_window(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+        target: &wgpu::Texture,
+        camera: ResolvedCamera,
+        include_background: bool,
+        outline: &[LayerId],
+        window: Window,
+    ) -> Result<(), EngineError> {
         self.outline_layers = outline.iter().copied().take(255).collect();
         self.outline_order = self.outline_layers.clone();
         let composition = view
@@ -365,21 +380,30 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        let layers = self.layers_from_resolved(
+        let document_camera = self.resolve_camera_in(view, &resolved, t)?;
+        let projection_camera = window.projection_camera.unwrap_or(document_camera);
+        let mut layers = self.layers_from_resolved(
             comp,
             camera,
-            self.resolve_camera_in(view, &resolved, t)?,
+            projection_camera,
             t,
             &resolved,
             &text_documents,
             &shape_documents,
         )?;
+        // 2D は出力の画面の物: どの窓でも作中カメラの箱に貼り付き、箱と一緒に動く(Boxcam)。
+        // 2.5D と 3D は世界に居るので、窓の投影基準(Stage は既定)のまま。
+        for layer in &mut layers {
+            if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
+                layer.layer.projection_camera = document_camera;
+            }
+        }
         let background_color = if include_background {
             composition.background
         } else {
             crate::render::compositor::NO_BACKGROUND
         };
-        let drawn = self.compositor.render_into(target, comp, camera, &layers, background_color);
+        let drawn = self.compositor.render_into_window(target, comp, camera, &layers, background_color, window);
         self.outline_layers.clear();
         Ok(drawn?)
     }

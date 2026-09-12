@@ -42,7 +42,7 @@ void main() {
     layout.close('Inspector');
     layout.move('Inspector', _find(layout.root, 'Stage'), 'right');
     final split = _splitAbove(layout.root, 'Inspector')!;
-    expect(split.first!.tabs, ['Stage']);
+    expect(split.first!.tabs, ['Stage', 'Camera']);
     expect(1000 - split.firstExtent(1000) - 4, 300);
   });
 

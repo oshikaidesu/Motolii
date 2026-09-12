@@ -53,6 +53,15 @@ const panelCatalog = [
     height: Extent.fill,
   ),
   PanelSpec(
+    'Camera',
+    'Work',
+    Icons.videocam_outlined,
+    minWidth: 720,
+    minHeight: 280,
+    width: Extent.fill,
+    height: Extent.fill,
+  ),
+  PanelSpec(
     'Timeline',
     'Work',
     Icons.view_timeline_outlined,

@@ -146,9 +146,8 @@ impl Compositor {
 
                 let solo_owned = spare
                     .pop()
-                    .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
-                let mut solo_config = sequential_target_config(
-                    "motolii-comp-sequential-solo", comp, view_from_world, projection, environment,
+                    .unwrap_or_else(|| self.create_blend_scratch_texture(self.window.width, self.window.height));
+                let mut solo_config = sequential_target_config("motolii-comp-sequential-solo", comp, self.window, view_from_world, projection, environment,
                 );
                 solo_config.scene_reflection = reflection.clone();
                 solo_config.light = light.clone();
@@ -220,10 +219,10 @@ impl Compositor {
             if sky {
                 let sky_owned = spare
                     .pop()
-                    .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
+                    .unwrap_or_else(|| self.create_blend_scratch_texture(self.window.width, self.window.height));
                 let mut sky_view = ViewBuilder::new_with_external_resolved(
                     &self.ctx,
-                    sequential_target_config("motolii-comp-sequential-sky", comp, view_from_world, projection, environment),
+                    sequential_target_config("motolii-comp-sequential-sky", comp, self.window, view_from_world, projection, environment),
                     ViewBuilderId::new(self.next_readback),
                     &sky_owned,
                 )
@@ -255,9 +254,7 @@ impl Compositor {
                 }
                 _ => None,
             };
-            let mut config = sequential_target_config(
-                "motolii-comp-sequential-run",
-                comp,
+            let mut config = sequential_target_config("motolii-comp-sequential-run", comp, self.window,
                 view_from_world,
                 projection,
                 environment,
@@ -269,7 +266,7 @@ impl Compositor {
 
             let run_owned = spare
                 .pop()
-                .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
+                .unwrap_or_else(|| self.create_blend_scratch_texture(self.window.width, self.window.height));
             let mut view_builder = ViewBuilder::new_with_external_resolved(
                 &self.ctx,
                 config,
@@ -324,8 +321,9 @@ impl Compositor {
             Some((backing, _)) => {
                 let dst_view = backing.create_view(&Default::default());
                 let src_view = canvas.create_view(&Default::default());
-                let out_texture = spare.pop().unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
+                let out_texture = spare.pop().unwrap_or_else(|| self.create_blend_scratch_texture(self.window.width, self.window.height));
                 let out_view = out_texture.create_view(&Default::default());
+                let window = self.window.size_f32();
                 let encoder = blend_encoder.get_or_insert_with(|| {
                     self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("motolii-compositor-blend-pass-encoder"),
@@ -339,7 +337,7 @@ impl Compositor {
                     &[&dst_view, &src_view],
                     &out_view,
                     &[("mode".to_owned(), mode as f32)],
-                    [comp.width as f32, comp.height as f32],
+                    window,
                 );
                 spare.push(backing);
                 spare.push(canvas);
@@ -364,14 +362,15 @@ impl Compositor {
         max_roughness: f32,
     ) -> Result<GpuTexture2D, CompositorError> {
         self.surface_work.backdrop_copies += 1;
-        let size = wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 };
+        let window = self.window;
+        let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
         let resource = match self.backdrop_resource.take() {
-            Some(resource) if resource.dimensions == [comp.width, comp.height] => resource,
+            Some(resource) if resource.dimensions == window.size() => resource,
             _ => {
                 let texture = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("motolii-backdrop-pyramid"),
                     size,
-                    mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(comp.width, comp.height),
+                    mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(window.width, window.height),
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: crate::render::compositor::BLEND_TARGET_FORMAT,
@@ -383,7 +382,7 @@ impl Compositor {
                 });
                 let imported = self.import_premultiplied(&texture)?;
                 self.surface_work.backdrop_allocations += 1;
-                BackdropResource { dimensions: [comp.width,comp.height], texture, imported }
+                BackdropResource { dimensions: window.size(), texture, imported }
             }
         };
         let texture = &resource.texture;
@@ -439,7 +438,7 @@ impl Compositor {
         let _ = camera;
         let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
         if let Some((_, imported)) = &background {
-            final_rects.push(screen_rect(comp, imported.clone()));
+            final_rects.push(screen_rect(self.window, imported.clone()));
         }
 
         let final_draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
@@ -447,7 +446,7 @@ impl Compositor {
 
         let mut final_view_builder = ViewBuilder::new(
             &self.ctx,
-            screen_target_config("motolii-comp-sequential-finalize", comp),
+            screen_target_config("motolii-comp-sequential-finalize", self.window),
             ViewBuilderId::new(self.next_readback),
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -516,13 +515,13 @@ impl Compositor {
             projection.rotation,
             -(projection.rotation * projection.eye),
         );
-        let mut config = sequential_target_config("motolii-comp-outline", comp, view_from_world, projection, None);
+        let mut config = sequential_target_config("motolii-comp-outline", comp, self.window, view_from_world, projection, None);
         config.outline_config = Some(re_renderer::OutlineConfig {
             outline_radius_pixel: 1.0,
             color_layer_a: Rgba::TRANSPARENT,
             color_layer_b: Rgba::TRANSPARENT,
         });
-        let owned = self.create_blend_scratch_texture(comp.width, comp.height);
+        let owned = self.create_blend_scratch_texture(self.window.width, self.window.height);
         let mut view_builder = ViewBuilder::new_with_external_resolved(
             &self.ctx,
             config,
@@ -539,7 +538,7 @@ impl Compositor {
         self.pending.push(command_buffer);
         if let (Some(mask), Some(bounds)) = (view_builder.outline_mask_texture(), self.selection_bounds.as_mut()) {
             let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-selection-bounds") });
-            bounds.record(&self.ctx.device, &mut encoder, &mask.default_view, [comp.width, comp.height]);
+            bounds.record(&self.ctx.device, &mut encoder, &mask.default_view, self.window.size());
             self.pending.push(encoder.finish());
         }
         Ok(Some((view_builder, owned)))
@@ -557,7 +556,7 @@ impl Compositor {
         let _ = camera;
         let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
         if let Some((_, imported)) = &background {
-            final_rects.push(screen_rect(comp, imported.clone()));
+            final_rects.push(screen_rect(self.window, imported.clone()));
         }
         let draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
             .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
@@ -565,7 +564,7 @@ impl Compositor {
         let mut view_builder = {
             let mut vb = ViewBuilder::new(
                 &self.ctx,
-                screen_target_config("motolii-comp-finalize-into", comp),
+                screen_target_config("motolii-comp-finalize-into", self.window),
                 ViewBuilderId::new(self.next_readback),
             )
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -646,12 +645,10 @@ impl Compositor {
                 );
                 let draw_data = RectangleDrawData::new(&self.ctx, &[])
                     .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
-                let texture = self.create_blend_scratch_texture(comp.width, comp.height);
+                let texture = self.create_blend_scratch_texture(self.window.width, self.window.height);
                 let mut view_builder = ViewBuilder::new_with_external_resolved(
                     &self.ctx,
-                    sequential_target_config(
-                        "motolii-comp-zero-copy-empty",
-                        comp,
+                    sequential_target_config("motolii-comp-zero-copy-empty", comp, self.window,
                         view_from_world,
                         projection,
                 None,
@@ -726,6 +723,7 @@ impl Compositor {
             })
             .collect();
 
+        self.window = crate::render::compositor::Window::output(comp);
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         self.finalize_readback(comp, camera, background, background_color)
     }
@@ -775,7 +773,7 @@ impl Compositor {
 
         let mut view_builder = ViewBuilder::new(
             &self.ctx,
-            sequential_target_config(label, comp, view_from_world, projection, None),
+            sequential_target_config(label, comp, self.window, view_from_world, projection, None),
             ViewBuilderId::new(self.next_readback),
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -824,8 +822,9 @@ impl Compositor {
 
         let layer_view = layer_canvas.default_view.clone();
         let matte_view = matte_canvas.default_view.clone();
-        let out_texture = self.create_blend_scratch_texture(comp.width, comp.height);
+        let out_texture = self.create_blend_scratch_texture(self.window.width, self.window.height);
         let out_view = out_texture.create_view(&Default::default());
+        let window = self.window;
 
         let mut encoder = self
             .ctx
@@ -846,7 +845,7 @@ impl Compositor {
             &[&layer_view, &matte_view],
             &out_view,
             &[("mode".to_owned(), matte::matte_mode_index(mode) as f32)],
-            [comp.width as f32, comp.height as f32],
+            window.size_f32(),
         );
         self.pending.push(encoder.finish());
 
@@ -860,9 +859,10 @@ impl Compositor {
 
         Ok(Layer {
             content: crate::render::compositor::LayerContent::Texture(imported),
-            size: [comp.width as f32, comp.height as f32],
+            // 描いた絵は窓の切り取り。世界へ戻すときは関心域の場所と大きさに置く。
+            size: [window.roi[2], window.roi[3]],
             placement: LayerPlacement {
-                transform: glam::Affine2::IDENTITY,
+                transform: glam::Affine2::from_translation(glam::vec2(window.roi[0], window.roi[1])),
                 world_transform: None,
                 opacity: 1.0,
                 order: layer.placement.order,

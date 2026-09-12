@@ -568,11 +568,12 @@ pub(crate) enum DragSession {
     Spatial(crate::editor::gizmo3d::SpatialDrag),
 }
 impl DragSession {
-    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,view_scale:f64,held:Option<&str>)->Result<Self,String>{
+    /// `projection_camera` は 2D・2.5D を置くカメラ: Stage は既定、Camera は作中(描いた絵と同じ写像で掴む)。
+    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,projection_camera:crate::doc::core::ResolvedCamera,view_scale:f64,held:Option<&str>)->Result<Self,String>{
         if mode=="spatial" {
             return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,ids,start,at,observer,view_scale,held)?));
         }
-        Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer)?))
+        Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer,projection_camera)?))
     }
     pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:Animate)->Result<Vec<Intent>,String>{
         match self {
@@ -584,7 +585,7 @@ impl DragSession {
 
 pub(crate) struct CageDrag {drag:GizmoDrag,map:PlaneMap,revision:Revision,start:[f64;2],moves:Vec<(LayerId,(f64,f64),PlaneMap)>}
 impl CageDrag {
-    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera)->Result<Self,String>{
+    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,projection_camera:crate::doc::core::ResolvedCamera)->Result<Self,String>{
         let layer=*ids.last().ok_or("Select a layer")?;
         let view=doc.view().without_transients();
         if let Some(reason)=crate::editor::functions::lens::edit_rejection(&view,layer).map_err(|e|e.to_string())?{return Err(reason.into())}
@@ -592,7 +593,7 @@ impl CageDrag {
         let mode=match mode {"move"=>GizmoMode::Move,"rotate"=>GizmoMode::Rotate,"scale"=>match handle {
             "nw"=>GizmoMode::ScaleCorner{sx:false,sy:false},"ne"=>GizmoMode::ScaleCorner{sx:true,sy:false},"sw"=>GizmoMode::ScaleCorner{sx:false,sy:true},"se"=>GizmoMode::ScaleCorner{sx:true,sy:true},
             "n"=>GizmoMode::ScaleEdge{axis_x:false,positive:false},"s"=>GizmoMode::ScaleEdge{axis_x:false,positive:true},"w"=>GizmoMode::ScaleEdge{axis_x:true,positive:false},"e"=>GizmoMode::ScaleEdge{axis_x:true,positive:true},_=>return Err("Unknown scale handle".into())},_=>return Err("Unsupported stage mode".into())};
-        let fit=Fit {comp:view.composition().map_err(|e|e.to_string())?.ok_or("No composition")?.spec(),camera:observer,projection_camera:engine.resolve_camera(&view,at).map_err(|e|e.to_string())?,fx:0.0,fy:0.0,s:1.0};
+        let fit=Fit {comp:view.composition().map_err(|e|e.to_string())?.ok_or("No composition")?.spec(),camera:observer,projection_camera,fx:0.0,fy:0.0,s:1.0};
         let map=if geom.projection==LayerProjection::ThreeD{plane_map(&fit,&geom)}else{frame_map(&fit,&geom,mode==GizmoMode::Rotate)};let(u,v)=map.to_uv(start[0],start[1]);
         if !u.is_finite()||!v.is_finite(){return Err("Selected plane is edge-on".into())}
         let(bx,by,bw,bh)=geom.box_;let grab=rotate_around(geom.position,geom.rotation,(bx+u*bw,by+v*bh));

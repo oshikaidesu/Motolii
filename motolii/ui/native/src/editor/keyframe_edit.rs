@@ -5,6 +5,21 @@ pub(crate) fn document_fps(doc: &Document) -> Result<Fps, StoreError> {
         .map(|composition| composition.fps)
         .ok_or_else(|| StoreError::Property("Composition has no frame rate".to_owned()))
 }
+/// A move of several keys stops where the earliest would cross frame 0, and
+/// every key keeps its distance — the wall the layer bars already have.
+pub(crate) fn clamped_key_delta(
+    keys: &[(LayerId, Option<crate::doc::store::PropertyId>, f64)],
+    fps: f64,
+    raw_delta: i64,
+) -> i64 {
+    let earliest = keys
+        .iter()
+        .map(|(_, _, at)| (at * fps).round() as i64)
+        .min()
+        .unwrap_or(0);
+    raw_delta.max(-earliest)
+}
+
 pub(crate) fn key_selection_move_intents(
     doc: &Document,
     keys: &[(LayerId, Option<crate::doc::store::PropertyId>, f64)],

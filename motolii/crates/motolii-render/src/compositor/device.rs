@@ -37,6 +37,7 @@ impl Compositor {
         let selection_bounds = selection_bounds::SelectionBounds::new(&ctx.device, re_renderer::OutlineMaskProcessor::mask_sample_count(ctx.device_caps().tier) > 1);
         Ok(Self {
             ctx,
+            window: crate::render::compositor::Window { width: 0, height: 0, roi: [0.0; 4], projection_camera: None },
             measurement_enabled: false,
             measurement: Default::default(),
             surface_work: Default::default(),
@@ -60,6 +61,7 @@ impl Compositor {
             next_readback: 1,
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
+            baked_effects: Default::default(),
             effect_programs,
             surface_programs: Default::default(),
             blend_vism,

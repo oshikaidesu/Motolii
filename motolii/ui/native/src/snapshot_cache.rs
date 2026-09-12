@@ -90,7 +90,7 @@ impl EditorRuntime {
 
 impl EditorRuntime {
     fn content_key(&self) -> String {
-        format!("{}:{:?}:{}:{:?}", self.doc.identity(), self.doc.display_revision(), self.user_stage, self.user_camera)
+        format!("{}:{:?}:{:?}:{:?}", self.doc.identity(), self.doc.display_revision(), self.stage_window, self.user_camera)
     }
 
     pub(crate) fn image_key(&self) -> String { format!("{}:{}:{:?}", self.content_key(), self.frame, self.selected_ids) }
@@ -147,6 +147,7 @@ impl EditorRuntime {
         }
         let selected = cache.body["layers"].as_array().and_then(|layers| layers.iter().find(|l| l["id"].as_u64() == self.selected.map(|id|id.0)));
         reply["selectedBounds"] = selected.map(|l| l["bounds"].clone()).unwrap_or(Value::Null);
+        reply["selectedStageBounds"] = selected.map(|l| l["stageBounds"].clone()).unwrap_or(Value::Null);
         for axis in ["x", "y"] { reply[axis] = selected.map(|l|l[axis].clone()).unwrap_or(json!(0.0)); }
         for field in ["width", "height", "fps", "durationFrames", "documentRevision", "deviceId"] { reply[field] = cache.body[field].clone(); }
         reply["contentRevision"] = json!(self.content_key());
@@ -211,9 +212,9 @@ mod tests {
                 let reply = request(&mut rt, json!({"op":"select","ids":[selected.0],"deferSnapshot":true}));
                 assert_eq!(reply, json!({"needsRender":true}), "a new selection needs its own mask");
             }
-            rt.render_into(&texture).unwrap();
+            rt.render_into(&texture, crate::snapshot::View::Camera, crate::render::engine::Window::output(rt.doc.view().composition().unwrap().unwrap().spec())).unwrap();
             let after = request(&mut rt, json!({"op":"status","knownSnapshotId":previous["snapshotId"],"knownReferenceId":previous["referenceId"]}));
-            let b = rt.selection_bounds.get(&selected).expect("selected layer reached the mask");
+            let b = rt.selection_bounds[&crate::snapshot::View::Camera].get(&selected).expect("selected layer reached the mask");
             assert_eq!(after["selectedBounds"]["corners"], json!([[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]));
             assert_ne!(after["snapshotId"], previous["snapshotId"], "post-render geometry must reach the host");
             assert_eq!(after["referenceId"], previous["referenceId"], "rendering does not change the catalog");
@@ -319,9 +320,8 @@ mod tests {
         step(&mut rt, "reorder now", json!({"op":"reorder","delta":1}));
         step(&mut rt, "composition", json!({"op":"composition","width":960,"height":540}));
         step(&mut rt, "delete", json!({"op":"delete"}));
-        rt.user_stage = false;
-        step(&mut rt, "camera view", Value::Null);
-        rt.user_stage = true;
+        rt.stage_window = Some(crate::render::engine::Window { width: 800, height: 500, roi: [-100.0, -50.0, 1600.0, 1000.0], projection_camera: Some(Default::default()) });
+        step(&mut rt, "stage window", Value::Null);
         rt.user_camera.orbit_degrees = [22.0, 8.0];
         step(&mut rt, "orbited stage", Value::Null);
     }
@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(row(&restored),row(&full));
         let moved = request(&mut rt,json!({"op":"seek","frame":8,"deferSnapshot":true}));
         assert_eq!(moved,json!({"needsRender":true}));
-        let view = request(&mut rt,json!({"op":"stageView","mode":"Camera","deferSnapshot":true}));
+        let view = request(&mut rt,json!({"op":"stageWindow","width":640,"height":360,"roi":[0.0,0.0,1920.0,1080.0]}));
         assert_eq!(view,json!({"needsRender":true}));
         request(&mut rt,json!({"op":"play"}));
         let joined = request(&mut rt,json!({"op":"status","bootstrap":true}));

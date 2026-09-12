@@ -7,8 +7,8 @@ import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
-import 'native_visual_sample.dart';
 import 'rich_text_editor.dart';
+import 'gradient_inspector.dart';
 
 part 'inspector_property_style.dart';
 part 'inspector_color.dart';
@@ -877,34 +877,53 @@ class _InspectorPanelState extends State<InspectorPanel> {
         layer: layer,
         text: text,
       ),
+      // Justification is one control, not three spread across the card: three
+      // squares of a well's height, side by side, the chosen one lit.
       if (align != null)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: EditorMetrics.s6),
-          child: Row(
-            children: [
-              for (final entry in const {
-                0: Icons.format_align_left,
-                2: Icons.format_align_center,
-                1: Icons.format_align_right,
-              }.entries)
-                Expanded(
-                  child: IconButton(
-                    tooltip: const {
-                      0: 'Align left',
-                      2: 'Align center',
-                      1: 'Align right',
-                    }[entry.key],
-                    isSelected: align['value'] == entry.key,
-                    icon: Icon(entry.value, size: EditorMetrics.s16),
-                    color: align['value'] == entry.key
-                        ? EditorTheme.accent
-                        : EditorTheme.muted,
-                    onPressed: _canEdit(layer)
-                        ? () => _write(layer, align, entry.key, preview: false)
-                        : null,
-                  ),
-                ),
-            ],
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              height: EditorMetrics.row,
+              decoration: BoxDecoration(
+                color: EditorTheme.app,
+                border: Border.all(color: EditorTheme.line),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final entry in const {
+                    0: Icons.format_align_left,
+                    2: Icons.format_align_center,
+                    1: Icons.format_align_right,
+                  }.entries)
+                    SizedBox(
+                      width: EditorMetrics.control,
+                      child: IconButton(
+                        tooltip: const {
+                          0: 'Align left',
+                          2: 'Align center',
+                          1: 'Align right',
+                        }[entry.key],
+                        isSelected: align['value'] == entry.key,
+                        icon: Icon(entry.value, size: EditorMetrics.s14),
+                        color: align['value'] == entry.key
+                            ? EditorTheme.accent
+                            : EditorTheme.muted,
+                        onPressed: _canEdit(layer)
+                            ? () => _write(
+                                layer,
+                                align,
+                                entry.key,
+                                preview: false,
+                              )
+                            : null,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       if (rows.isNotEmpty) ...[
@@ -918,17 +937,20 @@ class _InspectorPanelState extends State<InspectorPanel> {
   List<Widget> _colors(Map<String, dynamic> layer) {
     final colors = panelRows(layer['colors']);
     return [
-      // A shape's fill is one row: solid shows its swatch and hex, a gradient
-      // shows its picture and kind. Editing happens in the Colors panel, which
-      // the swatch targets. The stroke keeps its own row under it.
+      // A shape's fill leads with its kind — solid or one of the gradients —
+      // and a gradient keeps its stops under it. A solid's own colour is the
+      // swatch and hex below. The stroke keeps its own row under that.
       if (layer['kind'] == 'Shape' && layer['fill'] is Map) ...[
-        if (panelMap(layer['fill'])['kind'] != 'solid')
-          EditorGradientRow(
+        Padding(
+          padding: const EdgeInsets.only(bottom: EditorMetrics.s8),
+          child: GradientInspector(
+            key: ValueKey('fill:${layer['id']}'),
             controller: c,
             layer: layer,
             fill: panelMap(layer['fill']),
-          )
-        else
+          ),
+        ),
+        if (panelMap(layer['fill'])['kind'] == 'solid')
           for (final color in colors)
             if (!panelMap(color['slot']).containsKey('ShapeStroke'))
               Padding(

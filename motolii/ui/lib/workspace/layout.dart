@@ -115,6 +115,12 @@ class DockNode {
         !tabs.contains('Files') &&
         paneNames.contains('Files'))
       tabs.add('Files');
+    // A layout saved while the Stage bar still switched views gains the
+    // Camera tab behind Stage, where the default dock keeps it.
+    if ('${m['id']}' == 'stage' &&
+        tabs.contains('Stage') &&
+        !tabs.contains('Camera'))
+      tabs.insert(tabs.indexOf('Stage') + 1, 'Camera');
     return DockNode.leaf(
       '${m['id']}',
       tabs,
@@ -133,7 +139,7 @@ DockNode initialDock() => DockNode.split(
     DockNode.split(
       Axis.horizontal,
       .775,
-      DockNode.leaf('stage', ['Stage']),
+      DockNode.leaf('stage', ['Stage', 'Camera']),
       DockNode.split(
         Axis.vertical,
         .76,

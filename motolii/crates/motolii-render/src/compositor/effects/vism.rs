@@ -95,7 +95,7 @@ pub(crate) struct ShaderStageSource {
     pub(crate) entry_point: String,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ImageFrame {
     pub size: [f32; 2],
     pub origin: [f32; 2],
