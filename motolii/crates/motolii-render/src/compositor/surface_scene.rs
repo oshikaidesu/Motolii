@@ -374,6 +374,7 @@ impl Compositor {
                             clip: input
                                 .clip
                                 .map_or(ClipPlane::NONE, |c| c.world_for_rect(corner, u, v)),
+                            field_grid: shading.field_grid(),
                             surface: shading.program,
                             surface_params: shading.params,
                             outline_mask: outline_mask(input.outline),

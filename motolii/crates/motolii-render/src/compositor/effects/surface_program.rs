@@ -15,6 +15,10 @@ use crate::doc::store::ResolvedEffect;
 /// instance が hook へ渡せる float の数(頂点属性 16 か所の上限、法線行列を shader で出して 6 本)(fork の `GpuMeshInstance::params`)。
 pub(crate) const PARAM_SLOTS: usize = 24;
 
+/// 場が板を動かす時の格子の細かさ(一辺の升の数)。板は四角 1 枚では 4 隅しか動かせないので、
+/// mesh の頂点と同じ密さで動けるよう割る。場を持たない層は割らない(既定の 1 = 三角形 2 枚)。
+pub(crate) const FIELD_GRID: u32 = 128;
+
 /// A shared program and its parameter values for a surface.
 #[derive(Clone, Default)]
 pub struct SurfaceShading {
@@ -23,6 +27,16 @@ pub struct SurfaceShading {
     pub reads_backdrop: bool,
     /// backdrop の mip を何段まで読むかを決める粗さ(manifest の `BACKDROP_BLUR`、無ければ 1 = 全段)。
     pub backdrop_roughness: f32,
+}
+
+impl SurfaceShading {
+    /// 板を割る升の数。場を持つ効果が乗っている時だけ割る。
+    pub fn field_grid(&self) -> u32 {
+        match &self.program {
+            Some(p) if p.desc().field.is_some() => FIELD_GRID,
+            _ => 1,
+        }
+    }
 }
 
 /// 効果列から hook を拾う。同じ stage が複数あれば下(後)が勝つ。
@@ -209,5 +223,65 @@ mod program_contract {
         let b = compositor.surface_shading(&[glass, turbulence]).unwrap().program.unwrap();
         assert!(std::sync::Arc::ptr_eq(&a, &b));
         assert_eq!(compositor.surface_programs.len(), 3);
+    }
+}
+
+/// 場は板の絵そのものを動かす — 四角の外へ出る(実 GPU)。
+/// 出られない実装(拾う場所をずらすだけ)だと、外の画素は必ず 0 のままになる。
+#[cfg(test)]
+mod field_leaves_the_rectangle {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+    /// 層は 32×32 を (16,16) に置く。
+    const BOX_MIN: u32 = 16;
+    const BOX_MAX: u32 = 48;
+
+    fn document(path: &std::path::Path, amount: f64) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([BOX_MIN as f64, BOX_MIN as f64]) },
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.turbulent_displace".into() }] },
+            // XYZ = 法線でなく面内へも動く向き。
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), "along").unwrap(), value: Value::F64(1.0) },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), "amount").unwrap(), value: Value::F64(amount) },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), "size").unwrap(), value: Value::F64(20.0) },
+        ]).unwrap();
+        doc
+    }
+
+    /// 元の四角の外で描かれている画素の数。
+    fn outside(frame: &[u8]) -> usize {
+        let mut count = 0;
+        for y in 0..SIZE {
+            for x in 0..SIZE {
+                if (BOX_MIN..BOX_MAX).contains(&x) && (BOX_MIN..BOX_MAX).contains(&y) { continue; }
+                let i = ((y * SIZE + x) * 4) as usize;
+                if frame[i..i + 3].iter().copied().max().unwrap() > 0 { count += 1; }
+            }
+        }
+        count
+    }
+
+    #[test]
+    fn the_picture_moves_past_its_own_corners() {
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("red.png");
+        let pixels: Vec<u8> = [255u8, 0, 0, 255].into_iter().cycle().take(32 * 32 * 4).collect();
+        image::save_buffer(&png, &pixels, 32, 32, image::ColorType::Rgba8).unwrap();
+        let mut engine = Engine::new().unwrap();
+
+        let still = engine.render_frame(&document(&png, 0.0).view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert_eq!(outside(&still), 0, "動かさなければ四角の中だけ");
+
+        let moved = engine.render_frame(&document(&png, 20.0).view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert!(outside(&moved) > 0, "場が絵を四角の外へ出す");
     }
 }

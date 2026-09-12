@@ -138,6 +138,7 @@ impl Compositor {
                         clip: input.clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world_for_rect(corner, extent_u, extent_v)),
                         surface: input.shading.program.clone(),
                         surface_params: input.shading.params,
+                        field_grid: input.shading.field_grid(),
                         ..Default::default()
                     },
                 };
