@@ -169,3 +169,36 @@ void main() {
 Evolution と同じ)。時計が要るなら `TIME` を読む。
 
 まだ無い物: 別の層の絵(層を指す欄)、compute shader・storage buffer、音。
+
+## 10. 下の合成を読む — `BACKDROP_INPUT`(pass)
+
+2 枚目の image に `BACKDROP_INPUT` で名指すと、**その層の下に合成された絵**が入る。層を指す欄は無い —
+北極星(アライトモーション)と同じで、「真下 1 枚」は `clip_to_below`、「下の全部」はこれ。同梱の
+**Background Copy**(`motolii.background_copy`)は自分の絵を下の合成にする 1 行:
+
+```glsl
+/*{ "ID": "motolii.background_copy", "STAGE": "pass", "BACKDROP_INPUT": "backdrop",
+    "INPUTS": [ { "NAME": "inputImage", "TYPE": "image" }, { "NAME": "backdrop", "TYPE": "image" } ] }*/
+void main() { gl_FragColor = IMG_THIS_PIXEL(backdrop) * IMG_THIS_PIXEL(inputImage).a; }
+```
+
+写すのは**自分の形(α)の中だけ**。層は形を持つので、形の外は触らない(窓ぶん全部を写すと、続く効果が
+画面全体に掛かる)。
+
+### 意図で読む
+
+| 型 | 意図 | 変わる側 | 決める側 | 自分の絵 |
+|---|---|---|---|---|
+| レンズ | 背後を、自分の形で乱す(Displacement を一番上に) | 下の合成 | 自分 | 出ない |
+| 切る／混ぜる | 自分を、相手で加工する(Set Matte・Calculations) | 自分 | 下 | 出る |
+
+レンズは「Background Copy → 歪ませる効果(自分の形は `inputImage` で読む)」の 2 段で書ける。
+実態は無く、変化だけが見える。
+
+### 作法と代償
+
+- 下の合成は合成の途中でしか決まらないので、この列は層の絵へ**焼かず、run の窓で効く**(§8 の Pass と同じ
+  代償: その層は平らな 1 枚になる)。
+- 2 枚目の image は 1 つだけ、`TIME_OFFSET` とは併用しない。
+- 下に何も無ければ透明が入る。
+- 審判は `render_effects.rs` の `background_copy_then_gain_brightens_what_is_below_and_hides_the_layer`。

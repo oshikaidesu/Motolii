@@ -89,6 +89,7 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
             });
             Some(crate::render::compositor::EffectPass {
                 uses_clock: descriptor.uses_clock,
+                reads_backdrop: descriptor.reads_backdrop,
                 image_time_offsets: descriptor.image_time_offsets.iter().map(|offset| match offset {
                     crate::render::compositor::effects::isf::TimeOffset::Fixed(seconds) => *seconds,
                     crate::render::compositor::effects::isf::TimeOffset::Param(name) => params.iter()

@@ -362,10 +362,20 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             });
         }
     }
+    // BACKDROP_INPUT = 下の合成を受ける口。surface では「読むかどうか」の数の欄、pass では
+    // 下の合成そのものが入る image の欄(2 枚目。アライトモーションの「背景のコピー」の型)。
     let backdrop_input = value.get("BACKDROP_INPUT").map(|v| {
-        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_INPUT must name a numeric input".into()))?;
-        if stage != IsfStage::Surface || !inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float | IsfInputType::Long | IsfInputType::Bool)) {
-            return Err(IsfError::Validate("BACKDROP_INPUT must name a surface parameter".into()));
+        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_INPUT must name an input".into()))?;
+        let ok = match stage {
+            IsfStage::Surface => inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float | IsfInputType::Long | IsfInputType::Bool)),
+            IsfStage::Pass => {
+                let images: Vec<&IsfInput> = inputs.iter().filter(|p| p.ty == IsfInputType::Image).collect();
+                images.get(1).is_some_and(|p| p.name == name) && images.len() == 2 && inputs.iter().all(|p| p.time_offset.is_none())
+            }
+            _ => false,
+        };
+        if !ok {
+            return Err(IsfError::Validate("BACKDROP_INPUT: surface では数の欄を、pass では 2 枚目の image(唯一の追加の image、TIME_OFFSET とは併用しない)を名指す".into()));
         }
         Ok(name.to_owned())
     }).transpose()?;

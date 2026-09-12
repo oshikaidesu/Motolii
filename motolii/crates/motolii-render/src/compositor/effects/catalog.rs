@@ -42,6 +42,8 @@ pub struct EffectDescriptor {
     pub(crate) image_time_offsets: Vec<isf::TimeOffset>,
     /// 時計(`TIME` 系)を読む。読む効果だけ、時刻が変われば焼き直す。
     pub(crate) uses_clock: bool,
+    /// pass が下の合成(BACKDROP_INPUT)を読む。層の絵へは焼けず、描いた後の窓で効く。
+    pub(crate) reads_backdrop: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -291,11 +293,11 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
                 .filter(|i| i.ty == isf::IsfInputType::Image)
                 .collect();
             // 2 枚目以降は、ホストが供給できる物だけ — 今は「層の絵を別の時刻で読む」(TIME_OFFSET)。
-            if let Some(extra) = images.iter().skip(1).find(|i| i.time_offset.is_none()) {
+            if let Some(extra) = images.iter().skip(1).find(|i| i.time_offset.is_none() && manifest.backdrop_input.as_deref() != Some(i.name.as_str())) {
                 return Err(format!(
                     "{}: 2 枚目以降の画像を繋ぐ口がまだ無い(層を指す欄が未実装)。\
                      読めるのは層の絵 1 枚、TIME_OFFSET を宣言した別の時刻の絵、\
-                     PASSES の中間 buffer だけ",
+                     BACKDROP_INPUT の下の合成、PASSES の中間 buffer だけ",
                     extra.name
                 ));
             }
@@ -343,6 +345,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         output_format: wgpu::TextureFormat::Rgba8Unorm,
         image_time_offsets: Vec::new(),
         uses_clock: false,
+        reads_backdrop: false,
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         image_time_offsets: d.manifest.inputs.iter()
@@ -351,6 +354,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             .filter_map(|i| i.time_offset.clone())
             .collect(),
         uses_clock: d.manifest.uses_clock,
+        reads_backdrop: d.manifest.stage == isf::IsfStage::Pass && d.manifest.backdrop_input.is_some(),
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
         snapshot: snapshot(d.plugin_id()),

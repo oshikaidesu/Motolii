@@ -94,7 +94,8 @@ impl Compositor {
                 effective_spills.push(None);
                 continue;
             };
-            if lwp.passes.is_empty() {
+            // 下の合成を読む列は、合成の途中でしか値が決まらない。ここでは焼かず、run の窓で流す。
+            if lwp.passes.is_empty() || lwp.passes.iter().any(|p| p.reads_backdrop) {
                 effective_textures.push(lwp.layer.content.clone());
                 effective_paddings.push(0);
                 effective_spills.push(None);
@@ -520,7 +521,8 @@ pub(crate) fn sequential_inputs<'a>(
                 blocks_light: layer.blocks_light,
                 outline: layer.outline,
                 // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
-                screen_passes: if layer.content.texture().is_none() { lwp.passes.as_slice() } else { &[] },
+                // 焼く先の絵が無い層(網・点群・環境)と、下の合成を読む効果列は、画面へ持って行く。
+                screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop) { lwp.passes.as_slice() } else { &[] },
             };
             // 溢れ: 同じ置き場に、coverage 外の絵だけを宣言された混ぜ方で重ねる(層の Blend と独立)。
             let spilled = spill.as_ref().and_then(|(content, mode)| {
@@ -799,5 +801,59 @@ mod passes_reach_every_material {
         let soft = engine.render_frame(&document(&obj, 12.0).view(), RationalTime::ZERO).unwrap();
         assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
         assert!(drawn(&soft, 32, 10) > 0, "ブラーが網の縁の外へ滲む");
+    }
+}
+
+/// 下の合成を読む効果(BACKDROP_INPUT)。「背景のコピー」で自分の絵が下の合成になり、続く効果は
+/// その絵に掛かる(実 GPU)。読めていなければ自分の絵(赤)が残るか、下(青)と同じままになる。
+#[cfg(test)]
+mod passes_can_read_what_is_beneath {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+
+    fn png(dir: &std::path::Path, name: &str, size: u32, rgba: [u8; 4]) -> std::path::PathBuf {
+        let path = dir.join(name);
+        let pixels: Vec<u8> = rgba.into_iter().cycle().take((size * size * 4) as usize).collect();
+        image::save_buffer(&path, &pixels, size, size, image::ColorType::Rgba8).unwrap();
+        path
+    }
+
+    fn pixel(frame: &[u8], x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * SIZE + x) * 4) as usize;
+        [frame[i], frame[i + 1], frame[i + 2]]
+    }
+
+    #[test]
+    fn background_copy_then_gain_brightens_what_is_below_and_hides_the_layer() {
+        let dir = tempfile::tempdir().unwrap();
+        let blue = png(dir.path(), "blue.png", SIZE, [0, 0, 100, 255]);
+        let red = png(dir.path(), "red.png", 32, [255, 0, 0, 255]);
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        for (id, path, order, at) in [(1u64, &blue, 0i16, 0.0), (2, &red, 1, 16.0)] {
+            let layer = LayerId(id);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([at, at]) },
+            ]).unwrap();
+        }
+        doc.apply_all([
+            Intent::SetEffects { layer: LayerId(2), effects: vec![
+                EffectInstance { id: EffectId(0), plugin_id: "motolii.background_copy".into() },
+                EffectInstance { id: EffectId(1), plugin_id: "motolii.gain".into() },
+            ] },
+            Intent::SetConstant { layer: LayerId(2), property: PropertyId::effect_param(EffectId(1), "gain").unwrap(), value: Value::F64(2.0) },
+        ]).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let outside = pixel(&frame, 4, 4);
+        let inside = pixel(&frame, 32, 32);
+        assert!(outside[2] > 60 && outside[0] < 10, "外は青のまま: {outside:?}");
+        assert!(inside[0] < 10, "赤は消える(自分の絵は出ない): {inside:?}");
+        assert!(inside[2] > outside[2] + 40, "中は下の青を 2 倍にした青: 中 {inside:?} 外 {outside:?}");
     }
 }

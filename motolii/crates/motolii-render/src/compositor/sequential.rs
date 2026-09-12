@@ -307,7 +307,8 @@ impl Compositor {
                             label: Some("motolii-compositor-screen-passes-encoder"),
                         })
                     });
-                    self.apply_screen_passes(encoder, run_owned, only.screen_passes, &mut spare)?
+                    let backdrop = background.as_ref().map(|(backing, _)| backing.clone());
+                    self.apply_screen_passes(encoder, run_owned, only.screen_passes, backdrop, &mut spare)?
                 }
                 _ => run_owned,
             };
@@ -337,13 +338,30 @@ impl Compositor {
         encoder: &mut wgpu::CommandEncoder,
         canvas: AccumulatorBacking,
         passes: &[EffectPass],
+        backdrop: Option<AccumulatorBacking>,
         spare: &mut Vec<AccumulatorBacking>,
     ) -> Result<AccumulatorBacking, CompositorError> {
         let (width, height) = (self.window.width, self.window.height);
+        // 下の合成を読む効果には、ここまでの合成を 2 枚目の image として渡す(層の絵と同じ sRGB 符号化)。
+        // まだ何も無ければ透明。
+        let mut below: Option<wgpu::Texture> = None;
+        if passes.iter().any(|p| p.reads_backdrop) {
+            below = Some(match &backdrop {
+                Some(backing) => self.convert_image_encoding(encoder, backing, false),
+                None => self.ctx.texture_manager_2d.zeroed_texture_float().texture.clone(),
+            });
+        }
+        let others: Vec<Vec<wgpu::Texture>> = passes.iter().map(|p| match (&below, p.reads_backdrop) {
+            (Some(b), true) => vec![b.clone()],
+            _ => Vec::new(),
+        }).collect();
         // 窓は線形。効果列は層の絵と同じ作法(Pass は sRGB 符号化で受ける)で流し、終わりで線形へ戻す。
         let (mut current, linear, mut is_scratch) = self.record_pass_chain(
-            encoder, canvas.clone(), true, false, passes, &[], None, [width, height], 0, [width, height],
+            encoder, canvas.clone(), true, false, passes, &others, None, [width, height], 0, [width, height],
         )?;
+        if let (Some(b), Some(_)) = (below, &backdrop) {
+            self.effect_scratch.release(width, height, b.format(), b);
+        }
         if !linear {
             let back = self.convert_image_encoding(encoder, &current, true);
             if is_scratch {

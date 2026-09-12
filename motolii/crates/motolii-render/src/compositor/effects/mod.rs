@@ -131,6 +131,8 @@ pub struct EffectPass {
     pub(crate) image_time_offsets: Vec<f32>,
     /// 時計(`TIME` 系)を読む。合成側が記録の直前に時計の値を欄の列へ足す。
     pub(crate) uses_clock: bool,
+    /// 下の合成を 2 枚目の image として読む。層の絵へは焼けず、run の窓で効く。
+    pub(crate) reads_backdrop: bool,
 }
 
 /// 多成分の欄(点・色)は、成分ごとに 1 つの f32 として運ぶ。0 番は欄の名前そのまま、

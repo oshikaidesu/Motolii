@@ -41,5 +41,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         image::save_buffer(&out, &pixels, w, h, image::ColorType::Rgba8)?;
         eprintln!("wrote {out}");
     }
+
+    // レンズの意図: 一番上のグラフィックス(旗)に「背景のコピー → ぼかし」。旗の実態は出ず、
+    // 旗の形の中だけ街がぼける。変化だけが見える。
+    if let Some(flag) = std::env::args().nth(3) {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps: Fps::try_new(24, 1).unwrap(), duration_frames: 240, background: [0.0, 0.0, 0.0, 1.0] }))?;
+        for (id, path, order, at, scale) in [(1u64, clip.clone(), 0i16, [0.0, 0.0], 1.0), (2, flag, 1, [400.0, 123.0], 0.5)] {
+            let layer = LayerId(id);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path, fingerprint: None }, order, timing: LayerTiming::place(0, None, 240) } },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2(at) },
+                Intent::SetConstant { layer, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([scale, scale]) },
+            ])?;
+        }
+        doc.apply_all([
+            Intent::SetEffects { layer: LayerId(2), effects: vec![
+                EffectInstance { id: EffectId(0), plugin_id: "motolii.background_copy".into() },
+                EffectInstance { id: EffectId(1), plugin_id: "motolii.blur".into() },
+            ] },
+            Intent::SetConstant { layer: LayerId(2), property: PropertyId::effect_param(EffectId(1), "radius").unwrap(), value: Value::F64(14.0) },
+        ])?;
+        let t = RationalTime::try_from_frame(72, Fps::try_new(24, 1).unwrap())?;
+        let pixels = engine.render_frame(&doc.view(), t)?;
+        for f in engine.layer_failures() { eprintln!("  city-lens: layer failure: {f}"); }
+        let out = format!("{dir}/city-lens.png");
+        image::save_buffer(&out, &pixels, w, h, image::ColorType::Rgba8)?;
+        eprintln!("wrote {out}");
+    }
     Ok(())
 }
