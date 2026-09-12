@@ -2,7 +2,7 @@
 
 作成日: 2026-09-12
 
-状態: **Shadertoy(`mainImage`)は実装済み。Buffer 複数枚・音・`iChannelResolution` / `iChannelTime` は未対応。貼る窓(editor)はまだ無い。**
+状態: **Shadertoy(`mainImage`)は実装済み。層の絵を別の時刻で読む口(`TIME_OFFSET`)は実装済み(§8)。Buffer 複数枚・音・`iChannelResolution` / `iChannelTime` は未対応。貼る窓(editor)は作らない(各自の editor で書く)。**
 
 関連正本: [場(Field)の取説](vism-field-model.md)、[Vism コンセプト](vism-package-concept.md)、[プラグイン作者向け規約](plugin-authoring.md)
 
@@ -84,7 +84,7 @@ Shadertoy も ISF も**座標は下端が 0**(GL の作法)、wgpu の texture �
 
 | 形 | 何ができる | 状態 |
 |---|---|---|
-| **lookbehind**(非再帰。`exclude` で自己参照を切る) | 残像、時間差、フレーム間の比較 | **口の予約のみ。未実装** |
+| **lookbehind**(非再帰。`exclude` で自己参照を切る) | 残像、時間差、フレーム間の比較 | **層の絵の別時刻は実装済み(§8、2026-09-12)**。合体後(Group / CompRoot)の別時刻は予約のまま |
 | **フィードバック**(再帰。クリップ先頭を初期条件とする漸化式 + チェックポイント/リプレイ) | 軌跡、蓄積、反応拡散 | **口の予約のみ。未実装** |
 
 後者は「スクラブすると変わる」TD / AviUtl 型ではなく、**コーデックの GOP と同型**(チェックポイント
@@ -94,15 +94,57 @@ Shadertoy も ISF も**座標は下端が 0**(GL の作法)、wgpu の texture �
 datamosh はさらに別トラックで、codec 領域の台帳が
 [decision-index.md](decision-index.md)(`M5-DATAMOSH-P0` = `DONE / PRIVATE PROBE`・`BUILD FORBIDDEN`)にある。
 
-つまり**この取り込み口の天井**は「時間を持ち越せない」ではなく、「**ホストの時間参照がまだ
-実装されていないので、そこへ繋ぐ語彙が無い**」である。
+つまり**この取り込み口の天井**は「時間を持ち越せない」ではなく、「**ホストの時間参照のうち、
+層の絵の別時刻だけが繋がっていて、合体後の別時刻と再帰はまだ**」である。
 
 ## 7. まだ無い物
 
-- **ホストの時間参照**(`CompLookbehind`)と、そこへ繋ぐ ISF / Shadertoy 側の語彙。§6 の通り
-  設計は 2026-07-10 に済んでいて、実装だけが無い。
-- **貼る窓**。今は file を置く。
+- **合体後(Group / CompRoot)の別時刻**(`CompLookbehind` の本来の対象)と、**再帰のフィードバック**。
+  §6 の通り設計は 2026-07-10 に済んでいる。層の絵の別時刻(§8)は、その入口の最初の 1 本。
+- **`TIME_OFFSET` を利用者が回す欄**。今は作者が manifest で固定する。
+- **貼る窓**は作らない。各自の editor で書き、file を置く。
 - **Shadertoy の Buffer A..D をそのまま貼る**(1 file に複数 tab を書く取り決め)。ISF の `PASSES`
   に写せるので、器はもう在る。
 - **音**(`iChannel` に音を入れる型)。
 - naga の GLSL frontend が読めない書き方。通らなければ理由が出る。
+
+## 8. 別の時刻の絵を読む — `TIME_OFFSET`
+
+image の欄に `TIME_OFFSET`(秒。負が過去)を書くと、**ホストがその時刻の層の絵を作って渡す**。
+効果は何も覚えない。同梱の実例は [`vism/time_difference.fs`](../motolii/crates/motolii-render/vism/time_difference.fs)。
+
+```glsl
+/*{ "ID": "motolii.time_difference", "STAGE": "pass",
+    "INPUTS": [
+      { "NAME": "inputImage", "TYPE": "image" },
+      { "NAME": "past", "TYPE": "image", "TIME_OFFSET": -0.2 } ] }*/
+void main() {
+    gl_FragColor = abs(IMG_THIS_PIXEL(inputImage) - IMG_THIS_PIXEL(past));
+}
+```
+
+### 作法(ホスト側)
+
+- **「時刻 t′ の層の姿」を作るのは Document の resolve 1 箇所だけ。** ホストは `view.resolved_layers(t′)` で
+  層を引き直し、その姿で絵を作る(`engine/render.rs` の `sources_at_other_times`)。`source_time` だけを
+  手でずらすと、mask やキーフレームが t のままの継ぎ接ぎになる — やらない。
+- 別の時刻の読みは**別の流れ**(層の番号を変えて復号器の流れを分ける)。同じ流れで読むと、今の絵まで
+  巻き添えで上書きされる。
+- 読んだ絵は**写しを取る**。素材の texture は時刻ごとに同じ 1 枚へ上書きされるので、写した物だけが
+  「あの時刻の絵」でいられる。写しの命令は**即 submit しない** — 復号したコマの転送は frame 共通の
+  encoder に積まれ、流れるのは `before_submit` の中。先に打つと、届いていない texture を写す
+  (冷えていれば零、暖まっていれば前のコマ。**同じ時刻の絵が辿り方で変わる** — 2026-09-12 にこれで
+  1 度落ちた)。
+- 届かなかった時に**今の絵で代用しない**。理由を挙げて層の失敗にする。
+
+### 審判
+
+`engine/render.rs` の `time_reference_is_deterministic` — いきなり飛んだ時と、頭から辿った時で、同じ時刻の
+絵が**完全一致**すること(実 GPU、毎コマ変わる素材)。素の動画で同じ事を先に確かめる兄弟の test が並ぶ。
+
+### 限界
+
+- 読めるのは**自分の層の絵**だけ。合体後の別時刻(下の層ごと)は予約のまま。
+- ずれは作者が固定する。利用者が回す欄は次。
+- 費用は、ずれ 1 つにつき復号 1 回 + 写し 1 枚。cache はまだ効かない。
+- 速度を変えた層(time stretch)は、素材側のずれが comp の秒とは一致しない。

@@ -79,6 +79,7 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
                 (value.abs() * padding.scale).ceil() as u32
             });
             Some(crate::render::compositor::EffectPass {
+                image_time_offsets: descriptor.image_time_offsets.clone(),
                 plugin_id: effect.plugin_id.clone(),
                 params,
                 padding,

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::doc::core::{CompSpec, ResolvedCamera};
@@ -44,6 +45,7 @@ impl Engine {
         self.compositor.measurement.resolve_us = frame_start.elapsed().as_micros() as u64;
         let layer_start = std::time::Instant::now();
         let layers = self.layers_from_resolved(
+            view,
             comp,
             camera,
             self.resolve_camera_in(view, &resolved, t)?,
@@ -66,8 +68,60 @@ impl Engine {
         Ok(pixels)
     }
 
+    /// 効果が宣言した時刻のずれごとに、**その時刻の層の絵**を用意する。
+    ///
+    /// 効果が自分で前フレームを覚えるのは恒久禁止(`docs/plugin-resources.md` §6) — 追跡できなくなり、
+    /// 純関数契約・フレーム並列・スクラブが壊れるため。ここは逆で、ホストが時刻を決めて渡すので
+    /// `render_frame(t)` は純関数のまま。
+    ///
+    /// 「時刻 t の層の姿」を作るのは Document の resolve 1 箇所だけ。ここでは引き直した姿を使う
+    /// (`source_time` だけを手でずらすと、mask やキーフレームは t のままの継ぎ接ぎになる)。
+    fn sources_at_other_times(
+        &mut self,
+        passes: &[EffectPass],
+        layer: LayerId,
+        others: &OtherTimes,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        projection_camera: ResolvedCamera,
+    ) -> Vec<Vec<crate::render::compositor::GpuTexture2D>> {
+        if passes.iter().all(|pass| pass.image_time_offsets().is_empty()) {
+            return Vec::new();
+        }
+        passes
+            .iter()
+            .map(|pass| {
+                pass.image_time_offsets()
+                    .iter()
+                    .map(|offset| {
+                        let got = (|| {
+                        let (at, resolved, texts, shapes) = others.get(&offset_key(*offset))?;
+                        let mut then = resolved.iter().find(|l| l.id == layer)?.clone();
+                        // 別の流れとして読む。復号器の texture は層ごとに 1 本なので、同じ層として
+                        // 読むと今の時刻の絵まで巻き添えで上書きされる(差が 0 になる)。
+                        then.id = lookbehind_layer_id(layer, *offset);
+                        let (content, _, _) = self
+                            .texture_for_resolved(&then, texts, shapes, *at, comp, camera, projection_camera)
+                            .ok()?;
+                        // 素材の texture は時刻ごとに同じ 1 枚へ上書きされるので、使う分を写しておく。
+                        content.as_ref().and_then(|c| c.texture()).and_then(|t| self.compositor.snapshot_texture(t))
+                        })();
+                        if got.is_none() {
+                            // 届かなかった物を黙って「今の絵」で代用しない — 同じ時刻が辿り方で
+                            // 変わる原因になる(それは時間参照を入れた意味を消す)。
+                            self.layer_failures.push(format!("{offset} 秒前の絵が間に合わなかった"));
+                        }
+                        got
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
     fn layers_from_resolved(
         &mut self,
+        view: &StoreView<'_>,
         comp: CompSpec,
         camera: ResolvedCamera,
         projection_camera: ResolvedCamera,
@@ -86,6 +140,22 @@ impl Engine {
             resolved.iter().flat_map(|l| l.effects.iter().chain(&l.after_effects))
                 .any(|e| surface_ids.contains(e.plugin_id.as_str()))
         };
+        // 別の時刻を要求した効果があれば、その時刻の層の姿をここで 1 回だけ引き直す(同じずれは共有)。
+        let mut other_times: OtherTimes = BTreeMap::new();
+        for layer in resolved {
+            for pass in super::translate::translate_effect_passes(&layer.effects) {
+                for offset in pass.image_time_offsets() {
+                    let key = offset_key(*offset);
+                    if other_times.contains_key(&key) {
+                        continue;
+                    }
+                    let at = shifted_by_seconds(t, *offset);
+                    let Ok(then) = view.resolved_layers(at) else { continue };
+                    let (Ok(texts), Ok(shapes)) = (collect_text_documents(view, &then, at), collect_shape_documents(view, &then, at)) else { continue };
+                    other_times.insert(key, (at, then, texts, shapes));
+                }
+            }
+        }
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
         // 層 id → layers の添字(通り抜けの配置なら複製の数だけ)。クリップの下地探しに使う。
         let mut contributions: HashMap<LayerId, Vec<usize>> = HashMap::new();
@@ -136,7 +206,7 @@ impl Engine {
                 for &j in &members {
                     let member = &resolved[j];
                     if let Some(built) = self.build_layer_shared(&mut previous_build, member, text_documents, shape_documents, t, comp, camera, projection_camera, translate_blend_mode(member.blend_mode)?)? {
-                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&member.effects) });
+                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&member.effects), pass_sources: Vec::new() });
                     }
                 }
                 if copies.is_empty() {
@@ -164,7 +234,7 @@ impl Engine {
                 let mut copies = Vec::new();
                 for copy in &resolved[index..end] {
                     if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {
-                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&copy.effects) });
+                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&copy.effects), pass_sources: Vec::new() });
                     }
                 }
                 if copies.is_empty() {
@@ -198,7 +268,7 @@ impl Engine {
                 let first = indices[0];
                 let (blend, placement) = (layers[first].layer.blend_mode, layers[first].layer.placement);
                 let union = self.bake_isolated_layers(comp, camera, indices.iter().map(|&i| layers[i].clone()).collect(), blend, placement)?;
-                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new() }, &built, &passes)? {
+                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new(), pass_sources: Vec::new() }, &built, &passes)? {
                     Some(clipped) => {
                         layers[first] = clipped;
                         removed.extend(indices.into_iter().skip(1));
@@ -235,7 +305,21 @@ impl Engine {
             self.drawn_layers += 1;
             contributions.entry(layer.id).or_default().push(layers.len());
             entry_copy.push(layer.copy);
+            // 別の時刻の絵を要求した効果へ、ホストがその時刻の層の絵を渡す(効果は覚えない)。
+            // 自分の絵も先に写す — 別時刻の復号が同じ player texture を書き換えるので、
+            // 写さないと「今」と「前」が同じ絵になる。
+            let mut final_layer = final_layer;
+            if passes.iter().any(|pass| !pass.image_time_offsets().is_empty()) {
+                final_layer.content = match &final_layer.content {
+                    LayerContent::Texture(t) => self.compositor.snapshot_texture(t).map(LayerContent::Texture),
+                    LayerContent::LinearTexture(t) => self.compositor.snapshot_texture(t).map(LayerContent::LinearTexture),
+                    _ => None,
+                }
+                .unwrap_or(final_layer.content);
+            }
+            let pass_sources = self.sources_at_other_times(&passes, layer.id, &other_times, comp, camera, projection_camera);
             layers.push(LayerWithPasses {
+                pass_sources,
                 layer: final_layer,
                 passes,
             });
@@ -250,6 +334,7 @@ impl Engine {
 
     pub fn render_resolved_to_texture(
         &mut self,
+        view: &StoreView<'_>,
         comp: CompSpec,
         background: [f32; 4],
         camera: ResolvedCamera,
@@ -258,6 +343,7 @@ impl Engine {
         text_documents: &HashMap<LayerId, TextDocument>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         self.render_resolved_to_texture_with_shapes(
+            view,
             comp,
             background,
             camera,
@@ -270,6 +356,7 @@ impl Engine {
 
     pub fn render_resolved_to_texture_with_shapes(
         &mut self,
+        view: &StoreView<'_>,
         comp: CompSpec,
         background: [f32; 4],
         camera: ResolvedCamera,
@@ -279,7 +366,7 @@ impl Engine {
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         let layers =
-            self.layers_from_resolved(comp, camera, camera, t, resolved, text_documents, shape_documents)?;
+            self.layers_from_resolved(view, comp, camera, camera, t, resolved, text_documents, shape_documents)?;
         Ok(self
             .compositor
             .render_to_texture(comp, camera, &layers, background)?)
@@ -302,6 +389,7 @@ impl Engine {
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
         self.render_resolved_to_texture_with_shapes(
+            view,
             comp,
             composition.background,
             camera,
@@ -330,6 +418,7 @@ impl Engine {
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
         let layers = self.layers_from_resolved(
+            view,
             comp,
             camera,
             self.resolve_camera_in(view, &resolved, t)?,
@@ -383,6 +472,7 @@ impl Engine {
         let document_camera = self.resolve_camera_in(view, &resolved, t)?;
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
         let mut layers = self.layers_from_resolved(
+            view,
             comp,
             camera,
             projection_camera,
@@ -424,6 +514,7 @@ impl Engine {
         let mut baked_placement = layer.placement;
         baked_placement.opacity = 1.0;
         let source = LayerWithPasses {
+            pass_sources: Vec::new(),
             layer: Layer {
                 placement: baked_placement,
                 ..layer.clone()
@@ -486,7 +577,7 @@ impl Engine {
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
         let (blend, placement) = (layer.blend_mode, layer.placement);
-        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec() }], blend, placement)
+        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new() }], blend, placement)
     }
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。
@@ -1253,5 +1344,119 @@ mod projection_contract {
         for c in &centroids[1..] {
             assert!((c.0 - centroids[0].0).abs() < 0.5 && (c.1 - centroids[0].1).abs() < 0.5 && c.2 == centroids[0].2, "{centroids:?}");
         }
+    }
+}
+
+/// 時刻を秒だけずらす(ミリ秒の分母で厳密に足す)。クリップの前へは行かない。
+fn shifted_by_seconds(t: RationalTime, offset: f32) -> RationalTime {
+    const DEN: i64 = 1000;
+    let num = (offset as f64 * DEN as f64).round() as i64;
+    let shifted = t
+        .num()
+        .checked_mul(DEN)
+        .and_then(|scaled| num.checked_mul(t.den()).map(|by| scaled + by))
+        .zip(t.den().checked_mul(DEN))
+        .and_then(|(num, den)| RationalTime::try_new(num, den).ok());
+    match shifted {
+        Some(at) if at.as_seconds_f64() >= 0.0 => at,
+        _ => RationalTime::ZERO,
+    }
+}
+
+/// 別の時刻ごとに引き直した「層の姿」。鍵はずれ(ミリ秒)。
+type OtherTimes = BTreeMap<i64, (RationalTime, Vec<ResolvedLayer>, HashMap<LayerId, TextDocument>, HashMap<LayerId, Vec<ShapeNode>>)>;
+
+/// 時刻のずれ(秒)を鍵にする — 同じずれは 1 回しか引かない。
+fn offset_key(offset: f32) -> i64 {
+    (offset as f64 * 1000.0).round() as i64
+}
+
+/// 別の時刻を読むための層の番号。復号器の流れを本体と分けるためだけの物で、Document には無い。
+fn lookbehind_layer_id(layer: LayerId, offset: f32) -> LayerId {
+    let mut hasher = std::hash::DefaultHasher::new();
+    use std::hash::{Hash as _, Hasher as _};
+    layer.0.hash(&mut hasher);
+    offset_key(offset).hash(&mut hasher);
+    LayerId(hasher.finish() | 1 << 63)
+}
+
+/// 別の時刻を読む効果は、**たどり着き方で絵が変わってはいけない**(実 GPU)。
+///
+/// 効果が自分で前フレームを覚える道を恒久禁止している理由がここ(`docs/plugin-resources.md` §6)。
+/// ホストが時刻を渡す形なら、同じ時刻は何度描いても、どの順で描いても同じ絵になる。
+#[cfg(test)]
+mod time_reference_is_deterministic {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+
+    /// 中身が時刻で変わる素材(動画)が要る。1 コマごとに色が変わる小さな mp4 を作る。
+    fn clip(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let out = dir.join("ramp.mp4");
+        let status = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=64x64:d=2:r=10",
+                   "-pix_fmt", "yuv420p", "-c:v", "libx264", "-y"])
+            .arg(&out)
+            .status()
+            .ok()?;
+        status.success().then_some(out)
+    }
+
+    fn document(path: &std::path::Path) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(10, 1).unwrap(), duration_frames: 20, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 20) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.time_difference".into() }] },
+        ]).unwrap();
+        doc
+    }
+
+    /// 先に素の層(効果なし)で測る。ここが揺れるなら、揺れているのは復号であって時間参照ではない。
+    #[test]
+    fn a_plain_clip_is_already_the_same_however_you_got_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let mut doc = document(&path);
+        doc.apply(Intent::SetEffects { layer: LayerId(1), effects: vec![] }).unwrap();
+        let at = RationalTime::try_from_frame(12, Fps::try_new(10, 1).unwrap()).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let jumped = engine.render_frame(&doc.view(), at).unwrap();
+        for frame in 0..12 {
+            let t = RationalTime::try_from_frame(frame, Fps::try_new(10, 1).unwrap()).unwrap();
+            engine.render_frame(&doc.view(), t).unwrap();
+        }
+        let scrubbed = engine.render_frame(&doc.view(), at).unwrap();
+        assert_eq!(jumped, scrubbed, "効果なしでも、たどり着き方で絵が変わっている");
+    }
+
+    #[test]
+    fn the_same_time_gives_the_same_picture_however_you_got_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let doc = document(&path);
+        let at = RationalTime::try_from_frame(12, Fps::try_new(10, 1).unwrap()).unwrap();
+        let mut engine = Engine::new().unwrap();
+
+        // いきなりその時刻へ飛ぶ。
+        let jumped = engine.render_frame(&doc.view(), at).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+
+        // 頭から順に辿ってから、同じ時刻へ。
+        for frame in 0..12 {
+            let t = RationalTime::try_from_frame(frame, Fps::try_new(10, 1).unwrap()).unwrap();
+            engine.render_frame(&doc.view(), t).unwrap();
+        }
+        let scrubbed = engine.render_frame(&doc.view(), at).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+
+        assert_eq!(jumped, scrubbed, "同じ時刻の絵が、たどり着き方で変わった");
+        // 素材が時刻で変わる物であることの確認(変わらない素材なら試験になっていない)。
+        let other = RationalTime::try_from_frame(4, Fps::try_new(10, 1).unwrap()).unwrap();
+        assert_ne!(jumped, engine.render_frame(&doc.view(), other).unwrap(), "時刻で絵が変わる素材で測っている");
     }
 }

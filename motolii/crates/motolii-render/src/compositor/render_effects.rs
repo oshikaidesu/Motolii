@@ -11,9 +11,13 @@ pub(crate) struct BakedEffects {
     entries: Vec<BakedEntry>,
     generation: u64,
 }
-struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame> }
+struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame>, others: Vec<GpuTexture2D> }
 impl PartialEq for BakedKey {
-    fn eq(&self, other: &Self) -> bool { self.source.handle() == other.source.handle() && self.passes == other.passes && self.frame == other.frame }
+    fn eq(&self, other: &Self) -> bool {
+        self.source.handle() == other.source.handle() && self.passes == other.passes && self.frame == other.frame
+            && self.others.len() == other.others.len()
+            && self.others.iter().zip(&other.others).all(|(a, b)| a.handle() == b.handle())
+    }
 }
 struct BakedEntry { key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill, owned: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>, used: u64 }
 impl BakedEffects {
@@ -96,14 +100,15 @@ impl Compositor {
                 continue;
             }
             if let Some((source, passes, content, padding, spill)) = &previous {
-                if shared_frame.is_none() && source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
+                if shared_frame.is_none() && lwp.pass_sources.iter().all(Vec::is_empty)
+                    && source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
                     effective_textures.push(content.clone());
                     effective_paddings.push(*padding);
                     effective_spills.push(spill.clone());
                     continue;
                 }
             }
-            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame };
+            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame, others: lwp.pass_sources.iter().flatten().cloned().collect() };
             if let Some((content, padding, spill)) = self.baked_effects.hit(&baked_key) {
                 self.surface_work.baked_hits += 1;
                 previous = Some((layer_texture, lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
@@ -157,9 +162,14 @@ impl Compositor {
                 current_is_scratch = true;
             }
 
+            // 別の時刻の絵を、束ねられる形へ(pool の借りはここで解く)。
+            let others: Vec<Vec<wgpu::Texture>> = lwp.pass_sources.iter().map(|row| {
+                row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()
+            }).collect();
+            let encoder = copy_encoder.as_mut().expect("直前に用意した");
             let (next, next_linear, next_is_scratch) = self.record_pass_chain(
                 encoder, current, current_linear, current_is_scratch,
-                &lwp.passes, frame, [padded_width, padded_height], padding, [width, height],
+                &lwp.passes, &others, frame, [padded_width, padded_height], padding, [width, height],
             )?;
             current = next;
             current_linear = next_linear;
@@ -270,6 +280,8 @@ impl Compositor {
         mut current_linear: bool,
         mut current_is_scratch: bool,
         passes: &[EffectPass],
+        // `others` は効果ごとの「別の時刻の絵」(`passes` と同じ並び)。空なら層の絵 1 枚だけ。
+        others: &[Vec<wgpu::Texture>],
         frame: Option<effects::vism::ImageFrame>,
         size: [u32; 2],
         padding: u32,
@@ -277,7 +289,7 @@ impl Compositor {
     ) -> Result<(wgpu::Texture, bool, bool), CompositorError> {
         let [padded_width, padded_height] = size;
         let [width, height] = unpadded;
-        for pass in passes {
+        for (index, pass) in passes.iter().enumerate() {
             let is_warp = self.catalog.descriptors.iter().any(|d| d.plugin_id == pass.plugin_id && d.stage == EffectStage::Warp);
             if current_linear != is_warp {
                 let converted = self.convert_image_encoding(encoder, &current, is_warp);
@@ -298,7 +310,10 @@ impl Compositor {
             );
             let source_view = (program.image_input_count() > 0)
                 .then(|| current.create_view(&Default::default()));
-            let sources: Vec<_> = source_view.iter().collect();
+            let other_views: Vec<wgpu::TextureView> = others.get(index)
+                .map(|row| row.iter().map(|t| t.create_view(&Default::default())).collect())
+                .unwrap_or_default();
+            let sources: Vec<_> = source_view.iter().chain(other_views.iter()).collect();
             let destination_view = destination.create_view(&Default::default());
             if is_warp {
                 let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
@@ -328,6 +343,46 @@ impl Compositor {
             current_is_scratch = true;
         }
         Ok((current, current_linear, current_is_scratch))
+    }
+
+    /// 別の時刻の絵を 1 枚だけ写し取る。
+    ///
+    /// 素材の texture は時刻ごとに**同じ 1 枚へ上書き**されるので(動画は path ごとに 1 枚)、
+    /// 写さずに持つと、後の復号で中身が入れ替わる。写した物だけが「あの時刻の絵」でいられる。
+    pub(crate) fn snapshot_texture(&mut self, source: &GpuTexture2D) -> Option<GpuTexture2D> {
+        let size;
+        let copy;
+        {
+            let src = self.ctx.gpu_resources.textures.get_from_handle(source.handle()).ok()?;
+            if !src.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
+                return None;
+            }
+            size = src.texture.size();
+            copy = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("motolii-other-time"),
+                size,
+                mip_level_count: src.texture.mip_level_count(),
+                sample_count: src.texture.sample_count(),
+                dimension: wgpu::TextureDimension::D2,
+                format: src.texture.format(),
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("motolii-other-time-copy"),
+            });
+            encoder.copy_texture_to_texture(src.texture.as_image_copy(), copy.as_image_copy(), size);
+            // ここで submit しない。復号したコマの転送は frame 共通の encoder に積まれていて、
+            // 流れるのは `before_submit` の中 — 先に打つと、まだ届いていない texture を写す
+            // (冷えていれば零、暖まっていれば前のコマ。同じ時刻の絵が辿り方で変わる)。
+            // pending に積めば `flush_pending` が `before_submit` → この写し、の順で流す。
+            self.pending.push(encoder.finish());
+        }
+        self.next_effect_key += 1;
+        self.ctx
+            .texture_manager_2d
+            .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &copy)
+            .ok()
     }
 
     /// 元の絵を余白ぶん広げた scratch の中央へ写す(周りは透明)。効果の入力と、溢れを分ける coverage が使う。

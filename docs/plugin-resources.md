@@ -133,3 +133,11 @@ Aₙ = Composite(DecayOrTransform(Aₙ₋₁), Drawₙ)
 - **予約(凍結ゲート項目17)**: `CompLookbehind`のスキーマ/契約口。F-7(インスタンスインデックス)と同じ「口の予約のみ・実装は後」の棚
 - **実装時期**: lookbehindはM4キャッシュ後ならいつでも安い。フィードバック(チェックポイント)はグループ仮出力(M4)に依存
 - **恒久にやらない**: StatefulFilter、再生ヘッド依存の隠しバッファ
+
+### 6-5. 現在地(2026-09-12)
+
+**層の絵の別時刻**(lookbehind の最小形。target = 自分の層、非再帰)を実装した。効果は manifest の image 欄に
+`TIME_OFFSET`(秒)を書き、ホストが `view.resolved_layers(t′)` で層を引き直して絵を渡す
+(`engine/render.rs` の `sources_at_other_times`)。決定性は `time_reference_is_deterministic` が審判
+(飛んでも辿っても同じ絵)。取説は [Shadertoy の取り込み §8](vism-shadertoy-import.md)。
+`CompLookbehind` 本来の対象(Group / CompRoot)と、6-3 のフィードバック(チェックポイント)は予約のまま。

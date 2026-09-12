@@ -127,11 +127,18 @@ pub struct EffectPass {
     pub(crate) output_format: wgpu::TextureFormat,
     /// coverage 外の出力の混ぜ方(溢れの法)。
     pub(crate) spill: Option<crate::render::compositor::BlendMode>,
+    /// 2 枚目以降の image が要る時刻のずれ(秒。負が過去)。ホストがその時刻の絵を渡す。
+    pub(crate) image_time_offsets: Vec<f32>,
 }
 
 impl EffectPass {
     pub fn padding(&self) -> u32 {
         self.padding
+    }
+
+    /// 2 枚目以降の image が要る時刻のずれ(秒。負が過去)。
+    pub fn image_time_offsets(&self) -> &[f32] {
+        &self.image_time_offsets
     }
 
     pub(crate) fn intermediate_format(&self) -> Option<wgpu::TextureFormat> {

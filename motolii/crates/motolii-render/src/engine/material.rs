@@ -84,7 +84,7 @@ impl Engine {
             let mut texture = cached.normalized.clone();
             let mut frame = source_frame.unwrap_or(ImageFrame { size: natural, origin: [0.0;2], pixels: texture.width_height() });
             for pass in warps {
-                let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass] };
+                let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass], pass_sources: Vec::new() };
                 let (mut outputs,padding,_spills,_owned_outputs) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
                 texture = outputs.remove(0).texture().expect("image effect output").clone();
                 frame = frame.padded(padding[0]);
@@ -185,11 +185,11 @@ mod domain_contract {
             let effect=ResolvedEffect{plugin_id:"motolii.turbulent_warp".into(),params:vec![("amount".into(),Value::F64(6.0)),("size".into(),Value::F64(20.0))],..Default::default()};
             let passes=super::super::translate::translate_image_effects(&[effect],EffectStage::Warp);
             let frame=ImageFrame{size:[64.0;2],origin:[0.0;2],pixels:[extent;2]};
-            let input=LayerWithPasses{layer:image_layer(source,frame.size),passes};
+            let input=LayerWithPasses{layer:image_layer(source,frame.size),passes,pass_sources:Vec::new()};
             let (mut output,padding,_spills,_owned)=compositor.effective_layer_textures_in_frame(&[input],Some(frame)).unwrap();
             let frame=frame.padded(padding[0]);
             let texture=output.remove(0).texture().unwrap().clone();
-            let layer=LayerWithPasses{layer:image_layer(texture,frame.size),passes:Vec::new()};
+            let layer=LayerWithPasses{layer:image_layer(texture,frame.size),passes:Vec::new(),pass_sources:Vec::new()};
             rendered.push(compositor.render_with_effects(CompSpec{width:76,height:76},Default::default(),&[layer],[0.0;4]).unwrap());
         }
         let mut total=0usize;let mut error=0usize;

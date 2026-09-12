@@ -50,7 +50,7 @@ impl Engine {
             let (texture, _view) = engine.compositor.render_to_texture(
                 local,
                 flat,
-                &[LayerWithPasses { layer, passes: passes.to_vec() }],
+                &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new() }],
                 crate::render::compositor::NO_BACKGROUND,
             )?;
             engine.compositor.import_premultiplied(&texture)
@@ -79,6 +79,7 @@ impl Engine {
         let clipped = self.compositor.source_atop(&base_local, &upper_local, upper.blend_mode)?;
         let unpad = Vec2::splat(-padf);
         Ok(Some(LayerWithPasses {
+            pass_sources: Vec::new(),
             layer: Layer {
                 content: LayerContent::Texture(clipped),
                 size: [local.width as f32, local.height as f32],

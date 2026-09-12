@@ -342,7 +342,7 @@ impl Compositor {
         let (width, height) = (self.window.width, self.window.height);
         // 窓は線形。効果列は層の絵と同じ作法(Pass は sRGB 符号化で受ける)で流し、終わりで線形へ戻す。
         let (mut current, linear, mut is_scratch) = self.record_pass_chain(
-            encoder, canvas.clone(), true, false, passes, None, [width, height], 0, [width, height],
+            encoder, canvas.clone(), true, false, passes, &[], None, [width, height], 0, [width, height],
         )?;
         if !linear {
             let back = self.convert_image_encoding(encoder, &current, true);

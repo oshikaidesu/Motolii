@@ -108,6 +108,10 @@ pub struct IsfInput {
     pub advanced: bool,
     /// 主役の欄(`HERO`)。無ければ宣言順の先頭が主役。
     pub hero: bool,
+    /// image の欄だけ: 層の絵を**別の時刻**で読む(`TIME_OFFSET`、秒。負が過去)。
+    /// ホストが供給するので、2 枚目以降でもこれを宣言していれば繋がる。
+    /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`plugin-resources.md` §6)。
+    pub time_offset: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -270,6 +274,8 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let advanced = entry.get("ADVANCED").and_then(|v| v.as_bool()).unwrap_or(false);
             let hero = entry.get("HERO").and_then(|v| v.as_bool()).unwrap_or(false);
             let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
+            let time_offset = entry.get("TIME_OFFSET").and_then(|v| v.as_f64()).map(|v| v as f32)
+                .filter(|_| ty == IsfInputType::Image);
             inputs.push(IsfInput {
                 name: name.to_owned(),
                 label,
@@ -282,6 +288,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 min,
                 max,
                 maps,
+                time_offset,
             });
         }
     }

@@ -38,6 +38,8 @@ pub struct EffectDescriptor {
     /// coverage 外の出力を下へ合成する混ぜ方(溢れの法)。無ければ層の Blend のまま。
     pub(crate) spill: Option<crate::render::compositor::BlendMode>,
     pub(crate) output_format: wgpu::TextureFormat,
+    /// 2 枚目以降の image が要求する時刻のずれ(秒。負が過去)。宣言順。
+    pub(crate) image_time_offsets: Vec<f32>,
 }
 
 #[derive(Clone, Debug)]
@@ -269,6 +271,30 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
                 vertex_entry: String::new(), fragment_entry: String::new(), subtypes });
         }
     }
+    // 棚に出る効果が読める絵は、今は層の絵 1 枚だけ。2 枚目を宣言されても繋ぐ先が無いので、
+    // 黙って 1 枚目を二度束ねず(絵は出るが意味が違う)、名指しで断る。内部の効果(blend・matte)は
+    // 呼び手が明示的に 2 枚渡すので対象外。
+    {
+        let manifest = if source.extension == "fs" {
+            isf::compiled_stages(&source.source).map_err(|e| e.to_string())?.0
+        } else {
+            isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?.0
+        };
+        if manifest.expose {
+            let images: Vec<&isf::IsfInput> = manifest.inputs.iter()
+                .filter(|i| i.ty == isf::IsfInputType::Image)
+                .collect();
+            // 2 枚目以降は、ホストが供給できる物だけ — 今は「層の絵を別の時刻で読む」(TIME_OFFSET)。
+            if let Some(extra) = images.iter().skip(1).find(|i| i.time_offset.is_none()) {
+                return Err(format!(
+                    "{}: 2 枚目以降の画像を繋ぐ口がまだ無い(層を指す欄が未実装)。\
+                     読めるのは層の絵 1 枚、TIME_OFFSET を宣言した別の時刻の絵、\
+                     PASSES の中間 buffer だけ",
+                    extra.name
+                ));
+            }
+        }
+    }
     let (manifest, vertex, fragment, vertex_entry, fragment_entry) = if source.extension == "fs" {
         let (manifest, vertex, fragment) = isf::compiled_stages(&source.source).map_err(|e| e.to_string())?;
         (manifest, vertex, fragment, "main", "main")
@@ -308,8 +334,14 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         padding: None,
         spill: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
+        image_time_offsets: Vec::new(),
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
+        image_time_offsets: d.manifest.inputs.iter()
+            .filter(|i| i.ty == isf::IsfInputType::Image)
+            .skip(1)
+            .filter_map(|i| i.time_offset)
+            .collect(),
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
         snapshot: snapshot(d.plugin_id()),
