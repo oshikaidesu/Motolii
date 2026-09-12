@@ -88,18 +88,20 @@ class _SampleShelf {
   }
 }
 
-/// A small specimen the document renderer draws. The name stands alone until
-/// the picture arrives.
+/// A small specimen the document renderer draws. The [placeholder] stands
+/// until the picture arrives, and stays when there is none to draw.
 class NativeVisualSample extends StatefulWidget {
   const NativeVisualSample({
     super.key,
     required this.controller,
     required this.request,
     this.fit = BoxFit.contain,
+    this.placeholder,
   });
   final EditorSession controller;
   final Map<String, dynamic> request;
   final BoxFit fit;
+  final Widget? placeholder;
   @override
   State<NativeVisualSample> createState() => _NativeVisualSampleState();
 }
@@ -157,7 +159,7 @@ class _NativeVisualSampleState extends State<NativeVisualSample> {
 
   @override
   Widget build(BuildContext context) => _image == null
-      ? const SizedBox.shrink()
+      ? widget.placeholder ?? const SizedBox.shrink()
       : Image.memory(
           _image!,
           fit: widget.fit,

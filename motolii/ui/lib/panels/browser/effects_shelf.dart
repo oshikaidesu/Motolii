@@ -66,26 +66,21 @@ class EffectsShelf extends BrowserShelf {
 
   @override
   Widget preview(BrowserHost host, Map<String, dynamic> item, Color identity) =>
-      Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(
-            child: Text(
-              '${item['glyph'] ?? 'ƒ'}',
-              style: TextStyle(fontSize: EditorMetrics.s23, color: identity),
-            ),
+      NativeVisualSample(
+        key: ValueKey('browser:effect:${item['id']}'),
+        controller: host.controller,
+        request: {
+          'kind': 'effect',
+          'id': item['id'],
+          'generation': item['generation'],
+        },
+        fit: BoxFit.cover,
+        placeholder: Center(
+          child: Text(
+            '${item['glyph'] ?? 'ƒ'}',
+            style: TextStyle(fontSize: EditorMetrics.s23, color: identity),
           ),
-          NativeVisualSample(
-            key: ValueKey('browser:effect:${item['id']}'),
-            controller: host.controller,
-            request: {
-              'kind': 'effect',
-              'id': item['id'],
-              'generation': item['generation'],
-            },
-            fit: BoxFit.cover,
-          ),
-        ],
+        ),
       );
 
   @override
