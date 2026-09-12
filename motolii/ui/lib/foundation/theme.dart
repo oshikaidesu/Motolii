@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -125,19 +127,7 @@ abstract final class EditorTheme {
     dividerColor: line,
     splashFactory: NoSplash.splashFactory,
     highlightColor: hover,
-    popupMenuTheme: const PopupMenuThemeData(
-      color: menu,
-      surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.transparent,
-      menuPadding: EdgeInsets.symmetric(vertical: EditorMetrics.s2),
-      textStyle: TextStyle(fontSize: EditorMetrics.font, color: ink),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: BorderSide(color: menuEdge),
-      ),
-    ),
-    // MenuAnchor menus (choices, dropdowns) share the popup menu's sheet.
+    // MenuAnchor menus (choices, context menus) share one sheet.
     menuTheme: const MenuThemeData(style: menuSheet),
     menuButtonTheme: MenuButtonThemeData(style: menuRow),
     // The icon is the button: no minimum square, no padding, no stadium ink.
@@ -345,62 +335,114 @@ class EditorSection extends StatelessWidget {
   );
 }
 
-/// A context menu at a pointer's screen position. The whole app is scaled
-/// above the Navigator, so the overlay's coordinates are not the screen's.
+/// A context menu at a pointer's screen position. Needs nothing set up
+/// ahead of it — it drops itself into the nearest [Overlay] (every
+/// [MaterialApp] already has one) and removes itself when it closes, the
+/// way [showMenu] does. No animation; as wide as its widest row. The rows
+/// are [EditorMenuItem]s and [EditorMenuDivider]s.
 Future<T?> showEditorMenu<T>(
   BuildContext context,
   Offset at,
-  List<PopupMenuEntry<T>> items,
+  List<Widget> items,
 ) {
-  final overlay =
-      Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
-  final p = overlay.globalToLocal(at);
-  return showMenu<T>(
-    context: context,
-    position: RelativeRect.fromLTRB(p.dx, p.dy, p.dx, p.dy),
-    items: items,
+  final overlay = Overlay.of(context);
+  final overlayBox = overlay.context.findRenderObject() as RenderBox;
+  final position = overlayBox.globalToLocal(at);
+  final completer = Completer<T?>();
+  late final OverlayEntry entry;
+  var picked = false;
+  void settle(Object? value) {
+    if (!completer.isCompleted) completer.complete(value as T?);
+    entry.remove();
+  }
+
+  final controller = MenuController();
+  entry = OverlayEntry(
+    builder: (context) => Positioned(
+      left: position.dx,
+      top: position.dy,
+      child: _EditorMenuHost(
+        controller: controller,
+        items: items,
+        onPick: (v) {
+          picked = true;
+          settle(v);
+        },
+        onClose: () {
+          if (!picked) settle(null);
+        },
+      ),
+    ),
+  );
+  overlay.insert(entry);
+  WidgetsBinding.instance.addPostFrameCallback((_) => controller.open());
+  return completer.future;
+}
+
+/// The MenuAnchor a [showEditorMenu] call briefly owns: it opens itself once
+/// mounted and reports back however it closed (a pick, or an outside tap).
+class _EditorMenuHost extends StatelessWidget {
+  const _EditorMenuHost({
+    required this.controller,
+    required this.items,
+    required this.onPick,
+    required this.onClose,
+  });
+  final MenuController controller;
+  final List<Widget> items;
+  final ValueChanged<Object?> onPick;
+  final VoidCallback onClose;
+  @override
+  Widget build(BuildContext context) => _EditorMenuScope(
+    pick: onPick,
+    child: MenuAnchor(
+      controller: controller,
+      animated: false,
+      consumeOutsideTap: true,
+      crossAxisUnconstrained: false,
+      style: EditorTheme.menuSheet.copyWith(
+        minimumSize: const WidgetStatePropertyAll(Size.zero),
+      ),
+      onClose: onClose,
+      menuChildren: items,
+      child: const SizedBox.shrink(),
+    ),
   );
 }
 
-class EditorMenuItem<T> extends PopupMenuItem<T> {
+/// Threads a row's pick back out to the [showEditorMenu] call that opened it.
+class _EditorMenuScope extends InheritedWidget {
+  const _EditorMenuScope({required this.pick, required super.child});
+  final ValueChanged<Object?> pick;
+  @override
+  bool updateShouldNotify(_EditorMenuScope old) => false;
+  static void pickFrom(BuildContext context, Object? value) => context
+      .dependOnInheritedWidgetOfExactType<_EditorMenuScope>()!
+      .pick(value);
+}
+
+class EditorMenuItem<T> extends StatelessWidget {
   const EditorMenuItem({
     super.key,
-    super.value,
-    super.enabled,
-    required super.child,
-  }) : super(
-         height: EditorMetrics.row,
-         padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-       );
+    this.value,
+    this.enabled = true,
+    required this.child,
+  });
+  final T? value;
+  final bool enabled;
+  final Widget child;
   @override
-  PopupMenuItemState<T, EditorMenuItem<T>> createState() =>
-      _EditorMenuItemState<T>();
+  Widget build(BuildContext context) => MenuItemButton(
+    style: EditorTheme.menuRow,
+    closeOnActivate: false,
+    onPressed: enabled ? () => _EditorMenuScope.pickFrom(context, value) : null,
+    child: child,
+  );
 }
 
-class _EditorMenuItemState<T> extends PopupMenuItemState<T, EditorMenuItem<T>> {
-  bool hovered = false;
+class EditorMenuDivider extends StatelessWidget {
+  const EditorMenuDivider({super.key});
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => setState(() => hovered = true),
-    onExit: (_) => setState(() => hovered = false),
-    child: Theme(
-      data: Theme.of(context).copyWith(
-        hoverColor: EditorTheme.select,
-        highlightColor: EditorTheme.select,
-      ),
-      child: super.build(context),
-    ),
-  );
-  @override
-  Widget buildChild() => DefaultTextStyle.merge(
-    style: TextStyle(
-      fontSize: 11,
-      color: !widget.enabled
-          ? EditorTheme.disabledInk
-          : hovered
-          ? EditorTheme.selectInk
-          : EditorTheme.ink,
-    ),
-    child: widget.child!,
-  );
+  Widget build(BuildContext context) =>
+      const Divider(height: EditorMetrics.s8, thickness: 1);
 }
