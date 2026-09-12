@@ -5,7 +5,8 @@
   "DESCRIPTION": "Shows what moved: the layer now, minus the layer a moment ago (AE の Time Difference と同じ型)",
   "INPUTS": [
     { "NAME": "inputImage", "TYPE": "image" },
-    { "NAME": "past", "LABEL": "Past", "TYPE": "image", "TIME_OFFSET": -0.2 },
+    { "NAME": "past", "TYPE": "image", "TIME_OFFSET": "offset" },
+    { "NAME": "offset", "LABEL": "Offset", "TYPE": "float", "DEFAULT": -0.2, "MIN": -5.0, "MAX": 5.0, "HERO": true },
     { "NAME": "contrast", "LABEL": "Contrast", "TYPE": "float", "DEFAULT": 3.0, "MIN": 0.0, "MAX": 20.0 }
   ]
 }*/

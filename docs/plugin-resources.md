@@ -137,7 +137,7 @@ Aₙ = Composite(DecayOrTransform(Aₙ₋₁), Drawₙ)
 ### 6-5. 現在地(2026-09-12)
 
 **層の絵の別時刻**(lookbehind の最小形。target = 自分の層、非再帰)を実装した。効果は manifest の image 欄に
-`TIME_OFFSET`(秒)を書き、ホストが `view.resolved_layers(t′)` で層を引き直して絵を渡す
+`TIME_OFFSET`(秒の数値か、利用者が回す float 欄の名前)を書き、ホストが `view.resolved_layers(t′)` で層を引き直して絵を渡す
 (`engine/render.rs` の `sources_at_other_times`)。決定性は `time_reference_is_deterministic` が審判
 (飛んでも辿っても同じ絵)。取説は [Shadertoy の取り込み §8](vism-shadertoy-import.md)。
 `CompLookbehind` 本来の対象(Group / CompRoot)と、6-3 のフィードバック(チェックポイント)は予約のまま。

@@ -101,7 +101,6 @@ datamosh はさらに別トラックで、codec 領域の台帳が
 
 - **合体後(Group / CompRoot)の別時刻**(`CompLookbehind` の本来の対象)と、**再帰のフィードバック**。
   §6 の通り設計は 2026-07-10 に済んでいる。層の絵の別時刻(§8)は、その入口の最初の 1 本。
-- **`TIME_OFFSET` を利用者が回す欄**。今は作者が manifest で固定する。
 - **貼る窓**は作らない。各自の editor で書き、file を置く。
 - **Shadertoy の Buffer A..D をそのまま貼る**(1 file に複数 tab を書く取り決め)。ISF の `PASSES`
   に写せるので、器はもう在る。
@@ -110,14 +109,16 @@ datamosh はさらに別トラックで、codec 領域の台帳が
 
 ## 8. 別の時刻の絵を読む — `TIME_OFFSET`
 
-image の欄に `TIME_OFFSET`(秒。負が過去)を書くと、**ホストがその時刻の層の絵を作って渡す**。
-効果は何も覚えない。同梱の実例は [`vism/time_difference.fs`](../motolii/crates/motolii-render/vism/time_difference.fs)。
+image の欄に `TIME_OFFSET` を書くと、**ホストがその時刻の層の絵を作って渡す**。効果は何も覚えない。
+値は**数値**(秒。負が過去。作者が固定)か、**float 欄の名前**(その欄が普段の仕組みで Inspector に出て、
+利用者が回す)。同梱の実例は [`vism/time_difference.fs`](../motolii/crates/motolii-render/vism/time_difference.fs)。
 
 ```glsl
 /*{ "ID": "motolii.time_difference", "STAGE": "pass",
     "INPUTS": [
       { "NAME": "inputImage", "TYPE": "image" },
-      { "NAME": "past", "TYPE": "image", "TIME_OFFSET": -0.2 } ] }*/
+      { "NAME": "past",   "TYPE": "image", "TIME_OFFSET": "offset" },
+      { "NAME": "offset", "TYPE": "float", "DEFAULT": -0.2, "MIN": -5.0, "MAX": 5.0 } ] }*/
 void main() {
     gl_FragColor = abs(IMG_THIS_PIXEL(inputImage) - IMG_THIS_PIXEL(past));
 }
@@ -145,6 +146,6 @@ void main() {
 ### 限界
 
 - 読めるのは**自分の層の絵**だけ。合体後の別時刻(下の層ごと)は予約のまま。
-- ずれは作者が固定する。利用者が回す欄は次。
+- 名指した欄が無い(または float でない)場合は、黙って 0 にせず名前を挙げて断る。
 - 費用は、ずれ 1 つにつき復号 1 回 + 写し 1 枚。cache はまだ効かない。
 - 速度を変えた層(time stretch)は、素材側のずれが comp の秒とは一致しない。

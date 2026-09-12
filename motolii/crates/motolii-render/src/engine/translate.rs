@@ -79,7 +79,13 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
                 (value.abs() * padding.scale).ceil() as u32
             });
             Some(crate::render::compositor::EffectPass {
-                image_time_offsets: descriptor.image_time_offsets.clone(),
+                image_time_offsets: descriptor.image_time_offsets.iter().map(|offset| match offset {
+                    crate::render::compositor::effects::isf::TimeOffset::Fixed(seconds) => *seconds,
+                    crate::render::compositor::effects::isf::TimeOffset::Param(name) => params.iter()
+                        .find(|(n, _)| n == name).map(|(_, v)| *v)
+                        .or_else(|| descriptor.params.iter().find(|p| &p.name == name).map(|p| p.default as f32))
+                        .unwrap_or(0.0),
+                }).collect(),
                 plugin_id: effect.plugin_id.clone(),
                 params,
                 padding,
@@ -157,6 +163,16 @@ pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
 #[cfg(test)]
 mod shelf_tests {
     use crate::render::compositor::EffectStage;
+
+    /// 別の時刻のずれは、欄の値(無ければ欄の既定)で決まる — 作者が固定するのではなく利用者が回す。
+    #[test]
+    fn a_time_offset_named_after_a_field_takes_the_field_value() {
+        use crate::doc::store::{ResolvedEffect, Value};
+        let dialed = ResolvedEffect { plugin_id: "motolii.time_difference".into(), params: vec![("offset".into(), Value::F64(-1.5))], ..Default::default() };
+        let untouched = ResolvedEffect { plugin_id: "motolii.time_difference".into(), params: vec![], ..Default::default() };
+        assert_eq!(super::translate_effect_passes(&[dialed])[0].image_time_offsets(), &[-1.5]);
+        assert_eq!(super::translate_effect_passes(&[untouched])[0].image_time_offsets(), &[-0.2], "既定は manifest の欄の既定");
+    }
 
     /// hook の効果(Glass・Turbulent Displace)は棚に並び、pass にならず、欄は manifest から。
     #[test]

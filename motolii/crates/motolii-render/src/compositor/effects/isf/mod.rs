@@ -17,6 +17,8 @@ pub(crate) enum IsfError {
     PersistentBuffer,
     #[error("STAGE `{0}` は知らない(pass / warp / surface / field)")]
     UnknownStage(String),
+    #[error("TIME_OFFSET: {0}")]
+    TimeOffset(String),
 }
 
 pub mod shadertoy;
@@ -108,10 +110,18 @@ pub struct IsfInput {
     pub advanced: bool,
     /// 主役の欄(`HERO`)。無ければ宣言順の先頭が主役。
     pub hero: bool,
-    /// image の欄だけ: 層の絵を**別の時刻**で読む(`TIME_OFFSET`、秒。負が過去)。
+    /// image の欄だけ: 層の絵を**別の時刻**で読む(`TIME_OFFSET`)。
     /// ホストが供給するので、2 枚目以降でもこれを宣言していれば繋がる。
     /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`plugin-resources.md` §6)。
-    pub time_offset: Option<f32>,
+    pub time_offset: Option<TimeOffset>,
+}
+
+/// 別の時刻のずれ(秒。負が過去)。作者が固定するか、float の欄を名指しして利用者に回させる。
+#[derive(Clone, Debug, PartialEq)]
+pub enum TimeOffset {
+    Fixed(f32),
+    /// その名前の float 欄の値(秒)。欄は普段の仕組みで Inspector に出る。
+    Param(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -274,8 +284,11 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let advanced = entry.get("ADVANCED").and_then(|v| v.as_bool()).unwrap_or(false);
             let hero = entry.get("HERO").and_then(|v| v.as_bool()).unwrap_or(false);
             let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
-            let time_offset = entry.get("TIME_OFFSET").and_then(|v| v.as_f64()).map(|v| v as f32)
-                .filter(|_| ty == IsfInputType::Image);
+            let time_offset = entry.get("TIME_OFFSET").and_then(|v| match v {
+                serde_json::Value::Number(n) => n.as_f64().map(|v| TimeOffset::Fixed(v as f32)),
+                serde_json::Value::String(name) => Some(TimeOffset::Param(name.clone())),
+                _ => None,
+            }).filter(|_| ty == IsfInputType::Image);
             inputs.push(IsfInput {
                 name: name.to_owned(),
                 label,
@@ -290,6 +303,14 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 maps,
                 time_offset,
             });
+        }
+    }
+    for input in &inputs {
+        if let Some(TimeOffset::Param(name)) = &input.time_offset {
+            let ok = inputs.iter().any(|p| &p.name == name && p.ty == IsfInputType::Float);
+            if !ok {
+                return Err(IsfError::TimeOffset(format!("{} が名指す float の欄 {name} が無い", input.name)));
+            }
         }
     }
     let mut passes = Vec::new();
@@ -520,6 +541,14 @@ mod manifest_tests {
         let (images, params) = crate::render::compositor::effects::vism::orders(&manifest);
         let glsl = wrap_fragment_source(&manifest, &images, &params, &body);
         assert!(glsl.contains("1.0 - isf_FragNormCoord.y"), "{glsl}");
+    }
+
+    /// TIME_OFFSET が名指す欄が無い(か float でない)なら、黙って 0 にせず名前を挙げて断る。
+    #[test]
+    fn a_time_offset_naming_a_missing_field_is_refused() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"past\",\"TYPE\":\"image\",\"TIME_OFFSET\":\"nope\"}] }*/ void main() {}";
+        let error = parse_isf_source(source).err().expect("断る").to_string();
+        assert!(error.contains("nope") && error.contains("past"), "{error}");
     }
 
     #[test]

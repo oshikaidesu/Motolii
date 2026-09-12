@@ -39,7 +39,7 @@ pub struct EffectDescriptor {
     pub(crate) spill: Option<crate::render::compositor::BlendMode>,
     pub(crate) output_format: wgpu::TextureFormat,
     /// 2 枚目以降の image が要求する時刻のずれ(秒。負が過去)。宣言順。
-    pub(crate) image_time_offsets: Vec<f32>,
+    pub(crate) image_time_offsets: Vec<isf::TimeOffset>,
 }
 
 #[derive(Clone, Debug)]
@@ -340,7 +340,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         image_time_offsets: d.manifest.inputs.iter()
             .filter(|i| i.ty == isf::IsfInputType::Image)
             .skip(1)
-            .filter_map(|i| i.time_offset)
+            .filter_map(|i| i.time_offset.clone())
             .collect(),
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
