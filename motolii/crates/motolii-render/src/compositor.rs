@@ -8,7 +8,7 @@ mod clip;
 mod device;
 pub(crate) mod effects;
 mod environment;
-mod extrude;
+pub(crate) mod extrude;
 mod headless;
 mod matte;
 pub(crate) mod mesh;

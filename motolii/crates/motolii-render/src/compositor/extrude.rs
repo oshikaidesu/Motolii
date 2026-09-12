@@ -17,17 +17,90 @@ pub(crate) struct Geometry {
     pub indices: Vec<glam::UVec3>,
 }
 
-/// 輪郭を z = 0 の前の蓋、z = depth の後ろの蓋、側面へ(AE と同じく前面は層の面に留まり、
+/// 縁の丸み(fillet)。前の蓋の縁を半径 `radius` の四分円(`chamfer` なら 1 段の面取り)にする。
+/// 法線が蓋から側面へ連続して回るので、ガラスはここで下の絵を歪める。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Bevel {
+    pub radius: f32,
+    pub segments: u32,
+    pub chamfer: bool,
+}
+
+/// 立体を作る族の読み取り結果(Extrude の奥行き + Bevel)。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Solid {
+    pub depth: f32,
+    pub bevel: Option<Bevel>,
+}
+
+impl Solid {
+    /// 立体の全長。奥行きが丸みより浅ければ丸みが奥行きになる(丸みだけの板 = レンズの縁を持つ板)。
+    pub fn extent(&self) -> f32 {
+        self.depth.max(self.bevel.map_or(0.0, |b| b.radius))
+    }
+    pub fn hash_key(&self, hasher: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        self.depth.to_bits().hash(hasher);
+        if let Some(b) = self.bevel { b.radius.to_bits().hash(hasher); b.segments.hash(hasher); b.chamfer.hash(hasher); }
+    }
+}
+
+/// 閉じた折れ線の重複点(閉じるための末尾の複製、連続する同じ点)を落とす。
+fn dedup_closed(line: &[glam::Vec2]) -> Vec<glam::Vec2> {
+    let mut out: Vec<glam::Vec2> = Vec::with_capacity(line.len());
+    for p in line {
+        if out.last().is_some_and(|q| q.distance_squared(*p) <= 1e-8) { continue; }
+        out.push(*p);
+    }
+    while out.len() > 1 && out.first().unwrap().distance_squared(*out.last().unwrap()) <= 1e-8 { out.pop(); }
+    out
+}
+
+/// 閉じた折れ線の各頂点の外向きの寄せ(隣り合う辺の法線の平均 × miter 長)。距離 r を掛けると、
+/// 隣り合う辺を r ずつ内側へ平行移動した時の角に一致する(鋭角は 3 倍で止める)。`outward` は輪郭の巻きの向き。
+fn vertex_normals(line: &[glam::Vec2], outward: f32) -> Vec<glam::Vec2> {
+    let n = line.len();
+    let edge_normal = |i: usize| {
+        let e = line[(i + 1) % n] - line[i];
+        if e.length_squared() <= f32::EPSILON { glam::Vec2::ZERO } else { glam::vec2(e.y, -e.x).normalize() * outward }
+    };
+    (0..n).map(|i| {
+        let prev = edge_normal((i + n - 1) % n);
+        let next = edge_normal(i);
+        let sum = prev + next;
+        if sum.length_squared() <= 1e-8 { return next; }
+        let direction = sum.normalize();
+        let miter = 1.0 / direction.dot(next).max(1.0 / 3.0);
+        direction * miter
+    }).collect()
+}
+
+/// 輪郭を z = 0 の前の蓋、z = extent の後ろの蓋、側面へ(AE と同じく前面は層の面に留まり、
 /// 奥行きはカメラから遠ざかる側へ伸びる)。座標は層の local px、uv は絵(size)への割合。
 /// 蓋は閉じた輪郭の fill、側面は閉じた輪郭は外向き、開いた輪郭は帯のまま。
-pub(crate) fn geometry(outlines: &[(Vec<PathContour>, PathFillRule)], size: [f32; 2], depth: f32) -> Geometry {
+/// Bevel があれば閉じた輪郭の前の縁を丸め、前の蓋は半径ぶん内側へ寄せる。
+pub(crate) fn geometry(outlines: &[(Vec<PathContour>, PathFillRule)], size: [f32; 2], solid: Solid) -> Geometry {
     let uv = |p: glam::Vec2| glam::vec2(p.x / size[0].max(1.0), p.y / size[1].max(1.0)).clamp(glam::Vec2::ZERO, glam::Vec2::ONE);
+    let extent = solid.extent();
+    let bevel = solid.bevel.filter(|b| b.radius > 0.0);
+    let vertex = |p: glam::Vec2| re_renderer::renderer::PathVertex { point: p, in_tangent: glam::Vec2::ZERO, out_tangent: glam::Vec2::ZERO };
     let mut g = Geometry { positions: Vec::new(), normals: Vec::new(), texcoords: Vec::new(), indices: Vec::new() };
     for (contours, rule) in outlines {
+        let flattened: Vec<(Vec<glam::Vec2>, bool)> = re_renderer::renderer::flattened_contours(contours)
+            .into_iter().map(|(line, closes)| (if closes { dedup_closed(&line) } else { line }, closes)).filter(|(line, _)| line.len() >= 2).collect();
+        // 前の蓋: Bevel があれば折れ線を法線方向へ半径ぶん寄せた輪郭、無ければ元の輪郭。
+        let front: Vec<PathContour> = match bevel {
+            None => contours.iter().filter(|c| c.closed).cloned().collect(),
+            Some(b) => flattened.iter().filter(|(_, closes)| *closes).map(|(line, _)| {
+                let area: f32 = line.iter().zip(line.iter().cycle().skip(1)).map(|(a, c)| a.x * c.y - c.x * a.y).sum::<f32>() * 0.5;
+                let outward = if area < 0.0 { -1.0 } else { 1.0 };
+                let normals = vertex_normals(line, outward);
+                PathContour { closed: true, vertices: line.iter().zip(&normals).map(|(p, n)| vertex(*p - *n * b.radius)).collect() }
+            }).collect(),
+        };
         let closed: Vec<PathContour> = contours.iter().filter(|c| c.closed).cloned().collect();
-        let (cap, cap_indices) = re_renderer::renderer::fill_triangles(&closed, *rule);
-        // 前の蓋はカメラ側(-z)、後ろは +z。後ろは巻きを返す。
-        for (z, normal, flip) in [(0.0, -glam::Vec3::Z, false), (depth, glam::Vec3::Z, true)] {
+        for (z, normal, flip, source) in [(0.0, -glam::Vec3::Z, false, &front), (extent, glam::Vec3::Z, true, &closed)] {
+            let (cap, cap_indices) = re_renderer::renderer::fill_triangles(source, *rule);
             let base = g.positions.len() as u32;
             g.positions.extend(cap.iter().map(|p| p.extend(z)));
             g.normals.extend(std::iter::repeat(normal).take(cap.len()));
@@ -36,17 +109,49 @@ pub(crate) fn geometry(outlines: &[(Vec<PathContour>, PathFillRule)], size: [f32
                 if flip { glam::uvec3(base + t[0], base + t[2], base + t[1]) } else { glam::uvec3(base + t[0], base + t[1], base + t[2]) }
             }));
         }
-        for (line, closes) in re_renderer::renderer::flattened_contours(contours) {
+        for (line, closes) in &flattened {
             let area: f32 = line.iter().zip(line.iter().cycle().skip(1)).map(|(a, b)| a.x * b.y - b.x * a.y).sum::<f32>() * 0.5;
-            let outward = if closes && area < 0.0 { -1.0 } else { 1.0 };
-            let edges = if closes { line.len() } else { line.len() - 1 };
+            let outward = if *closes && area < 0.0 { -1.0 } else { 1.0 };
+            let edges = if *closes { line.len() } else { line.len() - 1 };
+            // 側面の始まる深さ。丸みがあれば四分円の終わり(z = radius)から。
+            let wall_from = match bevel { Some(b) if *closes => b.radius.min(extent), _ => 0.0 };
+            if let (Some(b), true) = (bevel, *closes) {
+                let normals = vertex_normals(line, outward);
+                let steps = if b.chamfer { 1 } else { b.segments.max(1) };
+                // 四分円: 中心 c = (p − n·r, z = r)。位置 = c + r(sin θ·n − cos θ·ẑ)、法線 = (sin θ·n, −cos θ)。
+                let ring = |p: glam::Vec2, n: glam::Vec2, k: u32| -> (glam::Vec3, glam::Vec3) {
+                    let theta = std::f32::consts::FRAC_PI_2 * k as f32 / steps as f32;
+                    let (sin, cos) = theta.sin_cos();
+                    let position = (p - n * b.radius * (1.0 - sin)).extend(b.radius * (1.0 - cos));
+                    let normal = (n.normalize_or_zero() * sin).extend(-cos).normalize();
+                    (position, normal)
+                };
+                for i in 0..edges {
+                    let (ia, ib) = (i, (i + 1) % line.len());
+                    let (a, b2) = (line[ia], line[ib]);
+                    if (b2 - a).length_squared() <= f32::EPSILON { continue; }
+                    let (ua, ub) = (uv(a - normals[ia].normalize_or_zero() * WALL_INSET), uv(b2 - normals[ib].normalize_or_zero() * WALL_INSET));
+                    for k in 0..steps {
+                        let (a0, na0) = ring(a, normals[ia], k);
+                        let (a1, na1) = ring(a, normals[ia], k + 1);
+                        let (b0, nb0) = ring(b2, normals[ib], k);
+                        let (b1, nb1) = ring(b2, normals[ib], k + 1);
+                        let base = g.positions.len() as u32;
+                        g.positions.extend([a0, b0, b1, a1]);
+                        g.normals.extend([na0, nb0, nb1, na1]);
+                        g.texcoords.extend([ua, ub, ub, ua]);
+                        g.indices.extend([glam::uvec3(base, base + 1, base + 2), glam::uvec3(base, base + 2, base + 3)]);
+                    }
+                }
+            }
+            if wall_from >= extent { continue; }
             for i in 0..edges {
                 let (a, b) = (line[i], line[(i + 1) % line.len()]);
                 let e = b - a;
                 if e.length_squared() <= f32::EPSILON { continue; }
                 let n = glam::vec2(e.y, -e.x).normalize() * outward;
                 let base = g.positions.len() as u32;
-                g.positions.extend([a.extend(0.0), b.extend(0.0), b.extend(depth), a.extend(depth)]);
+                g.positions.extend([a.extend(wall_from), b.extend(wall_from), b.extend(extent), a.extend(extent)]);
                 g.normals.extend(std::iter::repeat(n.extend(0.0)).take(4));
                 let (ua, ub) = (uv(a - n * WALL_INSET), uv(b - n * WALL_INSET));
                 g.texcoords.extend([ua, ub, ub, ua]);
@@ -65,9 +170,10 @@ impl Compositor {
         outlines: &[(Vec<PathContour>, PathFillRule)],
         texture: GpuTexture2D,
         size: [f32; 2],
-        depth: f32,
+        solid: Solid,
     ) -> Result<Option<GpuModelData>, CompositorError> {
-        let g = geometry(outlines, size, depth);
+        let depth = solid.extent();
+        let g = geometry(outlines, size, solid);
         if g.indices.is_empty() {
             return Ok(None);
         }
@@ -118,7 +224,7 @@ mod tests {
     /// 正方形は蓋 2 枚(2 三角形ずつ)と側面 4 枚(2 三角形ずつ)。蓋は ±z、側面の法線は外向きで z=0。
     #[test]
     fn a_square_extrudes_to_two_caps_and_four_walls() {
-        let g = geometry(&[square(10.0)], [10.0, 10.0], 4.0);
+        let g = geometry(&[square(10.0)], [10.0, 10.0], Solid { depth: 4.0, bevel: None });
         assert_eq!(g.indices.len(), 4 + 8);
         assert_eq!(g.positions.len(), 8 + 16);
         assert!(g.positions.iter().all(|p| p.z == 0.0 || p.z == 4.0));
@@ -131,7 +237,49 @@ mod tests {
             assert!((at - centre).dot(wall[0].truncate()) > 0.0, "外向き: {wall:?}");
         }
         assert!(g.texcoords.iter().all(|uv| (0.0..=1.0).contains(&uv.x) && (0.0..=1.0).contains(&uv.y)));
-        assert!(geometry(&[], [10.0, 10.0], 4.0).indices.is_empty());
+        assert!(geometry(&[], [10.0, 10.0], Solid { depth: 4.0, bevel: None }).indices.is_empty());
+    }
+
+    /// 丸みを付けると、前の蓋は半径ぶん内側へ寄り、縁は段数ぶんの帯になり、法線が蓋(−z)から側面へ連続して回る。
+    #[test]
+    fn a_bevel_rounds_the_front_rim_with_continuous_normals() {
+        let g = geometry(&[square(20.0)], [20.0, 20.0], Solid { depth: 10.0, bevel: Some(Bevel { radius: 4.0, segments: 4, chamfer: false }) });
+        // 前の蓋の 4 隅は (4,4)…(16,16) に寄る
+        let front: Vec<_> = g.positions.iter().zip(&g.normals).filter(|(p, n)| p.z == 0.0 && **n == -glam::Vec3::Z).map(|(p, _)| p.truncate()).collect();
+        assert!(front.iter().all(|p| (4.0 - 1e-3..=16.0 + 1e-3).contains(&p.x) && (4.0 - 1e-3..=16.0 + 1e-3).contains(&p.y)), "{front:?}");
+        // 帯: 4 辺 × 4 段 × 4 頂点 = 64 頂点。最初の段の法線はほぼ −z、最後は側面の法線に近い
+        let rim: Vec<_> = g.positions.iter().zip(&g.normals).filter(|(p, _)| p.z > 0.0 && p.z < 4.0 + 1e-3).collect();
+        assert!(!rim.is_empty());
+        assert!(g.normals.iter().all(|n| (n.length() - 1.0).abs() < 1e-3));
+        let first_ring = g.positions.iter().zip(&g.normals).filter(|(p, _)| p.z == 0.0 && p.x >= 4.0 - 1e-3 && p.x <= 16.0 + 1e-3).count();
+        assert!(first_ring > 0);
+        assert!(g.positions.iter().all(|p| p.z >= 0.0 && p.z <= 10.0 + 1e-4));
+        // 側面は z = 4 から 10
+        assert!(g.positions.iter().any(|p| (p.z - 4.0).abs() < 1e-4) && g.positions.iter().any(|p| (p.z - 10.0).abs() < 1e-4));
+        // 奥行き 0 でも丸みだけなら全長 = 半径
+        assert_eq!(Solid { depth: 0.0, bevel: Some(Bevel { radius: 6.0, segments: 2, chamfer: true }) }.extent(), 6.0);
+    }
+
+    /// 効果の Extrude + Bevel でも(Depth 属性無しで)立体になり、傾けると側面が見える。
+    #[test]
+    fn extrude_and_bevel_effects_make_a_solid_without_the_depth_attribute() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        let mut engine = crate::render::engine::Engine::new().unwrap();
+        let t = RationalTime::ZERO;
+        let mut doc = rectangle_document(0.0, 35.0);
+        let flat = engine.render_frame(&doc.view(), t).unwrap();
+        doc.apply_all([
+            Intent::SetEffects { layer: LayerId(1), effects: vec![
+                EffectInstance { id: EffectId(0), plugin_id: crate::doc::store::solid::EXTRUDE.into() },
+                EffectInstance { id: EffectId(1), plugin_id: crate::doc::store::solid::BEVEL.into() },
+            ] },
+            Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(0), "depth").unwrap(), value: Value::F64(24.0) },
+            Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(1), "radius").unwrap(), value: Value::F64(6.0) },
+        ]).unwrap();
+        let solid = engine.render_frame(&doc.view(), t).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert!(lit(&solid) > lit(&flat) + 40, "側面と縁が見える: {} vs {}", lit(&solid), lit(&flat));
+        assert!(matches!(&engine.extrusions[&LayerId(1)].1.bounds.max, [_, _, z] if (*z - 24.0).abs() < 1e-3), "全長は奥行き");
     }
 
     fn rectangle_document(depth: f64, tilt_y: f64) -> Document {

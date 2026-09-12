@@ -329,6 +329,11 @@ impl Compositor {
                     );
                     for instance in &mut instances {
                         instance.outline_mask_ids = outline_mask(input.outline);
+                        if input.projection == crate::doc::store::LayerProjection::TwoD && !capture {
+                            // 輪郭のままの文字・図形(planar な網)も同じ法: 面の法線に沿ってカメラ側へ積み順ぶん。
+                            let normal = glam::Vec3::from(instance.world_from_mesh.matrix3.z_axis).normalize_or_zero();
+                            instance.world_from_mesh = glam::Affine3A::from_translation(-normal * two_d_stack_bias(input.depth_offset)) * instance.world_from_mesh;
+                        }
                     }
                     if let Some((_, group)) = mesh_groups.iter_mut().find(|(c, _)| *c == clip) {
                         group.extend(instances);
@@ -337,7 +342,7 @@ impl Compositor {
                     }
                 }
                 SequentialContent::Rect(_) | SequentialContent::LinearRect(_) => {
-                    let (corner, u, v) = projected_placement_corners(
+                    let (mut corner, u, v) = projected_placement_corners(
                         comp,
                         input.projection_camera,
                         input.projection,
@@ -345,6 +350,9 @@ impl Compositor {
                         input.local_min,
                         input.local_size,
                     );
+                    if input.projection == crate::doc::store::LayerProjection::TwoD && !capture {
+                        corner += -u.cross(v).normalize_or_zero() * two_d_stack_bias(input.depth_offset);
+                    }
                     let alpha = if input.blend_mode == BlendMode::Add {
                         0.0
                     } else {
@@ -700,4 +708,11 @@ impl Compositor {
         self.reflection_resources = Some(resources);
         Ok(Some(result))
     }
+}
+
+/// 2D は積み順だけで重なる(法 2026-09-12)。同じ面に重なった物の描き順を sort key の同点に
+/// 委ねると process ごとに揺れた(網は mesh ごとの束ね順が不定)ので、積み順ぶんだけ面に垂直に
+/// カメラ側へずらして「遠 → 近 = 下 → 上」を確定させる。1 段 0.02 px、視線に平行なので絵は動かない。
+fn two_d_stack_bias(order: i16) -> f32 {
+    f32::from(order.max(0)) * 0.02
 }

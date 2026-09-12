@@ -62,12 +62,17 @@ pub(crate) fn document(stage: EffectStage) -> Result<(Document, LayerId), String
             out.push(Intent::SetTrack { layer: subject, property: PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, track: track(Value::Vec2([centered[0] - 90.0, centered[1]]), Value::Vec2(centered)) });
             out
         }
-        EffectStage::Placement | EffectStage::Path => {
+        EffectStage::Placement | EffectStage::Path | EffectStage::Solid => {
             let mut out = place(subject, 0, NewKind::Star);
             if stage == EffectStage::Placement {
                 // Repeater の既定は 100px 刻みで 3 つ。1 歩ぶん左へ寄せて、複製の群れが枠の中に並ぶ。
                 let centered = out.iter().find_map(|i| match i { Intent::SetConstant { property, value: Value::Vec2(p), .. } if property.name() == property::POSITION => Some(*p), _ => None }).unwrap_or([0.0, 0.0]);
                 out.push(Intent::SetConstant { layer: subject, property: PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, value: Value::Vec2([centered[0] - 100.0, centered[1]]) });
+            }
+            if stage == EffectStage::Solid {
+                // 立体は傾けて側面と縁を見せる(2.5D の板のまま回すと奥行きは出ない)。
+                out.push(Intent::SetAttrs { layer: subject, patch: crate::doc::store::LayerAttrsPatch { projection: Some(crate::doc::store::LayerProjection::ThreeD), ..Default::default() } });
+                out.push(Intent::SetTrack { layer: subject, property: PropertyId::new(property::ROTATION_Y).map_err(|e| e.to_string())?, track: track(Value::F64(-20.0), Value::F64(-50.0)) });
             }
             out.push(Intent::SetTrack { layer: subject, property: PropertyId::new(property::ROTATION).map_err(|e| e.to_string())?, track: track(Value::F64(0.0), Value::F64(45.0)) });
             out

@@ -175,3 +175,30 @@ mod shelf_tests {
         assert_eq!(super::translate_point_displace(std::slice::from_ref(&effect)).amount, 50.0);
     }
 }
+
+/// 立体を作る族(Extrude・Bevel)の読み取り。どちらも無ければ None。depth 0 で Bevel だけなら
+/// 「縁だけ丸い板」(奥行きは丸みの半径)。
+pub(crate) fn translate_solid(effects: &[crate::doc::store::ResolvedEffect]) -> Option<crate::render::compositor::extrude::Solid> {
+    use crate::doc::store::solid::{BEVEL, EXTRUDE};
+    let catalog = known_effects();
+    let read = |id: &str, name: &str| -> Option<f32> {
+        let effect = effects.iter().rev().find(|e| e.plugin_id == id)?;
+        let descriptor = catalog.iter().find(|d| d.plugin_id == id)?;
+        Some(effect.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v {
+            crate::doc::store::Value::F64(v) => Some(*v as f32),
+            crate::doc::store::Value::Enum(v) => Some(*v as f32),
+            _ => None,
+        }).or_else(|| descriptor.params.iter().find(|p| p.name == name).map(|p| p.default as f32)).unwrap_or(0.0))
+    };
+    let depth = read(EXTRUDE, "depth");
+    let radius = read(BEVEL, "radius");
+    if depth.is_none() && radius.is_none() { return None; }
+    Some(crate::render::compositor::extrude::Solid {
+        depth: depth.unwrap_or(0.0).max(0.0),
+        bevel: radius.map(|radius| crate::render::compositor::extrude::Bevel {
+            radius: radius.max(0.0),
+            segments: read(BEVEL, "segments").unwrap_or(6.0).round().clamp(1.0, 32.0) as u32,
+            chamfer: read(BEVEL, "profile").unwrap_or(0.0) > 0.5,
+        }).filter(|b| b.radius > 0.0),
+    })
+}

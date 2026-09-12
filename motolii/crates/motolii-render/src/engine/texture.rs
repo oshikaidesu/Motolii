@@ -324,7 +324,12 @@ impl Engine {
         // 絵を読む効果(pass)は素材座標の絵を要る。comp 大に焼くと comp の外が失われ、
         // Blur が縁で切れる(広がりの法: 評価の入力を view・comp・カメラで切らない)。
         let needs_image = !super::translate::translate_effect_passes(&layer.effects).is_empty();
-        let vector = layer.depth == 0.0 && layer.masks.is_empty() && !needs_material && !needs_image;
+        // 立体を作る族(Extrude・Bevel の効果)。効果が無ければ Depth 属性(互換)。
+        let solid = super::translate::translate_solid(&layer.effects)
+            .map(|s| if s.depth > 0.0 { s } else { crate::render::compositor::extrude::Solid { depth: layer.depth, ..s } })
+            .unwrap_or(crate::render::compositor::extrude::Solid { depth: layer.depth, bevel: None });
+        let flat = solid.extent() <= 0.0;
+        let vector = flat && layer.masks.is_empty() && !needs_material && !needs_image;
         let natural = if layer.source == LayerSource::Shape {
             let canvas = content_canvas(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
@@ -356,7 +361,7 @@ impl Engine {
         // (段に丸めると置いた時に再標本化され、縁が甘くなる)。
         let tolerance = (0.05 / if vector { density } else { exact_density }).max(1e-6);
         let (content, natural, frame) = if layer.source == LayerSource::Text {
-            self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp, vector, tolerance, layer.depth == 0.0)?
+            self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp, vector, tolerance, flat)?
         } else if layer.source == LayerSource::Shape {
             let shapes = shape_documents
                 .get(&layer.id)
@@ -376,8 +381,8 @@ impl Engine {
             { let (content,natural)=self.texture_for(&layer.source, layer.source_frame)?; (content,natural,None) }
         };
         match content {
-            Some(LayerContent::Texture(texture)) if layer.depth > 0.0 && layer.projection != crate::doc::store::LayerProjection::TwoD && layer.masks.is_empty() => {
-                Ok((self.extruded_content(layer, texture, natural, text_documents, shape_documents, t, comp)?, natural, frame))
+            Some(LayerContent::Texture(texture)) if !flat && layer.projection != crate::doc::store::LayerProjection::TwoD && layer.masks.is_empty() => {
+                Ok((self.extruded_content(layer, texture, natural, text_documents, shape_documents, t, comp, solid)?, natural, frame))
             }
             content => Ok((content, natural, frame)),
         }
@@ -394,11 +399,12 @@ impl Engine {
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
         t: RationalTime,
         comp: CompSpec,
+        solid: crate::render::compositor::extrude::Solid,
     ) -> Result<Option<LayerContent>, EngineError> {
         let key = {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             texture.handle.hash(&mut hasher);
-            layer.depth.to_bits().hash(&mut hasher);
+            solid.hash_key(&mut hasher);
             hasher.finish()
         };
         if let Some((cached, model)) = self.extrusions.get(&layer.id) {
@@ -427,7 +433,7 @@ impl Engine {
             }
             _ => rectangle(natural),
         };
-        let Some(model) = self.compositor.extrude_model(&outlines, texture.clone(), natural, layer.depth)? else {
+        let Some(model) = self.compositor.extrude_model(&outlines, texture.clone(), natural, solid)? else {
             return Ok(Some(LayerContent::Texture(texture)));
         };
         let model = std::sync::Arc::new(model);

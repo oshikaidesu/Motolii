@@ -333,7 +333,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             // shader を持たない棚の札は native の stage が族(Path = 形の層の輪郭)。
             switch (item['stage']) {
               'Warp' => 'Distort',
-              'Field' || 'Surface' || 'Clip' => '3D',
+              'Field' || 'Surface' || 'Clip' || 'Solid' => '3D',
               'Path' => 'Path',
               _ => 'Other',
             };

@@ -11,6 +11,7 @@ mod persist;
 pub mod kind;
 pub mod placement;
 pub mod pathop;
+pub mod solid;
 pub mod shape_props;
 mod slot;
 mod text;

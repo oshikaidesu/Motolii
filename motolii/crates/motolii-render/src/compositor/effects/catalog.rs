@@ -22,6 +22,8 @@ pub enum EffectStage {
     Placement,
     /// 形の層の輪郭(shader を持たない)。
     Path,
+    /// 平らな素材から立体を起こす(shader を持たない): 押し出し・縁の丸み。
+    Solid,
 }
 
 /// 棚の札の出所。作者の絵があればそれ、無ければ見本を描く。
@@ -297,6 +299,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         stage: match kind.family {
             crate::doc::store::kind::Family::Placement => EffectStage::Placement,
             crate::doc::store::kind::Family::Path => EffectStage::Path,
+            crate::doc::store::kind::Family::Solid => EffectStage::Solid,
         },
         params: kind.params.iter().map(|p| EffectParamDescriptor {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,

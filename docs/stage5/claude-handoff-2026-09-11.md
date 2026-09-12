@@ -15,6 +15,7 @@
 | 7 | 効果の溢れ(Glow が周りを照らさない) | 完了・GPU 試験(commit 81251924) | coverage 外の光を層の Blend と独立に screen で下へ。manifest `SPILL`、合成側 1 箇所。同 §2 |
 | 8 | Glow の作り直し | 実装済み・見本 5 枚、実窓は利用者検収待ち | Bevy bloom(CoD の mip 鎖)+ Deep Glow の札(Exposure・Radius・Anamorphic・Chromatic・Tint・Composite)。7 の後 |
 | 9 | 2D/2.5D/3D の法(仕切り・中心保持・3D が選べない) | 実装済み・実窓は利用者検収待ち | [2D/2.5D/3D の法](../reviews/2026-09-12-projection-law.md)。Torus で 3D が押せなかったのは animate された位置を切替が拒んでいたため |
+| 10 | Extrude / Bevel を効果に(裁定 b) | 実装済み・実窓は利用者検収待ち | 棚の 3D に Extrude(depth)と Bevel(radius・segments・profile)。Depth 属性は互換で残る。Bevel は前の蓋の縁を四分円にして法線を回す(ガラスが縁で歪む)。2D の同一面の描き順が process ごとに揺れる穴も塞いだ(積み順ぶんカメラ側へ 0.02 px) |
 | 5 | 拡大・カメラ接近時のパス／文字のジャギー | 完了・実窓確認済み | 利用者の22:09:36スクリーンショットで黒い文字の曲線に大きな階段を確認。文字・図形の輪郭を最終投影まで保持。画像効果の境界、Stage／export一致、負荷を検証する |
 
 ## 1の参考と調査入口

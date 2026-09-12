@@ -64,6 +64,8 @@ pub enum Family {
     Placement,
     /// 形の層の輪郭。
     Path,
+    /// 平らな素材から立体を起こす(押し出し・縁の丸み)。
+    Solid,
 }
 
 /// 棚に並ぶ 1 枚の見え方。
@@ -81,6 +83,7 @@ pub fn all() -> impl Iterator<Item = Kind> {
         .iter()
         .map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement })
         .chain(crate::doc::store::pathop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Path }))
+        .chain(crate::doc::store::solid::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Solid }))
 }
 
 pub fn kind(plugin_id: &str) -> Option<Kind> {
