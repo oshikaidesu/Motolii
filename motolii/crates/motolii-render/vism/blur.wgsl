@@ -4,7 +4,6 @@
   "OUTPUT_FLOAT": true,
   "FILTER": "linear",
   "PADDING": { "PARAM": "radius", "SCALE": 3.0 },
-  "THUMBNAIL": { "radius": 24.0 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "radius", "TYPE": "float", "DEFAULT": 8.0, "MIN": 0.0, "MAX": 128.0, "SUBTYPE": "DISTANCE" }

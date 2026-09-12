@@ -26,30 +26,14 @@ pub enum EffectStage {
     Solid,
 }
 
-/// 棚の札の出所。作者の絵があればそれ、無ければ見本を描く。
-#[derive(Clone, Debug)]
-pub enum EffectThumbnail {
-    Picture(Arc<[u8]>),
-    Rendered {
-        pose: Vec<(String, f64)>,
-        split: bool,
-        /// 見本の時刻(秒)。
-        time: f64,
-    },
-}
-
-impl EffectThumbnail {
-    pub const DEFAULT_TIME: f64 = 0.5;
-    pub fn split(&self) -> bool { matches!(self, Self::Rendered { split: true, .. }) }
-}
-
 #[derive(Clone, Debug)]
 pub struct EffectDescriptor {
     pub plugin_id: String,
     pub label: String,
     pub stage: EffectStage,
     pub params: Vec<EffectParamDescriptor>,
-    pub thumbnail: EffectThumbnail,
+    /// 札の絵(PNG): shader の隣の `<plugin_id>_snapshot.png`。VST3 の Plug-in Snapshot の型。
+    pub snapshot: Option<Arc<[u8]>>,
     pub(crate) padding: Option<EffectPaddingDescriptor>,
     /// coverage 外の出力を下へ合成する混ぜ方(溢れの法)。無ければ層の Blend のまま。
     pub(crate) spill: Option<crate::render::compositor::BlendMode>,
@@ -151,13 +135,17 @@ pub fn bind_catalog_runtime(runtime: &CatalogRuntime) {
 
 fn directory() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vism") }
 
-/// 作者の札の絵(wgsl と同じ dir の file)。開発中は disk、配布物は build.rs が埋めた物。
+/// 札の絵(shader と同じ dir の PNG)。開発中は disk、配布物は build.rs が埋めた物。
 fn picture_bytes(file: &str) -> Option<Arc<[u8]>> {
-    if file.contains('/') || file.contains("..") { return None; }
     #[cfg(load_shaders_from_disk)]
     { std::fs::read(directory().join(file)).ok().map(Arc::from) }
     #[cfg(not(load_shaders_from_disk))]
     { super::VISM_PICTURES.iter().find(|p| p.file == file).map(|p| Arc::from(p.bytes)) }
+}
+
+/// `<id>_snapshot_2.0x.png` があればそれ、無ければ `<id>_snapshot.png`。
+fn snapshot(plugin_id: &str) -> Option<Arc<[u8]>> {
+    picture_bytes(&format!("{plugin_id}_snapshot_2.0x.png")).or_else(|| picture_bytes(&format!("{plugin_id}_snapshot.png")))
 }
 fn prelude_path() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reference/vello-blend.wgsl") }
 
@@ -246,9 +234,6 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
 fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> {
     if source.extension != "fs" {
         let (manifest, body) = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?;
-        if let isf::IsfThumbnail::Picture(file) = &manifest.thumbnail {
-            if picture_bytes(file).is_none() { return Err(format!("THUMBNAIL picture `{file}` is not beside the shader")); }
-        }
         if !matches!(manifest.stage, isf::IsfStage::Pass | isf::IsfStage::Warp) {
             // hook の snippet。型は fork の base と合わせて初めて決まるので、ここでは欄の型だけ縛る。
             for input in manifest.param_inputs() {
@@ -307,11 +292,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
             subtype: None, unit: None, group: None, advanced: false, hero: false,
         }).collect(),
-        thumbnail: EffectThumbnail::Rendered {
-            pose: kind.params.iter().filter_map(|p| p.sample.map(|v| (p.name.to_owned(), v))).collect(),
-            split: false,
-            time: EffectThumbnail::DEFAULT_TIME,
-        },
+        snapshot: snapshot(kind.plugin_id),
         padding: None,
         spill: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
@@ -319,16 +300,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
-        thumbnail: match &d.manifest.thumbnail {
-            // 無い絵は prepare が拒んでいるので、ここでは必ず読める。
-            isf::IsfThumbnail::Picture(file) => picture_bytes(file).map(EffectThumbnail::Picture)
-                .unwrap_or(EffectThumbnail::Rendered { pose: Vec::new(), split: false, time: EffectThumbnail::DEFAULT_TIME }),
-            isf::IsfThumbnail::Rendered { pose, split, time } => EffectThumbnail::Rendered {
-                pose: pose.iter().map(|(n, v)| (n.clone(), *v as f64)).collect(),
-                split: *split,
-                time: time.map_or(EffectThumbnail::DEFAULT_TIME, |t| t as f64),
-            },
-        },
+        snapshot: snapshot(d.plugin_id()),
         stage: match d.manifest.stage {
             isf::IsfStage::Pass => EffectStage::Pass,
             isf::IsfStage::Warp => EffectStage::Warp,

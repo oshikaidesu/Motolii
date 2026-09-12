@@ -132,26 +132,6 @@ pub struct IsfPadding {
     pub scale: f32,
 }
 
-/// 棚の札。`"THUMBNAIL": "echo.png"` は作者の絵(wgsl と同じ dir)、
-/// `"THUMBNAIL": {"intensity": 2.0, "SPLIT": true, "TIME": 1.0}` は見本を描く姿勢。
-/// 無ければ見本を HERO の欄を 75% にして描く。
-#[derive(Clone, Debug, PartialEq)]
-pub enum IsfThumbnail {
-    Picture(String),
-    Rendered {
-        /// 欄の名前と値。既定値の代わりに置く。
-        pose: Vec<(String, f32)>,
-        /// 左 before / 右 after で見せる(差でしか読めない効果)。
-        split: bool,
-        /// 見本のどの時刻を描くか(秒)。無ければ 0.5s。
-        time: Option<f32>,
-    },
-}
-
-impl Default for IsfThumbnail {
-    fn default() -> Self { Self::Rendered { pose: Vec::new(), split: false, time: None } }
-}
-
 #[derive(Clone, Debug)]
 pub struct IsfManifest {
     pub id: Option<String>,
@@ -173,7 +153,6 @@ pub struct IsfManifest {
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
     pub passes: Vec<IsfPass>,
-    pub thumbnail: IsfThumbnail,
 }
 
 impl Default for IsfManifest {
@@ -193,7 +172,6 @@ impl Default for IsfManifest {
             description: None,
             inputs: Vec::new(),
             passes: Vec::new(),
-            thumbnail: IsfThumbnail::default(),
         }
     }
 }
@@ -360,31 +338,6 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
         }
         Ok(name.to_owned())
     }).transpose()?;
-    let thumbnail = match value.get("THUMBNAIL") {
-        None => IsfThumbnail::default(),
-        Some(serde_json::Value::String(file)) => IsfThumbnail::Picture(file.clone()),
-        Some(serde_json::Value::Object(fields)) => {
-            let mut pose = Vec::new();
-            for (key, v) in fields {
-                match key.as_str() {
-                    "SPLIT" | "TIME" => {}
-                    name => {
-                        if !inputs.iter().any(|p| p.name == name && p.ty != IsfInputType::Image) {
-                            return Err(IsfError::Validate(format!("THUMBNAIL names no parameter `{name}`")));
-                        }
-                        let number = v.as_f64().ok_or_else(|| IsfError::Validate(format!("THUMBNAIL `{name}` must be a number")))?;
-                        pose.push((name.to_owned(), number as f32));
-                    }
-                }
-            }
-            IsfThumbnail::Rendered {
-                pose,
-                split: fields.get("SPLIT").and_then(|v| v.as_bool()).unwrap_or(false),
-                time: fields.get("TIME").and_then(|v| v.as_f64()).map(|t| t as f32),
-            }
-        }
-        Some(_) => return Err(IsfError::Validate("THUMBNAIL must be a picture file name or a pose object".into())),
-    };
     Ok((
         IsfManifest {
             id,
@@ -401,7 +354,6 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             description,
             inputs,
             passes,
-            thumbnail,
         },
         body,
     ))
@@ -516,7 +468,7 @@ pub(super) fn compiled_stages(isf_source: &str) -> Result<(IsfManifest, String, 
 }
 
 #[cfg(test)]
-mod thumbnail_tests {
+mod manifest_tests {
     use super::*;
 
     fn manifest(header: &str) -> Result<IsfManifest, IsfError> {
@@ -533,19 +485,5 @@ mod thumbnail_tests {
         for value in ["0", "-1", "1.5", "16385", "\"$WIDTH/0\""] {
             assert!(manifest(&format!(", \"PASSES\": [{{\"TARGET\":\"summary\",\"WIDTH\":{value}}}]")).is_err());
         }
-    }
-
-    /// 作者の絵は file 名、姿勢は欄の名前と値。知らない欄は落とす(黙って既定の札にしない)。
-    #[test]
-    fn thumbnail_is_a_picture_or_a_pose() {
-        assert_eq!(manifest("").unwrap().thumbnail, IsfThumbnail::default());
-        assert_eq!(manifest(", \"THUMBNAIL\": \"gain.png\"").unwrap().thumbnail, IsfThumbnail::Picture("gain.png".into()));
-        assert_eq!(
-            manifest(", \"THUMBNAIL\": {\"gain\": 2.5, \"SPLIT\": true, \"TIME\": 1.0}").unwrap().thumbnail,
-            IsfThumbnail::Rendered { pose: vec![("gain".into(), 2.5)], split: true, time: Some(1.0) }
-        );
-        assert!(matches!(manifest(", \"THUMBNAIL\": {\"nope\": 1}"), Err(IsfError::Validate(_))));
-        assert!(matches!(manifest(", \"THUMBNAIL\": {\"source\": 1}"), Err(IsfError::Validate(_))), "image の欄は姿勢にならない");
-        assert!(matches!(manifest(", \"THUMBNAIL\": 3"), Err(IsfError::Validate(_))));
     }
 }

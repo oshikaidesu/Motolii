@@ -5,7 +5,6 @@
   "OUTPUT_FLOAT": true,
   "DESCRIPTION": "Fractal noise warps material-local XY before spatial placement",
   "PADDING": { "PARAM": "amount", "SCALE": 1.0 },
-  "THUMBNAIL": { "amount": 24.0, "size": 80.0 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "amount", "LABEL": "Amount", "TYPE": "float", "DEFAULT": 50.0, "MIN": -1000.0, "MAX": 1000.0, "SUBTYPE": "DISTANCE" },

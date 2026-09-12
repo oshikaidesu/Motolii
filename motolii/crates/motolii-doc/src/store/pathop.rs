@@ -29,7 +29,7 @@ pub const RESAMPLE_PATH: &str = "motolii.resample_path";
 pub const BEND: &str = "motolii.bend";
 
 const fn point(name: &'static str, label: &'static str) -> Param {
-    Param { name, label, section: "", kind: crate::doc::store::kind::ParamKind::Vec2, default: [0.0, 0.0], range: None, modes: None, sample: None }
+    Param { name, label, section: "", kind: crate::doc::store::kind::ParamKind::Vec2, default: [0.0, 0.0], range: None, modes: None }
 }
 
 const MULTIPLES: &[&str] = &["Simultaneously", "Individually"];
@@ -40,7 +40,7 @@ const JOINS: &[&str] = &["Miter", "Round", "Bevel"];
 pub const KINDS: &[PathOpKind] = &[
     PathOpKind { plugin_id: TRIM_PATHS, label: "Trim Paths", params: &[
         Param::number("start", "Start", 0.0, Some((0.0, 100.0))),
-        Param::number("end", "End", 100.0, Some((0.0, 100.0))).sample(60.0),
+        Param::number("end", "End", 100.0, Some((0.0, 100.0))),
         Param::number("offset", "Offset", 0.0, None),
         Param::choice("multiple", "Trim", MULTIPLES),
     ] },
@@ -48,7 +48,7 @@ pub const KINDS: &[PathOpKind] = &[
         Param::number("radius", "Radius", 10.0, Some((0.0, f64::MAX))),
     ] },
     PathOpKind { plugin_id: PUCKER_BLOAT, label: "Pucker & Bloat", params: &[
-        Param::number("amount", "Amount", 0.0, Some((-100.0, 100.0))).sample(60.0),
+        Param::number("amount", "Amount", 0.0, Some((-100.0, 100.0))),
     ] },
     PathOpKind { plugin_id: ZIG_ZAG, label: "Zig Zag", params: &[
         Param::number("amplitude", "Size", 10.0, None),
@@ -61,7 +61,7 @@ pub const KINDS: &[PathOpKind] = &[
         Param::number("miter_limit", "Miter Limit", 4.0, Some((1.0, f64::MAX))),
     ] },
     PathOpKind { plugin_id: TWIST, label: "Twist", params: &[
-        Param::number("angle", "Angle", 0.0, None).sample(120.0),
+        Param::number("angle", "Angle", 0.0, None),
         point("center", "Center"),
     ] },
     // ここから Lottie の外。AE の Wiggle Paths と Cavalry の behaviour の欄と既定に合わせる。
@@ -82,7 +82,7 @@ pub const KINDS: &[PathOpKind] = &[
     PathOpKind { plugin_id: REVERSE_PATH, label: "Reverse Path", params: &[] },
     PathOpKind { plugin_id: EXTEND_PATHS, label: "Extend Paths", params: &[
         Param::number("start", "Start", 0.0, None),
-        Param::number("end", "End", 0.0, None).sample(30.0),
+        Param::number("end", "End", 0.0, None),
     ] },
     PathOpKind { plugin_id: CHOP_PATH, label: "Chop Path", params: &[
         Param::number("length", "Length", 50.0, Some((0.0, f64::MAX))),
@@ -93,7 +93,7 @@ pub const KINDS: &[PathOpKind] = &[
         Param::choice("point_type", "Points", POINTS),
     ] },
     PathOpKind { plugin_id: BEND, label: "Bend", params: &[
-        Param::number("angle", "Angle", 0.0, Some((-360.0, 360.0))).sample(120.0),
+        Param::number("angle", "Angle", 0.0, Some((-360.0, 360.0))),
         point("center", "Center"),
     ] },
 ];

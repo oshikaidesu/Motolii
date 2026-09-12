@@ -222,7 +222,7 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         }
         if value["op"] == "visualSample" {
             let at = probe.time()?;
-            model_reply = Some(if value["kind"] == "effect" { editor::effect_sample::reply(&mut probe.engine, &value) } else { editor::visual_samples::reply(&probe.doc, at, &value) });
+            model_reply = Some(if value["kind"] == "effect" { editor::effect_sample::reply(&value) } else { editor::visual_samples::reply(&probe.doc, at, &value) });
             return Ok(());
         }
         if value["op"] == "easeModel" {

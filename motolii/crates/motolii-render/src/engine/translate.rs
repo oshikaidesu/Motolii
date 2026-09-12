@@ -99,7 +99,7 @@ pub(crate) fn translate_plate_passes(effects: &[crate::doc::store::ResolvedEffec
     }).collect()
 }
 
-pub use crate::render::compositor::{EffectDescriptor, EffectParamDescriptor, EffectThumbnail};
+pub use crate::render::compositor::{EffectDescriptor, EffectParamDescriptor};
 
 /// Turbulent Displace の欄を点群用の CPU の写しへ。既定は棚の宣言から。
 pub(crate) fn translate_point_displace(

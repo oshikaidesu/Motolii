@@ -6,7 +6,6 @@
   "FILTER": "linear",
   "SPILL": "screen",
   "PADDING": { "PARAM": "radius", "SCALE": 1.5 },
-  "THUMBNAIL": { "threshold": 0.3, "intensity": 2.0, "radius": 32.0, "chromatic": 0.5 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "threshold", "LABEL": "Threshold", "TYPE": "float", "DEFAULT": 0.6, "MIN": 0.0, "MAX": 1.0, "SUBTYPE": "LEVEL" },

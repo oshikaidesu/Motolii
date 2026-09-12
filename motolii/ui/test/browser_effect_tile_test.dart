@@ -5,11 +5,9 @@ import '../lib/session/editor_session.dart';
 import '../lib/panels/browser.dart';
 import '../lib/panels/native_visual_sample.dart';
 
-/// An effect's tile is the shelf's one sample with the effect on it. Holding
-/// the pointer shows the bare sample; a difference-only effect splits the
-/// large tile, bare left and dressed right.
+/// An effect's tile asks for the effect's snapshot picture and nothing else.
 void main() {
-  Future<EditorSession> mount(WidgetTester tester, {required int view}) async {
+  testWidgets('every tile asks for its effect snapshot', (tester) async {
     tester.view.physicalSize = const Size(520, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -27,11 +25,10 @@ void main() {
         {'id': 1, 'name': 'Clip', 'kind': 'Media'},
       ],
       'catalog': [
-        {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass', 'split': false, 'generation': 3},
-        {'id': 'motolii.gain', 'name': 'Gain', 'stage': 'Pass', 'split': true, 'generation': 3},
+        {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass', 'generation': 3},
       ],
     };
-    c.deskWork.value = {'browserView': view};
+    c.deskWork.value = {'browserView': 0};
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -39,61 +36,12 @@ void main() {
         ),
       ),
     );
-    return c;
-  }
-
-  Finder sample(String id, String side) =>
-      find.byKey(ValueKey('browser:effect:$id:$side'));
-  Map<String, dynamic> request(WidgetTester tester, Finder f) =>
-      tester.widget<NativeVisualSample>(f).request;
-
-  testWidgets('every tile asks for the shelf sample dressed in its effect', (
-    tester,
-  ) async {
-    await mount(tester, view: 0);
-    expect(sample('motolii.blur', 'after'), findsOneWidget);
-    expect(sample('motolii.blur', 'before'), findsNothing);
-    expect(request(tester, sample('motolii.blur', 'after')), {
+    final tile = find.byKey(const ValueKey('browser:effect:motolii.blur'));
+    expect(tile, findsOneWidget);
+    expect(tester.widget<NativeVisualSample>(tile).request, {
       'kind': 'effect',
       'id': 'motolii.blur',
-      'before': false,
       'generation': 3,
     });
-    // The small grid never splits, even for a difference-only effect.
-    expect(sample('motolii.gain', 'before'), findsNothing);
-  });
-
-  testWidgets('holding the pointer shows the bare sample', (tester) async {
-    await mount(tester, view: 0);
-    final gesture = await tester.startGesture(
-      tester.getCenter(sample('motolii.blur', 'after')),
-    );
-    await tester.pump();
-    expect(sample('motolii.blur', 'before'), findsOneWidget);
-    expect(sample('motolii.blur', 'after'), findsNothing);
-    expect(request(tester, sample('motolii.blur', 'before'))['before'], true);
-    await gesture.up();
-    await tester.pump();
-    expect(sample('motolii.blur', 'after'), findsOneWidget);
-    expect(sample('motolii.blur', 'before'), findsNothing);
-    // The tile's double-tap window must close before the tree goes away.
-    await tester.pump(const Duration(seconds: 1));
-  });
-
-  testWidgets('a difference-only effect splits the large tile', (tester) async {
-    await mount(tester, view: 2);
-    expect(sample('motolii.gain', 'after'), findsOneWidget);
-    expect(sample('motolii.gain', 'before'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('browser:Effects:motolii.gain')),
-        matching: find.byKey(const ValueKey('browser:effect:divider')),
-      ),
-      findsOneWidget,
-    );
-    final tile = tester.getRect(find.byKey(const ValueKey('browser:Effects:motolii.gain')));
-    final divider = tester.getRect(find.byKey(const ValueKey('browser:effect:divider')));
-    expect(divider.center.dx, closeTo(tile.center.dx, 1));
-    expect(sample('motolii.blur', 'before'), findsNothing);
   });
 }

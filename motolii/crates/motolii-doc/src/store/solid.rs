@@ -17,10 +17,10 @@ pub const PROFILES: &[&str] = &["Round", "Chamfer"];
 
 pub const KINDS: &[SolidKind] = &[
     SolidKind { plugin_id: EXTRUDE, label: "Extrude", params: &[
-        Param::number("depth", "Depth", 20.0, Some((0.0, f64::MAX))).sample(24.0),
+        Param::number("depth", "Depth", 20.0, Some((0.0, f64::MAX))),
     ] },
     SolidKind { plugin_id: BEVEL, label: "Bevel", params: &[
-        Param::number("radius", "Radius", 8.0, Some((0.0, f64::MAX))).sample(10.0),
+        Param::number("radius", "Radius", 8.0, Some((0.0, f64::MAX))),
         Param::number("segments", "Segments", 6.0, Some((1.0, 32.0))),
         Param::choice("profile", "Profile", PROFILES),
     ] },

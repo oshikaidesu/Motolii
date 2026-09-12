@@ -52,11 +52,11 @@ pub const SHARE_PREFIX: &str = "share.";
 pub const SHARE_DEFAULT: f64 = 100.0;
 
 const fn number(name: &'static str, label: &'static str, section: &'static str, default: f64, range: Option<(f64, f64)>, modes: Option<&'static [u8]>) -> PlacementParam {
-    PlacementParam { name, label, section, kind: ParamKind::Number, default: [default, 0.0], range, modes, sample: None }
+    PlacementParam { name, label, section, kind: ParamKind::Number, default: [default, 0.0], range, modes }
 }
 
 const fn vec2(name: &'static str, label: &'static str, section: &'static str, default: [f64; 2], modes: Option<&'static [u8]>) -> PlacementParam {
-    PlacementParam { name, label, section, kind: ParamKind::Vec2, default, range: None, modes, sample: None }
+    PlacementParam { name, label, section, kind: ParamKind::Vec2, default, range: None, modes }
 }
 
 /// 欄は使う人が決める順: いくつ → どんな形 → 1 つずつどう変えるか → どう散らすか。
@@ -65,8 +65,8 @@ pub const KINDS: &[PlacementKind] = &[PlacementKind {
     label: "Repeater",
     params: &[
         number("count", "Count", "Shape", 3.0, Some((1.0, 1000.0)), None),
-        PlacementParam { name: "mode", label: "Along", section: "Shape", kind: ParamKind::Choice(SHAPES), default: [0.0, 0.0], range: Some((0.0, 2.0)), modes: None, sample: None },
-        PlacementParam { name: "pick", label: "Pick", section: "Shape", kind: ParamKind::Choice(PICKS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None, sample: None },
+        PlacementParam { name: "mode", label: "Along", section: "Shape", kind: ParamKind::Choice(SHAPES), default: [0.0, 0.0], range: Some((0.0, 2.0)), modes: None },
+        PlacementParam { name: "pick", label: "Pick", section: "Shape", kind: ParamKind::Choice(PICKS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None },
         number("columns", "Columns", "Shape", 3.0, Some((1.0, 1000.0)), Some(&[GRID])),
         number("radius", "Radius", "Shape", 200.0, Some((0.0, f64::MAX)), Some(&[CIRCLE])),
         number("start_angle", "Start", "Shape", 0.0, None, Some(&[CIRCLE])),

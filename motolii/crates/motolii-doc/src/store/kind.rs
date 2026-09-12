@@ -21,21 +21,14 @@ pub struct Param {
     pub range: Option<(f64, f64)>,
     /// この形の時だけ出る(配置効果の形のトグル)。None は全形。
     pub modes: Option<&'static [u8]>,
-    /// 札の姿勢: 既定では何も起きない欄(Trim の end、Twist の angle)を、見本に効く値へ。
-    pub sample: Option<f64>,
 }
 
 impl Param {
     pub const fn number(name: &'static str, label: &'static str, default: f64, range: Option<(f64, f64)>) -> Self {
-        Self { name, label, section: "", kind: ParamKind::Number, default: [default, 0.0], range, modes: None, sample: None }
+        Self { name, label, section: "", kind: ParamKind::Number, default: [default, 0.0], range, modes: None }
     }
-    pub const fn sample(mut self, value: f64) -> Self {
-        self.sample = Some(value);
-        self
-    }
-
     pub const fn choice(name: &'static str, label: &'static str, choices: &'static [&'static str]) -> Self {
-        Self { name, label, section: "", kind: ParamKind::Choice(choices), default: [0.0, 0.0], range: Some((0.0, (choices.len() - 1) as f64)), modes: None, sample: None }
+        Self { name, label, section: "", kind: ParamKind::Choice(choices), default: [0.0, 0.0], range: Some((0.0, (choices.len() - 1) as f64)), modes: None }
     }
 
     pub fn shown(&self, mode: u8) -> bool {

@@ -1675,7 +1675,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ? _EffectTile(
             controller: widget.controller,
             item: item,
-            split: viewMode == 2 && item['split'] == true,
             fallback: Center(
               child: Text(
                 '${item['glyph'] ?? 'ƒ'}',
@@ -3054,78 +3053,35 @@ class _FittedNameState extends State<_FittedName>
 }
 
 /// Tells its child whether the pointer rests on it.
-/// An effect's tile: the shelf's one sample with this effect on it. Every
-/// tile shares the sample, so the difference reads against the neighbours.
-/// Holding the pointer down shows the bare sample (Lightroom's before key);
-/// an effect that only reads as a difference splits the large tile, bare on
-/// the left and dressed on the right.
-class _EffectTile extends StatefulWidget {
+/// An effect's tile is its snapshot picture (VST3's plug-in snapshot); the
+/// fallback stays when the effect ships none.
+class _EffectTile extends StatelessWidget {
   const _EffectTile({
     required this.controller,
     required this.item,
-    required this.split,
     required this.fallback,
   });
   final EditorSession controller;
   final Map<String, dynamic> item;
-  final bool split;
   final Widget fallback;
+
   @override
-  State<_EffectTile> createState() => _EffectTileState();
-}
-
-class _EffectTileState extends State<_EffectTile> {
-  bool pressed = false;
-
-  Widget sample(bool before) => NativeVisualSample(
-    key: ValueKey(
-      'browser:effect:${widget.item['id']}:${before ? 'before' : 'after'}',
-    ),
-    controller: widget.controller,
-    request: {
-      'kind': 'effect',
-      'id': widget.item['id'],
-      'before': before,
-      'generation': widget.item['generation'],
-    },
-    fit: BoxFit.cover,
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      fallback,
+      NativeVisualSample(
+        key: ValueKey('browser:effect:${item['id']}'),
+        controller: controller,
+        request: {
+          'kind': 'effect',
+          'id': item['id'],
+          'generation': item['generation'],
+        },
+        fit: BoxFit.cover,
+      ),
+    ],
   );
-
-  @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: (_) => setState(() => pressed = true),
-    onPointerUp: (_) => setState(() => pressed = false),
-    onPointerCancel: (_) => setState(() => pressed = false),
-    child: Stack(
-      fit: StackFit.expand,
-      children: [
-        widget.fallback,
-        if (pressed)
-          sample(true)
-        else ...[
-          sample(false),
-          if (widget.split) ...[
-            ClipRect(clipper: const _LeftHalf(), child: sample(true)),
-            Center(
-              child: Container(
-                key: const ValueKey('browser:effect:divider'),
-                width: 1,
-                color: EditorTheme.line,
-              ),
-            ),
-          ],
-        ],
-      ],
-    ),
-  );
-}
-
-class _LeftHalf extends CustomClipper<Rect> {
-  const _LeftHalf();
-  @override
-  Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width / 2, size.height);
-  @override
-  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
 }
 
 class _Hover extends StatefulWidget {

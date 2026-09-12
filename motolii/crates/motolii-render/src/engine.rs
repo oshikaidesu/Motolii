@@ -25,7 +25,7 @@ use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey, TextTexture};
 
 pub use crate::render::compositor::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
-    known_effects, EffectDescriptor, EffectParamDescriptor, EffectThumbnail,
+    known_effects, EffectDescriptor, EffectParamDescriptor,
 };
 
 #[derive(Debug, thiserror::Error)]

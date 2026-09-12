@@ -243,7 +243,7 @@ pub use effects::catalog::EffectStage;
 pub use clip::ClipSpec;
 
 pub(crate) use effects::catalog::catalog_snapshot;
-pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor, EffectThumbnail};
+pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use effects::IsfStage;
 
