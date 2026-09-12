@@ -114,6 +114,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("wrote {out}");
     }
 
+    // 絵の効果(Pass)も素材を選ばない。板は層の絵へ焼かれ、網と点群は描いた後の窓で効く。
+    {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.07, 0.07, 0.09, 1.0] }))?;
+        for (id, path, order, pos, scale) in [
+            (1u64, flag.clone(), 0i16, [90.0, 290.0], Some(0.45)),
+            (2, ply.clone(), 1, [540.0, 270.0], Some(1.25)),
+            (3, obj.clone(), 2, [1130.0, 290.0], Some(160.0)),
+        ] {
+            let layer = LayerId(id);
+            let fx = EffectId(0);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path, fingerprint: None }, order, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2(pos) },
+                Intent::SetEffects { layer, effects: vec![EffectInstance { id: fx, plugin_id: "motolii.blur".into() }] },
+                Intent::SetConstant { layer, property: PropertyId::effect_param(fx, "radius").unwrap(), value: Value::F64(14.0) },
+            ])?;
+            if let Some(scale) = scale {
+                doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([scale, scale]) })?;
+            }
+        }
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO)?;
+        for f in engine.layer_failures() { eprintln!("  layer failure: {f}"); }
+        let out = format!("{dir}/pass-everywhere.png");
+        image::save_buffer(&out, &pixels, W, H, image::ColorType::Rgba8)?;
+        eprintln!("wrote {out}");
+    }
+
     // 決定的な絵: 点群を旗の真上へ重ねる。場が世界で繋がっていれば、点は旗の波に乗る。
     for (name, world) in [("overlap-loose", false), ("overlap-linked", true)] {
         let mut doc = Document::new();

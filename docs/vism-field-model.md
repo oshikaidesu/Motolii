@@ -87,5 +87,25 @@ cargo run -p motolii-render --example field_everywhere -- <flag.png> <out_dir>
 | `world-still` / `world-moved` | 同じ効果・同じ値が板・点群・網に乗る |
 | `world-linked` | 場を世界座標で評価した 3 素材 |
 | `overlap-loose` / `overlap-linked` | 層ローカル(ばらける)と世界座標(輪郭が 1 本になる)の差 |
+| `pass-everywhere` | 絵の効果(ブラー)が板・点群・網の 3 つに効く(§8) |
 
-機械の審判は [`effects/surface_program.rs`](../motolii/crates/motolii-render/src/compositor/effects/surface_program.rs) の `field_leaves_the_rectangle` — 元の四角の外に描かれた画素を実 GPU で数える。
+機械の審判は 2 つ。[`effects/surface_program.rs`](../motolii/crates/motolii-render/src/compositor/effects/surface_program.rs) の `field_leaves_the_rectangle`(元の四角の外に描かれた画素を数える)と、[`render_effects.rs`](../motolii/crates/motolii-render/src/compositor/render_effects.rs) の `passes_reach_every_material`(網の縁の外へブラーが滲む)。どちらも実 GPU。
+
+## 8. 絵の効果(Pass)も素材を選ばない — ただし画面で効く
+
+`uv → color` の効果(ブラー・グロー・色補正、Shadertoy や ISF から来る物のほぼ全部)は
+`STAGE` が `pass`。素材が板なら**層の絵**へ焼く。網・点群・環境には焼く先の絵が無いので、
+**その層を単独で画面へ描いた後、その窓の絵へ流す**([`sequential.rs`](../motolii/crates/motolii-render/src/compositor/sequential.rs) の `apply_screen_passes`)。
+
+作者の側に分岐は無い。`fn fs_main` を 1 回書けば、板でも網でも点群でも乗る。
+
+代償は 1 つで、隠さない:
+
+> **画面で効いた層は、その run の中で平らな 1 枚になる。** 網をぼかすと、他の網と深度で刺さり合わなくなる。AE でプリコンポして効果を掛けた時と同じ代償。
+
+避けたい時は、効果を場(§2)か表面(`STAGE: surface`)として書く — そちらは幾何のまま効く。
+
+### Pass が乗らない所
+
+- **層の平面ではなく画面の解像度で効く。** 小さく置いた網のブラーは、層の大きさではなく画面の画素で広がる。
+- **余白(padding)と溢れ(SPILL)は板だけ。** 窓は既に画面ぶんあるので、外へ広げる余地が無い。

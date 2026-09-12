@@ -157,56 +157,13 @@ impl Compositor {
                 current_is_scratch = true;
             }
 
-            for pass in &lwp.passes {
-                let is_warp = self.catalog.descriptors.iter().any(|d| d.plugin_id == pass.plugin_id && d.stage == EffectStage::Warp);
-                if current_linear != is_warp {
-                    let converted = self.convert_image_encoding(encoder, &current, is_warp);
-                    if current_is_scratch { self.effect_scratch.release(padded_width,padded_height,current.format(),current); }
-                    current = converted;
-                    current_is_scratch = true;
-                }
-                current_linear = is_warp;
-                let program = &self.effect_programs[&pass.plugin_id];
-                let format = pass
-                    .intermediate_format()
-                    .unwrap_or_else(|| current.format());
-                let destination = self.effect_scratch.acquire(
-                    &self.ctx.device,
-                    padded_width,
-                    padded_height,
-                    format,
-                );
-                let source_view = (program.image_input_count() > 0)
-                    .then(|| current.create_view(&Default::default()));
-                let sources: Vec<_> = source_view.iter().collect();
-                let destination_view = destination.create_view(&Default::default());
-                if is_warp {
-                    let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
-                    program.record_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame);
-                } else {
-                    // pass は ISF の作法(render_size = 画素)。論理 px の欄だけ host が密度で画素へ写す。
-                    let density = frame.map_or(1.0, |f| f.density().into_iter().fold(1.0f32, f32::max));
-                    let params = program.params_at_density(&pass.params, density);
-                    program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, [padded_width as f32,padded_height as f32]);
-                }
-                let destination = if program.image_input_count() == 0 {
-                    self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
-                } else {
-                    destination
-                };
-                // The previous output stays checked out until its consuming pass is recorded.
-                // Reuse thereafter is ordered by this command encoder, never within the same pass.
-                if current_is_scratch {
-                    self.effect_scratch.release(
-                        padded_width,
-                        padded_height,
-                        current.format(),
-                        current,
-                    );
-                }
-                current = destination;
-                current_is_scratch = true;
-            }
+            let (next, next_linear, next_is_scratch) = self.record_pass_chain(
+                encoder, current, current_linear, current_is_scratch,
+                &lwp.passes, frame, [padded_width, padded_height], padding, [width, height],
+            )?;
+            current = next;
+            current_linear = next_linear;
+            current_is_scratch = next_is_scratch;
 
             // 溢れの法: SPILL を宣言した効果があれば、出力を素材の coverage の内と外に分ける。
             // 内は層の Blend、外(光・影)は宣言された混ぜ方で下へ。分け方は 1 箇所、効果は分岐しない。
@@ -300,6 +257,77 @@ impl Compositor {
             [width as f32, height as f32],
         );
         Ok(confined)
+    }
+
+    /// 効果列を 1 枚の texture へ順に流す。焼く経路(層の絵)と、run の経路(絵を持たない素材を
+    /// 描いた後の窓)が同じ意味を通るように、ここ 1 箇所だけが効果を順に記録する。
+    /// `size` は余白込みの寸法、`unpadded` は余白を除いた素材の寸法(warp の既定の枠が使う)。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_pass_chain(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        mut current: wgpu::Texture,
+        mut current_linear: bool,
+        mut current_is_scratch: bool,
+        passes: &[EffectPass],
+        frame: Option<effects::vism::ImageFrame>,
+        size: [u32; 2],
+        padding: u32,
+        unpadded: [u32; 2],
+    ) -> Result<(wgpu::Texture, bool, bool), CompositorError> {
+        let [padded_width, padded_height] = size;
+        let [width, height] = unpadded;
+        for pass in passes {
+            let is_warp = self.catalog.descriptors.iter().any(|d| d.plugin_id == pass.plugin_id && d.stage == EffectStage::Warp);
+            if current_linear != is_warp {
+                let converted = self.convert_image_encoding(encoder, &current, is_warp);
+                if current_is_scratch { self.effect_scratch.release(padded_width,padded_height,current.format(),current); }
+                current = converted;
+                current_is_scratch = true;
+            }
+            current_linear = is_warp;
+            let program = &self.effect_programs[&pass.plugin_id];
+            let format = pass
+                .intermediate_format()
+                .unwrap_or_else(|| current.format());
+            let destination = self.effect_scratch.acquire(
+                &self.ctx.device,
+                padded_width,
+                padded_height,
+                format,
+            );
+            let source_view = (program.image_input_count() > 0)
+                .then(|| current.create_view(&Default::default()));
+            let sources: Vec<_> = source_view.iter().collect();
+            let destination_view = destination.create_view(&Default::default());
+            if is_warp {
+                let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
+                program.record_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame);
+            } else {
+                // pass は ISF の作法(render_size = 画素)。論理 px の欄だけ host が密度で画素へ写す。
+                let density = frame.map_or(1.0, |f| f.density().into_iter().fold(1.0f32, f32::max));
+                let params = program.params_at_density(&pass.params, density);
+                program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, [padded_width as f32,padded_height as f32]);
+            }
+            let destination = if program.image_input_count() == 0 {
+                self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
+            } else {
+                destination
+            };
+            // The previous output stays checked out until its consuming pass is recorded.
+            // Reuse thereafter is ordered by this command encoder, never within the same pass.
+            if current_is_scratch {
+                self.effect_scratch.release(
+                    padded_width,
+                    padded_height,
+                    current.format(),
+                    current,
+                );
+            }
+            current = destination;
+            current_is_scratch = true;
+        }
+        Ok((current, current_linear, current_is_scratch))
     }
 
     /// 元の絵を余白ぶん広げた scratch の中央へ写す(周りは透明)。効果の入力と、溢れを分ける coverage が使う。
@@ -424,11 +452,13 @@ pub(crate) fn sequential_inputs<'a>(
                 clip: layer.clip,
                 blocks_light: layer.blocks_light,
                 outline: layer.outline,
+                // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
+                screen_passes: if layer.content.texture().is_none() { lwp.passes.as_slice() } else { &[] },
             };
             // 溢れ: 同じ置き場に、coverage 外の絵だけを宣言された混ぜ方で重ねる(層の Blend と独立)。
             let spilled = spill.as_ref().and_then(|(content, mode)| {
                 let texture = match content { LayerContent::Texture(t) => SequentialContent::Rect(t), LayerContent::LinearTexture(t) => SequentialContent::LinearRect(t), _ => return None };
-                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), blocks_light: false, outline: 0, ..body })
+                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), blocks_light: false, outline: 0, screen_passes: &[], ..body })
             });
             std::iter::once(body).chain(spilled)
         })
@@ -654,5 +684,53 @@ mod tests {
                 "removing the chain restores rendering in the same Engine"
             );
         }
+    }
+}
+
+/// 絵を持たない素材にも効果列が届く(実 GPU)。
+/// 届かない実装(素材の texture が無ければ効果を捨てる)だと、網の外はいつまでも 0 のまま。
+#[cfg(test)]
+mod passes_reach_every_material {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+
+    fn document(path: &std::path::Path, radius: f64) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([16.0, 16.0]) },
+            Intent::SetConstant { layer, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([16.0, 16.0]) },
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), "radius").unwrap(), value: Value::F64(radius) },
+        ]).unwrap();
+        doc
+    }
+
+    fn drawn(frame: &[u8], x: u32, y: u32) -> u8 {
+        let i = ((y * SIZE + x) * 4) as usize;
+        frame[i..i + 3].iter().copied().max().unwrap()
+    }
+
+    #[test]
+    fn a_blur_on_a_mesh_bleeds_past_its_edge() {
+        let dir = tempfile::tempdir().unwrap();
+        let obj = dir.path().join("quad.obj");
+        // 32×32 を (16,16) に置くので、絵は x,y が 16..48。外側の 8 px は素の網なら真っ黒。
+        std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
+        let mut engine = Engine::new().unwrap();
+
+        let sharp = engine.render_frame(&document(&obj, 0.0).view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert!(drawn(&sharp, 32, 32) > 0, "網は描かれている");
+        assert_eq!(drawn(&sharp, 32, 10), 0, "ぼかさなければ縁の外は黒");
+
+        let soft = engine.render_frame(&document(&obj, 12.0).view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert!(drawn(&soft, 32, 10) > 0, "ブラーが網の縁の外へ滲む");
     }
 }

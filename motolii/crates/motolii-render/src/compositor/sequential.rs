@@ -205,8 +205,15 @@ impl Compositor {
                 if idx > run_start && (inputs[idx].shading.reads_backdrop || (run_has_rect && matches!(inputs[idx].content, SequentialContent::Model(_)))) {
                     break;
                 }
+                // 画面で効く効果列を持つ層は 1 つで 1 run。隣を巻き込むと隣にも効いてしまう。
+                if idx > run_start && !inputs[idx].screen_passes.is_empty() {
+                    break;
+                }
                 run_has_rect |= matches!(inputs[idx].content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
                 idx += 1;
+                if !inputs[idx - 1].screen_passes.is_empty() {
+                    break;
+                }
             }
             let run = &inputs[run_start..idx];
 
@@ -292,6 +299,19 @@ impl Compositor {
             }
             batch.push(command_buffer);
 
+            // 焼く先の絵が無かった素材(網・点群・環境)の効果列は、描いた後のこの窓へ流す。
+            let run_owned = match run {
+                [only] if !only.screen_passes.is_empty() => {
+                    let encoder = blend_encoder.get_or_insert_with(|| {
+                        self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("motolii-compositor-screen-passes-encoder"),
+                        })
+                    });
+                    self.apply_screen_passes(encoder, run_owned, only.screen_passes, &mut spare)?
+                }
+                _ => run_owned,
+            };
+
             const SRC_OVER: u32 = 3;
             background = Some(self.stack_over(comp, background.take(), run_owned, SRC_OVER, &mut spare, &mut blend_encoder)?);
         }
@@ -308,6 +328,54 @@ impl Compositor {
     /// ここまでの合成(背後)を mip 付きで写す。ガラスの網が粗さで段を読む。
     /// 描いた 1 枚(層または run)を地の上へ積む。地が無ければそれが地になる。
     /// `mode` は `vello_blend_mode` の番号(Normal は `SRC_OVER`)。
+    /// 窓 1 枚に効果列を流し、同じ寸法・同じ形式の新しい窓を返す。
+    ///
+    /// 層の絵へ焼けなかった効果(網・点群・環境には焼く先が無い)の行き先。層の平面ではなく
+    /// **画面**で効くので、その層はこの run の中で平らな 1 枚になる(AE のプリコンポと同じ代償)。
+    fn apply_screen_passes(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        canvas: AccumulatorBacking,
+        passes: &[EffectPass],
+        spare: &mut Vec<AccumulatorBacking>,
+    ) -> Result<AccumulatorBacking, CompositorError> {
+        let (width, height) = (self.window.width, self.window.height);
+        // 窓は線形。効果列は層の絵と同じ作法(Pass は sRGB 符号化で受ける)で流し、終わりで線形へ戻す。
+        let (mut current, linear, mut is_scratch) = self.record_pass_chain(
+            encoder, canvas.clone(), true, false, passes, None, [width, height], 0, [width, height],
+        )?;
+        if !linear {
+            let back = self.convert_image_encoding(encoder, &current, true);
+            if is_scratch {
+                self.effect_scratch.release(width, height, current.format(), current);
+            }
+            current = back;
+            is_scratch = true;
+        }
+
+        let out = spare.pop().unwrap_or_else(|| self.create_blend_scratch_texture(width, height));
+        let dst_view = canvas.create_view(&Default::default());
+        let src_view = current.create_view(&Default::default());
+        let out_view = out.create_view(&Default::default());
+        let window = self.window.size_f32();
+        {
+            // compose 1 = copy(vello の Compose: Clear=0, Copy=1, Dest=2, SrcOver=3)。
+            // 下は読まない — 効果の結果で置き換える。
+            const COPY: u32 = 1;
+            let Self { ctx, blend_vism, effect_scratch, .. } = self;
+            blend_vism.record_over(
+                ctx, encoder, effect_scratch,
+                &[&dst_view, &src_view], &out_view,
+                &[("mode".to_owned(), COPY as f32)], window,
+            );
+        }
+        if is_scratch {
+            self.effect_scratch.release(width, height, current.format(), current);
+        }
+        spare.push(canvas);
+        Ok(out)
+    }
+
     fn stack_over(
         &mut self,
         comp: CompSpec,
@@ -721,6 +789,7 @@ impl Compositor {
                 clip: layer.clip,
                 blocks_light: layer.blocks_light,
                 outline: layer.outline,
+                screen_passes: &[],
             })
             .collect();
 
