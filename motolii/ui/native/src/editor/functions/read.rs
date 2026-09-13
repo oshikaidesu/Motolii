@@ -1,4 +1,4 @@
-use crate::doc::store::{property, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreError, StoreView, Value};
+use crate::doc::store::{names, property, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreError, StoreView, Value};
 use crate::render::engine::EffectDescriptor;
 use crate::editor::fixture::{AssetFamily, EffectBlock, InspectorData, PropRow, LABEL_PALETTE};
 use crate::editor::session::ColorSlot;
@@ -213,7 +213,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     let text = match view.text_document(layer) {
         Ok(Some(doc)) => {
             let mut rows = vec![PropRow {
-                label: "Content".into(),
+                label: names::label_or_id(names::TEXT_CONTENT).into_owned(),
                 cells: [String::new(), String::new(), doc.content.eval(t).to_string()],
                 dims: [false, false, false],
                 keyed: doc.content.keys().iter().any(|k| k.t == t),
@@ -224,8 +224,8 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                 axis: [None, None, None],
             }];
             rows.push(PropRow {
-                label: "Alignment".into(), cells: Default::default(), dims: [false; 3],
-                keyed: keyed("text_justify"), property: Some("text_justify".into()),
+                label: names::label_or_id(names::TEXT_JUSTIFY).into_owned(), cells: Default::default(), dims: [false; 3],
+                keyed: keyed(names::TEXT_JUSTIFY), property: Some(names::TEXT_JUSTIFY.into()),
                 vec2: false, value: Value::Enum(doc.justify.to_enum_value()),
                 range: None, axis: [None, None, None],
             });
@@ -237,7 +237,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                     _ => f64::from(style.size),
                 };
                 rows.push(PropRow {
-                    label: "Size".into(),
+                    label: names::label_or_id(prop.name()).into_owned(),
                     cells: [String::new(), String::new(), f1(size)],
                     dims: [false, false, false],
                     keyed: keyed(prop.name()),
@@ -258,12 +258,12 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                     Some(Value::F64(v)) => v,
                     _ => f64::from(style.tracking),
                 };
-                for (label, prop, value, range) in [
-                    ("Line height", line_height_prop, line_height, (0.0, 1000.0)),
-                    ("Tracking", tracking_prop, tracking, (-200.0, 200.0)),
+                for (prop, value, range) in [
+                    (line_height_prop, line_height, (0.0, 1000.0)),
+                    (tracking_prop, tracking, (-200.0, 200.0)),
                 ] {
                     rows.push(PropRow {
-                        label: label.into(),
+                        label: names::label_or_id(prop.name()).into_owned(),
                         cells: [String::new(), String::new(), f1(value)],
                         dims: [false, false, false],
                         keyed: keyed(prop.name()),
@@ -291,7 +291,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                 Value::Color(_) => (Default::default(), false),
                 _ => continue,
             };
-            text.push(PropRow { label: row.label.into(), cells, dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2, value, range: row.range, axis: [None, None, None] });
+            text.push(PropRow { label: names::label_or_id(row.name).into_owned(), cells, dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2, value, range: row.range, axis: [None, None, None] });
         }
     }
 
@@ -300,14 +300,14 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         if let Some(style) = doc.styles.first() {
             let prop = PropertyId::text_style_fill_color(style.id);
             let value = match view.value_at(layer, &prop, t).ok().flatten() { Some(v @ Value::Color(_)) => v, _ => Value::Color(style.fill) };
-            text.push(PropRow { label: "Fill".into(), cells: Default::default(), dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2: false, value, range: None, axis: [None, None, None] });
+            text.push(PropRow { label: names::label_or_id(prop.name()).into_owned(), cells: Default::default(), dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2: false, value, range: None, axis: [None, None, None] });
         }
     }
     // 奥行きは板(形・文字・画・動画)だけ。網・点群は素材が奥行きを持ち、camera 等は絵が無い。
     let flat = matches!(source_name, "shape" | "text" | "media");
     let mut transform = vec![
         PropRow {
-            label: "Position".into(),
+            label: names::label_or_id(property::POSITION).into_owned(),
             cells: [px, py, f1(pos_z)],
             dims: [false, false, false],
             keyed: keyed(property::POSITION),
@@ -318,7 +318,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             axis: [None, None, Some((property::POSITION_Z.to_owned(), Value::F64(pos_z)))],
         },
         PropRow {
-            label: "Scale".into(),
+            label: names::label_or_id(property::SCALE).into_owned(),
             cells: [f(scale_x), f(scale_y), f(scale_z)],
             dims: [false, false, false],
             keyed: keyed(property::SCALE),
@@ -329,7 +329,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             axis: [None, None, Some((property::SCALE_Z.to_owned(), Value::F64(scale_z)))],
         },
         PropRow {
-            label: "Rotation".into(),
+            label: names::label_or_id(property::ROTATION).into_owned(),
             cells: [f(rot_x), f(rot_y), f(rotation_v)],
             dims: [false, false, false],
             keyed: keyed(property::ROTATION),
@@ -344,7 +344,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             ],
         },
         PropRow {
-            label: "Opacity".into(),
+            label: names::label_or_id(property::OPACITY).into_owned(),
             cells: [String::new(), String::new(), opacity],
             dims: [false, false, false],
             keyed: keyed(property::OPACITY),
@@ -357,7 +357,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     ];
     if flat {
         transform.push(PropRow {
-            label: "Depth".into(),
+            label: names::label_or_id(property::DEPTH).into_owned(),
             cells: [String::new(), String::new(), f(depth_v)],
             dims: [false, false, false],
             keyed: keyed(property::DEPTH),

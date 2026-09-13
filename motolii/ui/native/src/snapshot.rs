@@ -326,6 +326,7 @@ impl EditorRuntime{
         status["animate"]=json!(self.animate!=Animate::Off);
         if status["easeKinds"].is_null(){status.as_object_mut().unwrap().remove("easeKinds");}
         status["importExtensions"]=json!(crate::render::media::import_extensions());
+        status["names"]=json!(names::fixed().collect::<std::collections::BTreeMap<_,_>>());
         Ok(status)
     }
     #[allow(clippy::too_many_arguments)]
@@ -338,11 +339,11 @@ impl EditorRuntime{
                 if seen.insert(p.clone()){properties.push(prop(view,id,p,&row.label,&row.value,row.range,at,fps,live)?);}
             }
             for (index,axis) in row.axis.iter().enumerate(){if let Some((p,v))=axis{
-                if seen.insert(p.clone()){properties.push(prop(view,id,p,&format!("{} {}",row.label,["X","Y","Z"][index]),v,row.range,at,fps,live)?);}
+                if seen.insert(p.clone()){properties.push(prop(view,id,p,&names::label_or_id(p),v,row.range,at,fps,live)?);}
             }}
         }
         for p in view.properties(id){if !p.name().starts_with(property::EFFECT_PREFIX)&&seen.insert(p.name().into()){
-            if let Some(v)=view.value_at(id,&p,at).map_err(e)?{properties.push(prop(view,id,p.name(),p.name(),&v,None,at,fps,live)?);}
+            if let Some(v)=view.value_at(id,&p,at).map_err(e)?{properties.push(prop(view,id,p.name(),&names::label_or_id(p.name()),&v,None,at,fps,live)?);}
         }}
         if meta.source == LayerSource::Camera {
             properties = property::CAMERA_ROWS.iter().map(|(p,label,v,range)| prop(view,id,p,label,v,*range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
@@ -351,19 +352,19 @@ impl EditorRuntime{
             properties = crate::doc::store::particles::ROWS.iter().map(|(p,label,v,range)| prop(view,id,p,label,v,*range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
         }
         if meta.source == LayerSource::Stage {
-            properties = property::STAGE_MARGINS.iter().zip(["Left","Top","Right","Bottom"])
-                .map(|(p,label)| prop(view,id,p,label,&Value::F64(0.0),Some((0.0,100000.0)),at,fps,live)).collect::<Result<Vec<_>,_>>()?;
+            properties = property::STAGE_MARGINS.iter()
+                .map(|p| prop(view,id,p,&names::label_or_id(p),&Value::F64(0.0),Some((0.0,100000.0)),at,fps,live)).collect::<Result<Vec<_>,_>>()?;
         }
         let text=if let Some(t)=view.text_document(id).map_err(e)?{
             let keyed=t.content.keys().iter().any(|k|k.t.try_to_frame_round(fps).ok()==Some(self.frame));
             let content=if live { json!({"id":"content","value":t.content.eval(at),"keyedNow":keyed}) } else {
                 let keys:Result<Vec<_>,String>=t.content.keys().iter().map(|k|Ok(json!({"frame":k.t.try_to_frame_round(fps).map_err(e)?,"value":k.content,"interp":{"kind":"Hold"}}))).collect();
-                json!({"id":"content","label":"Content","kind":"text","value":t.content.eval(at),"min":null,"max":null,"keyedNow":keyed,"keys":keys?})
+                json!({"id":names::TEXT_CONTENT,"label":names::label_or_id(names::TEXT_CONTENT),"kind":"text","value":t.content.eval(at),"min":null,"max":null,"keyedNow":keyed,"keys":keys?})
             };
             properties.insert(0,content);
             let resolved=view.resolved_text_document(id,at).map_err(e)?.unwrap_or(t.clone());
             properties.retain(|p|p["id"]!="text_justify");
-            let mut justify=prop(view,id,"text_justify","Alignment",&Value::Enum(resolved.justify.to_enum_value()),None,at,fps,live)?;
+            let mut justify=prop(view,id,names::TEXT_JUSTIFY,&names::label_or_id(names::TEXT_JUSTIFY),&Value::Enum(resolved.justify.to_enum_value()),None,at,fps,live)?;
             justify["choices"]=json!(["Left","Right","Center"]);properties.push(justify);
             let s=resolved.styles.first();
             json!({"classes":crate::doc::store::text_edit::classifications(t.content.eval(at)),"styles":resolved.styles,"runs":resolved.runs,"fontFamily":s.map(|s|&s.font.family),"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})

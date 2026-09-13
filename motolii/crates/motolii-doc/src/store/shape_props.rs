@@ -72,7 +72,6 @@ pub fn axis_points(source: &PathSource, kind: GradientType, axis: &GradientAxis)
 /// Inspector の 1 行。`value` は property が無い時の既定(書類の形の値)。
 pub struct ShapeRow {
     pub name: &'static str,
-    pub label: &'static str,
     pub value: Value,
     pub range: Option<(f64, f64)>,
 }
@@ -101,9 +100,9 @@ pub fn rows(shapes: &[ShapeNode]) -> Vec<ShapeRow> {
     if let Some(leaf) = first_leaf(shapes) {
         if let Some(Brush::Gradient(g)) = leaf.fill.as_ref().map(|f| &f.brush) {
             let axis = axis_of(&leaf.source, g);
-            rows.push(ShapeRow { name: property::FILL_ANGLE, label: "Angle", value: Value::F64(axis.angle), range: None });
-            rows.push(ShapeRow { name: property::FILL_CENTER, label: "Center", value: Value::Vec2(axis.center), range: None });
-            rows.push(ShapeRow { name: property::FILL_SPREAD, label: "Spread", value: Value::F64(axis.spread), range: Some((0.0, 1000.0)) });
+            rows.push(ShapeRow { name: property::FILL_ANGLE, value: Value::F64(axis.angle), range: None });
+            rows.push(ShapeRow { name: property::FILL_CENTER, value: Value::Vec2(axis.center), range: None });
+            rows.push(ShapeRow { name: property::FILL_SPREAD, value: Value::F64(axis.spread), range: Some((0.0, 1000.0)) });
         }
     }
     rows

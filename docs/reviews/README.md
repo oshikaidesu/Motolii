@@ -827,3 +827,5 @@
 - [Browser UI phases](2026-09-09-browser-ui-phases.md)
 
 - [shader の外に仕組みが要る表現 — 宿題の台帳](2026-09-13-shader-outside-expressions-ledger.md)
+
+- [スクリプトの口 — p5.js と LLM ポン出しの客](2026-09-14-script-mouth.md)

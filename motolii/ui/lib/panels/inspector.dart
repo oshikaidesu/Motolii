@@ -695,6 +695,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// One name per row, never two marks for one meaning: the word while it
   /// fits, the glyph when the panel is too narrow for words. The name is a
   /// step quieter than the value it names.
+  Widget _named(IconData icon, String id) => _name(icon, panelName(c, id));
   Widget _name([IconData? icon, String? label]) => SizedBox(
     width: EditorMetrics.s18 + _wordWidth,
     child: label == null
@@ -778,7 +779,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return [
       if (_row('camera.center') != null)
         _line([
-          _name(Icons.center_focus_strong, 'Center'),
+          _named(Icons.center_focus_strong, 'camera.center'),
           _slot(_well(layer, 'camera.center', 0, label: 'X')),
           _gap(),
           _slot(_well(layer, 'camera.center', 1, label: 'Y')),
@@ -789,7 +790,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.target.z') != null)
         _line([
-          _name(Icons.center_focus_weak, 'Target Z'),
+          _named(Icons.center_focus_weak, 'camera.target.z'),
           _slot(_well(layer, 'camera.target.z', 0, label: 'Z')),
           _gap(),
           _slot(),
@@ -800,12 +801,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.target') != null)
         _line([
-          _name(Icons.gps_fixed, 'Target'),
+          _named(Icons.gps_fixed, 'camera.target'),
           Expanded(child: _layerPicker(layer, 'camera.target')),
         ]),
       if (_row('camera.orbit') != null)
         _line([
-          _name(Icons.threesixty, 'Orbit'),
+          _named(Icons.threesixty, 'camera.orbit'),
           _slot(_well(layer, 'camera.orbit', 0, label: 'Pitch')),
           _gap(),
           _slot(_well(layer, 'camera.orbit', 1, label: 'Yaw')),
@@ -816,7 +817,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.distance') != null)
         _line([
-          _name(Icons.straighten, 'Distance'),
+          _named(Icons.straighten, 'camera.distance'),
           _slot(_well(layer, 'camera.distance', 0, label: 'Scale')),
           _gap(),
           _slot(),
@@ -827,7 +828,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.zoom') != null)
         _line([
-          _name(Icons.zoom_in, 'Zoom'),
+          _named(Icons.zoom_in, 'camera.zoom'),
           _slot(_well(layer, 'camera.zoom', 0, label: 'Zoom')),
           _gap(),
           _slot(),
@@ -838,7 +839,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.roll') != null)
         _line([
-          _name(Icons.rotate_right, 'Roll'),
+          _named(Icons.rotate_right, 'camera.roll'),
           _slot(_well(layer, 'camera.roll', 0, label: 'Roll')),
           _gap(),
           _slot(),
@@ -900,7 +901,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
     // the family's name, and pressing it turns the shelf toward this layer.
     final rows = panelRows(layer['properties'])
         .where(_isTextProperty)
-        .where((r) => r['id'] != 'text_justify' && r['label'] != 'Size')
+        .where((r) => r['id'] != 'text_justify')
+        .where((r) => !'${r['id']}'.endsWith('.size'))
         .where((r) => r['kind'] != 'color')
         .toList();
     final family = '${text['fontFamily'] ?? ''}';
@@ -1034,7 +1036,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return [
       if (_row('position') != null)
         _line([
-          _name(Icons.open_with, 'Position'),
+          _named(Icons.open_with, 'position'),
           _slot(_well(layer, 'position', 0, label: 'X')),
           _gap(),
           _slot(_well(layer, 'position', 1, label: 'Y')),
@@ -1049,7 +1051,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('scale') != null)
         _line([
-          _name(Icons.aspect_ratio, 'Scale'),
+          _named(Icons.aspect_ratio, 'scale'),
           _slot(
             _well(
               layer,
@@ -1085,19 +1087,15 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('rotation') != null)
         _line([
-          _name(Icons.rotate_right, 'Rotation'),
+          _named(Icons.rotate_right, 'rotation'),
           _slot(_well(layer, 'rotation', 0, label: 'Rotation')),
           _gap(),
           _slot(
-            _row('rotation.x') == null
-                ? null
-                : _well(layer, 'rotation.x', 0, label: 'Tilt X'),
+            _row('rotation.x') == null ? null : _well(layer, 'rotation.x', 0),
           ),
           _gap(),
           _slot(
-            _row('rotation.y') == null
-                ? null
-                : _well(layer, 'rotation.y', 0, label: 'Tilt Y'),
+            _row('rotation.y') == null ? null : _well(layer, 'rotation.y', 0),
           ),
           _gap(),
           _tail(_dial(layer, 'rotation')),
@@ -1106,7 +1104,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       // once the layer has left 2D; scale Z then has something to scale.
       if (_row('depth') != null && layer['projection'] != '2D')
         _line([
-          _name(Icons.view_in_ar, 'Depth'),
+          _named(Icons.view_in_ar, 'depth'),
           _slot(_well(layer, 'depth', 0, label: 'Depth')),
           _gap(),
           _slot(),
@@ -1117,7 +1115,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('opacity') != null)
         _line([
-          _name(Icons.opacity, 'Opacity'),
+          _named(Icons.opacity, 'opacity'),
           SizedBox(
             width: _wellWidth * 2 + EditorMetrics.s4,
             height: EditorMetrics.s22,
@@ -1136,7 +1134,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _tail(),
         ]),
       _line([
-        _name(Icons.center_focus_weak, 'Anchor'),
+        _named(Icons.center_focus_weak, 'anchor'),
         EditorAnchorGrid(
           fraction: anchor is List
               ? [(anchor[0] as num).toDouble(), (anchor[1] as num).toDouble()]

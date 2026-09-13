@@ -18,6 +18,7 @@ pub mod particles;
 pub mod solid;
 pub mod textop;
 pub mod shape_props;
+pub mod names;
 mod slot;
 mod text;
 mod view;

@@ -570,3 +570,30 @@ mod environment_media {
         assert!(primitive("nope").is_err());
     }
 }
+
+#[cfg(test)]
+mod english_names {
+    use super::*;
+
+    /// 置いた層が持つ属性は全部、窓とスクリプトの名前の表に載っている(内部 id を窓に出さない)。
+    #[test]
+    fn every_property_a_new_layer_writes_has_an_english_name() {
+        let fps = Fps::try_new(30, 1).unwrap();
+        let kinds = [NewKind::Text, NewKind::Camera, NewKind::Stage, NewKind::Rectangle, NewKind::RoundedRectangle, NewKind::Ellipse, NewKind::Star,
+            NewKind::Polygon, NewKind::Line, NewKind::Bezier, NewKind::Null, NewKind::Particles,
+            NewKind::Primitive { path: "/nowhere/cube.glb".into(), name: "Cube".into() }, NewKind::Media { path: "/nowhere/photo.png".into(), name: "Photo".into() }];
+        let mut missing = Vec::new();
+        for kind in kinds {
+            for intent in new_layer_intents(LayerId(1), 0, 0, 90, fps, (1920.0, 1080.0), kind, None) {
+                let property = match &intent {
+                    Intent::SetConstant { property, .. } | Intent::SetTrack { property, .. } | Intent::SetPropertySlot { property, .. } => property.name().to_owned(),
+                    _ => continue,
+                };
+                if !property.starts_with(property::EFFECT_PREFIX) && crate::doc::store::names::label(&property).is_none() {
+                    missing.push(property);
+                }
+            }
+        }
+        assert!(missing.is_empty(), "英語の名前が無い属性: {missing:?}");
+    }
+}
