@@ -1158,6 +1158,15 @@ fn collect_text_documents(
             {
                 documents.insert(layer.id, document);
             }
+            // Text Morph の相手は見えていない層でもよい: 書類だけ持ってくる。
+            let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
+            if let Some((target, _)) = crate::doc::store::textop::morph(&effects) {
+                if !documents.contains_key(&target) {
+                    if let Some(document) = view.resolved_text_document(target, t).map_err(|e| EngineError::Store(e.to_string()))? {
+                        documents.insert(target, document);
+                    }
+                }
+            }
         }
     }
     Ok(documents)

@@ -12,6 +12,7 @@ pub mod kind;
 pub mod placement;
 pub mod pathop;
 pub mod solid;
+pub mod textop;
 pub mod shape_props;
 mod slot;
 mod text;

@@ -76,6 +76,8 @@ pub struct LineMeasure {
 pub struct ShapedText {
     pub contours: Vec<Contour>,
     pub contour_styles: Vec<usize>,
+    /// 輪郭ごとの文字の番(組んだ順)。morph が同じ番同士を対にする。
+    pub contour_glyphs: Vec<usize>,
     pub lines: Vec<LineMeasure>,
 }
 
@@ -178,7 +180,9 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
     let mut swash_cache = SwashCache::new();
     let mut contours = Vec::new();
     let mut contour_styles = Vec::new();
+    let mut contour_glyphs = Vec::new();
     let mut lines = Vec::new();
+    let mut glyph_ordinal = 0usize;
     for run in buffer.layout_runs() {
         let mut glyph_xs = Vec::with_capacity(run.glyphs.len());
         for glyph in run.glyphs {
@@ -186,6 +190,8 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
             let pen_y = run.line_y + glyph.y - glyph.font_size * glyph.y_offset;
             glyph_xs.push(glyph.x);
             let cache_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
+            let ordinal = glyph_ordinal;
+            glyph_ordinal += 1;
             let Some(commands) = swash_cache.get_outline_commands(font_system, cache_key)
             else {
                 continue; // 空白など、輪郭を持たない glyph。
@@ -193,6 +199,7 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
             let before = contours.len();
             commands_to_contours(commands, pen_x, pen_y, &mut contours);
             contour_styles.extend(std::iter::repeat_n(glyph.metadata, contours.len() - before));
+            contour_glyphs.extend(std::iter::repeat_n(ordinal, contours.len() - before));
         }
         lines.push(LineMeasure {
             baseline_y: run.line_y,
@@ -200,7 +207,7 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
             glyph_xs,
         });
     }
-    Ok(ShapedText { contours, contour_styles, lines })
+    Ok(ShapedText { contours, contour_styles, contour_glyphs, lines })
 }
 
 fn commands_to_contours(commands: &[Command], pen_x: f32, pen_y: f32, out: &mut Vec<Contour>) {

@@ -280,7 +280,9 @@ impl Engine {
         match &layer.source {
             LayerSource::Text => {
                 let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
-                let key = TextCacheKey::new(layer_id, &document, t, comp.width, comp.height);
+                let partner = crate::doc::store::textop::morph(&layer.effects)
+                    .and_then(|(target, amount)| view.resolved_text_document(target, t).ok().flatten().map(|d| (d, amount)));
+                let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height);
                 let cached = self.text_textures.get(&key)?;
                 planar(cached.bounds?, [comp.width as f32, comp.height as f32])
             }
@@ -370,7 +372,7 @@ impl Engine {
         // (段に丸めると置いた時に再標本化され、縁が甘くなる)。
         let tolerance = (0.05 / if vector { density } else { exact_density }).max(1e-6);
         let (content, natural, frame) = if layer.source == LayerSource::Text {
-            self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp, vector, tolerance, flat, step)?
+            self.text_texture_from_document(text_documents.get(&layer.id), text::morph_partner(layer, text_documents), layer.id, t, comp, vector, tolerance, flat, step)?
         } else if layer.source == LayerSource::Shape {
             let shapes = shape_documents
                 .get(&layer.id)
@@ -428,7 +430,7 @@ impl Engine {
         let outlines = match &layer.source {
             LayerSource::Text => {
                 let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
-                match text_documents.get(&layer.id).and_then(|d| text::text_shapes(d, t, &canvas).ok().flatten()) {
+                match text_documents.get(&layer.id).and_then(|d| text::text_shapes_morphed(d, text::morph_partner(layer, text_documents), t, &canvas).ok().flatten()) {
                     Some(shapes) => crate::render::compositor::paths::outlines(&shapes, &canvas)?,
                     None => Vec::new(),
                 }
@@ -450,9 +452,11 @@ impl Engine {
         Ok(Some(LayerContent::Model(model)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn text_texture_from_document(
         &mut self,
         document: Option<&TextDocument>,
+        morph: Option<(&TextDocument, f64)>,
         layer_id: LayerId,
         t: RationalTime,
         comp: CompSpec,
@@ -472,7 +476,7 @@ impl Engine {
             origin_y: 0,
         };
 
-        let key = TextCacheKey::new(layer_id, document, t, canvas.width, canvas.height);
+        let key = TextCacheKey::new(layer_id, document, morph, t, canvas.width, canvas.height);
         if let Some(cached) = self.text_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance && c.step == step) {
             return Ok((
                 Some(cached.texture.clone()),
@@ -481,7 +485,7 @@ impl Engine {
             ));
         }
 
-        let Some(shapes) = text::text_shapes(document, t, &canvas)? else {
+        let Some(shapes) = text::text_shapes_morphed(document, morph, t, &canvas)? else {
             return Ok((None, [0.0, 0.0], None));
         };
         let bounds = crate::doc::vector::content_bounds(&shapes)?.map(|b| crate::render::media::SpatialBounds {
@@ -1034,19 +1038,21 @@ impl TextCacheKey {
     fn new(
         layer: LayerId,
         document: &TextDocument,
+        morph: Option<(&TextDocument, f64)>,
         t: RationalTime,
         canvas_width: u32,
         canvas_height: u32,
     ) -> Self {
-        let content = document.content.eval(t);
-        let content_snapshot = serde_json::to_string(&(
-            &content,
+        let snapshot = |document: &TextDocument| serde_json::to_string(&(
+            document.content.eval(t),
             document.justify,
             document.wrap_size,
             &document.styles,
             &document.runs,
         ))
         .unwrap_or_default();
+        // 相手の文字と量も鍵: 相手が変われば組み直す。
+        let content_snapshot = format!("{}|{}", snapshot(document), morph.map(|(d, amount)| format!("{amount}|{}", snapshot(d))).unwrap_or_default());
         Self {
             layer,
             canvas_width,
@@ -1208,9 +1214,12 @@ mod rich_text_cache_tests {
         let style=|id,size|TextDocumentStyle{id:TextStyleId(id),font:FontRef::default(),size,fill:[1.0;4],line_height:None,tracking:0.0,axes:vec![],features:vec![]};
         let mut content=ContentTrack::new();content.insert(ContentKeyframe{t:RationalTime::ZERO,content:"AB".into()});
         let mut text=TextDocument{content,justify:TextJustify::Left,wrap_size:None,styles:vec![style(0,20.0),style(1,40.0)],slot_id:None,ranges:vec![],alignment:Default::default(),runs:vec![TextRun{len:1,style:TextStyleId(0)},TextRun{len:1,style:TextStyleId(1)}]};
-        let before=TextCacheKey::new(LayerId(1),&text,RationalTime::ZERO,400,200);
+        let before=TextCacheKey::new(LayerId(1),&text,None,RationalTime::ZERO,400,200);
         text.runs.reverse();
-        assert!(before!=TextCacheKey::new(LayerId(1),&text,RationalTime::ZERO,400,200));
+        assert!(before!=TextCacheKey::new(LayerId(1),&text,None,RationalTime::ZERO,400,200));
+        // morph の相手と量も鍵。
+        let partner=text.clone();
+        assert!(TextCacheKey::new(LayerId(1),&text,Some((&partner,0.5)),RationalTime::ZERO,400,200)!=TextCacheKey::new(LayerId(1),&text,Some((&partner,0.6)),RationalTime::ZERO,400,200));
     }
 }
 

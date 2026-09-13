@@ -8,6 +8,8 @@ pub enum ParamKind {
     Vec2,
     /// 形のトグル。値は選択肢の番号(F64 で持つ)。
     Choice(&'static [&'static str]),
+    /// 別の層を指す。値は LayerId(0 = 無し)。窓はカメラの target と同じ選択肢で描く。
+    Layer,
 }
 
 pub struct Param {
@@ -31,6 +33,10 @@ impl Param {
         Self { name, label, section: "", kind: ParamKind::Choice(choices), default: [0.0, 0.0], range: Some((0.0, (choices.len() - 1) as f64)), modes: None }
     }
 
+    pub const fn layer(name: &'static str, label: &'static str) -> Self {
+        Self { name, label, section: "", kind: ParamKind::Layer, default: [0.0, 0.0], range: None, modes: None }
+    }
+
     pub fn shown(&self, mode: u8) -> bool {
         self.modes.is_none_or(|modes| modes.contains(&mode))
     }
@@ -38,6 +44,7 @@ impl Param {
     pub fn default_value(&self) -> Value {
         match self.kind {
             ParamKind::Vec2 => Value::Vec2(self.default),
+            ParamKind::Layer => Value::LayerId(0),
             _ => Value::F64(self.default[0]),
         }
     }
@@ -59,6 +66,8 @@ pub enum Family {
     Path,
     /// 平らな素材から立体を起こす(押し出し・縁の丸み)。
     Solid,
+    /// 文字の層の輪郭(文字を形にする段で効く)。
+    Text,
 }
 
 /// 棚に並ぶ 1 枚の見え方。
@@ -77,6 +86,7 @@ pub fn all() -> impl Iterator<Item = Kind> {
         .map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement })
         .chain(crate::doc::store::pathop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Path }))
         .chain(crate::doc::store::solid::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Solid }))
+        .chain(crate::doc::store::textop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Text }))
 }
 
 pub fn kind(plugin_id: &str) -> Option<Kind> {
@@ -96,7 +106,7 @@ pub fn choices(plugin_id: &str, param: &str) -> Option<&'static [&'static str]> 
 mod tests {
     use super::*;
 
-    /// 3 つの家が 1 つの表に載り、id は被らず、欄の既定は範囲の中。
+    /// 4 つの家が 1 つの表に載り、id は被らず、欄の既定は範囲の中。
     #[test]
     fn every_kind_is_on_one_table_with_sane_params() {
         let kinds: Vec<Kind> = all().collect();
@@ -116,5 +126,7 @@ mod tests {
         assert_eq!(label(crate::doc::store::placement::REPEAT), Some("Repeater"));
         assert_eq!(choices(crate::doc::store::placement::REPEAT, "mode"), Some(crate::doc::store::placement::SHAPES));
         assert_eq!(kind(crate::doc::store::pathop::PUCKER_BLOAT).map(|k| k.family), Some(Family::Path));
+        assert_eq!(kind(crate::doc::store::textop::TEXT_MORPH).map(|k| k.family), Some(Family::Text));
+        assert_eq!(kind(crate::doc::store::textop::TEXT_MORPH).and_then(|k| k.params.iter().find(|p| p.name == "target")).map(|p| p.default_value()), Some(Value::LayerId(0)));
     }
 }

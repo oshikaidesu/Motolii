@@ -48,6 +48,7 @@ mod snapshots {
         ("motolii.bend", &[("angle", 120.0)]),
         ("motolii.extrude", &[("depth", 24.0)]),
         ("motolii.bevel", &[("radius", 10.0)]),
+        ("motolii.text_morph", &[("amount", 50.0)]),
     ];
 
     /// 平らな席の見本は写真(同梱の photo studio の真ん中)。硬い縁・明部・階調・色が 1 枚で読める。
@@ -109,6 +110,23 @@ mod snapshots {
                 out.push(Intent::SetTrack { layer: subject, property: PropertyId::new(property::ROTATION).map_err(|e| e.to_string())?, track: track(Value::F64(0.0), Value::F64(45.0)) });
                 out
             }
+            EffectStage::Text => {
+                // 文字が別の書体の文字へ半分だけ変わった姿: 相手は隠した 2 枚目の文字の層。
+                let mut out = place(subject, 0, NewKind::Text);
+                out.extend(place(LayerId(2), 1, NewKind::Text));
+                // 相手は同じ文字を明朝で(書体が違わないと morph が見えない)。
+                for intent in &mut out {
+                    if let Intent::SetTextDocument { layer, document } = intent {
+                        if *layer == LayerId(2) {
+                            for style in &mut document.styles {
+                                style.font = crate::doc::store::FontRef { path: "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc".to_owned(), fingerprint: None, family: "Hiragino Mincho ProN".to_owned(), style: "W6".to_owned() };
+                            }
+                        }
+                    }
+                }
+                out.push(Intent::SetConstant { layer: LayerId(2), property: PropertyId::new(property::OPACITY).map_err(|e| e.to_string())?, value: Value::F64(0.0) });
+                out
+            }
             EffectStage::Surface | EffectStage::Field | EffectStage::Clip => {
                 let mut out = Vec::new();
                 if stage == EffectStage::Surface {
@@ -133,6 +151,9 @@ mod snapshots {
         };
         for (name, value) in pose {
             doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_param(id, name).map_err(|e| e.to_string())?, value: Value::F64(value) }).map_err(|e| e.to_string())?;
+        }
+        for p in effect.params.iter().filter(|p| p.layer) {
+            doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_param(id, &p.name).map_err(|e| e.to_string())?, value: Value::LayerId(2) }).map_err(|e| e.to_string())?;
         }
         Ok(())
     }

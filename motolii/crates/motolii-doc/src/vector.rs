@@ -9,6 +9,7 @@ mod raster;
 pub mod coverage;
 
 pub mod text;
+pub mod morph;
 
 use serde::{Deserialize, Serialize};
 
