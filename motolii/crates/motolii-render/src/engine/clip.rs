@@ -50,7 +50,7 @@ impl Engine {
             let (texture, _view) = engine.compositor.render_to_texture(
                 local,
                 flat,
-                &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new() }],
+                &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0 }],
                 crate::render::compositor::NO_BACKGROUND,
             )?;
             engine.compositor.import_premultiplied(&texture)
@@ -80,6 +80,7 @@ impl Engine {
         let unpad = Vec2::splat(-padf);
         Ok(Some(LayerWithPasses {
             pass_sources: Vec::new(),
+            padding: 0,
             layer: Layer {
                 content: LayerContent::Texture(clipped),
                 size: [local.width as f32, local.height as f32],

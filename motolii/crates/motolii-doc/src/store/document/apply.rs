@@ -9,7 +9,7 @@ use crate::doc::store::slot::PropertySource;
 use crate::doc::store::StoreError;
 
 use super::validate::{
-    check_not_frozen, check_not_locked, freeze_attrs_batch, is_frozen_or_within_frozen,
+    check_not_frozen, check_not_frozen_inside, check_not_locked, freeze_attrs_batch, is_frozen_or_within_frozen, property_is_inside,
     validate_masks_have_shapes, validate_no_link_cycle, validate_no_parent_cycle,
 };
 use super::{Document, Intent};
@@ -74,7 +74,7 @@ impl Document {
             }
             Intent::SetMasks { layer, masks } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
+                check_not_frozen_inside(&self.view(), layer, "its masks")?;
                 crate::doc::store::mask::validate_unique_ids(&masks)?;
                 validate_masks_have_shapes(&self.view(), layer, &masks)?;
                 let json = serde_json::to_string(&masks)?;
@@ -89,7 +89,7 @@ impl Document {
             }
             Intent::AddMask { layer, mask, shape } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
+                check_not_frozen_inside(&self.view(), layer, "its masks")?;
                 let mut masks = self.view().masks(layer)?;
                 masks.push(mask);
                 crate::doc::store::mask::validate_unique_ids(&masks)?;
@@ -157,7 +157,7 @@ impl Document {
             }
             Intent::SetSource { layer, source } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
+                check_not_frozen_inside(&self.view(), layer, "its source")?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -256,7 +256,7 @@ impl Document {
             }
             Intent::SetEffects { layer, effects } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
+                check_not_frozen_inside(&self.view(), layer, "its effects")?;
                 crate::doc::store::effect::validate_unique_ids(&effects)?;
                 let json = serde_json::to_string(&effects)?;
                 (
@@ -270,7 +270,7 @@ impl Document {
             }
             Intent::SetShapes { layer, shapes } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
+                check_not_frozen_inside(&self.view(), layer, "its shapes")?;
                 let json = serde_json::to_string(&shapes)?;
                 (
                     layer.entity_path(),
@@ -283,7 +283,7 @@ impl Document {
             }
             Intent::SetTextDocument { layer, document } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
+                check_not_frozen_inside(&self.view(), layer, "its text")?;
                 crate::doc::store::text::validate(&document)?;
                 let json = serde_json::to_string(&document)?;
                 (
@@ -302,6 +302,7 @@ impl Document {
             } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
+                if property_is_inside(property.name()) { check_not_frozen_inside(&self.view(), layer, "its effects")?; }
                 track
                     .validate()
                     .map_err(|error| StoreError::Property(error.to_string()))?;
@@ -322,6 +323,7 @@ impl Document {
             } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
+                if property_is_inside(property.name()) { check_not_frozen_inside(&self.view(), layer, "its effects")?; }
                 let json = serde_json::to_string(&PropertySource::constant(value))?;
                 (
                     layer.entity_path(),

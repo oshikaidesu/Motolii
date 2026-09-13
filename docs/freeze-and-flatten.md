@@ -112,4 +112,13 @@ Hold(`TIME_AT`)は「ある瞬間の絵を読む効果」で、固めるので�
 
 ## 6. 現在地(2026-09-13)
 
-法のみ。拒み(`Intent::Freeze { group }`)は群だけ存在。cache と Flatten は未実装。
+**板の Freeze を実装**(§5 の 1)。層にも群にも `Intent::Freeze`。裏の thread(`ui/native/src/freeze_job.rs`、export と同じ型)が
+入点〜出点を順に焼き(`Engine::freeze_bake_frame`)、書類の隣 `<name>.motolii-cache/<layer>/<frame>.rgba16f` + `.json`
+(乗算済み線形 half float、余白・枠込み)へ置く。本番の engine は焼けたコマから cache の絵で層を組み、素材の復号も
+効果の列も走らない(`engine/frozen.rs`、`frozen_layer`)。場・面の hook と配置・不透明度・blend・マット・時間は生きたまま。
+凍った層の中(効果の欄・効果の列・マスク・形・文字・素材)は名指しで断り、位置・不透明度・重ね順・時間は通る
+(`check_not_frozen_inside`、`property_is_inside`)。Unfreeze は cache の dir を消す。
+窓: Timeline の右クリック(Freeze / Unfreeze)、Inspector の ❄ switch(全部の層)、凍った層の効果は灰色で触れず 1 行の注意、
+下の行に「Freezing *Title* 34/120」。審判 `freeze_keeps_the_picture`(凍っても絵は同じ・再起動後も disk から同じ・拒み・Unfreeze で戻る)、
+`freeze_op`(口)。
+未実装: 立体の Freeze(頂点・点の列)、Flatten(Bounce to Media)、未保存の書類の cache は temp(保存しても引っ越さない — Freeze し直す)。

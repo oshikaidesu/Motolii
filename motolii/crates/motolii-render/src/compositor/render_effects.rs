@@ -102,7 +102,7 @@ impl Compositor {
             // 下の合成を読む列は、合成の途中でしか値が決まらない。ここでは焼かず、run の窓で流す。
             if lwp.passes.is_empty() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) {
                 effective_textures.push(lwp.layer.content.clone());
-                effective_paddings.push(0);
+                effective_paddings.push(lwp.padding);
                 effective_spills.push(None);
                 continue;
             }

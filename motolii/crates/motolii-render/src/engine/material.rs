@@ -85,7 +85,7 @@ impl Engine {
             let mut texture = cached.normalized.clone();
             let mut frame = source_frame.unwrap_or(ImageFrame { size: natural, origin: [0.0;2], pixels: texture.width_height() });
             for pass in warps {
-                let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass], pass_sources: Vec::new() };
+                let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass], pass_sources: Vec::new(), padding: 0 };
                 let (mut outputs,padding,_spills,_owned_outputs) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
                 texture = outputs.remove(0).texture().expect("image effect output").clone();
                 frame = frame.padded(padding[0]);

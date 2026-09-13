@@ -172,6 +172,53 @@ impl Compositor {
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
 
+    /// GPU の texture を CPU へ読み戻す(行の詰め物を外した生の byte)。Freeze の cache が書類の隣へ置く時に使う。
+    pub(crate) fn read_texture_bytes(&mut self, texture: &wgpu::Texture) -> Result<Vec<u8>, CompositorError> {
+        let bytes_per_pixel = texture.format().block_copy_size(None).ok_or_else(|| CompositorError::Effect(format!("{:?} は読み戻せない", texture.format())))?;
+        let (width, height) = (texture.width(), texture.height());
+        let row = width * bytes_per_pixel;
+        let padded = row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let staging = self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("motolii-freeze-readback"), size: u64::from(padded) * u64::from(height),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false,
+        });
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-freeze-readback") });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(height) } },
+            texture.size(),
+        );
+        self.pending.push(encoder.finish());
+        self.flush_pending();
+        let slice = staging.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
+        self.ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| CompositorError::Draw(e.to_string()))?;
+        rx.recv().map_err(|e| CompositorError::Draw(e.to_string()))?.map_err(|e| CompositorError::Draw(e.to_string()))?;
+        let data = slice.get_mapped_range();
+        let mut out = Vec::with_capacity((row * height) as usize);
+        for y in 0..height as usize {
+            let start = y * padded as usize;
+            out.extend_from_slice(&data[start..start + row as usize]);
+        }
+        drop(data);
+        staging.unmap();
+        Ok(out)
+    }
+
+    /// CPU の byte(乗算済み線形、Rgba16Float)を板として置ける texture に(Freeze の cache を disk から戻す時)。
+    pub(crate) fn upload_rgba16f(&mut self, label: &str, bytes: Vec<u8>, width: u32, height: u32) -> Result<GpuTexture2D, CompositorError> {
+        self.next_effect_key += 1;
+        let key = self.next_effect_key;
+        self.ctx.texture_manager_2d.get_or_try_create_with(key, &self.ctx, || Ok::<_, std::convert::Infallible>(ImageDataDesc {
+            label: label.into(),
+            data: bytes.into(),
+            format: wgpu::TextureFormat::Rgba16Float.into(),
+            width_height: [width, height],
+            alpha_channel_usage: re_renderer::AlphaChannelUsage::AlphaChannelInUse,
+        })).map_err(|e| CompositorError::Rectangles(e.to_string()))
+    }
+
     /// 焼いた絵を板として使えるようにする(上流の取り込み口)。
     pub fn import_premultiplied(
         &mut self,

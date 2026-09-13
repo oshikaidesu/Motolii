@@ -180,11 +180,18 @@ impl EditorRuntime{
             }).collect();
             // 箱は注視面の 4 角が写れば描く。eye は観測者と同じ深さか後ろに居るのが普通で(正面の観測者は
             // 既定のカメラと同じ距離に立つ)、写せない。eye と frustum の線は写せた時だけの飾り。
+            // Blender のカメラ: eye を頂点に、一定の表示距離へ置いた枠(四角錐)と、上を示す三角。
+            // 世界に置いた形なので観測者を回しても崩れない。eye が写せる時(観測者を回した時)に描く。
+            let display=crate::doc::core::distance_from_camera(comp,0.0)*0.15;
+            let fh=display*(projection.vertical_fov_radians*0.5).tan();let fw=fh*projection.aspect_ratio;
+            let frustum:Vec<_>=[(-fw,-fh),(fw,-fh),(fw,fh),(-fw,fh)].into_iter().map(|(x,y)|screen(eye+rotation*glam::vec3(x,y,-display))).collect();
+            let up=screen(eye+rotation*glam::vec3(0.0,-fh*1.7,-display));
             let eye=screen(eye);
             let authorable=camera.orbit_degrees==[0.0;2] && view.camera_target_layer(id,time).map_err(e)?.is_none();
             // 届かない角は null。2 角以上写れば箱を出し、Flutter は写った角だけ結ぶ。author できるのは 4 角揃った時だけ。
             let seen=corners.iter().filter(|c|c.is_some()).count();
-            if seen>=2{gizmos.push(json!({"id":id.0,"points":corners,"eye":eye,"target":screen(camera.target(comp)),"authorable":authorable&&seen==4,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
+            let pyramid=eye.is_some()&&frustum.iter().all(Option::is_some);
+            if seen>=2||pyramid{gizmos.push(json!({"id":id.0,"points":corners,"eye":eye,"frustum":frustum,"up":up,"target":screen(camera.target(comp)),"authorable":authorable&&seen==4,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
         }
         Ok(json!(gizmos))
     }
@@ -304,7 +311,7 @@ impl EditorRuntime{
         let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
         let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"generation":generation})).collect::<Vec<_>>();
-        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status()});
+        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
@@ -628,6 +635,13 @@ mod camera_view_cage_tests {
         assert_eq!(g["points"].as_array().unwrap().len(),4,"{g}");
         assert!(g["eye"].is_null(),"the eye sits at the observer and cannot be projected: {g}");
         let corner=|i:usize|[g["points"][i][0].as_f64().unwrap(),g["points"][i][1].as_f64().unwrap()];
+        // 観測者を回せば eye が写り、Blender の四角錐(枠 4 角 + 上の三角)が出る。正面では箱だけ。
+        assert!(g["frustum"].as_array().unwrap().iter().all(|p|p.is_null())||g["eye"].is_null(),"front-on the pyramid is not drawable: {g}");
+        rt.user_camera.orbit_degrees=[-20.0,35.0];
+        let turned=rt.camera_gizmos().unwrap();
+        let t=turned.as_array().unwrap().first().expect("the camera is still drawn from an orbited observer");
+        assert!(!t["eye"].is_null()&&t["frustum"].as_array().unwrap().iter().all(|p|!p.is_null())&&!t["up"].is_null(),"orbited: eye, frame and up all project: {t}");
+        rt.user_camera=Default::default();
         let (xs,ys):(Vec<f64>,Vec<f64>)=(0..4).map(corner).map(|c|(c[0],c[1])).unzip();
         let span=|v:&[f64]|(v.iter().cloned().fold(f64::MAX,f64::min),v.iter().cloned().fold(f64::MIN,f64::max));
         assert!(span(&xs).0.abs()<1.0&&(span(&xs).1-w as f64).abs()<1.0&&span(&ys).0.abs()<1.0&&(span(&ys).1-h as f64).abs()<1.0,"a default camera's box is the frame: {g}");

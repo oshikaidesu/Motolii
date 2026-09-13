@@ -317,6 +317,8 @@ pub(crate) type Clock = [f32; 3];
 pub struct LayerWithPasses {
     pub layer: Layer,
     pub passes: Vec<EffectPass>,
+    /// 絵が既に余白を持つ(Freeze の cache: 効果の列の出口を保存した物)。列は空で、置く時にこの余白を使う。
+    pub padding: u32,
     /// 効果ごとの「別の時刻の絵」(`passes` と同じ並び)。宣言していない効果は空。
     /// 効果が自分で覚えるのではなく**ホストが渡す**ので、評価は純関数のまま。
     pub pass_sources: Vec<Vec<GpuTexture2D>>,

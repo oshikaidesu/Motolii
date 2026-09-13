@@ -10,6 +10,7 @@ mod material;
 pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 mod translate;
+mod frozen;
 
 use crate::doc::core::ResolvedCamera;
 use crate::render::compositor::GpuTexture2D;
@@ -123,6 +124,10 @@ pub struct Engine {
     feedback_namespace: u64,
     /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
     feedback_saw_composites: bool,
+    /// Freeze の cache(層の投影の前の絵、書類の隣)。
+    pub(crate) frozen: frozen::FrozenStore,
+    /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
+    freezing: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
@@ -187,6 +192,8 @@ impl Engine {
             video_stream_namespace: 0,
             feedback_namespace: 0,
             feedback_saw_composites: false,
+            frozen: Default::default(),
+            freezing: None,
             feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
@@ -249,6 +256,8 @@ impl Engine {
             video_stream_namespace: 0,
             feedback_namespace: 0,
             feedback_saw_composites: false,
+            frozen: Default::default(),
+            freezing: None,
             feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,

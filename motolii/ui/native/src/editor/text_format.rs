@@ -11,7 +11,7 @@ pub(crate) fn edits(doc:&Document, layer:LayerId, time:RationalTime, j:&J) -> Re
     let text=document.content.eval(time).to_owned();
     if j["text"].as_str().is_some_and(|t|t!=text) { return Err("Text changed; select the characters again".into()); }
     let scope=j["scope"].as_str().unwrap_or("all");
-    if !["all","selection","hiragana","katakana","han","latin"].contains(&scope) { return Err("Unknown character selection".into()); }
+    if !text_edit::SCOPES.contains(&scope) { return Err("Unknown character selection".into()); }
     let start=j["start"].as_u64().unwrap_or(0) as usize;
     let end=j["end"].as_u64().unwrap_or(0) as usize;
     if scope=="selection" && (start>=end || end>text.encode_utf16().count()) { return Err("Select some characters".into()); }

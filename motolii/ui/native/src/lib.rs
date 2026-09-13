@@ -6,6 +6,7 @@ mod port;
 mod snapshot;
 mod snapshot_cache;
 mod export_job;
+mod freeze_job;
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Instant;
@@ -31,6 +32,8 @@ pub struct EditorRuntime {
     saved_signature: String,
     color_target: Option<editor::session::ColorSlot>,
     exporter: export_job::ExportController,
+    /// Freeze の裏仕事(層のコマを焼く)。
+    freezer: freeze_job::FreezeController,
     clock: editor::playback::Clock,
     clock_revision: doc::store::Revision,
     frame: i64,
@@ -73,7 +76,8 @@ impl EditorRuntime {
             return Err("Saved document has no composition".into());
         }
         let selected = doc.view().layers().first().copied();
-        let engine = Engine::new().map_err(|e| e.to_string())?;
+        let mut engine = Engine::new().map_err(|e| e.to_string())?;
+        engine.set_cache_root(Self::cache_root_for(if path.is_empty() { None } else { Some(path) }));
         let device_id = unsafe { engine.gpu_device().as_hal::<wgpu::hal::api::Metal>() }
             .ok_or("Engine did not create a Metal device")?.raw_device().registryID();
         let saved_signature = snapshot::authored_signature(&doc)?;
@@ -82,8 +86,16 @@ impl EditorRuntime {
         let clock_revision = doc.revision();
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
-        Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
+        Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), freezer: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
             render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None })
+    }
+
+    /// Freeze の cache の置き場: 書類の隣。未保存の書類は temp(保存した時に引っ越さない — Freeze し直す)。
+    fn cache_root_for(path: Option<&str>) -> Option<std::path::PathBuf> {
+        match path {
+            Some(path) => Engine::cache_root_for(std::path::Path::new(path)),
+            None => Some(std::env::temp_dir().join(format!("motolii-cache-{}", std::process::id()))),
+        }
     }
 
     fn time(&self) -> Result<RationalTime, String> {

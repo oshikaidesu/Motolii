@@ -43,17 +43,31 @@ fn scripts(text:&str) -> Vec<Script> {
     }).collect()
 }
 
+/// One label per grapheme: the script, and for a cased letter its case after
+/// a dash (`latin-upper`). A scope names either half; [`in_scope`] reads it.
 pub fn classifications(text:&str) -> Vec<&'static str> {
-    scripts(text).into_iter().map(|s|match s {
-        Script::Hiragana=>"hiragana",Script::Katakana=>"katakana",Script::Han=>"han",Script::Latin=>"latin",_=>"other",
+    text.graphemes(true).zip(scripts(text)).map(|(g,s)| {
+        let case=if g.chars().any(char::is_uppercase) {"-upper"} else if g.chars().any(char::is_lowercase) {"-lower"} else {""};
+        match (s,case) {
+            (Script::Hiragana,_)=>"hiragana",(Script::Katakana,_)=>"katakana",(Script::Han,_)=>"han",
+            (Script::Latin,"-upper")=>"latin-upper",(Script::Latin,"-lower")=>"latin-lower",(Script::Latin,_)=>"latin",
+            (_,"-upper")=>"other-upper",(_,"-lower")=>"other-lower",_=>"other",
+        }
     }).collect()
+}
+
+pub const SCOPES:&[&str]=&["all","selection","hiragana","katakana","han","latin","upper","lower"];
+
+pub fn in_scope(kind:&str, scope:&str) -> bool {
+    let (script,case)=kind.split_once('-').unwrap_or((kind,""));
+    script==scope || case==scope
 }
 
 pub fn selected(text:&str, start:usize, end:usize, scope:&str) -> Vec<bool> {
     let mut offset=0;
     text.graphemes(true).zip(classifications(text)).map(|(g,kind)| {
         let from=offset;offset+=g.encode_utf16().count();
-        match scope { "all"=>true,"selection"=>from<end && offset>start,_=>kind==scope }
+        match scope { "all"=>true,"selection"=>from<end && offset>start,_=>in_scope(kind,scope) }
     }).collect()
 }
 
@@ -63,7 +77,10 @@ mod tests {
     #[test]
     fn scripts_and_utf16_ranges_never_split_a_grapheme() {
         let text="か\u{3099}カ漢😀a";
-        assert_eq!(classifications(text),["hiragana","katakana","han","other","latin"]);
+        assert_eq!(classifications(text),["hiragana","katakana","han","other","latin-lower"]);
+        assert_eq!(classifications("Ab1Ж"),["latin-upper","latin-lower","other","other-upper"]);
+        assert_eq!(selected("Ab1Ж",0,0,"upper"),[true,false,false,true]);
+        assert_eq!(selected("Ab1Ж",0,0,"latin"),[true,true,false,false]);
         assert_eq!(selected(text,1,2,"selection"),[true,false,false,false,false]);
         assert_eq!(selected(text,5,6,"selection"),[false,false,false,true,false]);
         assert_eq!(classifications("スーパー。"),["katakana","katakana","katakana","katakana","other"]);

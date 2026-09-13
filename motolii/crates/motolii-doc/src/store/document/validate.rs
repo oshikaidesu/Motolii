@@ -118,6 +118,24 @@ pub(super) fn check_not_frozen(view: &StoreView, layer: LayerId) -> Result<(), S
     Ok(())
 }
 
+/// 凍った層の**中**(素材・効果・欄・キーフレーム・マスク・形・文字)は触れない。配置・不透明度・重ね順・時間は
+/// 触れる(docs/freeze-and-flatten.md §2-2, §2-3)。群の部分木は従来通り丸ごと。
+pub(super) fn check_not_frozen_inside(view: &StoreView, layer: LayerId, what: &str) -> Result<(), StoreError> {
+    check_not_frozen(view, layer)?;
+    if view.attrs(layer)?.unwrap_or_default().frozen {
+        return Err(StoreError::Property(format!(
+            "layer {} is frozen — unfreeze to edit {what}",
+            layer.0
+        )));
+    }
+    Ok(())
+}
+
+/// 欄の名前が「中」の物か(効果の欄・マスク)。それ以外(位置・不透明度など)は凍っていても回せる。
+pub(super) fn property_is_inside(name: &str) -> bool {
+    name.starts_with(crate::doc::store::property::EFFECT_PREFIX) || name.starts_with(crate::doc::store::property::MASK_PREFIX)
+}
+
 pub(super) fn is_frozen_or_within_frozen(view: &StoreView, candidate: LayerId) -> Result<bool, StoreError> {
     let self_frozen = view
         .meta(candidate)?
@@ -138,16 +156,7 @@ pub(super) fn freeze_attrs_batch(
             group.0
         )));
     }
-    let is_group = view
-        .meta(group)?
-        .map(|meta| meta.source == LayerSource::Group)
-        .unwrap_or(false);
-    if !is_group {
-        return Err(StoreError::Property(format!(
-            "layer {} は LayerSource::Group ではないので freeze/unfreeze できない",
-            group.0
-        )));
-    }
+    // Freeze は層にも群にも(DAW のトラック単位。docs/freeze-and-flatten.md、2026-09-13)。
     let mut attrs = view.attrs(group)?.unwrap_or_default();
     attrs.frozen = frozen;
     let json = serde_json::to_string(&attrs)?;

@@ -121,6 +121,8 @@ impl EditorRuntime{
         // 棚(vism/)が変わっていれば読み直す。変わっていなければ lock 1 回で戻る。
         // 見張りの起こしは reloadEffects で来るが、他の操作の途中で変わっても次の請求で拾う。
         crate::render::engine::refresh_effect_catalog();
+        // 焼いている間は disk にコマが増える: 「無い」の記憶を捨てて見に行く。
+        if self.freezer.running().is_some(){self.engine.refresh_frozen();}
         if op=="status"||op=="exportStatus"||op=="reloadEffects"{return Ok(())}
         if op=="stageView" {
             self.cancel_preview();
@@ -234,7 +236,7 @@ impl EditorRuntime{
             "cancelExport"=>self.exporter.cancel(),
             "save"=>{let path=string(&j,"path")?;
                 self.doc.save(path).map_err(e)?;
-                if j["copy"].as_bool()!=Some(true){self.path=Some(path.into());self.saved_signature=snapshot::authored_signature(&self.doc)?;}
+                if j["copy"].as_bool()!=Some(true){self.path=Some(path.into());self.engine.set_cache_root(Self::cache_root_for(Some(path)));self.saved_signature=snapshot::authored_signature(&self.doc)?;}
             }
             "new"=>{if self.clock.playing(){self.clock.toggle();}self.doc=blank_project();self.clock=editor::playback::Clock::from_document(&self.doc,60.0);self.path=None;self.pick(vec![]);self.selected_keys.clear();self.frame=0;self.saved_signature=snapshot::authored_signature(&self.doc)?;self.color_target=None;}
             "undo"=>{self.doc.undo();self.selected_keys.clear();}
@@ -252,7 +254,23 @@ impl EditorRuntime{
             "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;self.picked_color=Some([px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0));self.pick_serial+=1;}
             "seek"=>{self.frame=integer(&j,"frame")?.max(0);self.clock.seek_frame(self.frame);}
             "anchor"=>{let id=layer(&j)?;let b=self.bounds(id).ok_or("Bounds unavailable until rendered")?;let min:[f64;3]=serde_json::from_value(b["localMin"].clone()).map_err(e)?;let max:[f64;3]=serde_json::from_value(b["localMax"].clone()).map_err(e)?;let point=[min[0]+(max[0]-min[0])*num(&j,"xFraction")?,min[1]+(max[1]-min[1])*num(&j,"yFraction")?];let intents=editor::functions::placement::anchor_point_plan(&self.doc,id,self.time()?,point).map_err(e)?;self.apply(intents)?;}
-            "freeze"=>{let id=layer(&j)?;self.apply([if j["enabled"].as_bool().ok_or("Missing enabled")?{Intent::Freeze{group:id}}else{Intent::Unfreeze{group:id}}])?;}
+            "freeze"=>{
+                let id=layer(&j)?;
+                if j["enabled"].as_bool().ok_or("Missing enabled")? {
+                    // 法 docs/freeze-and-flatten.md §2: 旗を立て、入点〜出点を裏で焼く。焼けたコマから cache の絵になる。
+                    let meta=self.doc.view().meta(id).map_err(e)?.ok_or("Layer has no timing")?;
+                    self.apply([Intent::Freeze{group:id}])?;
+                    let root=Self::cache_root_for(self.path.as_deref());
+                    if let Err(error)=self.freezer.start(&self.doc,id,root,meta.timing.start,meta.timing.start+meta.timing.duration){
+                        let _=self.apply([Intent::Unfreeze{group:id}]);
+                        return Err(error);
+                    }
+                } else {
+                    if self.freezer.running()==Some(id){self.freezer.cancel();}
+                    self.apply([Intent::Unfreeze{group:id}])?;
+                    self.engine.forget_frozen(id);
+                }
+            }
             "setGradient"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;let edit=editor::gradient::edit(&self.doc,&slot,&j)?;if j["preview"]==true{self.set_preview(vec![edit])?}else{self.cancel_preview();self.apply([edit])?;}self.color_target=None;}
             "setFillMode"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if !slot.is_shape_fill(){return Err("Select a shape fill".into())}editor::color::set_shape_gradient(&mut self.doc,&slot,j["gradient"].as_bool().ok_or("Missing gradient")?).map_err(e)?;}
             other=>return Err(format!("Unsupported operation: {other}")),
@@ -415,6 +433,45 @@ mod hot_reload_probe {
         assert!(await_wake(&woke));
         rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
         assert!(errors(&rt).iter().any(|e| e.contains("zz_hot_probe") && e.contains("source removed")), "{:?}", errors(&rt));
+    }
+}
+
+/// Freeze の口: 旗が立ち、裏で入点〜出点が焼かれ、status に進みが出る。Unfreeze で cache が消える。
+#[cfg(test)]
+mod freeze_op {
+    use crate::doc::store::*;
+    use serde_json::json;
+
+    #[test]
+    fn freeze_bakes_the_layer_in_the_background_and_unfreeze_forgets() {
+        let dir = std::env::temp_dir().join(format!("motolii-freeze-op-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let png = dir.join("dot.png");
+        image::save_buffer(&png, &vec![200u8; 32 * 32 * 4], 32, 32, image::ColorType::Rgba8).unwrap();
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        let layer = LayerId(1);
+        rt.doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: png.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(3, None, 11) } },
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] },
+        ]).unwrap();
+        rt.request(json!({"op":"freeze","layer":1,"enabled":true})).unwrap();
+        assert!(rt.doc.view().attrs(layer).unwrap().unwrap().frozen, "旗が立つ");
+        let started = std::time::Instant::now();
+        loop {
+            let status = rt.freezer.status();
+            if status["phase"] != "running" { assert_eq!(status["phase"], "complete", "{status}"); break; }
+            assert!(started.elapsed() < std::time::Duration::from_secs(60), "焼き終わらない: {status}");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert_eq!(rt.freezer.status()["total"], 8);
+        assert_eq!(rt.engine.frozen_frames_on_disk(layer), 8, "入点 3 から 8 コマ");
+        // 凍っている間、効果の欄は断られる(理由付き)。
+        let refused = rt.request(json!({"op":"setProperty","layer":1,"property":"effect.0.param.radius","value":3.0}));
+        assert!(refused.is_err() || rt.error.is_some());
+        rt.request(json!({"op":"freeze","layer":1,"enabled":false})).unwrap();
+        assert!(!rt.doc.view().attrs(layer).unwrap().unwrap().frozen);
+        assert_eq!(rt.engine.frozen_frames_on_disk(layer), 0, "Unfreeze で cache が消える");
     }
 }
 

@@ -225,6 +225,86 @@ impl Engine {
         });
     }
 
+    /// 凍った層の絵(cache)があれば、その絵で層を組む。素材は復号せず、効果の列も走らない。
+    /// 場・面の hook(頂点段)と配置・不透明度・blend・マットは生きたまま(法 §2-2)。
+    fn frozen_layer(&mut self, view: &StoreView<'_>, layer: &ResolvedLayer, t: RationalTime, projection_camera: ResolvedCamera, blend_mode: CompositeBlendMode) -> Result<Option<(Layer, u32)>, EngineError> {
+        if self.freezing == Some(layer.id) || layer.copy != 0 || layer.ghost { return Ok(None); }
+        if !view.attrs(layer.id).ok().flatten().is_some_and(|a| a.frozen) { return Ok(None); }
+        let Some(composition) = view.composition().ok().flatten() else { return Ok(None) };
+        let Ok(comp_frame) = t.try_to_frame_round(composition.fps) else { return Ok(None) };
+        let start = view.meta(layer.id).ok().flatten().map_or(0, |m| m.timing.start);
+        let layer_frame = comp_frame - start;
+        let Self { frozen, compositor, .. } = self;
+        let Some(picture) = frozen.load(layer.id, layer_frame, &mut |bytes, w, h| compositor.upload_rgba16f("motolii-frozen", bytes, w, h).ok()) else { return Ok(None) };
+        let outline = self.outline_id(layer.id);
+        let shading = self.compositor.surface_shading_for(&layer.effects, false).map_err(EngineError::Store)?;
+        Ok(Some((Layer {
+            content: LayerContent::LinearTexture(picture.texture),
+            size: picture.natural,
+            placement: layer.placement,
+            projection: layer.projection,
+            projection_camera,
+            blend_mode,
+            shading,
+            displace: translate_point_displace(&layer.effects),
+            clip: translate_clip(&layer.effects),
+            blocks_light: layer.blocks_light,
+            outline,
+            frame: picture.frame,
+        }, picture.padding)))
+    }
+
+    /// Freeze の 1 コマを焼く: 層を本物で組み、効果の列の出口(乗算済み線形)を読み戻して cache へ。
+    /// 順に呼ぶ(feedback は 1 歩ずつ進む)。絵にならない層(網・点群)は false。
+    pub fn freeze_bake_frame(&mut self, view: &StoreView<'_>, layer_id: LayerId, comp_frame: i64) -> Result<bool, EngineError> {
+        let composition = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?;
+        let comp = composition.spec();
+        let t = RationalTime::try_from_frame(comp_frame, composition.fps).map_err(|e| EngineError::Time(e.to_string()))?;
+        let resolved = view.resolved_layers(t).map_err(|e| EngineError::Store(e.to_string()))?;
+        let Some(target) = resolved.iter().find(|l| l.id == layer_id && l.copy == 0 && !l.ghost).cloned() else { return Ok(false) };
+        let texts = collect_text_documents(view, std::slice::from_ref(&target), t)?;
+        let shapes = collect_shape_documents(view, std::slice::from_ref(&target), t)?;
+        let camera = self.resolve_camera_in(view, &resolved, t)?;
+        self.freezing = Some(layer_id);
+        let built = self.layers_from_resolved(view, comp, camera, camera, t, std::slice::from_ref(&target), &texts, &shapes);
+        self.freezing = None;
+        let Some(lwp) = built?.into_iter().next() else { return Ok(false) };
+        let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(&lwp))?;
+        let Some(texture) = textures.first().and_then(|c| c.texture()).cloned() else { return Ok(false) };
+        let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| EngineError::Store(e.to_string()))?.texture.clone();
+        // 効果の列の出口は乗算済み線形の Rgba16Float。列が空の層は素材のまま(非乗算 sRGB 等)なので同じ空間へ写す。
+        let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || raw.format().is_srgb();
+        let (half, owned) = if raw.format() == wgpu::TextureFormat::Rgba16Float {
+            (raw, None)
+        } else {
+            let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-freeze-encode") });
+            let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !linear, linear);
+            self.compositor.pending.push(encoder.finish());
+            (converted.clone(), Some(converted))
+        };
+        let bytes = self.compositor.read_texture_bytes(&half)?;
+        for (w, h, f, tx) in checked_out { self.compositor.effect_scratch.release(w, h, f, tx); }
+        if let Some(owned) = owned { self.compositor.effect_scratch.release(owned.width(), owned.height(), owned.format(), owned); }
+        let [w, h] = [half.width(), half.height()];
+        let uploaded = self.compositor.upload_rgba16f("motolii-frozen", bytes.clone(), w, h)?;
+        let start = view.meta(layer_id).map_err(|e| EngineError::Store(e.to_string()))?.map_or(0, |m| m.timing.start);
+        let picture = super::frozen::FrozenFrame { texture: uploaded, natural: lwp.layer.size, padding: paddings[0], frame: lwp.layer.frame };
+        self.frozen.remember(layer_id, comp_frame - start, picture, Some(&bytes)).map_err(|e| EngineError::Store(format!("Freeze の cache を書けない: {e}")))?;
+        Ok(true)
+    }
+
+    /// Freeze の cache の置き場(書類の隣)。None なら GPU の中だけ。
+    pub fn set_cache_root(&mut self, root: Option<std::path::PathBuf>) { self.frozen.root = root; }
+    /// 書類の path から cache の置き場(`<name>.motolii-cache`)。
+    pub fn cache_root_for(path: &std::path::Path) -> Option<std::path::PathBuf> { super::frozen::FrozenStore::root_for_document(Some(path)) }
+    /// 焼いている最中は disk に新しいコマが増える: 「無い」と覚えた物を忘れて、また見に行く。
+    pub fn refresh_frozen(&mut self) { self.frozen.forget_missing(); }
+    /// Unfreeze: 層の cache を捨てる。
+    pub fn forget_frozen(&mut self, layer: LayerId) { self.frozen.forget(layer); }
+    /// 凍った層の、disk にあるコマの数。
+    pub fn frozen_frames_on_disk(&self, layer: LayerId) -> usize { self.frozen.frames_on_disk(layer) }
+    pub fn frozen_frames_resident(&self, layer: LayerId) -> usize { self.frozen.resident_count(layer) }
+
     /// 今描いている窓の寸法(画面の道の feedback の鍵)。読み戻しの道は出力寸法。
     fn window_size(&self, comp: CompSpec) -> [u32; 2] {
         self.feedback_window.map_or([comp.width, comp.height], |w| [w.width, w.height])
@@ -461,6 +541,7 @@ impl Engine {
             }
 
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
+            let mut frozen_padding = 0u32;
             let (built, passes) = if let Some(group) = layer.plate {
                 // Whole の効果を積んだグループ: 同じ板の子孫を全部 1 枚に焼いてから、板の効果を掛ける。
                 // 板の不透明度と混ぜ方はグループの物。効果はどちらの道でも「1 枚に掛かる」だけ(裁定 2026-09-11)。
@@ -476,7 +557,7 @@ impl Engine {
                         let mut passes = translate_effect_passes(&member.effects);
                         let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
                         self.stamp_feedback(&mut passes, member.id, member.copy, 0, screen);
-                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new() });
+                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
                     }
                 }
                 if copies.is_empty() {
@@ -491,6 +572,11 @@ impl Engine {
                 self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
             } else if layer.after_effects.is_empty() {
+              // 凍った層は cache の絵で差し替え、素材の復号も効果の列も走らない(docs/freeze-and-flatten.md §2)。
+              if let Some((built, padding)) = self.frozen_layer(view, layer, t, projection_camera, blend_mode)? {
+                frozen_padding = padding;
+                (built, Vec::new())
+              } else {
                 let Some(built) = self.build_layer_shared(&mut previous_build, layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? else {
                     continue;
                 };
@@ -502,6 +588,7 @@ impl Engine {
                     continue;
                 }
                 (built, passes)
+              }
             } else {
                 // 配置効果の下に効果が積まれた層: 同じ層の配置を全部 1 枚に合わせてから残りを掛ける。
                 let end = index + resolved[index..].iter().take_while(|copy| copy.id == layer.id).count();
@@ -512,7 +599,7 @@ impl Engine {
                         let mut passes = translate_effect_passes(&copy.effects);
                         let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
                         self.stamp_feedback(&mut passes, copy.id, copy.copy, 0, screen);
-                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new() });
+                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
                     }
                 }
                 if copies.is_empty() {
@@ -549,7 +636,7 @@ impl Engine {
                 let first = indices[0];
                 let (blend, placement) = (layers[first].layer.blend_mode, layers[first].layer.placement);
                 let union = self.bake_isolated_layers(comp, camera, indices.iter().map(|&i| layers[i].clone()).collect(), blend, placement)?;
-                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new(), pass_sources: Vec::new() }, &built, &passes)? {
+                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new(), pass_sources: Vec::new(), padding: 0 }, &built, &passes)? {
                     Some(clipped) => {
                         layers[first] = clipped;
                         removed.extend(indices.into_iter().skip(1));
@@ -603,6 +690,7 @@ impl Engine {
                 pass_sources,
                 layer: final_layer,
                 passes,
+                padding: frozen_padding,
             });
         }
 
@@ -799,6 +887,7 @@ impl Engine {
         baked_placement.opacity = 1.0;
         let source = LayerWithPasses {
             pass_sources: Vec::new(),
+            padding: 0,
             layer: Layer {
                 placement: baked_placement,
                 ..layer.clone()
@@ -861,7 +950,7 @@ impl Engine {
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
         let (blend, placement) = (layer.blend_mode, layer.placement);
-        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new() }], blend, placement)
+        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0 }], blend, placement)
     }
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。
@@ -1994,5 +2083,80 @@ mod composite_at_another_time {
         let mut fresh = Engine::new().unwrap();
         for f in 0..12 { fresh.render_frame(&delayed.view(), at(f)).unwrap(); }
         assert_eq!(fresh.render_frame(&delayed.view(), at(12)).unwrap(), seen);
+    }
+}
+
+/// Freeze(docs/freeze-and-flatten.md §2-6): 凍っても絵は変わらない、飛んでも辿っても同じ、Unfreeze で戻る。
+#[cfg(test)]
+mod freeze_keeps_the_picture {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+    fn fps() -> Fps { Fps::try_new(10, 1).unwrap() }
+    fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
+    fn clip(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let out = dir.join("ramp.mp4");
+        let status = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=64x64:d=3:r=10", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-y"])
+            .arg(&out).status().ok()?;
+        status.success().then_some(out)
+    }
+    fn document(path: &std::path::Path) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(2, None, 26) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+            // feedback(残像)+ 通常の pass: 凍れば両方が cache の絵になる。
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.rgb_trail".into() }, EffectInstance { id: EffectId(1), plugin_id: "motolii.gain".into() }] },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(1), "gain").unwrap(), value: Value::F64(1.5) },
+        ]).unwrap();
+        doc
+    }
+    fn close(a: &[u8], b: &[u8]) -> usize {
+        a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 2)).count()
+    }
+
+    #[test]
+    fn a_frozen_layer_draws_the_same_picture_from_its_cache_and_thaws_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let mut doc = document(&path);
+        let mut engine = Engine::new().unwrap();
+        // 生の絵(順に辿る: feedback の履歴込み)。
+        let mut live = Vec::new();
+        for f in 0..16 { live.push(engine.render_frame(&doc.view(), at(f)).unwrap()); }
+        // 焼く(cache は書類の隣に見立てた dir)。
+        let root = dir.path().join("cache");
+        engine.set_cache_root(Some(root.clone()));
+        doc.apply(Intent::Freeze { group: LayerId(1) }).unwrap();
+        let mut baked = 0;
+        for f in 0..16 { if engine.freeze_bake_frame(&doc.view(), LayerId(1), f).unwrap() { baked += 1; } }
+        assert_eq!(baked, 14, "入点 2 から 16 コマ目の手前まで、層が居るコマだけ焼ける");
+        assert_eq!(engine.frozen_frames_on_disk(LayerId(1)), 14);
+        // 凍っても絵は同じ(half float の丸めだけ)。飛んで来ても辿り直しが要らない。
+        for f in [3, 9, 15] {
+            let frozen = engine.render_frame(&doc.view(), at(f)).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            assert!(close(&frozen, &live[f as usize]) < 30, "frame {f}: 凍った絵が生の絵と違う: {} px", close(&frozen, &live[f as usize]));
+        }
+        // 凍っている間、中は触れない。
+        assert!(doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(1), "gain").unwrap(), value: Value::F64(3.0) }).is_err(), "凍った層の欄は拒む");
+        // 別の engine(再起動)でも disk の cache から同じ絵。
+        let mut fresh = Engine::new().unwrap();
+        fresh.set_cache_root(Some(root.clone()));
+        let again = fresh.render_frame(&doc.view(), at(9)).unwrap();
+        assert!(close(&again, &live[9]) < 30, "再起動後の cache の絵が違う: {} px", close(&again, &live[9]));
+        assert_eq!(fresh.frozen_frames_resident(LayerId(1)), 1);
+        // Unfreeze: cache を捨て、生に戻る。書類の欄も触れる。
+        doc.apply(Intent::Unfreeze { group: LayerId(1) }).unwrap();
+        engine.forget_frozen(LayerId(1));
+        assert_eq!(engine.frozen_frames_on_disk(LayerId(1)), 0);
+        let thawed = engine.render_frame(&doc.view(), at(9)).unwrap();
+        assert!(close(&thawed, &live[9]) < 30, "戻した絵が生の絵と違う: {} px", close(&thawed, &live[9]));
+        doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(1), "gain").unwrap(), value: Value::F64(3.0) }).unwrap();
     }
 }

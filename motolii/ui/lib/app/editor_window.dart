@@ -16,6 +16,21 @@ import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
 
+/// Freeze の裏仕事の進み。走っていなければ null。失敗はその理由。
+String? freezeNotice(Map<String, dynamic> status) {
+  final job = status['freeze'];
+  if (job is! Map) return null;
+  final phase = '${job['phase']}';
+  if (phase != 'running' && phase != 'cancelling' && phase != 'failed') return null;
+  final layers = (status['layers'] as List? ?? const []).whereType<Map>();
+  final name = layers
+      .where((l) => l['id'] == job['layer'])
+      .map((l) => '${l['name']}')
+      .firstOrNull ?? 'layer';
+  if (phase == 'failed') return 'Freeze failed: ${job['error']}';
+  return 'Freezing $name ${job['done']}/${job['total']}';
+}
+
 /// 棚(vism/)で断った効果の理由。空なら ''。status の `catalogErrors` をそのまま 1 行に。
 String effectsNotice(Map<String, dynamic> status) {
   final errors = (status['catalogErrors'] as List? ?? const [])
@@ -477,7 +492,7 @@ class _EditorWindowState extends State<EditorWindow> {
                           color: EditorTheme.app,
                           child: Text(
                             // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
-                            message ?? effectsNotice(doc),
+                            message ?? freezeNotice(doc) ?? effectsNotice(doc),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

@@ -1230,12 +1230,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ),
           _gap(),
         ],
-        if (layer['kind'] == 'Group') ...[
+        if (layer['kind'] != 'Camera') ...[
           _slot(
             EditorSwitch(
               on: layer['frozen'] == true,
               glyph: Icons.ac_unit,
-              label: 'Freeze: the group keeps its picture as it is',
+              label: 'Freeze: bake the picture; source and effects stay as they are until unfrozen',
               onChanged: panelCan(c, 'freeze')
                   ? (on) => c.command('freeze', {
                       'layer': layer['id'],
@@ -1485,7 +1485,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: EditorMetrics.s4),
-                _Fold(
+                EditorFold(
                   open: open,
                   onTap: () => _advancedOpen.value = open
                       ? ({..._advancedOpen.value}..remove(key))
@@ -1967,20 +1967,41 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           ),
                       ],
                     ),
-                    if (!_multiple)
-                      SliverReorderableList(
-                        itemCount: effects.length,
-                        itemBuilder: (context, i) => _effect(
-                          layer,
-                          effects[i],
-                          index: i,
-                          count: effects.length,
+                    // 凍った層: 効果は焼かれている。灰色にして触れない(DAW の凍った device)。
+                    if (!_multiple && layer['frozen'] == true && effects.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: EditorMetrics.s6,
+                            vertical: EditorMetrics.s4,
+                          ),
+                          child: Text(
+                            'Frozen — effects are baked. Unfreeze to edit.',
+                            style: TextStyle(color: EditorTheme.muted),
+                          ),
                         ),
-                        onReorderItem: (from, to) => c.command('moveEffect', {
-                          'layer': layer['id'],
-                          'id': effects[from]['id'],
-                          'to': to,
-                        }),
+                      ),
+                    if (!_multiple)
+                      SliverOpacity(
+                        opacity: layer['frozen'] == true ? 0.45 : 1.0,
+                        sliver: SliverIgnorePointer(
+                          ignoring: layer['frozen'] == true,
+                          sliver: SliverReorderableList(
+                            itemCount: effects.length,
+                            itemBuilder: (context, i) => _effect(
+                              layer,
+                              effects[i],
+                              index: i,
+                              count: effects.length,
+                            ),
+                            onReorderItem: (from, to) =>
+                                c.command('moveEffect', {
+                                  'layer': layer['id'],
+                                  'id': effects[from]['id'],
+                                  'to': to,
+                                }),
+                          ),
+                        ),
                       ),
                     const SliverPadding(
                       padding: EdgeInsets.only(bottom: EditorMetrics.s6),
@@ -2053,39 +2074,6 @@ class _Cell {
 }
 
 /// The fold of the seldom-used controls: a chevron and the word, one line.
-class _Fold extends StatelessWidget {
-  const _Fold({required this.open, required this.onTap});
-  final bool open;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => EditorTooltip(
-    message: open ? 'Hide the advanced controls' : 'Show the advanced controls',
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Row(
-        children: [
-          Icon(
-            open ? Icons.expand_more : Icons.chevron_right,
-            size: EditorMetrics.s14,
-            color: EditorTheme.muted,
-          ),
-          const SizedBox(width: EditorMetrics.s2),
-          const Text(
-            'Advanced',
-            style: TextStyle(
-              fontSize: EditorMetrics.dense,
-              color: EditorTheme.muted,
-            ),
-          ),
-          const SizedBox(width: EditorMetrics.s6),
-          const Expanded(child: Divider(height: 1)),
-        ],
-      ),
-    ),
-  );
-}
-
 List<double>? _parseHex(String input) {
   var text = input.trim().replaceFirst(RegExp(r'^#+'), '');
   if (text.length == 3) text = text.split('').map((c) => '$c$c').join();
