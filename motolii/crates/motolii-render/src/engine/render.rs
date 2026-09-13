@@ -129,7 +129,10 @@ impl Engine {
         use std::hash::{Hash, Hasher};
         (offset_key_of(at, view), source as u8).hash(&mut hasher);
         self.video_stream_namespace = hasher.finish() | 1;
+        // feedback の状態も分ける: t′ の列は t′ の列で 1 歩ずつ進む(offset が一定なら順送り)。
+        self.feedback_namespace = self.video_stream_namespace;
         let built = self.build_layers(view, comp, camera, camera, at, &picked, texts, shapes);
+        self.feedback_namespace = 0;
         self.video_stream_namespace = 0;
         self.feedback_replaying = was_nested;
         self.drawn_layers = drawn;
@@ -228,8 +231,11 @@ impl Engine {
 
     /// feedback を持つ pass に状態の鍵を刻み、この frame で見た鍵として覚える(辿り直しの要否を後で見る)。
     fn stamp_feedback(&mut self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>) {
-        super::translate::stamp_feedback(passes, layer, copy, chain, screen);
-        self.feedback_keys_seen.extend(passes.iter().filter_map(|p| p.feedback));
+        super::translate::stamp_feedback(passes, layer, copy, chain, screen, self.feedback_namespace);
+        // 本番の鍵だけ辿り直しの対象(別の時刻の列は自分の列で進む)。
+        if self.feedback_namespace == 0 {
+            self.feedback_keys_seen.extend(passes.iter().filter_map(|p| p.feedback));
+        }
     }
 
     /// 層の組み立て + feedback の辿り直し。
@@ -287,7 +293,8 @@ impl Engine {
         let Ok(now) = t.try_to_frame_round(fps) else { return Ok(false) };
         let mut start: Option<i64> = None;
         let mut ids: HashSet<LayerId> = HashSet::new();
-        let mut whole_frames = false;
+        // 別の時刻の合成がある frame は丸ごと辿り直す: t′ の列(名前空間付きの状態)も同じ歩で進める。
+        let mut whole_frames = self.feedback_saw_composites;
         for &key in seen {
             let ok = match self.compositor.feedback_frame(key) {
                 // 板の道はこの frame の組み立てで既に描かれている: 初期条件からでなければ正しい。
@@ -410,6 +417,7 @@ impl Engine {
             }
         }
         if !composites.is_empty() { self.stamp_clock(view, t); }
+        if self.feedback_namespace == 0 && !self.feedback_replaying { self.feedback_saw_composites = !composites.is_empty(); }
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
         // 層 id → layers の添字(通り抜けの配置なら複製の数だけ)。クリップの下地探しに使う。
         let mut contributions: HashMap<LayerId, Vec<usize>> = HashMap::new();
@@ -476,7 +484,7 @@ impl Engine {
                 let mut plate = self.bake_isolated_layers(comp, camera, copies, plate_blend, layer.placement)?;
                 plate.placement.opacity = owner.map_or(1.0, |g| g.placement.opacity);
                 let mut after = super::translate::translate_plate_passes(&layer.after_effects);
-                let screen = after.iter().any(|p| p.reads_backdrop).then(|| self.window_size(comp));
+                let screen = after.iter().any(|p| p.reads_backdrop || p.reads_composite()).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
             } else if layer.after_effects.is_empty() {
@@ -484,7 +492,7 @@ impl Engine {
                     continue;
                 };
                 let mut passes = translate_effect_passes(&layer.effects);
-                let screen = (built.content.texture().is_none() || passes.iter().any(|p| p.reads_backdrop)).then(|| self.window_size(comp));
+                let screen = (built.content.texture().is_none() || passes.iter().any(|p| p.reads_backdrop || p.reads_composite())).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut passes, layer.id, layer.copy, 0, screen);
                 // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
                 if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
@@ -509,7 +517,7 @@ impl Engine {
                 }
                 let plate = self.bake_isolated_layers(comp, camera, copies, blend_mode, layer.placement)?;
                 let mut after = super::translate::translate_plate_passes(&layer.after_effects);
-                let screen = after.iter().any(|p| p.reads_backdrop).then(|| self.window_size(comp));
+                let screen = after.iter().any(|p| p.reads_backdrop || p.reads_composite()).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
             };

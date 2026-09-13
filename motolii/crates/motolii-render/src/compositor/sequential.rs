@@ -308,7 +308,7 @@ impl Compositor {
                         })
                     });
                     let backdrop = background.as_ref().map(|(backing, _)| backing.clone());
-                    self.apply_screen_passes(encoder, run_owned, only.screen_passes, backdrop, &mut spare)?
+                    self.apply_screen_passes(encoder, run_owned, only.screen_passes, only.screen_sources, backdrop, &mut spare)?
                 }
                 _ => run_owned,
             };
@@ -338,6 +338,7 @@ impl Compositor {
         encoder: &mut wgpu::CommandEncoder,
         canvas: AccumulatorBacking,
         passes: &[EffectPass],
+        sources: &[Vec<GpuTexture2D>],
         backdrop: Option<AccumulatorBacking>,
         spare: &mut Vec<AccumulatorBacking>,
     ) -> Result<AccumulatorBacking, CompositorError> {
@@ -352,9 +353,10 @@ impl Compositor {
                 None => self.ctx.texture_manager_2d.zeroed_texture_float().texture.clone(),
             });
         }
-        let others: Vec<Vec<wgpu::Texture>> = passes.iter().map(|p| match (&below, p.reads_backdrop) {
+        // 2 枚目: 下の合成(今)か、別の時刻の合成(host が先に描いた写し)。
+        let others: Vec<Vec<wgpu::Texture>> = passes.iter().enumerate().map(|(i, p)| match (&below, p.reads_backdrop) {
             (Some(b), true) => vec![b.clone()],
-            _ => Vec::new(),
+            _ => sources.get(i).map(|row| row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()).unwrap_or_default(),
         }).collect();
         // 窓は線形。効果列は層の絵と同じ作法(Pass は sRGB 符号化で受ける)で流し、終わりで線形へ戻す。
         let (mut current, linear, premultiplied, mut is_scratch) = self.record_pass_chain(
@@ -807,6 +809,7 @@ impl Compositor {
                 blocks_light: layer.blocks_light,
                 outline: layer.outline,
                 screen_passes: &[],
+                screen_sources: &[],
             })
             .collect();
 

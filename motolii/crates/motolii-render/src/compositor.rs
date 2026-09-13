@@ -539,6 +539,8 @@ pub(crate) struct SequentialInput<'a> {
     /// 層の絵へ焼けなかった効果列(網・点群・環境には焼く先の絵が無い)。
     /// 画面へ描いた後で、その窓の絵に対して流す。AE のプリコンポと同じ位置。
     screen_passes: &'a [EffectPass],
+    /// 画面の道の効果ごとの 2 枚目以降(別の時刻の合成)。`screen_passes` と同じ並び。
+    screen_sources: &'a [Vec<GpuTexture2D>],
 }
 
 /// 選択の mask: channel A に層の番号。B は空けておく(hover を後で載せる口)。

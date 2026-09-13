@@ -47,10 +47,10 @@ pub(crate) fn translate_effect_passes(
 
 /// feedback を持つ pass に、状態の持ち主の鍵(層 × 複製 × 列 × 番)を刻む。
 /// 列 0 = 層の効果、列 1 = 板(配置・Whole)の後の効果。
-pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass], layer: crate::doc::store::LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>) {
+pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass], layer: crate::doc::store::LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>, namespace: u64) {
     for (index, pass) in passes.iter_mut().enumerate() {
         if pass.persistent {
-            pass.feedback = Some(crate::render::compositor::FeedbackKey { layer, copy, chain, index: index as u16, screen });
+            pass.feedback = Some(crate::render::compositor::FeedbackKey { layer, copy, chain, index: index as u16, screen, namespace });
         }
     }
 }

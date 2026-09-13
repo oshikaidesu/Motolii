@@ -119,6 +119,10 @@ pub struct Engine {
     feedback_window: Option<crate::render::compositor::Window>,
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
     video_stream_namespace: u64,
+    /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
+    feedback_namespace: u64,
+    /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
+    feedback_saw_composites: bool,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
@@ -181,6 +185,8 @@ impl Engine {
             feedback_replaying: false,
             feedback_window: None,
             video_stream_namespace: 0,
+            feedback_namespace: 0,
+            feedback_saw_composites: false,
             feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
@@ -241,6 +247,8 @@ impl Engine {
             feedback_replaying: false,
             feedback_window: None,
             video_stream_namespace: 0,
+            feedback_namespace: 0,
+            feedback_saw_composites: false,
             feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,

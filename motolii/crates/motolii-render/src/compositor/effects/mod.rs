@@ -135,6 +135,9 @@ pub struct FeedbackKey {
     pub index: u16,
     /// 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持つ: 窓の寸法。板の道は None。
     pub screen: Option<[u32; 2]>,
+    /// 0 = 本番。別の時刻の合成(SOURCE below / group / comp)を描く間は時刻のずれごとの値:
+    /// t′ の列は t′ の列で 1 歩ずつ進み、本番の状態を汚さない(辿り直しの対象外)。
+    pub namespace: u64,
 }
 
 /// 1 つの PERSISTENT target の 2 枚: 前のフレーム(読む)と今のフレーム(書く)。
@@ -211,6 +214,10 @@ impl EffectPass {
     }
     pub fn image_time_sources(&self) -> &[isf::TimeSource] {
         &self.image_time_sources
+    }
+    /// 合体後の別時刻(下の合成 / 群 / comp)を読む。下の合成と同じく画面の道で効く(画面の uv で揃う)。
+    pub fn reads_composite(&self) -> bool {
+        self.image_time_sources.iter().any(|s| *s != isf::TimeSource::Own)
     }
 
     /// 2 枚目以降の image が指す層。

@@ -100,7 +100,7 @@ impl Compositor {
                 continue;
             };
             // 下の合成を読む列は、合成の途中でしか値が決まらない。ここでは焼かず、run の窓で流す。
-            if lwp.passes.is_empty() || lwp.passes.iter().any(|p| p.reads_backdrop) {
+            if lwp.passes.is_empty() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) {
                 effective_textures.push(lwp.layer.content.clone());
                 effective_paddings.push(0);
                 effective_spills.push(None);
@@ -611,12 +611,13 @@ pub(crate) fn sequential_inputs<'a>(
                 outline: layer.outline,
                 // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
                 // 焼く先の絵が無い層(網・点群・環境)と、下の合成を読む効果列は、画面へ持って行く。
-                screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop) { lwp.passes.as_slice() } else { &[] },
+                screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) { lwp.passes.as_slice() } else { &[] },
+                screen_sources: lwp.pass_sources.as_slice(),
             };
             // 溢れ: 同じ置き場に、coverage 外の絵だけを宣言された混ぜ方で重ねる(層の Blend と独立)。
             let spilled = spill.as_ref().and_then(|(content, mode)| {
                 let texture = match content { LayerContent::Texture(t) => SequentialContent::Rect(t), LayerContent::LinearTexture(t) => SequentialContent::LinearRect(t), _ => return None };
-                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), blocks_light: false, outline: 0, screen_passes: &[], ..body })
+                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), blocks_light: false, outline: 0, screen_passes: &[], screen_sources: &[], ..body })
             });
             std::iter::once(body).chain(spilled)
         })
