@@ -1,71 +1,86 @@
 # Motolii
 
-**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effects の重さ、AviUtl からの移行、ソフトごとのエフェクト再発明、そして「映像制作における VST」について。問題設定と長期方針の要約は [VISION.ja.md](VISION.ja.md)。
+**After Effects の手つきで使える、rerun の上に建てた映像制作ソフト。** 文字・画像・動画・形・立体・点群を同じ舞台に置き、1 本の曲のタイムラインで MV を作るための物です。
 
-> **Everything you hand to After Effects becomes a flat rectangle.** A 3D scan, a particle field, a camera path, an audio waveform — the moment they enter the composition they are pressed into planar layers that no longer remember what they were.
+<p align="center">
+  <img src="docs/assets/rgb-trail.gif" alt="実写の上で動く 3 つの形に、群ごと RGB Trail(色ごとに減衰する残像)。上の長方形は 0.2 秒前の背景を映す" width="800">
+</p>
+<p align="center"><em>群に残像、その上に「0.2 秒前の背景」— どちらも shader 20 行で書いた効果。スクラブしても同じ絵になる</em></p>
 
-Motolii is built on two *what ifs* that were both nearly real.
+> **After Effects に渡した物は、全部、平らな長方形になる。** 3D スキャンも、点の群も、カメラの道も、音の波形も、合成に入った瞬間に「元が何だったか」を忘れた板に押し潰される。
 
-**What if a compositor never flattened meaning?** Motolii's stage is [Rerun](https://rerun.io) — a semantic data engine built for robotics and computer vision, where a point cloud stays a point cloud, a mesh stays a mesh, a path stays a path. Compositing on top of that store means you combine *meanings*, not rasters. The concrete promise, and it is kept today: **one effect, written once, lands on a video, a text outline, a mesh and a point cloud alike** — a turbulent displacement bends the silhouette of all of them, not a picture of them.
+Motolii は、どちらも起こりかけて起こらなかった **2 つの if** の上に建っています。
 
-**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That crossing never happened — the freedom grew on one island, while AE's depth stayed sealed behind a vendor SDK, and no bridge was built between them. Motolii is the bridge that was never built: the AE-family editing grammar your hands already know, with extension freedom as a constitution. Save a shader file and it is on the shelf; paste a Shadertoy and it runs; the host, not the plugin, owns time.
+**もし合成が、意味を潰さなかったら。** Motolii の舞台は [rerun](https://rerun.io) — ロボットとコンピュータビジョンのために作られた、点群が点群のまま、網が網のまま、線が線のままでいる器です。その上で合成するとは、絵ではなく**意味**を重ねること。だから Motolii では、**1 個の効果を 1 度書けば、動画にも、文字の輪郭にも、網にも、点群にも同じ札のまま乗ります**。乱流で歪ませれば、板の絵ではなくシルエットそのものが曲がる。
 
-Both futures were plausible. Neither happened. Motolii is being built so they can — and the whole build is public: every design decision is a numbered ruling in [the decision index](docs/decision-index.md), every law a document you can read before you write a line.
+**もし AviUtl の文化が、After Effects の文法と出会っていたら。** 20 年、無料でローカルな日本の編集ソフトが、作者の想像を越える形に拡張され、その隙間に MV/MAD の文化が育った。一方で AE の深さは vendor の SDK の奥に封じられ、2 つの島に橋は架からなかった。Motolii はその架からなかった橋です。手が覚えている AE 系の編集の文法と、拡張の自由を憲法として。shader を 1 file 保存すれば棚に並ぶ。Shadertoy を貼ればそのまま動く。時間は効果ではなく host が持つ。
 
-## What works today (September 2026)
+## できること
 
-The effect system is the part that is ahead of everything else, and it is the reason this project exists.
+**編集**: 層、キーフレームと ease、群（子それぞれ / 1 枚に焼いてから、の効果の掛け分け）、トラックマット、クリッピング、2D / 2.5D / 3D のカメラ、文字、形とパス効果（Trim・Pucker & Bloat・Twist・Wiggle・Repeater 等）、押し出しと縁の丸み、音と波形、mp4 書き出し。プレビューと書き出しは同じ 1 本の道を通り、同じ時刻は何度描いても同じ絵です。
 
-| You write | It runs on | How |
-|---|---|---|
-| A **field** (`fn field(in, params) -> offset`) | video and image boards, text and shape outlines, meshes, point clouds | boards become a grid, outlines become a mesh with anchored strokes, meshes and clouds move their vertices — [field model](docs/vism-field-model.md) |
-| A **pass** (an ISF fragment shader) | every material | boards are baked; meshes and clouds get it on the screen — [Shadertoy import](docs/vism-shadertoy-import.md) |
-| A **Shadertoy** (`mainImage`, or the exported JSON with Buffer A–D and Common) | as above, unchanged | GLSL → WGSL through naga; buffers become host-owned feedback |
-| A shader that reads **another time** — its own layer, what is composited beneath it, its group, the whole comp | as above | the host renders that time and hands the picture over; the effect remembers nothing |
-| A shader that **feeds back** (`PERSISTENT`) | as above | the host keeps the history and replays from checkpoints, so scrubbing lands on the same picture as playing |
+**効果**: 棚に並ぶ物はすべて `vism/` の中の file で、保存すれば窓に載ります。
 
-Everything in that table has a test that renders on a real GPU, and a bundled sample on the shelf. Save the file and the window reloads it; a broken save shows its reason and keeps the last good program.
+| 書く物 | 乗る先 |
+|---|---|
+| 場（頂点を動かす: `fn field(in, params) -> offset`） | 動画・画像の板、文字と形の輪郭、網、点群 |
+| pass（ISF の fragment shader） | どの素材にも |
+| Shadertoy（`mainImage`、または Export の JSON: Buffer A–D + Common） | そのまま |
+| 別の時刻を読む効果（自分の層、下の合成、自分の群、comp 全体） | host がその時刻の絵を描いて渡す |
+| 前のフレームを保つ効果（`PERSISTENT`: 残像・軌跡・蓄積・反応拡散） | host が履歴を持ち、飛んで来ても辿った物と同じ絵になる |
 
-The editing side is an AE-family editor in Flutter: layers, keyframes with easing, groups with Each/Whole effect scope, track mattes, clipping, cameras in 2D / 2.5D / 3D, text, shapes with path effects, audio, mp4 export through one deterministic path. It is a macOS development build, used daily by one person to make music videos. It is not yet a release.
+同梱: Blur、Glow、Bloom、Radiance、Gain、Gradient、Tri LED、Glass、Turbulent Displace、Clip、Background Copy、Background Delay、Set Matte、Time Difference、RGB Trail、Shadertoy から取り込んだ見本 6 本。
 
-## Why open source
+## まだのこと
 
-After Effects established much of the language of modern motion graphics. Cavalry and Autograph demonstrate strong alternatives. AviUtl demonstrates how far a lightweight, locally run tool and its extension community can carry a creative culture. Motolii learns from these and does not treat proprietary software as a failed choice. It is open because it favors a future that does not have to converge on one universal host: code, project semantics, tests and rulings stay inspectable and forkable, so different communities can continue the work, disagree with it, or build compatible hosts without asking one owner to define the future for everyone.
+- **macOS だけ**。配布物は無く、自分で build します（下）。他の機械で build するには、描画部（rerun の fork）の参照先をこの機械のパスから直す必要があります
+- フリーズフレーム、逆再生の速さ（feedback の効果を逆に辿ると 1 コマごとに辿り直しが走る）、描いたコマの cache
+- 効果の重さ: 1080p で残像 1 本なら順再生 60 fps 圏。スクラブで遠くへ飛ぶと 0.1〜2 秒の辿り直しが入る（`docs/plugin-resources.md` §6-5 に実測）
+- UI は毎週変わります。スクリーンショットは 1 週間で古くなる
 
-A [Vism](docs/vism-package-concept.md) — Motolii's effect package — is not a universal plugin format. It cannot be loaded into After Effects or AviUtl. Motolii is its first host; the portability target is compatible hosts and forks that adopt the public contract.
+## 効果を書く人へ
 
-## Read before you write
+`motolii/crates/motolii-render/vism/` に file を置く。3 通り:
 
-- [Concept](docs/concept.md) — what Motolii is and is not
-- [Plugin resources and the laws of time](docs/plugin-resources.md) — why an effect never remembers a frame, and how the host does it instead
-- [The field model](docs/vism-field-model.md) — one effect on every material
-- [Shadertoy import](docs/vism-shadertoy-import.md) — paste, orientation, time references, feedback, multi-tab
-- [AE pain points](docs/ae-pain-points.md) — the evidence behind the design
-- [Contributing](CONTRIBUTING.md) · [Agent entry](motolii/AGENTS.md) · [Stage 5 workspace](docs/stage5/README.md)
-
-## Build and run — macOS
-
-Install Rust, Flutter with macOS desktop support, and Xcode's macOS build tools. Put Flutter on `PATH` or set `FLUTTER_BIN`. Media operations use FFmpeg (`.cargo/config.toml` names its location; adjust it to your machine). The renderer is a pinned fork of Rerun; today the pin points at a local clone, which is the first thing to fix before anyone else can build this.
-
-```sh
-scripts/motolii-ui.sh check
-scripts/motolii-ui.sh native       # first run, or after Rust changes
-scripts/motolii-ui.sh dev          # start an empty project
+```glsl
+/*{ "ID": "me.tint", "LABEL": "Tint", "STAGE": "pass",
+    "INPUTS": [ { "NAME": "inputImage", "TYPE": "image" },
+                { "NAME": "amount", "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 1.0 } ] }*/
+void main() { vec4 c = IMG_THIS_PIXEL(inputImage); gl_FragColor = mix(c, c.bgra, amount); }
 ```
 
-Open an existing project with File → Open, or `scripts/motolii-ui.sh dev /absolute/path/project.rrd`. Keep the dev process running: `r` or `scripts/motolii-ui.sh reload` for Dart changes; Rust changes need `native` and an app restart. Effects in `motolii/crates/motolii-render/vism/` reload on save.
+- **ISF**（`.fs`）: 上の形。欄は manifest に書けば Inspector に出る
+- **Shadertoy**（`.frag`）: `mainImage` をそのまま。`iChannel0` = 自分の層、`iTime` = comp の時刻。Export の JSON（`.json`）なら Buffer A–D と Common も
+- **WGSL**（`.wgsl`）: 場（`STAGE: field`）・面（`surface`）・pass
 
-Tests: `cargo test -p motolii-render --lib -- --test-threads=2` (GPU tests are flaky when fully parallel), `cargo test -p motolii-ui --lib`, and `scripts/motolii-ui.sh test` for the Flutter side.
+保存した瞬間に窓へ載り、壊れていれば理由が窓の下に出て、前の物が残ります。取説: [場の取説](docs/vism-field-model.md)、[Shadertoy の取り込み](docs/vism-shadertoy-import.md)（向き・時間参照・feedback・複数タブ）、[時間の法](docs/plugin-resources.md)。
 
-## Status, honestly
+## 動かし方（macOS）
 
-- macOS only; the build is pinned to one machine's paths.
-- One deterministic path from preview to export; export is mp4 through FFmpeg.
-- Freeze frames, reverse playback of feedback effects, and a per-frame render cache are not done.
-- The UI is functional and under active revision; screenshots would be out of date within a week.
+Rust、Flutter（macOS desktop）、Xcode の command line tools、FFmpeg（Homebrew）。Flutter は `PATH` か `FLUTTER_BIN`。FFmpeg の場所は `.cargo/config.toml` に書いてあるので自分の機械に合わせる。
 
-The earlier README, written before the effect system existed, is kept as [docs/archive/README-2026-08-27-two-what-ifs.md](docs/archive/README-2026-08-27-two-what-ifs.md).
+```sh
+scripts/motolii-ui.sh native       # 初回と、Rust を変えた後
+scripts/motolii-ui.sh dev          # 白紙で起動
+scripts/motolii-ui.sh dev /absolute/path/project.rrd
+```
+
+作品は `.rrd`（rerun の形式）で保存されます。
+
+## 開発に加わる人へ
+
+[docs/README.md](docs/README.md)（設計と裁定の入口）、[CONTRIBUTING.md](CONTRIBUTING.md)、[motolii/AGENTS.md](motolii/AGENTS.md)（一行の憲法）。なぜ作るかの長い版は [MANIFESTO.ja.md](MANIFESTO.ja.md)、要約は [VISION.ja.md](VISION.ja.md)。
 
 ## License
 
-Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option — a permissive, local, forkable core.
+[Apache-2.0](LICENSE-APACHE) または [MIT](LICENSE-MIT)。
+
+---
+
+## English
+
+**Motolii is a layer-based video editor with After Effects' grammar, built on [rerun](https://rerun.io).** Text, images, video, shapes, meshes and point clouds share one stage and one song-length timeline.
+
+Two *what ifs*: a compositor that never flattens meaning (a point cloud stays a point cloud, so **one effect written once lands on video, text outlines, meshes and clouds alike** and bends their silhouettes), and the bridge that was never built between AviUtl's extension culture and AE's depth (save a shader file and it is on the shelf; paste a Shadertoy and it runs; the host, not the effect, owns time).
+
+Today: AE-family editing (layers, keyframes, groups, mattes, cameras in 2D/2.5D/3D, text, shapes with path effects, audio, mp4 export), and an effect system where ISF, Shadertoy (single file or exported JSON with Buffer A–D) and WGSL fields reload on save, can read other times (own layer, what is beneath, the group, the comp) and can feed back (`PERSISTENT`) with host-owned history, so scrubbing lands on the same picture as playing. macOS only, no binaries yet, pinned to one machine's paths. Docs in `docs/`; the effect manuals are [field model](docs/vism-field-model.md), [Shadertoy import](docs/vism-shadertoy-import.md) and [the laws of time](docs/plugin-resources.md). Dual-licensed Apache-2.0 / MIT.
