@@ -12,6 +12,7 @@ import 'browser/colors_shelf.dart';
 import 'browser/create_shelf.dart';
 import 'browser/effects_shelf.dart';
 import 'browser/files_shelf.dart';
+import 'browser/filters.dart';
 import 'browser/fonts_shelf.dart';
 import 'browser/media_shelf.dart';
 import 'browser/parts.dart';
@@ -65,6 +66,98 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   final scroll = ScrollController();
   @override
   List<Map<String, dynamic>> visible = [];
+
+  /// Tags, collections and labels the user keeps (Live 12's browser, 4.4–4.5).
+  late final library = BrowserLibrary(widget.controller);
+  final filters = <String, ShelfFilter>{};
+  final filtersShown = <String, bool>{};
+  final quickAdd = TextEditingController();
+  final quickAddFocus = FocusNode();
+  ShelfFilter get filter => filters.putIfAbsent(tab, ShelfFilter.new);
+  List<FilterGroup> get groups => [
+    ...shelf.groups(this),
+    if (library.tagsOn(tab).isNotEmpty)
+      FilterGroup(userTagGroup, library.tagsOn(tab)),
+  ];
+  Set<String> tagsOf(Map<String, dynamic> item) => {
+    ...shelf.tagsOf(this, item),
+    ...library.tagsOf(tab, id(item)),
+  };
+
+  /// Groups combine with AND, tags within one with OR; a collection is one
+  /// more AND. [except] leaves one group out (to count what it would keep).
+  bool _passesFilter(Map<String, dynamic> item, {String? except}) {
+    final f = filter;
+    if (f.collection != null &&
+        library.collectionOf(tab, id(item)) != f.collection)
+      return false;
+    Set<String>? tags;
+    for (final e in f.groups.entries) {
+      if (e.value.isEmpty || e.key == except) continue;
+      tags ??= tagsOf(item);
+      if (!e.value.any(tags.contains)) return false;
+    }
+    return true;
+  }
+
+  /// What each tag would keep, given the rest of the filter.
+  Map<String, int> _counts() {
+    final query = search.text.trim().toLowerCase();
+    final chosen = _chosen;
+    final base = shelf.items(this).where((item) {
+      final label = '${item['name'] ?? item['hex'] ?? item['id']}'
+          .toLowerCase();
+      return label.contains(query) && shelf.passes(this, item, chosen);
+    }).toList();
+    final counts = <String, int>{};
+    for (final group in groups) {
+      for (final item in base) {
+        if (!_passesFilter(item, except: group.name)) continue;
+        final tags = tagsOf(item);
+        for (final tag in group.tags) {
+          if (tags.contains(tag))
+            counts['${group.name}/$tag'] =
+                (counts['${group.name}/$tag'] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }
+
+  void _toggleTag(String group, String tag, bool add) {
+    final set = filter.groups.putIfAbsent(group, () => <String>{});
+    if (add) {
+      set.contains(tag) ? set.remove(tag) : set.add(tag);
+    } else if (set.length == 1 && set.contains(tag)) {
+      set.clear();
+    } else {
+      set
+        ..clear()
+        ..add(tag);
+    }
+    setState(_derive);
+  }
+
+  void _saveLabel() {
+    final name = filter.describe();
+    if (name.isEmpty) return;
+    library.saveLabel(tab, {
+      'name': name,
+      'filter': filter.toJson(),
+      'rail': _chosen,
+      'query': search.text,
+    });
+  }
+
+  void _restoreLabel(Map<String, dynamic> label) {
+    setState(() {
+      filter.restore(EditorSession.map(label['filter']));
+      classifications[tab] = '${label['rail'] ?? 'All'}';
+      search.text = '${label['query'] ?? ''}';
+      filtersShown[tab] = true;
+      _derive();
+    });
+  }
 
   /// The current tab's selection as a signal: [selected] is the store, this
   /// is what a tile and the count watch, so a pick redraws only them.
@@ -181,6 +274,9 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
         'browserView',
         'browserTile',
         'browserRail',
+        'tags',
+        'collections',
+        'labels',
         for (final s in shelves) ...s.deskKeys,
       ])
         d[k],
@@ -210,7 +306,9 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     visible = all.where((item) {
       final label = '${item['name'] ?? item['hex'] ?? item['id']}'
           .toLowerCase();
-      return label.contains(query) && shelf.passes(this, item, chosen);
+      return label.contains(query) &&
+          shelf.passes(this, item, chosen) &&
+          _passesFilter(item);
     }).toList();
   }
 
@@ -243,6 +341,8 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     _slice.removeListener(_onDocument);
     for (final s in shelves) s.dispose();
     picked.dispose();
+    quickAdd.dispose();
+    quickAddFocus.dispose();
     search.dispose();
     searchFocus.dispose();
     panelFocus.dispose();
@@ -326,6 +426,18 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
         active.remove(tab);
         _publish();
       }
+      return KeyEventResult.handled;
+    }
+    if (primary && k == LogicalKeyboardKey.keyE) {
+      if (selectedIds.isNotEmpty) quickAddFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    final digit = k.keyLabel.length == 1 ? int.tryParse(k.keyLabel) : null;
+    if (!primary &&
+        digit != null &&
+        digit <= BrowserLibrary.collectionCount &&
+        selectedIds.isNotEmpty) {
+      library.collect(tab, selectedIds.toList(), digit);
       return KeyEventResult.handled;
     }
     if (primary && k == LogicalKeyboardKey.keyA && shelf.multiSelect) {
@@ -438,6 +550,28 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                         const SizedBox(width: EditorMetrics.s6),
                         tool,
                       ],
+                      if (groups.isNotEmpty) ...[
+                        const SizedBox(width: EditorMetrics.s6),
+                        EditorTooltip(
+                          message: 'Show filters',
+                          child: InkWell(
+                            key: const ValueKey('browser:filters-toggle'),
+                            onTap: () => setState(
+                              () => filtersShown[tab] =
+                                  !(filtersShown[tab] ?? false),
+                            ),
+                            child: Icon(
+                              Icons.filter_list,
+                              size: EditorMetrics.s14,
+                              color:
+                                  (filtersShown[tab] ?? false) ||
+                                      !filter.isEmpty
+                                  ? EditorTheme.accent
+                                  : EditorTheme.muted,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (shelf.showViews) ...[
                         const SizedBox(width: EditorMetrics.s6),
                         shelfViews(widget.controller, viewMode),
@@ -482,6 +616,23 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                   () => shelf.rail(this, entry),
                                   selected: chosen == entry,
                                 ),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: RailCollections(
+                                    chosen: filter.collection,
+                                    labels: library.labelsOn(tab),
+                                    onCollection: (i) => setState(() {
+                                      filter.collection = filter.collection == i
+                                          ? null
+                                          : i;
+                                      _derive();
+                                    }),
+                                    onLabel: _restoreLabel,
+                                    onDropLabel: (name) =>
+                                        library.dropLabel(tab, name),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -569,6 +720,19 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                if ((filtersShown[tab] ?? false) &&
+                                    groups.isNotEmpty)
+                                  FilterView(
+                                    groups: groups,
+                                    filter: filter,
+                                    counts: _counts(),
+                                    onToggle: _toggleTag,
+                                    onClear: () => setState(() {
+                                      filter.clear();
+                                      _derive();
+                                    }),
+                                    onSaveLabel: _saveLabel,
+                                  ),
                                 if (editor != null) editor,
                                 Expanded(
                                   child: visible.isEmpty
@@ -618,6 +782,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                           ),
                                         ),
                                 ),
+                                _quickTags(),
                                 _zoomBar(),
                               ],
                             );
@@ -633,6 +798,37 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
           ],
         ),
       ),
+    );
+  }
+
+  /// The picked rows' tags: theirs (quiet), the user's (removable), Add….
+  Widget _quickTags() => ValueListenableBuilder<Set<String>>(
+    valueListenable: picked,
+    builder: (context, chosen, _) => chosen.isEmpty
+        ? const SizedBox()
+        : _quickTagsFor(visible.where((i) => chosen.contains(id(i))).toList()),
+  );
+
+  Widget _quickTagsFor(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return const SizedBox();
+    Set<String>? builtin;
+    final own = <String>{};
+    for (final row in rows) {
+      final theirs = shelf.tagsOf(this, row);
+      builtin = builtin == null ? {...theirs} : builtin.intersection(theirs);
+      own.addAll(library.tagsOf(tab, id(row)));
+    }
+    final title = rows.length == 1
+        ? '${rows.single['name'] ?? id(rows.single)}'
+        : '${rows.length} rows';
+    return QuickTags(
+      title: title,
+      builtin: (builtin ?? const {}).toList()..sort(),
+      own: own.toList(),
+      addFocus: quickAddFocus,
+      addController: quickAdd,
+      onAdd: (tag) => library.tag(tab, rows.map(id), tag),
+      onRemove: (tag) => library.untag(tab, rows.map(id), tag),
     );
   }
 

@@ -67,6 +67,15 @@ class ShelfLayout {
   final Color ground;
 }
 
+/// One filter group (Live 12's Filter View): a name and the tags an item may
+/// carry in it. An item's own tags are facts about it; the user's tags live in
+/// one more group the frame adds.
+class FilterGroup {
+  const FilterGroup(this.name, this.tags);
+  final String name;
+  final List<String> tags;
+}
+
 /// One tab of the Browser: what it lists, how a tile looks, what applying
 /// does. Adding a tab is adding a shelf to [browserShelves]; the panel never
 /// names a tab itself.
@@ -111,6 +120,13 @@ abstract class BrowserShelf {
 
   /// Desk keys the shelf reads; a write to any other leaves it still.
   List<String> get deskKeys => const [];
+
+  /// The filter groups this shelf's items carry (empty: no Filter View).
+  List<FilterGroup> groups(BrowserHost host) => const [];
+
+  /// The item's own tags, as `group/tag` pairs are not needed: a tag name is
+  /// unique within its group and the frame asks group by group.
+  Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) => const {};
 
   /// Called when the shelf comes to the front.
   void enter(BrowserHost host) {}

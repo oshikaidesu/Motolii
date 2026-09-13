@@ -77,6 +77,49 @@ class FontsShelf extends BrowserShelf {
   @override
   List<String> rails(BrowserHost host) => const ['All', 'Used here'];
 
+  static const _scriptNames = [
+    'Latin',
+    'Kana',
+    'Kanji',
+    'Hangul',
+    'Cyrillic',
+    'Arabic',
+  ];
+
+  /// The facts as filter groups: which scripts, how big a family, which axes
+  /// (or none), and what kind of face it is.
+  @override
+  List<FilterGroup> groups(BrowserHost host) {
+    final axes = <String>{};
+    for (final f in (fontFacts ?? const {}).values)
+      axes.addAll((f['axes'] as List? ?? const []).cast<String>());
+    return [
+      const FilterGroup('Script', _scriptNames),
+      const FilterGroup('Family', ['Single', '2–5 styles', '6+ styles']),
+      FilterGroup('Axes', ['Static', ...axes.toList()..sort()]),
+      const FilterGroup('Kind', ['Mono', 'Color']),
+    ];
+  }
+
+  @override
+  Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) {
+    final f = fontFacts?['${item['name']}'];
+    if (f == null) return const {};
+    final styles = (f['styles'] as num? ?? 1).toInt();
+    final axes = (f['axes'] as List? ?? const []).cast<String>();
+    return {
+      ...(f['scripts'] as List? ?? const []).cast<String>(),
+      styles <= 1
+          ? 'Single'
+          : styles <= 5
+          ? '2–5 styles'
+          : '6+ styles',
+      if (axes.isEmpty) 'Static' else ...axes,
+      if (f['monospaced'] == true) 'Mono',
+      if (f['color'] == true) 'Color',
+    };
+  }
+
   @override
   List<Map<String, dynamic>> items(BrowserHost host) {
     _ask(host);
