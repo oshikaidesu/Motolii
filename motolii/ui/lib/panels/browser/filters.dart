@@ -212,10 +212,10 @@ class FilterView extends StatelessWidget {
                     border: Border(bottom: BorderSide(color: EditorTheme.line)),
                   ),
                   padding: const EdgeInsets.fromLTRB(
-                    EditorMetrics.s8,
+                    EditorMetrics.s6,
+                    EditorMetrics.s2,
+                    EditorMetrics.s6,
                     EditorMetrics.s3,
-                    EditorMetrics.s8,
-                    EditorMetrics.s4,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -224,13 +224,13 @@ class FilterView extends StatelessWidget {
                         key: ValueKey('browser:filter-group:${group.name}'),
                         onTap: () => onFold(group.name),
                         child: SizedBox(
-                          height: EditorMetrics.row,
+                          height: EditorMetrics.s16,
                           child: Row(
                             children: [
                               Text(
                                 group.name,
                                 style: const TextStyle(
-                                  fontSize: EditorMetrics.font,
+                                  fontSize: EditorMetrics.dense,
                                   color: EditorTheme.ink,
                                 ),
                               ),
@@ -239,7 +239,7 @@ class FilterView extends StatelessWidget {
                                 folded.contains(group.name)
                                     ? Icons.arrow_right
                                     : Icons.arrow_drop_down,
-                                size: EditorMetrics.s14,
+                                size: EditorMetrics.s12,
                                 color: EditorTheme.muted,
                               ),
                               if (folded.contains(group.name) &&
@@ -252,7 +252,7 @@ class FilterView extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontSize: EditorMetrics.dense,
+                                    fontSize: EditorMetrics.micro,
                                     color: EditorTheme.accent,
                                   ),
                                 ),
@@ -262,8 +262,8 @@ class FilterView extends StatelessWidget {
                       ),
                       if (!folded.contains(group.name))
                         Wrap(
-                          spacing: EditorMetrics.s4,
-                          runSpacing: EditorMetrics.s3,
+                          spacing: EditorMetrics.s3,
+                          runSpacing: EditorMetrics.s2,
                           children: [
                             for (final tag in group.tags)
                               _TagChip(
@@ -286,15 +286,15 @@ class FilterView extends StatelessWidget {
         ),
       ),
       Container(
-        height: EditorMetrics.control,
-        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+        height: EditorMetrics.row,
+        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
         color: filter.isEmpty ? Colors.transparent : EditorTheme.raised,
         child: Row(
           children: [
             Text(
               'Results',
               style: const TextStyle(
-                fontSize: EditorMetrics.font,
+                fontSize: EditorMetrics.dense,
                 color: EditorTheme.ink,
               ),
             ),
@@ -304,13 +304,28 @@ class FilterView extends StatelessWidget {
                   ? '$results'
                   : '$results · $active ${active == 1 ? 'filter' : 'filters'}',
               style: TextStyle(
-                fontSize: EditorMetrics.dense,
+                fontSize: EditorMetrics.micro,
                 color: active == 0 ? EditorTheme.muted : EditorTheme.accent,
               ),
             ),
             const Spacer(),
-            shelfAction('Clear', filter.isEmpty ? null : onClear),
-            const SizedBox(width: EditorMetrics.s4),
+            InkWell(
+              onTap: filter.isEmpty ? null : onClear,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EditorMetrics.s4,
+                ),
+                child: Text(
+                  'Clear',
+                  style: TextStyle(
+                    fontSize: EditorMetrics.dense,
+                    color: filter.isEmpty
+                        ? EditorTheme.disabledInk
+                        : EditorTheme.ink,
+                  ),
+                ),
+              ),
+            ),
             EditorTooltip(
               message: 'Add label · keep this filter in the rail',
               child: InkWell(
@@ -318,7 +333,7 @@ class FilterView extends StatelessWidget {
                 onTap: filter.isEmpty ? null : onSaveLabel,
                 child: Icon(
                   Icons.playlist_add,
-                  size: EditorMetrics.s14,
+                  size: EditorMetrics.s12,
                   color: filter.isEmpty
                       ? EditorTheme.disabledInk
                       : EditorTheme.ink,
@@ -350,10 +365,10 @@ class _TagChip extends StatelessWidget {
     ),
     // No alignment on the box: with one it would take the whole line.
     child: Container(
-      height: EditorMetrics.row,
+      height: EditorMetrics.s16,
       padding: const EdgeInsets.symmetric(
-        horizontal: EditorMetrics.s6,
-        vertical: EditorMetrics.s3,
+        horizontal: EditorMetrics.s5,
+        vertical: EditorMetrics.s2,
       ),
       decoration: BoxDecoration(
         color: chosen ? EditorTheme.accent : EditorTheme.raised,
@@ -362,7 +377,7 @@ class _TagChip extends StatelessWidget {
       child: Text(
         tag,
         style: TextStyle(
-          fontSize: EditorMetrics.dense,
+          fontSize: EditorMetrics.micro,
           color: chosen ? EditorTheme.app : EditorTheme.ink,
         ),
       ),
