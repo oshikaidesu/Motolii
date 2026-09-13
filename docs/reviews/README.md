@@ -825,3 +825,5 @@
 - [操作・状態生成・描画経路の分離計測 — 2026-09-09](2026-09-09-frame-pipeline-measurements.md)
 
 - [Browser UI phases](2026-09-09-browser-ui-phases.md)
+
+- [shader の外に仕組みが要る表現 — 宿題の台帳](2026-09-13-shader-outside-expressions-ledger.md)

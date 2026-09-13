@@ -121,12 +121,22 @@ pub struct IsfInput {
     /// ホストが供給するので、2 枚目以降でもこれを宣言していれば繋がる。
     /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`plugin-resources.md` §6)。
     pub time_offset: Option<TimeOffset>,
-    /// `time_offset` の読み方: false = t からのずれ(`TIME_OFFSET`)、true = 層の入点からの絶対時刻(`TIME_AT`)。
-    pub time_absolute: bool,
+    /// `time_offset` の読み方。
+    pub time_base: TimeBase,
     /// image の欄だけ: `"LAYER"` で名指した層の欄(TYPE layer)が指す層の絵が入る。
     pub layer_field: Option<String>,
     /// image の欄だけ、`TIME_OFFSET` と組で: 別の時刻に読む**相手**。既定は自分の層。
     pub time_source: TimeSource,
+}
+
+/// `time_offset` の読み方: t からの秒(`TIME_OFFSET`)、層の入点からの秒(`TIME_AT`)、t からのコマ数(`TIME_OFFSET_FRAMES`)。
+/// コマ数は comp の fps で秒に直す — 前後のコマを読む効果(動きの推定)が fps に依らず隣のコマに当たる。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum TimeBase {
+    #[default]
+    Offset,
+    At,
+    Frames,
 }
 
 /// 別の時刻に読む相手(`SOURCE`)。`CompLookbehind`(plugin-resources.md §6-1)の target: 自分の層 /
@@ -325,12 +335,13 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 serde_json::Value::String(name) => Some(TimeOffset::Param(name.clone())),
                 _ => None,
             }).filter(|_| ty == IsfInputType::Image);
-            let (time_offset, time_absolute) = match (read_time("TIME_OFFSET"), read_time("TIME_AT")) {
-                (Some(_), Some(_)) => return Err(IsfError::TimeOffset(format!("{name}: TIME_OFFSET と TIME_AT は同時に書けない"))),
-                (Some(offset), None) => (Some(offset), false),
-                // TIME_AT: 層の入点からの秒。「あの瞬間の絵」を欄で指す(host が渡す。効果は覚えない)。
-                (None, Some(at)) => (Some(at), true),
-                (None, None) => (None, false),
+            let declared: Vec<_> = [("TIME_OFFSET", TimeBase::Offset), ("TIME_AT", TimeBase::At), ("TIME_OFFSET_FRAMES", TimeBase::Frames)]
+                .into_iter().filter_map(|(key, base)| read_time(key).map(|offset| (offset, base))).collect();
+            // TIME_AT: 層の入点からの秒。「あの瞬間の絵」を欄で指す(host が渡す。効果は覚えない)。
+            let (time_offset, time_base) = match declared.as_slice() {
+                [] => (None, TimeBase::Offset),
+                [(offset, base)] => (Some(offset.clone()), *base),
+                _ => return Err(IsfError::TimeOffset(format!("{name}: TIME_OFFSET / TIME_AT / TIME_OFFSET_FRAMES は 1 つだけ書ける"))),
             };
             let time_source = match entry.get("SOURCE").and_then(|v| v.as_str()) {
                 None => TimeSource::Own,
@@ -340,7 +351,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 Some(other) => return Err(IsfError::TimeOffset(format!("{name}: SOURCE は below / group / comp のどれか({other})"))),
             };
             if time_source != TimeSource::Own && time_offset.is_none() {
-                return Err(IsfError::TimeOffset(format!("{name}: SOURCE は TIME_OFFSET か TIME_AT と組で書く")));
+                return Err(IsfError::TimeOffset(format!("{name}: SOURCE は TIME_OFFSET / TIME_AT / TIME_OFFSET_FRAMES と組で書く")));
             }
             inputs.push(IsfInput {
                 name: name.to_owned(),
@@ -355,7 +366,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 max,
                 maps,
                 time_offset,
-                time_absolute,
+                time_base,
                 layer_field,
                 time_source,
             });
@@ -627,6 +638,17 @@ mod manifest_tests {
         let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"past\",\"TYPE\":\"image\",\"TIME_OFFSET\":\"nope\"}] }*/ void main() {}";
         let error = parse_isf_source(source).err().expect("断る").to_string();
         assert!(error.contains("nope") && error.contains("past"), "{error}");
+    }
+
+    /// 隣のコマは `TIME_OFFSET_FRAMES`(コマ数)で読む。時刻の読み方は 1 つの image に 1 つだけ。
+    #[test]
+    fn a_time_offset_in_frames_is_one_of_the_three_time_bases() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"previous\",\"TYPE\":\"image\",\"TIME_OFFSET_FRAMES\":-1}] }*/ void main() {}";
+        let previous = &parse_isf_source(source).unwrap().0.inputs[1];
+        assert_eq!((previous.time_offset.clone(), previous.time_base), (Some(TimeOffset::Fixed(-1.0)), TimeBase::Frames));
+        let both = source.replace("\"TIME_OFFSET_FRAMES\":-1", "\"TIME_OFFSET_FRAMES\":-1,\"TIME_AT\":0");
+        let error = parse_isf_source(&both).err().expect("断る").to_string();
+        assert!(error.contains("previous") && error.contains("1 つだけ"), "{error}");
     }
 
     /// 時計は ISF の綴り(TIME / TIMEDELTA / FRAMEINDEX / DATE)で、ホストの uniform として届く。

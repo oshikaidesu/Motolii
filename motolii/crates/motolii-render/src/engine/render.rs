@@ -13,6 +13,7 @@ use crate::render::compositor::{
 use crate::render::engine::translate::{
     translate_blend_mode, translate_clip, translate_effect_passes, translate_matte_mode, translate_point_displace,
 };
+use crate::render::compositor::effects::isf::TimeBase;
 use crate::render::engine::{Engine, EngineError};
 
 impl Engine {
@@ -184,7 +185,7 @@ impl Engine {
                     .enumerate()
                     .map(|(i, offset)| {
                         let source = pass.image_time_sources().get(i).copied().unwrap_or_default();
-                        let key = time_key(*offset, pass.image_time_absolute(i), layer);
+                        let key = time_key(*offset, pass.image_time_base(i), layer);
                         let got = (|| {
                         let (at, resolved, texts, shapes) = others.get(&key)?;
                         if source != crate::render::compositor::TimeSource::Own {
@@ -467,12 +468,16 @@ impl Engine {
             let in_point = layer_in_point(view, layer.id);
             for pass in super::translate::translate_effect_passes(&layer.effects).into_iter().chain(super::translate::translate_plate_passes(&layer.after_effects)) {
                 for (i, offset) in pass.image_time_offsets().iter().enumerate() {
-                    let absolute = pass.image_time_absolute(i);
-                    let key = time_key(*offset, absolute, layer.id);
+                    let base = pass.image_time_base(i);
+                    let key = time_key(*offset, base, layer.id);
                     if other_times.contains_key(&key) {
                         continue;
                     }
-                    let at = if absolute { shifted_by_seconds(in_point, *offset) } else { shifted_by_seconds(t, *offset) };
+                    let at = match base {
+                        TimeBase::Offset => shifted_by_seconds(t, *offset),
+                        TimeBase::At => shifted_by_seconds(in_point, *offset),
+                        TimeBase::Frames => shifted_by_frames(view, t, *offset),
+                    };
                     let Ok(then) = view.resolved_layers(at) else { continue };
                     let (Ok(texts), Ok(shapes)) = (collect_text_documents(view, &then, at), collect_shape_documents(view, &then, at)) else { continue };
                     other_times.insert(key, (at, then, texts, shapes));
@@ -488,7 +493,7 @@ impl Engine {
                 for (i, offset) in pass.image_time_offsets().iter().enumerate() {
                     let source = pass.image_time_sources().get(i).copied().unwrap_or_default();
                     if source == crate::render::compositor::TimeSource::Own { continue; }
-                    let key = (time_key(*offset, pass.image_time_absolute(i), layer.id), source, layer.id);
+                    let key = (time_key(*offset, pass.image_time_base(i), layer.id), source, layer.id);
                     if composites.contains_key(&key) { continue; }
                     let Some((at, then, texts, shapes)) = other_times.get(&key.0) else { continue };
                     if let Some(picture) = self.composite_at(view, *at, then, texts, shapes, comp, layer.id, source) {
@@ -1759,13 +1764,25 @@ fn offset_key(offset: f32) -> i64 {
 }
 
 /// 別の時刻の鍵: ずれ(ms)か、層ごとの絶対時刻(入点からの ms に層の番号を混ぜ、上の bit で区別)。
-fn time_key(offset: f32, absolute: bool, layer: LayerId) -> i64 {
-    if !absolute { return offset_key(offset); }
+fn time_key(offset: f32, base: TimeBase, layer: LayerId) -> i64 {
+    match base {
+        TimeBase::Offset => return offset_key(offset),
+        // コマ数の鍵は秒の鍵と混ざらないよう上の bit で分ける(-1 コマと -0.001 秒は別の時刻)。
+        TimeBase::Frames => return offset.round() as i64 | 1 << 60,
+        TimeBase::At => {}
+    }
     let mut hasher = std::hash::DefaultHasher::new();
     use std::hash::{Hash as _, Hasher as _};
     layer.0.hash(&mut hasher);
     offset_key(offset).hash(&mut hasher);
     (hasher.finish() >> 2) as i64 | 1 << 61
+}
+
+/// t から整数コマずらした comp の時刻(TIME_OFFSET_FRAMES)。comp の前は 0。
+fn shifted_by_frames(view: &StoreView<'_>, t: RationalTime, frames: f32) -> RationalTime {
+    view.composition().ok().flatten()
+        .and_then(|c| t.try_to_frame_round(c.fps).ok().and_then(|now| RationalTime::try_from_frame((now + frames.round() as i64).max(0), c.fps).ok()))
+        .unwrap_or(RationalTime::ZERO)
 }
 
 /// 層の入点(comp の時刻)。TIME_AT はここからの秒。
@@ -2167,5 +2184,78 @@ mod freeze_keeps_the_picture {
         let thawed = engine.render_frame(&doc.view(), at(9)).unwrap();
         assert!(close(&thawed, &live[9]) < 30, "戻した絵が生の絵と違う: {} px", close(&thawed, &live[9]));
         doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(1), "gain").unwrap(), value: Value::F64(3.0) }).unwrap();
+    }
+}
+
+/// Pixel Motion Blur(光学フロー)の審判: 横に動く白い四角の縁の傾きが、1 コマの動き × シャッター角 / 360 の幅になる。
+/// 隣のコマは `TIME_OFFSET_FRAMES` で読むので、fps を変えても「1 コマの動き」で測れる。飛んでも辿っても同じ絵。
+#[cfg(test)]
+mod pixel_motion_blur_follows_the_motion {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const W: u32 = 320;
+    const H: u32 = 180;
+
+    /// 1 コマに `step` px 右へ動く 30×60 の白い四角(黒地)。
+    fn clip(dir: &std::path::Path, fps: i64, step: i64) -> Option<std::path::PathBuf> {
+        let out = dir.join(format!("box-{fps}.mp4"));
+        let status = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", &format!("color=c=black:s={W}x{H}:r={fps}:d=2"),
+                   "-f", "lavfi", "-i", &format!("color=c=white:s=30x60:r={fps}:d=2"),
+                   "-filter_complex", &format!("[0][1]overlay=x='n*{step}-30':y=60"),
+                   "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "10"])
+            .arg(&out).status().ok()?;
+        status.success().then_some(out)
+    }
+
+    fn document(path: &std::path::Path, fps: i64, shutter: Option<f64>) -> Document {
+        let fps = Fps::try_new(fps, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 40) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+        ]).unwrap();
+        if let Some(shutter) = shutter {
+            doc.apply_all([
+                Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.pixel_motion_blur".into() }] },
+                Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), "shutter").unwrap(), value: Value::F64(shutter) },
+            ]).unwrap();
+        }
+        doc
+    }
+
+    /// 四角の真ん中の行で、黒でも白でもない画素の数(左右の縁の傾きの合計)。
+    fn ramp(pixels: &[u8]) -> usize {
+        (0..W as usize).map(|x| pixels[(90 * W as usize + x) * 4]).filter(|v| (12..243).contains(v)).count()
+    }
+
+    fn walked(doc: &Document, fps: i64, frame: i64) -> Vec<u8> {
+        let mut engine = Engine::new().unwrap();
+        let mut last = Vec::new();
+        for f in 0..=frame { last = engine.render_frame(&doc.view(), RationalTime::try_from_frame(f, Fps::try_new(fps, 1).unwrap()).unwrap()).unwrap(); }
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        last
+    }
+
+    #[test]
+    fn the_edges_smear_by_the_motion_of_one_frame_times_the_shutter() {
+        let dir = tempfile::tempdir().unwrap();
+        for (fps, step) in [(24, 20), (48, 10)] {
+            let Some(path) = clip(dir.path(), fps, step) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+            let at = RationalTime::try_from_frame(10, Fps::try_new(fps, 1).unwrap()).unwrap();
+            assert!(ramp(&Engine::new().unwrap().render_frame(&document(&path, fps, None).view(), at).unwrap()) <= 2, "素の縁は切り立っている");
+            let doc = document(&path, fps, Some(180.0));
+            let walked = walked(&doc, fps, 10);
+            // 縁 2 本 × (1 コマの動き × 180/360) = 1 コマの動き。
+            let (got, expected) = (ramp(&walked), step as usize);
+            assert!(got.abs_diff(expected) <= 3, "{fps}fps: 縁の傾き {got} px(期待 {expected} px)");
+            let jumped = Engine::new().unwrap().render_frame(&doc.view(), at).unwrap();
+            assert_eq!(jumped, walked, "{fps}fps: 飛んで来た絵が辿った絵と違う");
+            assert!(ramp(&Engine::new().unwrap().render_frame(&document(&path, fps, Some(0.0)).view(), at).unwrap()) <= 2, "シャッター 0 はぼけない");
+        }
     }
 }

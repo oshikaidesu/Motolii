@@ -2,7 +2,7 @@
 
 作成日: 2026-09-12
 
-状態: **Shadertoy(`mainImage`)は実装済み。層の絵を別の時刻で読む口(`TIME_OFFSET`)は実装済み(§8)。Buffer 複数枚・音・`iChannelResolution` / `iChannelTime` は未対応。貼る窓(editor)は作らない(各自の editor で書く)。**
+状態(2026-09-13 更新): **Shadertoy(`mainImage`)と複数タブ(Export の JSON、Buffer A..D + Common、§2-1)は実装済み。フレーム跨ぎの持ち越し(`PERSISTENT`、§6)、別の時刻の絵(`TIME_OFFSET` / `TIME_AT`、相手は `SOURCE` で自分・下・群・comp、§8)も実装済み。音・`iChannelResolution` / `iChannelTime`・keyboard / webcam / cubemap の入力は未対応。貼る窓(editor)は作らない(各自の editor で書く)。**
 
 関連正本: [場(Field)の取説](vism-field-model.md)、[Vism コンセプト](vism-package-concept.md)、[プラグイン作者向け規約](plugin-authoring.md)
 
@@ -121,20 +121,29 @@ TouchDesigner / AviUtl の「スクラブすると変わる」型でも、AE の
 
 板に焼けない層(網・点群)と下の合成を読む列は**画面の道**で効くので、状態は窓ごと(Camera / Stage)に持ち、
 辿り直す時はその窓の寸法で**フレームを丸ごと**描く(板の道は「その層だけ」)。重さは歩数 × 1 フレーム。
-まだ無い物: 合体後(Group / CompRoot)の別時刻は予約のまま。
+
+**合成の自己帰還**(comp の前フレームを自分込みで読み、回して縮めて重ねる — ビデオフィードバック)は、
+新しい口なしでこの組で書ける: 一番上に全面の層を置き、`BACKDROP_INPUT` と `PERSISTENT` を 1 本の効果に持たせる。
+層の出力 = history なので、前のフレームの「下 + 自分」が次の入力に戻る。
+
+```glsl
+if (PASSINDEX == 0) gl_FragColor = max(IMG_THIS_PIXEL(backdrop), IMG_NORM_PIXEL(history, warp(uv)) * 0.94);
+else                 gl_FragColor = IMG_THIS_PIXEL(history) * IMG_THIS_PIXEL(inputImage).a;
+```
+
+2026-09-13 にヘッドレスで確かめた(640×360、動く点 + 上の全面層、回転 0.04・縮小 1.04): 尾が回転を重ねて
+渦に巻き込まれ(1 回だけ読む lookbehind では巻かない)、40 フレーム目は飛んでも辿っても**完全一致**。
+全面の層は位置が左上基準なので `[0, 0]` に置く(中央に置くと右下 1/4 だけに効く)。
+合体後(下・群・comp)の別時刻は §8-1 の `SOURCE` で読める(非再帰、自分は除く)。
 
 datamosh はさらに別トラックで、codec 領域の台帳が
 [decision-index.md](decision-index.md)(`M5-DATAMOSH-P0` = `DONE / PRIVATE PROBE`・`BUILD FORBIDDEN`)にある。
-層の絵の別時刻だけが繋がっていて、合体後の別時刻と再帰はまだ**」である。
 
 ## 7. まだ無い物
 
-- **合体後(Group / CompRoot)の別時刻**(`CompLookbehind` の本来の対象)と、**再帰のフィードバック**。
-  §6 の通り設計は 2026-07-10 に済んでいる。層の絵の別時刻(§8)は、その入口の最初の 1 本。
 - **貼る窓**は作らない。各自の editor で書き、file を置く。
-- **Shadertoy の Buffer A..D をそのまま貼る**(1 file に複数 tab を書く取り決め)。ISF の `PASSES`
-  に写せるので、器はもう在る。
-- **音**(`iChannel` に音を入れる型)。
+- **音**(`iChannel` に音を入れる型)。keyboard / webcam / video / cubemap の入力、sound / cubemap のタブ(§2-1 で名指しで断る)。
+- `iChannelResolution` / `iChannelTime`(§3 で名指しで断る)。
 - naga の GLSL frontend が読めない書き方。通らなければ理由が出る。
 
 ## 8. 別の時刻の絵を読む — `TIME_OFFSET`
@@ -175,10 +184,20 @@ void main() {
 
 ### 限界
 
-- 読めるのは**自分の層の絵**だけ。合体後の別時刻(下の層ごと)は予約のまま。
+- `SOURCE` が無ければ読めるのは**自分の層の絵**。下・群・comp の別時刻は §8-1。
 - 名指した欄が無い(または float でない)場合は、黙って 0 にせず名前を挙げて断る。
 - 費用は、ずれ 1 つにつき復号 1 回 + 写し 1 枚。cache はまだ効かない。
 - 速度を変えた層(time stretch)は、素材側のずれが comp の秒とは一致しない。
+
+### 8-0. コマ数で読む — `TIME_OFFSET_FRAMES`(2026-09-13)
+
+`TIME_OFFSET` の秒の代わりに、**t からのコマ数**で読む(数値か float の欄の名前、端数は丸める)。comp の fps で時刻に直すので、
+24fps でも 60fps でも「隣のコマ」に当たる。`TIME_OFFSET` / `TIME_AT` とは 1 つの image に 1 つだけ。
+同梱の **Pixel Motion Blur**(`pixel_motion_blur.fs`)がこれで、前のコマとの光学フロー(ピラミッド Lucas-Kanade、13 パス)を
+推定し、シャッター角ぶん動きに沿ってぼかす。審判は `engine/render.rs` の `pixel_motion_blur_follows_the_motion`
+(1 コマに 20 px / 10 px 動く四角の縁の傾きが、24fps / 48fps とも 1 コマの動き × 180/360 × 2 本)。
+
+別の時刻の絵は**板に焼かれる層**(動画・静止画など)だけが持つ。形・文字のように直に描かれる層では届かず、層の失敗になる。
 
 ### 8-1. 相手を選ぶ — `SOURCE`(2026-09-13)
 
@@ -231,7 +250,7 @@ Freeze(cache)・Flatten(素材化)とは別物。
 唯一の綴り)。`SUBTYPE: TIME` の欄は**利用者がキーフレームを打つただの float**で、時計は流れない(AE の
 Evolution と同じ)。時計が要るなら `TIME` を読む。
 
-まだ無い物: 別の層の絵(層を指す欄)、compute shader・storage buffer、音。
+まだ無い物: compute shader・storage buffer、音。別の層の絵は §12(`TYPE: layer`)。
 
 ## 10. 下の合成を読む — `BACKDROP_INPUT`(pass)
 
