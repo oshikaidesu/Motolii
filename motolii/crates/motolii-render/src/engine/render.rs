@@ -601,7 +601,7 @@ impl Engine {
                 skip_below = end;
                 let mut copies = Vec::new();
                 if layer.averaged > 0 {
-                    copies = self.motion_blur_copies(&mut previous_build, &resolved[index..end], layer.averaged, text_documents, shape_documents, t, comp, camera, projection_camera)?;
+                    copies = self.motion_blur_copies(&mut previous_build, &resolved[index..end], text_documents, shape_documents, t, comp, camera, projection_camera)?;
                 } else {
                     for copy in &resolved[index..end] {
                         if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {

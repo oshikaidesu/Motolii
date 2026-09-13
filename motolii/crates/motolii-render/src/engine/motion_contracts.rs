@@ -118,6 +118,21 @@ mod motion_blur_follows_the_keyframes {
         pixels
     }
 
+    /// 画面の外から入ってくる層: 写しは素材座標の絵をずらすので、画面の外にあった部分もぼけに入る
+    /// (comp 大に焼いてからずらすと、上端に空いた帯ができる)。
+    #[test]
+    fn a_layer_entering_from_outside_the_frame_is_not_cut() {
+        let mut doc = document(true, Some(&[]));
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe { t: RationalTime::ZERO, value: Value::Vec2([140.0, -130.0]), interp: Interp::Linear, spatial: None });
+        track.insert(Keyframe { t: at(FRAMES), value: Value::Vec2([140.0, -130.0 + 20.0 * FRAMES as f64]), interp: Interp::Linear, spatial: None });
+        doc.apply(Intent::SetTrack { layer: LayerId(1), property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
+        // 5 コマ目: 四角(40 × 60)の上端は y = -30、下端は 30。1 コマ 20 px 下へ動く。
+        let pixels = render(&doc, 5);
+        let top_row = (150..170).map(|x| pixels[(x * 4) as usize]).min().unwrap();
+        assert!(top_row > 200, "画面の一番上の行も四角の中(外にあった部分がぼけに入る): {top_row}");
+    }
+
     #[test]
     fn the_edges_smear_by_one_frame_of_keyframed_motion() {
         assert!(ramp(&render(&document(true, None), 5)) <= 2, "素の縁は切り立っている");

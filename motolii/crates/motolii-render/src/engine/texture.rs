@@ -331,7 +331,8 @@ impl Engine {
         let needs_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
         // 絵を読む効果(pass)は素材座標の絵を要る。comp 大に焼くと comp の外が失われ、
         // Blur が縁で切れる(広がりの法: 評価の入力を view・comp・カメラで切らない)。
-        let needs_image = !super::translate::translate_effect_passes(&layer.effects).is_empty();
+        // Motion Blur の写しも足す合成に乗るよう矩形(素材座標の絵)で持つ。comp 大に焼くと画面の外に出た部分が切れる。
+        let needs_image = !super::translate::translate_effect_passes(&layer.effects).is_empty() || layer.averaged > 0;
         // 立体を作る族(Extrude・Bevel の効果)。効果が無ければ Depth 属性(互換)。
         let solid = super::translate::translate_solid(&layer.effects)
             .map(|s| if s.depth > 0.0 { s } else { crate::render::compositor::extrude::Solid { depth: layer.depth, ..s } })

@@ -9,14 +9,13 @@ use crate::render::engine::translate::translate_effect_passes;
 use crate::render::engine::{Engine, EngineError};
 
 impl Engine {
-    /// Motion Blur: 写しは変換だけが違うので、1 枚目を comp 大の板に 1 回だけ焼き(上の効果もここで 1 回)、
-    /// 板を写しごとのずれで置く(足すのは呼び手の bake)。形・文字は矩形でないと足す合成に乗らないので、必ず板にする。
+    /// Motion Blur: 写しは置き場所だけが違う。素材座標の絵(Blur と同じ、余白は効果が宣言)を 1 回だけ組み、
+    /// 同じ絵と同じ効果列を写しごとの置き場所で並べる(効果の列は同じ素材 × 同じ列を 1 回だけ流して配る)。足すのは呼び手の bake。
     #[allow(clippy::too_many_arguments)]
     pub(super) fn motion_blur_copies(
         &mut self,
         previous_build: &mut Option<(LayerId, i64, Layer)>,
         copies: &[ResolvedLayer],
-        count: u32,
         text_documents: &HashMap<LayerId, TextDocument>,
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
         t: RationalTime,
@@ -25,22 +24,16 @@ impl Engine {
         projection_camera: ResolvedCamera,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         let Some(first) = copies.first() else { return Ok(Vec::new()) };
-        let Some(mut built) = self.build_layer_shared(previous_build, first, text_documents, shape_documents, t, comp, camera, projection_camera, CompositeBlendMode::Normal)? else {
+        let Some(built) = self.build_layer_shared(previous_build, first, text_documents, shape_documents, t, comp, camera, projection_camera, CompositeBlendMode::Normal)? else {
             return Ok(Vec::new());
         };
-        // 写しの不透明度(1/枚数)は置く時に 1 回だけ掛ける。板は層の不透明度で焼く。
-        built.placement.opacity = (first.placement.opacity * count as f32).min(1.0);
         let mut passes = translate_effect_passes(&first.effects);
         let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
         self.stamp_feedback(&mut passes, first.id, first.copy, 0, screen);
-        let mut plate = self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 }], CompositeBlendMode::Normal, first.placement, false)?;
-        plate.placement.opacity = 1.0;
-        let reference = first.placement.transform.inverse();
         Ok(copies.iter().map(|copy| {
-            let mut moved = plate.clone();
-            moved.placement.transform = copy.placement.transform * reference;
-            moved.placement.opacity = 1.0 / count as f32;
-            LayerWithPasses { layer: moved, passes: Vec::new(), pass_sources: Vec::new(), padding: 0 }
+            let mut placed = built.clone();
+            placed.placement = copy.placement;
+            LayerWithPasses { layer: placed, passes: passes.clone(), pass_sources: Vec::new(), padding: 0 }
         }).collect())
     }
 
