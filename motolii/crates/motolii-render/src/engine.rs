@@ -4,6 +4,9 @@ pub mod mask;
 pub mod text;
 pub mod strokes;
 
+mod motion;
+#[cfg(test)]
+mod motion_contracts;
 mod clip;
 mod render;
 mod texture;
