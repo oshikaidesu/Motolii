@@ -83,7 +83,8 @@ void main() {
         'layer': 1,
         'slot': points[1]['slot'],
       });
-      expect(placements.single, {'name': 'Colors', 'placement': 'show'});
+      expect(placements, isEmpty);
+      expect(c.browserTab.value, 'Colors');
       expect(find.byType(MenuAnchor), findsNothing);
       await tester.tap(find.byTooltip('Add stop'));
       await tester.pumpAndSettle();

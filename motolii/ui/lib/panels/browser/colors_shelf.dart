@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -11,7 +10,9 @@ import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../native_visual_sample.dart';
-import '../../foundation/color_wheel.dart';
+import '../../foundation/color_field.dart';
+import '../../foundation/panel_controls.dart';
+import 'color_wheel.dart';
 import 'parts.dart';
 import 'shelf.dart';
 
@@ -21,8 +22,11 @@ class ColorsShelf extends BrowserShelf {
   @override
   String get name => 'Colors';
 
-  /// Colours stacked under the wheel; one is a solid, more make a gradient.
+  /// Colours stacked beside the wheel; one is a solid, more make a gradient.
   List<List<double>> stops = [];
+
+  /// The wheel's colour while nothing is focused: what the stops are made of.
+  List<double>? picked;
 
   /// The wheel's size is the picker's height; the grip under the picker
   /// drags it.
@@ -139,13 +143,49 @@ class ColorsShelf extends BrowserShelf {
               ),
             ),
           ),
-        _ColorPicker(
-          controller: c,
-          target: target,
-          enabled: host.has('setColor'),
-          size: wheelSize(c),
-          stops: stops,
-          onStops: (next) => host.refresh(() => stops = next),
+        // The wheel takes the asked size, but never more than the panel
+        // leaves beside the stops bar.
+        LayoutBuilder(
+          builder: (context, box) {
+            final side = math
+                .min(
+                  wheelSize(c),
+                  box.maxWidth - _StopsBar.width - EditorMetrics.s6 * 3,
+                )
+                .clamp(EditorMetrics.s96, EditorMetrics.s200);
+            return Padding(
+              padding: const EdgeInsets.all(EditorMetrics.s6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ColorPicker(
+                    controller: c,
+                    target: target,
+                    enabled: host.has('setColor'),
+                    size: side,
+                    unbound: picked ?? const [1, 0, 0, 1],
+                    onPick: (rgba) => host.refresh(() => picked = rgba),
+                  ),
+                  const SizedBox(width: EditorMetrics.s6),
+                  _StopsBar(
+                    controller: c,
+                    height: side,
+                    current: picked ?? rgbaOf(target?['rgba']),
+                    stops: stops,
+                    onStops: (next) => host.refresh(() => stops = next),
+                    onPick: (rgba) => target == null
+                        ? host.refresh(() => picked = rgba)
+                        : c.command('setColor', {
+                            'layer': target['layer'],
+                            'slot': target['slot'],
+                            'rgba': rgba,
+                          }),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         shelfGrip(
           key: const ValueKey('browser:picker-grip'),
@@ -281,83 +321,63 @@ Map<String, dynamic>? _colorTarget(EditorSession controller) {
   if (controller.state['colorTarget'] is Map)
     return Map<String, dynamic>.from(controller.state['colorTarget']);
   final layer = controller.activeLayer;
-  final colors = layer?['colors'] as List? ?? [];
-  if (layer == null || colors.isEmpty) return null;
-  return {
-    ...Map<String, dynamic>.from(colors.first as Map),
-    'layer': layer['id'],
-  };
+  if (layer == null) return null;
+  for (final row in EditorSession.maps(layer['properties'])) {
+    if (row['kind'] == 'color' && row['slot'] != null)
+      return {
+        'layer': layer['id'],
+        'slot': row['slot'],
+        'rgba': row['value'],
+        'label': row['label'],
+      };
+  }
+  return null;
 }
 
+/// The wheel: hue on the ring, saturation and value inside. It edits the
+/// focused slot as a draft while the pointer is down and writes once on
+/// release; with nothing focused it only feeds the stops bar.
 class _ColorPicker extends StatefulWidget {
   const _ColorPicker({
     required this.controller,
     required this.target,
     required this.enabled,
     required this.size,
-    required this.stops,
-    required this.onStops,
+    required this.unbound,
+    required this.onPick,
   });
   final EditorSession controller;
   final Map<String, dynamic>? target;
   final bool enabled;
 
-  /// Wheel side the panel asks for; the width may still shrink it.
+  /// The wheel's colour while nothing is focused; the shelf keeps it.
+  final List<double> unbound;
+
+  /// The wheel's side; the shelf has already fitted it to the panel.
   final double size;
-  final List<List<double>> stops;
-  final ValueChanged<List<List<double>>> onStops;
+  final ValueChanged<List<double>> onPick;
   @override
   State<_ColorPicker> createState() => _ColorPickerState();
 }
 
 class _ColorPickerState extends State<_ColorPicker> {
-  List<double> unbound = [1, 0, 0, 1];
   List<double>? draft;
   String? dragPart;
-  final hex = TextEditingController();
-  final hexFocus = FocusNode();
+  bool previewUsed = false, ending = false;
   final pickerFocus = FocusNode();
-  Future<void>? previewFlight;
-  Map<String, dynamic>? queuedPreview;
-  bool previewUsed = false;
-  bool get canPreview =>
-      (widget.controller.state['capabilities'] as List? ?? []).contains(
-        'previewColor',
-      );
-
-  void preview() {
-    if (widget.target == null ||
-        draft == null ||
-        !canPreview ||
-        !widget.enabled)
-      return;
-    previewUsed = true;
-    queuedPreview = {
+  late final queue = EditorPreviewQueue<List<double>>(
+    (rgba) => widget.controller.command('previewColor', {
       'layer': widget.target!['layer'],
       'slot': widget.target!['slot'],
-      'rgba': List<double>.of(draft!),
-    };
-    previewFlight ??= pumpPreview();
-  }
-
-  Future<void> pumpPreview() async {
-    try {
-      while (queuedPreview != null) {
-        final request = queuedPreview!;
-        queuedPreview = null;
-        await widget.controller.command('previewColor', request);
-      }
-    } finally {
-      previewFlight = null;
-    }
-  }
+      'rgba': rgba,
+    }),
+  );
+  bool get canPreview =>
+      widget.controller.supports('previewColor') && widget.enabled;
 
   @override
   void dispose() {
-    queuedPreview = null;
-    if (previewUsed) widget.controller.cancelPreview();
-    hex.dispose();
-    hexFocus.dispose();
+    if (previewUsed && !ending) widget.controller.cancelPreview();
     pickerFocus.dispose();
     super.dispose();
   }
@@ -365,12 +385,10 @@ class _ColorPickerState extends State<_ColorPicker> {
   @override
   void didUpdateWidget(covariant _ColorPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (jsonEncode(oldWidget.target?['slot']) !=
-            jsonEncode(widget.target?['slot']) ||
+    if (oldWidget.target?['slot'] != widget.target?['slot'] ||
         oldWidget.target?['layer'] != widget.target?['layer']) {
       draft = null;
       dragPart = null;
-      queuedPreview = null;
       if (previewUsed) {
         previewUsed = false;
         widget.controller.cancelPreview();
@@ -380,7 +398,7 @@ class _ColorPickerState extends State<_ColorPicker> {
 
   List<double> get value =>
       draft ??
-      (widget.target == null ? unbound : rgbaOf(widget.target!['rgba']));
+      (widget.target == null ? widget.unbound : rgbaOf(widget.target!['rgba']));
 
   /// Set by the last layout; sampling reads the same geometry the paint used.
   ColorWheel wheel = ColorWheel(EditorMetrics.thumb, 'square');
@@ -396,8 +414,14 @@ class _ColorPickerState extends State<_ColorPicker> {
         ? wheel.pickInner(p, hsv)
         : hsv.withHue(wheel.hueAt(p));
     final c = updated.toColor();
-    setState(() => draft = [c.r, c.g, c.b, v[3]]);
-    preview();
+    final next = [c.r, c.g, c.b, v[3]];
+    setState(() => draft = next);
+    if (widget.target == null) {
+      widget.onPick(next);
+    } else if (canPreview) {
+      previewUsed = true;
+      queue.add(next);
+    }
   }
 
   Future<void> commit() async {
@@ -409,29 +433,32 @@ class _ColorPickerState extends State<_ColorPicker> {
     previewUsed = false;
     if (next == null) return;
     if (target == null) {
-      setState(() => unbound = next);
+      setState(() {});
       return;
     }
-    await previewFlight;
-    if (widget.enabled) {
-      if (used) {
-        await widget.controller.command('commitPreview');
-      } else {
-        await widget.controller.command('setColor', {
-          'layer': target['layer'],
-          'slot': target['slot'],
-          'rgba': next,
-        });
-      }
+    if (!widget.enabled) return;
+    ending = true;
+    try {
+      await queue.finish(
+        false,
+        () => used
+            ? widget.controller.command('commitPreview')
+            : widget.controller.command('setColor', {
+                'layer': target['layer'],
+                'slot': target['slot'],
+                'rgba': next,
+              }),
+      );
+    } finally {
+      ending = false;
+      if (mounted) setState(() {});
     }
-    if (mounted) setState(() {});
   }
 
   void cancel() {
-    queuedPreview = null;
     if (previewUsed) {
       previewUsed = false;
-      widget.controller.cancelPreview();
+      queue.finish(true, () async => widget.controller.cancelPreview());
     }
     setState(() {
       draft = null;
@@ -439,12 +466,134 @@ class _ColorPickerState extends State<_ColorPicker> {
     });
   }
 
-  static const double _stopsWidth = EditorMetrics.row;
+  @override
+  Widget build(BuildContext context) {
+    final color = _color(value);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          widget.controller.eyedropper.value = false;
+          cancel();
+        },
+      },
+      child: Focus(
+        focusNode: pickerFocus,
+        child: Builder(
+          builder: (context) {
+            wheel = ColorWheel(widget.size, shape);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onPanStart: (e) => sample(e.localPosition),
+                  onPanUpdate: (e) => sample(e.localPosition),
+                  onPanEnd: (_) => commit(),
+                  onPanCancel: cancel,
+                  onTapUp: (e) {
+                    sample(e.localPosition);
+                    commit();
+                  },
+                  child: SizedBox(
+                    width: wheel.side,
+                    height: wheel.side,
+                    child: CustomPaint(
+                      painter: ColorWheelPainter(color, wheel),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: wheel.side,
+                  height: EditorMetrics.s23,
+                  margin: const EdgeInsets.only(top: EditorMetrics.s6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: EditorMetrics.s5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: EditorTheme.line,
+                    borderRadius: BorderRadius.circular(EditorMetrics.s5),
+                  ),
+                  child: Row(
+                    children: [
+                      Swatch(color: color, size: EditorMetrics.s14),
+                      const Spacer(),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: widget.controller.eyedropper,
+                        builder: (context, on, _) => EditorTooltip(
+                          message: on
+                              ? 'Click the Stage to pick a colour · Esc cancels'
+                              : 'Pick a colour from the Stage',
+                          child: InkWell(
+                            key: const ValueKey('browser:eyedropper'),
+                            onTap: () =>
+                                widget.controller.eyedropper.value = !on,
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                right: EditorMetrics.s6,
+                              ),
+                              child: Icon(
+                                Icons.colorize,
+                                size: EditorMetrics.s14,
+                                color: on
+                                    ? EditorTheme.accent
+                                    : EditorTheme.muted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      EditorTooltip(
+                        message: shape == 'square'
+                            ? 'Switch to triangle'
+                            : 'Switch to square',
+                        child: InkWell(
+                          key: const ValueKey('browser:color-shape'),
+                          onTap: () => widget.controller.storeDesk(
+                            'colorShape',
+                            shape == 'square' ? 'triangle' : 'square',
+                          ),
+                          child: Icon(
+                            shape == 'square'
+                                ? Icons.change_history
+                                : Icons.crop_square,
+                            size: EditorMetrics.s14,
+                            color: EditorTheme.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
-  /// Stacked colours beside the wheel: tap one to pick it, right-click to
-  /// drop it, `+` adds the current colour, Save keeps the strip as a swatch.
-  Widget _stopsBar(List<double> current) {
-    final stops = widget.stops;
+/// Stacked colours beside the wheel: tap one to pick it, right-click to
+/// drop it, `+` adds the current colour, Save keeps the strip as a swatch.
+/// This authors the catalogue; it never edits a layer by itself.
+class _StopsBar extends StatelessWidget {
+  const _StopsBar({
+    required this.controller,
+    required this.height,
+    required this.current,
+    required this.stops,
+    required this.onStops,
+    required this.onPick,
+  });
+  final EditorSession controller;
+  final double height;
+  final List<double> current;
+  final List<List<double>> stops;
+  final ValueChanged<List<List<double>>> onStops;
+  final ValueChanged<List<double>> onPick;
+  static const double width = EditorMetrics.row;
+
+  @override
+  Widget build(BuildContext context) {
     Widget small(IconData icon, String tip, VoidCallback? press, {Key? key}) =>
         EditorTooltip(
           message: tip,
@@ -452,7 +601,7 @@ class _ColorPickerState extends State<_ColorPicker> {
             key: key,
             onTap: press,
             child: SizedBox(
-              width: _stopsWidth,
+              width: width,
               height: EditorMetrics.row,
               child: Icon(
                 icon,
@@ -465,14 +614,14 @@ class _ColorPickerState extends State<_ColorPicker> {
           ),
         );
     return SizedBox(
-      width: _stopsWidth,
-      height: wheel.side,
+      width: width,
+      height: height,
       child: Column(
         children: [
           small(
             Icons.add,
             'Add this colour as a stop',
-            () => widget.onStops([...stops, current]),
+            () => onStops([...stops, current]),
             key: const ValueKey('browser:stop-add'),
           ),
           Expanded(
@@ -487,12 +636,9 @@ class _ColorPickerState extends State<_ColorPicker> {
                           Expanded(
                             child: GestureDetector(
                               key: ValueKey('browser:stop:$i'),
-                              onTap: () {
-                                draft = List.of(stop);
-                                commit();
-                              },
+                              onTap: () => onPick(List.of(stop)),
                               onSecondaryTap: () =>
-                                  widget.onStops([...stops]..removeAt(i)),
+                                  onStops([...stops]..removeAt(i)),
                               child: ColoredBox(color: _color(stop)),
                             ),
                           ),
@@ -506,172 +652,15 @@ class _ColorPickerState extends State<_ColorPicker> {
             stops.isEmpty
                 ? null
                 : () {
-                    widget.controller.storeDesk('swatches', [
-                      ...ColorsShelf.saved(widget.controller),
+                    controller.storeDesk('swatches', [
+                      ...ColorsShelf.saved(controller),
                       {'stops': stops},
                     ]);
-                    widget.onStops([]);
+                    onStops([]);
                   },
             key: const ValueKey('browser:stop-save'),
           ),
         ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final v = value;
-    final color = _color(v);
-    final display =
-        '#${(color.toARGB32() & 0xffffff).toRadixString(16).padLeft(6, '0')}';
-    if (!hexFocus.hasFocus) hex.text = display;
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          widget.controller.eyedropper.value = false;
-          cancel();
-        },
-      },
-      child: Focus(
-        focusNode: pickerFocus,
-        child: Padding(
-          padding: const EdgeInsets.all(EditorMetrics.s6),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              wheel = ColorWheel(
-                math
-                    .min(
-                      widget.size,
-                      constraints.maxWidth - _stopsWidth - EditorMetrics.s6,
-                    )
-                    .clamp(EditorMetrics.s96, EditorMetrics.s200),
-                shape,
-              );
-              return Column(
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onPanStart: (e) => sample(e.localPosition),
-                        onPanUpdate: (e) => sample(e.localPosition),
-                        onPanEnd: (_) => commit(),
-                        onPanCancel: cancel,
-                        onTapUp: (e) {
-                          sample(e.localPosition);
-                          commit();
-                        },
-                        child: SizedBox(
-                          width: wheel.side,
-                          height: wheel.side,
-                          child: CustomPaint(
-                            painter: ColorWheelPainter(color, wheel),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: EditorMetrics.s6),
-                      _stopsBar(v),
-                    ],
-                  ),
-                  Container(
-                    width: wheel.side + EditorMetrics.s6 + _stopsWidth,
-                    height: EditorMetrics.s23,
-                    margin: const EdgeInsets.only(top: EditorMetrics.s6),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: EditorMetrics.s5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: EditorTheme.line,
-                      borderRadius: BorderRadius.circular(EditorMetrics.s5),
-                    ),
-                    child: Row(
-                      children: [
-                        Swatch(color: color, size: EditorMetrics.s14),
-                        const SizedBox(width: EditorMetrics.s6),
-                        Expanded(
-                          child: TextField(
-                            controller: hex,
-                            focusNode: hexFocus,
-                            readOnly: widget.target == null || !widget.enabled,
-                            style: const TextStyle(
-                              fontSize: EditorMetrics.font,
-                              color: EditorTheme.ink,
-                            ),
-                            onSubmitted: (text) {
-                              var raw = text.trim().replaceFirst('#', '');
-                              if (raw.length == 3)
-                                raw = raw.split('').map((s) => '$s$s').join();
-                              final parsed = raw.length == 6
-                                  ? int.tryParse(raw, radix: 16)
-                                  : null;
-                              if (parsed == null) {
-                                widget.controller.error.value =
-                                    'Enter a valid hex color';
-                                return;
-                              }
-                              draft = [
-                                ((parsed >> 16) & 255) / 255,
-                                ((parsed >> 8) & 255) / 255,
-                                (parsed & 255) / 255,
-                                v[3],
-                              ];
-                              commit();
-                            },
-                          ),
-                        ),
-                        ValueListenableBuilder<bool>(
-                          valueListenable: widget.controller.eyedropper,
-                          builder: (context, on, _) => EditorTooltip(
-                            message: on
-                                ? 'Click the Stage to pick a colour · Esc cancels'
-                                : 'Pick a colour from the Stage',
-                            child: InkWell(
-                              key: const ValueKey('browser:eyedropper'),
-                              onTap: () =>
-                                  widget.controller.eyedropper.value = !on,
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                  right: EditorMetrics.s6,
-                                ),
-                                child: Icon(
-                                  Icons.colorize,
-                                  size: EditorMetrics.s14,
-                                  color: on
-                                      ? EditorTheme.accent
-                                      : EditorTheme.muted,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        EditorTooltip(
-                          message: shape == 'square'
-                              ? 'Switch to triangle'
-                              : 'Switch to square',
-                          child: InkWell(
-                            key: const ValueKey('browser:color-shape'),
-                            onTap: () => widget.controller.storeDesk(
-                              'colorShape',
-                              shape == 'square' ? 'triangle' : 'square',
-                            ),
-                            child: Icon(
-                              shape == 'square'
-                                  ? Icons.change_history
-                                  : Icons.crop_square,
-                              size: EditorMetrics.s14,
-                              color: EditorTheme.muted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
       ),
     );
   }

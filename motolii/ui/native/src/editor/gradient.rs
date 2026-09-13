@@ -87,7 +87,7 @@ mod tests {
         doc.clear_preview_edits(axis_owner);
         assert!((model(&doc,&slot,RationalTime::ZERO).unwrap()["angle"].as_f64().unwrap()-90.0).abs()<0.001);
         let middle=ColorSlot::ShapeGradientPoint{layer,path:vec![0],index:1};
-        assert_eq!(super::super::color::read_color(&doc,&middle),Some([0.0,1.0,0.0,1.0]));
+        assert_eq!(super::super::color::read_color(&doc,&middle,RationalTime::ZERO),Some([0.0,1.0,0.0,1.0]));
         assert!(doc.undo());assert_eq!(doc.view().shapes(layer).unwrap(),before);
         assert!(edit(&doc,&slot,&json!({"stops":[{"offset":-1,"rgba":[0,0,0,1]}, {"offset":1,"rgba":[1,1,1,1]}]})).is_err());
         doc.apply(Intent::SetAttrs{layer,patch:LayerAttrsPatch{locked:Some(true),..Default::default()}}).unwrap();

@@ -12,12 +12,6 @@ pub(crate) struct ColorSwatch {
 }
 
 /// Inspector の COLOR の行。押すと焦点になり、机の色の引き出しが指す。
-pub(crate) struct ColorRow {
-    pub label: &'static str,
-    pub hex: String,
-    pub slot: ColorSlot,
-}
-
 fn push_swatch(
     seen: &mut std::collections::BTreeSet<[u8; 4]>,
     out: &mut Vec<ColorSwatch>,
@@ -160,7 +154,6 @@ pub(crate) struct InspectorData {
     pub transform: Vec<PropRow>,
     pub effects: Vec<EffectBlock>,
     pub has_effects: bool,
-    pub colors: Vec<ColorRow>,
 }
 
 pub(crate) fn expand_folders(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {

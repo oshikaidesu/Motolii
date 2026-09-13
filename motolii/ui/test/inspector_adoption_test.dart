@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
-import '../lib/foundation/color_wheel.dart';
+import '../lib/foundation/color_field.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/layout.dart';

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../foundation/metrics.dart';
-import '../foundation/color_wheel.dart';
+import '../foundation/color_field.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
@@ -12,7 +12,6 @@ import 'rich_text_editor.dart';
 import 'gradient_inspector.dart';
 
 part 'inspector_property_style.dart';
-part 'inspector_color.dart';
 
 /// The Inspector as controls, not rows. Every property row the snapshot sends
 /// is turned into one control by [_kindOf]; nothing here is laid out by hand
@@ -186,7 +185,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
         'frozen',
         'clipToBelow',
         'anchorFraction',
-        'colors',
         'fill',
         'matte',
         'text',
@@ -913,57 +911,35 @@ class _InspectorPanelState extends State<InspectorPanel> {
     ];
   }
 
-  /// The layer's colours open their shared Colors editor.
+  /// A shape's fill: the kind is a mode, the gradient's rows are values.
+  /// The colours themselves are property rows and sit with the shape's other
+  /// values; the stops' colours live in the gradient editor.
   List<Widget> _colors(Map<String, dynamic> layer) {
-    final colors = panelRows(layer['colors']);
     final fillRows = panelRows(layer['properties'])
-        .where((r) => '${r['id']}'.startsWith('fill.'))
+        .where(
+          (r) =>
+              '${r['id']}'.startsWith('fill.') &&
+              !'${r['id']}'.startsWith('fill.stop.'),
+        )
         .toList();
     return [
-      // A shape's fill leads with its kind — solid or one of the gradients —
-      // and a gradient keeps its stops under it. A solid's own colour is the
-      // swatch below. The stroke keeps its own row under that.
-      if (layer['kind'] == 'Shape' && layer['fill'] is Map) ...[
-        Padding(
-          padding: const EdgeInsets.only(bottom: EditorMetrics.s8),
-          child: GradientInspector(
-            key: ValueKey('fill:${layer['id']}'),
-            controller: c,
-            layer: layer,
-            fill: panelMap(layer['fill']),
-          ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: EditorMetrics.s8),
+        child: GradientInspector(
+          key: ValueKey('fill:${layer['id']}'),
+          controller: c,
+          layer: layer,
+          fill: panelMap(layer['fill']),
         ),
-        if (fillRows.isNotEmpty)
-          _cells([
-            for (final r in fillRows)
-              _Cell(
-                _control(layer, '${r['id']}'),
-                wide: _kindOf(r) == _Kind.color,
-              ),
-          ]),
-        if (panelMap(layer['fill'])['kind'] == 'solid')
-          for (final color in colors)
-            if (!panelMap(color['slot']).containsKey('ShapeStroke'))
-              Padding(
-                padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
-                child: EditorColorRow(
-                  controller: c,
-                  layer: layer,
-                  color: color,
-                ),
-              ),
-        for (final color in colors)
-          if (panelMap(color['slot']).containsKey('ShapeStroke'))
-            Padding(
-              padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
-              child: EditorColorRow(controller: c, layer: layer, color: color),
+      ),
+      if (fillRows.isNotEmpty)
+        _cells([
+          for (final r in fillRows)
+            _Cell(
+              _control(layer, '${r['id']}'),
+              wide: _kindOf(r) == _Kind.color,
             ),
-      ] else
-        for (final color in colors)
-          Padding(
-            padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
-            child: EditorColorRow(controller: c, layer: layer, color: color),
-          ),
+        ]),
     ];
   }
 
@@ -1785,6 +1761,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ),
             label: label,
             enabled: _canEdit(layer),
+            allowAlpha: row['alpha'] != false,
+            onFocus: !c.supports('focusColor')
+                ? null
+                : () => c.focusColor({
+                    'layer': layer['id'],
+                    'property': row['id'],
+                  }),
             onPreview: (v) => _write(layer, row, [
               v.r,
               v.g,
@@ -1957,15 +1940,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
                         if (!_multiple && text.isNotEmpty)
                           EditorCard(
                             title: 'Text',
-                            children: [
-                              ..._text(layer, text),
-                              ..._colors(layer),
-                            ],
+                            children: _text(layer, text),
                           ),
                         if (!_multiple &&
-                            text.isEmpty &&
-                            panelRows(layer['colors']).isNotEmpty)
-                          EditorCard(title: 'Color', children: _colors(layer)),
+                            layer['kind'] == 'Shape' &&
+                            layer['fill'] is Map)
+                          EditorCard(title: 'Fill', children: _colors(layer)),
                         if (layer['kind'] == 'Camera')
                           EditorCard(title: 'Camera', children: _camera(layer))
                         else

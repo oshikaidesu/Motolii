@@ -108,8 +108,14 @@ pub fn rows(shapes: &[ShapeNode]) -> Vec<ShapeRow> {
             rows.push(ShapeRow { name: property::FILL_CENTER, label: "Center", value: Value::Vec2(axis.center), range: None });
             rows.push(ShapeRow { name: property::FILL_SPREAD, label: "Spread", value: Value::F64(axis.spread), range: Some((0.0, 1000.0)) });
         }
+        if let Some(Brush::Solid(c)) = leaf.fill.as_ref().map(|f| &f.brush) {
+            rows.push(ShapeRow { name: property::SHAPE_FILL_COLOR, label: "Fill", value: Value::Color([c.r, c.g, c.b, 1.0]), range: None });
+        }
         let width = leaf.stroke.as_ref().map_or(0.0, |s| s.width);
         rows.push(ShapeRow { name: property::SHAPE_STROKE_WIDTH, label: "Stroke width", value: Value::F64(width), range: Some((0.0, 400.0)) });
+        // 線の色は線の有無に関わらず欄を出す。色を付けた時に線が生える(太さは Create の線と同じ)。
+        let stroke = match leaf.stroke.as_ref().map(|s| &s.brush) { Some(Brush::Solid(c)) => [c.r, c.g, c.b, 1.0], _ => [0.0, 0.0, 0.0, 1.0] };
+        rows.push(ShapeRow { name: property::SHAPE_STROKE_COLOR, label: "Stroke", value: Value::Color(stroke), range: None });
     }
     rows
 }
@@ -185,6 +191,14 @@ pub fn apply(shapes: &[ShapeNode], get: &dyn Fn(&str) -> Option<Value>) -> Vec<S
                     }
                 }
             }
+            if let Some(Value::Color(c)) = get(property::SHAPE_FILL_COLOR) {
+                let fill = shape.fill.get_or_insert_with(Default::default);
+                if matches!(fill.brush, Brush::Solid(_)) { fill.brush = Brush::Solid(Rgb { r: c[0], g: c[1], b: c[2] }); }
+            }
+            if let Some(Value::Color(c)) = get(property::SHAPE_STROKE_COLOR) {
+                let stroke = shape.stroke.get_or_insert_with(|| Stroke { width: DEFAULT_STROKE_WIDTH, ..Stroke::default() });
+                stroke.brush = Brush::Solid(Rgb { r: c[0], g: c[1], b: c[2] });
+            }
             if let Some(Value::F64(width)) = get(property::SHAPE_STROKE_WIDTH) {
                 if width.is_finite() {
                     if width <= 0.0 {
@@ -219,7 +233,7 @@ mod tests {
     #[test]
     fn properties_override_the_documents_shape_values() {
         let rows = super::rows(&star());
-        assert_eq!(rows.iter().map(|r| r.name).collect::<Vec<_>>(), vec![property::SHAPE_POINTS, property::SHAPE_OUTER_RADIUS, property::SHAPE_INNER_RADIUS, property::SHAPE_STROKE_WIDTH]);
+        assert_eq!(rows.iter().map(|r| r.name).collect::<Vec<_>>(), vec![property::SHAPE_POINTS, property::SHAPE_OUTER_RADIUS, property::SHAPE_INNER_RADIUS, property::SHAPE_STROKE_WIDTH, property::SHAPE_STROKE_COLOR]);
         assert_eq!(rows[0].value, Value::F64(5.0));
         let shown = apply(&star(), &|name| (name == property::SHAPE_POINTS).then_some(Value::F64(7.0)));
         let ShapeNode::Leaf(leaf) = &shown[0] else { panic!("葉") };
@@ -279,12 +293,12 @@ mod tests {
     #[test]
     fn stroke_width_and_length_are_rows_too() {
         let labels = |shapes: &[ShapeNode]| super::rows(shapes).iter().map(|r| r.label).collect::<Vec<_>>();
-        assert_eq!(labels(&star()), vec!["Points", "Outer Radius", "Inner Radius", "Stroke width"]);
+        assert_eq!(labels(&star()), vec!["Points", "Outer Radius", "Inner Radius", "Stroke width", "Stroke"]);
         let grown = apply(&star(), &|n| (n == property::SHAPE_STROKE_WIDTH).then_some(Value::F64(3.0)));
         let ShapeNode::Leaf(leaf) = &grown[0] else { panic!("葉") };
         assert_eq!(leaf.stroke.as_ref().map(|s| (s.width, s.brush.clone())), Some((3.0, Brush::Solid(Rgb::BLACK))));
         let line = vec![ShapeNode::Leaf(crate::doc::vector::Shape { stroke: Some(Stroke { width: 6.0, ..Stroke::default() }), ..crate::doc::vector::Shape::new(PathSource::Bezier(vec![crate::doc::vector::Contour::open([Point { x: 10.0, y: 0.0 }, Point { x: 110.0, y: 0.0 }])])) })];
-        assert_eq!(labels(&line), vec!["Length", "Stroke width"]);
+        assert_eq!(labels(&line), vec!["Length", "Stroke width", "Stroke"]);
         assert_eq!(super::rows(&line)[0].value, Value::F64(100.0));
         let longer = apply(&line, &|n| match n { property::SHAPE_LENGTH => Some(Value::F64(250.0)), property::SHAPE_STROKE_WIDTH => Some(Value::F64(0.0)), _ => None });
         let ShapeNode::Leaf(leaf) = &longer[0] else { panic!("葉") };

@@ -75,16 +75,11 @@ impl EditorRuntime{
         if let Some(row)=row{if let(Value::F64(n),Some((min,max)))=(&mut v,row.range){*n=n.clamp(min,max);}}
         self.doc.place_checked(layer,&p,v,self.time()?,self.animate).map(|v|v.into_iter().collect()).map_err(e)
     }
-    fn color_intent(&self,j:&J)->Result<Intent,String>{
+    fn color_intent(&self,j:&J)->Result<Vec<Intent>,String>{
         let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;
         if j.get("layer").is_some()&&slot.layer()!=layer(j)?{return Err("Color target layer mismatch".into())}
         if let Some(reason)=editor::functions::lens::edit_rejection(&self.doc.view(),slot.layer()).map_err(e)?{return Err(reason.into())}
-        let color=rgba(j)?;
-        let mut intent=editor::color::write_color(&self.doc,&slot,[color[0],color[1],color[2]]).map_err(e)?;
-        if let Intent::SetTextDocument{document,..}=&mut intent{
-            let ColorSlot::TextFill{style,..}=slot else{unreachable!()};
-            if let Some(s)=document.styles.iter_mut().find(|s|s.id==style){s.fill[3]=color[3]}
-        }Ok(intent)
+        editor::color::write_color(&self.doc,&slot,rgba(j)?,self.time()?,self.animate).map_err(e)
     }
     pub(crate) fn asset_used(&self,id:AssetId)->Result<bool,String>{
         let view=self.doc.view();let a=view.asset(id).map_err(e)?.ok_or("Asset missing")?;
@@ -211,9 +206,9 @@ impl EditorRuntime{
             }
             "moveKeys"=>{if self.selected_keys.is_empty(){return Err("Select keyframes".into())}let keys:Vec<_>=self.selected_keys.iter().map(|k|(k.layer,k.property.clone(),k.at_sec)).collect();let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let delta=editor::keyframe_edit::clamped_key_delta(&keys,fps,integer(&j,"deltaFrames")?);let edits=editor::keyframe_edit::key_selection_move_intents(&self.doc,&keys,delta).map_err(e)?;self.apply(edits)?;for k in &mut self.selected_keys{k.at_sec+=delta as f64/fps;}}
             "ease"=>self.apply_ease(&j)?,
-            "setColor"|"previewColor"=>{let intent=self.color_intent(&j)?;if op=="previewColor"{self.set_preview(vec![intent])?;}else{self.apply([intent])?;}}
-            "focusColor"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if slot.layer()!=layer(&j)?{return Err("Color target mismatch".into())}self.color_target=Some(slot);}
-            "applyPalette"=>{if let Some(slot)=self.color_target.clone(){let q=json!({"layer":slot.layer().0,"slot":slot,"rgba":rgba(&j)?});let edit=self.color_intent(&q)?;self.apply([edit])?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
+            "setColor"|"previewColor"=>{let intents=self.color_intent(&j)?;if op=="previewColor"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
+            "focusColor"=>{let slot:ColorSlot=if let Some(name)=j["property"].as_str(){editor::color::slot_of(&self.doc,layer(&j)?,name).ok_or("Not a color property")?}else{serde_json::from_value(j["slot"].clone()).map_err(e)?};if slot.layer()!=layer(&j)?{return Err("Color target mismatch".into())}self.color_target=Some(slot);}
+            "applyPalette"=>{if let Some(slot)=self.color_target.clone(){let q=json!({"layer":slot.layer().0,"slot":slot,"rgba":rgba(&j)?});let edits=self.color_intent(&q)?;self.apply(edits)?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
             "applyEffect"=>{let plugins:Vec<String>=if let Some(a)=j["pluginIds"].as_array(){a.iter().map(|p|p.as_str().map(str::to_owned).ok_or("Invalid plugin".into())).collect::<Result<_,String>>()?}else{vec![string(&j,"pluginId")?.into()]};let catalog=crate::render::engine::known_effects();if plugins.iter().any(|p|!catalog.iter().any(|c|c.plugin_id==*p)){return Err("Unknown effect".into())}let warp=plugins.iter().any(|p|catalog.iter().any(|d|d.plugin_id==*p&&d.stage==crate::render::compositor::EffectStage::Warp));if warp { for id in self.selected_required()? { let meta=self.doc.view().meta(*id).map_err(e)?.ok_or("Layer missing")?;let planar=match meta.source { LayerSource::Text|LayerSource::Shape=>true,LayerSource::File{path,..}=>!crate::render::media::is_mesh_path(&path)&&!crate::render::media::is_point_cloud_path(&path),_=>false };if !planar||self.doc.view().attrs(*id).map_err(e)?.is_some_and(|a|a.environment){return Err("2D warp requires a planar material".into())} } }let mut intents=Vec::new();let path_only=plugins.iter().any(|p|crate::doc::store::pathop::kind(p).is_some());for id in self.selected_required()?{if path_only&&self.doc.view().meta(*id).map_err(e)?.is_none_or(|m|m.source!=crate::doc::store::LayerSource::Shape){return Err("Path effects apply to shape layers".into())}intents.extend(editor::functions::verb::effect_batch_intents(&self.doc,*id,&plugins).map_err(e)?);}self.apply(intents)?;}
             "preferences"=>{if j.get("flatProjection").is_some(){self.flat_projection=serde_json::from_value(j["flatProjection"].clone()).map_err(e)?;}}
             "animate"=>{let on=j["enabled"].as_bool().ok_or("Missing enabled")?;let interp=if j["shape"].is_object(){editor::ease_kinds::decode(&j["shape"])?}else{Interp::Linear};self.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From{origin:self.time()?,interp}}else{Animate::Now{interp}};}

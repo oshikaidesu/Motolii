@@ -14,6 +14,8 @@ pub(crate) enum ColorSlot {
     /// 2色gradientの端。`end=false` が最小offset、`end=true` が最大offset。
     /// VecのindexをUIへ漏らさないので、stopの並び順が違う文書でも同じ端を指せる。
     ShapeGradientPoint { layer: LayerId, path: Vec<usize>, index: usize },
+    /// 色の型の property なら何でも(効果の param の色など)。名前がそのまま宛先。
+    Property { layer: LayerId, property: String },
     ShapeGradientStop {
         layer: LayerId,
         path: Vec<usize>,
@@ -28,6 +30,7 @@ impl ColorSlot {
             | Self::ShapeFill { layer, .. }
             | Self::ShapeStroke { layer, .. }
             | Self::ShapeGradientPoint { layer, .. }
+            | Self::Property { layer, .. }
             | Self::ShapeGradientStop { layer, .. } => *layer,
         }
     }

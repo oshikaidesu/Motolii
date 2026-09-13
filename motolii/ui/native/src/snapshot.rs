@@ -307,7 +307,7 @@ impl EditorRuntime{
         };
         let waveforms:Vec<_>=self.clock.waveform_tracks().iter().map(|track|json!({"layer":track.layer.0,"columns":track.columns(0.0,self.clock.duration(),256.0/self.clock.duration().max(0.01)).unwrap_or_default().iter().map(|c|json!({"frame":c.at_sec*comp.fps.as_f64(),"min":c.min,"max":c.max})).collect::<Vec<_>>()})).collect();
         let (undo,redo)=self.doc.history_depth();let point=self.selected.map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
-        let color_target=self.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot).map(|rgba|json!({"layer":slot.layer().0,"slot":slot,"label":"Color","rgba":rgba})));
+        let color_target=self.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().0,"slot":slot,"label":"Color","rgba":rgba})));
         let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
         let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"generation":generation})).collect::<Vec<_>>();
@@ -365,7 +365,9 @@ impl EditorRuntime{
             let s=resolved.styles.first();
             json!({"classes":crate::doc::store::text_edit::classifications(t.content.eval(at)),"styles":resolved.styles,"runs":resolved.runs,"fontFamily":s.map(|s|&s.font.family),"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})
         }else{Json::Null};
-        let colors:Vec<_>=data.colors.iter().filter(|_|!live).map(|c|json!({"label":c.label,"slot":c.slot,"rgba":editor::color::read_color(&self.doc,&c.slot).unwrap_or([0.0,0.0,0.0,1.0])})).collect();
+        // 色の行は property。Browser の輪へ焦点を渡す slot を添える。
+        for row in properties.iter_mut(){if row["kind"]=="color"{if let Some(slot)=row["id"].as_str().and_then(|name|editor::color::slot_of(&self.doc,id,name)){row["alpha"]=json!(matches!(slot,editor::session::ColorSlot::TextFill{..}|editor::session::ColorSlot::Property{..}));row["slot"]=json!(slot);}}}
+        let fill_slot=(meta.source==LayerSource::Shape).then(||view.shapes(id).ok()).flatten().and_then(|shapes|editor::functions::read::first_shape_fill(&shapes,Vec::new())).map(|(path,_)|editor::session::ColorSlot::ShapeFill{layer:id,path});
         let effects:Result<Vec<_>,String>=data.effects.iter().map(|effect|{
             let kind=crate::doc::store::placement::kind(&effect.plugin_id);
             let mut params:Vec<Json>=effect.params.iter().filter_map(|p|p.property.as_ref().map(|idp|prop(view,id,idp,&p.label,&p.value,p.range,at,fps,live))).collect::<Result<_,_>>()?;
@@ -399,12 +401,12 @@ impl EditorRuntime{
         }).collect();
         if live {
             let mut row=json!({"id":id.0,"text":text,"properties":properties,"effects":effects?});
-            if let Some(color)=data.colors.first(){row["fill"]=editor::gradient::model(&self.doc,&color.slot,at).unwrap_or(Json::Null);}
+            if let Some(slot)=&fill_slot{row["fill"]=editor::gradient::model(&self.doc,slot,at).unwrap_or(Json::Null);}
             return Ok(Some(row));
         }
         let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
-        let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"blocksLight":attrs.blocks_light,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"colors":colors,"effects":effects?,"contentKeys":content_keys});
-        if let Some(color)=data.colors.first(){row["fill"]=editor::gradient::model(&self.doc,&color.slot,at).unwrap_or(Json::Null);}
+        let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"blocksLight":attrs.blocks_light,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"effects":effects?,"contentKeys":content_keys});
+        if let Some(slot)=&fill_slot{row["fill"]=editor::gradient::model(&self.doc,slot,at).unwrap_or(Json::Null);}
         Ok(Some(row))
     }
 }

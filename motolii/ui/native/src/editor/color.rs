@@ -1,4 +1,6 @@
-use crate::doc::store::{Document,Intent,LayerId,ShapeNode,StoreError};
+use crate::doc::eval::Value;
+use crate::doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, ShapeNode, StoreError, TextStyleId};
+use crate::editor::functions::read;
 use crate::doc::vector::{Brush,Fill,Gradient,GradientStop,GradientType,PathSource,Point,Rgb};
 use crate::editor::session::ColorSlot;
 pub(super) fn leaf_mut<'a>(
@@ -108,152 +110,104 @@ pub(crate) fn set_shape_gradient(
     shape.fill = Some(fill);
     d.apply(Intent::SetShapes { layer, shapes }).map(|_| ())
 }
-pub(crate) fn read_color(doc: &Document, slot: &ColorSlot) -> Option<[f64; 4]> {
-    let d = doc;
-    let view = d.view();
+/// slot が指す色の property。色は property で、書類の brush はその既定。
+pub(crate) fn property_of(doc: &Document, slot: &ColorSlot) -> Option<PropertyId> {
+    let name = match slot {
+        ColorSlot::TextFill { style, .. } => return Some(PropertyId::text_style_fill_color(*style)),
+        ColorSlot::ShapeFill { .. } => property::SHAPE_FILL_COLOR.to_owned(),
+        ColorSlot::ShapeStroke { .. } => property::SHAPE_STROKE_COLOR.to_owned(),
+        ColorSlot::Property { property, .. } => property.clone(),
+        ColorSlot::ShapeGradientPoint { index, .. } => format!("{}{index}.color", property::FILL_STOP_PREFIX),
+        ColorSlot::ShapeGradientStop { layer, path, end } => {
+            let mut shapes = doc.view().shapes(*layer).ok()?;
+            let shape = leaf_mut(&mut shapes, path)?;
+            let Brush::Gradient(g) = &shape.fill.as_ref()?.brush else { return None };
+            let pick = |a: &(usize, &GradientStop), b: &(usize, &GradientStop)| a.1.offset.total_cmp(&b.1.offset);
+            let it = g.stops.iter().enumerate();
+            let (index, _) = if *end { it.max_by(pick)? } else { it.min_by(pick)? };
+            format!("{}{index}.color", property::FILL_STOP_PREFIX)
+        }
+    };
+    PropertyId::new(&name).ok()
+}
+
+/// property の名前から slot へ。Inspector の色の行が Browser の輪へ焦点を渡す時の逆引き。
+pub(crate) fn slot_of(doc: &Document, layer: LayerId, name: &str) -> Option<ColorSlot> {
+    if let Some(rest) = name.strip_prefix(property::TEXT_STYLE_PREFIX) {
+        let style = rest.strip_suffix(".fill_color")?.parse().ok()?;
+        return Some(ColorSlot::TextFill { layer, style: TextStyleId(style) });
+    }
+    if let Some(rest) = name.strip_prefix(property::FILL_STOP_PREFIX) {
+        let index = rest.strip_suffix(".color")?.parse().ok()?;
+        let (path, _) = read::first_shape_fill(&doc.view().shapes(layer).ok()?, Vec::new())?;
+        return Some(ColorSlot::ShapeGradientPoint { layer, path, index });
+    }
+    let shapes = doc.view().shapes(layer).ok()?;
+    match name {
+        property::SHAPE_FILL_COLOR => read::first_shape_fill(&shapes, Vec::new()).map(|(path, _)| ColorSlot::ShapeFill { layer, path }),
+        property::SHAPE_STROKE_COLOR => read::first_leaf(&shapes, Vec::new()).map(|(path, _)| ColorSlot::ShapeStroke { layer, path }),
+        _ => Some(ColorSlot::Property { layer, property: name.to_owned() }),
+    }
+}
+
+/// 時刻 t の色: property があればそれ、無ければ書類の brush。
+pub(crate) fn read_color(doc: &Document, slot: &ColorSlot, t: RationalTime) -> Option<[f64; 4]> {
+    let view = doc.view();
+    if let Some(Value::Color(c)) = property_of(doc, slot).and_then(|p| view.value_at(slot.layer(), &p, t).ok().flatten()) {
+        return Some(c);
+    }
     match slot {
+        ColorSlot::Property { .. } => None,
         ColorSlot::TextFill { layer, style } => {
             let text = view.text_document(*layer).ok()??;
-            let found = text.styles.iter().find(|s| s.id == *style)?;
-            Some(found.fill)
+            Some(text.styles.iter().find(|s| s.id == *style)?.fill)
         }
         ColorSlot::ShapeFill { layer, path } => {
             let mut shapes = view.shapes(*layer).ok()?;
-            let shape = leaf_mut(&mut shapes, path)?;
-            match shape.fill.as_ref().map(|f| &f.brush) {
+            match leaf_mut(&mut shapes, path)?.fill.as_ref().map(|f| &f.brush) {
                 Some(Brush::Solid(rgb)) => Some([rgb.r, rgb.g, rgb.b, 1.0]),
                 _ => None,
             }
         }
         ColorSlot::ShapeStroke { layer, path } => {
             let mut shapes = view.shapes(*layer).ok()?;
-            let shape = leaf_mut(&mut shapes, path)?;
-            match shape.stroke.as_ref().map(|s| &s.brush) {
+            match leaf_mut(&mut shapes, path)?.stroke.as_ref().map(|s| &s.brush) {
                 Some(Brush::Solid(rgb)) => Some([rgb.r, rgb.g, rgb.b, 1.0]),
-                _ => None,
+                _ => Some([0.0, 0.0, 0.0, 1.0]),
             }
         }
         ColorSlot::ShapeGradientPoint { layer, path, index } => {
             let mut shapes = view.shapes(*layer).ok()?;
-            let shape = leaf_mut(&mut shapes, path)?;
-            let Brush::Gradient(g) = &shape.fill.as_ref()?.brush else { return None };
+            let Brush::Gradient(g) = &leaf_mut(&mut shapes, path)?.fill.as_ref()?.brush else { return None };
             let c = g.stops.get(*index)?.color;
             Some([c.r, c.g, c.b, 1.0])
         }
         ColorSlot::ShapeGradientStop { layer, path, end } => {
             let mut shapes = view.shapes(*layer).ok()?;
-            let shape = leaf_mut(&mut shapes, path)?;
-            match shape.fill.as_ref().map(|fill| &fill.brush) {
-                Some(Brush::Gradient(gradient)) => {
-                    endpoint_color(gradient, *end).map(|rgb| [rgb.r, rgb.g, rgb.b, 1.0])
-                }
+            match leaf_mut(&mut shapes, path)?.fill.as_ref().map(|fill| &fill.brush) {
+                Some(Brush::Gradient(gradient)) => endpoint_color(gradient, *end).map(|rgb| [rgb.r, rgb.g, rgb.b, 1.0]),
                 _ => None,
             }
         }
     }
 }
+
+/// 色を書く: 他の property と同じ入口(`place_checked`)。animate が立っていれば鍵になる。
+/// 単色で無い塗り(gradient)に単色を書く手は無い(stop ごとの slot で書く)。
 pub(crate) fn write_color(
     doc: &Document,
     slot: &ColorSlot,
-    [r, g, b]: [f64; 3],
-) -> Result<Intent, StoreError> {
-    let d = doc;
-    let intent = match slot {
-        ColorSlot::TextFill { layer, style } => {
-            let Some(mut text) = d.view().text_document(*layer)? else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            let Some(found) = text.styles.iter_mut().find(|s| s.id == *style) else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            found.fill = [r, g, b, found.fill[3]];
-            Intent::SetTextDocument {
-                layer: *layer,
-                document: text,
-            }
+    rgba: [f64; 4],
+    at: RationalTime,
+    animate: Animate,
+) -> Result<Vec<Intent>, StoreError> {
+    if let ColorSlot::ShapeFill { layer, path } = slot {
+        let mut shapes = doc.view().shapes(*layer)?;
+        if !matches!(leaf_mut(&mut shapes, path).and_then(|s| s.fill.as_ref()).map(|f| &f.brush), Some(Brush::Solid(_)) | None) {
+            return Err(StoreError::Property("The color target is no longer editable".into()));
         }
-        ColorSlot::ShapeFill { layer, path } => {
-            let mut shapes = d.view().shapes(*layer)?;
-            let Some(shape) = leaf_mut(&mut shapes, path) else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            // gradient の塗りは単色で潰さない(輪の相手は read_color が Solid の時だけ)。
-            if matches!(
-                shape.fill.as_ref().map(|f| &f.brush),
-                Some(Brush::Gradient(_))
-            ) {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            }
-            let mut fill = shape.fill.take().unwrap_or_default();
-            fill.brush = Brush::Solid(Rgb { r, g, b });
-            shape.fill = Some(Fill { ..fill });
-            Intent::SetShapes {
-                layer: *layer,
-                shapes,
-            }
-        }
-        ColorSlot::ShapeStroke { layer, path } => {
-            let mut shapes = d.view().shapes(*layer)?;
-            let Some(shape) = leaf_mut(&mut shapes, path) else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            let mut stroke = shape.stroke.take().unwrap_or_default();
-            stroke.brush = Brush::Solid(Rgb { r, g, b });
-            if stroke.width <= 0.0 { stroke.width = crate::doc::store::shape_props::DEFAULT_STROKE_WIDTH; }
-            shape.stroke = Some(stroke);
-            Intent::SetShapes { layer: *layer, shapes }
-        }
-        ColorSlot::ShapeGradientPoint { layer, path, index } => {
-            let mut shapes = d.view().without_transients().shapes(*layer)?;
-            let shape = leaf_mut(&mut shapes, path).ok_or_else(||StoreError::Property("Gradient no longer exists".into()))?;
-            let Some(Fill { brush: Brush::Gradient(gradient), .. }) = &mut shape.fill else { return Err(StoreError::Property("Gradient no longer exists".into())) };
-            let stop = gradient.stops.get_mut(*index).ok_or_else(||StoreError::Property("Stop no longer exists".into()))?;
-            stop.color = Rgb { r, g, b };
-            Intent::SetShapes { layer: *layer, shapes }
-        }
-        ColorSlot::ShapeGradientStop { layer, path, end } => {
-            let mut shapes = d.view().shapes(*layer)?;
-            let Some(shape) = leaf_mut(&mut shapes, path) else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            let Some(fill) = shape.fill.as_mut() else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            let Brush::Gradient(gradient) = &mut fill.brush else {
-                return Err(StoreError::Property("The color target is no longer editable".into()));
-            };
-            write_endpoint(gradient, *end, Rgb { r, g, b });
-            Intent::SetShapes {
-                layer: *layer,
-                shapes,
-            }
-        }
-    };
-    Ok(intent)
-}
-pub(crate) fn write_alpha(
-    doc: &mut Document,
-    slot: &ColorSlot,
-    alpha: f64,
-) -> Result<(), StoreError> {
-    let d = doc;
-    let (layer, style) = match slot {
-        ColorSlot::TextFill { layer, style } => {
-            (*layer, *style)
-        }
-        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeStroke { .. } | ColorSlot::ShapeGradientStop { .. } | ColorSlot::ShapeGradientPoint { .. } => return Ok(()),
-    };
-    let Some(mut text) = d.view().text_document(layer)? else {
-        return Ok(());
-    };
-    let Some(found) = text.styles.iter_mut().find(|s| s.id == style) else {
-        return Ok(());
-    };
-    let a = alpha.clamp(0.0, 1.0);
-    found.fill[3] = a;
-    d.apply(Intent::SetTextDocument {
-        layer,
-        document: text,
-    })
-    .map(|_| ())
+    }
+    let property = property_of(doc, slot).ok_or_else(|| StoreError::Property("The color target is no longer editable".into()))?;
+    let alpha = match slot { ColorSlot::TextFill { .. } | ColorSlot::Property { .. } => rgba[3], _ => 1.0 };
+    Ok(doc.place_checked(slot.layer(), &property, Value::Color([rgba[0], rgba[1], rgba[2], alpha]), at, animate)?.into_iter().collect())
 }

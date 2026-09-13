@@ -93,7 +93,7 @@ mod tests {
         doc.apply(Intent::SetTextDocument { layer, document: loaded }).unwrap();
         let view = doc.view();
         let data = crate::editor::functions::read::inspector_data_from_doc(&view, layer, time, &[]);
-        assert_eq!(data.colors.iter().map(|c| c.label).collect::<Vec<_>>(), vec!["Fill"]);
+        assert_eq!(data.text.iter().filter(|r| matches!(r.value, Value::Color(_))).map(|r| r.label.as_str()).collect::<Vec<_>>(), vec!["Fill"]);
         assert!(serde_json::from_value::<crate::editor::session::ColorSlot>(
             json!({"TextStroke":{"layer":1,"style":0}})
         ).is_err());

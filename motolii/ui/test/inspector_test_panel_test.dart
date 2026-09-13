@@ -348,12 +348,16 @@ void main() {
               'value': 72.0,
               'keys': [],
             },
-          ],
-          'colors': [
             {
+              'id': 'text_style.0.fill_color',
               'label': 'Fill',
-              'slot': 'fill',
-              'rgba': [1.0, 0.5, 0.0, 1.0],
+              'kind': 'color',
+              'alpha': true,
+              'slot': {
+                'TextFill': {'layer': 4, 'style': 0},
+              },
+              'value': [1.0, 0.5, 0.0, 1.0],
+              'keys': [],
             },
           ],
           'effects': [],
@@ -380,7 +384,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('TEXT'), findsOneWidget);
     expect(find.text('Hello'), findsOneWidget);
-    expect(find.text('COLOR'), findsOneWidget);
+    // The colour is a value row of the text, with the hex to type into.
+    expect(find.text('COLOR'), findsNothing);
     expect(find.text('#ff8000'), findsOneWidget);
   });
 }

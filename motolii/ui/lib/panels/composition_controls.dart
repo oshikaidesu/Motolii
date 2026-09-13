@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/color_field.dart';
 import '../foundation/metrics.dart';
 
 class CompositionControls extends StatelessWidget {
@@ -85,16 +86,16 @@ class CompositionControls extends StatelessWidget {
                       selected: _isGrey(s['background'], grey),
                     ),
                   Expanded(
-                    child: EditorDraftField(
+                    child: EditorColorField(
                       key: ValueKey('background-${s['background']}'),
-                      value: _hex(s['background']),
-                      label: 'background hex',
-                      validator: (v) => _parseHex(v) == null
-                          ? 'Enter a hex colour like 1a1a1a'
-                          : null,
-                      onCommit: (v) => controller.command('composition', {
-                        'background': [..._parseHex(v)!, 1.0],
+                      value: _color(s['background']),
+                      label: 'background',
+                      allowAlpha: false,
+                      onPreview: (v) => controller.command('composition', {
+                        'background': [v.r, v.g, v.b, 1.0],
                       }),
+                      onFinish: () async {},
+                      onCancel: () async {},
                     ),
                   ),
                 ],
@@ -131,21 +132,8 @@ class CompositionControls extends StatelessWidget {
   ];
   static bool _isGrey(dynamic v, double grey) =>
       _rgba(v).take(3).every((x) => (x - grey).abs() < .005);
-  static String _hex(dynamic v) => _rgba(v)
-      .take(3)
-      .map(
-        (x) => (x.clamp(0, 1) * 255).round().toRadixString(16).padLeft(2, '0'),
-      )
-      .join();
-  static List<double>? _parseHex(String value) {
-    final text = value.trim().replaceFirst('#', '');
-    if (text.length != 6) return null;
-    final n = int.tryParse(text, radix: 16);
-    if (n == null) return null;
-    return [
-      (n >> 16) & 255,
-      (n >> 8) & 255,
-      n & 255,
-    ].map((x) => x / 255).toList();
+  static Color _color(dynamic v) {
+    final c = _rgba(v);
+    return Color.from(alpha: 1, red: c[0], green: c[1], blue: c[2]);
   }
 }

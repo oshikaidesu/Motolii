@@ -139,6 +139,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     super.initState();
     tab = widget.fixedTab ?? 'Create';
     widget.controller.importedAssets.addListener(_revealImported);
+    widget.controller.browserTab.addListener(_revealTab);
     widget.controller.deskWork.addListener(_redraw);
     _slice = widget.controller.slice(
       'browser',
@@ -235,6 +236,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   @override
   void dispose() {
     widget.controller.importedAssets.removeListener(_revealImported);
+    widget.controller.browserTab.removeListener(_revealTab);
     widget.controller.deskWork.removeListener(_redraw);
     _slice.removeListener(_onDocument);
     for (final s in shelves) s.dispose();
@@ -244,6 +246,13 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     panelFocus.dispose();
     scroll.dispose();
     super.dispose();
+  }
+
+  /// A colour row's swatch asks for the Colors shelf; the wheel follows.
+  void _revealTab() {
+    final value = widget.controller.browserTab.value;
+    if (!mounted || widget.fixedTab != null || tab == value) return;
+    changeTab(value);
   }
 
   void changeTab(String value) {

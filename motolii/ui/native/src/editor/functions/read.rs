@@ -1,6 +1,6 @@
 use crate::doc::store::{property, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreError, StoreView, Value};
 use crate::render::engine::EffectDescriptor;
-use crate::editor::fixture::{AssetFamily, ColorRow, EffectBlock, InspectorData, PropRow, LABEL_PALETTE};
+use crate::editor::fixture::{AssetFamily, EffectBlock, InspectorData, PropRow, LABEL_PALETTE};
 use crate::editor::session::ColorSlot;
 
 pub(crate) fn property_value(
@@ -287,77 +287,21 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             let (cells, vec2) = match value {
                 Value::Vec2([x, y]) => ([f(x), f(y), String::new()], true),
                 Value::F64(v) => ([String::new(), String::new(), f(v)], false),
+                Value::Color(_) => (Default::default(), false),
                 _ => continue,
             };
             text.push(PropRow { label: row.label.into(), cells, dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2, value, range: row.range, axis: [None, None, None] });
         }
     }
 
-    let mut colors = Vec::new();
-    let row = |label, c: [f64; 4], slot| ColorRow {
-        label,
-        hex: hex_of([
-            (c[0] * 255.0).round() as u8,
-            (c[1] * 255.0).round() as u8,
-            (c[2] * 255.0).round() as u8,
-            (c[3] * 255.0).round() as u8,
-        ]),
-        slot,
-    };
-    match view.meta(layer).ok().flatten().map(|m| m.source) {
-        Some(LayerSource::Text) => {
-            if let Ok(Some(doc)) = view.text_document(layer) {
-                if let Some(style) = doc.styles.first() {
-                    colors.push(row("Fill", style.fill, ColorSlot::TextFill { layer, style: style.id }));
-                }
-            }
+    // 文字の色は style の property。書類の style が既定で、property が上書きする(resolve と同じ順)。
+    if let Ok(Some(doc)) = view.text_document(layer) {
+        if let Some(style) = doc.styles.first() {
+            let prop = PropertyId::text_style_fill_color(style.id);
+            let value = match view.value_at(layer, &prop, t).ok().flatten() { Some(v @ Value::Color(_)) => v, _ => Value::Color(style.fill) };
+            text.push(PropRow { label: "Fill".into(), cells: Default::default(), dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2: false, value, range: None, axis: [None, None, None] });
         }
-        Some(LayerSource::Shape) => {
-            if let Ok(shapes) = view.shapes(layer) {
-                if let Some((path, brush)) = first_shape_fill(&shapes, Vec::new()) {
-                    match brush {
-                        crate::doc::vector::Brush::Solid(rgb) => {
-                            colors.push(row("Fill", [rgb.r, rgb.g, rgb.b, 1.0], ColorSlot::ShapeFill { layer, path }));
-                        }
-                        crate::doc::vector::Brush::Gradient(gradient) => {
-                            let start = gradient
-                                .stops
-                                .iter()
-                                .min_by(|a, b| a.offset.total_cmp(&b.offset))
-                                .map(|stop| stop.color)
-                                .unwrap_or(crate::doc::vector::Rgb::BLACK);
-                            let end = gradient
-                                .stops
-                                .iter()
-                                .max_by(|a, b| a.offset.total_cmp(&b.offset))
-                                .map(|stop| stop.color)
-                                .unwrap_or(start);
-                            colors.push(row(
-                                "Start",
-                                [start.r, start.g, start.b, 1.0],
-                                ColorSlot::ShapeGradientStop { layer, path: path.clone(), end: false },
-                            ));
-                            colors.push(row(
-                                "End",
-                                [end.r, end.g, end.b, 1.0],
-                                ColorSlot::ShapeGradientStop { layer, path, end: true },
-                            ));
-                        }
-                    }
-                }
-                // 線の色は塗りの有無に関わらず出す。無い物を「足す口」が無いと線の形に色が付かない。
-                if let Some((path, leaf)) = first_leaf(&shapes, Vec::new()) {
-                    let stroke = match leaf.stroke.as_ref().map(|s| &s.brush) {
-                        Some(crate::doc::vector::Brush::Solid(rgb)) => [rgb.r, rgb.g, rgb.b, 1.0],
-                        _ => [0.0, 0.0, 0.0, 1.0],
-                    };
-                    colors.push(row("Stroke", stroke, ColorSlot::ShapeStroke { layer, path }));
-                }
-            }
-        }
-        _ => {}
     }
-
     // 奥行きは板(形・文字・画・動画)だけ。網・点群は素材が奥行きを持ち、camera 等は絵が無い。
     let flat = matches!(source_name, "shape" | "text" | "media");
     let mut transform = vec![
@@ -428,7 +372,6 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         blend: sel_attrs.blend_mode,
         ident_name: sel_attrs.name,
         ident_sub: format!("{source_name} · {key_count} keys"),
-        colors,
         text,
         transform,
         effects,

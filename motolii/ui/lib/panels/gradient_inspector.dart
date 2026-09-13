@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../foundation/metrics.dart';
-import '../foundation/color_wheel.dart';
+import '../foundation/color_field.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../session/editor_session.dart';
@@ -85,8 +85,16 @@ class _GradientInspectorState extends State<GradientInspector>
         ...patch,
         'preview': preview,
       });
+
+  /// Choosing a stop is focusing its colour: the row below shows it and the
+  /// Browser's wheel turns to it.
   Future<void> focus(int index) async {
     setState(() => selected = index);
+    if (!c.supports('focusColor')) return;
+    await c.focusColor({
+      'layer': widget.layer['id'],
+      'slot': stops[index]['slot'],
+    });
   }
 
   Color color(Map<String, dynamic> stop) {
@@ -386,6 +394,12 @@ class _GradientInspectorState extends State<GradientInspector>
               label: 'Stop ${selected + 1}',
               allowAlpha: false,
               enabled: enabled,
+              onFocus: !c.supports('focusColor')
+                  ? null
+                  : () => c.focusColor({
+                      'layer': widget.layer['id'],
+                      'slot': rows[selected]['slot'],
+                    }),
               onPreview: (v) => c.command('previewColor', {
                 'layer': widget.layer['id'],
                 'slot': rows[selected]['slot'],

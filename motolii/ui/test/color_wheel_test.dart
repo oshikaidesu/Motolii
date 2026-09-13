@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/browser.dart';
+import '../lib/panels/browser/color_wheel.dart';
 
 void main() {
   testWidgets('Square or triangle: tapping the wheel picks a colour', (
@@ -44,7 +45,7 @@ void main() {
       ),
     );
     final wheel = find.byWidgetPredicate(
-      (w) => w is CustomPaint && '${w.painter.runtimeType}' == '_WheelPainter',
+      (w) => w is CustomPaint && w.painter is ColorWheelPainter,
     );
     final center = tester.getCenter(wheel);
     final half = tester.getSize(wheel).width / 2;
