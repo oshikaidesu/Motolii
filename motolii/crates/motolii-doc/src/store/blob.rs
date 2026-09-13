@@ -106,5 +106,13 @@ mod tests {
         assert!(lo.distance(glam::vec2(75.0, 90.0)) < 1e-3 && hi.distance(glam::vec2(125.0, 110.0)) < 1e-3, "{lo} {hi}");
         let (lo, hi) = box_of(&placed[1]);
         assert!(lo.distance(glam::vec2(250.0, 150.0)) < 1e-3 && hi.distance(glam::vec2(350.0, 250.0)) < 1e-3, "{lo} {hi}");
+        assert_eq!(placed[0].shape_stretch, [1.0, 1.0], "形でない素材は置き場所で伸ばす");
+        // 形の素材は置き場所では伸ばさず、輪郭を伸ばす倍率を渡す(線は太らない)。
+        doc.apply(Intent::SetSource { layer, source: LayerSource::Shape }).unwrap();
+        let shaped = copies(doc.view().with_analysis(&inputs));
+        assert_eq!(shaped[0].shape_stretch, [0.5, 0.2]);
+        let lo = shaped[0].placement.transform.transform_point2(glam::Vec2::ZERO);
+        let unit = shaped[0].placement.transform.transform_point2(glam::vec2(1.0, 1.0)) - lo;
+        assert!(lo.distance(glam::vec2(75.0, 90.0)) < 1e-3 && unit.distance(glam::Vec2::ONE) < 1e-3, "置き場所は動かすだけ: {lo} {unit}");
     }
 }

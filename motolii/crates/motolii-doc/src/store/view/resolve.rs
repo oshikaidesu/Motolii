@@ -482,6 +482,7 @@ impl<'a> StoreView<'a> {
             after_effects: plate.as_ref().map(|(_, effects)| effects.clone()).unwrap_or_default(),
             plate: plate.map(|(group, _)| group),
             averaged: 0,
+            shape_stretch: [1.0, 1.0],
         }))
     }
 
@@ -553,9 +554,11 @@ impl<'a> StoreView<'a> {
         };
         let params = &base.effects[first].params;
         let layer = base.id;
-        let placements = match placement::kind(&base.effects[first].plugin_id) {
-            Some(kind) => placement::placements(kind, params),
-            None => self.blob_placements(layer, t, params)?,
+        // 形の素材は輪郭を伸ばし(線は太らない)、それ以外は置き場所で伸ばす。
+        let stretch_outline = base.source == crate::doc::store::LayerSource::Shape;
+        let placements: Vec<(placement::Placement, [f32; 2])> = match placement::kind(&base.effects[first].plugin_id) {
+            Some(kind) => placement::placements(kind, params).into_iter().map(|p| (p, [1.0, 1.0])).collect(),
+            None => self.blob_placements(layer, t, params, stretch_outline)?,
         };
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
         let is_group = base.source == crate::doc::store::LayerSource::Group;
@@ -565,7 +568,7 @@ impl<'a> StoreView<'a> {
         }
         let whole = is_group && base.effects[first].scope == crate::doc::store::EffectScope::Whole;
         let picks = placement::picks(params, &children.iter().map(|c| c.0).collect::<Vec<_>>(), placements.len());
-        for placement in placements {
+        for (placement, outline) in placements {
             let Ok(at) = t.try_sub(placement.time_offset) else { continue };
             let shifted = at != t;
             let subjects: Vec<LayerId> = if whole {
@@ -607,6 +610,7 @@ impl<'a> StoreView<'a> {
                     copy.effects.pop();
                 }
                 copy.copy = placement.index;
+                copy.shape_stretch = outline;
                 copy.placement.transform =
                     parent2 * placement.affine2(pivot) * parent2.inverse() * copy.placement.transform;
                 if let Some(world) = copy.placement.world_transform {
@@ -623,7 +627,7 @@ impl<'a> StoreView<'a> {
 
     /// Blob Track: host が解いた塊(`AnalysisInputs`)を配置に。素材(この層)の中心を塊の中心へ、Box なら素材を箱の大きさへ伸ばす。
     /// 解析の入力が無ければ空(描く前・UI の問い合わせ)。鍵の効果の番号は、層の中で何番目の Blob Track か。
-    fn blob_placements(&self, layer: LayerId, t: RationalTime, params: &[(String, crate::doc::store::Value)]) -> Result<Vec<placement::Placement>, StoreError> {
+    fn blob_placements(&self, layer: LayerId, t: RationalTime, params: &[(String, crate::doc::store::Value)], stretch_outline: bool) -> Result<Vec<(placement::Placement, [f32; 2])>, StoreError> {
         use crate::doc::store::blob;
         let Some(marks) = self.analysis().and_then(|a| a.blobs(layer, crate::doc::store::EffectId(0), t)) else { return Ok(Vec::new()) };
         let position = glam::Vec2::from(self.resolve_position(layer, t)?);
@@ -633,7 +637,8 @@ impl<'a> StoreView<'a> {
             let stretch = if fit_box { [mark.size[0] / material[0], mark.size[1] / material[1]] } else { [1.0, 1.0] };
             let half = glam::vec2(material[0] * stretch[0], material[1] * stretch[1]) * 0.5;
             let offset = glam::Vec2::from(mark.center) - position - half;
-            placement::Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch }
+            let (placed, outline) = if stretch_outline { ([1.0, 1.0], stretch) } else { (stretch, [1.0, 1.0]) };
+            (placement::Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch: placed }, outline)
         }).collect())
     }
 

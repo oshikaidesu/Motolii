@@ -508,6 +508,8 @@ pub struct ResolvedLayer {
     pub plate: Option<LayerId>,
     /// Motion Blur の写しなら、足して平均する枚数(各写しの不透明度は 1/枚数)。0 なら普通に重ねる。
     pub averaged: u32,
+    /// 形の輪郭を伸ばす倍率(Blob Track が形の素材を箱へ合わせる)。線の太さは伸ばさない。[1, 1] は素のまま。
+    pub shape_stretch: [f32; 2],
 }
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。

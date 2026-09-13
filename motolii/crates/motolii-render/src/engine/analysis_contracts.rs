@@ -1,7 +1,7 @@
 //! 解析の入力の審判(実 GPU): Blob Track が元の層の絵から塊を拾い、素材を塊ごとに置く。
 
 use crate::doc::store::{blob, property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
-use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode};
+use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode, Stroke};
 use crate::render::engine::Engine;
 
 const W: u32 = 320;
@@ -23,6 +23,10 @@ fn clip(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 }
 
 fn document(path: &std::path::Path, persist: bool) -> Document {
+    document_with(path, persist, Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 0.0, b: 0.0 }), ..Default::default() }), None)
+}
+
+fn document_with(path: &std::path::Path, persist: bool, fill: Option<Fill>, stroke: Option<Stroke>) -> Document {
     let mut doc = Document::new();
     doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
     let (source, material) = (LayerId(1), LayerId(2));
@@ -32,7 +36,7 @@ fn document(path: &std::path::Path, persist: bool) -> Document {
         Intent::SetConstant { layer: source, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
         Intent::AddLayer(material),
         Intent::SetMeta { layer: material, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 50) } },
-        Intent::SetShapes { layer: material, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 10.0, y: 10.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 0.0, b: 0.0 }), ..Default::default() }) })] },
+        Intent::SetShapes { layer: material, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 10.0, y: 10.0 } }, ops: Vec::new(), stroke, fill })] },
         Intent::SetConstant { layer: material, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
         Intent::SetEffects { layer: material, effects: vec![EffectInstance { id: EffectId(0), plugin_id: blob::BLOB_TRACK.into() }] },
     ]).unwrap();
@@ -86,3 +90,24 @@ fn kept_ids_follow_the_moving_square_and_land_the_same_however_you_arrive() {
     let jumped = Engine::new().unwrap().render_frame(&doc.view(), at(12)).unwrap();
     assert_eq!(jumped, walked, "飛んで来た絵が辿った絵と違う");
 }
+
+/// 箱の大きさが違っても枠線は素材の太さのまま(輪郭を伸ばし、線は伸ばさない)。
+#[test]
+fn outlines_keep_their_stroke_width_whatever_the_box_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+    let stroke = Stroke { brush: Brush::Solid(Rgb { r: 1.0, g: 0.0, b: 0.0 }), width: 2.0, ..Default::default() };
+    let doc = document_with(&path, false, None, Some(stroke));
+    let mut engine = Engine::new().unwrap();
+    let frame = engine.render_frame(&doc.view(), at(10)).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    // 横一列を左から見て、赤い画素の続く長さ(枠の左の辺の太さ)。左の箱は 30 px(3 倍)、右は 20 px(2 倍)。
+    let red_run = |y: u32, from: u32, to: u32| {
+        let xs: Vec<u32> = (from..to).filter(|&x| { let [r, g, b] = px(&frame, x, y); r > 120 && g < 80 && b < 80 }).collect();
+        let first = *xs.first().unwrap_or(&from);
+        xs.iter().take_while(|&&x| x < first + 12).count()
+    };
+    let (left, right) = (red_run(55, 40, 80), red_run(130, 235, 262));
+    assert!((1..=4).contains(&left) && (1..=4).contains(&right), "枠線は 2 px 前後のまま: 左の箱 {left} 右の箱 {right}");
+}
+

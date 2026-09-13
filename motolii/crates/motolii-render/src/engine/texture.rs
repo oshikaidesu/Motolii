@@ -343,8 +343,11 @@ impl Engine {
         let needs_field = needs_material && !needs_warp;
         let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image;
         let step = (vector && needs_field).then_some(FIELD_STEP);
+        // Blob Track が形の素材を箱へ合わせた写し: 輪郭だけを伸ばす(線は太らない)。大きさは写しごとに違うので cache に残さない。
+        let stretched = (layer.source == LayerSource::Shape && layer.shape_stretch != [1.0, 1.0])
+            .then(|| stretch_outline(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]), layer.shape_stretch));
         let natural = if layer.source == LayerSource::Shape {
-            let canvas = content_canvas(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]))?;
+            let canvas = content_canvas(stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
         } else { [comp.width as f32, comp.height as f32] };
         let size = layer_size(layer, natural);
@@ -390,11 +393,8 @@ impl Engine {
         } else if layer.source == LayerSource::Text {
             self.text_texture_from_document(text_documents.get(&layer.id), text::morph_partner(layer, text_documents), layer.id, t, comp, vector, tolerance, flat, step)?
         } else if layer.source == LayerSource::Shape {
-            let shapes = shape_documents
-                .get(&layer.id)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-            let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp, step)?;
+            let shapes = stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]);
+            let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp, step, stretched.is_none())?;
             // 密度 > 1 で描いた絵は、その枠を持ち歩く(効果の reach・radius は論理 px)。
             let frame = content.as_ref().and_then(|c| c.texture()).map(|t| crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0; 2], pixels: t.width_height() });
             (content,natural,frame)
@@ -543,6 +543,7 @@ impl Engine {
         tolerance: f32,
         comp: CompSpec,
         step: Option<f32>,
+        remember: bool,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         if shapes.is_empty() {
             return Ok((None, [0.0, 0.0]));
@@ -566,7 +567,9 @@ impl Engine {
         let Some(texture) = content else {
             return Ok((None, [0.0, 0.0]));
         };
-        self.shape_textures.insert(key, TextTexture { texture: texture.clone(), bounds: None, tolerance, step, frame: None });
+        if remember {
+            self.shape_textures.insert(key, TextTexture { texture: texture.clone(), bounds: None, tolerance, step, frame: None });
+        }
         Ok((
             Some(texture),
             [canvas.width as f32, canvas.height as f32],
@@ -1079,6 +1082,26 @@ impl TextCacheKey {
             content_snapshot,
         }
     }
+}
+
+/// 輪郭の点だけを原点から伸ばす(1 枚だけの Repeater の変換は、線を引く前の点に掛かる)。
+fn stretch_outline(shapes: &[ShapeNode], stretch: [f32; 2]) -> Vec<ShapeNode> {
+    use crate::doc::vector::{Composite, OpKind, Point, RepeaterTransform, ShapeOp};
+    let op = ShapeOp::new(OpKind::Repeater {
+        copies: 1.0,
+        offset: 1.0,
+        transform: RepeaterTransform { scale: Point { x: stretch[0] as f64, y: stretch[1] as f64 }, ..RepeaterTransform::IDENTITY },
+        composite: Composite::Above,
+        start_opacity: 1.0,
+        end_opacity: 1.0,
+    });
+    fn push(node: &ShapeNode, op: &ShapeOp) -> ShapeNode {
+        match node {
+            ShapeNode::Leaf(shape) => { let mut shape = shape.clone(); shape.ops.push(op.clone()); ShapeNode::Leaf(shape) }
+            ShapeNode::Group(group) => { let mut group = group.clone(); group.children = group.children.iter().map(|c| push(c, op)).collect(); ShapeNode::Group(group) }
+        }
+    }
+    shapes.iter().map(|n| push(n, &op)).collect()
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
