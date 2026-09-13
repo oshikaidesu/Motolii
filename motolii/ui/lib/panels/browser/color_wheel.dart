@@ -52,17 +52,38 @@ class ColorWheel {
     return [a, b, 1 - a - b];
   }
 
+  Offset _closestOn(Offset p, Offset a, Offset b) {
+    final edge = b - a;
+    final length2 = edge.dx * edge.dx + edge.dy * edge.dy;
+    if (length2 == 0) return a;
+    final u = (((p - a).dx * edge.dx + (p - a).dy * edge.dy) / length2).clamp(
+      0.0,
+      1.0,
+    );
+    return a + edge * u;
+  }
+
+  Offset _insideTriangle(Offset p, List<Offset> t) {
+    if (_weights(p, t).every((weight) => weight >= 0)) return p;
+    final candidates = [
+      _closestOn(p, t[0], t[1]),
+      _closestOn(p, t[1], t[2]),
+      _closestOn(p, t[2], t[0]),
+    ];
+    candidates.sort(
+      (a, b) => (a - p).distanceSquared.compareTo((b - p).distanceSquared),
+    );
+    return candidates.first;
+  }
+
   bool hitsInner(Offset p, HSVColor hsv) => shape == 'triangle'
-      ? (p - center).distance <= inner + EditorMetrics.s4
+      ? (_insideTriangle(p, triangle(hsv.hue)) - p).distance <= EditorMetrics.s4
       : square.inflate(EditorMetrics.s4).contains(p);
   HSVColor pickInner(Offset p, HSVColor hsv) {
     if (shape == 'triangle') {
-      final w = _weights(
-        p,
-        triangle(hsv.hue),
-      ).map((x) => x.clamp(0.0, 1.0)).toList();
-      final sum = w[0] + w[1] + w[2];
-      final a = w[0] / sum, b = w[1] / sum;
+      final triangle = this.triangle(hsv.hue);
+      final w = _weights(_insideTriangle(p, triangle), triangle);
+      final a = w[0].clamp(0.0, 1.0), b = w[1].clamp(0.0, 1.0);
       final value = a + b;
       return hsv
           .withValue(value.clamp(0.0, 1.0))

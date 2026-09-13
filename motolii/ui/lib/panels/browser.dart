@@ -297,7 +297,11 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   Future<void> apply(Map<String, dynamic> item) => shelf.apply(this, item);
 
   KeyEventResult key(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || searchFocus.hasFocus)
+    if (event is! KeyDownEvent ||
+        searchFocus.hasFocus ||
+        FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<EditableText>() !=
+            null)
       return KeyEventResult.ignored;
     final k = event.logicalKey;
     final primary =

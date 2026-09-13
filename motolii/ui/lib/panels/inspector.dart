@@ -35,6 +35,34 @@ class _InspectorPanelState extends State<InspectorPanel> {
   void _begin() => _gestureLayers = c.liveLayers().toList();
   final _rows = <String, GlobalKey>{};
   final _scroll = ScrollController();
+  final _closed = <String>{};
+
+  String _effectSection(Map<String, dynamic> layer, Object? effect) =>
+      'effect:${layer['id']}:$effect';
+
+  Widget _card({
+    Key? key,
+    required String title,
+    required List<Widget> children,
+    String? section,
+    Widget? leading,
+    Widget? trailing,
+    bool dim = false,
+  }) {
+    final id = section ?? title;
+    return EditorCard(
+      key: key ?? ValueKey('section:$id'),
+      title: title,
+      expanded: !_closed.contains(id),
+      onToggle: () => setState(() {
+        if (!_closed.remove(id)) _closed.add(id);
+      }),
+      leading: leading,
+      trailing: trailing,
+      dim: dim,
+      children: children,
+    );
+  }
 
   /// The shown layer and its rows by id, worked out once per status. The
   /// panel asks for the same rows dozens of times while it builds, and
@@ -260,6 +288,24 @@ class _InspectorPanelState extends State<InspectorPanel> {
   void _reveal() {
     final id = c.focusProperty.value;
     if (id == null) return;
+    final layer = _active;
+    if (layer != null) {
+      setState(() {
+        _closed.remove(
+          _transformIds.contains(id)
+              ? layer['kind'] == 'Camera'
+                    ? 'Camera'
+                    : 'Transform'
+              : 'Stage',
+        );
+        for (final effect in panelRows(layer['effects'])) {
+          if (panelRows(effect['params']).any((row) => row['id'] == id)) {
+            _closed.remove(_effectSection(layer, effect['id']));
+            _advancedOpen.value = {..._advancedOpen.value, '${effect['id']}'};
+          }
+        }
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final target = _rows[id]?.currentContext;
@@ -476,11 +522,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
     if (value is! num) return SizedBox(width: width);
     final slotWidth = width;
     final id = '${row['id']}';
-    final mixed = _targets(layer).any((t) {
-      final other = _property(t, id)?['value'];
-      final n = other is List && axis < other.length ? other[axis] : other;
-      return n is num && n != value;
-    });
+    final mixed =
+        _multiple &&
+        _live.any((t) {
+          if (t['id'] == layer['id'] || !c.selectedIds.contains(t['id'])) {
+            return false;
+          }
+          final other = _property(t, id)?['value'];
+          final n = other is List && axis < other.length ? other[axis] : other;
+          return n is num && n != value;
+        });
     // Opacity is declared without a range; it is 0..1 by meaning.
     final min =
             (row['min'] as num?)?.toDouble() ?? (id == 'opacity' ? 0 : null),
@@ -685,9 +736,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// padding. Measured once for the panel instead of once per row of cells.
   double _cardWidth = EditorMetrics.cell;
   void _fit(double panelWidth) {
-    _cardWidth = math.max(1, panelWidth - EditorMetrics.s6 * 4);
+    _cardWidth = math.max(1, panelWidth - EditorMetrics.s6 * 2);
     final fixed =
-        EditorMetrics.s12 * 2 +
+        EditorMetrics.s6 * 2 +
         EditorMetrics.s18 +
         EditorMetrics.s4 * 3 +
         EditorMetrics.s22;
@@ -1414,8 +1465,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
       );
     }
     final key = '${effect['id']}';
-    return EditorCard(
+    return _card(
       key: ValueKey('effect:$key'),
+      section: _effectSection(layer, effect['id']),
       title: '${effect['name']}',
       dim: effect['enabled'] == false,
       // The order is the pipeline: grab the head to move the effect up or
@@ -1751,7 +1803,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       case _Kind.color:
         final rgba = (row['value'] as List).cast<num>();
         body = SizedBox(
-          width: _cardWidth,
+          width: EditorMetrics.row,
           child: EditorColorField(
             key: ValueKey('color:${layer['id']}:${row['id']}'),
             value: Color.from(
@@ -1870,6 +1922,24 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ),
           ),
         ),
+        if (!_multiple && panelRows(layer['effects']).isNotEmpty)
+          _headGlyph(
+            _effectsClosed(layer) ? Icons.unfold_more : Icons.unfold_less,
+            _effectsClosed(layer) ? 'Expand effects' : 'Collapse effects',
+            () {
+              final closed = _effectsClosed(layer);
+              setState(() {
+                for (final effect in panelRows(layer['effects'])) {
+                  final id = _effectSection(layer, effect['id']);
+                  if (closed) {
+                    _closed.remove(id);
+                  } else {
+                    _closed.add(id);
+                  }
+                }
+              });
+            },
+          ),
         EditorSwitch(
           on: c.animating,
           glyph: Icons.diamond_outlined,
@@ -1883,6 +1953,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
       ],
     ),
   );
+
+  bool _effectsClosed(Map<String, dynamic> layer) => panelRows(layer['effects'])
+      .every((effect) => _closed.contains(_effectSection(layer, effect['id'])));
 
   @override
   Widget build(BuildContext context) {
@@ -1904,16 +1977,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final effects = panelRows(layer['effects']);
     final text = panelMap(layer['text']);
     final matte = panelMap(layer['matte']);
-    final rest = panelRows(layer['properties'])
-        .where(
-          (r) =>
-              !_transformIds.contains('${r['id']}') &&
-              !_isTextProperty(r) &&
-              !'${r['id']}'.startsWith('fill.') &&
-              !'${r['id']}'.startsWith('effect') &&
-              (r['value'] is num || r['value'] is List || r['value'] is String),
-        )
-        .toList();
     return LayoutBuilder(
       builder: (context, box) {
         _fit(box.maxWidth);
@@ -1934,43 +1997,36 @@ class _InspectorPanelState extends State<InspectorPanel> {
                       // selection never pushes Position up or down.
                       children: [
                         if (layer['kind'] == 'Camera')
-                          EditorCard(title: 'Camera', children: _camera(layer))
+                          _card(title: 'Camera', children: _camera(layer))
+                        else if (layer['kind'] == 'Stage')
+                          _card(
+                            title: 'Stage',
+                            children: [
+                              _cells([
+                                for (final row in panelRows(
+                                  layer['properties'],
+                                ))
+                                  _Cell(_control(layer, '${row['id']}')),
+                              ]),
+                            ],
+                          )
                         else
-                          EditorCard(
+                          _card(
                             title: 'Transform',
                             children: _transform(layer),
                           ),
                         if (layer['kind'] != 'Camera')
-                          EditorCard(title: 'World', children: _world(layer)),
+                          _card(title: 'World', children: _world(layer)),
                         if (!_multiple && text.isNotEmpty)
-                          EditorCard(
-                            title: 'Text',
-                            children: _text(layer, text),
-                          ),
+                          _card(title: 'Text', children: _text(layer, text)),
                         if (!_multiple &&
                             layer['kind'] == 'Shape' &&
                             layer['fill'] is Map)
-                          EditorCard(title: 'Fill', children: _colors(layer)),
+                          _card(title: 'Fill', children: _colors(layer)),
                         if (!_multiple &&
                             matte.isNotEmpty &&
                             layer['clipToBelow'] != true)
-                          EditorCard(
-                            title: 'Matte',
-                            children: _matte(layer, matte),
-                          ),
-                        if (rest.isNotEmpty)
-                          EditorCard(
-                            title: 'Properties',
-                            children: [
-                              _cells([
-                                for (final r in rest)
-                                  _Cell(
-                                    _control(layer, '${r['id']}'),
-                                    wide: _kindOf(r) == _Kind.color,
-                                  ),
-                              ]),
-                            ],
-                          ),
+                          _card(title: 'Matte', children: _matte(layer, matte)),
                       ],
                     ),
                     // 凍った層: 効果は焼かれている。灰色にして触れない(DAW の凍った device)。

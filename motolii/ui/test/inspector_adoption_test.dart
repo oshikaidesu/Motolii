@@ -128,21 +128,27 @@ void main() {
           'id': 1,
           'name': 'shape',
           'kind': 'Shape',
-          'properties': [
+          'properties': [],
+          'effects': [
             {
-              'id': 'caption',
-              'label': 'Caption',
-              'kind': 'text',
-              'value': 'Hello',
-            },
-            {
-              'id': 'tint',
-              'label': 'Tint',
-              'kind': 'color',
-              'value': [1.0, 0.0, 0.0, 0.5],
+              'id': 0,
+              'name': 'Declared effect',
+              'params': [
+                {
+                  'id': 'caption',
+                  'label': 'Caption',
+                  'kind': 'text',
+                  'value': 'Hello',
+                },
+                {
+                  'id': 'tint',
+                  'label': 'Tint',
+                  'kind': 'color',
+                  'value': [1.0, 0.0, 0.0, 0.5],
+                },
+              ],
             },
           ],
-          'effects': [],
         },
       ],
       'selectedIds': [1],

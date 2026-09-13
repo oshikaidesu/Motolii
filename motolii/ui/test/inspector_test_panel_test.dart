@@ -167,8 +167,19 @@ void main() {
     expect(find.byType(EditorDial), findsNWidgets(3));
     expect(find.byType(EditorAnchorGrid), findsOneWidget);
     expect(find.byType(EditorChoice<dynamic>), findsNWidgets(2));
-    // Scale link, Environment, Ghost, Clip, Animate.
-    expect(find.byType(EditorSwitch), findsNWidgets(5));
+    // Required layer switches stay available beside added capabilities.
+    final switchGlyphs = tester
+        .widgetList<EditorSwitch>(find.byType(EditorSwitch))
+        .map((s) => s.glyph);
+    expect(
+      switchGlyphs,
+      containsAll([
+        Icons.link,
+        Icons.wb_sunny_outlined,
+        Icons.blur_on,
+        Icons.diamond_outlined,
+      ]),
+    );
     // The rotation well carries the key lamp; opacity does not.
     final lamps = tester
         .widgetList<EditorLamp>(find.byType(EditorLamp))

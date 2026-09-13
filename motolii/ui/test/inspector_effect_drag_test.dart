@@ -25,6 +25,7 @@ void main() {
           return <String, dynamic>{};
         });
     final c = EditorSession();
+    addTearDown(c.dispose);
     Map<String, dynamic> effect(int id, String name) => {
       'id': id,
       'pluginId': 'motolii.$name',
@@ -57,6 +58,17 @@ void main() {
     );
     final handles = find.byTooltip('Drag to reorder');
     expect(handles, findsNWidgets(3));
+    await tester.tap(find.byTooltip('Collapse effects'));
+    await tester.pumpAndSettle();
+    expect(find.text('Amount'), findsNothing);
+    expect(handles, findsNWidgets(3));
+    expect(commands, isEmpty, reason: 'folding is presentation only');
+    await tester.tap(find.text('BLUR'));
+    await tester.pumpAndSettle();
+    expect(find.text('Amount'), findsOneWidget);
+    await tester.tap(find.text('BLUR'));
+    await tester.pumpAndSettle();
+    // Closed heads still carry the pipeline's reorder operation.
     // The last effect's head, carried up past the first two.
     final from = tester.getCenter(handles.at(2));
     final to = tester.getCenter(handles.at(0)) - const Offset(0, 12);

@@ -59,7 +59,17 @@ Map<String, dynamic> _document(Map<String, double> moved) {
           _number('rotation.y', 'Rotation Y', at('rotation.y', 0)),
           _number('opacity', 'Opacity', at('opacity', 1)),
           _number('depth', 'Depth', at('depth', 0), min: 0, max: 100000),
-          _number('shape.size', 'Size', [at('shape.size.0', 100), 120.0], kind: 'vec2'),
+          _number('shape.fill_color', 'shape.fill_color', [
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+          ], kind: 'color'),
+          _number('internal.future_value', 'internal.future_value', 123.0),
+          _number('shape.size', 'Size', [
+            at('shape.size.0', 100),
+            120.0,
+          ], kind: 'vec2'),
           _number(
             'roughness',
             'Roughness',
@@ -156,7 +166,47 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(_wellValue(tester, 'shape.size', 0), 100.0);
+    expect(find.byKey(const ValueKey('inspector:shape.size:0')), findsNothing);
+    expect(find.text('PROPERTIES'), findsNothing);
+    expect(find.text('shape.fill_color'), findsNothing);
+    expect(find.text('internal.future_value'), findsNothing);
+
+    // A preview compares the live selection, never its gesture-start values.
+    // A single selected layer cannot have mixed values.
+    final position = find.byKey(const ValueKey('inspector:position:0'));
+    tester.widget<EditorNumericField>(position).onBegin!();
+    c.document.value = _document(const {'position.0': 40});
+    await tester.pump();
+    expect(tester.widget<EditorNumericField>(position).mixed, isFalse);
+    await tester.widget<EditorNumericField>(position).onFinish();
+    await tester.pump();
+    expect(find.text('—'), findsNothing);
+    c.document.value = _document(const {});
+    await tester.pump();
+
+    // Multiple live values still show mixed, and folding never changes them.
+    final multi = _document(const {});
+    multi['layers'] = [
+      ...(multi['layers'] as List),
+      {
+        ...((_document(const {'position.0': 70})['layers'] as List).single
+            as Map),
+        'id': 2,
+      },
+    ];
+    multi['selectedIds'] = [2, 1];
+    c.document.value = multi;
+    await tester.pump();
+    expect(tester.widget<EditorNumericField>(position).mixed, isTrue);
+    c.document.value = _document(const {});
+    await tester.pump();
+    await tester.tap(find.text('TRANSFORM'));
+    await tester.pump();
+    expect(position, findsNothing);
+    c.focusProperty.value = 'position';
+    await tester.pumpAndSettle();
+    expect(position, findsOneWidget);
+    expect(tester.widget<EditorNumericField>(position).mixed, isFalse);
 
     // The wells, including the ones a percent or an axis rewrites.
     const wells = <String, (String, int, double, double)>{
@@ -169,7 +219,6 @@ void main() {
       'tilt Y': ('rotation.y', 0, 34.0, 34.0),
       'opacity': ('opacity', 0, 0.5, 50.0),
       'depth': ('depth', 0, 40.0, 40.0),
-      'a plain property': ('roughness', 0, 0.25, 0.25),
       'an effect amount': ('warp.param.amount', 0, 6.0, 6.0),
       'an effect angle': ('warp.param.angle', 0, 90.0, 90.0),
       'an effect seed': ('warp.param.seed', 0, 42.0, 42.0),

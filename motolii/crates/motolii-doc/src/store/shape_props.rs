@@ -151,9 +151,10 @@ pub fn apply(shapes: &[ShapeNode], get: &dyn Fn(&str) -> Option<Value>) -> Vec<S
                         g.start = start;
                         g.end = end;
                     }
-                    for (i, stop) in g.stops.iter_mut().enumerate() {
-                        if let Some(Value::F64(o)) = get(&format!("{}{i}.offset", property::FILL_STOP_PREFIX)) { if o.is_finite() { stop.offset = o.clamp(0.0, 1.0); } }
-                        if let Some(Value::Color(c)) = get(&format!("{}{i}.color", property::FILL_STOP_PREFIX)) { stop.color = Rgb { r: c[0], g: c[1], b: c[2] }; }
+                    let stop_ids: Vec<_> = (0..g.stops.len()).map(|i| g.stop_id(i)).collect();
+                    for (id, stop) in stop_ids.into_iter().zip(&mut g.stops) {
+                        if let Some(Value::F64(o)) = get(&format!("{}{id}.offset", property::FILL_STOP_PREFIX)) { if o.is_finite() { stop.offset = o.clamp(0.0, 1.0); } }
+                        if let Some(Value::Color(c)) = get(&format!("{}{id}.color", property::FILL_STOP_PREFIX)) { stop.color = Rgb { r: c[0], g: c[1], b: c[2] }; }
                     }
                 }
             }
@@ -209,7 +210,7 @@ mod tests {
     fn gradient_axis_is_a_ratio_of_the_shapes_bounds() {
         use crate::doc::vector::{Fill, GradientStop};
         let source = PathSource::Rectangle { size: Point { x: 100.0, y: 50.0 } };
-        let g = Gradient { kind: GradientType::Linear, start: Point { x: -50.0, y: 0.0 }, end: Point { x: 50.0, y: 0.0 }, stops: vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }] };
+        let g = Gradient { blend: Default::default(), stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Linear, start: Point { x: -50.0, y: 0.0 }, end: Point { x: 50.0, y: 0.0 }, stops: vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }] };
         let axis = axis_of(&source, &g);
         assert!((axis.angle).abs() < 1e-9 && axis.center == [0.0, 0.0] && (axis.spread - 100.0).abs() < 1e-9, "{} {:?} {}", axis.angle, axis.center, axis.spread);
         assert_eq!(axis_points(&source, GradientType::Linear, &axis), (g.start, g.end));
@@ -237,11 +238,11 @@ mod tests {
     fn angular_and_diamond_parameters_close_the_circle_and_the_diamond() {
         use crate::doc::vector::GradientStop;
         let stops = vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }];
-        let angular = Gradient { kind: GradientType::Angular, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops: stops.clone(), blend: crate::doc::vector::GradientBlend::Rgb };
+        let angular = Gradient { stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Angular, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops: stops.clone(), blend: crate::doc::vector::GradientBlend::Rgb };
         assert!((angular.parameter(Point { x: 0.0, y: 10.0 }) - 0.25).abs() < 1e-9);
         assert!((angular.parameter(Point { x: -10.0, y: 0.0 }) - 0.5).abs() < 1e-9);
         assert!(angular.parameter(Point { x: 10.0, y: -0.001 }) > 0.99);
-        let diamond = Gradient { kind: GradientType::Diamond, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops, blend: crate::doc::vector::GradientBlend::Rgb };
+        let diamond = Gradient { stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Diamond, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops, blend: crate::doc::vector::GradientBlend::Rgb };
         assert!((diamond.parameter(Point { x: 5.0, y: 5.0 }) - 1.0).abs() < 1e-9);
         assert!((diamond.parameter(Point { x: 0.0, y: 10.0 }) - 1.0).abs() < 1e-9);
         assert!((diamond.parameter(Point { x: 2.5, y: 0.0 }) - 0.25).abs() < 1e-9);

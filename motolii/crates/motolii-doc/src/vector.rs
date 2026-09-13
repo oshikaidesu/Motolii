@@ -218,6 +218,11 @@ pub struct Gradient {
     pub start: Point,
     pub end: Point,
     pub stops: Vec<GradientStop>,
+    /// Property identities in stop order. Empty in legacy documents: ordinal identities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stop_ids: Vec<usize>,
+    #[serde(default)]
+    pub next_stop_id: usize,
     /// stop の間を色がどう渡るか。書類に書く定義で、鍵は打たない。
     #[serde(default)]
     pub blend: GradientBlend,
@@ -319,6 +324,18 @@ pub enum GradientType {
 }
 
 impl Gradient {
+    pub fn stop_id(&self, index: usize) -> usize { self.stop_ids.get(index).copied().unwrap_or(index) }
+    pub fn stop_index(&self, id: usize) -> Option<usize> { (0..self.stops.len()).find(|&i| self.stop_id(i) == id) }
+    pub fn identify_stops(&mut self) {
+        self.stop_ids = (0..self.stops.len()).map(|i| self.stop_id(i)).collect();
+        self.next_stop_id = self.next_stop_id.max(self.stop_ids.iter().max().map_or(0, |id| id + 1));
+    }
+    pub fn allocate_stop_id(&mut self) -> usize {
+        self.identify_stops();
+        let id = self.next_stop_id;
+        self.next_stop_id += 1;
+        id
+    }
     /// 点が gradient のどこか(0..1)。描く側(GPU・tiny-skia)は全部これを読む。
     pub fn parameter(&self, p: Point) -> f64 {
         let d = self.end.sub(self.start);

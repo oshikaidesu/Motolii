@@ -253,7 +253,7 @@ pub(super) fn set_shape_gradient(
     fill.brush = match (enabled, fill.brush) {
         (true, Brush::Solid(color)) => {
             let (start, end) = gradient_axis(&shape.source);
-            Brush::Gradient(Gradient {
+            Brush::Gradient(Gradient { stop_ids: Vec::new(), next_stop_id: 0,
                 kind: GradientType::Linear,
                 start,
                 end,

@@ -491,6 +491,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
         widget.max ?? double.infinity,
       )
       .toDouble();
+
   /// What the well reads right now. Typing starts from this exact string —
   /// the number must not turn into a different one under the caret (0.00 →
   /// 0.0, -19 → -18.999999).
@@ -782,6 +783,8 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                   child: EditorTooltip(
                     message: _dragging && _rung != 1
                         ? '${widget.label} ×$_rung'
+                        : widget.enabled
+                        ? '${widget.label} · drag to adjust · double-click or Enter to type'
                         : widget.label,
                     child: Container(
                       height: EditorMetrics.row,
@@ -1326,57 +1329,86 @@ class EditorCard extends StatelessWidget {
     this.leading,
     this.trailing,
     this.dim = false,
+    this.expanded = true,
+    this.onToggle,
   });
   final String title;
   final List<Widget> children;
   final Widget? leading, trailing;
+  final bool expanded;
+  final VoidCallback? onToggle;
 
   /// The card's contents faded: what it holds is not applied right now.
   final bool dim;
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.fromLTRB(
-      EditorMetrics.s6,
-      EditorMetrics.s6,
-      EditorMetrics.s6,
-      0,
-    ),
-    padding: const EdgeInsets.all(EditorMetrics.s6),
-    decoration: BoxDecoration(
-      color: EditorTheme.panel,
-      borderRadius: BorderRadius.circular(EditorMetrics.s3),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            if (leading != null) leading!,
-            Expanded(
-              child: Text(
-                title.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: EditorMetrics.micro,
-                  letterSpacing: 1,
-                  color: EditorTheme.muted,
+  Widget build(BuildContext context) => Material(
+    color: EditorTheme.panel,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+      decoration: const BoxDecoration(
+        color: EditorTheme.panel,
+        border: Border(bottom: BorderSide(color: EditorTheme.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: EditorMetrics.row,
+            child: Row(
+              children: [
+                if (leading != null) leading!,
+                Expanded(
+                  child: Semantics(
+                    expanded: expanded,
+                    child: InkWell(
+                      onTap: onToggle,
+                      child: Row(
+                        children: [
+                          if (onToggle != null)
+                            Icon(
+                              expanded
+                                  ? Icons.expand_more
+                                  : Icons.chevron_right,
+                              size: EditorMetrics.s14,
+                              color: EditorTheme.muted,
+                            ),
+                          Expanded(
+                            child: Text(
+                              title.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: EditorMetrics.micro,
+                                letterSpacing: 1,
+                                color: EditorTheme.muted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                if (trailing != null) trailing!,
+              ],
             ),
-            if (trailing != null) trailing!,
+          ),
+          if (expanded) ...[
+            const SizedBox(height: EditorMetrics.s2),
+            if (dim)
+              Opacity(
+                opacity: .4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
+              )
+            else
+              ...children,
+            const SizedBox(height: EditorMetrics.s4),
           ],
-        ),
-        const SizedBox(height: EditorMetrics.s6),
-        if (dim)
-          Opacity(
-            opacity: .4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
-          )
-        else
-          ...children,
-      ],
+        ],
+      ),
     ),
   );
 }

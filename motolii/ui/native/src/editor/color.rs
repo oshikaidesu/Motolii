@@ -78,9 +78,19 @@ pub(crate) fn set_shape_gradient(
     doc: &mut Document,
     slot: &ColorSlot,
     enabled: bool,
+    at: RationalTime,
 ) -> Result<(), StoreError> {
     let Some((layer, path)) = shape_location(slot) else {
         return Ok(());
+    };
+    let shown = {
+        let mut shapes = doc.view().shapes_at(layer, at)?;
+        leaf_mut(&mut shapes, path)
+            .and_then(|shape| shape.fill.as_ref())
+            .and_then(|fill| match &fill.brush {
+                Brush::Solid(color) => Some(*color),
+                Brush::Gradient(gradient) => endpoint_color(gradient, false),
+            })
     };
     let d = doc;
     let mut shapes = d.view().shapes(layer)?;
@@ -91,7 +101,8 @@ pub(crate) fn set_shape_gradient(
     fill.brush = match (enabled, fill.brush) {
         (true, Brush::Solid(color)) => {
             let (start, end) = gradient_axis(&shape.source);
-            Brush::Gradient(Gradient {
+            let color = shown.unwrap_or(color);
+            Brush::Gradient(Gradient { stop_ids: Vec::new(), next_stop_id: 0,
                 kind: GradientType::Linear,
                 start,
                 end,
@@ -104,7 +115,7 @@ pub(crate) fn set_shape_gradient(
         }
         (true, brush @ Brush::Gradient(_)) => brush,
         (false, Brush::Gradient(gradient)) => {
-            Brush::Solid(endpoint_color(&gradient, false).unwrap_or(Rgb::BLACK))
+            Brush::Solid(shown.or_else(|| endpoint_color(&gradient, false)).unwrap_or(Rgb::BLACK))
         }
         (false, brush @ Brush::Solid(_)) => brush,
     };
@@ -112,18 +123,37 @@ pub(crate) fn set_shape_gradient(
     d.apply(Intent::SetShapes { layer, shapes }).map(|_| ())
 }
 /// 見本に alpha の欄を付けるか。形の塗りは Rgb で、不透明度は fill.opacity の仕事。
+pub(crate) fn default_target(doc:&Document,layer:LayerId)->Option<ColorSlot>{
+    if let Some((path,brush))=doc.view().shapes(layer).ok().and_then(|s|read::first_shape_fill(&s,Vec::new())){
+        return match brush{
+            Brush::Solid(_)=>Some(ColorSlot::ShapeFill{layer,path}),
+            Brush::Gradient(g)=>g.stops.iter().enumerate().min_by(|a,b|a.1.offset.total_cmp(&b.1.offset)).map(|(i,_)|ColorSlot::ShapeGradientPoint{layer,path,index:g.stop_id(i)}),
+        }
+    }
+    let text=doc.view().text_document(layer).ok()??;
+    Some(ColorSlot::TextFill{layer,style:text.styles.first()?.id})
+}
 pub(crate) fn has_alpha(slot: &ColorSlot) -> bool { matches!(slot, ColorSlot::TextFill { .. } | ColorSlot::Property { .. }) }
 
 /// slot が指す色の property。色は property で、書類の brush はその既定。
 pub(crate) fn property_of(doc: &Document, slot: &ColorSlot) -> Option<PropertyId> {
     let name = match slot {
         ColorSlot::TextFill { style, .. } => return Some(PropertyId::text_style_fill_color(*style)),
-        ColorSlot::ShapeFill { .. } => property::SHAPE_FILL_COLOR.to_owned(),
+        ColorSlot::ShapeFill { layer, path } => {
+            let mut shapes=doc.view().shapes(*layer).ok()?;
+            if !matches!(leaf_mut(&mut shapes,path)?.fill.as_ref()?.brush,Brush::Solid(_)){return None}
+            property::SHAPE_FILL_COLOR.to_owned()
+        },
         // 線は効果の責務。ここからは書けない。
         ColorSlot::ShapeStroke { .. } => return None,
         ColorSlot::Property { property, .. } => property.clone(),
         ColorSlot::Background => return None,
-        ColorSlot::ShapeGradientPoint { index, .. } => format!("{}{index}.color", property::FILL_STOP_PREFIX),
+        ColorSlot::ShapeGradientPoint { layer, path, index } => {
+            let mut shapes=doc.view().shapes(*layer).ok()?;
+            let Brush::Gradient(g)=&leaf_mut(&mut shapes,path)?.fill.as_ref()?.brush else{return None};
+            g.stop_index(*index)?;
+            format!("{}{index}.color", property::FILL_STOP_PREFIX)
+        },
         ColorSlot::ShapeGradientStop { layer, path, end } => {
             let mut shapes = doc.view().shapes(*layer).ok()?;
             let shape = leaf_mut(&mut shapes, path)?;
@@ -131,7 +161,7 @@ pub(crate) fn property_of(doc: &Document, slot: &ColorSlot) -> Option<PropertyId
             let pick = |a: &(usize, &GradientStop), b: &(usize, &GradientStop)| a.1.offset.total_cmp(&b.1.offset);
             let it = g.stops.iter().enumerate();
             let (index, _) = if *end { it.max_by(pick)? } else { it.min_by(pick)? };
-            format!("{}{index}.color", property::FILL_STOP_PREFIX)
+            format!("{}.{}.color", property::FILL_STOP_PREFIX.trim_end_matches('.'), g.stop_id(index))
         }
     };
     PropertyId::new(&name).ok()
@@ -185,7 +215,7 @@ pub(crate) fn read_color(doc: &Document, slot: &ColorSlot, t: RationalTime) -> O
         ColorSlot::ShapeGradientPoint { layer, path, index } => {
             let mut shapes = view.shapes(*layer).ok()?;
             let Brush::Gradient(g) = &leaf_mut(&mut shapes, path)?.fill.as_ref()?.brush else { return None };
-            let c = g.stops.get(*index)?.color;
+            let c = g.stops.get(g.stop_index(*index)?)?.color;
             Some([c.r, c.g, c.b, 1.0])
         }
         ColorSlot::ShapeGradientStop { layer, path, end } => {

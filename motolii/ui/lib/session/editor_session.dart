@@ -94,6 +94,7 @@ class EditorSession {
   Future<void> focusColor(Map<String, dynamic> args) async {
     await command('focusColor', args);
     browserTab.value = 'Colors';
+    await placePanel('Colors', 'show');
   }
 
   /// The key selection before the current one, with the layers it sits on,

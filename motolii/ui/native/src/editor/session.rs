@@ -13,6 +13,7 @@ pub(crate) enum ColorSlot {
     ShapeStroke { layer: LayerId, path: Vec<usize> },
     /// 2色gradientの端。`end=false` が最小offset、`end=true` が最大offset。
     /// VecのindexをUIへ漏らさないので、stopの並び順が違う文書でも同じ端を指せる。
+    /// index is the persisted stop identity; legacy gradients use their ordinal.
     ShapeGradientPoint { layer: LayerId, path: Vec<usize>, index: usize },
     /// 色の型の property なら何でも(効果の param の色など)。名前がそのまま宛先。
     Property { layer: LayerId, property: String },

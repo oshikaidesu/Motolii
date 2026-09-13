@@ -33,7 +33,7 @@ fn attrs_patch(j:&J)->Result<LayerAttrsPatch,String>{
     Ok(p)
 }
 impl EditorRuntime{
-    fn pick(&mut self,ids:Vec<LayerId>){self.selected_ids=ids;self.selected=self.selected_ids.last().copied();}
+    fn pick(&mut self,ids:Vec<LayerId>){let changed=self.selected_ids!=ids;self.selected_ids=ids;self.selected=self.selected_ids.last().copied();if changed{self.color_target=self.selected.and_then(|id|editor::color::default_target(&self.doc,id));}}
     fn selected_required(&self)->Result<&[LayerId],String>{if self.selected_ids.is_empty(){Err("Select layers".into())}else{Ok(&self.selected_ids)}}
     fn apply(&mut self,intents:impl IntoIterator<Item=Intent>)->Result<(),String>{
         let intents:Vec<_>=intents.into_iter().collect();
@@ -266,8 +266,8 @@ impl EditorRuntime{
                     self.engine.forget_frozen(id);
                 }
             }
-            "setGradient"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;let edit=editor::gradient::edit(&self.doc,&slot,&j)?;if j["preview"]==true{self.set_preview(vec![edit])?}else{self.cancel_preview();self.apply([edit])?;}self.color_target=None;}
-            "setFillMode"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if !slot.is_shape_fill(){return Err("Select a shape fill".into())}editor::color::set_shape_gradient(&mut self.doc,&slot,j["gradient"].as_bool().ok_or("Missing gradient")?).map_err(e)?;}
+            "setGradient"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;let edit=editor::gradient::edit(&self.doc,&slot,&j,self.time()?)?;if j["preview"]==true{self.set_preview(vec![edit])?}else{self.cancel_preview();self.apply([edit])?;}if j.get("addStop").is_some(){if let Some(model)=editor::gradient::model(&self.doc,&slot,self.time()?){self.color_target=model["stops"].as_array().and_then(|s|s.iter().max_by_key(|r|r["id"].as_u64())).and_then(|r|serde_json::from_value(r["slot"].clone()).ok());}}}
+            "setFillMode"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if !slot.is_shape_fill(){return Err("Select a shape fill".into())}let at=self.time()?;editor::color::set_shape_gradient(&mut self.doc,&slot,j["gradient"].as_bool().ok_or("Missing gradient")?,at).map_err(e)?;}
             other=>return Err(format!("Unsupported operation: {other}")),
         }
         if self.doc.revision()!=self.clock_revision {
@@ -275,7 +275,7 @@ impl EditorRuntime{
             self.clock_revision=self.doc.revision();
             self.clock_frame();
         }
-        let live=self.doc.view().layers();self.selected_ids.retain(|id|live.contains(id));self.selected_keys.retain(|key|live.contains(&key.layer));if self.color_target.as_ref().is_some_and(|slot|slot.layer().is_some_and(|id|!live.contains(&id))){self.color_target=None;}self.selected=self.selected_ids.last().copied();self.error=None;Ok(())
+        let live=self.doc.view().layers();self.selected_ids.retain(|id|live.contains(id));self.selected_keys.retain(|key|live.contains(&key.layer));if self.color_target.as_ref().is_some_and(|slot|slot.layer().is_some_and(|id|!live.contains(&id))){self.color_target=None;}self.selected=self.selected_ids.last().copied();if self.color_target.as_ref().is_none_or(|slot|editor::color::read_color(&self.doc,slot,self.time().unwrap_or(RationalTime::ZERO)).is_none()){self.color_target=self.selected.and_then(|id|editor::color::default_target(&self.doc,id));}self.error=None;Ok(())
     }
     fn clock_frame(&mut self){
         // 尺は上限ではない: 再生は越えて進み、越えた先の層は帯の外なので描かれないだけ。
@@ -336,6 +336,61 @@ impl EditorRuntime{
 
 #[cfg(test)]
 mod playback_probe {
+    #[test]
+    fn held_color_preview_changes_every_frame_but_commits_one_history_step() {
+        use super::*;
+        let mut rt=crate::EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        let slot=rt.color_target.clone().unwrap();
+        let history=rt.doc.history_depth();
+        for step in 0..31 {
+            let rgba=[step as f64/30.0,0.25,0.5,1.0];
+            rt.request(json!({"op":"previewColor","slot":slot,"rgba":rgba})).unwrap();
+            assert_eq!(rt.doc.history_depth(),history);
+            assert_eq!(editor::color::read_color(&rt.doc,&slot,RationalTime::ZERO),Some(rgba));
+        }
+        rt.request(json!({"op":"commitPreview"})).unwrap();
+        assert_eq!(rt.doc.history_depth().0,history.0+1);
+        rt.request(json!({"op":"undo"})).unwrap();
+        assert_eq!(editor::color::read_color(&rt.doc,&slot,RationalTime::ZERO),Some([1.0;4]));
+    }
+    #[test]
+    fn color_target_follows_selection_and_keeps_the_other_layer_unchanged() {
+        use super::*;
+        let mut rt=crate::EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        let first=rt.selected.unwrap();
+        let first_slot=rt.color_target.clone().unwrap();
+        rt.request(json!({"op":"setColor","slot":first_slot,"rgba":[1,0,0,1]})).unwrap();
+        rt.request(json!({"op":"create","kind":"ellipse"})).unwrap();
+        let second=rt.selected.unwrap();
+        assert_eq!(rt.color_target.as_ref().and_then(ColorSlot::layer),Some(second));
+        rt.request(json!({"op":"select","ids":[first.0]})).unwrap();
+        let target=rt.color_target.clone().unwrap();
+        assert_eq!(target.layer(),Some(first));
+        rt.request(json!({"op":"setColor","slot":target,"rgba":[0,1,0,1]})).unwrap();
+        let other=editor::color::default_target(&rt.doc,second).unwrap();
+        assert_eq!(editor::color::read_color(&rt.doc,&other,RationalTime::ZERO),Some([1.0;4]));
+        rt.request(json!({"op":"undo"})).unwrap();
+        assert_eq!(editor::color::read_color(&rt.doc,&first_slot,RationalTime::ZERO),Some([1.0,0.0,0.0,1.0]));
+    }
+
+    #[test]
+    fn solid_mode_keeps_the_stop_color_visible_at_the_current_time() {
+        use super::*;
+        let mut rt=crate::EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        let layer=rt.selected.unwrap();
+        let fill=editor::color::default_target(&rt.doc,layer).unwrap();
+        rt.request(json!({"op":"setGradient","slot":fill,"kind":"linear"})).unwrap();
+        let model=editor::gradient::model(&rt.doc,&fill,RationalTime::ZERO).unwrap();
+        let stop:ColorSlot=serde_json::from_value(model["stops"][0]["slot"].clone()).unwrap();
+        rt.request(json!({"op":"setColor","slot":stop,"rgba":[0,0,1,1]})).unwrap();
+        assert_eq!(editor::color::read_color(&rt.doc,&stop,RationalTime::ZERO),Some([0.0,0.0,1.0,1.0]));
+        rt.request(json!({"op":"setFillMode","slot":fill,"gradient":false})).unwrap();
+        let solid=editor::color::default_target(&rt.doc,layer).unwrap();
+        assert_eq!(editor::color::read_color(&rt.doc,&solid,RationalTime::ZERO),Some([0.0,0.0,1.0,1.0]));
+    }
     /// 再生: play の後に時間が経てば tick で frame が進む。
     #[test]
     fn play_then_tick_advances_the_frame() {
@@ -837,4 +892,3 @@ mod swiss {
         rt.request(json!({"op":"save","path":out.to_string_lossy()})).unwrap();
     }
 }
-

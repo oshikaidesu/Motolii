@@ -34,7 +34,9 @@ class _GradientInspectorState extends State<GradientInspector>
   double _dragX = 0, _dragY = 0;
   bool _ending = false, _dropping = false;
   late final _queue = EditorPreviewQueue<Map<String, dynamic>>(
-    (patch) => edit(patch, preview: true),
+    (patch) => c.command('previewProperties', {
+      'edits': [patch],
+    }),
   );
 
   static const double _handle = EditorMetrics.s14,
@@ -62,12 +64,11 @@ class _GradientInspectorState extends State<GradientInspector>
     final drop = _dropping && !cancel;
     try {
       await _queue.finish(
-        cancel,
-        () => c.command(cancel ? 'cancelPreview' : 'commitPreview'),
+        cancel || drop,
+        () => c.command(cancel || drop ? 'cancelPreview' : 'commitPreview'),
       );
       if (drop) {
-        final rows = [...stops]..removeAt(selected);
-        await edit({'stops': rows});
+        await edit({'removeStop': _dragRows![selected]['id']});
         if (mounted) setState(() => selected = 0);
       }
     } finally {
@@ -76,6 +77,14 @@ class _GradientInspectorState extends State<GradientInspector>
       _dropping = false;
       if (mounted) setState(() => _draft = null);
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant GradientInspector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.layer['id'] != widget.layer['id'] ||
+        (oldWidget.layer['locked'] != true && widget.layer['locked'] == true))
+      _end(true);
   }
 
   @override
@@ -106,36 +115,49 @@ class _GradientInspectorState extends State<GradientInspector>
     if (!c.supports('focusColor')) return;
     await c.focusColor({
       'layer': widget.layer['id'],
-      'slot': stops[index]['slot'],
+      'slot': widget.fill['kind'] == 'solid'
+          ? widget.fill['slot']
+          : stops[index]['slot'],
     });
   }
 
-  /// A new stop where the bar was pressed, coloured like the bar there.
   Future<void> add(double offset) async {
-    final rows = stops;
-    if (rows.length >= 32) return;
-    var before = rows.first, after = rows.last;
-    for (final r in rows) {
-      final o = (r['offset'] as num).toDouble();
-      if (o <= offset) before = r;
-    }
-    for (final r in rows.reversed) {
-      final o = (r['offset'] as num).toDouble();
-      if (o >= offset) after = r;
-    }
-    final a = (before['offset'] as num).toDouble(),
-        b = (after['offset'] as num).toDouble();
-    final u = b > a ? ((offset - a) / (b - a)).clamp(0.0, 1.0) : 0.0;
-    final ca = (before['rgba'] as List).cast<num>(),
-        cb = (after['rgba'] as List).cast<num>();
-    final rgba = [for (var k = 0; k < 3; k++) ca[k] + (cb[k] - ca[k]) * u, 1.0];
+    if (stops.length >= 32) return;
+    await edit({'addStop': offset});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final rows = stops;
+      final index = rows.indexWhere(
+        (s) => ((s['offset'] as num).toDouble() - offset).abs() < .0001,
+      );
+      if (index >= 0) setState(() => selected = index);
+    });
+  }
+
+  void _moveStop(int i, Offset point, double span) {
+    final base = _dragRows;
+    if (base == null || _ending) return;
+    final away = (point.dy - _dragY).abs() > _dropReach && base.length > 2;
+    final lower = i == 0 ? 0.0 : (base[i - 1]['offset'] as num).toDouble();
+    final upper = i + 1 == base.length
+        ? 1.0
+        : (base[i + 1]['offset'] as num).toDouble();
+    final offset =
+        ((base[i]['offset'] as num).toDouble() + (point.dx - _dragX) / span)
+            .clamp(lower, upper);
     final next = [
-      ...rows,
-      {'offset': offset, 'rgba': rgba},
-    ]..sort((x, y) => (x['offset'] as num).compareTo(y['offset'] as num));
-    final index = next.indexWhere((r) => r['offset'] == offset);
-    await edit({'stops': next});
-    if (mounted) setState(() => selected = index);
+      for (var index = 0; index < base.length; index++)
+        {...base[index], if (index == i) 'offset': offset},
+    ];
+    setState(() {
+      _draft = next;
+      _dropping = away;
+    });
+    _queue.add({
+      'layer': widget.layer['id'],
+      'property': base[i]['positionProperty'],
+      'value': offset,
+    });
   }
 
   Color color(Map<String, dynamic> stop) {
@@ -170,13 +192,13 @@ class _GradientInspectorState extends State<GradientInspector>
           return KeyEventResult.handled;
         }
         if ((event.logicalKey == LogicalKeyboardKey.delete ||
-                event.logicalKey == LogicalKeyboardKey.backspace) &&
-            enabled &&
-            rows.length > 2) {
-          edit({
-            'stops': [...rows]..removeAt(selected),
-          });
-          setState(() => selected = 0);
+            event.logicalKey == LogicalKeyboardKey.backspace)) {
+          if (_dragRows != null) {
+            _end(true);
+          } else if (enabled && rows.length > 2) {
+            edit({'removeStop': rows[selected]['id']});
+            setState(() => selected = 0);
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -184,42 +206,60 @@ class _GradientInspectorState extends State<GradientInspector>
       child: LayoutBuilder(
         builder: (context, box) {
           final span = box.maxWidth - _handle;
+          Offset local(Offset point) =>
+              (context.findRenderObject()! as RenderBox).globalToLocal(point);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // The bar: press to add a stop. A solid is a bar of one colour;
               // adding a stop makes it a gradient.
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: !enabled
-                    ? null
-                    : (e) => add(
-                        ((e.localPosition.dx - _handle / 2) / span).clamp(
-                          0.0,
-                          1.0,
-                        ),
+              MouseRegion(
+                cursor: enabled
+                    ? solid
+                          ? SystemMouseCursors.click
+                          : SystemMouseCursors.precise
+                    : MouseCursor.defer,
+                child: EditorTooltip(
+                  message: solid
+                      ? 'Edit fill color in Colors'
+                      : 'Click empty space to add a color stop',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: !enabled
+                        ? null
+                        : solid
+                        ? (_) => focus(0)
+                        : (e) => add(
+                            ((e.localPosition.dx - _handle / 2) / span).clamp(
+                              0.0,
+                              1.0,
+                            ),
+                          ),
+                    child: Container(
+                      key: const ValueKey('gradient-bar'),
+                      height: EditorMetrics.s16,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: _handle / 2,
                       ),
-                child: Container(
-                  key: const ValueKey('gradient-bar'),
-                  height: EditorMetrics.s16,
-                  margin: const EdgeInsets.symmetric(horizontal: _handle / 2),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: EditorTheme.line),
-                    borderRadius: BorderRadius.circular(EditorMetrics.s2),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: EditorTheme.line),
+                        borderRadius: BorderRadius.circular(EditorMetrics.s2),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: solid
+                          ? ColoredBox(color: color(rows.first))
+                          : NativeVisualSample(
+                              controller: c,
+                              request: {
+                                'kind': 'gradient',
+                                'type': 'linear',
+                                'stops': sampleStops,
+                                'blend': widget.fill['blend'],
+                              },
+                              fit: BoxFit.fill,
+                            ),
+                    ),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: solid
-                      ? ColoredBox(color: color(rows.first))
-                      : NativeVisualSample(
-                          controller: c,
-                          request: {
-                            'kind': 'gradient',
-                            'type': 'linear',
-                            'stops': sampleStops,
-                            'blend': widget.fill['blend'],
-                          },
-                          fit: BoxFit.fill,
-                        ),
                 ),
               ),
               // The handles: each is its stop's swatch.
@@ -234,62 +274,41 @@ class _GradientInspectorState extends State<GradientInspector>
                         top: 0,
                         child: EditorTooltip(
                           message:
-                              'Stop ${i + 1} · ${((rows[i]['offset'] as num) * 100).round()}% · drag off to remove',
+                              'Stop ${i + 1} · click to edit in Colors · drag to move · drag off to remove',
                           child: Listener(
+                            onPointerDown: (e) {
+                              final point = local(e.position);
+                              _dragX = point.dx;
+                              _dragY = point.dy;
+                            },
                             onPointerCancel: (_) => _end(true),
                             child: GestureDetector(
-                              onTap: enabled ? () => focus(i) : null,
+                              onTap: enabled
+                                  ? () {
+                                      _focus.requestFocus();
+                                      focus(i);
+                                    }
+                                  : null,
                               onPanStart: !enabled || solid
                                   ? null
                                   : (e) {
                                       if (_ending) return;
                                       _focus.requestFocus();
                                       _dragRows = stops;
-                                      _dragX = e.globalPosition.dx;
-                                      _dragY = e.globalPosition.dy;
                                       setState(() => selected = i);
+                                      _moveStop(
+                                        i,
+                                        local(e.globalPosition),
+                                        span,
+                                      );
                                     },
                               onPanUpdate: !enabled || solid
                                   ? null
-                                  : (e) {
-                                      final base = _dragRows;
-                                      if (base == null || _ending) return;
-                                      final away =
-                                          (e.globalPosition.dy - _dragY).abs() >
-                                              _dropReach &&
-                                          base.length > 2;
-                                      final lower = i == 0
-                                          ? 0.0
-                                          : (base[i - 1]['offset'] as num)
-                                                .toDouble();
-                                      final upper = i + 1 == base.length
-                                          ? 1.0
-                                          : (base[i + 1]['offset'] as num)
-                                                .toDouble();
-                                      final offset =
-                                          ((base[i]['offset'] as num)
-                                                      .toDouble() +
-                                                  (e.globalPosition.dx -
-                                                          _dragX) /
-                                                      span)
-                                              .clamp(lower, upper);
-                                      final next = [
-                                        for (
-                                          var index = 0;
-                                          index < base.length;
-                                          index++
-                                        )
-                                          {
-                                            ...base[index],
-                                            if (index == i) 'offset': offset,
-                                          },
-                                      ];
-                                      setState(() {
-                                        _draft = next;
-                                        _dropping = away;
-                                      });
-                                      _queue.add({'stops': next});
-                                    },
+                                  : (e) => _moveStop(
+                                      i,
+                                      local(e.globalPosition),
+                                      span,
+                                    ),
                               onPanEnd: (_) => _end(false),
                               onPanCancel: () => _end(true),
                               child: Opacity(
