@@ -10,6 +10,7 @@ pub mod coverage;
 
 pub mod text;
 pub mod morph;
+pub mod strokes;
 
 use serde::{Deserialize, Serialize};
 

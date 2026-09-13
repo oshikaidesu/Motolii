@@ -11,7 +11,7 @@ use crate::doc::vector::{
     VectorError,
 };
 
-fn to_tiny_skia(path: &Path, origin: Point) -> Option<tiny_skia::Path> {
+pub(crate) fn to_tiny_skia(path: &Path, origin: Point) -> Option<tiny_skia::Path> {
     let mut b = PathBuilder::new();
     let mut any = false;
     for c in path {

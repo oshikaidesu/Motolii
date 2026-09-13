@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 pub mod mask;
 pub mod text;
+pub mod strokes;
 
 mod clip;
 mod render;
