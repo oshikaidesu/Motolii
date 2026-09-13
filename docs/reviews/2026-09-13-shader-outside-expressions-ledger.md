@@ -98,7 +98,14 @@ Furikake の利用者向けの説明(aescripts / toolfarm / gfxplugin の紹介�
 3. 静的な代替(深度・超解像・Kuwahara / XDoG)— **3 本済み(2026-09-14)**: `depth_map.fs`(縦位置・かすみ・細部の 3 手掛かり、1/4 で混ぜて joint bilateral で戻す)、`kuwahara.fs`(異方性・多項式重み)、`xdog.fs`(流れに沿う XDoG、閾値は見た目の明るさ)。審判 `stylize_without_machine_learning`。**超解像は保留(相談)**: 効果の出力を層より大きくする口が無く、「footprint 解像度・余白は効果が宣言」の法に触れる
 4. 粒子(Furikake 型)— **済み(2026-09-14、L0)**: `LayerSource::Particles`(doc の `store/particles.rs`、欄は `ROWS` の 1 表)。動きは閉じた式(simulation-model.md §8 の L0): 率だけ入点からコマごとに積み、重力・風は放物線、跳ね返りは跳ねるたびに次の着地を解く、乱流は年齢で動く fbm。描くのは fork の点群(円の billboard、点ごとの直径)。Create の棚に Particles、Inspector は欄の表。審判 `particles_are_a_closed_form`・`creating_particles_shows_the_particle_rows`。**まだ**: 出す元の形(箱・球・格子 — 今は矩形の広がりだけ)、子の粒子、加算の混ぜ方と soft particle(fork の点群に加算のパイプラインが無い)、積み重なる乱流と衝突(L3 / StateTrack、SIM-1)、欄の値は t の値で過去の粒にも効く(率だけが積む)
 5. Plexus(粒子・パスの頂点・点群の点を距離で結ぶ。描くのは re_renderer の線)— **粒子の分済み(2026-09-14)**: 粒子の層の欄 Connect Distance / Line Width / Line Opacity(Stardust の Plexus が粒子のノードなのと同じ置き方)。近傍は結ぶ距離の升目で探し、1 点 12 本・全体 6 万本まで。線は近いほど濃く、8 段に分けて fork の `LineDrawableBuilder` で描く。審判 `plexus_links_near_particles_with_lines`。**まだ**: パスの頂点・点群・Blob の点を結ぶ(配置や点の出所を受ける口が要る)
-6. 2D 物理
-7. Blob(拾う元 3 つ・ID 持続の切り替え・配置 + 同梱プリセット)
+6. 2D 物理 — **止めた(2026-09-14、相談待ち)**: 物理の結果が層の位置・角度を書き換えるので座標の法に触れる(どの層が剛体か = 効果か属性か、書類の評価へどう戻すか)。rapier2d は新しい重い依存で、夜間に足すと build のリスク
+7. Blob(拾う元 3 つ・ID 持続の切り替え・配置 + 同梱プリセット)— **芯だけ済み(2026-09-14)**: `media/blob.rs`(明るさ / 動き / 色で二値 → 8 近傍の連結成分 → 箱・中心・面積、大きさで足切り、ID は持続なら最大移動距離の中で近い順に継いで revive、非持続は読む順)。審判 5 本。**まだ(相談待ち)**: 塊を配置として resolve へ渡す橋 — resolve は書類だけの純関数で画素を読めない。描いた絵の解析を書類の評価へ戻すのは新しい仕組み
+
+## 9. 朝の相談(2026-09-14 夜間の続き)
+
+1. **超解像**: 効果の出力を層より大きくする口(footprint 解像度・余白の宣言の法)をどうするか
+2. **2D 物理**: 剛体の印は効果か層の属性か、物理が書いた位置を書類の評価へどう戻すか(StateTrack)、rapier2d を足してよいか
+3. **Blob の橋**: 描いた絵の解析(塊)を配置として resolve へ渡す仕組み。同じ橋が Plexus の点の出所(パスの頂点・点群・Blob)にも要る
+4. **見た目の検収**: Pixel Motion Blur・Motion Blur・Depth Map・Kuwahara・XDoG・Particles(Create の棚の Particles、Inspector の欄の表)・Plexus。Motion Blur の Position / Scale / Angle は今 Off/On の選択肢の部品で出る
 
 走らせる前に、この順番の形を利用者に見せて「うん」を待つ。

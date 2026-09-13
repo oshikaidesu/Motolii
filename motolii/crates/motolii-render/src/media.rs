@@ -1,4 +1,5 @@
 
+pub mod blob;
 mod encode;
 mod mesh;
 mod point_cloud;
