@@ -213,7 +213,7 @@ fn fill_to_json(fill: &Fill) -> serde_json::Value {
             "s": static_vec2([g.start.x, g.start.y]),
             "e": static_vec2([g.end.x, g.end.y]),
             "t": gradient_type_to_int(g.kind),
-            "g": gradient_colors_json(&g.stops),
+            "g": gradient_colors_json(&g.baked_stops()),
             "r": fill_rule_to_int(fill.rule),
         }),
     }
@@ -230,7 +230,7 @@ fn stroke_to_json(stroke: &Stroke) -> serde_json::Value {
             "s": static_vec2([g.start.x, g.start.y]),
             "e": static_vec2([g.end.x, g.end.y]),
             "t": gradient_type_to_int(g.kind),
-            "g": gradient_colors_json(&g.stops),
+            "g": gradient_colors_json(&g.baked_stops()),
         }),
     };
     obj["o"] = static_scalar(stroke.opacity * 100.0);

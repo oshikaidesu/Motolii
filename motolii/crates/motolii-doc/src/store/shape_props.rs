@@ -237,11 +237,11 @@ mod tests {
     fn angular_and_diamond_parameters_close_the_circle_and_the_diamond() {
         use crate::doc::vector::GradientStop;
         let stops = vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }];
-        let angular = Gradient { kind: GradientType::Angular, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops: stops.clone() };
+        let angular = Gradient { kind: GradientType::Angular, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops: stops.clone(), blend: crate::doc::vector::GradientBlend::Rgb };
         assert!((angular.parameter(Point { x: 0.0, y: 10.0 }) - 0.25).abs() < 1e-9);
         assert!((angular.parameter(Point { x: -10.0, y: 0.0 }) - 0.5).abs() < 1e-9);
         assert!(angular.parameter(Point { x: 10.0, y: -0.001 }) > 0.99);
-        let diamond = Gradient { kind: GradientType::Diamond, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops };
+        let diamond = Gradient { kind: GradientType::Diamond, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops, blend: crate::doc::vector::GradientBlend::Rgb };
         assert!((diamond.parameter(Point { x: 5.0, y: 5.0 }) - 1.0).abs() < 1e-9);
         assert!((diamond.parameter(Point { x: 0.0, y: 10.0 }) - 1.0).abs() < 1e-9);
         assert!((diamond.parameter(Point { x: 2.5, y: 0.0 }) - 0.25).abs() < 1e-9);

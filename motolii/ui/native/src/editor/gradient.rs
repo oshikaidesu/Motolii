@@ -1,5 +1,5 @@
 use crate::doc::store::{Document, Intent};
-use crate::doc::vector::{Brush, Fill, Gradient, GradientStop, GradientType, Point, Rgb};
+use crate::doc::vector::{Brush, Fill, Gradient, GradientBlend, GradientStop, GradientType, Point, Rgb};
 use super::{color::{leaf_mut, shape_location, gradient_axis}, session::ColorSlot};
 use serde_json::{Value as J, json};
 
@@ -35,10 +35,11 @@ pub(crate) fn edit(doc:&Document, slot:&ColorSlot, j:&J) -> Result<Intent,String
     let fill=shape.fill.get_or_insert_with(Fill::default);
     let mut g=match &fill.brush {
         Brush::Gradient(g)=>g.clone(),
-        Brush::Solid(c)=>Gradient{kind:GradientType::Linear,start,end,stops:vec![GradientStop{offset:0.0,color:*c},GradientStop{offset:1.0,color:*c}]},
+        Brush::Solid(c)=>Gradient{kind:GradientType::Linear,start,end,stops:vec![GradientStop{offset:0.0,color:*c},GradientStop{offset:1.0,color:*c}],blend:Default::default()},
     };
     if !j["stops"].is_null() { g.stops=stops(&j["stops"])?; }
     if !j["kind"].is_null() { g.kind=kind(&j["kind"])?; }
+    if let Some(name)=j["blend"].as_str() { g.blend=GradientBlend::parse(name).ok_or("Unknown gradient blend")?; }
     if let Some(angle)=j["angle"].as_f64() {
         if !angle.is_finite() { return Err("Invalid gradient angle".into()); }
         let length=(g.end.x-g.start.x).hypot(g.end.y-g.start.y).max(1.0);
@@ -57,8 +58,8 @@ pub(crate) fn model(doc:&Document, slot:&ColorSlot, time:crate::doc::store::Rati
     let fill=leaf_mut(&mut shapes,path)?.fill.as_ref()?;
     let slot=ColorSlot::ShapeFill{layer,path:path.to_vec()};
     Some(match &fill.brush {
-        Brush::Solid(c)=>json!({"slot":slot,"kind":"solid","angle":0,"stops":[{"offset":0,"rgba":[c.r,c.g,c.b,1.0]}]}),
-        Brush::Gradient(g)=>json!({"slot":slot,"kind":match g.kind{GradientType::Linear=>"linear",GradientType::Radial=>"radial",GradientType::Angular=>"angular",GradientType::Diamond=>"diamond"},"angle":(g.end.y-g.start.y).atan2(g.end.x-g.start.x).to_degrees(),"stops":g.stops.iter().enumerate().map(|(index,s)|json!({"offset":s.offset,"rgba":[s.color.r,s.color.g,s.color.b,1.0],"slot":ColorSlot::ShapeGradientPoint{layer,path:path.to_vec(),index}})).collect::<Vec<_>>()}),
+        Brush::Solid(c)=>json!({"slot":slot,"kind":"solid","angle":0,"blend":GradientBlend::default().name(),"stops":[{"offset":0,"rgba":[c.r,c.g,c.b,1.0]}]}),
+        Brush::Gradient(g)=>json!({"slot":slot,"kind":match g.kind{GradientType::Linear=>"linear",GradientType::Radial=>"radial",GradientType::Angular=>"angular",GradientType::Diamond=>"diamond"},"angle":(g.end.y-g.start.y).atan2(g.end.x-g.start.x).to_degrees(),"blend":g.blend.name(),"stops":g.stops.iter().enumerate().map(|(index,s)|json!({"offset":s.offset,"rgba":[s.color.r,s.color.g,s.color.b,1.0],"slot":ColorSlot::ShapeGradientPoint{layer,path:path.to_vec(),index}})).collect::<Vec<_>>()}),
     })
 }
 

@@ -189,6 +189,8 @@ pub struct Rgb {
 }
 
 impl Rgb {
+    pub fn to_linear(self) -> Rgb { Rgb { r: srgb_to_linear(self.r), g: srgb_to_linear(self.g), b: srgb_to_linear(self.b) } }
+    pub fn to_srgb(self) -> Rgb { Rgb { r: linear_to_srgb(self.r), g: linear_to_srgb(self.g), b: linear_to_srgb(self.b) } }
     pub const BLACK: Rgb = Rgb {
         r: 0.0,
         g: 0.0,
@@ -214,6 +216,87 @@ pub struct Gradient {
     pub start: Point,
     pub end: Point,
     pub stops: Vec<GradientStop>,
+    /// stop の間を色がどう渡るか。書類に書く定義で、鍵は打たない。
+    #[serde(default)]
+    pub blend: GradientBlend,
+}
+
+/// 2 つの stop の間の道。空間の一覧は CSS Color 4 の閉集合(sRGB・linear・Oklab・Oklch の短/長)と段階。
+/// 顔料の混色(Kubelka–Munk)と HDR の空間は別の核なので、核が入った時に足す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GradientBlend {
+    /// 表示の sRGB を直線で。Photoshop の Classic、CSS の legacy。
+    Rgb,
+    /// 光の量で直線に(linear sRGB)。
+    LinearRgb,
+    /// 知覚で直線に。Photoshop 2023 の Perceptual、CSS の既定。
+    #[default]
+    Oklab,
+    /// 色相環を短い方へ回る。
+    OklchShort,
+    /// 色相環を長い方へ回る。
+    OklchLong,
+    /// 混ぜない。stop の中点で切り替わる。
+    Steps,
+}
+
+impl GradientBlend {
+    pub const ALL: [GradientBlend; 6] = [Self::Rgb, Self::LinearRgb, Self::Oklab, Self::OklchShort, Self::OklchLong, Self::Steps];
+    pub fn name(self) -> &'static str {
+        match self { Self::Rgb => "rgb", Self::LinearRgb => "linear_rgb", Self::Oklab => "oklab", Self::OklchShort => "oklch_short", Self::OklchLong => "oklch_long", Self::Steps => "steps" }
+    }
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|b| b.name() == name)
+    }
+    /// 2 色の間の u(0..1)の色。
+    pub fn mix(self, a: Rgb, b: Rgb, u: f64) -> Rgb {
+        let u = u.clamp(0.0, 1.0);
+        let lerp = |x: f64, y: f64| x + (y - x) * u;
+        match self {
+            Self::Rgb => Rgb { r: lerp(a.r, b.r), g: lerp(a.g, b.g), b: lerp(a.b, b.b) },
+            Self::Steps => if u < 0.5 { a } else { b },
+            Self::LinearRgb => {
+                let (la, lb) = (a.to_linear(), b.to_linear());
+                Rgb { r: lerp(la.r, lb.r), g: lerp(la.g, lb.g), b: lerp(la.b, lb.b) }.to_srgb()
+            }
+            Self::Oklab => {
+                let (la, lb) = (oklab(a), oklab(b));
+                from_oklab([lerp(la[0], lb[0]), lerp(la[1], lb[1]), lerp(la[2], lb[2])])
+            }
+            Self::OklchShort | Self::OklchLong => {
+                let (la, lb) = (oklab(a), oklab(b));
+                let (ca, cb) = (la[1].hypot(la[2]), lb[1].hypot(lb[2]));
+                // 無彩色の端は相手の色相を借りる(弓なりに膨らまない)。
+                let ha = if ca < 1e-4 { lb[2].atan2(lb[1]) } else { la[2].atan2(la[1]) };
+                let hb = if cb < 1e-4 { ha } else { lb[2].atan2(lb[1]) };
+                let mut d = hb - ha;
+                let tau = std::f64::consts::TAU;
+                d -= (d / tau).round() * tau;
+                if matches!(self, Self::OklchLong) && d.abs() < std::f64::consts::PI && d != 0.0 { d -= d.signum() * tau; }
+                let h = ha + d * u;
+                let c = lerp(ca, cb);
+                from_oklab([lerp(la[0], lb[0]), c * h.cos(), c * h.sin()])
+            }
+        }
+    }
+}
+
+fn srgb_to_linear(v: f64) -> f64 { if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) } }
+fn linear_to_srgb(v: f64) -> f64 { let v = v.clamp(0.0, 1.0); if v <= 0.0031308 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 } }
+/// Ottosson 2020 の行列。
+fn oklab(c: Rgb) -> [f64; 3] {
+    let l = c.to_linear();
+    let lm = (0.4122214708 * l.r + 0.5363325363 * l.g + 0.0514459929 * l.b).cbrt();
+    let m = (0.2119034982 * l.r + 0.6806995451 * l.g + 0.1073969566 * l.b).cbrt();
+    let s = (0.0883024619 * l.r + 0.2817188376 * l.g + 0.6299787005 * l.b).cbrt();
+    [0.2104542553 * lm + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * lm - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * lm + 0.7827717662 * m - 0.8086757660 * s]
+}
+fn from_oklab([l, a, b]: [f64; 3]) -> Rgb {
+    let lm = (l + 0.3963377774 * a + 0.2158037573 * b).powi(3);
+    let m = (l - 0.1055613458 * a - 0.0638541728 * b).powi(3);
+    let s = (l - 0.0894841775 * a - 1.2914855480 * b).powi(3);
+    Rgb { r: 4.0767416621 * lm - 3.3077115913 * m + 0.2309699292 * s, g: -1.2684380046 * lm + 2.6097574011 * m - 0.3413193965 * s, b: -0.0041960863 * lm - 0.7034186147 * m + 1.7076147010 * s }.to_srgb()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -257,7 +340,33 @@ impl Gradient {
         if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) }
     }
 
-    /// 0..1 の位置の色。stop の間は直線で混ぜ、外は端の色。
+    /// 描き手が sRGB の直線しか混ぜられない時(tiny-skia・Lottie)の stop の列。
+    /// 直線以外の道は間を細かく刻んで渡す。嘘で達成。
+    pub fn baked_stops(&self) -> Vec<GradientStop> {
+        let mut stops = self.stops.clone();
+        stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+        if matches!(self.blend, GradientBlend::Rgb) || stops.len() < 2 { return stops; }
+        let n = if matches!(self.blend, GradientBlend::Steps) { 1 } else { 12 };
+        let mut out = Vec::with_capacity(stops.len() * n);
+        for w in stops.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            out.push(a);
+            if matches!(self.blend, GradientBlend::Steps) {
+                let mid = (a.offset + b.offset) * 0.5;
+                out.push(GradientStop { offset: mid, color: a.color });
+                out.push(GradientStop { offset: mid, color: b.color });
+                continue;
+            }
+            for k in 1..n {
+                let u = k as f64 / n as f64;
+                out.push(GradientStop { offset: a.offset + (b.offset - a.offset) * u, color: self.blend.mix(a.color, b.color, u) });
+            }
+        }
+        out.push(*stops.last().unwrap());
+        out
+    }
+
+    /// 0..1 の位置の色。stop の間は blend の道で混ぜ、外は端の色。
     pub fn color_at(&self, t: f64) -> Rgb {
         let mut stops = self.stops.clone();
         stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
@@ -269,7 +378,7 @@ impl Gradient {
                 let i = stops.iter().position(|s| s.offset > t).unwrap_or(stops.len() - 1);
                 let (a, b) = (&stops[i - 1], &stops[i]);
                 let u = ((t - a.offset) / (b.offset - a.offset).max(f64::EPSILON)).clamp(0.0, 1.0);
-                Rgb { r: a.color.r + (b.color.r - a.color.r) * u, g: a.color.g + (b.color.g - a.color.g) * u, b: a.color.b + (b.color.b - a.color.b) * u }
+                self.blend.mix(a.color, b.color, u)
             }
         }
     }

@@ -4,12 +4,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../foundation/metrics.dart';
-import '../foundation/color_field.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../session/editor_session.dart';
 import 'native_visual_sample.dart';
 
+/// The fill's value on the sheet: one bar, its stops as handles. A handle is
+/// the stop's swatch — press it and the Browser's wheel turns to it, drag it
+/// along to move it, drag it off the bar to drop it; press the bar to add a
+/// stop. The kind and the blend are definitions and live on the Colors shelf.
 class GradientInspector extends StatefulWidget {
   const GradientInspector({
     super.key,
@@ -28,11 +31,15 @@ class _GradientInspectorState extends State<GradientInspector>
   int selected = 0;
   final _focus = FocusNode();
   List<Map<String, dynamic>>? _dragRows, _draft;
-  double _dragX = 0;
-  bool _ending = false;
+  double _dragX = 0, _dragY = 0;
+  bool _ending = false, _dropping = false;
   late final _queue = EditorPreviewQueue<Map<String, dynamic>>(
     (patch) => edit(patch, preview: true),
   );
+
+  static const double _handle = EditorMetrics.s14,
+      _dropReach = EditorMetrics.s32;
+
   @override
   void initState() {
     super.initState();
@@ -52,14 +59,21 @@ class _GradientInspectorState extends State<GradientInspector>
   Future<void> _end(bool cancel) async {
     if (_dragRows == null || _ending) return;
     _ending = true;
+    final drop = _dropping && !cancel;
     try {
       await _queue.finish(
         cancel,
         () => c.command(cancel ? 'cancelPreview' : 'commitPreview'),
       );
+      if (drop) {
+        final rows = [...stops]..removeAt(selected);
+        await edit({'stops': rows});
+        if (mounted) setState(() => selected = 0);
+      }
     } finally {
       _ending = false;
       _dragRows = null;
+      _dropping = false;
       if (mounted) setState(() => _draft = null);
     }
   }
@@ -86,8 +100,7 @@ class _GradientInspectorState extends State<GradientInspector>
         'preview': preview,
       });
 
-  /// Choosing a stop is focusing its colour: the row below shows it and the
-  /// Browser's wheel turns to it.
+  /// Choosing a stop is focusing its colour: the Browser's wheel turns to it.
   Future<void> focus(int index) async {
     setState(() => selected = index);
     if (!c.supports('focusColor')) return;
@@ -97,10 +110,38 @@ class _GradientInspectorState extends State<GradientInspector>
     });
   }
 
+  /// A new stop where the bar was pressed, coloured like the bar there.
+  Future<void> add(double offset) async {
+    final rows = stops;
+    if (rows.length >= 32) return;
+    var before = rows.first, after = rows.last;
+    for (final r in rows) {
+      final o = (r['offset'] as num).toDouble();
+      if (o <= offset) before = r;
+    }
+    for (final r in rows.reversed) {
+      final o = (r['offset'] as num).toDouble();
+      if (o >= offset) after = r;
+    }
+    final a = (before['offset'] as num).toDouble(),
+        b = (after['offset'] as num).toDouble();
+    final u = b > a ? ((offset - a) / (b - a)).clamp(0.0, 1.0) : 0.0;
+    final ca = (before['rgba'] as List).cast<num>(),
+        cb = (after['rgba'] as List).cast<num>();
+    final rgba = [for (var k = 0; k < 3; k++) ca[k] + (cb[k] - ca[k]) * u, 1.0];
+    final next = [
+      ...rows,
+      {'offset': offset, 'rgba': rgba},
+    ]..sort((x, y) => (x['offset'] as num).compareTo(y['offset'] as num));
+    final index = next.indexWhere((r) => r['offset'] == offset);
+    await edit({'stops': next});
+    if (mounted) setState(() => selected = index);
+  }
+
   Color color(Map<String, dynamic> stop) {
     final rgba = (stop['rgba'] as List).cast<num>();
     return Color.from(
-      alpha: rgba.length > 3 ? rgba[3].toDouble() : 1,
+      alpha: 1,
       red: rgba[0].toDouble(),
       green: rgba[1].toDouble(),
       blue: rgba[2].toDouble(),
@@ -112,138 +153,111 @@ class _GradientInspectorState extends State<GradientInspector>
     final rows = _draft ?? stops;
     if (rows.isEmpty) return const SizedBox();
     selected = selected.clamp(0, rows.length - 1);
-    final kind = widget.fill['kind'] ?? 'solid';
+    final solid = widget.fill['kind'] == 'solid';
     final sampleStops = rows.length == 1
         ? [
             rows.first,
             {...rows.first, 'offset': 1.0},
           ]
         : rows;
-    Widget sample(String type) => type == 'solid'
-        ? ColoredBox(color: color(rows.first))
-        : NativeVisualSample(
-            controller: c,
-            request: {
-              'kind': 'gradient',
-              'type': type,
-              'stops': sampleStops,
-              'angle': widget.fill['angle'] ?? 0,
-            },
-            fit: BoxFit.fill,
-          );
     return Focus(
       focusNode: _focus,
       onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape &&
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.escape &&
             _dragRows != null) {
           _end(true);
           return KeyEventResult.handled;
         }
+        if ((event.logicalKey == LogicalKeyboardKey.delete ||
+                event.logicalKey == LogicalKeyboardKey.backspace) &&
+            enabled &&
+            rows.length > 2) {
+          edit({
+            'stops': [...rows]..removeAt(selected),
+          });
+          setState(() => selected = 0);
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final span = box.maxWidth - _handle;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final type in [
-                'solid',
-                'linear',
-                'radial',
-                'angular',
-                'diamond',
-              ])
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: EditorMetrics.s4),
-                    child: EditorTooltip(
-                      message:
-                          '${type[0].toUpperCase()}${type.substring(1)} fill',
-                      child: InkWell(
-                        key: ValueKey('fill-mode:$type'),
-                        onTap: !enabled
-                            ? null
-                            : () async {
-                                if (type == 'solid') {
-                                  await c.command('setFillMode', {
-                                    'slot': widget.fill['slot'],
-                                    'gradient': false,
-                                  });
-                                } else {
-                                  await edit({'kind': type});
-                                }
-                                if (mounted) setState(() => selected = 0);
-                              },
-                        // The picture of the fill is the button, the chosen
-                        // one ringed. A solid fill draws all three alike, so
-                        // the word under each box tells them apart.
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              height: EditorMetrics.tall,
-                              decoration: BoxDecoration(
-                                border: kind == type
-                                    ? Border.all(
-                                        color: EditorTheme.accent,
-                                        width: EditorMetrics.s2,
-                                      )
-                                    : Border.all(color: EditorTheme.border),
-                              ),
-                              child: sample(type),
-                            ),
-                            Text(
-                              '${type[0].toUpperCase()}${type.substring(1)}',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: kind == type
-                                        ? EditorTheme.accent
-                                        : EditorTheme.muted,
-                                  ),
-                            ),
-                          ],
+              // The bar: press to add a stop. A solid is a bar of one colour;
+              // adding a stop makes it a gradient.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: !enabled
+                    ? null
+                    : (e) => add(
+                        ((e.localPosition.dx - _handle / 2) / span).clamp(
+                          0.0,
+                          1.0,
                         ),
                       ),
-                    ),
+                child: Container(
+                  key: const ValueKey('gradient-bar'),
+                  height: EditorMetrics.s16,
+                  margin: const EdgeInsets.symmetric(horizontal: _handle / 2),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: EditorTheme.line),
+                    borderRadius: BorderRadius.circular(EditorMetrics.s2),
                   ),
+                  clipBehavior: Clip.antiAlias,
+                  child: solid
+                      ? ColoredBox(color: color(rows.first))
+                      : NativeVisualSample(
+                          controller: c,
+                          request: {
+                            'kind': 'gradient',
+                            'type': 'linear',
+                            'stops': sampleStops,
+                            'blend': widget.fill['blend'],
+                          },
+                          fit: BoxFit.fill,
+                        ),
                 ),
-            ],
-          ),
-          const SizedBox(height: EditorMetrics.s8),
-          if (kind != 'solid') ...[
-            SizedBox(height: EditorMetrics.s36, child: sample(kind)),
-            SizedBox(
-              height: EditorMetrics.s22,
-              child: LayoutBuilder(
-                builder: (context, box) => Stack(
+              ),
+              // The handles: each is its stop's swatch.
+              SizedBox(
+                height: _handle + EditorMetrics.s2,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
                     for (var i = 0; i < rows.length; i++)
                       Positioned(
-                        left:
-                            ((rows[i]['offset'] as num).toDouble() *
-                            (box.maxWidth - EditorMetrics.s16)),
+                        left: (rows[i]['offset'] as num).toDouble() * span,
+                        top: 0,
                         child: EditorTooltip(
                           message:
-                              'Stop ${i + 1} · ${((rows[i]['offset'] as num) * 100).round()}%',
+                              'Stop ${i + 1} · ${((rows[i]['offset'] as num) * 100).round()}% · drag off to remove',
                           child: Listener(
                             onPointerCancel: (_) => _end(true),
                             child: GestureDetector(
-                              onPanStart: !enabled
+                              onTap: enabled ? () => focus(i) : null,
+                              onPanStart: !enabled || solid
                                   ? null
                                   : (e) {
                                       if (_ending) return;
                                       _focus.requestFocus();
                                       _dragRows = stops;
                                       _dragX = e.globalPosition.dx;
+                                      _dragY = e.globalPosition.dy;
                                       setState(() => selected = i);
                                     },
-                              onPanUpdate: !enabled
+                              onPanUpdate: !enabled || solid
                                   ? null
                                   : (e) {
                                       final base = _dragRows;
                                       if (base == null || _ending) return;
+                                      final away =
+                                          (e.globalPosition.dy - _dragY).abs() >
+                                              _dropReach &&
+                                          base.length > 2;
                                       final lower = i == 0
                                           ? 0.0
                                           : (base[i - 1]['offset'] as num)
@@ -257,8 +271,7 @@ class _GradientInspectorState extends State<GradientInspector>
                                                       .toDouble() +
                                                   (e.globalPosition.dx -
                                                           _dragX) /
-                                                      (box.maxWidth -
-                                                          EditorMetrics.s16))
+                                                      span)
                                               .clamp(lower, upper);
                                       final next = [
                                         for (
@@ -271,17 +284,20 @@ class _GradientInspectorState extends State<GradientInspector>
                                             if (index == i) 'offset': offset,
                                           },
                                       ];
-                                      setState(() => _draft = next);
+                                      setState(() {
+                                        _draft = next;
+                                        _dropping = away;
+                                      });
                                       _queue.add({'stops': next});
                                     },
                               onPanEnd: (_) => _end(false),
                               onPanCancel: () => _end(true),
-                              child: InkWell(
-                                key: ValueKey('gradient-stop:$i'),
-                                onTap: enabled ? () => focus(i) : null,
+                              child: Opacity(
+                                opacity: _dropping && selected == i ? .35 : 1,
                                 child: Container(
-                                  width: EditorMetrics.s16,
-                                  height: EditorMetrics.s16,
+                                  key: ValueKey('gradient-stop:$i'),
+                                  width: _handle,
+                                  height: _handle,
                                   decoration: BoxDecoration(
                                     color: color(rows[i]),
                                     border: Border.all(
@@ -303,113 +319,9 @@ class _GradientInspectorState extends State<GradientInspector>
                   ],
                 ),
               ),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: EditorNumericField(
-                    key: ValueKey('stop-position:$selected'),
-                    value: (rows[selected]['offset'] as num).toDouble() * 100,
-                    label: 'Stop position',
-                    unit: '%',
-                    decimals: 1,
-                    speed: .2,
-                    min: selected > 0
-                        ? (rows[selected - 1]['offset'] as num).toDouble() * 100
-                        : 0,
-                    max: selected + 1 < rows.length
-                        ? (rows[selected + 1]['offset'] as num).toDouble() * 100
-                        : 100,
-                    enabled: enabled,
-                    onPreview: (value) => edit({
-                      'stops': [
-                        for (var i = 0; i < rows.length; i++)
-                          {
-                            ...rows[i],
-                            if (i == selected) 'offset': value / 100,
-                          },
-                      ],
-                    }, preview: true),
-                    onCommit: (value) => edit({
-                      'stops': [
-                        for (var i = 0; i < rows.length; i++)
-                          {
-                            ...rows[i],
-                            if (i == selected) 'offset': value / 100,
-                          },
-                      ],
-                    }),
-                    onFinish: () => c.command('commitPreview'),
-                    onCancel: () => c.command('cancelPreview'),
-                  ),
-                ),
-                const SizedBox(width: EditorMetrics.s6),
-                EditorTooltip(
-                  message: 'Add stop',
-                  child: IconButton(
-                    icon: const Icon(Icons.add, size: EditorMetrics.s14),
-                    onPressed: !enabled || rows.length >= 32
-                        ? null
-                        : () async {
-                            final stop = {
-                              ...rows[selected],
-                              'offset': selected + 1 < rows.length
-                                  ? ((rows[selected]['offset'] as num) +
-                                            (rows[selected + 1]['offset']
-                                                as num)) /
-                                        2
-                                  : ((rows[selected - 1]['offset'] as num) +
-                                            (rows[selected]['offset'] as num)) /
-                                        2,
-                            };
-                            final next = [...rows, stop]
-                              ..sort(
-                                (a, b) => (a['offset'] as num).compareTo(
-                                  b['offset'] as num,
-                                ),
-                              );
-                            final index = next.indexOf(stop);
-                            await edit({'stops': next});
-                            if (mounted) setState(() => selected = index);
-                          },
-                  ),
-                ),
-                EditorTooltip(
-                  message: 'Remove stop',
-                  child: IconButton(
-                    icon: const Icon(Icons.remove, size: EditorMetrics.s14),
-                    onPressed: !enabled || rows.length <= 2
-                        ? null
-                        : () => edit({
-                            'stops': [...rows]..removeAt(selected),
-                          }),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: EditorMetrics.s6),
-            EditorColorField(
-              key: ValueKey('gradient-color:${widget.layer['id']}:$selected'),
-              value: color(rows[selected]),
-              label: 'Stop ${selected + 1}',
-              allowAlpha: false,
-              enabled: enabled,
-              onFocus: !c.supports('focusColor')
-                  ? null
-                  : () => c.focusColor({
-                      'layer': widget.layer['id'],
-                      'slot': rows[selected]['slot'],
-                    }),
-              onPreview: (v) => c.command('previewColor', {
-                'layer': widget.layer['id'],
-                'slot': rows[selected]['slot'],
-                'rgba': [v.r, v.g, v.b, v.a],
-              }),
-              onFinish: () => c.command('commitPreview'),
-              onCancel: () => c.command('cancelPreview'),
-            ),
-          ],
-        ],
+            ],
+          );
+        },
       ),
     );
   }

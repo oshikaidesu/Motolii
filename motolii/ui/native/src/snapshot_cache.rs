@@ -161,7 +161,7 @@ impl EditorRuntime {
         reply["selectedIds"] = json!(self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>());
         let fps = self.doc.view().composition().map_err(|e|e.to_string())?.ok_or("No composition")?.fps.as_f64();
         reply["selectedKeys"] = json!(self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*fps).round()as i64})).collect::<Vec<_>>());
-        reply["colorTarget"] = self.color_target.as_ref().and_then(|slot| crate::editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().0,"slot":slot,"label":"Color","rgba":rgba}))).unwrap_or(Value::Null);
+        reply["colorTarget"] = self.color_target.as_ref().and_then(|slot| crate::editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":crate::editor::color::has_alpha(slot)}))).unwrap_or(Value::Null);
         reply["undo"] = json!(undo); reply["redo"] = json!(redo);
         reply["path"] = json!(self.path); reply["dirty"] = json!(self.is_dirty()?);
         reply["frame"] = json!(self.frame); reply["playing"] = json!(playing);

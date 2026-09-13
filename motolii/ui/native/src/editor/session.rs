@@ -16,6 +16,8 @@ pub(crate) enum ColorSlot {
     ShapeGradientPoint { layer: LayerId, path: Vec<usize>, index: usize },
     /// 色の型の property なら何でも(効果の param の色など)。名前がそのまま宛先。
     Property { layer: LayerId, property: String },
+    /// Composition の背景。層ではないが、同じ見本と輪で触る。
+    Background,
     ShapeGradientStop {
         layer: LayerId,
         path: Vec<usize>,
@@ -24,14 +26,15 @@ pub(crate) enum ColorSlot {
 }
 
 impl ColorSlot {
-    pub(crate) fn layer(&self) -> LayerId {
+    pub(crate) fn layer(&self) -> Option<LayerId> {
         match self {
             Self::TextFill { layer, .. }
             | Self::ShapeFill { layer, .. }
             | Self::ShapeStroke { layer, .. }
             | Self::ShapeGradientPoint { layer, .. }
             | Self::Property { layer, .. }
-            | Self::ShapeGradientStop { layer, .. } => *layer,
+            | Self::ShapeGradientStop { layer, .. } => Some(*layer),
+            Self::Background => None,
         }
     }
 

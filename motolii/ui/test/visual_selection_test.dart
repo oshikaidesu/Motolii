@@ -72,10 +72,8 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.byKey(const ValueKey('fill-mode:radial')));
-      await tester.pumpAndSettle();
-      expect(sent.last['op'], 'setGradient');
-      expect(sent.last['kind'], 'radial');
+      // The kind lives on the Colors shelf now; the sheet has the bar only.
+      expect(find.byKey(const ValueKey('fill-mode:radial')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('gradient-stop:1')));
       await tester.pumpAndSettle();
       expect(sent.last, {
@@ -86,8 +84,11 @@ void main() {
       expect(placements, isEmpty);
       expect(c.browserTab.value, 'Colors');
       expect(find.byType(MenuAnchor), findsNothing);
-      await tester.tap(find.byTooltip('Add stop'));
+      // Pressing the bar adds a stop there, coloured like the bar.
+      final bar = find.byKey(const ValueKey('gradient-bar'));
+      await tester.tapAt(tester.getTopLeft(bar) + const Offset(30, 8));
       await tester.pumpAndSettle();
+      expect(sent.last['op'], 'setGradient');
       expect((sent.last['stops'] as List).length, 4);
       sent.clear();
       final pointer = await tester.startGesture(

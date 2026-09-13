@@ -77,8 +77,8 @@ impl EditorRuntime{
     }
     fn color_intent(&self,j:&J)->Result<Vec<Intent>,String>{
         let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;
-        if j.get("layer").is_some()&&slot.layer()!=layer(j)?{return Err("Color target layer mismatch".into())}
-        if let Some(reason)=editor::functions::lens::edit_rejection(&self.doc.view(),slot.layer()).map_err(e)?{return Err(reason.into())}
+        if j.get("layer").is_some()&&slot.layer()!=Some(layer(j)?){return Err("Color target layer mismatch".into())}
+        if let Some(id)=slot.layer(){if let Some(reason)=editor::functions::lens::edit_rejection(&self.doc.view(),id).map_err(e)?{return Err(reason.into())}}
         editor::color::write_color(&self.doc,&slot,rgba(j)?,self.time()?,self.animate).map_err(e)
     }
     pub(crate) fn asset_used(&self,id:AssetId)->Result<bool,String>{
@@ -207,8 +207,8 @@ impl EditorRuntime{
             "moveKeys"=>{if self.selected_keys.is_empty(){return Err("Select keyframes".into())}let keys:Vec<_>=self.selected_keys.iter().map(|k|(k.layer,k.property.clone(),k.at_sec)).collect();let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let delta=editor::keyframe_edit::clamped_key_delta(&keys,fps,integer(&j,"deltaFrames")?);let edits=editor::keyframe_edit::key_selection_move_intents(&self.doc,&keys,delta).map_err(e)?;self.apply(edits)?;for k in &mut self.selected_keys{k.at_sec+=delta as f64/fps;}}
             "ease"=>self.apply_ease(&j)?,
             "setColor"|"previewColor"=>{let intents=self.color_intent(&j)?;if op=="previewColor"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
-            "focusColor"=>{let slot:ColorSlot=if let Some(name)=j["property"].as_str(){editor::color::slot_of(&self.doc,layer(&j)?,name).ok_or("Not a color property")?}else{serde_json::from_value(j["slot"].clone()).map_err(e)?};if slot.layer()!=layer(&j)?{return Err("Color target mismatch".into())}self.color_target=Some(slot);}
-            "applyPalette"=>{if let Some(slot)=self.color_target.clone(){let q=json!({"layer":slot.layer().0,"slot":slot,"rgba":rgba(&j)?});let edits=self.color_intent(&q)?;self.apply(edits)?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
+            "focusColor"=>{let slot:ColorSlot=if let Some(name)=j["property"].as_str(){editor::color::slot_of(&self.doc,layer(&j)?,name).ok_or("Not a color property")?}else{serde_json::from_value(j["slot"].clone()).map_err(e)?};if j.get("layer").is_some()&&slot.layer()!=Some(layer(&j)?){return Err("Color target mismatch".into())}self.color_target=Some(slot);}
+            "applyPalette"=>{if let Some(slot)=self.color_target.clone(){let mut q=json!({"slot":slot,"rgba":rgba(&j)?});if let Some(id)=slot.layer(){q["layer"]=json!(id.0);}let edits=self.color_intent(&q)?;self.apply(edits)?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
             "applyEffect"=>{let plugins:Vec<String>=if let Some(a)=j["pluginIds"].as_array(){a.iter().map(|p|p.as_str().map(str::to_owned).ok_or("Invalid plugin".into())).collect::<Result<_,String>>()?}else{vec![string(&j,"pluginId")?.into()]};let catalog=crate::render::engine::known_effects();if plugins.iter().any(|p|!catalog.iter().any(|c|c.plugin_id==*p)){return Err("Unknown effect".into())}let warp=plugins.iter().any(|p|catalog.iter().any(|d|d.plugin_id==*p&&d.stage==crate::render::compositor::EffectStage::Warp));if warp { for id in self.selected_required()? { let meta=self.doc.view().meta(*id).map_err(e)?.ok_or("Layer missing")?;let planar=match meta.source { LayerSource::Text|LayerSource::Shape=>true,LayerSource::File{path,..}=>!crate::render::media::is_mesh_path(&path)&&!crate::render::media::is_point_cloud_path(&path),_=>false };if !planar||self.doc.view().attrs(*id).map_err(e)?.is_some_and(|a|a.environment){return Err("2D warp requires a planar material".into())} } }let mut intents=Vec::new();let path_only=plugins.iter().any(|p|crate::doc::store::pathop::kind(p).is_some());for id in self.selected_required()?{if path_only&&self.doc.view().meta(*id).map_err(e)?.is_none_or(|m|m.source!=crate::doc::store::LayerSource::Shape){return Err("Path effects apply to shape layers".into())}intents.extend(editor::functions::verb::effect_batch_intents(&self.doc,*id,&plugins).map_err(e)?);}self.apply(intents)?;}
             "preferences"=>{if j.get("flatProjection").is_some(){self.flat_projection=serde_json::from_value(j["flatProjection"].clone()).map_err(e)?;}}
             "animate"=>{let on=j["enabled"].as_bool().ok_or("Missing enabled")?;let interp=if j["shape"].is_object(){editor::ease_kinds::decode(&j["shape"])?}else{Interp::Linear};self.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From{origin:self.time()?,interp}}else{Animate::Now{interp}};}
@@ -275,7 +275,7 @@ impl EditorRuntime{
             self.clock_revision=self.doc.revision();
             self.clock_frame();
         }
-        let live=self.doc.view().layers();self.selected_ids.retain(|id|live.contains(id));self.selected_keys.retain(|key|live.contains(&key.layer));if self.color_target.as_ref().is_some_and(|slot|!live.contains(&slot.layer())){self.color_target=None;}self.selected=self.selected_ids.last().copied();self.error=None;Ok(())
+        let live=self.doc.view().layers();self.selected_ids.retain(|id|live.contains(id));self.selected_keys.retain(|key|live.contains(&key.layer));if self.color_target.as_ref().is_some_and(|slot|slot.layer().is_some_and(|id|!live.contains(&id))){self.color_target=None;}self.selected=self.selected_ids.last().copied();self.error=None;Ok(())
     }
     fn clock_frame(&mut self){
         // 尺は上限ではない: 再生は越えて進み、越えた先の層は帯の外なので描かれないだけ。
@@ -707,8 +707,7 @@ mod path_effect_tests {
         rt.request(json!({"op":"create","kind":"star"})).unwrap();
         let star=rt.selected.unwrap();
         let read=crate::editor::functions::read::inspector_data_from_doc(&rt.doc.view(),star,crate::doc::core::RationalTime::ZERO,&crate::render::engine::known_effects());
-        let labels:Vec<_>=read.text.iter().map(|r|r.label.as_str()).collect();
-        assert!(labels.contains(&"Points")&&labels.contains(&"Outer Radius")&&labels.contains(&"Inner Radius"),"{labels:?}");
+        assert!(!read.text.iter().any(|r|r.label=="Points"),"形の寸法は欄にならない(2D は path、8/29)");
         rt.request(json!({"op":"setProperty","layer":star.0,"property":"shape.points","value":8.0})).unwrap();
         let view=rt.doc.view();
         let at=crate::doc::core::RationalTime::ZERO;

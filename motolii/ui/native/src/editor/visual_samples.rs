@@ -37,7 +37,8 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
             if !angle.is_finite() { return Err("Invalid angle".into()); }
             let (sin,cos)=angle.sin_cos();
             let extent=cos.abs()*140.0+sin.abs()*32.0;
-            let gradient=Gradient{kind,start:Point{x:-cos*extent,y:-sin*extent},end:Point{x:cos*extent,y:sin*extent},stops};
+            let blend=j["blend"].as_str().map(|b|crate::doc::vector::GradientBlend::parse(b).ok_or("Unknown blend")).transpose()?.unwrap_or_default();
+            let gradient=Gradient{kind,start:Point{x:-cos*extent,y:-sin*extent},end:Point{x:cos*extent,y:sin*extent},stops,blend};
             let shape=Shape{source:PathSource::Rectangle{size:Point{x:280.0,y:64.0}},ops:vec![],stroke:None,fill:Some(Fill{brush:Brush::Gradient(gradient),..Default::default()})};
             Some(crate::doc::vector::render(&shape,&Canvas::centered(280,64)).map_err(|e|e.to_string())?)
         },

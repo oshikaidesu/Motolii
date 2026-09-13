@@ -147,7 +147,12 @@ void main() {
       ],
       'selectedIds': [1],
       'selectedKeys': [],
-      'capabilities': ['previewProperties', 'commitPreview', 'cancelPreview'],
+      'capabilities': [
+        'previewProperties',
+        'commitPreview',
+        'cancelPreview',
+        'focusColor',
+      ],
     };
     await tester.pumpWidget(
       MaterialApp(
@@ -170,17 +175,18 @@ void main() {
         .map((m) => m['edits'][0])
         .toList();
     expect(edits[0]['value'], 'Changed');
+    // A colour is a swatch: it shows the value and hands the focus to the
+    // Browser's wheel. Nothing is typed on the sheet.
     final color = tester.widget<EditorColorField>(
       find.byType(EditorColorField),
     );
     expect(color.value.a, closeTo(0.5, 0.01));
-    await color.onPreview(const Color(0x8000ff00));
-    await color.onFinish();
-    final colorEdit = commands.lastWhere(
-      (m) => m['op'] == 'previewProperties',
-    )['edits'][0];
-    expect(colorEdit['property'], 'tint');
-    expect(colorEdit['value'], [0.0, 1.0, 0.0, 128 / 255]);
+    expect(find.byType(TextField), findsNWidgets(1), reason: 'caption only');
+    await tester.tap(find.byType(EditorColorField));
+    await tester.pumpAndSettle();
+    final focus = commands.lastWhere((m) => m['op'] == 'focusColor');
+    expect(focus['layer'], 1);
+    expect(focus['property'], 'tint');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

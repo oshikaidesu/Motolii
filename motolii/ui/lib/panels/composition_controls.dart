@@ -86,16 +86,17 @@ class CompositionControls extends StatelessWidget {
                       selected: _isGrey(s['background'], grey),
                     ),
                   Expanded(
-                    child: EditorColorField(
-                      key: ValueKey('background-${s['background']}'),
-                      value: _color(s['background']),
-                      label: 'background',
-                      allowAlpha: false,
-                      onPreview: (v) => controller.command('composition', {
-                        'background': [v.r, v.g, v.b, 1.0],
-                      }),
-                      onFinish: () async {},
-                      onCancel: () async {},
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: EditorColorField(
+                        key: ValueKey('background-${s['background']}'),
+                        value: _color(s['background']),
+                        label: 'the background',
+                        onFocus: !controller.supports('focusColor')
+                            ? null
+                            : () =>
+                                  controller.focusColor({'slot': 'Background'}),
+                      ),
                     ),
                   ),
                 ],

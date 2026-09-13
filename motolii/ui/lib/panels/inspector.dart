@@ -1762,21 +1762,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ),
             label: label,
             enabled: _canEdit(layer),
-            allowAlpha: row['alpha'] != false,
             onFocus: !c.supports('focusColor')
                 ? null
                 : () => c.focusColor({
                     'layer': layer['id'],
                     'property': row['id'],
                   }),
-            onPreview: (v) => _write(layer, row, [
-              v.r,
-              v.g,
-              v.b,
-              if (rgba.length > 3) v.a,
-            ], preview: true),
-            onFinish: () => _finish(false),
-            onCancel: () => _finish(true),
           ),
         );
       case _Kind.scale:

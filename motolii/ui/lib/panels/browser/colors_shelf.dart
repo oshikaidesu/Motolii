@@ -50,7 +50,7 @@ class ColorsShelf extends BrowserShelf {
     final target = _colorTarget(c);
     // The fill being edited: its kind, stops and direction redraw the editor
     // at the top of the panel; the layer's name titles it.
-    return [target, _targetLayer(c, target)?['name']];
+    return [target, _targetLayer(c, target)?['name'], c.activeLayer?['fill']];
   }
 
   @override
@@ -95,7 +95,7 @@ class ColorsShelf extends BrowserShelf {
 
   @override
   Widget preview(BrowserHost host, Map<String, dynamic> item, Color identity) =>
-      gradientBox(host.controller, stopsOf(item));
+      gradientBox(host.controller, stopsOf(item), blend: item['blend']);
 
   @override
   Future<void> apply(BrowserHost host, Map<String, dynamic> item) async {
@@ -107,7 +107,11 @@ class ColorsShelf extends BrowserShelf {
       final fill = EditorSession.map(c.activeLayer?['fill']);
       final slot = target['slot'] ?? fill['slot'];
       if (host.has('setGradient') && slot != null) {
-        await c.command('setGradient', {'slot': slot, 'stops': colors});
+        await c.command('setGradient', {
+          'slot': slot,
+          'stops': colors,
+          if (item['blend'] != null) 'blend': item['blend'],
+        });
       }
     } else if (host.has('applyPalette')) {
       await c.command('applyPalette', {'rgba': colors.single});
@@ -177,7 +181,8 @@ class ColorsShelf extends BrowserShelf {
                     onPick: (rgba) => target == null
                         ? host.refresh(() => picked = rgba)
                         : c.command('setColor', {
-                            'layer': target['layer'],
+                            if (target['layer'] != null)
+                              'layer': target['layer'],
                             'slot': target['slot'],
                             'rgba': rgba,
                           }),
@@ -187,6 +192,11 @@ class ColorsShelf extends BrowserShelf {
             );
           },
         ),
+        if (c.activeLayer?['fill'] is Map && host.has('setGradient'))
+          _FillDefinitions(
+            controller: c,
+            fill: EditorSession.map(c.activeLayer!['fill']),
+          ),
         shelfGrip(
           key: const ValueKey('browser:picker-grip'),
           vertical: true,
@@ -282,11 +292,19 @@ Color _color(List<double> rgba) =>
     Color.from(alpha: rgba[3], red: rgba[0], green: rgba[1], blue: rgba[2]);
 
 /// A solid, or the same strip a saved gradient was made from.
-Widget gradientBox(EditorSession controller, List<List<double>> stops) =>
-    stops.length > 1
+Widget gradientBox(
+  EditorSession controller,
+  List<List<double>> stops, {
+  String? blend,
+}) => stops.length > 1
     ? NativeVisualSample(
         controller: controller,
-        request: {'kind': 'gradient', 'type': 'linear', 'stops': stops},
+        request: {
+          'kind': 'gradient',
+          'type': 'linear',
+          'stops': stops,
+          if (blend != null) 'blend': blend,
+        },
         fit: BoxFit.fill,
       )
     : ColoredBox(color: _color(stops.single));
@@ -306,6 +324,7 @@ Map<String, dynamic>? _targetLayer(
 
 /// "Layer name · Fill" / "· Stroke": what the wheel is editing.
 String _targetTitle(EditorSession controller, Map<String, dynamic> target) {
+  if (target['slot'] == 'Background') return 'Composition · Background';
   final layer = _targetLayer(controller, target);
   final slot = EditorSession.map(target['slot']);
   final what = slot.containsKey('ShapeStroke')
@@ -367,7 +386,7 @@ class _ColorPickerState extends State<_ColorPicker> {
   final pickerFocus = FocusNode();
   late final queue = EditorPreviewQueue<List<double>>(
     (rgba) => widget.controller.command('previewColor', {
-      'layer': widget.target!['layer'],
+      if (widget.target!['layer'] != null) 'layer': widget.target!['layer'],
       'slot': widget.target!['slot'],
       'rgba': rgba,
     }),
@@ -444,7 +463,7 @@ class _ColorPickerState extends State<_ColorPicker> {
         () => used
             ? widget.controller.command('commitPreview')
             : widget.controller.command('setColor', {
-                'layer': target['layer'],
+                if (target['layer'] != null) 'layer': target['layer'],
                 'slot': target['slot'],
                 'rgba': next,
               }),
@@ -515,7 +534,33 @@ class _ColorPickerState extends State<_ColorPicker> {
                   child: Row(
                     children: [
                       Swatch(color: color, size: EditorMetrics.s14),
-                      const Spacer(),
+                      const SizedBox(width: EditorMetrics.s4),
+                      Expanded(
+                        child: EditorDraftField(
+                          key: ValueKey('browser:hex:${color.toARGB32()}'),
+                          value: hexOf(color),
+                          label: 'hex',
+                          enabled: widget.enabled,
+                          validator: (v) => parseHex(v) == null
+                              ? 'Use three or six hex digits'
+                              : null,
+                          onCommit: (v) async {
+                            final c = parseHex(v)!;
+                            final rgba = [c.r, c.g, c.b, value[3]];
+                            if (widget.target == null) {
+                              widget.onPick(rgba);
+                              return;
+                            }
+                            await widget.controller.command('setColor', {
+                              if (widget.target!['layer'] != null)
+                                'layer': widget.target!['layer'],
+                              'slot': widget.target!['slot'],
+                              'rgba': rgba,
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: EditorMetrics.s4),
                       ValueListenableBuilder<bool>(
                         valueListenable: widget.controller.eyedropper,
                         builder: (context, on, _) => EditorTooltip(
@@ -563,6 +608,38 @@ class _ColorPickerState extends State<_ColorPicker> {
                     ],
                   ),
                 ),
+                // The alpha, only where the slot carries one (text, params).
+                if (widget.target?['alpha'] == true)
+                  SizedBox(
+                    width: wheel.side,
+                    height: EditorMetrics.s23,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.opacity,
+                          size: EditorMetrics.s14,
+                          color: EditorTheme.muted,
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: value[3],
+                            onChanged: !widget.enabled
+                                ? null
+                                : (a) {
+                                    final v = value;
+                                    final next = [v[0], v[1], v[2], a];
+                                    setState(() => draft = next);
+                                    if (canPreview) {
+                                      previewUsed = true;
+                                      queue.add(next);
+                                    }
+                                  },
+                            onChangeEnd: (_) => commit(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             );
           },
@@ -652,9 +729,15 @@ class _StopsBar extends StatelessWidget {
             stops.isEmpty
                 ? null
                 : () {
+                    final fill = EditorSession.map(
+                      controller.activeLayer?['fill'],
+                    );
                     controller.storeDesk('swatches', [
                       ...ColorsShelf.saved(controller),
-                      {'stops': stops},
+                      {
+                        'stops': stops,
+                        if (stops.length > 1) 'blend': fill['blend'] ?? 'oklab',
+                      },
                     ]);
                     onStops([]);
                   },
@@ -662,6 +745,136 @@ class _StopsBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The fill's definitions, written hard into the document: its kind and how
+/// the colour travels between stops. One press applies; the tiles are the
+/// current fill drawn each way, so the choice is seen before it is made.
+class _FillDefinitions extends StatelessWidget {
+  const _FillDefinitions({required this.controller, required this.fill});
+  final EditorSession controller;
+  final Map<String, dynamic> fill;
+  static const kinds = ['solid', 'linear', 'radial', 'angular', 'diamond'];
+  static const blends = {
+    'rgb': 'RGB',
+    'linear_rgb': 'Linear',
+    'oklab': 'Oklab',
+    'oklch_short': 'Oklch',
+    'oklch_long': 'Oklch long',
+    'steps': 'Steps',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final stops = [
+      for (final s in EditorSession.maps(fill['stops'])) rgbaOf(s['rgba']),
+    ];
+    if (stops.isEmpty) return const SizedBox.shrink();
+    final sample = stops.length > 1 ? stops : [stops.first, stops.first];
+    Widget tile(
+      String key,
+      String tip,
+      bool on,
+      Widget picture,
+      VoidCallback press,
+    ) => Expanded(
+      child: EditorTooltip(
+        message: tip,
+        child: InkWell(
+          key: ValueKey(key),
+          onTap: press,
+          child: Container(
+            height: EditorMetrics.s16,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: on ? EditorTheme.accent : EditorTheme.line,
+                width: on ? EditorMetrics.s2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(EditorMetrics.s2),
+            ),
+            child: picture,
+          ),
+        ),
+      ),
+    );
+    Widget row(List<Widget> tiles) => Padding(
+      padding: const EdgeInsets.fromLTRB(
+        EditorMetrics.s6,
+        0,
+        EditorMetrics.s6,
+        EditorMetrics.s4,
+      ),
+      child: Row(
+        children: [
+          for (final (i, t) in tiles.indexed) ...[
+            if (i > 0) const SizedBox(width: EditorMetrics.s3),
+            t,
+          ],
+        ],
+      ),
+    );
+    final kind = fill['kind'] ?? 'solid';
+    final blend = fill['blend'] ?? 'oklab';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row([
+          for (final k in kinds)
+            tile(
+              'browser:fill-kind:$k',
+              '${k[0].toUpperCase()}${k.substring(1)} fill',
+              kind == k,
+              k == 'solid'
+                  ? ColoredBox(color: _color(stops.first))
+                  : NativeVisualSample(
+                      controller: controller,
+                      request: {
+                        'kind': 'gradient',
+                        'type': k,
+                        'stops': sample,
+                        'blend': blend,
+                        'angle': fill['angle'] ?? 0,
+                      },
+                      fit: BoxFit.fill,
+                    ),
+              () => k == 'solid'
+                  ? controller.command('setFillMode', {
+                      'slot': fill['slot'],
+                      'gradient': false,
+                    })
+                  : controller.command('setGradient', {
+                      'slot': fill['slot'],
+                      'kind': k,
+                    }),
+            ),
+        ]),
+        if (kind != 'solid')
+          row([
+            for (final b in blends.entries)
+              tile(
+                'browser:fill-blend:${b.key}',
+                'Colours travel ${b.value}',
+                blend == b.key,
+                NativeVisualSample(
+                  controller: controller,
+                  request: {
+                    'kind': 'gradient',
+                    'type': 'linear',
+                    'stops': sample,
+                    'blend': b.key,
+                  },
+                  fit: BoxFit.fill,
+                ),
+                () => controller.command('setGradient', {
+                  'slot': fill['slot'],
+                  'blend': b.key,
+                }),
+              ),
+          ]),
+      ],
     );
   }
 }

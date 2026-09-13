@@ -82,9 +82,7 @@ fn paint_for(brush: &Brush, origin: Point, alpha: f64) -> Paint<'static> {
 
 fn gradient_shader(g: &Gradient, origin: Point, alpha: f64) -> Option<Shader<'static>> {
     let at = |p: Point| tiny_skia::Point::from_xy((p.x + origin.x) as f32, (p.y + origin.y) as f32);
-    let mut sorted_stops = g.stops.clone();
-    sorted_stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
-    let stops: Vec<TsStop> = sorted_stops
+    let stops: Vec<TsStop> = g.baked_stops()
         .iter()
         .map(|s| TsStop::new(clamp01(s.offset) as f32, color_of(s.color, alpha)))
         .collect();
