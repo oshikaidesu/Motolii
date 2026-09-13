@@ -76,9 +76,74 @@ impl Engine {
     ///
     /// 「時刻 t の層の姿」を作るのは Document の resolve 1 箇所だけ。ここでは引き直した姿を使う
     /// (`source_time` だけを手でずらすと、mask やキーフレームは t のままの継ぎ接ぎになる)。
+    /// 別の時刻 `at` の**合成**を 1 枚に描く(下の合成 / 自分の群 / comp 全体)。自分は除く(非再帰)。
+    /// 組み立ての入れ子: 今の frame の失敗の記録と数は保ち、時計は呼び手が戻す。
+    #[allow(clippy::too_many_arguments)]
+    fn composite_at(
+        &mut self,
+        view: &StoreView<'_>,
+        at: RationalTime,
+        then: &[ResolvedLayer],
+        texts: &HashMap<LayerId, TextDocument>,
+        shapes: &HashMap<LayerId, Vec<ShapeNode>>,
+        comp: CompSpec,
+        exclude: LayerId,
+        source: crate::render::compositor::TimeSource,
+    ) -> Option<crate::render::compositor::GpuTexture2D> {
+        use crate::render::compositor::TimeSource;
+        let picked: Vec<ResolvedLayer> = match source {
+            TimeSource::Own => return None,
+            TimeSource::Below => {
+                let end = then.iter().position(|l| l.id == exclude).unwrap_or(then.len());
+                then[..end].to_vec()
+            }
+            TimeSource::Comp => then.iter().filter(|l| l.id != exclude).cloned().collect(),
+            TimeSource::Group => {
+                // 自分が群(板の持ち主)ならその子、そうでなければ自分の親の群の子。
+                let owner_of_plate = then.iter().any(|l| l.plate == Some(exclude));
+                let group = if owner_of_plate { Some(exclude) } else { view.attrs(exclude).ok().flatten().and_then(|a| a.parent) };
+                let Some(group) = group else { return None };
+                let descends = |id: LayerId| -> bool {
+                    let mut cursor = Some(id);
+                    for _ in 0..64 {
+                        let Some(here) = cursor else { return false };
+                        if here == group { return true; }
+                        cursor = view.attrs(here).ok().flatten().and_then(|a| a.parent);
+                    }
+                    false
+                };
+                then.iter().filter(|l| l.id != exclude && (l.plate == Some(group) || descends(l.id))).cloned().collect()
+            }
+        };
+        let background = match source {
+            TimeSource::Group => crate::render::compositor::NO_BACKGROUND,
+            _ => view.composition().ok().flatten().map_or(crate::render::compositor::NO_BACKGROUND, |c| c.background),
+        };
+        let camera = self.resolve_camera_in(view, then, at).ok()?;
+        let failures = std::mem::take(&mut self.layer_failures);
+        let drawn = self.drawn_layers;
+        let was_nested = self.feedback_replaying;
+        self.feedback_replaying = true;
+        // 復号の流れを本番と分ける(同じ流れで t′ → t と復号すると t′ の写しが t の絵になる)。
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        use std::hash::{Hash, Hasher};
+        (offset_key_of(at, view), source as u8).hash(&mut hasher);
+        self.video_stream_namespace = hasher.finish() | 1;
+        let built = self.build_layers(view, comp, camera, camera, at, &picked, texts, shapes);
+        self.video_stream_namespace = 0;
+        self.feedback_replaying = was_nested;
+        self.drawn_layers = drawn;
+        let mut nested = std::mem::replace(&mut self.layer_failures, failures);
+        self.layer_failures.append(&mut nested);
+        let layers = built.ok()?;
+        let (texture, _view) = self.compositor.render_to_texture(comp, camera, &layers, background).ok()?;
+        self.compositor.import_premultiplied(&texture).ok()
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn sources_at_other_times(
         &mut self,
+        composites: &Composites,
         passes: &[EffectPass],
         layer: LayerId,
         others: &OtherTimes,
@@ -113,9 +178,17 @@ impl Engine {
                 }
                 pass.image_time_offsets()
                     .iter()
-                    .map(|offset| {
+                    .enumerate()
+                    .map(|(i, offset)| {
+                        let source = pass.image_time_sources().get(i).copied().unwrap_or_default();
                         let got = (|| {
                         let (at, resolved, texts, shapes) = others.get(&offset_key(*offset))?;
+                        if source != crate::render::compositor::TimeSource::Own {
+                            // 合成の t′ は組み立ての前に描いて写してある(復号 texture は層ごとに 1 本なので、
+                            // 後から t′ で復号すると本番の t の絵まで巻き添えになる)。
+                            let _ = (resolved, texts, shapes);
+                            return composites.get(&(offset_key(*offset), source, layer)).cloned();
+                        }
                         let mut then = resolved.iter().find(|l| l.id == layer)?.clone();
                         // 別の流れとして読む。復号器の texture は層ごとに 1 本なので、同じ層として
                         // 読むと今の時刻の絵まで巻き添えで上書きされる(差が 0 になる)。
@@ -236,6 +309,9 @@ impl Engine {
         self.feedback_replaying = true;
         let result = (|| {
             for frame in start..now {
+                // 辿り直しの歩は cache へ写さない: 復号の texture は 1 本で、写す前に次の歩が上書きする
+                // (全部の歩の写しが最後の絵になる)。本番の t の写しは組み直しがもう一度登録する。
+                self.pending_frame_copies.clear();
                 let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Store(e.to_string()))?;
                 let mut then = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
                 if !whole_frames {
@@ -267,6 +343,7 @@ impl Engine {
                     self.compositor.render_to_texture(comp, camera, &layers, background)?;
                 }
             }
+            self.pending_frame_copies.clear();
             Ok(())
         })();
         self.feedback_replaying = false;
@@ -312,6 +389,27 @@ impl Engine {
                 }
             }
         }
+        // 合体後の別時刻(SOURCE below / group / comp)は、本番を組む前に描いて写す。
+        let mut composites: Composites = HashMap::new();
+        for layer in resolved {
+            let passes = super::translate::translate_effect_passes(&layer.effects).into_iter()
+                .chain(super::translate::translate_plate_passes(&layer.after_effects));
+            for pass in passes {
+                for (i, offset) in pass.image_time_offsets().iter().enumerate() {
+                    let source = pass.image_time_sources().get(i).copied().unwrap_or_default();
+                    if source == crate::render::compositor::TimeSource::Own { continue; }
+                    let key = (offset_key(*offset), source, layer.id);
+                    if composites.contains_key(&key) { continue; }
+                    let Some((at, then, texts, shapes)) = other_times.get(&key.0) else { continue };
+                    if let Some(picture) = self.composite_at(view, *at, then, texts, shapes, comp, layer.id, source) {
+                        composites.insert(key, picture);
+                    } else {
+                        self.layer_failures.push(format!("{offset} 秒の合成({source:?})が間に合わなかった"));
+                    }
+                }
+            }
+        }
+        if !composites.is_empty() { self.stamp_clock(view, t); }
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
         // 層 id → layers の添字(通り抜けの配置なら複製の数だけ)。クリップの下地探しに使う。
         let mut contributions: HashMap<LayerId, Vec<usize>> = HashMap::new();
@@ -489,7 +587,7 @@ impl Engine {
                 }
                 .unwrap_or(final_layer.content);
             }
-            let pass_sources = self.sources_at_other_times(&passes, layer.id, &other_times, (resolved, text_documents, shape_documents, t), comp, camera, projection_camera);
+            let pass_sources = self.sources_at_other_times(&composites, &passes, layer.id, &other_times, (resolved, text_documents, shape_documents, t), comp, camera, projection_camera);
             layers.push(LayerWithPasses {
                 pass_sources,
                 layer: final_layer,
@@ -1540,8 +1638,13 @@ fn shifted_by_seconds(t: RationalTime, offset: f32) -> RationalTime {
 
 /// 別の時刻ごとに引き直した「層の姿」。鍵はずれ(ミリ秒)。
 type OtherTimes = BTreeMap<i64, (RationalTime, Vec<ResolvedLayer>, HashMap<LayerId, TextDocument>, HashMap<LayerId, Vec<ShapeNode>>)>;
+/// 合体後の別時刻の写し: (時刻のずれ, 相手, 求めた層) → 絵。
+type Composites = HashMap<(i64, crate::render::compositor::TimeSource, LayerId), crate::render::compositor::GpuTexture2D>;
 
 /// 時刻のずれ(秒)を鍵にする — 同じずれは 1 回しか引かない。
+/// 絶対時刻の鍵(ms)。復号の流れの名前空間に使う。
+fn offset_key_of(at: RationalTime, _view: &StoreView<'_>) -> i64 { (at.as_seconds_f64() * 1000.0).round() as i64 }
+
 fn offset_key(offset: f32) -> i64 {
     (offset as f64 * 1000.0).round() as i64
 }
@@ -1763,5 +1866,75 @@ mod feedback_is_a_recurrence_from_the_in_point {
         let edited = engine.render_frame(&doc.view(), at(12)).unwrap();
         assert_ne!(edited, before);
         assert_eq!(edited, Engine::new().unwrap().render_frame(&doc.view(), at(12)).unwrap(), "編集後の絵が、入点からの絵と違う");
+    }
+}
+
+/// 合体後の別時刻(`SOURCE: below / comp`)。下の合成を t′ で読む効果は、ホストが t′ の下の層たちを
+/// 描いて渡す。だから「下の合成の 0.5 秒前」は、下の層だけの書類を 0.5 秒前に描いた絵と同じで、
+/// 飛んでも辿っても同じ(`docs/plugin-resources.md` §6-1 CompLookbehind、非再帰)。
+#[cfg(test)]
+mod composite_at_another_time {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+
+    fn clip(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let out = dir.join("ramp.mp4");
+        let status = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=64x64:d=3:r=10", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-y"])
+            .arg(&out).status().ok()?;
+        status.success().then_some(out)
+    }
+    fn fps() -> Fps { Fps::try_new(10, 1).unwrap() }
+    fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
+
+    /// 下 = 動画、上 = 白い板(comp 全面)に効果。`top` が None なら下だけ。
+    fn document(clip: &std::path::Path, top: Option<(&std::path::Path, &str)>) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let below = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(below),
+            Intent::SetMeta { layer: below, meta: LayerMeta { source: LayerSource::File { path: clip.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 30) } },
+            Intent::SetConstant { layer: below, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+        ]).unwrap();
+        if let Some((white, effect)) = top {
+            let above = LayerId(2);
+            doc.apply_all([
+                Intent::AddLayer(above),
+                Intent::SetMeta { layer: above, meta: LayerMeta { source: LayerSource::File { path: white.to_string_lossy().into_owned(), fingerprint: None }, order: 1, timing: LayerTiming::place(0, None, 30) } },
+                Intent::SetConstant { layer: above, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+                Intent::SetEffects { layer: above, effects: vec![EffectInstance { id: EffectId(0), plugin_id: effect.into() }] },
+                Intent::SetConstant { layer: above, property: PropertyId::effect_param(EffectId(0), "offset").unwrap(), value: Value::F64(-0.5) },
+            ]).unwrap();
+        }
+        doc
+    }
+
+    fn close(a: &[u8], b: &[u8]) -> usize {
+        a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a, b)| a[..3].iter().zip(&b[..3]).any(|(x, y)| x.abs_diff(*y) > 6)).count()
+    }
+
+    #[test]
+    fn the_background_a_moment_ago_is_the_layers_below_rendered_then() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let white = dir.path().join("white.png");
+        image::save_buffer(&white, &vec![255u8; (SIZE * SIZE * 4) as usize], SIZE, SIZE, image::ColorType::Rgba8).unwrap();
+        let delayed = document(&path, Some((&white, "motolii.background_delay")));
+        let below_only = document(&path, None);
+        let mut engine = Engine::new().unwrap();
+        let seen = engine.render_frame(&delayed.view(), at(12)).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        // 12 フレーム目に見えるのは、下の層だけを 7 フレーム目(0.5 秒前)に描いた絵。
+        let then = engine.render_frame(&below_only.view(), at(7)).unwrap();
+        let now = engine.render_frame(&below_only.view(), at(12)).unwrap();
+        assert!(close(&seen, &then) < 40, "0.5 秒前の下の合成と違う: {} px", close(&seen, &then));
+        assert!(close(&seen, &then) < close(&seen, &now), "今の下の合成の方に近い = ずれていない");
+        // 飛んでも辿っても同じ。
+        let mut fresh = Engine::new().unwrap();
+        for f in 0..12 { fresh.render_frame(&delayed.view(), at(f)).unwrap(); }
+        assert_eq!(fresh.render_frame(&delayed.view(), at(12)).unwrap(), seen);
     }
 }

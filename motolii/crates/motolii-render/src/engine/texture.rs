@@ -827,7 +827,10 @@ impl Engine {
             }
         }
         let (bytes, video) = self.videos.get(path).expect("直前に insert した");
-        let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
+        // 復号の流れ(texture)は層 × 素材で 1 本。別の時刻の合成を同じ frame で描く時は、engine が
+        // 流れの名前空間を切り替える — 同じ流れで t′ と t を続けて復号すると、cache へ写す前に
+        // texture が t で上書きされ、t′ の写しが t の絵になる。
+        let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path) ^ self.video_stream_namespace);
         let source = re_video::player::VideoSliceSource(&bytes[..]);
         // デコーダは非同期で、頼んだ直後は返さない。待たずに前のコマを
         // 返すと、**同じ時刻でも辿り着き方で絵が変わり**、窓と書き出しが

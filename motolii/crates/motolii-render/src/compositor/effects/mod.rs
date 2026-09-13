@@ -186,6 +186,8 @@ pub struct EffectPass {
     pub(crate) reads_backdrop: bool,
     /// 2 枚目以降の image が指す層(利用者が欄で選んだ)。ホストがその層の絵を渡す。
     pub(crate) image_layers: Vec<crate::doc::store::LayerId>,
+    /// `image_time_offsets` と同じ並び: 別の時刻に読む相手(自分 / 下の合成 / 群 / comp)。
+    pub(crate) image_time_sources: Vec<isf::TimeSource>,
     /// PERSISTENT な target を持つ(前のフレームを読む)。状態は host が `feedback` の鍵で持つ。
     pub(crate) persistent: bool,
     /// 状態の持ち主の鍵。engine が層の識別を刻む(刻まれていない persistent は毎フレーム初期条件)。
@@ -206,6 +208,9 @@ impl EffectPass {
     /// 2 枚目以降の image が要る時刻のずれ(秒。負が過去)。
     pub fn image_time_offsets(&self) -> &[f32] {
         &self.image_time_offsets
+    }
+    pub fn image_time_sources(&self) -> &[isf::TimeSource] {
+        &self.image_time_sources
     }
 
     /// 2 枚目以降の image が指す層。

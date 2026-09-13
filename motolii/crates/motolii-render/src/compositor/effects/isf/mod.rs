@@ -123,6 +123,19 @@ pub struct IsfInput {
     pub time_offset: Option<TimeOffset>,
     /// image の欄だけ: `"LAYER"` で名指した層の欄(TYPE layer)が指す層の絵が入る。
     pub layer_field: Option<String>,
+    /// image の欄だけ、`TIME_OFFSET` と組で: 別の時刻に読む**相手**。既定は自分の層。
+    pub time_source: TimeSource,
+}
+
+/// 別の時刻に読む相手(`SOURCE`)。`CompLookbehind`(plugin-resources.md §6-1)の target: 自分の層 /
+/// 下の合成 / 自分の群 / comp 全体(自分を除く = 非再帰)。再帰は feedback(PERSISTENT)が受け持つ。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum TimeSource {
+    #[default]
+    Own,
+    Below,
+    Group,
+    Comp,
 }
 
 /// 別の時刻のずれ(秒。負が過去)。作者が固定するか、float の欄を名指しして利用者に回させる。
@@ -310,6 +323,16 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 serde_json::Value::String(name) => Some(TimeOffset::Param(name.clone())),
                 _ => None,
             }).filter(|_| ty == IsfInputType::Image);
+            let time_source = match entry.get("SOURCE").and_then(|v| v.as_str()) {
+                None => TimeSource::Own,
+                Some("below") => TimeSource::Below,
+                Some("group") => TimeSource::Group,
+                Some("comp") => TimeSource::Comp,
+                Some(other) => return Err(IsfError::TimeOffset(format!("{name}: SOURCE は below / group / comp のどれか({other})"))),
+            };
+            if time_source != TimeSource::Own && time_offset.is_none() {
+                return Err(IsfError::TimeOffset(format!("{name}: SOURCE は TIME_OFFSET と組で書く")));
+            }
             inputs.push(IsfInput {
                 name: name.to_owned(),
                 label,
@@ -324,6 +347,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 maps,
                 time_offset,
                 layer_field,
+                time_source,
             });
         }
     }

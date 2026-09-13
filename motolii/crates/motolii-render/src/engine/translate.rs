@@ -100,6 +100,7 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
             Some(crate::render::compositor::EffectPass {
                 persistent: descriptor.persistent,
                 feedback: None,
+                image_time_sources: descriptor.image_time_sources.clone(),
                 uses_clock: descriptor.uses_clock,
                 reads_backdrop: descriptor.reads_backdrop,
                 image_layers: descriptor.image_layer_fields.iter().filter_map(|field| effect.params.iter()

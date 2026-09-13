@@ -140,7 +140,9 @@ Aₙ = Composite(DecayOrTransform(Aₙ₋₁), Drawₙ)
 `TIME_OFFSET`(秒の数値か、利用者が回す float 欄の名前)を書き、ホストが `view.resolved_layers(t′)` で層を引き直して絵を渡す
 (`engine/render.rs` の `sources_at_other_times`)。決定性は `time_reference_is_deterministic` が審判
 (飛んでも辿っても同じ絵)。取説は [Shadertoy の取り込み §8](vism-shadertoy-import.md)。
-`CompLookbehind` 本来の対象(Group / CompRoot)は予約のまま。
+**`CompLookbehind` の対象(下の合成 / Group / CompRoot)も繋いだ(2026-09-13)。** image 欄の `SOURCE: below / group / comp`
+(`TIME_OFFSET` と組)。非再帰: 自分は除く。host は t′ の合成を本番の前に描いて写す(`engine/render.rs` の
+`composite_at`)。同梱の見本は Background Delay。審判は `composite_at_another_time`。
 
 **6-3 のフィードバックを実装した(2026-09-13)。** 利用者「制限を作りたくない」。ISF の `PERSISTENT` を受け、
 状態は層 × 効果ごとに compositor が持つ(`Compositor.feedback`)。時刻 t は入点を初期条件とする漸化式:

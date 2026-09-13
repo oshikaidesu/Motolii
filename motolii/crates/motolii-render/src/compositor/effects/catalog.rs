@@ -48,6 +48,8 @@ pub struct EffectDescriptor {
     pub(crate) image_layer_fields: Vec<String>,
     /// PERSISTENT な target を持つ(feedback)。
     pub(crate) persistent: bool,
+    /// `image_time_offsets` と同じ並び: 別の時刻に読む相手。
+    pub(crate) image_time_sources: Vec<isf::TimeSource>,
 }
 
 #[derive(Clone, Debug)]
@@ -341,6 +343,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     // shader を持たない棚の 1 枚(配置・表面・場)は doc の 1 つの表から。棚と Inspector には同じ列で並ぶ。
     let declared = crate::doc::store::kind::all().map(|kind| EffectDescriptor {
         persistent: false,
+        image_time_sources: Vec::new(),
         plugin_id: kind.plugin_id.to_owned(),
         label: kind.label.to_owned(),
         stage: match kind.family {
@@ -367,6 +370,12 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         persistent: d.manifest.passes.iter().any(|p| p.persistent),
+        image_time_sources: d.manifest.inputs.iter()
+            .filter(|i| i.ty == isf::IsfInputType::Image)
+            .skip(1)
+            .filter(|i| i.time_offset.is_some())
+            .map(|i| i.time_source)
+            .collect(),
         image_time_offsets: d.manifest.inputs.iter()
             .filter(|i| i.ty == isf::IsfInputType::Image)
             .skip(1)

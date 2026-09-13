@@ -244,6 +244,7 @@ pub use clip::ClipSpec;
 
 pub(crate) use effects::catalog::catalog_snapshot;
 pub use effects::FeedbackKey;
+pub use effects::isf::TimeSource;
 pub use effects::catalog::{bind_catalog_runtime, catalog_errors, catalog_generation, catalog_reads_disk, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use effects::IsfStage;

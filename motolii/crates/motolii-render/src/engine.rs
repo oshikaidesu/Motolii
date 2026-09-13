@@ -117,6 +117,8 @@ pub struct Engine {
     feedback_replaying: bool,
     /// 今描いている窓(画面の道の feedback は窓ごとに状態を持つ)。読み戻しの道では None = 出力寸法。
     feedback_window: Option<crate::render::compositor::Window>,
+    /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
+    video_stream_namespace: u64,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
@@ -178,6 +180,7 @@ impl Engine {
             renders_since_video_purge: 0,
             feedback_replaying: false,
             feedback_window: None,
+            video_stream_namespace: 0,
             feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
@@ -237,6 +240,7 @@ impl Engine {
             renders_since_video_purge: 0,
             feedback_replaying: false,
             feedback_window: None,
+            video_stream_namespace: 0,
             feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
