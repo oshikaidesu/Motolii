@@ -76,21 +76,41 @@ impl Engine {
     ///
     /// 「時刻 t の層の姿」を作るのは Document の resolve 1 箇所だけ。ここでは引き直した姿を使う
     /// (`source_time` だけを手でずらすと、mask やキーフレームは t のままの継ぎ接ぎになる)。
+    #[allow(clippy::too_many_arguments)]
     fn sources_at_other_times(
         &mut self,
         passes: &[EffectPass],
         layer: LayerId,
         others: &OtherTimes,
+        now: (&[ResolvedLayer], &HashMap<LayerId, TextDocument>, &HashMap<LayerId, Vec<ShapeNode>>, RationalTime),
         comp: CompSpec,
         camera: ResolvedCamera,
         projection_camera: ResolvedCamera,
     ) -> Vec<Vec<crate::render::compositor::GpuTexture2D>> {
-        if passes.iter().all(|pass| pass.image_time_offsets().is_empty()) {
+        if passes.iter().all(|pass| pass.image_time_offsets().is_empty() && pass.image_layers().is_empty()) {
             return Vec::new();
         }
         passes
             .iter()
             .map(|pass| {
+                // 指した層の絵(同じ時刻)。自分自身と無い層は断る — 黙って今の絵で代用しない。
+                let (resolved, texts, shapes, t) = now;
+                let picked: Option<Vec<_>> = pass.image_layers().iter().map(|&target| {
+                    let got = (|| {
+                        if target == layer { return None; }
+                        let mut then = resolved.iter().find(|l| l.id == target)?.clone();
+                        then.id = lookbehind_layer_id(target, 0.0);
+                        let (content, _, _) = self.texture_for_resolved(&then, texts, shapes, t, comp, camera, projection_camera).ok()?;
+                        content.as_ref().and_then(|c| c.texture()).and_then(|t| self.compositor.snapshot_texture(t))
+                    })();
+                    if got.is_none() {
+                        self.layer_failures.push(format!("指した層 {} の絵が無い(自分自身か、無い層)", target.0));
+                    }
+                    got
+                }).collect();
+                if !pass.image_layers().is_empty() {
+                    return picked.unwrap_or_default();
+                }
                 pass.image_time_offsets()
                     .iter()
                     .map(|offset| {
@@ -315,7 +335,7 @@ impl Engine {
             // 自分の絵も先に写す — 別時刻の復号が同じ player texture を書き換えるので、
             // 写さないと「今」と「前」が同じ絵になる。
             let mut final_layer = final_layer;
-            if passes.iter().any(|pass| !pass.image_time_offsets().is_empty()) {
+            if passes.iter().any(|pass| !pass.image_time_offsets().is_empty() || !pass.image_layers().is_empty()) {
                 final_layer.content = match &final_layer.content {
                     LayerContent::Texture(t) => self.compositor.snapshot_texture(t).map(LayerContent::Texture),
                     LayerContent::LinearTexture(t) => self.compositor.snapshot_texture(t).map(LayerContent::LinearTexture),
@@ -323,7 +343,7 @@ impl Engine {
                 }
                 .unwrap_or(final_layer.content);
             }
-            let pass_sources = self.sources_at_other_times(&passes, layer.id, &other_times, comp, camera, projection_camera);
+            let pass_sources = self.sources_at_other_times(&passes, layer.id, &other_times, (resolved, text_documents, shape_documents, t), comp, camera, projection_camera);
             layers.push(LayerWithPasses {
                 pass_sources,
                 layer: final_layer,

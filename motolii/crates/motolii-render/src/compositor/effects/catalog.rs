@@ -44,6 +44,8 @@ pub struct EffectDescriptor {
     pub(crate) uses_clock: bool,
     /// pass が下の合成(BACKDROP_INPUT)を読む。層の絵へは焼けず、描いた後の窓で効く。
     pub(crate) reads_backdrop: bool,
+    /// 2 枚目の image が層を指す欄の名前(`LAYER`)。宣言順。
+    pub(crate) image_layer_fields: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -56,6 +58,8 @@ pub struct EffectParamDescriptor {
     pub point: Option<[f64; 2]>,
     /// 色の欄(RGBA 0..1)ならその既定。
     pub color: Option<[f64; 4]>,
+    /// 層を指す欄。値は LayerId(0 = 無し)。窓はカメラの target と同じ選択肢で描く。
+    pub layer: bool,
     pub range: Option<(f64, f64)>,
     /// 選択肢。値は番号。
     pub choices: Option<Vec<String>>,
@@ -293,11 +297,11 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
                 .filter(|i| i.ty == isf::IsfInputType::Image)
                 .collect();
             // 2 枚目以降は、ホストが供給できる物だけ — 今は「層の絵を別の時刻で読む」(TIME_OFFSET)。
-            if let Some(extra) = images.iter().skip(1).find(|i| i.time_offset.is_none() && manifest.backdrop_input.as_deref() != Some(i.name.as_str())) {
+            if let Some(extra) = images.iter().skip(1).find(|i| i.time_offset.is_none() && i.layer_field.is_none() && manifest.backdrop_input.as_deref() != Some(i.name.as_str())) {
                 return Err(format!(
                     "{}: 2 枚目以降の画像を繋ぐ口がまだ無い(層を指す欄が未実装)。\
                      読めるのは層の絵 1 枚、TIME_OFFSET を宣言した別の時刻の絵、\
-                     BACKDROP_INPUT の下の合成、PASSES の中間 buffer だけ",
+                     BACKDROP_INPUT の下の合成、LAYER で指した層の絵、PASSES の中間 buffer だけ",
                     extra.name
                 ));
             }
@@ -336,6 +340,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
             point: matches!(p.kind, crate::doc::store::kind::ParamKind::Vec2).then_some(p.default),
             color: None,
+            layer: false,
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
             subtype: None, unit: None, group: None, advanced: false, hero: false,
         }).collect(),
@@ -346,6 +351,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         image_time_offsets: Vec::new(),
         uses_clock: false,
         reads_backdrop: false,
+        image_layer_fields: Vec::new(),
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         image_time_offsets: d.manifest.inputs.iter()
@@ -355,6 +361,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             .collect(),
         uses_clock: d.manifest.uses_clock,
         reads_backdrop: d.manifest.stage == isf::IsfStage::Pass && d.manifest.backdrop_input.is_some(),
+        image_layer_fields: d.manifest.inputs.iter().filter(|i| i.ty == isf::IsfInputType::Image).skip(1).filter_map(|i| i.layer_field.clone()).collect(),
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
         snapshot: snapshot(d.plugin_id()),
@@ -375,6 +382,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
                 // 点(2 と 3 成分)は x,y を窓へ。3 成分目は窓に部品が無く既定のまま。
                 point: matches!(p.ty, isf::IsfInputType::Point2D | isf::IsfInputType::Point3D).then(|| [p.default[0] as f64, p.default[1] as f64]),
                 color: matches!(p.ty, isf::IsfInputType::Color).then(|| [p.default[0] as f64, p.default[1] as f64, p.default[2] as f64, p.default[3] as f64]),
+                layer: p.ty == isf::IsfInputType::Layer,
                 range, choices: p.labels.clone(), subtype, unit, group, advanced: p.advanced, hero: p.hero,
             }
         }).collect(),

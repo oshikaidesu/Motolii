@@ -90,6 +90,9 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
             Some(crate::render::compositor::EffectPass {
                 uses_clock: descriptor.uses_clock,
                 reads_backdrop: descriptor.reads_backdrop,
+                image_layers: descriptor.image_layer_fields.iter().filter_map(|field| effect.params.iter()
+                    .find(|(n, _)| n == field)
+                    .and_then(|(_, v)| match v { crate::doc::store::Value::LayerId(id) if *id != 0 => Some(crate::doc::store::LayerId(*id)), _ => None })).collect(),
                 image_time_offsets: descriptor.image_time_offsets.iter().map(|offset| match offset {
                     crate::render::compositor::effects::isf::TimeOffset::Fixed(seconds) => *seconds,
                     crate::render::compositor::effects::isf::TimeOffset::Param(name) => params.iter()
@@ -190,6 +193,16 @@ mod shelf_tests {
         assert_eq!((get("center"), get("center.1")), (Some(3.0), Some(4.0)));
         assert_eq!((get("tint"), get("tint.1"), get("tint.2"), get("tint.3")), (Some(0.1), Some(0.2), Some(0.3), Some(0.4)));
         assert_eq!((get("on"), get("radius")), (Some(1.0), Some(8.0)));
+    }
+
+    /// 層を指す欄(LayerId)は、その効果の 2 枚目の image が読む層になる。0 と無指定は「無し」。
+    #[test]
+    fn a_layer_field_names_the_layer_the_second_image_reads() {
+        use crate::doc::store::{ResolvedEffect, Value};
+        let picked = ResolvedEffect { plugin_id: "motolii.set_matte".into(), params: vec![("layer".into(), Value::LayerId(7))], ..Default::default() };
+        let none = ResolvedEffect { plugin_id: "motolii.set_matte".into(), params: vec![("layer".into(), Value::LayerId(0))], ..Default::default() };
+        assert_eq!(super::translate_effect_passes(&[picked])[0].image_layers(), &[crate::doc::store::LayerId(7)]);
+        assert!(super::translate_effect_passes(&[none])[0].image_layers().is_empty());
     }
 
     /// 別の時刻のずれは、欄の値(無ければ欄の既定)で決まる — 作者が固定するのではなく利用者が回す。

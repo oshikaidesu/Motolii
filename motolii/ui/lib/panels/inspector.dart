@@ -751,27 +751,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       if (_row('camera.target') != null)
         _line([
           _name(Icons.gps_fixed, 'Target'),
-          Expanded(
-            child: _live2(['camera.target'], () {
-              final current = _row('camera.target')?['value'];
-              return EditorChoice<dynamic>(
-                value: current is num ? current.toInt() : 0,
-                choices: [
-                  const MapEntry(0, 'None'),
-                  for (final v
-                      in (c.state['layers'] as List? ?? const [])
-                          .whereType<Map>())
-                    if (v['id'] != layer['id'])
-                      MapEntry(v['id'], '${v['name']}'),
-                ],
-                onChanged: (v) => c.command('setProperty', {
-                  'layer': layer['id'],
-                  'property': 'camera.target',
-                  'value': v,
-                }),
-              );
-            }),
-          ),
+          Expanded(child: _layerPicker(layer, 'camera.target')),
         ]),
       if (_row('camera.orbit') != null)
         _line([
@@ -1552,6 +1532,29 @@ class _InspectorPanelState extends State<InspectorPanel> {
     );
   }
 
+  /// A property that points at another layer (the camera's target, an
+  /// effect's matte): one list of the other layers, `None` on top.
+  Widget _layerPicker(Map<String, dynamic> layer, String id) =>
+      _live2([id], () {
+        final current = _row(id)?['value'];
+        return EditorChoice<dynamic>(
+          value: current is num ? current.toInt() : 0,
+          choices: [
+            const MapEntry(0, 'None'),
+            for (final v
+                in (c.state['layers'] as List? ?? const []).whereType<Map>())
+              if (v['id'] != layer['id']) MapEntry(v['id'], '${v['name']}'),
+          ],
+          onChanged: _canEdit(layer)
+              ? (v) => c.command('setProperty', {
+                  'layer': layer['id'],
+                  'property': id,
+                  'value': v,
+                })
+              : null,
+        );
+      });
+
   /// A pair of params as one point: drag the dot, or type either number.
   Widget _pointControl(
     Map<String, dynamic> layer,
@@ -1679,6 +1682,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final label = '${row['label'] ?? row['id']}';
     Widget body;
     switch (kind) {
+      case _Kind.layer:
+        body = SizedBox(width: _cellWidth, child: _layerPicker(layer, '${row['id']}'));
       case _Kind.choice:
         final choices = row['choices'];
         body = SizedBox(

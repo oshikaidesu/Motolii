@@ -227,3 +227,25 @@ void main() { gl_FragColor = IMG_THIS_PIXEL(backdrop) * IMG_THIS_PIXEL(inputImag
 
 審判: `render_effects.rs` の `a_blurred_layer_fades_at_its_edge_without_going_dark_on_the_baked_path` と
 `a_blurred_copy_fades_at_its_edge_without_going_dark`(白の上の白の縁が沈まない、実 GPU)。
+
+## 12. 層を指す — `TYPE: layer` と image の `LAYER`
+
+既定は「下」(§10)。それでも相手を名指ししたい時(Set Matte の相手が離れた所にある等)のために、
+**層を指す欄**がある。欄の TYPE は `layer`(Motolii の拡張。ISF には無い)、値は LayerId。
+image に `"LAYER": "<欄の名前>"` を書くと、その欄が指す層の**同じ時刻の絵**が入る。
+
+```glsl
+/*{ "ID": "motolii.set_matte", "STAGE": "pass",
+    "INPUTS": [ { "NAME": "inputImage", "TYPE": "image" },
+                { "NAME": "matte", "TYPE": "image", "LAYER": "layer" },
+                { "NAME": "layer", "TYPE": "layer" } ] }*/
+```
+
+- 窓は**カメラの target と同じ部品**(他の層の一覧、先頭に None)で描く。Dart はその部品を共有しただけ。
+- ホストは「別の時刻」「下の合成」と同じ道: `view.resolved_layers(t)` から相手を引き、写して 2 枚目に束ねる。
+- **自分自身と無い層は断る**(理由を挙げて層の失敗に)。黙って今の絵で代用しない。
+- 相手の絵は**相手の効果まで掛かった後**の絵(`clip_to_below` と同じ答え)。
+- 2 枚目の image は 1 つだけ。`TIME_OFFSET` / `BACKDROP_INPUT` / `LAYER` は併用しない。
+- 同梱: **Set Matte**(`motolii.set_matte` — Alpha / Luminance / 反転、Stretch)。
+
+審判: `render_effects.rs` の `set_matte_cuts_by_the_layer_the_user_picked`。

@@ -164,6 +164,9 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                     // 点の欄(Twist・Bend の Center)は 2 つの枡、数の欄は 1 つ。
                     // 色の欄は値の形(Color)だけで窓が hex の部品を出す。枡は使わない。
                     let (cells, vec2, value) = match (param.point, param.color, stored) {
+                        // 層を指す欄: 値は LayerId(0 = 無し)。窓はカメラの target と同じ選択肢で描く。
+                        (_, _, Some(Value::LayerId(id))) if param.layer => ([String::new(), String::new(), String::new()], false, Value::LayerId(id)),
+                        (_, _, _) if param.layer => ([String::new(), String::new(), String::new()], false, Value::LayerId(0)),
                         (_, Some(_), Some(Value::Color(c))) => ([String::new(), String::new(), String::new()], false, Value::Color(c)),
                         (_, Some(c), _) => ([String::new(), String::new(), String::new()], false, Value::Color(c)),
                         (Some(_), _, Some(Value::Vec2([x, y]))) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),

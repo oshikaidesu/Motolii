@@ -60,6 +60,9 @@ pub enum IsfInputType {
     /// 3 成分の点(ISF の `point3D`)。窓には vec3 の部品が無いので、z は既定のまま(取説に明記)。
     Point3D,
     Color,
+    /// 層を指す欄(Motolii の拡張。ISF には無い)。値は LayerId。shader へは何も届かない —
+    /// 対になる image に `"LAYER"` で名指されると、ホストがその層の絵をその image に入れる。
+    Layer,
 }
 
 impl IsfInputType {
@@ -72,6 +75,7 @@ impl IsfInputType {
             "point2D" => Some(Self::Point2D),
             "point3D" => Some(Self::Point3D),
             "color" => Some(Self::Color),
+            "layer" => Some(Self::Layer),
             _ => None,
         }
     }
@@ -79,7 +83,7 @@ impl IsfInputType {
     pub fn component_count(self) -> usize {
         match self {
             Self::Image => 0,
-            Self::Float | Self::Long | Self::Bool => 1,
+            Self::Float | Self::Long | Self::Bool | Self::Layer => 1,
             Self::Point2D => 2,
             Self::Point3D => 3,
             Self::Color => 4,
@@ -89,7 +93,7 @@ impl IsfInputType {
     fn glsl_uniform_type(self) -> &'static str {
         match self {
             Self::Image => "sampler2D",
-            Self::Float | Self::Long | Self::Bool => "float",
+            Self::Float | Self::Long | Self::Bool | Self::Layer => "float",
             Self::Point2D => "vec2",
             Self::Point3D => "vec3",
             Self::Color => "vec4",
@@ -119,6 +123,8 @@ pub struct IsfInput {
     /// ホストが供給するので、2 枚目以降でもこれを宣言していれば繋がる。
     /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`plugin-resources.md` §6)。
     pub time_offset: Option<TimeOffset>,
+    /// image の欄だけ: `"LAYER"` で名指した層の欄(TYPE layer)が指す層の絵が入る。
+    pub layer_field: Option<String>,
 }
 
 /// 別の時刻のずれ(秒。負が過去)。作者が固定するか、float の欄を名指しして利用者に回させる。
@@ -292,6 +298,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let advanced = entry.get("ADVANCED").and_then(|v| v.as_bool()).unwrap_or(false);
             let hero = entry.get("HERO").and_then(|v| v.as_bool()).unwrap_or(false);
             let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
+            let layer_field = entry.get("LAYER").and_then(|v| v.as_str()).map(str::to_owned).filter(|_| ty == IsfInputType::Image);
             let time_offset = entry.get("TIME_OFFSET").and_then(|v| match v {
                 serde_json::Value::Number(n) => n.as_f64().map(|v| TimeOffset::Fixed(v as f32)),
                 serde_json::Value::String(name) => Some(TimeOffset::Param(name.clone())),
@@ -310,10 +317,16 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 max,
                 maps,
                 time_offset,
+                layer_field,
             });
         }
     }
     for input in &inputs {
+        if let Some(name) = &input.layer_field {
+            if !inputs.iter().any(|p| &p.name == name && p.ty == IsfInputType::Layer) {
+                return Err(IsfError::TimeOffset(format!("{}: LAYER が名指す layer の欄 {name} が無い", input.name)));
+            }
+        }
         if let Some(TimeOffset::Param(name)) = &input.time_offset {
             let ok = inputs.iter().any(|p| &p.name == name && p.ty == IsfInputType::Float);
             if !ok {
@@ -596,6 +609,14 @@ mod manifest_tests {
         assert_eq!((p.ty, p.ty.component_count()), (IsfInputType::Point3D, 3));
         assert_eq!(&p.default[..3], &[1.0, 2.0, 3.0]);
         assert!(fragment.contains("fn main"), "{fragment}");
+    }
+
+    /// image の LAYER が名指す欄が無い(か layer でない)なら、名前を挙げて断る。
+    #[test]
+    fn an_image_naming_a_missing_layer_field_is_refused() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"matte\",\"TYPE\":\"image\",\"LAYER\":\"nope\"}] }*/ void main() {}";
+        let error = parse_isf_source(source).err().expect("断る").to_string();
+        assert!(error.contains("nope") && error.contains("matte"), "{error}");
     }
 
     #[test]

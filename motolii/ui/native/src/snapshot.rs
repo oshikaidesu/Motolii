@@ -375,6 +375,7 @@ impl EditorRuntime{
                     if let Some(g)=&p.group{row["group"]=json!(format!("effect.{}.param.{}",effect.id,g));}
                     if p.advanced{row["advanced"]=json!(true);}
                     if p.hero{row["hero"]=json!(true);}
+                    if p.layer{row["layer"]=json!(true);}
                     row["default"]=json!(p.default);
                 }
             }

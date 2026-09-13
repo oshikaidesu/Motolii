@@ -133,6 +133,8 @@ pub struct EffectPass {
     pub(crate) uses_clock: bool,
     /// 下の合成を 2 枚目の image として読む。層の絵へは焼けず、run の窓で効く。
     pub(crate) reads_backdrop: bool,
+    /// 2 枚目以降の image が指す層(利用者が欄で選んだ)。ホストがその層の絵を渡す。
+    pub(crate) image_layers: Vec<crate::doc::store::LayerId>,
 }
 
 /// 多成分の欄(点・色)は、成分ごとに 1 つの f32 として運ぶ。0 番は欄の名前そのまま、
@@ -149,6 +151,11 @@ impl EffectPass {
     /// 2 枚目以降の image が要る時刻のずれ(秒。負が過去)。
     pub fn image_time_offsets(&self) -> &[f32] {
         &self.image_time_offsets
+    }
+
+    /// 2 枚目以降の image が指す層。
+    pub fn image_layers(&self) -> &[crate::doc::store::LayerId] {
+        &self.image_layers
     }
 
     pub(crate) fn intermediate_format(&self) -> Option<wgpu::TextureFormat> {

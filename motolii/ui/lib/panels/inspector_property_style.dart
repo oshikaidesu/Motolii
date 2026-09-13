@@ -1,11 +1,13 @@
 part of 'inspector.dart';
 
 /// What a control is, decided from the declaration, never from the label.
-enum _Kind { bounded, scalar, angle, vec2, scale, color, choice, text }
+enum _Kind { bounded, scalar, angle, vec2, scale, color, choice, text, layer }
 
 _Kind _kindOf(Map<String, dynamic> row) {
   final id = '${row['id']}';
   final kind = '${row['kind']}';
+  // A field that points at a layer: the same picker as the camera's target.
+  if (row['layer'] == true) return _Kind.layer;
   if (row['choices'] is List || kind == 'enum') return _Kind.choice;
   if (kind == 'color') return _Kind.color;
   if (kind == 'text') return _Kind.text;
