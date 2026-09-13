@@ -326,6 +326,17 @@ impl Compositor {
             }
             current_linear = true;
             current_premultiplied = true;
+            // 2 枚目以降も 1 枚目と同じ空間(乗算済み線形)で渡す。層の絵の写し(非乗算 sRGB)はここで写す。
+            // 線形の texture(float)と sRGB 形式は既に乗算済み線形(層の法)。
+            let mut converted_others: Vec<wgpu::Texture> = Vec::new();
+            let mut other_textures: Vec<wgpu::Texture> = Vec::new();
+            for t in others.get(index).map(|row| row.as_slice()).unwrap_or(&[]) {
+                let linear = t.format().is_srgb() || matches!(t.format(), wgpu::TextureFormat::Rgba16Float | wgpu::TextureFormat::Rgba32Float);
+                if linear { other_textures.push(t.clone()); continue; }
+                let converted = self.convert_image_encoding(encoder, t, true, true, false);
+                converted_others.push(converted.clone());
+                other_textures.push(converted);
+            }
             let program = &self.effect_programs[&pass.plugin_id];
             let format = pass
                 .intermediate_format()
@@ -338,9 +349,7 @@ impl Compositor {
             );
             let source_view = (program.image_input_count() > 0)
                 .then(|| current.create_view(&Default::default()));
-            let other_views: Vec<wgpu::TextureView> = others.get(index)
-                .map(|row| row.iter().map(|t| t.create_view(&Default::default())).collect())
-                .unwrap_or_default();
+            let other_views: Vec<wgpu::TextureView> = other_textures.iter().map(|t| t.create_view(&Default::default())).collect();
             let sources: Vec<_> = source_view.iter().chain(other_views.iter()).collect();
             let destination_view = destination.create_view(&Default::default());
             // feedback: 状態の持ち主は host。frame の並びから今フレームの扱いを決める。
@@ -388,6 +397,9 @@ impl Compositor {
                     state.checkpoints.sort_by_key(|(f, _)| *f);
                     while state.checkpoints.len() > effects::FEEDBACK_CHECKPOINTS_MAX { state.checkpoints.remove(0); }
                 }
+            }
+            for converted in converted_others {
+                self.effect_scratch.release(converted.width(), converted.height(), converted.format(), converted);
             }
             let destination = if program.image_input_count() == 0 {
                 self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?

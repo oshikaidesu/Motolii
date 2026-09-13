@@ -50,6 +50,8 @@ pub struct EffectDescriptor {
     pub(crate) persistent: bool,
     /// `image_time_offsets` と同じ並び: 別の時刻に読む相手。
     pub(crate) image_time_sources: Vec<isf::TimeSource>,
+    /// `image_time_offsets` と同じ並び: true なら層の入点からの絶対時刻(TIME_AT)。
+    pub(crate) image_time_absolute: Vec<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -349,6 +351,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     let declared = crate::doc::store::kind::all().map(|kind| EffectDescriptor {
         persistent: false,
         image_time_sources: Vec::new(),
+        image_time_absolute: Vec::new(),
         plugin_id: kind.plugin_id.to_owned(),
         label: kind.label.to_owned(),
         stage: match kind.family {
@@ -385,6 +388,12 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             .filter(|i| i.ty == isf::IsfInputType::Image)
             .skip(1)
             .filter_map(|i| i.time_offset.clone())
+            .collect(),
+        image_time_absolute: d.manifest.inputs.iter()
+            .filter(|i| i.ty == isf::IsfInputType::Image)
+            .skip(1)
+            .filter(|i| i.time_offset.is_some())
+            .map(|i| i.time_absolute)
             .collect(),
         uses_clock: d.manifest.uses_clock,
         reads_backdrop: d.manifest.stage == isf::IsfStage::Pass && d.manifest.backdrop_input.is_some(),

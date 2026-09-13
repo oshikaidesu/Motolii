@@ -201,6 +201,20 @@ void main() {
 host は t′ の合成を**本番を組む前に**描いて写す(動画の復号の流れは層ごとに 1 本なので、後から t′ で
 復号すると t の絵が巻き添えになる。合成の間だけ流れの名前空間を分ける)。重さは t′ ごとに 1 回の合成。
 
+### 8-2. ある瞬間の絵 — `TIME_AT`(2026-09-13)
+
+`TIME_OFFSET` が「t からのずれ」なのに対し、`TIME_AT` は**層の入点からの秒**で「あの瞬間の絵」を指す。
+数値でも、float の欄の名前でもよい(欄なら Inspector で回せてキーフレームも打てる)。`SOURCE` と組める。
+
+```json
+{ "NAME": "shot", "TYPE": "image", "TIME_AT": "moment" },
+{ "NAME": "moment", "TYPE": "float", "DEFAULT": 0.0, "SUBTYPE": "TIME" }
+```
+
+いつの絵かは host(書類の関数、同じ時刻は同じ絵)、絵をどう料理するか(縁を引き伸ばす・ほどく)は shader。
+同梱の **Hold**(`hold.fs`)がこれで、AE の Freeze Frame(時間の hold)は効果の 1 枚として棚に載る。
+Freeze(cache)・Flatten(素材化)とは別物。
+
 ## 9. shader へ届く欄と uniform(2026-09-12 に全部開けた)
 
 | 宣言 | 窓 | shader |

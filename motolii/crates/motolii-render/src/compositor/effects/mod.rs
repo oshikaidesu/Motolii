@@ -191,6 +191,8 @@ pub struct EffectPass {
     pub(crate) image_layers: Vec<crate::doc::store::LayerId>,
     /// `image_time_offsets` と同じ並び: 別の時刻に読む相手(自分 / 下の合成 / 群 / comp)。
     pub(crate) image_time_sources: Vec<isf::TimeSource>,
+    /// `image_time_offsets` と同じ並び: true なら層の入点からの絶対時刻(TIME_AT)、false なら t からのずれ。
+    pub(crate) image_time_absolute: Vec<bool>,
     /// PERSISTENT な target を持つ(前のフレームを読む)。状態は host が `feedback` の鍵で持つ。
     pub(crate) persistent: bool,
     /// 状態の持ち主の鍵。engine が層の識別を刻む(刻まれていない persistent は毎フレーム初期条件)。
@@ -214,6 +216,9 @@ impl EffectPass {
     }
     pub fn image_time_sources(&self) -> &[isf::TimeSource] {
         &self.image_time_sources
+    }
+    pub fn image_time_absolute(&self, i: usize) -> bool {
+        self.image_time_absolute.get(i).copied().unwrap_or(false)
     }
     /// 合体後の別時刻(下の合成 / 群 / comp)を読む。下の合成と同じく画面の道で効く(画面の uv で揃う)。
     pub fn reads_composite(&self) -> bool {

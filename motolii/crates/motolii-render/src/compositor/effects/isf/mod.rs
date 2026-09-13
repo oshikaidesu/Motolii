@@ -121,6 +121,8 @@ pub struct IsfInput {
     /// ホストが供給するので、2 枚目以降でもこれを宣言していれば繋がる。
     /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`plugin-resources.md` §6)。
     pub time_offset: Option<TimeOffset>,
+    /// `time_offset` の読み方: false = t からのずれ(`TIME_OFFSET`)、true = 層の入点からの絶対時刻(`TIME_AT`)。
+    pub time_absolute: bool,
     /// image の欄だけ: `"LAYER"` で名指した層の欄(TYPE layer)が指す層の絵が入る。
     pub layer_field: Option<String>,
     /// image の欄だけ、`TIME_OFFSET` と組で: 別の時刻に読む**相手**。既定は自分の層。
@@ -318,11 +320,18 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let hero = entry.get("HERO").and_then(|v| v.as_bool()).unwrap_or(false);
             let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
             let layer_field = entry.get("LAYER").and_then(|v| v.as_str()).map(str::to_owned).filter(|_| ty == IsfInputType::Image);
-            let time_offset = entry.get("TIME_OFFSET").and_then(|v| match v {
+            let read_time = |key: &str| entry.get(key).and_then(|v| match v {
                 serde_json::Value::Number(n) => n.as_f64().map(|v| TimeOffset::Fixed(v as f32)),
                 serde_json::Value::String(name) => Some(TimeOffset::Param(name.clone())),
                 _ => None,
             }).filter(|_| ty == IsfInputType::Image);
+            let (time_offset, time_absolute) = match (read_time("TIME_OFFSET"), read_time("TIME_AT")) {
+                (Some(_), Some(_)) => return Err(IsfError::TimeOffset(format!("{name}: TIME_OFFSET と TIME_AT は同時に書けない"))),
+                (Some(offset), None) => (Some(offset), false),
+                // TIME_AT: 層の入点からの秒。「あの瞬間の絵」を欄で指す(host が渡す。効果は覚えない)。
+                (None, Some(at)) => (Some(at), true),
+                (None, None) => (None, false),
+            };
             let time_source = match entry.get("SOURCE").and_then(|v| v.as_str()) {
                 None => TimeSource::Own,
                 Some("below") => TimeSource::Below,
@@ -331,7 +340,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 Some(other) => return Err(IsfError::TimeOffset(format!("{name}: SOURCE は below / group / comp のどれか({other})"))),
             };
             if time_source != TimeSource::Own && time_offset.is_none() {
-                return Err(IsfError::TimeOffset(format!("{name}: SOURCE は TIME_OFFSET と組で書く")));
+                return Err(IsfError::TimeOffset(format!("{name}: SOURCE は TIME_OFFSET か TIME_AT と組で書く")));
             }
             inputs.push(IsfInput {
                 name: name.to_owned(),
@@ -346,6 +355,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 max,
                 maps,
                 time_offset,
+                time_absolute,
                 layer_field,
                 time_source,
             });

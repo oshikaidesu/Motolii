@@ -167,7 +167,7 @@ impl Engine {
                     let got = (|| {
                         if target == layer { return None; }
                         let mut then = resolved.iter().find(|l| l.id == target)?.clone();
-                        then.id = lookbehind_layer_id(target, 0.0);
+                        then.id = lookbehind_layer_id(target, 0);
                         let (content, _, _) = self.texture_for_resolved(&then, texts, shapes, t, comp, camera, projection_camera).ok()?;
                         content.as_ref().and_then(|c| c.texture()).and_then(|t| self.compositor.snapshot_texture(t))
                     })();
@@ -184,18 +184,19 @@ impl Engine {
                     .enumerate()
                     .map(|(i, offset)| {
                         let source = pass.image_time_sources().get(i).copied().unwrap_or_default();
+                        let key = time_key(*offset, pass.image_time_absolute(i), layer);
                         let got = (|| {
-                        let (at, resolved, texts, shapes) = others.get(&offset_key(*offset))?;
+                        let (at, resolved, texts, shapes) = others.get(&key)?;
                         if source != crate::render::compositor::TimeSource::Own {
                             // 合成の t′ は組み立ての前に描いて写してある(復号 texture は層ごとに 1 本なので、
                             // 後から t′ で復号すると本番の t の絵まで巻き添えになる)。
                             let _ = (resolved, texts, shapes);
-                            return composites.get(&(offset_key(*offset), source, layer)).cloned();
+                            return composites.get(&(key, source, layer)).cloned();
                         }
                         let mut then = resolved.iter().find(|l| l.id == layer)?.clone();
                         // 別の流れとして読む。復号器の texture は層ごとに 1 本なので、同じ層として
                         // 読むと今の時刻の絵まで巻き添えで上書きされる(差が 0 になる)。
-                        then.id = lookbehind_layer_id(layer, *offset);
+                        then.id = lookbehind_layer_id(layer, key);
                         let (content, _, _) = self
                             .texture_for_resolved(&then, texts, shapes, *at, comp, camera, projection_camera)
                             .ok()?;
@@ -383,13 +384,15 @@ impl Engine {
         // 別の時刻を要求した効果があれば、その時刻の層の姿をここで 1 回だけ引き直す(同じずれは共有)。
         let mut other_times: OtherTimes = BTreeMap::new();
         for layer in resolved {
-            for pass in super::translate::translate_effect_passes(&layer.effects) {
-                for offset in pass.image_time_offsets() {
-                    let key = offset_key(*offset);
+            let in_point = layer_in_point(view, layer.id);
+            for pass in super::translate::translate_effect_passes(&layer.effects).into_iter().chain(super::translate::translate_plate_passes(&layer.after_effects)) {
+                for (i, offset) in pass.image_time_offsets().iter().enumerate() {
+                    let absolute = pass.image_time_absolute(i);
+                    let key = time_key(*offset, absolute, layer.id);
                     if other_times.contains_key(&key) {
                         continue;
                     }
-                    let at = shifted_by_seconds(t, *offset);
+                    let at = if absolute { shifted_by_seconds(in_point, *offset) } else { shifted_by_seconds(t, *offset) };
                     let Ok(then) = view.resolved_layers(at) else { continue };
                     let (Ok(texts), Ok(shapes)) = (collect_text_documents(view, &then, at), collect_shape_documents(view, &then, at)) else { continue };
                     other_times.insert(key, (at, then, texts, shapes));
@@ -405,7 +408,7 @@ impl Engine {
                 for (i, offset) in pass.image_time_offsets().iter().enumerate() {
                     let source = pass.image_time_sources().get(i).copied().unwrap_or_default();
                     if source == crate::render::compositor::TimeSource::Own { continue; }
-                    let key = (offset_key(*offset), source, layer.id);
+                    let key = (time_key(*offset, pass.image_time_absolute(i), layer.id), source, layer.id);
                     if composites.contains_key(&key) { continue; }
                     let Some((at, then, texts, shapes)) = other_times.get(&key.0) else { continue };
                     if let Some(picture) = self.composite_at(view, *at, then, texts, shapes, comp, layer.id, source) {
@@ -1657,12 +1660,28 @@ fn offset_key(offset: f32) -> i64 {
     (offset as f64 * 1000.0).round() as i64
 }
 
-/// 別の時刻を読むための層の番号。復号器の流れを本体と分けるためだけの物で、Document には無い。
-fn lookbehind_layer_id(layer: LayerId, offset: f32) -> LayerId {
+/// 別の時刻の鍵: ずれ(ms)か、層ごとの絶対時刻(入点からの ms に層の番号を混ぜ、上の bit で区別)。
+fn time_key(offset: f32, absolute: bool, layer: LayerId) -> i64 {
+    if !absolute { return offset_key(offset); }
     let mut hasher = std::hash::DefaultHasher::new();
     use std::hash::{Hash as _, Hasher as _};
     layer.0.hash(&mut hasher);
     offset_key(offset).hash(&mut hasher);
+    (hasher.finish() >> 2) as i64 | 1 << 61
+}
+
+/// 層の入点(comp の時刻)。TIME_AT はここからの秒。
+fn layer_in_point(view: &StoreView<'_>, layer: LayerId) -> RationalTime {
+    let start = view.meta(layer).ok().flatten().map_or(0, |m| m.timing.start);
+    view.composition().ok().flatten().and_then(|c| RationalTime::try_from_frame(start, c.fps).ok()).unwrap_or(RationalTime::ZERO)
+}
+
+/// 別の時刻を読むための層の番号。復号器の流れを本体と分けるためだけの物で、Document には無い。
+fn lookbehind_layer_id(layer: LayerId, key: i64) -> LayerId {
+    let mut hasher = std::hash::DefaultHasher::new();
+    use std::hash::{Hash as _, Hasher as _};
+    layer.0.hash(&mut hasher);
+    key.hash(&mut hasher);
     LayerId(hasher.finish() | 1 << 63)
 }
 
@@ -1922,6 +1941,37 @@ mod composite_at_another_time {
 
     fn close(a: &[u8], b: &[u8]) -> usize {
         a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a, b)| a[..3].iter().zip(&b[..3]).any(|(x, y)| x.abs_diff(*y) > 6)).count()
+    }
+
+    /// TIME_AT: 「層の入点から moment 秒の絵」を host が渡す。いつ見ても同じ絵(静止フレーム)で、
+    /// 層の入点を動かせば絵も付いて来る。
+    #[test]
+    fn a_held_moment_is_the_same_picture_at_every_time_and_follows_the_in_point() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let mut doc = document(&path, None);
+        doc.apply_all([
+            Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.hold".into() }] },
+            Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(0), "moment").unwrap(), value: Value::F64(0.5) },
+        ]).unwrap();
+        let plain = document(&path, None);
+        let mut engine = Engine::new().unwrap();
+        let reference = engine.render_frame(&plain.view(), at(5)).unwrap();
+        for frame in [3, 12, 20] {
+            let held = engine.render_frame(&doc.view(), at(frame)).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            assert!(close(&held, &reference) < 40, "frame {frame}: 0.5 秒の絵と違う: {} px", close(&held, &reference));
+            if frame != 5 { assert!(close(&held, &engine.render_frame(&plain.view(), at(frame)).unwrap()) > 200, "frame {frame}: 今の絵と同じ = 止まっていない"); }
+        }
+        // 入点を 4 コマ後ろへ: moment 0.5 秒 = comp の 9 コマ目の素材(素材の頭から 0.5 秒)。
+        let mut later = document(&path, None);
+        later.apply_all([
+            Intent::SetTiming { layer: LayerId(1), timing: LayerTiming::place(4, None, 26) },
+            Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.hold".into() }] },
+            Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(0), "moment").unwrap(), value: Value::F64(0.5) },
+        ]).unwrap();
+        let held = engine.render_frame(&later.view(), at(15)).unwrap();
+        assert!(close(&held, &reference) < 40, "入点が動いても、素材の頭から 0.5 秒の絵: {} px", close(&held, &reference));
     }
 
     #[test]
