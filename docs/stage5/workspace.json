@@ -18,7 +18,15 @@
     "Panel-internal refinement",
     "Release dylib packaging and signing",
     "Persistent UI session restoration",
-    "Full feature and actual-window acceptance"
+    "Full feature and actual-window acceptance",
+    "Freeze frame (still frame of a layer)",
+    "Rendered-frame cache per layer: reverse playback, backward scrubbing and post-edit redisplay of feedback effects should return pictures, not replays (docs/plugin-resources.md §6-5 has the measured cost)",
+    "Discard feedback state only for layers the edit touched (today: all)",
+    "Build on another machine: the Rerun fork pin is file://, the FFmpeg path is hard-coded in .cargo/config.toml",
+    "scripts/motolii-ui.sh test should pass --test-threads=2 to the GPU suites (fully parallel runs flake)",
+    "Retire the unused Warp effect stage (turbulent_warp.wgsl is kept only as its contract); decide whether the import.ceil_* evidence effects stay on the shelf",
+    "Verify the timeline speed field accepts negative values (the document's Speed already allows them)",
+    "Pre-existing failure: the_cage_follows_the_drawn_text_under_an_orbited_camera (window work)"
   ],
   "validation": {
     "workspaceCheck": "passed",
