@@ -3,9 +3,9 @@
 **[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](VISION.ja.md)。
 
 <p align="center">
-  <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
+  <img src="docs/assets/rgb-trail.gif" alt="Three shapes moving over live footage, grouped, with a per-channel decaying trail; a rectangle above shows the background a moment ago" width="960">
 </p>
-<p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
+<p align="center"><em>A group with an RGB trail, and a window onto the background a moment ago — two shaders of twenty lines each, scrub-safe: the host owns the history</em></p>
 
 > **Everything you hand to After Effects becomes a flat rectangle.** A 3D scan, a particle field, a camera path, an audio waveform — the moment they enter the composition they are pressed into planar layers that no longer remember what they were.
 
