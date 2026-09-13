@@ -5,15 +5,48 @@ use re_renderer::renderer::{PathContour, PathDrawDataBuilder, PathFillRule, Path
 use re_renderer::view_builder::{BlendWithBackground, OrthographicCameraMode, Projection, RenderMode, TargetConfiguration, ViewBuilder, ViewBuilderId};
 use re_renderer::{Rgba, Rgba32Unmul};
 
-fn contours(path: &[Contour], origin: Point) -> Vec<PathContour> {
+fn contours(path: &[Contour], origin: Point, step: Option<f32>) -> Vec<PathContour> {
     let at = |p: Point| glam::vec2((p.x + origin.x) as f32, (p.y + origin.y) as f32);
     let rel = |p: Point| glam::vec2(p.x as f32, p.y as f32);
-    path.iter()
-        .map(|c| PathContour {
-            closed: c.closed,
-            vertices: c.vertices.iter().map(|v| PathVertex { point: at(v.point), in_tangent: rel(v.in_tangent), out_tangent: rel(v.out_tangent) }).collect(),
-        })
-        .collect()
+    match step {
+        None => path.iter()
+            .map(|c| PathContour {
+                closed: c.closed,
+                vertices: c.vertices.iter().map(|v| PathVertex { point: at(v.point), in_tangent: rel(v.in_tangent), out_tangent: rel(v.out_tangent) }).collect(),
+            })
+            .collect(),
+        Some(step) => path.iter().map(|c| PathContour { closed: c.closed, vertices: subdivided(c, at, rel, step.max(0.5)) }).collect(),
+    }
+}
+
+/// 輪郭を直線の頂点に刻む(1 区間 ≤ step px)。場は頂点を動かすので、直線の辺も曲線も同じ細かさで曲がる。
+/// 制御点(接線)は捨て、曲線は 3 次ベジエを t で割って点にする。
+fn subdivided(c: &Contour, at: impl Fn(Point) -> glam::Vec2, rel: impl Fn(Point) -> glam::Vec2, step: f32) -> Vec<PathVertex> {
+    let n = c.vertices.len();
+    if n == 0 { return Vec::new(); }
+    let segments = if c.closed { n } else { n - 1 };
+    let mut out = Vec::new();
+    for i in 0..segments {
+        let a = &c.vertices[i];
+        let b = &c.vertices[(i + 1) % n];
+        let p0 = at(a.point);
+        let p3 = at(b.point);
+        let c1 = p0 + rel(a.out_tangent);
+        let c2 = p3 + rel(b.in_tangent);
+        let length = (c1 - p0).length() + (c2 - c1).length() + (p3 - c2).length();
+        let pieces = (length / step).ceil().max(1.0) as usize;
+        for k in 0..pieces {
+            let t = k as f32 / pieces as f32;
+            let u = 1.0 - t;
+            let point = p0 * (u * u * u) + c1 * (3.0 * u * u * t) + c2 * (3.0 * u * t * t) + p3 * (t * t * t);
+            out.push(PathVertex { point, in_tangent: glam::Vec2::ZERO, out_tangent: glam::Vec2::ZERO });
+        }
+    }
+    if !c.closed {
+        let last = &c.vertices[n - 1];
+        out.push(PathVertex { point: at(last.point), in_tangent: glam::Vec2::ZERO, out_tangent: glam::Vec2::ZERO });
+    }
+    out
 }
 
 fn byte(v: f64) -> u8 {
@@ -38,12 +71,12 @@ fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> 
 }
 
 /// 形の木を描き手へ積む。群は平らにし、演算(trim・角丸…)は解決済みの輪郭で渡す。
-fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32) -> Result<PathDrawDataBuilder, CompositorError> {
+fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<PathDrawDataBuilder, CompositorError> {
     let origin = Point { x: canvas.origin_x as f64, y: canvas.origin_y as f64 };
     let mut b = PathDrawDataBuilder::default().with_tolerance(tolerance);
     for shape in crate::doc::vector::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
         for instance in crate::doc::vector::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
-            let outline = contours(&instance.path, origin);
+            let outline = contours(&instance.path, origin, step);
             if let Some(fill) = shape.fill.as_ref().filter(|f| !f.hidden) {
                 let rule = match fill.rule { crate::doc::vector::FillRule::NonZero => PathFillRule::NonZero, crate::doc::vector::FillRule::EvenOdd => PathFillRule::EvenOdd };
                 b.fill(&outline, rule, &*paint(&fill.brush, fill.opacity * instance.opacity, origin));
@@ -73,17 +106,20 @@ pub(crate) fn outlines(shapes: &[ShapeNode], canvas: &Canvas) -> Result<Vec<(Vec
             _ => PathFillRule::NonZero,
         };
         for instance in crate::doc::vector::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
-            out.push((contours(&instance.path, origin), rule));
+            out.push((contours(&instance.path, origin, None), rule));
         }
     }
     Ok(out)
 }
 
 impl Compositor {
-    pub(crate) fn path_model(&mut self, shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32) -> Result<Option<super::GpuModelData>, CompositorError> {
-        let builder = build_at_tolerance(shapes, canvas, tolerance)?;
+    /// `step`: 場が乗る時、輪郭を ≤ step px の直線に刻む(頂点段の場が滑らかに効くように)。
+    pub(crate) fn path_model(&mut self, shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<Option<super::GpuModelData>, CompositorError> {
+        let builder = build_at_tolerance(shapes, canvas, tolerance, step)?;
         if builder.is_empty() { return Ok(None); }
-        let mesh = builder.into_mesh(&self.ctx, "vector layer");
+        let mut mesh = builder.into_mesh(&self.ctx, "vector layer");
+        // 場は線の中心線の点(錨)で評価する: 線の両側が同じ量だけ動き、線幅が保たれる。
+        for material in &mut mesh.materials { material.field_anchor = step.is_some(); }
         let vertices = mesh.vertex_positions.clone();
         let mut instances = re_renderer::CpuModel::from_single_mesh(mesh).into_gpu_meshes(&self.ctx)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
@@ -113,7 +149,7 @@ impl Compositor {
         let density = density.max(1.0).min(by_budget.max(1.0)).min(limit as f32 / canvas.width.max(canvas.height).max(1) as f32);
         let width = (canvas.width as f32 * density).ceil() as u32;
         let height = (canvas.height as f32 * density).ceil() as u32;
-        let builder = build_at_tolerance(shapes, canvas, 0.05 / density)?;
+        let builder = build_at_tolerance(shapes, canvas, 0.05 / density, None)?;
         if builder.is_empty() {
             return Ok(None);
         }

@@ -162,7 +162,9 @@ mod domain_contract {
             }
             let a=engine.render_frame(&path.view(),RationalTime::ZERO).unwrap();
             let b=engine.render_frame(&image.view(),RationalTime::ZERO).unwrap();
-            assert!(differing(&a,&b)<30,"source representation changed the displace ({projection:?}): {} pixels",differing(&a,&b));
+            // 形は輪郭の mesh、絵は場の板(格子)で受ける。同じ場・同じ座標なので形は一致し、縁の 1 px だけが違う
+            // (mesh の縁は鋭く、絵の縁は双一次)。128² の内 300 px 未満 = 縁だけ。
+            assert!(differing(&a,&b)<300,"source representation changed the displace ({projection:?}): {} pixels",differing(&a,&b));
             image.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::new(property::POSITION).unwrap(),value:Value::Vec2([52.0,40.0])}).unwrap();
             let shifted=engine.render_frame(&image.view(),RationalTime::ZERO).unwrap();
             let mut moved=0;
@@ -227,6 +229,28 @@ mod domain_contract {
         }
     }
 
+    /// 線に場が乗る: 場の効果がある形は raster の板ではなく、輪郭を刻んだ mesh で描かれる。
+    /// 直線の辺(長方形)が場で波打ち、行ごとに左端が違う。amount 0 なら素の絵と同じ。
+    #[test]
+    fn a_field_bends_the_outline_of_a_shape() {
+        let mut doc=document(LayerSource::Shape,128,[40.0,40.0]);shape(&mut doc);
+        let mut engine=Engine::new().unwrap();
+        let plain=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
+        effect(&mut doc,0,"motolii.turbulent_displace",&[("amount",0.0),("size",20.0),("along",2.0)]);
+        let zero=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
+        assert!(differing(&plain,&zero)<40,"amount 0 の場が形を変えた: {}",differing(&plain,&zero));
+        doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::effect_param(EffectId(0),"amount").unwrap(),value:Value::F64(6.0)}).unwrap();
+        let bent=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(),"{:?}",engine.layer_failures());
+        assert!(engine.materials.get(&LayerId(1)).is_none_or(|m| m.mesh.is_none()),"形は素材の板(格子)でなく輪郭の mesh で描く");
+        // 左端(最初に塗られた列)が行ごとに揺れている = 直線の辺が曲がった。
+        let left_edge = |px:&[u8]| (40..72).filter_map(|y| (0..128).find(|&x| px[(y*128+x)*4+3]>0)).collect::<Vec<usize>>();
+        let straight=left_edge(&plain); let bent_edge=left_edge(&bent);
+        assert!(straight.iter().all(|x| *x==straight[0]),"素の長方形の辺は真っ直ぐ");
+        assert!(bent_edge.iter().any(|x| *x!=bent_edge[0]),"場が辺を曲げていない: {bent_edge:?}");
+        assert!(differing(&plain,&bent)>30);
+    }
+
     #[test]
     fn neutral_displace_is_identity_and_evolution_and_seed_have_distinct_results() {
         let mut doc=document(LayerSource::Shape,128,[40.0,40.0]);shape(&mut doc);
@@ -254,9 +278,11 @@ mod domain_contract {
         doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::effect_param(EffectId(0),"amount").unwrap(),value:Value::F64(20.0)}).unwrap();
         let spatial=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
         assert!(differing(&neutral,&spatial)>50,"a larger field must deform the plane more");
-        assert!(engine.materials[&LayerId(1)].mesh.is_some(),"a spatial field must receive geometry");
+        // 場だけの形は輪郭の mesh(素材の板は作らない)。絵の効果が続けば絵に焼いてから場の板(格子)で受ける。
+        assert!(engine.materials.get(&LayerId(1)).is_none_or(|m| m.mesh.is_none()),"a shape with only a field is drawn as its own outline mesh");
         effect(&mut doc,2,"motolii.gain",&[("gain",2.0)]);
         let bright=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
+        assert!(engine.materials[&LayerId(1)].mesh.is_some(),"with an image pass the shape becomes a picture on the field plane");
         assert!(differing(&spatial,&bright)>50,"an image pass after the spatial plane must not be ignored");
         let mut effects=doc.view().effects(LayerId(1)).unwrap();effects.retain(|e|e.id!=EffectId(2));
         doc.apply(Intent::SetEffects{layer:LayerId(1),effects}).unwrap();

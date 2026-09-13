@@ -88,9 +88,14 @@ fn bleed_edges(rgba: &mut [u8], width: usize) {
     }
 }
 
+/// 場が乗る形・文字の輪郭を刻む幅(px)。頂点段の場はこの間隔で曲がる。
+pub(super) const FIELD_STEP: f32 = 4.0;
+
 pub(super) struct TextTexture {
     texture: LayerContent,
     tolerance: f32,
+    /// 場のために輪郭を刻んだ幅(None = 刻んでいない)。
+    step: Option<f32>,
     frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
     bounds: Option<crate::render::media::SpatialBounds>,
 }
@@ -329,7 +334,11 @@ impl Engine {
             .map(|s| if s.depth > 0.0 { s } else { crate::render::compositor::extrude::Solid { depth: layer.depth, ..s } })
             .unwrap_or(crate::render::compositor::extrude::Solid { depth: layer.depth, bevel: None });
         let flat = solid.extent() <= 0.0;
-        let vector = flat && layer.masks.is_empty() && !needs_material && !needs_image;
+        // 場(Field)だけなら輪郭を刻んだ mesh のまま描く(線に場が乗る)。warp と絵の効果は素材の絵が要る。
+        let needs_warp = self.compositor.catalog.descriptors.iter().any(|d| d.stage == crate::render::compositor::EffectStage::Warp && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
+        let needs_field = needs_material && !needs_warp;
+        let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image;
+        let step = (vector && needs_field).then_some(FIELD_STEP);
         let natural = if layer.source == LayerSource::Shape {
             let canvas = content_canvas(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
@@ -361,13 +370,13 @@ impl Engine {
         // (段に丸めると置いた時に再標本化され、縁が甘くなる)。
         let tolerance = (0.05 / if vector { density } else { exact_density }).max(1e-6);
         let (content, natural, frame) = if layer.source == LayerSource::Text {
-            self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp, vector, tolerance, flat)?
+            self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp, vector, tolerance, flat, step)?
         } else if layer.source == LayerSource::Shape {
             let shapes = shape_documents
                 .get(&layer.id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
-            let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp)?;
+            let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp, step)?;
             // 密度 > 1 で描いた絵は、その枠を持ち歩く(効果の reach・radius は論理 px)。
             let frame = content.as_ref().and_then(|c| c.texture()).map(|t| crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0; 2], pixels: t.width_height() });
             (content,natural,frame)
@@ -450,6 +459,7 @@ impl Engine {
         vector: bool,
         tolerance: f32,
         crop: bool,
+        step: Option<f32>,
     ) -> Result<(Option<LayerContent>, [f32; 2], Option<crate::render::compositor::effects::vism::ImageFrame>), EngineError> {
         let Some(document) = document else {
             return Ok((None, [0.0, 0.0], None));
@@ -463,7 +473,7 @@ impl Engine {
         };
 
         let key = TextCacheKey::new(layer_id, document, t, canvas.width, canvas.height);
-        if let Some(cached) = self.text_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance) {
+        if let Some(cached) = self.text_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance && c.step == step) {
             return Ok((
                 Some(cached.texture.clone()),
                 [canvas.width as f32, canvas.height as f32],
@@ -480,7 +490,7 @@ impl Engine {
         });
         let raster_canvas = if !vector && crop { content_canvas(&shapes)?.unwrap_or_else(|| canvas.clone()) } else { canvas.clone() };
         let content = if vector {
-            self.compositor.path_model(&shapes, &canvas, tolerance)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
+            self.compositor.path_model(&shapes, &canvas, tolerance, step)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
         } else { self.compositor.render_paths("text", &shapes, &raster_canvas, 0.05 / tolerance, raster_pixel_budget(comp))?.map(LayerContent::Texture) };
         let Some(texture) = content else {
             return Ok((None, [0.0, 0.0], None));
@@ -490,7 +500,7 @@ impl Engine {
             origin: [-(raster_canvas.origin_x as f32),-(raster_canvas.origin_y as f32)], pixels: t.width_height(),
         });
         let fresh = !self.text_textures.contains_key(&key);
-        self.text_textures.insert(key.clone(), TextTexture { texture: texture.clone(), bounds, tolerance, frame });
+        self.text_textures.insert(key.clone(), TextTexture { texture: texture.clone(), bounds, tolerance, step, frame });
         if fresh { self.text_order.push_back(key); }
         // 級数を擦るだけで鍵が増える。歌詞 200 行 + 擦りの残骸で GPU を食い潰さない。
         while self.text_order.len() > TEXT_CACHE_LIMIT {
@@ -512,6 +522,7 @@ impl Engine {
         vector: bool,
         tolerance: f32,
         comp: CompSpec,
+        step: Option<f32>,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         if shapes.is_empty() {
             return Ok((None, [0.0, 0.0]));
@@ -522,7 +533,7 @@ impl Engine {
         };
 
         let key = ShapeCacheKey::new(layer_id, shapes, canvas.width, canvas.height);
-        if let Some(cached) = self.shape_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance) {
+        if let Some(cached) = self.shape_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance && c.step == step) {
             return Ok((
                 Some(cached.texture.clone()),
                 [canvas.width as f32, canvas.height as f32],
@@ -530,12 +541,12 @@ impl Engine {
         }
 
         let content = if vector {
-            self.compositor.path_model(shapes, &canvas, tolerance)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
+            self.compositor.path_model(shapes, &canvas, tolerance, step)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
         } else { self.compositor.render_paths("shape", shapes, &canvas, 0.05 / tolerance, raster_pixel_budget(comp))?.map(LayerContent::Texture) };
         let Some(texture) = content else {
             return Ok((None, [0.0, 0.0]));
         };
-        self.shape_textures.insert(key, TextTexture { texture: texture.clone(), bounds: None, tolerance, frame: None });
+        self.shape_textures.insert(key, TextTexture { texture: texture.clone(), bounds: None, tolerance, step, frame: None });
         Ok((
             Some(texture),
             [canvas.width as f32, canvas.height as f32],

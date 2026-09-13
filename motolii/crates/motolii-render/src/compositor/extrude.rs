@@ -190,6 +190,7 @@ impl Compositor {
             vertex_texcoords: g.texcoords,
             materials: smallvec::smallvec![Material {
                 albedo_is_premultiplied: true,
+                field_anchor: false,
                 label: "layer picture".into(),
                 index_range: 0..index_count,
                 albedo: texture,
