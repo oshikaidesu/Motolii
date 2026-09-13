@@ -28,6 +28,9 @@ pub const FLOOR: &str = "particles.floor";
 pub const TURBULENCE: &str = "particles.turbulence";
 pub const TURBULENCE_SIZE: &str = "particles.turbulence_size";
 pub const SEED: &str = "particles.seed";
+pub const CONNECT: &str = "particles.connect";
+pub const LINE_WIDTH: &str = "particles.line_width";
+pub const LINE_OPACITY: &str = "particles.line_opacity";
 
 /// 粒子の層の欄: (property, label, 既定値, 範囲)。登録・既定・Inspector はこの 1 表から(Camera の表と同じ型)。
 /// 長さは comp の px、時間は秒、角度は度(0 = 右、-90 = 上)。
@@ -52,6 +55,10 @@ pub const ROWS: &[(&str, &str, Value, Option<(f64, f64)>)] = &[
     (TURBULENCE, "Turbulence", Value::F64(0.0), Some((0.0, 10000.0))),
     (TURBULENCE_SIZE, "Turbulence Size", Value::F64(120.0), Some((1.0, 100000.0))),
     (SEED, "Seed", Value::F64(0.0), Some((0.0, 9999.0))),
+    // Plexus: この距離より近い粒どうしを線で結ぶ(0 は結ばない)。線は近いほど濃い。
+    (CONNECT, "Connect Distance", Value::F64(0.0), Some((0.0, 10000.0))),
+    (LINE_WIDTH, "Line Width", Value::F64(1.0), Some((0.0, 100.0))),
+    (LINE_OPACITY, "Line Opacity", Value::F64(0.6), Some((0.0, 1.0))),
 ];
 
 /// 一度に生きていられる粒の上限(率 × 寿命がこれを超えたら、古い物から描かない)。
@@ -79,6 +86,14 @@ pub struct Turbulence {
     pub amount: f32,
     pub size: f32,
     pub seed: f32,
+}
+
+/// Plexus の取っ手(描く側が近い粒どうしを線で結ぶ)。`distance` 0 は結ばない。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Links {
+    pub distance: f32,
+    pub width: f32,
+    pub opacity: f32,
 }
 
 struct Params {
@@ -110,14 +125,15 @@ impl<'a> StoreView<'a> {
         Ok(match self.particle_value(layer, name, t)? { Value::F64(v) if v.is_finite() => v, _ => 0.0 })
     }
 
-    /// 時刻 t に生きている粒と、乱流の取っ手。入点より前は空。
-    pub fn particles_at(&self, layer: LayerId, t: RationalTime) -> Result<(Vec<Particle>, Turbulence), StoreError> {
+    /// 時刻 t に生きている粒と、乱流・Plexus の取っ手。入点より前は空。
+    pub fn particles_at(&self, layer: LayerId, t: RationalTime) -> Result<(Vec<Particle>, Turbulence, Links), StoreError> {
         let number = |name| self.particle_number(layer, name, t);
         let vec2 = |name| -> Result<[f64; 2], StoreError> { Ok(match self.particle_value(layer, name, t)? { Value::Vec2(v) => v, _ => [0.0, 0.0] }) };
         let color = |name| -> Result<[f64; 4], StoreError> { Ok(match self.particle_value(layer, name, t)? { Value::Color(c) => c, _ => [1.0; 4] }) };
         let turbulence = Turbulence { amount: number(TURBULENCE)? as f32, size: number(TURBULENCE_SIZE)?.max(1.0) as f32, seed: number(SEED)? as f32 };
-        let Some(fps) = self.composition()?.map(|c| c.fps) else { return Ok((Vec::new(), turbulence)) };
-        let Some(meta) = self.meta(layer)? else { return Ok((Vec::new(), turbulence)) };
+        let links = Links { distance: number(CONNECT)?.max(0.0) as f32, width: number(LINE_WIDTH)?.max(0.0) as f32, opacity: number(LINE_OPACITY)?.clamp(0.0, 1.0) as f32 };
+        let Some(fps) = self.composition()?.map(|c| c.fps) else { return Ok((Vec::new(), turbulence, links)) };
+        let Some(meta) = self.meta(layer)? else { return Ok((Vec::new(), turbulence, links)) };
         let p = Params {
             life: number(LIFE)?.max(0.01),
             life_random: number(LIFE_RANDOM)?.clamp(0.0, 1.0),
@@ -154,7 +170,7 @@ impl<'a> StoreView<'a> {
             }
         }
         out.reverse();
-        Ok((out, turbulence))
+        Ok((out, turbulence, links))
     }
 
     /// 入点から t までに生まれた粒: (番号, 生まれた comp の秒)。率はコマごとにその時刻の値で積む。

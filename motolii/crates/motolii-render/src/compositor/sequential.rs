@@ -784,6 +784,7 @@ impl Compositor {
                         point_size,
                         sizes,
                         sprites,
+                        links,
                     } => crate::render::compositor::SequentialContent::Cloud {
                         positions,
                         colors,
@@ -791,6 +792,7 @@ impl Compositor {
                         point_size: *point_size,
                         sizes: sizes.as_ref().map(|s| s.as_slice()),
                         sprites: *sprites,
+                        links: links.as_deref(),
                     },
                     crate::render::compositor::LayerContent::Model(model) => {
                         crate::render::compositor::SequentialContent::Model(model)

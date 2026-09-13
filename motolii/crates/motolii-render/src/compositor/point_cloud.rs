@@ -63,6 +63,94 @@ impl Compositor {
     }
 }
 
+/// 点どうしを結ぶ線(Plexus)。不透明度は近いほど濃く、`LEVELS` 段に分けて段ごとに 1 色で描く
+/// (re_renderer の線は 1 回の追加で 1 色)。
+#[derive(Clone, Debug, PartialEq)]
+pub struct CloudLinks {
+    /// 段ごとの (色, 線分たち)。位置は点群と同じ局所。
+    pub levels: Vec<([u8; 4], Vec<([f32; 3], [f32; 3])>)>,
+    /// 線の太さ(直径、px)。
+    pub width: f32,
+}
+
+impl CloudLinks {
+    const LEVELS: usize = 8;
+    /// 1 点から結ぶ線の上限と、全体の上限(近傍が密な時に線が爆発しない)。
+    const PER_POINT: usize = 12;
+    const TOTAL: usize = 60_000;
+
+    pub fn near(positions: &[[f32; 3]], colors: &[[u8; 4]], distance: f32, width: f32, opacity: f32) -> Self {
+        let cell = distance.max(1e-3);
+        let key = |p: [f32; 3]| ((p[0] / cell).floor() as i64, (p[1] / cell).floor() as i64);
+        let mut grid: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
+        for (i, p) in positions.iter().enumerate() {
+            grid.entry(key(*p)).or_default().push(i);
+        }
+        let mut levels: Vec<Vec<([f32; 3], [f32; 3])>> = vec![Vec::new(); Self::LEVELS];
+        let mut color_sum = [[0u64; 4]; Self::LEVELS];
+        let mut total = 0usize;
+        'points: for (i, a) in positions.iter().enumerate() {
+            let (cx, cy) = key(*a);
+            let mut linked = 0usize;
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    let Some(bucket) = grid.get(&(cx + dx, cy + dy)) else { continue };
+                    for &j in bucket {
+                        if j <= i { continue; }
+                        let b = positions[j];
+                        let d = glam::Vec3::from(*a).distance(glam::Vec3::from(b));
+                        if d >= distance { continue; }
+                        let closeness = 1.0 - d / distance;
+                        let level = ((closeness * Self::LEVELS as f32) as usize).min(Self::LEVELS - 1);
+                        levels[level].push((*a, b));
+                        for c in 0..4 { color_sum[level][c] += (colors[i][c] as u64 + colors[j][c] as u64) / 2; }
+                        linked += 1;
+                        total += 1;
+                        if total >= Self::TOTAL { break 'points; }
+                        if linked >= Self::PER_POINT { continue 'points; }
+                    }
+                }
+            }
+        }
+        let levels = levels.into_iter().enumerate().filter(|(_, segments)| !segments.is_empty()).map(|(level, segments)| {
+            let n = segments.len() as u64;
+            let mut color = color_sum[level].map(|c| (c / n) as u8);
+            let strength = (level as f32 + 0.5) / Self::LEVELS as f32;
+            color[3] = (color[3] as f32 * strength * opacity).round() as u8;
+            (color, segments)
+        }).collect();
+        Self { levels, width }
+    }
+}
+
+impl Compositor {
+    pub(crate) fn cloud_links_draw_data(
+        &mut self,
+        links: &CloudLinks,
+        bounds: SpatialBounds,
+        placement: crate::doc::core::LayerPlacement,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::doc::core::ResolvedCamera,
+        projection: crate::doc::store::LayerProjection,
+        opacity: f32,
+    ) -> Result<re_renderer::renderer::LineDrawData, CompositorError> {
+        let world_from_obj = projected_spatial_placement(comp, camera, projection, placement, bounds);
+        let mut builder = re_renderer::LineDrawableBuilder::new(&self.ctx);
+        builder.enable_alpha_blending();
+        {
+            let mut batch = builder.batch("motolii-plexus").world_from_obj(world_from_obj);
+            for (color, segments) in &links.levels {
+                let alpha = (color[3] as f32 * opacity.clamp(0.0, 1.0)).round() as u8;
+                batch
+                    .add_segments(segments.iter().map(|(a, b)| (glam::Vec3::from(*a), glam::Vec3::from(*b))))
+                    .radius(Size::new_ui_points(links.width.max(1e-3) * 0.5))
+                    .color(Color32::from_rgba_unmultiplied(color[0], color[1], color[2], alpha));
+            }
+        }
+        builder.into_draw_data().map_err(|e| CompositorError::Draw(e.to_string()))
+    }
+}
+
 /// Turbulent Displace の CPU の写し。点群は fork の hook を通らないので、同じ欄をここで受ける
 /// (最小コアの継ぎ目 D。網は `vism/turbulent_displace.wgsl`、点群はこれ)。
 #[derive(Clone, Copy, Debug, PartialEq)]

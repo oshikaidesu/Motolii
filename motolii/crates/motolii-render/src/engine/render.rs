@@ -460,7 +460,7 @@ impl Engine {
                 continue;
             }
             match view.particles_at(layer.id, t) {
-                Ok((particles, turbulence)) => { self.particle_frames.insert(layer.id, super::ParticleFrame::from_particles(&particles, turbulence)); }
+                Ok((particles, turbulence, links)) => { self.particle_frames.insert(layer.id, super::ParticleFrame::from_particles(&particles, turbulence, links)); }
                 Err(e) => self.layer_failures.push(format!("粒子の層 {} を解けない: {e}", layer.id.0)),
             }
         }
@@ -2433,6 +2433,29 @@ mod particles_are_a_closed_form {
         let mut walked = Vec::new();
         for f in 0..=24 { walked = engine.render_frame(&doc.view(), at(f)).unwrap(); }
         assert_eq!(walked, jumped, "飛んで来た絵が辿った絵と違う");
+    }
+
+    #[test]
+    fn plexus_links_near_particles_with_lines() {
+        let spread = [
+            (particles::SPREAD, Value::F64(360.0)),
+            (particles::SPEED, Value::F64(80.0)),
+            (particles::RATE, Value::F64(60.0)),
+            (particles::SIZE, Value::F64(2.0)),
+            (particles::SIZE_END, Value::F64(2.0)),
+            (particles::OPACITY_END, Value::F64(1.0)),
+        ];
+        let dots = document(&spread);
+        let mut linked_values = spread.to_vec();
+        linked_values.extend([(particles::CONNECT, Value::F64(50.0)), (particles::LINE_OPACITY, Value::F64(1.0)), (particles::LINE_WIDTH, Value::F64(1.5))]);
+        let linked = document(&linked_values);
+        let count = |frame: &[u8]| frame.chunks_exact(4).filter(|px| px[0] > 40).count();
+        let (plain, lines) = (count(&render(&dots, 36)), count(&render(&linked, 36)));
+        assert!(lines > plain * 2, "線が足される: 点だけ {plain} 線あり {lines}");
+        let mut engine = Engine::new().unwrap();
+        let mut walked = Vec::new();
+        for f in 0..=36 { walked = engine.render_frame(&linked.view(), at(f)).unwrap(); }
+        assert_eq!(walked, render(&linked, 36), "飛んで来た絵が辿った絵と違う");
     }
 
     #[test]

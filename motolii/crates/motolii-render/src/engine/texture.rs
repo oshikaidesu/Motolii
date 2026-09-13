@@ -382,6 +382,7 @@ impl Engine {
                     point_size: 1.0,
                     sizes: Some(frame.sizes.clone()),
                     sprites: true,
+                    links: frame.links.clone(),
                 }), [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)], None),
                 None => (None, [1.0, 1.0], None),
             }
@@ -650,6 +651,7 @@ impl Engine {
                 point_size: DEFAULT_POINT_SIZE,
                 sizes: None,
                 sprites: false,
+                links: None,
             }),
             natural,
         ))

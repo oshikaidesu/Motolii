@@ -1049,12 +1049,13 @@ pub(crate) struct ParticleFrame {
     pub(crate) colors: std::sync::Arc<Vec<[u8; 4]>>,
     pub(crate) sizes: std::sync::Arc<Vec<f32>>,
     pub(crate) bounds: crate::render::media::SpatialBounds,
+    pub(crate) links: Option<std::sync::Arc<crate::render::compositor::CloudLinks>>,
 }
 
 impl ParticleFrame {
     /// 閉じた式で解いた粒に乱流(年齢で動く fbm)を足す。bounds の min は 0 に据える — 置き方が min を層の原点にするので、
     /// 粒の散らばりで層が動かないように。
-    pub(crate) fn from_particles(particles: &[crate::doc::store::particles::Particle], turbulence: crate::doc::store::particles::Turbulence) -> Self {
+    pub(crate) fn from_particles(particles: &[crate::doc::store::particles::Particle], turbulence: crate::doc::store::particles::Turbulence, links: crate::doc::store::particles::Links) -> Self {
         let mut max = [1.0f32, 1.0];
         let positions: Vec<[f32; 3]> = particles.iter().map(|p| {
             let mut at = glam::Vec3::from(p.position);
@@ -1065,7 +1066,9 @@ impl ParticleFrame {
             max = [max[0].max(at.x), max[1].max(at.y)];
             at.into()
         }).collect();
-        let colors = particles.iter().map(|p| p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)).collect();
+        let colors: Vec<[u8; 4]> = particles.iter().map(|p| p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)).collect();
+        let links = (links.distance > 0.0 && links.width > 0.0 && links.opacity > 0.0)
+            .then(|| std::sync::Arc::new(crate::render::compositor::CloudLinks::near(&positions, &colors, links.distance, links.width, links.opacity)));
         // Size は直径。re_renderer の点の大きさは半径。
         let sizes = particles.iter().map(|p| p.size * 0.5).collect();
         Self {
@@ -1073,6 +1076,7 @@ impl ParticleFrame {
             colors: std::sync::Arc::new(colors),
             sizes: std::sync::Arc::new(sizes),
             bounds: crate::render::media::SpatialBounds { min: [0.0, 0.0, 0.0], max: [max[0], max[1], 0.0] },
+            links,
         }
     }
 }

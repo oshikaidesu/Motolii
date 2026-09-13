@@ -601,6 +601,7 @@ pub(crate) fn sequential_inputs<'a>(
                         point_size,
                         sizes,
                         sprites,
+                        links,
                     } => SequentialContent::Cloud {
                         positions,
                         colors,
@@ -608,6 +609,7 @@ pub(crate) fn sequential_inputs<'a>(
                         point_size: *point_size,
                         sizes: sizes.as_ref().map(|s| s.as_slice()),
                         sprites: *sprites,
+                        links: links.as_deref(),
                     },
                     LayerContent::Model(model) => SequentialContent::Model(model),
                     LayerContent::Environment(e) => SequentialContent::Environment(e),

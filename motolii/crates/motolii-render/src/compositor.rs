@@ -462,7 +462,7 @@ impl GpuModelData {
 
 pub use environment::GpuEnvironmentData;
 pub use effects::surface_program::SurfaceShading;
-pub use point_cloud::PointDisplace;
+pub use point_cloud::{CloudLinks, PointDisplace};
 
 /// 層が持つ中身。3D の素材はテクスチャにならず、点のまま run へ渡る。
 #[derive(Clone)]
@@ -480,6 +480,8 @@ pub enum LayerContent {
         sizes: Option<std::sync::Arc<Vec<f32>>>,
         /// 陰の無い円の billboard で描く(粒子)。点群は陰を付ける。
         sprites: bool,
+        /// 点どうしを結ぶ線(Plexus)。
+        links: Option<std::sync::Arc<CloudLinks>>,
     },
     Model(std::sync::Arc<GpuModelData>),
     /// 環境(空)。板にならず、run の背景と網の照明になる。
@@ -507,6 +509,7 @@ pub(crate) enum SequentialContent<'a> {
         point_size: f32,
         sizes: Option<&'a [f32]>,
         sprites: bool,
+        links: Option<&'a CloudLinks>,
     },
     Model(&'a GpuModelData),
     Environment(&'a GpuEnvironmentData),

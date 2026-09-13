@@ -98,6 +98,9 @@ impl Compositor {
         for cloud in &draws.clouds {
             builder.queue_draw(&self.ctx, cloud.clone());
         }
+        for line in &draws.lines {
+            builder.queue_draw(&self.ctx, line.clone());
+        }
         for mesh in &draws.meshes {
             builder.queue_draw(&self.ctx, mesh.clone());
         }
@@ -135,6 +138,7 @@ impl SharedMeshScene {
 pub(crate) struct SceneDraws {
     rects: RectangleDrawData,
     clouds: Vec<PointCloudDrawData>,
+    lines: Vec<re_renderer::renderer::LineDrawData>,
     meshes: Vec<MeshDrawData>,
 }
 
@@ -143,6 +147,9 @@ impl SceneDraws {
         view.queue_draw(ctx, self.rects);
         for cloud in self.clouds {
             view.queue_draw(ctx, cloud);
+        }
+        for line in self.lines {
+            view.queue_draw(ctx, line);
         }
         for mesh in self.meshes {
             view.queue_draw(ctx, mesh);
@@ -280,6 +287,7 @@ impl Compositor {
     ) -> Result<SceneDraws, CompositorError> {
         let started = std::time::Instant::now();
         let mut clouds = Vec::new();
+        let mut lines = Vec::new();
         let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>)> = Vec::new();
         for (index, input) in inputs.iter().enumerate() {
             #[cfg(test)]
@@ -301,7 +309,11 @@ impl Compositor {
                     point_size,
                     sizes,
                     sprites,
+                    links,
                 } => {
+                    if let Some(links) = links {
+                        lines.push(self.cloud_links_draw_data(links, bounds, input.placement, comp, input.projection_camera, input.projection, input.opacity)?);
+                    }
                     clouds.push(self.point_cloud_draw_data(
                         positions,
                         colors,
@@ -411,6 +423,7 @@ impl Compositor {
             rects: RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?,
             clouds,
+            lines,
             meshes,
         })
     }
@@ -611,6 +624,9 @@ impl Compositor {
                 builder.queue_draw(&self.ctx, draws.rects.clone());
                 for cloud in &draws.clouds {
                     builder.queue_draw(&self.ctx, cloud.clone());
+                }
+                for line in &draws.lines {
+                    builder.queue_draw(&self.ctx, line.clone());
                 }
                 for mesh in &draws.meshes {
                     builder.queue_draw(&self.ctx, mesh.clone());
