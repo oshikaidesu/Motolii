@@ -117,6 +117,29 @@ void main() {
     c.dispose();
   });
 
+  testWidgets('a row dragged onto a collection joins it', (tester) async {
+    final (c, settings) = await mount(tester);
+    final from = tester.getCenter(tile('Arial'));
+    final to = tester.getCenter(
+      find.byKey(const ValueKey('browser:collection:3')),
+    );
+    final gesture = await tester.startGesture(from);
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveTo(from + const Offset(0, 30));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveTo(to);
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(
+      Map<String, dynamic>.from(settings['deskWork'] as Map)['collections'],
+      {'Fonts/font:Arial': 3},
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
   testWidgets('a digit files picked rows in a collection the rail filters by', (
     tester,
   ) async {

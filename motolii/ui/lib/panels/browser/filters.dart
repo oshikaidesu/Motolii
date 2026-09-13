@@ -7,6 +7,7 @@ import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import 'parts.dart';
 import 'shelf.dart';
+import 'tile.dart';
 
 /// Tags and collections the way Live 12's browser keeps them (manual 4.4,
 /// 4.5): the item itself carries default tags in filter groups; the user adds
@@ -556,53 +557,74 @@ class RailCollections extends StatelessWidget {
     required this.onCollection,
     required this.onLabel,
     required this.onDropLabel,
+    required this.onDrop,
   });
   final int? chosen;
   final List<Map<String, dynamic>> labels;
   final ValueChanged<int> onCollection;
   final ValueChanged<Map<String, dynamic>> onLabel;
   final ValueChanged<String> onDropLabel;
+
+  /// Rows dropped on a collection: (which, ids). A Media tile carries its
+  /// asset id; any other tile carries the picked ids.
+  final void Function(int which, Set<String> ids) onDrop;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       const _RailTitle('Collections'),
       for (var i = 1; i <= BrowserLibrary.collectionCount; i++)
-        EditorTooltip(
-          message:
-              '${BrowserLibrary.collectionNames[i - 1]} · press $i on selected rows to add them',
-          child: InkWell(
-            key: ValueKey('browser:collection:$i'),
-            onTap: () => onCollection(i),
-            child: Container(
-              height: EditorMetrics.control,
-              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-              color: chosen == i ? EditorTheme.raised : Colors.transparent,
-              child: Row(
-                children: [
-                  Container(
-                    width: EditorMetrics.s8,
-                    height: EditorMetrics.s8,
-                    decoration: BoxDecoration(
-                      color: BrowserLibrary.collectionColors[i - 1],
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: EditorMetrics.s6),
-                  Expanded(
-                    child: Text(
-                      BrowserLibrary.collectionNames[i - 1],
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: EditorMetrics.font,
-                        color: chosen == i
-                            ? EditorTheme.accent
-                            : EditorTheme.ink,
+        DragTarget<Object>(
+          onWillAcceptWithDetails: (d) =>
+              d.data is BrowserDrag ||
+              (d.data is Map && (d.data as Map)['asset'] != null),
+          onAcceptWithDetails: (d) => onDrop(i, switch (d.data) {
+            BrowserDrag(:final ids) => ids,
+            final Map m => {'${m['asset']}'},
+            _ => const <String>{},
+          }),
+          builder: (context, hovering, _) => EditorTooltip(
+            message:
+                '${BrowserLibrary.collectionNames[i - 1]} · drop rows here, or press $i on picked rows',
+            child: InkWell(
+              key: ValueKey('browser:collection:$i'),
+              onTap: () => onCollection(i),
+              child: Container(
+                height: EditorMetrics.control,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EditorMetrics.s8,
+                ),
+                color: hovering.isNotEmpty
+                    ? EditorTheme.spatial.withValues(alpha: .3)
+                    : chosen == i
+                    ? EditorTheme.raised
+                    : Colors.transparent,
+                child: Row(
+                  children: [
+                    Container(
+                      width: EditorMetrics.s8,
+                      height: EditorMetrics.s8,
+                      decoration: BoxDecoration(
+                        color: BrowserLibrary.collectionColors[i - 1],
+                        shape: BoxShape.circle,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: EditorMetrics.s6),
+                    Expanded(
+                      child: Text(
+                        BrowserLibrary.collectionNames[i - 1],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: EditorMetrics.font,
+                          color: chosen == i
+                              ? EditorTheme.accent
+                              : EditorTheme.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

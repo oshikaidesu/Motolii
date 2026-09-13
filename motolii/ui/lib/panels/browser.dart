@@ -653,6 +653,8 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                     onLabel: _restoreLabel,
                                     onDropLabel: (name) =>
                                         library.dropLabel(tab, name),
+                                    onDrop: (which, ids) =>
+                                        library.collect(tab, ids, which),
                                   ),
                                 ),
                               ),

@@ -233,7 +233,20 @@ class ShelfTile extends StatelessWidget {
         ),
       ),
     );
-    return shelf.draggable(host, item, body);
+    final wrapped = shelf.draggable(host, item, body);
+    // A shelf that does not drag its tiles out still lets the frame drag them
+    // onto a collection in the rail (the picked rows come along).
+    if (!identical(wrapped, body)) return wrapped;
+    return Draggable<BrowserDrag>(
+      data: BrowserDrag(host.tab, {...host.selectedIds, host.id(item)}),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: dragFeedback(
+        host.selectedIds.contains(host.id(item)) && host.selectedIds.length > 1
+            ? '${host.selectedIds.length} rows'
+            : name,
+      ),
+      child: body,
+    );
   }
 }
 
@@ -268,3 +281,30 @@ double _badgeWidth(String format) => _badgeWidths[format] ??= () {
   painter.dispose();
   return width;
 }();
+
+/// What a tile dragged inside the Browser carries: the shelf and the ids
+/// (a collection row in the rail takes them).
+class BrowserDrag {
+  const BrowserDrag(this.shelf, this.ids);
+  final String shelf;
+  final Set<String> ids;
+}
+
+Widget dragFeedback(String label) => Material(
+  color: Colors.transparent,
+  child: Container(
+    height: EditorMetrics.row,
+    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+    decoration: BoxDecoration(
+      color: EditorTheme.panel,
+      border: Border.all(color: EditorTheme.border),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: EditorMetrics.font,
+        color: EditorTheme.ink,
+      ),
+    ),
+  ),
+);
