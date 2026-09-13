@@ -67,7 +67,7 @@ ffprobe -version
 - macOS共有GPU経路を検証済み。Windows/Linux、配布bundle・署名の成立を意味しない。
 - 回転・拡縮を伴う親変更で、子がアニメーションしている一般ケースの補償は未完。無言でキーを破壊しない。
 - Browser分類の詳細、3Dギズモ全機能、細部の操作整合は残作業。仮UIを採用仕様と取り違えない。
-- **効果の宿題(2026-09-13)**: フリーズフレーム。描いたコマの cache(feedback の効果の逆再生・戻りスクラブ・編集後の再表示を、辿り直しでなく絵で返す。重さの実測は [plugin-resources.md §6-5](../plugin-resources.md))。編集で捨てる feedback の状態を「変わった層だけ」に(今は全部)。他人の機械で build(fork の pin が `file://`、FFmpeg の場所が `.cargo/config.toml` に直書き)。`motolii-ui.sh test` に `--test-threads=2`(GPU の試験は全並列だと落ちる)。Warp 段の撤去(`turbulent_warp.wgsl` は契約としてだけ残る)と `import.ceil_*` の証拠を棚に出すかの判断。速度欄が負(逆再生)を受けるかの確認(書類の `Speed` は既に受ける)。cage の試験 1 本(窓の作業と一緒に)。一覧の正本は [workspace.json](workspace.json) の `pending`。
+- **効果の宿題(2026-09-13)**: Freeze(投影の前の cache、3D のまま)と Flatten(投影の後を ProRes 4444 の素材に)— 法は [freeze-and-flatten.md](../freeze-and-flatten.md)、静止フレームは Hold(`TIME_AT`)で済み。描いたコマの cache(feedback の効果の逆再生・戻りスクラブ・編集後の再表示を、辿り直しでなく絵で返す。重さの実測は [plugin-resources.md §6-5](../plugin-resources.md))。編集で捨てる feedback の状態を「変わった層だけ」に(今は全部)。他人の機械で build(fork の pin が `file://`、FFmpeg の場所が `.cargo/config.toml` に直書き)。`motolii-ui.sh test` に `--test-threads=2`(GPU の試験は全並列だと落ちる)。Warp 段の撤去(`turbulent_warp.wgsl` は契約としてだけ残る)と `import.ceil_*` の証拠を棚に出すかの判断。速度欄が負(逆再生)を受けるかの確認(書類の `Speed` は既に受ける)。cage の試験 1 本(窓の作業と一緒に)。一覧の正本は [workspace.json](workspace.json) の `pending`。
 
 ## 旧資料との関係
 
