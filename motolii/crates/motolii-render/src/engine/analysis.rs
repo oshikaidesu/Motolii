@@ -24,9 +24,6 @@ pub(crate) struct LinearPicture {
     pub(crate) frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
 }
 
-/// 解析する絵の長辺の上限(読み戻した後に縮める)。塊の箱は comp の座標へ戻すので、細かさは足切りの粒度だけに効く。
-const ANALYSIS_LONG_SIDE: u32 = 480;
-
 #[derive(Default)]
 pub(crate) struct BlobTrackState {
     key: u64,
@@ -89,6 +86,7 @@ impl Engine {
                 continue;
             }
             let settings = settings_of(params);
+            let detail = blob::number_of(params, "detail").round().clamp(120.0, 3840.0) as u32;
             let key = {
                 use std::hash::{Hash, Hasher};
                 let mut h = std::hash::DefaultHasher::new();
@@ -107,12 +105,12 @@ impl Engine {
                         state = BlobTrackState { key, next_frame: meta.timing.start, ..Default::default() };
                     }
                     for f in state.next_frame..=frame {
-                        let marks = self.blob_frame(view, source, f, &settings, composition.spec(), composition.fps, &mut state)?;
+                        let marks = self.blob_frame(view, source, f, &settings, detail, composition.spec(), composition.fps, &mut state)?;
                         state.marks.insert(f, marks);
                     }
                     state.next_frame = frame + 1;
                 } else {
-                    let marks = self.blob_frame(view, source, frame, &settings, composition.spec(), composition.fps, &mut state)?;
+                    let marks = self.blob_frame(view, source, frame, &settings, detail, composition.spec(), composition.fps, &mut state)?;
                     state.marks.insert(frame, marks);
                 }
             }
@@ -125,7 +123,7 @@ impl Engine {
 
     /// 1 コマ: 元の層を組んで読み戻し、縮めて塊を拾い、ID を振って comp の座標へ戻す。
     #[allow(clippy::too_many_arguments)]
-    fn blob_frame(&mut self, view: &StoreView<'_>, source: LayerId, frame: i64, settings: &BlobSettings, comp: CompSpec, fps: crate::doc::store::Fps, state: &mut BlobTrackState) -> Result<Vec<BlobMark>, EngineError> {
+    fn blob_frame(&mut self, view: &StoreView<'_>, source: LayerId, frame: i64, settings: &BlobSettings, detail: u32, comp: CompSpec, fps: crate::doc::store::Fps, state: &mut BlobTrackState) -> Result<Vec<BlobMark>, EngineError> {
         let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Time(e.to_string()))?;
         let resolved = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
         let Some(target) = resolved.iter().find(|l| l.id == source && l.copy == 0 && !l.ghost).cloned() else {
@@ -135,14 +133,21 @@ impl Engine {
             return Ok(Vec::new());
         };
         let Some(picture) = self.layer_linear_picture(view, &resolved, &target, at, comp)? else { return Ok(Vec::new()) };
-        let (pixels, width, height, shrink) = shrink_to_srgb(&picture);
+        let (pixels, width, height, shrink) = shrink_to_srgb(&picture, detail);
         // 論理 px ↔ 縮めた絵の px。
         let per_logical = picture.width as f32 / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0) / shrink as f32;
         let to_local = |p: [f32; 2]| glam::vec2(p[0] / per_logical - picture.padding as f32, p[1] / per_logical - picture.padding as f32);
         let transform = target.placement.transform;
         let comp_per_local = transform.matrix2.x_axis.length().max(1e-6);
         let small = |px: f32| px / comp_per_local * per_logical;
-        let scaled = BlobSettings { min_area: (settings.min_area as f32 * small(1.0) * small(1.0)).round() as u32, max_move: small(settings.max_move), ..*settings };
+        let area = |a: u32| (a as f64 * f64::from(small(1.0)).powi(2)).round().min(u32::MAX as f64) as u32;
+        let scaled = BlobSettings {
+            min_area: area(settings.min_area),
+            max_area: area(settings.max_area),
+            max_move: small(settings.max_move),
+            separation: small(settings.separation as f32).round() as u32,
+            ..*settings
+        };
         let previous = state.previous.as_ref().filter(|(_, w, h)| *w == width && *h == height).map(|(p, _, _)| p.as_slice());
         let regions = detect(&pixels, width, height, previous, &scaled);
         let blobs = state.tracker.step(regions, &scaled);
@@ -168,17 +173,18 @@ fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
     BlobSettings {
         source,
         min_area: n("min_area").max(0.0) as u32,
-        max_area: u32::MAX,
+        max_area: n("max_area").clamp(0.0, u32::MAX as f64) as u32,
         max_blobs: n("max_blobs").max(1.0) as usize,
         persist: n("persist") >= 0.5,
         max_move: n("max_move").max(0.0) as f32,
         revive_frames: n("revive").max(0.0) as u32,
+        separation: n("separation").max(0.0).round() as u32,
     }
 }
 
 /// 乗算済み線形 Rgba16Float を、長辺が上限に収まるよう箱で縮めて非乗算 sRGB の RGBA8 に。戻り値の最後は縮めた倍率。
-fn shrink_to_srgb(picture: &LinearPicture) -> (Vec<u8>, u32, u32, u32) {
-    let shrink = picture.width.max(picture.height).div_ceil(ANALYSIS_LONG_SIDE).max(1);
+fn shrink_to_srgb(picture: &LinearPicture, long_side: u32) -> (Vec<u8>, u32, u32, u32) {
+    let shrink = picture.width.max(picture.height).div_ceil(long_side.max(1)).max(1);
     let (w, h) = (picture.width / shrink, picture.height / shrink);
     let texel = |x: u32, y: u32, c: usize| {
         let i = ((y * picture.width + x) * 4) as usize * 2 + c * 2;

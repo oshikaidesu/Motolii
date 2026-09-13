@@ -35,8 +35,13 @@ pub const KINDS: &[BlobKind] = &[BlobKind {
         number("green", "Green", "Color", 0.0, (0.0, 1.0)),
         number("blue", "Blue", "Color", 0.0, (0.0, 1.0)),
         number("tolerance", "Tolerance", "Color", 0.25, (0.0, 2.0)),
-        number("min_area", "Min Size", "Filter", 64.0, (0.0, 1.0e9)),
-        number("max_blobs", "Max Blobs", "Filter", 32.0, (1.0, 1000.0)),
+        // 解析する絵の長辺(px)。細かいほど人どうしの隙間が残り、塊が小さくなる(重くなる)。
+        number("detail", "Detail", "Find", 960.0, (120.0, 3840.0)),
+        number("min_area", "Min Size", "Filter", 200.0, (0.0, 1.0e9)),
+        number("max_area", "Max Size", "Filter", 1.0e9, (0.0, 1.0e9)),
+        // 数える前に削る幅(comp の px)。細い橋で触れた塊を切り離す。
+        number("separation", "Separation", "Filter", 2.0, (0.0, 200.0)),
+        number("max_blobs", "Max Blobs", "Filter", 100.0, (1.0, 1000.0)),
         choice("persist", "Keep IDs", "Track", SWITCH, 1.0),
         number("max_move", "Max Move", "Track", 40.0, (0.0, 10000.0)),
         number("revive", "Revive Frames", "Track", 5.0, (0.0, 1000.0)),

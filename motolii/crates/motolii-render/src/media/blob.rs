@@ -28,6 +28,8 @@ pub struct BlobSettings {
     pub max_move: f32,
     /// 見失ってから同じ ID で戻れるコマ数。
     pub revive_frames: u32,
+    /// 数える前に塊を削る px(細い橋で触れた塊を切り離す)。箱は削った分だけ広げて戻す。
+    pub separation: u32,
 }
 
 /// 1 コマで拾った塊(ID を振る前)。箱は画素の端を含む `[min, max + 1)`。
@@ -65,6 +67,17 @@ pub fn detect(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, set
             BlobSource::Color { target, tolerance } => (0..3).map(|k| (c[k] - target[k]).powi(2)).sum::<f32>().sqrt() < tolerance,
         }
     };
+    let mut mask: Vec<bool> = (0..w * h).map(inside).collect();
+    // 削る(4 近傍の最小)。橋が切れて、人どうしが別の塊になる。
+    for _ in 0..settings.separation {
+        let before = mask.clone();
+        for y in 0..h {
+            for x in 0..w {
+                let i = y * w + x;
+                mask[i] = before[i] && x > 0 && before[i - 1] && x + 1 < w && before[i + 1] && y > 0 && before[i - w] && y + 1 < h && before[i + w];
+            }
+        }
+    }
     let mut labels = vec![0u32; w * h];
     let mut parent: Vec<u32> = vec![0];
     fn find(parent: &mut [u32], mut x: u32) -> u32 {
@@ -77,7 +90,7 @@ pub fn detect(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, set
     for y in 0..h {
         for x in 0..w {
             let i = y * w + x;
-            if !inside(i) {
+            if !mask[i] {
                 continue;
             }
             let mut neighbours = [0u32; 4];
@@ -120,8 +133,14 @@ pub fn detect(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, set
             entry.1[1] += y as f64 + 0.5;
         }
     }
+    let grow = settings.separation;
     let mut out: Vec<Region> = regions.into_values()
-        .map(|(mut r, sum)| { r.center = [(sum[0] / r.area as f64) as f32, (sum[1] / r.area as f64) as f32]; r })
+        .map(|(mut r, sum)| {
+            r.center = [(sum[0] / r.area as f64) as f32, (sum[1] / r.area as f64) as f32];
+            r.min = [r.min[0].saturating_sub(grow), r.min[1].saturating_sub(grow)];
+            r.max = [(r.max[0] + grow).min(width - 1), (r.max[1] + grow).min(height - 1)];
+            r
+        })
         .filter(|r| r.area >= settings.min_area && r.area <= settings.max_area)
         .collect();
     out.sort_by(|a, b| b.area.cmp(&a.area).then(a.min[1].cmp(&b.min[1])).then(a.min[0].cmp(&b.min[0])));
@@ -192,7 +211,7 @@ mod tests {
     const H: u32 = 48;
 
     fn settings(source: BlobSource, persist: bool) -> BlobSettings {
-        BlobSettings { source, min_area: 4, max_area: u32::MAX, max_blobs: 64, persist, max_move: 12.0, revive_frames: 3 }
+        BlobSettings { source, min_area: 4, max_area: u32::MAX, max_blobs: 64, persist, max_move: 12.0, revive_frames: 3, separation: 0 }
     }
 
     /// 黒地に白い四角 (x, y, 一辺) を描く。
@@ -218,6 +237,25 @@ mod tests {
         assert_eq!((regions[0].min, regions[0].max, regions[0].area), ([4, 4], [13, 13], 100));
         assert_eq!(regions[0].center, [9.0, 9.0]);
         assert_eq!((regions[1].min, regions[1].max, regions[1].area), ([40, 20], [45, 25], 36));
+    }
+
+    /// 細い橋(幅 2 px)でつながった 2 つは、削れば別の塊。箱は削った分だけ戻る。大きすぎる塊は捨てる。
+    #[test]
+    fn separation_cuts_thin_bridges_and_max_area_drops_the_huge() {
+        let s = settings(BlobSource::Luminance { threshold: 0.5, invert: false }, false);
+        let mut joined = frame(&[(4, 10, 12), (30, 10, 12)], [255; 3]);
+        for x in 16..30 { for y in 15..17 { let i = ((y * W + x) * 4) as usize; joined[i..i + 3].copy_from_slice(&[255; 3]); } }
+        assert_eq!(detect(&joined, W, H, None, &s).len(), 1, "削らなければ 1 つ");
+        let apart = detect(&joined, W, H, None, &BlobSettings { separation: 2, ..s });
+        assert_eq!(apart.len(), 2, "削れば 2 つ: {apart:?}");
+        let mut boxes: Vec<_> = apart.iter().map(|r| (r.min, r.max)).collect();
+        boxes.sort();
+        // 橋の付け根だけ 1 px 残る(削りに耐えた列)。
+        let near = |a: [u32; 2], b: [u32; 2]| a[0].abs_diff(b[0]) <= 1 && a[1].abs_diff(b[1]) <= 1;
+        assert!(near(boxes[0].0, [4, 10]) && near(boxes[0].1, [15, 21]) && near(boxes[1].0, [30, 10]) && near(boxes[1].1, [41, 21]), "箱は元の四角へ戻る: {boxes:?}");
+        let big = detect(&frame(&[(4, 4, 30), (50, 4, 6)], [255; 3]), W, H, None, &BlobSettings { max_area: 200, ..s });
+        assert_eq!(big.len(), 1, "30 × 30 は上限 200 を超えて捨てる");
+        assert_eq!(big[0].min, [50, 4]);
     }
 
     #[test]
