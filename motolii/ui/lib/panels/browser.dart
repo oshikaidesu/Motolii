@@ -71,6 +71,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   late final library = BrowserLibrary(widget.controller);
   final filters = <String, ShelfFilter>{};
   final filtersShown = <String, bool>{};
+  final folded = <String, Set<String>>{};
   final quickAdd = TextEditingController();
   final quickAddFocus = FocusNode();
   ShelfFilter get filter => filters.putIfAbsent(tab, ShelfFilter.new);
@@ -98,30 +99,6 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
       if (!e.value.any(tags.contains)) return false;
     }
     return true;
-  }
-
-  /// What each tag would keep, given the rest of the filter.
-  Map<String, int> _counts() {
-    final query = search.text.trim().toLowerCase();
-    final chosen = _chosen;
-    final base = shelf.items(this).where((item) {
-      final label = '${item['name'] ?? item['hex'] ?? item['id']}'
-          .toLowerCase();
-      return label.contains(query) && shelf.passes(this, item, chosen);
-    }).toList();
-    final counts = <String, int>{};
-    for (final group in groups) {
-      for (final item in base) {
-        if (!_passesFilter(item, except: group.name)) continue;
-        final tags = tagsOf(item);
-        for (final tag in group.tags) {
-          if (tags.contains(tag))
-            counts['${group.name}/$tag'] =
-                (counts['${group.name}/$tag'] ?? 0) + 1;
-        }
-      }
-    }
-    return counts;
   }
 
   void _toggleTag(String group, String tag, bool add) {
@@ -725,7 +702,20 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                   FilterView(
                                     groups: groups,
                                     filter: filter,
-                                    counts: _counts(),
+                                    folded: folded.putIfAbsent(
+                                      tab,
+                                      () => <String>{},
+                                    ),
+                                    results: visible.length,
+                                    onFold: (group) => setState(() {
+                                      final f = folded.putIfAbsent(
+                                        tab,
+                                        () => <String>{},
+                                      );
+                                      f.contains(group)
+                                          ? f.remove(group)
+                                          : f.add(group);
+                                    }),
                                     onToggle: _toggleTag,
                                     onClear: () => setState(() {
                                       filter.clear();

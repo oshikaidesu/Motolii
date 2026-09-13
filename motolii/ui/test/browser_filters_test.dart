@@ -99,11 +99,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(tile('Georgia'), findsNothing);
     expect(find.text('No matches'), findsOneWidget);
+    expect(find.text('0 · 2 filters'), findsOneWidget);
     // Clear puts everything back.
     await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(tile('Georgia'), findsOneWidget);
     expect(tile('Arial'), findsOneWidget);
+    // A group folds to its name; its chosen tags stay in force and are named.
+    await tester.tap(tag('Script', 'Cyrillic'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('browser:filter-group:Script')));
+    await tester.pumpAndSettle();
+    expect(tag('Script', 'Cyrillic'), findsNothing);
+    expect(find.text('Cyrillic'), findsOneWidget);
+    expect(tile('Arial'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });
@@ -119,6 +128,7 @@ void main() {
     final desk = Map<String, dynamic>.from(settings['deskWork'] as Map);
     expect(desk['collections'], {'Fonts/font:Georgia': 2});
     await tester.tap(find.byKey(const ValueKey('browser:collection:2')));
+    expect(find.text('Orange'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(tile('Georgia'), findsOneWidget);
     expect(tile('Arial'), findsNothing);
@@ -162,7 +172,7 @@ void main() {
       expect(tile('Arial'), findsOneWidget);
       expect(tile('Georgia'), findsNothing);
       // Saved as a label, cleared, then brought back from the rail.
-      await tester.tap(find.text('Add label'));
+      await tester.tap(find.byKey(const ValueKey('browser:label:add')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Clear'));
       await tester.pumpAndSettle();

@@ -21,6 +21,15 @@ class BrowserLibrary {
   final EditorSession controller;
 
   static const collectionCount = 7;
+  static const collectionNames = [
+    'Favorites',
+    'Orange',
+    'Yellow',
+    'Green',
+    'Blue',
+    'Purple',
+    'Gray',
+  ];
   static const collectionColors = [
     Color(0xffe05252),
     Color(0xffe0a052),
@@ -28,7 +37,7 @@ class BrowserLibrary {
     Color(0xff6fd06f),
     Color(0xff52b9e0),
     Color(0xff8f7ae0),
-    Color(0xffd06fb8),
+    Color(0xff8a8a8a),
   ];
 
   Map<String, dynamic> get _tags =>
@@ -146,7 +155,7 @@ class ShelfFilter {
 
   /// The label a saved filter takes when none is given: its tags.
   String describe() => [
-    if (collection != null) 'Collection $collection',
+    if (collection != null) BrowserLibrary.collectionNames[collection! - 1],
     for (final s in groups.values) ...s,
   ].join(' · ');
 }
@@ -154,137 +163,187 @@ class ShelfFilter {
 /// The user's own tags live in one more group beside the item's own.
 const userTagGroup = 'Tags';
 
-/// The band under the search field: the filter groups as columns of tags,
-/// each tag with how many rows it would keep, Clear and Add label at the end.
+/// The band under the search field, the way Live 12 draws it: one row per
+/// group — its name with a fold arrow, then its tags as chips flowing across —
+/// and a results bar under them saying how many filters are on, with Clear
+/// and Add label.
 class FilterView extends StatelessWidget {
   const FilterView({
     super.key,
     required this.groups,
     required this.filter,
-    required this.counts,
+    required this.folded,
+    required this.results,
+    required this.onFold,
     required this.onToggle,
     required this.onClear,
     required this.onSaveLabel,
   });
   final List<FilterGroup> groups;
   final ShelfFilter filter;
-  final Map<String, int> counts;
+  final Set<String> folded;
+  final int results;
+  final ValueChanged<String> onFold;
 
   /// A tag pressed: `add` when Cmd/Ctrl is held (extend within the group).
   final void Function(String group, String tag, bool add) onToggle;
   final VoidCallback onClear;
   final VoidCallback? onSaveLabel;
 
+  int get active =>
+      filter.groups.values.where((s) => s.isNotEmpty).length +
+      (filter.collection == null ? 0 : 1);
+
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => Column(
     key: const ValueKey('browser:filters'),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: EditorTheme.line)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(EditorMetrics.s6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final group in groups)
-                  Padding(
-                    padding: const EdgeInsets.only(right: EditorMetrics.s12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final group in groups)
+        Container(
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: EditorTheme.line)),
+          ),
+          padding: const EdgeInsets.fromLTRB(
+            EditorMetrics.s8,
+            EditorMetrics.s3,
+            EditorMetrics.s8,
+            EditorMetrics.s4,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InkWell(
+                key: ValueKey('browser:filter-group:${group.name}'),
+                onTap: () => onFold(group.name),
+                child: SizedBox(
+                  height: EditorMetrics.row,
+                  child: Row(
+                    children: [
+                      Text(
+                        group.name,
+                        style: const TextStyle(
+                          fontSize: EditorMetrics.font,
+                          color: EditorTheme.ink,
+                        ),
+                      ),
+                      const SizedBox(width: EditorMetrics.s4),
+                      Icon(
+                        folded.contains(group.name)
+                            ? Icons.arrow_right
+                            : Icons.arrow_drop_down,
+                        size: EditorMetrics.s14,
+                        color: EditorTheme.muted,
+                      ),
+                      if (folded.contains(group.name) &&
+                          (filter.groups[group.name]?.isNotEmpty ?? false))
                         Text(
-                          group.name.toUpperCase(),
+                          (filter.groups[group.name] ?? const {}).join(', '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: EditorMetrics.micro,
-                            letterSpacing: 1,
-                            color: EditorTheme.muted,
+                            fontSize: EditorMetrics.dense,
+                            color: EditorTheme.accent,
                           ),
                         ),
-                        const SizedBox(height: EditorMetrics.s3),
-                        for (final tag in group.tags)
-                          _TagRow(
-                            key: ValueKey('browser:filter:${group.name}:$tag'),
-                            tag: tag,
-                            count: counts['${group.name}/$tag'] ?? 0,
-                            chosen:
-                                filter.groups[group.name]?.contains(tag) ??
-                                false,
-                            onTap: (add) => onToggle(group.name, tag, add),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(EditorMetrics.s6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              shelfAction('Clear', filter.isEmpty ? null : onClear),
-              const SizedBox(height: EditorMetrics.s4),
-              shelfAction('Add label', filter.isEmpty ? null : onSaveLabel),
+                ),
+              ),
+              if (!folded.contains(group.name))
+                Wrap(
+                  spacing: EditorMetrics.s4,
+                  runSpacing: EditorMetrics.s3,
+                  children: [
+                    for (final tag in group.tags)
+                      _TagChip(
+                        key: ValueKey('browser:filter:${group.name}:$tag'),
+                        tag: tag,
+                        chosen:
+                            filter.groups[group.name]?.contains(tag) ?? false,
+                        onTap: (add) => onToggle(group.name, tag, add),
+                      ),
+                  ],
+                ),
             ],
           ),
         ),
-      ],
-    ),
+      Container(
+        height: EditorMetrics.control,
+        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+        color: filter.isEmpty ? Colors.transparent : EditorTheme.raised,
+        child: Row(
+          children: [
+            Text(
+              'Results',
+              style: const TextStyle(
+                fontSize: EditorMetrics.font,
+                color: EditorTheme.ink,
+              ),
+            ),
+            const SizedBox(width: EditorMetrics.s8),
+            Text(
+              active == 0
+                  ? '$results'
+                  : '$results · $active ${active == 1 ? 'filter' : 'filters'}',
+              style: TextStyle(
+                fontSize: EditorMetrics.dense,
+                color: active == 0 ? EditorTheme.muted : EditorTheme.accent,
+              ),
+            ),
+            const Spacer(),
+            shelfAction('Clear', filter.isEmpty ? null : onClear),
+            const SizedBox(width: EditorMetrics.s4),
+            EditorTooltip(
+              message: 'Add label · keep this filter in the rail',
+              child: InkWell(
+                key: const ValueKey('browser:label:add'),
+                onTap: filter.isEmpty ? null : onSaveLabel,
+                child: Icon(
+                  Icons.playlist_add,
+                  size: EditorMetrics.s14,
+                  color: filter.isEmpty
+                      ? EditorTheme.disabledInk
+                      : EditorTheme.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
   );
 }
 
-class _TagRow extends StatelessWidget {
-  const _TagRow({
+class _TagChip extends StatelessWidget {
+  const _TagChip({
     super.key,
     required this.tag,
-    required this.count,
     required this.chosen,
     required this.onTap,
   });
   final String tag;
-  final int count;
   final bool chosen;
   final ValueChanged<bool> onTap;
   @override
-  // A plain tooltip: the editor's needs a bounded width, and this row sits
-  // in a horizontal scroll.
-  Widget build(BuildContext context) => Tooltip(
-    message: '$tag · $count\n⌘-click to add to the group',
-    child: InkWell(
-      onTap: () => onTap(
-        HardwareKeyboard.instance.isMetaPressed ||
-            HardwareKeyboard.instance.isControlPressed,
+  Widget build(BuildContext context) => InkWell(
+    onTap: () => onTap(
+      HardwareKeyboard.instance.isMetaPressed ||
+          HardwareKeyboard.instance.isControlPressed,
+    ),
+    child: Container(
+      height: EditorMetrics.row,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: chosen ? EditorTheme.accent : EditorTheme.raised,
+        borderRadius: BorderRadius.circular(EditorMetrics.s2),
       ),
-      child: Container(
-        height: EditorMetrics.row,
-        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-        color: chosen ? EditorTheme.raised : Colors.transparent,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              tag,
-              style: TextStyle(
-                fontSize: EditorMetrics.dense,
-                color: chosen ? EditorTheme.accent : EditorTheme.ink,
-              ),
-            ),
-            const SizedBox(width: EditorMetrics.s6),
-            Text(
-              '$count',
-              style: const TextStyle(
-                fontSize: EditorMetrics.micro,
-                color: EditorTheme.muted,
-              ),
-            ),
-          ],
+      child: Text(
+        tag,
+        style: TextStyle(
+          fontSize: EditorMetrics.dense,
+          color: chosen ? EditorTheme.app : EditorTheme.ink,
         ),
       ),
     ),
@@ -313,7 +372,8 @@ class RailCollections extends StatelessWidget {
       const _RailTitle('Collections'),
       for (var i = 1; i <= BrowserLibrary.collectionCount; i++)
         EditorTooltip(
-          message: 'Collection $i · press $i on selected rows to add them',
+          message:
+              '${BrowserLibrary.collectionNames[i - 1]} · press $i on selected rows to add them',
           child: InkWell(
             key: ValueKey('browser:collection:$i'),
             onTap: () => onCollection(i),
@@ -332,11 +392,17 @@ class RailCollections extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: EditorMetrics.s6),
-                  Text(
-                    '$i',
-                    style: TextStyle(
-                      fontSize: EditorMetrics.font,
-                      color: chosen == i ? EditorTheme.accent : EditorTheme.ink,
+                  Expanded(
+                    child: Text(
+                      BrowserLibrary.collectionNames[i - 1],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: EditorMetrics.font,
+                        color: chosen == i
+                            ? EditorTheme.accent
+                            : EditorTheme.ink,
+                      ),
                     ),
                   ),
                 ],
