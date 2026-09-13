@@ -1230,7 +1230,21 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ),
           _gap(),
         ],
-        if (layer['kind'] != 'Camera') ...[
+        _slot(
+          EditorSwitch(
+            on: layer['clipToBelow'] == true,
+            glyph: Icons.subdirectory_arrow_right,
+            label: 'Clip to the layer below',
+            onChanged: layer['locked'] != true && panelCan(c, 'clip')
+                ? (_) => c.command('clip', {'layer': layer['id']})
+                : null,
+          ),
+        ),
+      ]),
+      // Freeze は旗ではなく状態(DAW の Freeze Track): 自分の行。docs/freeze-and-flatten.md
+      if (layer['kind'] != 'Camera')
+        _line([
+          _name(Icons.ac_unit, 'Freeze'),
           _slot(
             EditorSwitch(
               on: layer['frozen'] == true,
@@ -1246,18 +1260,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
             true,
           ),
           _gap(),
-        ],
-        _slot(
-          EditorSwitch(
-            on: layer['clipToBelow'] == true,
-            glyph: Icons.subdirectory_arrow_right,
-            label: 'Clip to the layer below',
-            onChanged: layer['locked'] != true && panelCan(c, 'clip')
-                ? (_) => c.command('clip', {'layer': layer['id']})
-                : null,
-          ),
-        ),
-      ]),
+          _slot(),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
     ];
   }
 
