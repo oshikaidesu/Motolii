@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../foundation/metrics.dart';
 import '../foundation/theme.dart';
+import '../foundation/panel_controls.dart';
 import '../session/editor_session.dart';
 import 'native_visual_sample.dart';
 
@@ -15,6 +16,12 @@ class FontBrowser extends StatefulWidget {
 
 class _FontBrowserState extends State<FontBrowser> {
   String query = '';
+  final _search = FocusNode();
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   /// The families in shelf order, sorted once per list the session hands
   /// over; a keystroke or a selection only filters it.
@@ -64,12 +71,13 @@ class _FontBrowserState extends State<FontBrowser> {
           children: [
             Padding(
               padding: const EdgeInsets.all(EditorMetrics.s6),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Search fonts',
-                  isDense: true,
+              child: EditorFieldFrame(
+                focus: _search,
+                child: TextField(
+                  focusNode: _search,
+                  decoration: const InputDecoration(hintText: 'Search fonts'),
+                  onChanged: (value) => setState(() => query = value),
                 ),
-                onChanged: (value) => setState(() => query = value),
               ),
             ),
             Padding(

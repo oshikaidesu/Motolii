@@ -212,32 +212,21 @@ abstract final class EditorTheme {
     // tuned against; only the shapes below move to M3.
     typography: Typography.material2014(platform: defaultTargetPlatform),
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    // A field is text and a caret, nothing more: the box it sits in is
+    // EditorFieldFrame, drawn once, at rest and while typing. A frame here
+    // would be a second one around every field.
     inputDecorationTheme: const InputDecorationTheme(
       isDense: true,
-      filled: true,
-      fillColor: app,
-      contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: accent),
-      ),
-      disabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: line),
-      ),
-      // errorText is used by EditorField; M3 would round these corners.
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: error),
-      ),
+      isCollapsed: true,
+      filled: false,
+      contentPadding: EdgeInsets.zero,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+      hintStyle: TextStyle(fontSize: EditorMetrics.font, color: muted),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(

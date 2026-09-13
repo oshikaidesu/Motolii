@@ -388,15 +388,9 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: EditorTheme.app,
-                            border: Border.all(
-                              color: searchFocus.hasFocus
-                                  ? EditorTheme.border
-                                  : EditorTheme.line,
-                            ),
-                          ),
+                        child: EditorFieldFrame(
+                          focus: searchFocus,
+                          padding: EdgeInsets.zero,
                           child: TextField(
                             controller: search,
                             focusNode: searchFocus,
@@ -420,11 +414,6 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                 vertical: EditorMetrics.s4,
                               ),
                               hintText: 'Search $tab',
-                              hintStyle: const TextStyle(
-                                fontSize: EditorMetrics.font,
-                                color: EditorTheme.muted,
-                              ),
-                              border: InputBorder.none,
                             ),
                             onChanged: (_) => setState(_derive),
                           ),

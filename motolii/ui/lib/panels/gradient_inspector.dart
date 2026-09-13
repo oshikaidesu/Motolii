@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../foundation/metrics.dart';
+import '../foundation/color_wheel.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../session/editor_session.dart';
@@ -86,11 +87,6 @@ class _GradientInspectorState extends State<GradientInspector>
       });
   Future<void> focus(int index) async {
     setState(() => selected = index);
-    final stop = stops[index];
-    await c.focusColor({
-      'layer': widget.layer['id'],
-      'slot': stop['slot'] ?? widget.fill['slot'],
-    });
   }
 
   Color color(Map<String, dynamic> stop) {
@@ -384,27 +380,19 @@ class _GradientInspectorState extends State<GradientInspector>
               ],
             ),
             const SizedBox(height: EditorMetrics.s6),
-            Row(
-              children: [
-                const Icon(
-                  Icons.rotate_right,
-                  size: EditorMetrics.s16,
-                  color: EditorTheme.muted,
-                ),
-                const SizedBox(width: EditorMetrics.s6),
-                Expanded(
-                  child: EditorNumericField(
-                    value: (widget.fill['angle'] as num? ?? 0).toDouble(),
-                    label: 'Gradient direction',
-                    unit: '°',
-                    enabled: enabled,
-                    onPreview: (value) => edit({'angle': value}, preview: true),
-                    onCommit: (value) => edit({'angle': value}),
-                    onFinish: () => c.command('commitPreview'),
-                    onCancel: () => c.command('cancelPreview'),
-                  ),
-                ),
-              ],
+            EditorColorField(
+              key: ValueKey('gradient-color:${widget.layer['id']}:$selected'),
+              value: color(rows[selected]),
+              label: 'Stop ${selected + 1}',
+              allowAlpha: false,
+              enabled: enabled,
+              onPreview: (v) => c.command('previewColor', {
+                'layer': widget.layer['id'],
+                'slot': rows[selected]['slot'],
+                'rgba': [v.r, v.g, v.b, v.a],
+              }),
+              onFinish: () => c.command('commitPreview'),
+              onCancel: () => c.command('cancelPreview'),
             ),
           ],
         ],

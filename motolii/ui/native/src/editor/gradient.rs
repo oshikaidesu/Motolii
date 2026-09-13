@@ -51,9 +51,9 @@ pub(crate) fn edit(doc:&Document, slot:&ColorSlot, j:&J) -> Result<Intent,String
     Ok(Intent::SetShapes{layer,shapes})
 }
 
-pub(crate) fn model(doc:&Document, slot:&ColorSlot) -> Option<J> {
+pub(crate) fn model(doc:&Document, slot:&ColorSlot, time:crate::doc::store::RationalTime) -> Option<J> {
     let (layer,path)=shape_location(slot)?;
-    let mut shapes=doc.view().shapes(layer).ok()?;
+    let mut shapes=doc.view().shapes_at(layer,time).ok()?;
     let fill=leaf_mut(&mut shapes,path)?.fill.as_ref()?;
     let slot=ColorSlot::ShapeFill{layer,path:path.to_vec()};
     Some(match &fill.brush {
@@ -74,13 +74,18 @@ mod tests {
         let before=doc.view().shapes(layer).unwrap();let history=doc.history_depth();
         let intent=edit(&doc,&slot,&json!({"kind":"radial","angle":90,"stops":[[1,0,0,1],[0,1,0,1],[0,0,1,1]]})).unwrap();
         let owner=doc.begin_preview();doc.preview_edits(owner,&[intent.clone()]).unwrap();
-        let projected=model(&doc,&slot).unwrap();
+        let projected=model(&doc,&slot,RationalTime::ZERO).unwrap();
         assert_eq!(projected["kind"],"radial");assert_eq!(projected["stops"].as_array().unwrap().len(),3);
         assert!((projected["angle"].as_f64().unwrap()-90.0).abs()<0.001);
         assert_eq!(doc.view().without_transients().shapes(layer).unwrap(),before);
         assert_eq!(doc.history_depth(),history);
         doc.clear_preview_edits(owner);assert_eq!(doc.view().shapes(layer).unwrap(),before);
         doc.apply(intent).unwrap();assert_ne!(doc.view().shapes(layer).unwrap(),before);
+        let axis_owner=doc.begin_preview();
+        doc.preview_edits(axis_owner,&[Intent::SetConstant{layer,property:PropertyId::new(property::FILL_ANGLE).unwrap(),value:Value::F64(35.0)}]).unwrap();
+        assert!((model(&doc,&slot,RationalTime::ZERO).unwrap()["angle"].as_f64().unwrap()-35.0).abs()<0.001);
+        doc.clear_preview_edits(axis_owner);
+        assert!((model(&doc,&slot,RationalTime::ZERO).unwrap()["angle"].as_f64().unwrap()-90.0).abs()<0.001);
         let middle=ColorSlot::ShapeGradientPoint{layer,path:vec![0],index:1};
         assert_eq!(super::super::color::read_color(&doc,&middle),Some([0.0,1.0,0.0,1.0]));
         assert!(doc.undo());assert_eq!(doc.view().shapes(layer).unwrap(),before);

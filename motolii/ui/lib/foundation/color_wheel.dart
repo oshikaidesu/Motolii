@@ -2,9 +2,170 @@ import 'dart:math' as math;
 import 'dart:ui' as ui show Vertices, VertexMode;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import 'metrics.dart';
+import 'theme.dart';
+import 'panel_controls.dart';
+
+/// A colour value and its local editing surface. The caller owns the edit.
+class EditorColorField extends StatefulWidget {
+  const EditorColorField({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.onPreview,
+    required this.onFinish,
+    required this.onCancel,
+    this.enabled = true,
+    this.allowAlpha = true,
+  });
+  final Color value;
+  final String label;
+  final bool enabled, allowAlpha;
+  final Future<void> Function(Color) onPreview;
+  final Future<void> Function() onFinish, onCancel;
+  @override
+  State<EditorColorField> createState() => _EditorColorFieldState();
+}
+
+class _EditorColorFieldState extends State<EditorColorField> {
+  bool _open = false, _changing = false, _ending = false;
+  Color? _draft;
+  double? _hue;
+  String? _part;
+  final _focus = FocusNode();
+  late final _queue = EditorPreviewQueue<Color>(
+    (value) => widget.onPreview(value),
+  );
+  void _change(Color value) {
+    if (_ending || !widget.enabled) return;
+    _focus.requestFocus();
+    setState(() {
+      _draft = value;
+      _changing = true;
+    });
+    _queue.add(value);
+  }
+
+  Future<void> _finish(bool cancel) async {
+    if (!_changing || _ending) return;
+    _ending = true;
+    try {
+      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
+    } finally {
+      _ending = false;
+      _changing = false;
+      _part = null;
+      if (mounted) setState(() => _draft = null);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_changing && !_ending) _queue.finish(true, widget.onCancel);
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _draft ?? widget.value;
+    return Focus(
+      focusNode: _focus,
+      onFocusChange: (on) {
+        if (!on) _finish(true);
+      },
+      onKeyEvent: (_, e) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+          _finish(true);
+          setState(() => _open = false);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EditorTooltip(
+            message: 'Choose ${widget.label}',
+            child: InkWell(
+              onTap: !widget.enabled
+                  ? null
+                  : () {
+                      _focus.requestFocus();
+                      setState(() => _open = !_open);
+                    },
+              child: Container(
+                height: EditorMetrics.row,
+                decoration: BoxDecoration(
+                  color: value,
+                  border: Border.all(color: EditorTheme.border),
+                ),
+              ),
+            ),
+          ),
+          if (_open) ...[
+            const SizedBox(height: EditorMetrics.s6),
+            LayoutBuilder(
+              builder: (context, box) {
+                final wheel = ColorWheel(
+                  math.min(box.maxWidth, EditorMetrics.s200),
+                  'square',
+                );
+                void sample(Offset p) {
+                  var hsv = HSVColor.fromColor(_draft ?? widget.value);
+                  hsv = hsv.withHue(_hue ?? hsv.hue);
+                  _part ??= wheel.hitsInner(p, hsv) ? 'sv' : 'hue';
+                  final next = (_part == 'sv'
+                      ? wheel.pickInner(p, hsv)
+                      : hsv.withHue(wheel.hueAt(p)));
+                  _hue = next.hue;
+                  _change(next.toColor());
+                }
+
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: GestureDetector(
+                    onPanStart: (e) => sample(e.localPosition),
+                    onPanUpdate: (e) => sample(e.localPosition),
+                    onPanEnd: (_) => _finish(false),
+                    onPanCancel: () => _finish(true),
+                    onTapUp: (e) {
+                      sample(e.localPosition);
+                      _finish(false);
+                    },
+                    child: CustomPaint(
+                      size: Size.square(wheel.side),
+                      painter: ColorWheelPainter(value, wheel, hue: _hue),
+                    ),
+                  ),
+                );
+              },
+            ),
+            if (widget.allowAlpha)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.opacity,
+                    size: EditorMetrics.s14,
+                    color: EditorTheme.muted,
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: value.a,
+                      onChanged: (a) => _change(value.withValues(alpha: a)),
+                      onChangeEnd: (_) => _finish(false),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 /// Where the ring and the inner area are, for one wheel size and shape.
 /// Sampling and painting both read this, so they cannot disagree.
@@ -94,13 +255,15 @@ class ColorWheel {
 }
 
 class ColorWheelPainter extends CustomPainter {
-  ColorWheelPainter(this.color, this.wheel);
+  ColorWheelPainter(this.color, this.wheel, {this.hue});
   final Color color;
   final ColorWheel wheel;
+  final double? hue;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final hsv = HSVColor.fromColor(color);
+    var hsv = HSVColor.fromColor(color);
+    hsv = hsv.withHue(hue ?? hsv.hue);
     final pure = HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor();
     final bounds = Offset.zero & size;
     canvas.drawCircle(
@@ -185,6 +348,7 @@ class ColorWheelPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant ColorWheelPainter oldDelegate) =>
       color != oldDelegate.color ||
+      hue != oldDelegate.hue ||
       wheel.side != oldDelegate.wheel.side ||
       wheel.shape != oldDelegate.wheel.shape;
 }

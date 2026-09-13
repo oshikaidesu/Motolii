@@ -92,18 +92,6 @@ pub(crate) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
                         (f[3] * 255.0).round() as u8,
                     ],
                 );
-                if let Some(s) = style.stroke_color {
-                    push_swatch(
-                        &mut seen,
-                        &mut out,
-                        [
-                            (s[0] * 255.0).round() as u8,
-                            (s[1] * 255.0).round() as u8,
-                            (s[2] * 255.0).round() as u8,
-                            (s[3] * 255.0).round() as u8,
-                        ],
-                    );
-                }
             }
         }
         if let Ok(shapes) = view.shapes(layer) {

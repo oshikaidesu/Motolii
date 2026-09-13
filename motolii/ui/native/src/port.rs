@@ -82,8 +82,8 @@ impl EditorRuntime{
         let color=rgba(j)?;
         let mut intent=editor::color::write_color(&self.doc,&slot,[color[0],color[1],color[2]]).map_err(e)?;
         if let Intent::SetTextDocument{document,..}=&mut intent{
-            let (style,stroke)=match slot{ColorSlot::TextFill{style,..}=>(style,false),ColorSlot::TextStroke{style,..}=>(style,true),_=>unreachable!()};
-            if let Some(s)=document.styles.iter_mut().find(|s|s.id==style){if stroke{if let Some(c)=s.stroke_color.as_mut(){c[3]=color[3]}}else{s.fill[3]=color[3]}}
+            let ColorSlot::TextFill{style,..}=slot else{unreachable!()};
+            if let Some(s)=document.styles.iter_mut().find(|s|s.id==style){s.fill[3]=color[3]}
         }Ok(intent)
     }
     pub(crate) fn asset_used(&self,id:AssetId)->Result<bool,String>{
@@ -832,10 +832,8 @@ mod swiss {
             go(rt,json!({"op":"styleText","layer":id.0,"scope":"all","size":size}));
             go(rt,json!({"op":"setProperty","layer":id.0,"property":"position","value":pos}));
             go(rt,json!({"op":"applyPalette","rgba":rgba}));
-            // 左揃え、縁取り無し(既定の黒い縁は黒い活字では滲む)。
             let mut document=rt.doc.view().text_document(id).unwrap().unwrap();
             document.justify=crate::doc::store::TextJustify::Left;
-            for style in document.styles.iter_mut(){style.stroke_color=None;style.stroke_width=0.0;}
             rt.doc.apply(Intent::SetTextDocument{layer:id,document}).unwrap();
         };
         // 文字の position は canvas の左上。活字の縁は局所 bounds の min だけ内側(探針で測った値)。

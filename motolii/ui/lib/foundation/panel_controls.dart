@@ -188,6 +188,99 @@ class EditorChoice<T> extends StatelessWidget {
   }
 }
 
+/// The one box a field sits in, at rest and while typing. The theme draws no
+/// frame around a TextField, so a field has this border and no other: line at
+/// rest, accent while it owns the keys, error while it refuses a draft. A tap
+/// anywhere in the box hands the keys to [focus].
+class EditorFieldFrame extends StatelessWidget {
+  const EditorFieldFrame({
+    super.key,
+    required this.child,
+    this.focus,
+    this.error = false,
+    this.height = EditorMetrics.row,
+    this.minHeight,
+    this.maxHeight,
+    this.padding = const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+    this.color = EditorTheme.app,
+  });
+  final Widget child;
+  final FocusNode? focus;
+  final bool error;
+  final double? height, minHeight, maxHeight;
+  final EdgeInsets padding;
+  final Color color;
+
+  Widget _box(bool focused) => GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    onTap: focus?.requestFocus,
+    child: Container(
+      height: height,
+      constraints: minHeight == null && maxHeight == null
+          ? null
+          : BoxConstraints(
+              minHeight: minHeight ?? 0,
+              maxHeight: maxHeight ?? double.infinity,
+            ),
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color,
+        border: Border.all(
+          color: error
+              ? EditorTheme.error
+              : focused
+              ? EditorTheme.accent
+              : EditorTheme.line,
+        ),
+      ),
+      child: child,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => focus == null
+      ? _box(false)
+      : ListenableBuilder(
+          listenable: focus!,
+          builder: (_, __) => _box(focus!.hasFocus),
+        );
+}
+
+/// The line that hides the seldom-used rows of a card: a chevron, the word,
+/// a rule. The same line on every card, so the eye learns it once.
+class EditorFold extends StatelessWidget {
+  const EditorFold({required this.open, required this.onTap});
+  final bool open;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: open ? 'Hide the advanced controls' : 'Show the advanced controls',
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            open ? Icons.expand_more : Icons.chevron_right,
+            size: EditorMetrics.s14,
+            color: EditorTheme.muted,
+          ),
+          const SizedBox(width: EditorMetrics.s2),
+          const Text(
+            'Advanced',
+            style: TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.muted,
+            ),
+          ),
+          const SizedBox(width: EditorMetrics.s6),
+          const Expanded(child: Divider(height: 1)),
+        ],
+      ),
+    ),
+  );
+}
+
 class EditorDraftField extends StatefulWidget {
   const EditorDraftField({
     super.key,
@@ -260,43 +353,29 @@ class _EditorDraftFieldState extends State<EditorDraftField> {
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
-    onKeyEvent: (_, event) {
-      if (event is KeyDownEvent &&
-          event.logicalKey == LogicalKeyboardKey.escape) {
-        _cancelled = true;
-        _text.text = widget.value;
-        setState(() => _error = null);
-        _focus.unfocus();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    },
-    child: TextField(
-      controller: _text,
-      focusNode: _focus,
-      enabled: widget.enabled,
-      minLines: 1,
-      maxLines: widget.multiline ? 4 : 1,
-      style: const TextStyle(
-        fontSize: EditorMetrics.font,
-        color: EditorTheme.ink,
-      ),
-      decoration: InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: EditorMetrics.s5,
-          vertical: EditorMetrics.s3,
+  Widget build(BuildContext context) => EditorTooltip(
+    message: _error ?? widget.label,
+    child: EditorFieldFrame(
+      focus: _focus,
+      error: _error != null,
+      height: widget.multiline ? null : EditorMetrics.row,
+      minHeight: widget.multiline ? EditorMetrics.row : null,
+      child: TextField(
+        controller: _text,
+        focusNode: _focus,
+        enabled: widget.enabled,
+        minLines: 1,
+        maxLines: widget.multiline ? 4 : 1,
+        style: const TextStyle(
+          fontSize: EditorMetrics.font,
+          color: EditorTheme.ink,
         ),
-        border: InputBorder.none,
-        labelText: null,
-        hintText: widget.label,
-        errorText: _error,
+        decoration: InputDecoration(hintText: widget.label),
+        onSubmitted: (_) => _commit(),
+        onChanged: (_) {
+          if (_error != null) setState(() => _error = null);
+        },
       ),
-      onSubmitted: (_) => _commit(),
-      onChanged: (_) {
-        if (_error != null) setState(() => _error = null);
-      },
     ),
   );
 }
@@ -643,17 +722,10 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     child: _editing
         ? EditorTooltip(
             message: _error ?? widget.label,
-            child: Container(
-              height: EditorMetrics.row,
-              decoration: BoxDecoration(
-                color: EditorTheme.app,
-                border: Border.all(
-                  color: _error == null ? EditorTheme.accent : EditorTheme.error,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: EditorMetrics.s2,
-              ),
+            child: EditorFieldFrame(
+              focus: _focus,
+              error: _error != null,
+              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s2),
               child: Row(
                 children: [
                   Expanded(
@@ -669,12 +741,6 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                       ),
                       cursorWidth: 1,
                       cursorColor: EditorTheme.ink,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        isCollapsed: true,
-                        contentPadding: EdgeInsets.zero,
-                        border: InputBorder.none,
-                      ),
                       onSubmitted: (_) => _commitText(),
                     ),
                   ),

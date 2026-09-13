@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
+import '../foundation/panel_controls.dart';
 import '../foundation/metrics.dart';
 
 class CompositionControls extends StatelessWidget {
@@ -49,18 +50,16 @@ class CompositionControls extends StatelessWidget {
                   children: [
                     SizedBox(width: EditorMetrics.s90, child: Text(key)),
                     Expanded(
-                      child: TextFormField(
+                      child: EditorDraftField(
                         key: ValueKey('$key-${s[key]}'),
-                        initialValue: '${s[key]}',
-                        style: const TextStyle(fontSize: EditorMetrics.font),
-                        onFieldSubmitted: (value) {
-                          final parsed = int.tryParse(value);
-                          if (parsed == null || parsed < 1) {
-                            controller.error.value = 'Enter a positive integer';
-                            return;
-                          }
-                          controller.command('composition', {key: parsed});
-                        },
+                        value: '${s[key]}',
+                        label: key,
+                        validator: (v) => (int.tryParse(v) ?? 0) < 1
+                            ? 'Enter a positive integer'
+                            : null,
+                        onCommit: (v) => controller.command('composition', {
+                          key: int.parse(v),
+                        }),
                       ),
                     ),
                   ],
@@ -86,21 +85,16 @@ class CompositionControls extends StatelessWidget {
                       selected: _isGrey(s['background'], grey),
                     ),
                   Expanded(
-                    child: TextFormField(
+                    child: EditorDraftField(
                       key: ValueKey('background-${s['background']}'),
-                      initialValue: _hex(s['background']),
-                      style: const TextStyle(fontSize: EditorMetrics.font),
-                      onFieldSubmitted: (value) {
-                        final rgb = _parseHex(value);
-                        if (rgb == null) {
-                          controller.error.value =
-                              'Enter a hex colour like 1a1a1a';
-                          return;
-                        }
-                        controller.command('composition', {
-                          'background': [...rgb, 1.0],
-                        });
-                      },
+                      value: _hex(s['background']),
+                      label: 'background hex',
+                      validator: (v) => _parseHex(v) == null
+                          ? 'Enter a hex colour like 1a1a1a'
+                          : null,
+                      onCommit: (v) => controller.command('composition', {
+                        'background': [..._parseHex(v)!, 1.0],
+                      }),
                     ),
                   ),
                 ],

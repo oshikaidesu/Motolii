@@ -399,12 +399,12 @@ impl EditorRuntime{
         }).collect();
         if live {
             let mut row=json!({"id":id.0,"text":text,"properties":properties,"effects":effects?});
-            if let Some(color)=data.colors.first(){row["fill"]=editor::gradient::model(&self.doc,&color.slot).unwrap_or(Json::Null);}
+            if let Some(color)=data.colors.first(){row["fill"]=editor::gradient::model(&self.doc,&color.slot,at).unwrap_or(Json::Null);}
             return Ok(Some(row));
         }
         let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
         let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"blocksLight":attrs.blocks_light,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"colors":colors,"effects":effects?,"contentKeys":content_keys});
-        if let Some(color)=data.colors.first(){row["fill"]=editor::gradient::model(&self.doc,&color.slot).unwrap_or(Json::Null);}
+        if let Some(color)=data.colors.first(){row["fill"]=editor::gradient::model(&self.doc,&color.slot,at).unwrap_or(Json::Null);}
         Ok(Some(row))
     }
 }

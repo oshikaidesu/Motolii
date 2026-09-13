@@ -16,9 +16,6 @@ Map<String, dynamic> _style({
   'fill': fill,
   'line_height': null,
   'tracking': 0.0,
-  'stroke_color': null,
-  'stroke_width': 0.0,
-  'stroke_over_fill': false,
   'axes': [],
   'features': [],
 };

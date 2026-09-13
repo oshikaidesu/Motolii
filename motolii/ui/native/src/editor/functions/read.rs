@@ -309,9 +309,6 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             if let Ok(Some(doc)) = view.text_document(layer) {
                 if let Some(style) = doc.styles.first() {
                     colors.push(row("Fill", style.fill, ColorSlot::TextFill { layer, style: style.id }));
-                    // 縁取りは無くても行を出す。無い物を「足す口」が無いと、縁取り無しの歌詞しか作れない。
-                    let stroke = style.stroke_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
-                    colors.push(row("Stroke", stroke, ColorSlot::TextStroke { layer, style: style.id }));
                 }
             }
         }

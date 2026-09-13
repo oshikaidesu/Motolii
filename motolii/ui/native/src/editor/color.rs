@@ -112,13 +112,10 @@ pub(crate) fn read_color(doc: &Document, slot: &ColorSlot) -> Option<[f64; 4]> {
     let d = doc;
     let view = d.view();
     match slot {
-        ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
+        ColorSlot::TextFill { layer, style } => {
             let text = view.text_document(*layer).ok()??;
             let found = text.styles.iter().find(|s| s.id == *style)?;
-            match slot {
-                ColorSlot::TextFill { .. } => Some(found.fill),
-                _ => found.stroke_color,
-            }
+            Some(found.fill)
         }
         ColorSlot::ShapeFill { layer, path } => {
             let mut shapes = view.shapes(*layer).ok()?;
@@ -162,24 +159,14 @@ pub(crate) fn write_color(
 ) -> Result<Intent, StoreError> {
     let d = doc;
     let intent = match slot {
-        ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
+        ColorSlot::TextFill { layer, style } => {
             let Some(mut text) = d.view().text_document(*layer)? else {
                 return Err(StoreError::Property("The color target is no longer editable".into()));
             };
             let Some(found) = text.styles.iter_mut().find(|s| s.id == *style) else {
                 return Err(StoreError::Property("The color target is no longer editable".into()));
             };
-            match slot {
-                ColorSlot::TextFill { .. } => found.fill = [r, g, b, found.fill[3]],
-                _ => {
-                    let a = found.stroke_color.map_or(1.0, |c| c[3]);
-                    found.stroke_color = Some([r, g, b, a]);
-                    // 幅 0 の縁取りは描かれない。色を付けた時点で見える幅を入れる(級数の 5%)。
-                    if found.stroke_width <= 0.0 {
-                        found.stroke_width = (found.size * 0.05).max(1.0);
-                    }
-                }
-            }
+            found.fill = [r, g, b, found.fill[3]];
             Intent::SetTextDocument {
                 layer: *layer,
                 document: text,
@@ -210,7 +197,6 @@ pub(crate) fn write_color(
             let Some(shape) = leaf_mut(&mut shapes, path) else {
                 return Err(StoreError::Property("The color target is no longer editable".into()));
             };
-            // 線が無い形に色を付けると線が生える(文字の縁取りと同じ流儀)。
             let mut stroke = shape.stroke.take().unwrap_or_default();
             stroke.brush = Brush::Solid(Rgb { r, g, b });
             if stroke.width <= 0.0 { stroke.width = crate::doc::store::shape_props::DEFAULT_STROKE_WIDTH; }
@@ -252,7 +238,7 @@ pub(crate) fn write_alpha(
 ) -> Result<(), StoreError> {
     let d = doc;
     let (layer, style) = match slot {
-        ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
+        ColorSlot::TextFill { layer, style } => {
             (*layer, *style)
         }
         ColorSlot::ShapeFill { .. } | ColorSlot::ShapeStroke { .. } | ColorSlot::ShapeGradientStop { .. } | ColorSlot::ShapeGradientPoint { .. } => return Ok(()),
@@ -264,14 +250,7 @@ pub(crate) fn write_alpha(
         return Ok(());
     };
     let a = alpha.clamp(0.0, 1.0);
-    match slot {
-        ColorSlot::TextFill { .. } => found.fill[3] = a,
-        _ => {
-            if let Some(c) = found.stroke_color.as_mut() {
-                c[3] = a;
-            }
-        }
-    }
+    found.fill[3] = a;
     d.apply(Intent::SetTextDocument {
         layer,
         document: text,

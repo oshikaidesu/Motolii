@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/composition_controls.dart';
 import '../lib/foundation/theme.dart';
+import '../lib/foundation/panel_controls.dart';
 
 class RecordingSession extends EditorSession {
   final commands = <(String, Map<String, dynamic>)>[];
@@ -49,17 +50,22 @@ void main() {
     expect(c.commands.last.$2, {
       'background': [0.5, 0.5, 0.5, 1.0],
     });
-    await tester.enterText(find.byType(TextFormField).last, '#ff8000');
+    await tester.enterText(find.byType(TextField).last, '#ff8000');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     final rgba = c.commands.last.$2['background'] as List;
     expect(rgba[0], 1.0);
     expect((rgba[1] as double) * 255, closeTo(128, .5));
     expect(rgba[2], 0.0);
-    await tester.enterText(find.byType(TextFormField).last, 'zzz');
+    await tester.enterText(find.byType(TextField).last, 'zzz');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
-    expect(c.error.value, isNotNull);
+    // The field refuses its own draft: the frame turns to error, nothing is written.
+    expect(
+      tester.widget<EditorFieldFrame>(find.byType(EditorFieldFrame).last).error,
+      isTrue,
+    );
+    expect(c.commands.last.$2['background'], rgba);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -668,9 +668,7 @@ class _NoteCardState extends State<_NoteCard> {
                             color: EditorTheme.ink,
                           ),
                           decoration: const InputDecoration(
-                            border: InputBorder.none,
                             hintText: 'Write a note',
-                            isDense: true,
                           ),
                           onTap: widget.onSelect,
                           onChanged: (_) {

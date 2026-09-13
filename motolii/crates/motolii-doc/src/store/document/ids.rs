@@ -97,14 +97,6 @@ impl PropertyId {
         Self::text_range_style_property(range, "fill_color")
     }
 
-    pub fn text_range_stroke_color(range: crate::doc::store::TextRangeId) -> Self {
-        Self::text_range_style_property(range, "stroke_color")
-    }
-
-    pub fn text_range_stroke_width(range: crate::doc::store::TextRangeId) -> Self {
-        Self::text_range_style_property(range, "stroke_width")
-    }
-
     pub fn text_range_line_spacing(range: crate::doc::store::TextRangeId) -> Self {
         Self::text_range_style_property(range, "line_spacing")
     }

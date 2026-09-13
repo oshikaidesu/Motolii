@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
+import '../lib/foundation/color_wheel.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/layout.dart';
@@ -154,7 +155,7 @@ void main() {
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
-    for (final entry in {'caption': 'Changed', 'tint': '#00ff0080'}.entries) {
+    for (final entry in {'caption': 'Changed'}.entries) {
       final field = find.descendant(
         of: find.byKey(ValueKey('1:${entry.key}')),
         matching: find.byType(TextField),
@@ -169,7 +170,17 @@ void main() {
         .map((m) => m['edits'][0])
         .toList();
     expect(edits[0]['value'], 'Changed');
-    expect(edits[1]['value'], [0.0, 1.0, 0.0, 128 / 255]);
+    final color = tester.widget<EditorColorField>(
+      find.byType(EditorColorField),
+    );
+    expect(color.value.a, closeTo(0.5, 0.01));
+    await color.onPreview(const Color(0x8000ff00));
+    await color.onFinish();
+    final colorEdit = commands.lastWhere(
+      (m) => m['op'] == 'previewProperties',
+    )['edits'][0];
+    expect(colorEdit['property'], 'tint');
+    expect(colorEdit['value'], [0.0, 1.0, 0.0, 128 / 255]);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

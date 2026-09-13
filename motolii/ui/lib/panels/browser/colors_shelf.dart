@@ -10,9 +10,8 @@ import 'package:flutter/services.dart';
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
-import '../gradient_inspector.dart';
 import '../native_visual_sample.dart';
-import 'color_wheel.dart';
+import '../../foundation/color_wheel.dart';
 import 'parts.dart';
 import 'shelf.dart';
 
@@ -47,7 +46,7 @@ class ColorsShelf extends BrowserShelf {
     final target = _colorTarget(c);
     // The fill being edited: its kind, stops and direction redraw the editor
     // at the top of the panel; the layer's name titles it.
-    return [target, _targetFill(c, target), _targetLayer(c, target)?['name']];
+    return [target, _targetLayer(c, target)?['name']];
   }
 
   @override
@@ -138,16 +137,6 @@ class ColorsShelf extends BrowserShelf {
                 fontSize: EditorMetrics.dense,
                 color: EditorTheme.ink,
               ),
-            ),
-          ),
-        if (_targetFill(c, target) case final fill?)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-            child: GradientInspector(
-              key: ValueKey('colors-fill:${target!['layer']}'),
-              controller: c,
-              layer: _targetLayer(c, target)!,
-              fill: fill,
             ),
           ),
         _ColorPicker(
@@ -279,26 +268,13 @@ Map<String, dynamic>? _targetLayer(
 String _targetTitle(EditorSession controller, Map<String, dynamic> target) {
   final layer = _targetLayer(controller, target);
   final slot = EditorSession.map(target['slot']);
-  final what = slot.containsKey('ShapeStroke') || slot.containsKey('TextStroke')
+  final what = slot.containsKey('ShapeStroke')
       ? 'Stroke'
       : slot.keys.any((k) => k.startsWith('ShapeGradient'))
       ? 'Fill · stop'
       : 'Fill';
   final name = '${layer?['name'] ?? ''}'.trim();
   return name.isEmpty ? what : '$name · $what';
-}
-
-/// The shape fill the target belongs to, when the target is a fill or one of
-/// its stops; null for strokes and text, which have no gradient to edit.
-Map<String, dynamic>? _targetFill(
-  EditorSession controller,
-  Map<String, dynamic>? target,
-) {
-  final layer = _targetLayer(controller, target);
-  if (layer == null || layer['fill'] is! Map) return null;
-  final slot = EditorSession.map(target!['slot']);
-  if (slot.containsKey('ShapeStroke')) return null;
-  return Map<String, dynamic>.from(layer['fill'] as Map);
 }
 
 Map<String, dynamic>? _colorTarget(EditorSession controller) {
@@ -621,11 +597,6 @@ class _ColorPickerState extends State<_ColorPicker> {
                             style: const TextStyle(
                               fontSize: EditorMetrics.font,
                               color: EditorTheme.ink,
-                            ),
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
                             ),
                             onSubmitted: (text) {
                               var raw = text.trim().replaceFirst('#', '');

@@ -62,8 +62,8 @@ void main() {
                     'han',
                     'hiragana',
                     'other',
-                    'latin',
-                    'latin',
+                    'latin-upper',
+                    'latin-lower',
                   ],
                 },
               ),
@@ -75,6 +75,20 @@ void main() {
     return c;
   }
 
+  testWidgets('the whole box hands the keys to the text', (tester) async {
+    await mount(tester, []);
+    final box = find.byType(EditorFieldFrame).first;
+    expect(tester.getSize(box).height, EditorMetrics.s96);
+    // Below the last line, inside the frame: still the field.
+    await tester.tapAt(tester.getBottomLeft(box) - const Offset(-20, 10));
+    await tester.pump();
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('rich-text-content')),
+    );
+    expect(field.focusNode!.hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'selected characters and script groups send explicit formatting scope',
     (tester) async {
@@ -82,9 +96,16 @@ void main() {
       final c = await mount(tester, sent);
       final field = find.byKey(const ValueKey('rich-text-content'));
       final text = tester.widget<TextField>(field).controller!;
+      // A selection in the box is only a caret's business: no span is held.
       text.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
       await tester.pump();
-      expect(c.textStyleTarget.value?['scope'], 'selection');
+      expect(c.textStyleTarget.value?['scope'], 'all');
+      expect(c.textStyleTarget.value?.containsKey('start'), isFalse);
+      await tester.tap(find.byType(EditorChoice<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hiragana').last);
+      await tester.pumpAndSettle();
+      expect(c.textStyleTarget.value?['scope'], 'hiragana');
       Future<void> size(String value) async {
         final control = find.byKey(const ValueKey('rich-text-size'));
         await tester.tap(control);
@@ -101,9 +122,7 @@ void main() {
 
       await size('80');
       final edit = sent.firstWhere((m) => m['op'] == 'styleText');
-      expect(edit['start'], 0);
-      expect(edit['end'], 1);
-      expect(edit['scope'], 'selection');
+      expect(edit['scope'], 'hiragana');
       expect(edit['size'], 80);
       await tester.tap(find.byType(EditorChoice<String>));
       await tester.pumpAndSettle();
@@ -113,6 +132,20 @@ void main() {
       expect(
         sent.lastWhere((m) => m['op'] == 'styleText')['scope'],
         'katakana',
+      );
+      // Case is the other half of a class label: `latin-upper` answers to
+      // both `latin` and `upper`.
+      await tester.tap(find.byType(EditorChoice<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Uppercase').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(field).controller,
+        isA<StyledTextController>().having(
+          (t) => t.highlighted,
+          'highlighted',
+          {5},
+        ),
       );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -179,17 +212,32 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('the box keeps the panel\'s size and borrows one known face', (
-    tester,
-  ) async {
-    await mount(tester, []);
+  testWidgets('the box previews proportion: first style at panel size, runs '
+      'at their share, one span per run', (tester) async {
+    await mount(
+      tester,
+      [],
+      styles: [
+        {
+          'id': 0,
+          'size': 40.0,
+          'font': {'family': 'Arial'},
+        },
+        {
+          'id': 1,
+          'size': 20.0,
+          'font': {'family': 'Georgia'},
+        },
+      ],
+    );
     final field = find.byKey(const ValueKey('rich-text-content'));
     final box =
         tester.widget<TextField>(field).controller! as StyledTextController;
+    box.runs = [
+      {'len': 5, 'style': 0},
+      {'len': 2, 'style': 1},
+    ];
     expect(box.previewFamily, 'Arial');
-    // The composition's 40px never reaches the box: the span it lays out
-    // carries the style the field was given, and one child per highlight —
-    // never one per grapheme.
     final span = box.buildTextSpan(
       context: tester.element(field),
       style: const TextStyle(fontSize: EditorMetrics.title),
@@ -197,7 +245,11 @@ void main() {
     );
     expect(span.style?.fontFamily, 'Arial');
     expect(span.style?.fontSize, EditorMetrics.title);
-    expect(span.children?.length ?? 1, lessThan(box.text.characters.length));
+    final runs = span.children!.cast<TextSpan>();
+    expect(runs.length, 2, reason: 'one span per run, never per grapheme');
+    expect(runs[0].style?.fontSize, EditorMetrics.title);
+    expect(runs[1].style?.fontSize, EditorMetrics.title / 2);
+    expect(runs[1].style?.fontFamily, 'Georgia');
   });
 
   testWidgets('a face the machine never listed is not asked for', (

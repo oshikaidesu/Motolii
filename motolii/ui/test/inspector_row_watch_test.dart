@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
+import '../lib/foundation/color_wheel.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
 
@@ -43,19 +44,29 @@ Map<String, dynamic> _document(Map<String, double> moved) {
         'blendMode': 'Normal',
         'projection': '2.5D',
         'properties': [
-          _number('position', 'Position', [at('position.0', 10), 20.0],
-              kind: 'vec2'),
+          _number('position', 'Position', [
+            at('position.0', 10),
+            20.0,
+          ], kind: 'vec2'),
           _number('position.z', 'Position Z', at('position.z', 0)),
-          _number('scale', 'Scale', [at('scale.0', 1), at('scale.1', 1)],
-              kind: 'vec2'),
+          _number('scale', 'Scale', [
+            at('scale.0', 1),
+            at('scale.1', 1),
+          ], kind: 'vec2'),
           _number('scale.z', 'Scale Z', at('scale.z', 1)),
           _number('rotation', 'Rotation', at('rotation', 0)),
           _number('rotation.x', 'Rotation X', at('rotation.x', 0)),
           _number('rotation.y', 'Rotation Y', at('rotation.y', 0)),
           _number('opacity', 'Opacity', at('opacity', 1)),
           _number('depth', 'Depth', at('depth', 0), min: 0, max: 100000),
-          _number('roughness', 'Roughness', at('roughness', 0.5),
-              min: 0, max: 1),
+          _number('shape.size', 'Size', [at('shape.size.0', 100), 120.0], kind: 'vec2'),
+          _number(
+            'roughness',
+            'Roughness',
+            at('roughness', 0.5),
+            min: 0,
+            max: 1,
+          ),
         ],
         'effects': [
           {
@@ -63,11 +74,21 @@ Map<String, dynamic> _document(Map<String, double> moved) {
             'name': 'Warp',
             'enabled': true,
             'params': [
-              _number('warp.param.amount', 'Amount', at('warp.param.amount', 2),
-                  min: 0, max: 10),
+              _number(
+                'warp.param.amount',
+                'Amount',
+                at('warp.param.amount', 2),
+                min: 0,
+                max: 10,
+              ),
               _number('warp.param.angle', 'Angle', at('warp.param.angle', 0)),
-              _number('warp.param.seed', 'Seed', at('warp.param.seed', 1),
-                  min: 0, max: 9999),
+              _number(
+                'warp.param.seed',
+                'Seed',
+                at('warp.param.seed', 1),
+                min: 0,
+                max: 9999,
+              ),
               _number(
                 'warp.param.center_x',
                 'Center X',
@@ -78,8 +99,12 @@ Map<String, dynamic> _document(Map<String, double> moved) {
                 'Center Y',
                 at('warp.param.center_y', 0),
               ),
-              _number('warp.param.mode', 'Mode', at('warp.param.mode', 0),
-                  choices: const ['Push', 'Pull']),
+              _number(
+                'warp.param.mode',
+                'Mode',
+                at('warp.param.mode', 0),
+                choices: const ['Push', 'Pull'],
+              ),
               {
                 'id': 'warp.param.tint',
                 'label': 'Tint',
@@ -108,9 +133,7 @@ Map<String, dynamic> _document(Map<String, double> moved) {
 }
 
 double _wellValue(WidgetTester tester, String id, int axis) => tester
-    .widget<EditorNumericField>(
-      find.byKey(ValueKey('inspector:$id:$axis')),
-    )
+    .widget<EditorNumericField>(find.byKey(ValueKey('inspector:$id:$axis')))
     .value;
 
 void main() {
@@ -133,6 +156,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(_wellValue(tester, 'shape.size', 0), 100.0);
 
     // The wells, including the ones a percent or an axis rewrites.
     const wells = <String, (String, int, double, double)>{
@@ -194,20 +218,24 @@ void main() {
     await tester.pump();
     expect(
       tester
-          .widgetList<EditorDraftField>(find.byType(EditorDraftField))
-          .map((f) => f.value),
-      contains('#ff0000ff'),
+          .widgetList<EditorColorField>(find.byType(EditorColorField))
+          .map((f) => f.value.toARGB32()),
+      contains(0xffff0000),
     );
 
     // A key on one row lights that row's lamp without a status shaped
     // differently: the row watches the whole of its declaration.
     final keyed = _document(const {});
     ((((keyed['layers'] as List)[0] as Map)['properties'] as List)[7]
-        as Map)['keys'] = const [0];
+        as Map)['keys'] = const [
+      0,
+    ];
     c.document.value = keyed;
     await tester.pump();
     expect(
-      tester.widgetList<EditorLamp>(find.byType(EditorLamp)).map((l) => l.state),
+      tester
+          .widgetList<EditorLamp>(find.byType(EditorLamp))
+          .map((l) => l.state),
       contains(KeyLamp.keyed),
     );
     await tester.pumpWidget(const SizedBox());

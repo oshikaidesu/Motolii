@@ -6,7 +6,7 @@ use crate::doc::vector::text::{
 };
 use crate::doc::store::ShapeNode;
 use crate::doc::vector::{
-    Brush, Canvas, Fill, FillRule, PathSource, Rgb, Shape, Stroke, VectorError,
+    Brush, Canvas, Fill, FillRule, PathSource, Rgb, Shape, VectorError,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -51,8 +51,8 @@ fn to_layout(style: &TextDocumentStyle, justify: StoreJustify, wrap_width: Optio
     }
 }
 
-fn to_fill_stroke(style: &TextDocumentStyle) -> (Option<Fill>, Option<Stroke>) {
-    let fill = Some(Fill {
+fn to_fill(style: &TextDocumentStyle) -> Fill {
+    Fill {
         brush: Brush::Solid(Rgb {
             r: style.fill[0],
             g: style.fill[1],
@@ -61,21 +61,7 @@ fn to_fill_stroke(style: &TextDocumentStyle) -> (Option<Fill>, Option<Stroke>) {
         rule: FillRule::NonZero,
         opacity: style.fill[3],
         hidden: false,
-    });
-    let stroke = style
-        .stroke_color
-        .filter(|_| style.stroke_width > 0.0)
-        .map(|stroke_color| Stroke {
-            brush: Brush::Solid(Rgb {
-                r: stroke_color[0],
-                g: stroke_color[1],
-                b: stroke_color[2],
-            }),
-            width: f64::from(style.stroke_width),
-            opacity: stroke_color[3],
-            ..Stroke::default()
-        });
-    (fill, stroke)
+    }
 }
 
 /// 文字を形の木に組む(描くのは形の層と同じ paths renderer)。
@@ -132,22 +118,16 @@ pub fn text_shapes(
     }
     let mut result = Vec::new();
     for (index, contours) in batches {
-        result.extend(paint_contours(contours, &document.styles[index]));
+        result.push(paint_contours(contours, &document.styles[index]));
     }
     Ok(Some(result))
 }
 
-fn paint_contours(contours: Vec<crate::doc::vector::Contour>, style: &TextDocumentStyle) -> Vec<ShapeNode> {
-    let (fill, stroke) = to_fill_stroke(style);
-    let leaf = |source, fill, stroke| ShapeNode::Leaf(Shape { source, ops: Vec::new(), fill, stroke });
-    // 縁取りは既定で fill の**下**(stroke_over_fill が false)。輪郭中心の stroke は外側半分しか
-    // 見えないので幅を 2 倍にし、先に置いてから fill を上に重ねる — 字が痩せない。
-    if let (Some(stroke), false) = (stroke.clone(), style.stroke_over_fill) {
-        return vec![
-            leaf(PathSource::Bezier(contours.clone()), None, Some(Stroke { width: stroke.width * 2.0, ..stroke })),
-            leaf(PathSource::Bezier(contours), fill, None),
-        ];
-    }
-    vec![leaf(PathSource::Bezier(contours), fill, stroke)]
+fn paint_contours(contours: Vec<crate::doc::vector::Contour>, style: &TextDocumentStyle) -> ShapeNode {
+    ShapeNode::Leaf(Shape {
+        source: PathSource::Bezier(contours),
+        ops: Vec::new(),
+        fill: Some(to_fill(style)),
+        stroke: None,
+    })
 }
-

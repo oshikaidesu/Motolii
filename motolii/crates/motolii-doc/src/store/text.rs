@@ -114,9 +114,6 @@ pub struct TextDocumentStyle {
     pub fill: [f64; 4],
     pub line_height: Option<f32>,
     pub tracking: f32,
-    pub stroke_color: Option<[f64; 4]>,
-    pub stroke_width: f32,
-    pub stroke_over_fill: bool,
     pub axes: Vec<TextStyleAxis>,
     pub features: Vec<TextStyleFeature>,
 }
@@ -320,10 +317,6 @@ impl crate::doc::store::PropertyId {
 
     pub fn text_style_fill_color(style: TextStyleId) -> Self {
         Self::text_style_layout_property(style, "fill_color")
-    }
-
-    pub fn text_style_stroke_color(style: TextStyleId) -> Self {
-        Self::text_style_layout_property(style, "stroke_color")
     }
 
     fn text_style_layout_property(style: TextStyleId, attr: &str) -> Self {

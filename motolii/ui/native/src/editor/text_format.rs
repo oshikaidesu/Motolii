@@ -79,6 +79,43 @@ mod tests {
         doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::text_style_size(TextStyleId(0)),value:Value::F64(40.0)}).unwrap();doc
     }
     #[test]
+    fn legacy_text_stroke_does_not_return_in_editing_render_or_export() {
+        let mut doc = project();
+        let layer = LayerId(1);
+        let time = RationalTime::ZERO;
+        let text = doc.view().text_document(layer).unwrap().unwrap();
+        let mut legacy = serde_json::to_value(&text).unwrap();
+        legacy["styles"][0]["stroke_color"] = json!([0.0, 0.0, 0.0, 1.0]);
+        legacy["styles"][0]["stroke_width"] = json!(20.0);
+        legacy["styles"][0]["stroke_over_fill"] = json!(false);
+        let loaded: TextDocument = serde_json::from_value(legacy).unwrap();
+        assert_eq!(loaded, text);
+        doc.apply(Intent::SetTextDocument { layer, document: loaded }).unwrap();
+        let view = doc.view();
+        let data = crate::editor::functions::read::inspector_data_from_doc(&view, layer, time, &[]);
+        assert_eq!(data.colors.iter().map(|c| c.label).collect::<Vec<_>>(), vec!["Fill"]);
+        assert!(serde_json::from_value::<crate::editor::session::ColorSlot>(
+            json!({"TextStroke":{"layer":1,"style":0}})
+        ).is_err());
+        let resolved = view.resolved_text_document(layer, time).unwrap().unwrap();
+        let canvas = crate::doc::vector::Canvas { width: 800, height: 240, origin_x: 0, origin_y: 0 };
+        let shapes = crate::render::engine::text::text_shapes(&resolved, time, &canvas).unwrap().unwrap();
+        let mut visible = 0;
+        for node in shapes {
+            let ShapeNode::Leaf(shape) = node else { panic!("Expected glyph paths") };
+            let raster = crate::doc::vector::render(&shape, &canvas).unwrap();
+            for pixel in raster.premultiplied_rgba8.chunks_exact(4).filter(|p| p[3] != 0) {
+                visible += 1;
+                assert_eq!(pixel[0], pixel[3], "White text must not have black stroke pixels");
+            }
+        }
+        assert!(visible > 0);
+        let exported = crate::render::export::export_lottie(&view).unwrap();
+        let text = &exported.json["layers"][0]["t"]["d"]["k"];
+        assert_eq!(text["t"], resolved.content.eval(time));
+        for key in ["sc", "sw", "of"] { assert!(text.get(key).is_none()); }
+    }
+    #[test]
     fn script_formatting_preserves_other_chars_and_roundtrips_undo() {
         let mut doc=project();let layer=LayerId(1);let before=doc.view().text_document(layer).unwrap().unwrap();
         let changes=edits(&doc,layer,RationalTime::ZERO,&json!({"scope":"hiragana","size":80.0})).unwrap();

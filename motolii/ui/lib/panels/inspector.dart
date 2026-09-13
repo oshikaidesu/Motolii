@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../foundation/metrics.dart';
+import '../foundation/color_wheel.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
@@ -840,8 +841,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
   };
 
   bool _isTextProperty(Map<String, dynamic> r) =>
-      '${r['id']}'.startsWith('text') ||
-      const ['Size', 'Line height', 'Tracking'].contains(r['label']);
+      '${r['id']}'.startsWith('text');
 
   /// A text layer: what it says, then how it is set.
   List<Widget> _text(Map<String, dynamic> layer, Map<String, dynamic> text) {
@@ -913,13 +913,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
     ];
   }
 
-  /// The layer's colours: a swatch that opens the Colors desk, and the hex.
+  /// The layer's colours open their shared Colors editor.
   List<Widget> _colors(Map<String, dynamic> layer) {
     final colors = panelRows(layer['colors']);
+    final fillRows = panelRows(layer['properties'])
+        .where((r) => '${r['id']}'.startsWith('fill.'))
+        .toList();
     return [
       // A shape's fill leads with its kind — solid or one of the gradients —
       // and a gradient keeps its stops under it. A solid's own colour is the
-      // swatch and hex below. The stroke keeps its own row under that.
+      // swatch below. The stroke keeps its own row under that.
       if (layer['kind'] == 'Shape' && layer['fill'] is Map) ...[
         Padding(
           padding: const EdgeInsets.only(bottom: EditorMetrics.s8),
@@ -930,6 +933,14 @@ class _InspectorPanelState extends State<InspectorPanel> {
             fill: panelMap(layer['fill']),
           ),
         ),
+        if (fillRows.isNotEmpty)
+          _cells([
+            for (final r in fillRows)
+              _Cell(
+                _control(layer, '${r['id']}'),
+                wide: _kindOf(r) == _Kind.color,
+              ),
+          ]),
         if (panelMap(layer['fill'])['kind'] == 'solid')
           for (final color in colors)
             if (!panelMap(color['slot']).containsKey('ShapeStroke'))
@@ -1418,7 +1429,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
         into.add(_Cell(_pointControl(layer, id, yId, hero: hero), tall: true));
         continue;
       }
-      into.add(_Cell(_control(layer, id, hero: hero)));
+      into.add(
+        _Cell(
+          _control(layer, id, hero: hero),
+          wide: _kindOf(row) == _Kind.color,
+        ),
+      );
     }
     final key = '${effect['id']}';
     return EditorCard(
@@ -1691,7 +1707,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
     Widget body;
     switch (kind) {
       case _Kind.layer:
-        body = SizedBox(width: _cellWidth, child: _layerPicker(layer, '${row['id']}'));
+        body = SizedBox(
+          width: _cellWidth,
+          child: _layerPicker(layer, '${row['id']}'),
+        );
       case _Kind.choice:
         final choices = row['choices'];
         body = SizedBox(
@@ -1754,32 +1773,26 @@ class _InspectorPanelState extends State<InspectorPanel> {
         );
       case _Kind.color:
         final rgba = (row['value'] as List).cast<num>();
-        final hex = rgba
-            .map(
-              (v) => (v.clamp(0, 1) * 255)
-                  .round()
-                  .toRadixString(16)
-                  .padLeft(2, '0'),
-            )
-            .join();
         body = SizedBox(
-          width: _cellWidth,
-          child: EditorDraftField(
-            key: ValueKey('${layer['id']}:${row['id']}'),
-            value: '#$hex',
+          width: _cardWidth,
+          child: EditorColorField(
+            key: ValueKey('color:${layer['id']}:${row['id']}'),
+            value: Color.from(
+              red: rgba[0].toDouble(),
+              green: rgba[1].toDouble(),
+              blue: rgba[2].toDouble(),
+              alpha: rgba.length > 3 ? rgba[3].toDouble() : 1,
+            ),
             label: label,
             enabled: _canEdit(layer),
-            validator: (v) =>
-                _parsePropertyColor(v) == null ? 'Use RGB or RGBA hex' : null,
-            onCommit: (v) {
-              final next = _parsePropertyColor(v)!;
-              return _write(
-                layer,
-                row,
-                rgba.length == 3 ? next.take(3).toList() : next,
-                preview: false,
-              );
-            },
+            onPreview: (v) => _write(layer, row, [
+              v.r,
+              v.g,
+              v.b,
+              if (rgba.length > 3) v.a,
+            ], preview: true),
+            onFinish: () => _finish(false),
+            onCancel: () => _finish(true),
           ),
         );
       case _Kind.scale:
@@ -1921,6 +1934,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           (r) =>
               !_transformIds.contains('${r['id']}') &&
               !_isTextProperty(r) &&
+              !'${r['id']}'.startsWith('fill.') &&
               !'${r['id']}'.startsWith('effect') &&
               (r['value'] is num || r['value'] is List || r['value'] is String),
         )
@@ -1940,6 +1954,18 @@ class _InspectorPanelState extends State<InspectorPanel> {
                   slivers: [
                     SliverList.list(
                       children: [
+                        if (!_multiple && text.isNotEmpty)
+                          EditorCard(
+                            title: 'Text',
+                            children: [
+                              ..._text(layer, text),
+                              ..._colors(layer),
+                            ],
+                          ),
+                        if (!_multiple &&
+                            text.isEmpty &&
+                            panelRows(layer['colors']).isNotEmpty)
+                          EditorCard(title: 'Color', children: _colors(layer)),
                         if (layer['kind'] == 'Camera')
                           EditorCard(title: 'Camera', children: _camera(layer))
                         else
@@ -1949,13 +1975,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           ),
                         if (layer['kind'] != 'Camera')
                           EditorCard(title: 'World', children: _world(layer)),
-                        if (!_multiple && text.isNotEmpty)
-                          EditorCard(
-                            title: 'Text',
-                            children: _text(layer, text),
-                          ),
-                        if (!_multiple && panelRows(layer['colors']).isNotEmpty)
-                          EditorCard(title: 'Color', children: _colors(layer)),
                         if (!_multiple &&
                             matte.isNotEmpty &&
                             layer['clipToBelow'] != true)
@@ -1969,14 +1988,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
                             children: [
                               _cells([
                                 for (final r in rest)
-                                  _Cell(_control(layer, '${r['id']}')),
+                                  _Cell(
+                                    _control(layer, '${r['id']}'),
+                                    wide: _kindOf(r) == _Kind.color,
+                                  ),
                               ]),
                             ],
                           ),
                       ],
                     ),
                     // 凍った層: 効果は焼かれている。灰色にして触れない(DAW の凍った device)。
-                    if (!_multiple && layer['frozen'] == true && effects.isNotEmpty)
+                    if (!_multiple &&
+                        layer['frozen'] == true &&
+                        effects.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
@@ -2079,27 +2103,4 @@ class _Cell {
   const _Cell(this.child, {this.tall = false, this.wide = false});
   final Widget child;
   final bool tall, wide;
-}
-
-/// The fold of the seldom-used controls: a chevron and the word, one line.
-List<double>? _parseHex(String input) {
-  var text = input.trim().replaceFirst(RegExp(r'^#+'), '');
-  if (text.length == 3) text = text.split('').map((c) => '$c$c').join();
-  if (!RegExp(r'^[a-fA-F0-9]{6}$').hasMatch(text)) return null;
-  return [
-    for (var i = 0; i < 3; i++)
-      int.parse(text.substring(i * 2, i * 2 + 2), radix: 16) / 255,
-  ];
-}
-
-List<double>? _parsePropertyColor(String input) {
-  final text = input.trim().replaceFirst(RegExp(r'^#'), '');
-  if (RegExp(r'^[a-fA-F0-9]{8}$').hasMatch(text)) {
-    return [
-      for (var i = 0; i < 4; i++)
-        int.parse(text.substring(i * 2, i * 2 + 2), radix: 16) / 255,
-    ];
-  }
-  final rgb = _parseHex(input);
-  return rgb == null ? null : [...rgb, 1.0];
 }

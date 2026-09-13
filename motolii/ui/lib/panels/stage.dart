@@ -293,6 +293,12 @@ class _StagePanelState extends State<StagePanel> {
 
   Offset? _cameraEye(Map<String, dynamic> camera) => _point(camera['eye']);
 
+  /// Blender's camera: a pyramid from the eye to a frame at a fixed display
+  /// distance, and a triangle marking up. Drawn whenever the eye is in view.
+  List<Offset?> _cameraFrustum(Map<String, dynamic> camera) =>
+      (camera['frustum'] as List? ?? const []).map(_point).toList();
+  Offset? _cameraUp(Map<String, dynamic> camera) => _point(camera['up']);
+
   /// 箱で author できるのは、正面を向いて注視点が自前のカメラだけ。回した物と層を見ている物は eye と frustum を見せるだけ。
   Map<String, dynamic>? get _selectedCamera {
     for (final camera in _cameras) {
@@ -1188,6 +1194,14 @@ class _StagePanelState extends State<StagePanel> {
                                         cameraEyes: gizmos
                                             ? _cameras.map(_cameraEye).toList()
                                             : const [],
+                                        cameraFrustums: gizmos
+                                            ? _cameras
+                                                  .map(_cameraFrustum)
+                                                  .toList()
+                                            : const [],
+                                        cameraUps: gizmos
+                                            ? _cameras.map(_cameraUp).toList()
+                                            : const [],
                                         cameraTargets: [
                                           if (gizmos)
                                             for (final camera in _cameras)
@@ -1321,6 +1335,8 @@ class _StageOverlay extends CustomPainter {
     this.dimOutside = false,
     this.cameras = const [],
     this.cameraEyes = const [],
+    this.cameraFrustums = const [],
+    this.cameraUps = const [],
     this.cameraTargets = const [],
     this.cameraHandles = const {},
     this.front = true,
@@ -1336,8 +1352,8 @@ class _StageOverlay extends CustomPainter {
     this.marquee,
   });
   final List<List<Offset>> outlines;
-  final List<List<Offset?>> cameras;
-  final List<Offset?> cameraEyes;
+  final List<List<Offset?>> cameras, cameraFrustums;
+  final List<Offset?> cameraEyes, cameraUps;
   final List<Offset> cameraTargets, frame, extent;
   final bool extendable;
 
@@ -1429,37 +1445,26 @@ class _StageOverlay extends CustomPainter {
         final a = box[i], b = box[(i + 1) % 4];
         if (a != null && b != null) canvas.drawLine(a, b, cameraLine);
       }
+      // Blender's camera object: eye, a frame at its display distance, the
+      // four edges between them, and a triangle above the frame for up.
       final eye = index < cameraEyes.length ? cameraEyes[index] : null;
-      if (front || eye == null) continue;
-      for (final corner in box) {
-        if (corner != null) canvas.drawLine(eye, corner, cameraLine);
+      final frustum = index < cameraFrustums.length
+          ? cameraFrustums[index]
+          : const <Offset?>[];
+      if (eye == null || frustum.length != 4 || frustum.any((p) => p == null))
+        continue;
+      final frame = frustum.cast<Offset>();
+      canvas.drawPath(Path()..addPolygon(frame, true), cameraLine);
+      for (final corner in frame) {
+        canvas.drawLine(eye, corner, cameraLine);
       }
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: eye,
-            width: EditorMetrics.s16,
-            height: EditorMetrics.s12,
-          ),
-          const Radius.circular(EditorMetrics.s2),
-        ),
-        cameraLine,
-      );
-      canvas.drawLine(
-        eye + const Offset(8, -4),
-        eye + const Offset(13, -7),
-        cameraLine,
-      );
-      canvas.drawLine(
-        eye + const Offset(13, -7),
-        eye + const Offset(13, 7),
-        cameraLine,
-      );
-      canvas.drawLine(
-        eye + const Offset(13, 7),
-        eye + const Offset(8, 4),
-        cameraLine,
-      );
+      final up = index < cameraUps.length ? cameraUps[index] : null;
+      if (up != null) {
+        canvas.drawPath(
+          Path()..addPolygon([frame[0], frame[1], up], true),
+          cameraLine,
+        );
+      }
     }
     for (final points in outlines) {
       if (points.isEmpty) continue;
@@ -1499,7 +1504,9 @@ class _StageOverlay extends CustomPainter {
   @override
   bool shouldRepaint(covariant _StageOverlay old) =>
       !_samePolylines(old.cameras, cameras) ||
+      !_samePolylines(old.cameraFrustums, cameraFrustums) ||
       !listEquals(old.cameraEyes, cameraEyes) ||
+      !listEquals(old.cameraUps, cameraUps) ||
       !listEquals(old.cameraTargets, cameraTargets) ||
       !mapEquals(old.cameraHandles, cameraHandles) ||
       old.front != front ||

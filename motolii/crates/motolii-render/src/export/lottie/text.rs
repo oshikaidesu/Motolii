@@ -127,11 +127,6 @@ fn text_document_json(
         if let Some(lh) = style.line_height {
             obj["lh"] = serde_json::json!(lh);
         }
-        if let Some(sc) = style.stroke_color {
-            obj["sc"] = serde_json::json!([sc[0], sc[1], sc[2]]);
-            obj["sw"] = serde_json::json!(style.stroke_width);
-            obj["of"] = serde_json::json!(style.stroke_over_fill);
-        }
     }
     obj
 }

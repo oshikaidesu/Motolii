@@ -12,10 +12,12 @@ class StyledTextController extends TextEditingController {
   StyledTextController({required super.text});
   List<Map<String, dynamic>> styles = [], runs = [];
 
-  /// The one family the box draws in — a glance at the face, nothing more.
-  /// Null while the text carries more than one family, or while the family
-  /// is not one the machine reported: an unknown name only costs a lookup
-  /// and gives back the same fallback face.
+  /// The families the machine listed; any other name would only cost a
+  /// lookup and give back the same fallback face.
+  Set<String> known = const {};
+
+  /// The face of the text's first style when the machine knows it — the one
+  /// the box borrows for its base and for the caret's own line.
   String? previewFamily;
   Set<int> highlighted = {};
   List<Map<String, dynamic>> characterStyles() {
@@ -34,45 +36,58 @@ class StyledTextController extends TextEditingController {
     return result;
   }
 
-  // The box is a text field, not the composition: one face, one UI size, one
-  // line height. The class highlight is the only reason to break the string,
-  // and while the IME is composing even that stands aside — so a keystroke
-  // lays out one span, not one per grapheme.
+  /// The box is a preview of proportion, not of the composition: the first
+  /// style lands at the panel's own size and every other run keeps its share
+  /// of it, in its own face when the machine knows it. A run is one span, so
+  /// a keystroke lays out a handful, not one per grapheme; while the IME is
+  /// composing even that stands aside and the whole text is one span.
   @override
   TextSpan buildTextSpan({
     required BuildContext context,
     TextStyle? style,
     required bool withComposing,
   }) {
-    final base = previewFamily == null
-        ? style
-        : (style ?? const TextStyle()).copyWith(fontFamily: previewFamily);
-    if (highlighted.isEmpty || (withComposing && value.composing.isValid))
+    final base = (style ?? const TextStyle()).copyWith(
+      fontFamily: previewFamily,
+      fontSize: EditorMetrics.title,
+    );
+    if (withComposing && value.composing.isValid)
       return super.buildTextSpan(
         context: context,
         style: base,
         withComposing: withComposing,
       );
-    final marked = (base ?? const TextStyle()).copyWith(
-      backgroundColor: EditorTheme.select,
-      color: EditorTheme.selectInk,
-    );
+    final unit = (styles.firstOrNull?['size'] as num?)?.toDouble() ?? 1;
+    final perCharacter = characterStyles();
     final children = <TextSpan>[];
     final buffer = StringBuffer();
-    bool? was;
-    var index = 0;
+    Map<String, dynamic>? run;
+    var lit = false;
     void flush() {
-      if (buffer.isNotEmpty)
-        children.add(
-          TextSpan(text: buffer.toString(), style: was! ? marked : null),
-        );
+      if (buffer.isEmpty) return;
+      final family = '${EditorSession.map(run?['font'])['family'] ?? ''}';
+      final size = (run?['size'] as num?)?.toDouble() ?? unit;
+      children.add(
+        TextSpan(
+          text: buffer.toString(),
+          style: TextStyle(
+            fontFamily: known.contains(family) ? family : null,
+            fontSize: EditorMetrics.title * size / (unit < 1 ? 1 : unit),
+            backgroundColor: lit ? EditorTheme.select : null,
+            color: lit ? EditorTheme.selectInk : null,
+          ),
+        ),
+      );
       buffer.clear();
     }
 
+    var index = 0;
     for (final g in text.characters) {
+      final here = perCharacter[index];
       final on = highlighted.contains(index++);
-      if (was != null && on != was) flush();
-      was = on;
+      if (run != null && (here != run || on != lit)) flush();
+      run = here;
+      lit = on;
       buffer.write(g);
     }
     flush();
@@ -80,6 +95,10 @@ class StyledTextController extends TextEditingController {
   }
 }
 
+/// What the text says, drawn in proportion, then the face and size it wears.
+/// Size and font land on the whole text or on one class of characters (a
+/// script, a case) picked from the menu; the box highlights that class. No
+/// span of characters is ever held: a range is the animator's business.
 class RichTextEditor extends StatefulWidget {
   const RichTextEditor({
     super.key,
@@ -147,14 +166,6 @@ class _RichTextEditorState extends State<RichTextEditor> {
     'layer': widget.layer['id'],
     'scope': _scope,
     'text': _text.text,
-    'start': math.max(
-      0,
-      math.min(_text.selection.baseOffset, _text.selection.extentOffset),
-    ),
-    'end': math.max(
-      0,
-      math.max(_text.selection.baseOffset, _text.selection.extentOffset),
-    ),
   };
   @override
   void initState() {
@@ -193,9 +204,6 @@ class _RichTextEditorState extends State<RichTextEditor> {
     if (_wasComposing && !_composing && _dirty && c.supports('previewText'))
       _previews.add(_text.text);
     _wasComposing = _composing;
-    if (!_text.selection.isCollapsed && _text.selection.isValid)
-      _scope = 'selection';
-    if (_scope == 'selection' && _text.selection.isCollapsed) _scope = 'all';
     c.textStyleTarget.value = _target;
     setState(() {});
   }
@@ -309,28 +317,29 @@ class _RichTextEditorState extends State<RichTextEditor> {
     super.dispose();
   }
 
+  /// A class label from the machine (`latin-upper`) names a script and a
+  /// case; the scope may be either half.
+  static bool inScope(String kind, String scope) {
+    final dash = kind.indexOf('-');
+    return dash < 0
+        ? kind == scope
+        : kind.substring(0, dash) == scope || kind.substring(dash + 1) == scope;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final classes = widget.text['classes'] as List? ?? const [];
     _text.highlighted = {
-      for (final (i, kind) in (widget.text['classes'] as List? ?? []).indexed)
-        if (kind == _scope) i,
+      for (final (i, kind) in classes.indexed)
+        if (inScope('$kind', _scope)) i,
     };
     final formats = _text.characterStyles();
-    final selection = _text.selection;
-    var offset = 0, index = 0;
-    final picked = <Map<String, dynamic>>[];
-    for (final g in _text.text.characters) {
-      final end = offset + g.length;
-      if (_scope == 'all' ||
-          (_scope == 'selection' &&
-              offset < selection.end &&
-              end > selection.start) ||
-          (index < (widget.text['classes'] as List? ?? []).length &&
-              (widget.text['classes'] as List)[index] == _scope))
-        picked.add(formats[index]);
-      offset = end;
-      index++;
-    }
+    final picked = [
+      for (final (i, f) in formats.indexed)
+        if (_scope == 'all' ||
+            (i < classes.length && inScope('${classes[i]}', _scope)))
+          f,
+    ];
     if (picked.isEmpty && _scope == 'all' && _text.styles.isNotEmpty)
       picked.add(_text.styles.first);
     final sizes = picked
@@ -341,30 +350,20 @@ class _RichTextEditorState extends State<RichTextEditor> {
         .toSet();
     final canFormat = _enabled && picked.isNotEmpty;
     final known = _knownFamilies(c.state['fontFamilies'] as List?);
-    // The box draws in the text's own face only while the whole text wears
-    // one — a mixed text falls back to the panel's, and so does a face the
-    // machine does not list.
-    final whole = _text.styles
-        .map((s) => '${EditorSession.map(s['font'])['family'] ?? ''}')
-        .toSet();
-    _text.previewFamily = whole.length == 1 && known.contains(whole.single)
-        ? whole.single
-        : null;
+    final first =
+        '${EditorSession.map(_text.styles.firstOrNull?['font'])['family'] ?? ''}';
+    _text
+      ..known = known
+      ..previewFamily = known.contains(first) ? first : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          constraints: const BoxConstraints(
-            minHeight: EditorMetrics.s96,
-            maxHeight: EditorMetrics.s200,
-          ),
+        EditorFieldFrame(
+          focus: _focus,
+          height: null,
+          minHeight: EditorMetrics.s96,
+          maxHeight: EditorMetrics.s200,
           padding: const EdgeInsets.all(EditorMetrics.s8),
-          decoration: BoxDecoration(
-            color: EditorTheme.app,
-            border: Border.all(
-              color: _focus.hasFocus ? EditorTheme.accent : EditorTheme.border,
-            ),
-          ),
           child: TextField(
             key: const ValueKey('rich-text-content'),
             controller: _text,
@@ -376,78 +375,36 @@ class _RichTextEditorState extends State<RichTextEditor> {
               height: 1.3,
               color: EditorTheme.ink,
             ),
-            decoration: const InputDecoration.collapsed(hintText: 'Type here'),
+            decoration: const InputDecoration(hintText: 'Type here'),
             onChanged: _typed,
           ),
         ),
         const SizedBox(height: EditorMetrics.s6),
-        Row(
-          children: [
-            Expanded(
-              child: EditorChoice<String>(
-                value: _scope,
-                choices: const [
-                  MapEntry('all', 'All text'),
-                  MapEntry('selection', 'Selection'),
-                  MapEntry('hiragana', 'Hiragana'),
-                  MapEntry('katakana', 'Katakana'),
-                  MapEntry('han', 'Kanji'),
-                  MapEntry('latin', 'Latin'),
-                ],
-                onChanged: !_enabled
-                    ? null
-                    : (scope) => setState(() {
-                        _scope = scope;
-                        c.textStyleTarget.value = _target;
-                      }),
-              ),
-            ),
+        EditorChoice<String>(
+          value: _scope,
+          choices: const [
+            MapEntry('all', 'All text'),
+            MapEntry('hiragana', 'Hiragana'),
+            MapEntry('katakana', 'Katakana'),
+            MapEntry('han', 'Kanji'),
+            MapEntry('latin', 'Latin'),
+            MapEntry('upper', 'Uppercase'),
+            MapEntry('lower', 'Lowercase'),
           ],
+          onChanged: !_enabled
+              ? null
+              : (scope) => setState(() {
+                  _scope = scope;
+                  c.textStyleTarget.value = _target;
+                }),
         ),
         const SizedBox(height: EditorMetrics.s6),
-        EditorTooltip(
-          message: 'Font',
-          child: Container(
-            height: EditorMetrics.row,
-            alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: EditorTheme.app,
-              border: Border.all(color: EditorTheme.line),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
-            child: Autocomplete<String>(
-              key: ValueKey('font:${families.join('|')}'),
-              initialValue: TextEditingValue(
-                text: families.length == 1 ? families.single : '',
-              ),
-              optionsBuilder: (value) => !canFormat || value.text.isEmpty
-                  ? const Iterable<String>.empty()
-                  : known
-                        .where(
-                          (n) => n.toLowerCase().contains(
-                            value.text.toLowerCase(),
-                          ),
-                        )
-                        .take(40),
-              onSelected: (family) => _format({'family': family}),
-              fieldViewBuilder: (context, text, focus, submit) => TextField(
-                controller: text,
-                focusNode: focus,
-                enabled: canFormat,
-                style: const TextStyle(
-                  fontSize: EditorMetrics.font,
-                  color: EditorTheme.ink,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                  border: InputBorder.none,
-                  hintText: families.length > 1 ? 'Mixed fonts' : 'Font',
-                ),
-                onSubmitted: (_) => submit(),
-              ),
-            ),
-          ),
+        _FontField(
+          key: ValueKey('font:$_scope:${families.join('|')}'),
+          families: families,
+          known: known,
+          enabled: canFormat,
+          onPick: (f) => _format({'family': f}),
         ),
         const SizedBox(height: EditorMetrics.s6),
         EditorNumericField(
@@ -467,4 +424,51 @@ class _RichTextEditorState extends State<RichTextEditor> {
       ],
     );
   }
+}
+
+/// A family, typed with the machine's list narrowing as it goes.
+class _FontField extends StatelessWidget {
+  const _FontField({
+    super.key,
+    required this.families,
+    required this.known,
+    required this.enabled,
+    required this.onPick,
+  });
+  final Set<String> families, known;
+  final bool enabled;
+  final ValueChanged<String> onPick;
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: 'Font',
+    child: Autocomplete<String>(
+      initialValue: TextEditingValue(
+        text: families.length == 1 ? families.single : '',
+      ),
+      optionsBuilder: (value) => !enabled || value.text.isEmpty
+          ? const Iterable<String>.empty()
+          : known
+                .where(
+                  (n) => n.toLowerCase().contains(value.text.toLowerCase()),
+                )
+                .take(40),
+      onSelected: onPick,
+      fieldViewBuilder: (context, text, focus, submit) => EditorFieldFrame(
+        focus: focus,
+        child: TextField(
+          controller: text,
+          focusNode: focus,
+          enabled: enabled,
+          style: const TextStyle(
+            fontSize: EditorMetrics.font,
+            color: EditorTheme.ink,
+          ),
+          decoration: InputDecoration(
+            hintText: families.length > 1 ? 'Mixed fonts' : 'Font',
+          ),
+          onSubmitted: (_) => submit(),
+        ),
+      ),
+    ),
+  );
 }

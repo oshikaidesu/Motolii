@@ -204,19 +204,6 @@ impl<'a> StoreView<'a> {
                     }
                 }
             }
-
-            let stroke_property = PropertyId::text_style_stroke_color(style.id);
-            if let Some(value) = self.value_at(layer, &stroke_property, t)? {
-                match value {
-                    Value::Color(c) => style.stroke_color = Some(c),
-                    other => {
-                        return Err(StoreError::Property(format!(
-                            "text_style.{}.stroke_color に色でない値が入っている: {other:?}",
-                            style.id
-                        )))
-                    }
-                }
-            }
         }
 
         Ok(Some(document))

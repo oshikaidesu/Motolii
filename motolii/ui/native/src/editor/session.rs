@@ -7,10 +7,6 @@ pub(crate) enum ColorSlot {
         layer: LayerId,
         style: crate::doc::store::TextStyleId,
     },
-    TextStroke {
-        layer: LayerId,
-        style: crate::doc::store::TextStyleId,
-    },
     /// ShapeNode の木の中の葉。index の列で指す。
     ShapeFill { layer: LayerId, path: Vec<usize> },
     /// 同じ葉の線の色。線が無ければ色を付けた時に生える。
@@ -29,7 +25,6 @@ impl ColorSlot {
     pub(crate) fn layer(&self) -> LayerId {
         match self {
             Self::TextFill { layer, .. }
-            | Self::TextStroke { layer, .. }
             | Self::ShapeFill { layer, .. }
             | Self::ShapeStroke { layer, .. }
             | Self::ShapeGradientPoint { layer, .. }

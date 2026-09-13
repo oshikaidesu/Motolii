@@ -400,9 +400,6 @@ pub(crate) fn new_layer_intents(
                             // 日本語の歌詞の既定: 行送り 1.5、約物を詰める(palt)、黒の縁取り(背景が動画でも読める)。
                             line_height: Some(96.0 * 1.5),
                             tracking: 0.0,
-                            stroke_color: Some([0.0, 0.0, 0.0, 1.0]),
-                            stroke_width: 96.0 * 0.08,
-                            stroke_over_fill: false,
                             axes: Vec::new(),
                             features: vec![crate::doc::store::TextStyleFeature {
                                 tag: "palt".to_owned(),

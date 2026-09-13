@@ -607,11 +607,11 @@ text	text-document	fc	Fill Color	採用済	字面色。独立した document 値
 text	text-document	j	Justify	採用済	Left/Right/Center。両端揃え4種は行分割器が要るので後回し	pub enum TextJustify	text	lottie
 text	text-document	lh	Line Height	採用済	行送り。未指定はフォントのメトリクスから。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub line_height: Option<f32>	text	lottie
 text	text-document	ls	Baseline Shift	不採用	document 全体のベースラインずらしは position で同じことができる			lottie
-text	text-document	of	Stroke Over Fill	採用済	縁取りと字面の重ね順。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub stroke_over_fill: bool	text	lottie
+text	text-document	of	Stroke Over Fill	不採用	利用者裁定(2026-09-13): 縁取りはエフェクトの責務。テキスト固有の値・編集・描画から除去		text	lottie
 text	text-document	ps	Wrap Position	不採用	箱の位置は layer の position/anchor と二重帳簿(裁定59/60 と同じ形)			lottie
 text	text-document	s	Font Size	採用済	組版のサイズ。animator の scale とは別物。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub size: f32	text	lottie
-text	text-document	sc	Stroke Color	採用済	縁取り色。歌詞では必須級。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub stroke_color: Option<[f64; 4]>	text	lottie
-text	text-document	sw	Stroke Width	採用済	縁取り幅。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub stroke_width: f32	text	lottie
+text	text-document	sc	Stroke Color	不採用	利用者裁定(2026-09-13): 縁取りはエフェクトの責務。テキスト固有の値・編集・描画から除去		text	lottie
+text	text-document	sw	Stroke Width	不採用	利用者裁定(2026-09-13): 縁取りはエフェクトの責務。テキスト固有の値・編集・描画から除去		text	lottie
 text	text-document	sz	Wrap Size	採用済	折返し幅。None = point text	pub wrap_size: Option<[f32; 2]>	text	lottie
 text	text-document	t	Text	採用済	本文。Lottie の改行 \r は採らず \n で持つ	pub content: ContentTrack	text	lottie
 text	text-document	tr	Tracking	採用済	基底トラッキング。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub tracking: f32	text	lottie
@@ -647,11 +647,11 @@ text	text-style	fo	Fill Opacity	不採用	Value::Color は RGBA なので fc の
 text	text-style	fs	Fill Saturation	不採用	同上(HSB 相対調整)			lottie
 text	text-style	ls	Line Spacing	採用済	行ごとの送り加算。**組版に触る**アニメーター	pub fn text_range_line_spacing	text	lottie
 text	text-style	sb	Stroke Brightness	不採用	同上(HSB 相対調整)			lottie
-text	text-style	sc	Stroke Color	採用済	文字ごとの縁取り色	pub fn text_range_stroke_color	text	lottie
+text	text-style	sc	Stroke Color	不採用	利用者裁定(2026-09-13): 縁取りはエフェクトの責務。テキスト固有の値・編集・描画から除去		text	lottie
 text	text-style	sh	Stroke Hue	不採用	同上(HSB 相対調整)			lottie
 text	text-style	so	Stroke Opacity	不採用	sc の alpha が正本			lottie
 text	text-style	ss	Stroke Saturation	不採用	同上(HSB 相対調整)			lottie
-text	text-style	sw	Stroke Width	採用済	文字ごとの縁取り幅	pub fn text_range_stroke_width	text	lottie
+text	text-style	sw	Stroke Width	不採用	利用者裁定(2026-09-13): 縁取りはエフェクトの責務。テキスト固有の値・編集・描画から除去		text	lottie
 text	text-style	t	Letter Spacing	採用済	トラッキング。**アニメーターだが送り幅を動かす** — text-model §1 の2層分離では足りず3層が要る	pub fn text_range_tracking	text	lottie
 values	bezier	c	Closed	採用済	パスを閉じるか	pub closed: bool		lottie
 values	bezier	i	In Tangents	採用済	頂点ごとの in 接線。keyframe の時間ベジェとは別物	pub in_tangent: [f64; 2]		lottie
