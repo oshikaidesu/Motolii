@@ -1,0 +1,85 @@
+{
+  "Shader": {
+    "ver": "0.1",
+    "info": {
+      "id": "motolii",
+      "name": "trail tabs",
+      "description": "Buffer A keeps a fading history of the layer; Image shows it. The buffer's memory belongs to the host (feedback)."
+    },
+    "renderpass": [
+      {
+        "name": "Common",
+        "type": "common",
+        "inputs": [],
+        "outputs": [],
+        "description": "",
+        "code": "const float FADE = 0.92;\nvec2 flow(vec2 uv) { return uv + vec2(-0.004, 0.0); }\n"
+      },
+      {
+        "name": "Buffer A",
+        "type": "buffer",
+        "description": "",
+        "code": "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    vec2 uv = fragCoord / iResolution.xy;\n    vec4 past = texture(iChannel0, flow(uv)) * FADE;\n    vec4 now = texture(iChannel1, uv);\n    fragColor = max(now, past);\n}\n",
+        "inputs": [
+          {
+            "id": 257,
+            "filepath": "/media/previz/buffer00.png",
+            "type": "buffer",
+            "channel": 0,
+            "sampler": {
+              "filter": "linear",
+              "wrap": "clamp",
+              "vflip": "true",
+              "srgb": "false",
+              "internal": "byte"
+            },
+            "published": 1
+          },
+          {
+            "id": 1,
+            "filepath": "/media/a/texture.jpg",
+            "type": "texture",
+            "channel": 1,
+            "sampler": {
+              "filter": "mipmap",
+              "wrap": "repeat",
+              "vflip": "true",
+              "srgb": "false",
+              "internal": "byte"
+            },
+            "published": 1
+          }
+        ],
+        "outputs": [
+          {
+            "id": 257,
+            "channel": 0
+          }
+        ]
+      },
+      {
+        "name": "Image",
+        "type": "image",
+        "description": "",
+        "code": "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    fragColor = texture(iChannel0, fragCoord / iResolution.xy);\n}\n",
+        "inputs": [
+          {
+            "id": 257,
+            "filepath": "/media/previz/buffer00.png",
+            "type": "buffer",
+            "channel": 0,
+            "sampler": {
+              "filter": "linear",
+              "wrap": "clamp",
+              "vflip": "true",
+              "srgb": "false",
+              "internal": "byte"
+            },
+            "published": 1
+          }
+        ],
+        "outputs": []
+      }
+    ]
+  }
+}

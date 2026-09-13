@@ -266,6 +266,11 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
             let text = isf::shadertoy::isf_from_shadertoy(&id, &source.name, &source.source)?;
             VismSource { source: text.into(), extension: "fs".into(), ..source }
         }
+        Some(isf::shadertoy::Dialect::Project) => {
+            let id = format!("import.{}", source.name);
+            let text = isf::shadertoy::isf_from_shadertoy_project(&id, &source.name, &source.source)?;
+            VismSource { source: text.into(), extension: "fs".into(), ..source }
+        }
         Some(isf::shadertoy::Dialect::Glsl) => {
             return Err(format!("{}: manifest が無い — ISF の /*{{ ... }}*/ を書くか、Shadertoy の mainImage で書く", source.name));
         }
@@ -445,7 +450,7 @@ fn refresh_runtime(runtime: &CatalogRuntime) -> CatalogRefresh {
     #[cfg(load_shaders_from_disk)]
     let (sources, prelude) = {
         let mut paths = match std::fs::read_dir(directory()) {
-            Ok(entries) => entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("wgsl" | "fs" | "frag" | "glsl"))).collect::<Vec<_>>(),
+            Ok(entries) => entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("wgsl" | "fs" | "frag" | "glsl" | "json"))).collect::<Vec<_>>(),
             Err(e) => { errors.push(format!("catalog directory: {e}")); Vec::new() }
         };
         paths.sort();

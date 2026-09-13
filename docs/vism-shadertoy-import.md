@@ -23,6 +23,22 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
 file 名が効果の名前になり、ID は `import.<file 名>`。棚には同梱の効果と並ぶ。
 
+### 2-1. タブが複数ある shader(Buffer A..D + Common)— 2026-09-13
+
+Shadertoy の **Export**(JSON、`renderpass` の列)をそのまま `vism/<name>.json` に置く。1 file の ISF に写され、
+タブは `PASSINDEX` で並ぶ:
+
+| タブ | 写る先 |
+|---|---|
+| `Buffer A..D` | `PERSISTENT` な target `bufferA..D`(前のフレームを保つ。持ち主は host = feedback) |
+| `Image` | 最後の pass(出力) |
+| `Common` | 全部の前に 1 度 |
+| 各タブの `iChannelN` | 繋がっている buffer の名前、texture なら層の絵(`inputImage`)へ識別子を書き換え |
+
+断る物(名指し): keyboard / music / webcam / video / cubemap の入力、sound / cubemap のタブ、
+**同じ名前の関数が 2 つのタブに在る**(Shadertoy ではタブが別々の翻訳単位だが、ここでは 1 つに並ぶ)。
+同梱の見本は `trail_tabs.json`(Buffer A が自分を読んで残像、Image がそれを出す)。
+
 ## 3. 名前の結び直し
 
 | Shadertoy | Motolii での姿 |
