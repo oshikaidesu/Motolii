@@ -65,6 +65,8 @@ impl Compositor {
             effect_programs,
             surface_programs: Default::default(),
             clock: None,
+            feedback: Default::default(),
+            feedback_revision: 0,
             blend_vism,
             selection_bounds,
             matte_vism,

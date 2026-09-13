@@ -302,6 +302,14 @@ impl VismProgram {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame) {
+        self.record_feedback_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame, None)
+    }
+
+    /// PERSISTENT な target は host の状態(`feedback`)の 2 枚を使う: 書く pass とその前の pass は
+    /// 前のフレーム(`prev`)を読み、書く先は今のフレーム(`next`)。後の pass は `next` を読む。
+    /// 状態が無い(鍵が刻まれていない)persistent は、毎フレーム透明を初期条件にする。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_feedback_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame, feedback: Option<(&mut super::FeedbackState, super::FeedbackStep)>) {
         let device = &ctx.device;
         let queue = &ctx.queue;
         let extent = frame.pixels;
@@ -309,16 +317,68 @@ impl VismProgram {
 
         // 中間ターゲットを借りる(宣言順 = 後続パスが読む順)。
         let slots = self.manifest.target_slots();
-        let mut targets: Vec<(wgpu::Texture, wgpu::TextureView, wgpu::TextureFormat)> = Vec::new();
+        let persistent = self.manifest.persistent_targets();
+        let (mut state, mut step) = match feedback { Some((state, step)) => (Some(state), step), None => (None, super::FeedbackStep::Restart) };
+        let clear = |encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView| {
+            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vism-feedback-clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view, depth_slice: None, resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None,
+            });
+            drop(pass);
+        };
+        // (texture, view, format, 借り物か, 前のフレームの view)
+        let mut targets: Vec<(wgpu::Texture, wgpu::TextureView, wgpu::TextureFormat, bool, Option<wgpu::TextureView>)> = Vec::new();
         for name in &slots {
             let format = target_format(&self.manifest, name);
             let declaration = self.manifest.passes.iter().find(|p| p.target.as_deref() == Some(name));
             let width = declaration.and_then(|p| p.width).map_or(extent[0], |v| v.resolve(extent[0]));
             let height = declaration.and_then(|p| p.height).map_or(extent[1], |v| v.resolve(extent[1]));
-            let texture = scratch.acquire(device, width, height, format);
-            let view = texture.create_view(&Default::default());
-            targets.push((texture, view, format));
+            if !persistent.contains(name) {
+                let texture = scratch.acquire(device, width, height, format);
+                let view = texture.create_view(&Default::default());
+                targets.push((texture, view, format, true, None));
+                continue;
+            }
+            match state.as_deref_mut() {
+                Some(state) => {
+                    let fits = state.targets.get(*name).is_some_and(|t| t.next.width() == width && t.next.height() == height && t.next.format() == format);
+                    if !fits {
+                        let make = || device.create_texture(&wgpu::TextureDescriptor {
+                            label: Some("motolii-feedback-state"), size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format,
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+                            view_formats: &[],
+                        });
+                        state.targets.insert((*name).to_owned(), super::FeedbackTarget { prev: make(), next: make() });
+                        // 寸法や形式が変われば履歴は続けられない: 初期条件から。
+                        step = super::FeedbackStep::Restart;
+                    }
+                    let target = state.targets.get_mut(*name).expect("just ensured");
+                    match step {
+                        super::FeedbackStep::Advance => std::mem::swap(&mut target.prev, &mut target.next),
+                        super::FeedbackStep::Restart => clear(encoder, &target.prev.create_view(&Default::default())),
+                        super::FeedbackStep::Reuse => {}
+                    }
+                    let view = target.next.create_view(&Default::default());
+                    let prev_view = target.prev.create_view(&Default::default());
+                    targets.push((target.next.clone(), view, format, false, Some(prev_view)));
+                }
+                None => {
+                    // 持ち主が無い: 前のフレームは透明(借り物を空にして読ませる)。
+                    let prev = scratch.acquire(device, width, height, format);
+                    let prev_view = prev.create_view(&Default::default());
+                    clear(encoder, &prev_view);
+                    let texture = scratch.acquire(device, width, height, format);
+                    let view = texture.create_view(&Default::default());
+                    targets.push((texture, view, format, true, Some(prev_view)));
+                    scratch.release(width, height, format, prev);
+                }
+            }
         }
+        // 各 slot を書く pass の番(persistent の読み分けに使う)。
+        let writer_of: Vec<Option<usize>> = slots.iter().map(|name| self.manifest.passes.iter().position(|p| p.target.as_deref() == Some(name))).collect();
 
         let bind_group_layouts = ctx.gpu_resources.bind_group_layouts.resources();
         let texture_layout = bind_group_layouts
@@ -338,19 +398,26 @@ impl VismProgram {
                 .expect("image 入力を宣言した Vism には最低1枚要る");
             views.push(view);
         }
-        for (_, view, _) in &targets {
+        for (_, view, _, _, _) in &targets {
             views.push(view);
         }
 
         // **同じパスの中で、書き込み先を読める形で束ねてはいけない**(WebGPU の使用衝突。
         // 束ねるとそのパスが丸ごと無効になり、絵が出ない)。書き込み先のスロットには
         // 代わりに入力の1枚目を挿しておく — シェーダは自分の出力先を読まない。
-        let bind_for_pass = |writing: Option<usize>| {
+        // persistent な slot は別: 書く pass とその前は前のフレーム、後の pass は今のフレームを読む。
+        let inputs = self.image_order.len();
+        let bind_for_pass = |pass_index: usize, writing: Option<usize>| {
             let mut entries: Vec<wgpu::BindGroupEntry> = Vec::with_capacity(views.len() * 2);
             for (order_index, view) in views.iter().enumerate() {
-                let bound = match writing {
-                    Some(w) if w == order_index => views[0],
-                    _ => view,
+                let slot = order_index.checked_sub(inputs);
+                let prev = slot.and_then(|s| targets[s].4.as_ref());
+                let bound = match (prev, slot.and_then(|s| writer_of[s])) {
+                    (Some(prev), Some(writer)) if pass_index <= writer => prev,
+                    _ => match writing {
+                        Some(w) if w == order_index => views[0],
+                        _ => view,
+                    },
                 };
                 let tex_binding = image_texture_binding(order_index);
                 entries.push(wgpu::BindGroupEntry {
@@ -391,7 +458,7 @@ impl VismProgram {
                 Some(slot) => views[slot],
                 None => dst_view,
             };
-            let texture_bind = bind_for_pass(writing);
+            let texture_bind = bind_for_pass(pass_index, writing);
             let pipeline = render_pipelines
                 .get(self.pipelines[pass_index])
                 .expect("vism pipeline");
@@ -419,9 +486,9 @@ impl VismProgram {
             drop(pass);
         }
 
-        // 記録し終えたので返す。次に借りた者のパスは、この後ろで実行される。
-        for (texture, _, format) in targets {
-            scratch.release(texture.width(), texture.height(), format, texture);
+        // 記録し終えたので返す。次に借りた者のパスは、この後ろで実行される。状態の 2 枚は host の物。
+        for (texture, _, format, borrowed, _) in targets {
+            if borrowed { scratch.release(texture.width(), texture.height(), format, texture); }
         }
     }
 

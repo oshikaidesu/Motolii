@@ -243,6 +243,7 @@ pub use effects::catalog::EffectStage;
 pub use clip::ClipSpec;
 
 pub(crate) use effects::catalog::catalog_snapshot;
+pub use effects::FeedbackKey;
 pub use effects::catalog::{bind_catalog_runtime, catalog_errors, catalog_generation, catalog_reads_disk, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use effects::IsfStage;
@@ -421,6 +422,10 @@ pub struct Compositor {
     pub(crate) surface_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::SurfaceProgram>>,
     /// この frame の時計。engine が描く前に置く(無ければ 0)。
     pub(crate) clock: Option<Clock>,
+    /// feedback の状態(層 × 効果)。効果は自分で覚えない — host が持ち、入点からの漸化式で決める。
+    pub(crate) feedback: std::collections::HashMap<effects::FeedbackKey, effects::FeedbackState>,
+    /// 状態を作った書類の指紋。変われば全部捨てて入点からやり直す(同じ時刻は同じ絵、の保証)。
+    pub(crate) feedback_revision: u64,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::EffectProgram,
     pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,

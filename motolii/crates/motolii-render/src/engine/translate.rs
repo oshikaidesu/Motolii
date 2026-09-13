@@ -45,6 +45,16 @@ pub(crate) fn translate_effect_passes(
     translate_image_effects(effects, crate::render::compositor::EffectStage::Pass)
 }
 
+/// feedback を持つ pass に、状態の持ち主の鍵(層 × 複製 × 列 × 番)を刻む。
+/// 列 0 = 層の効果、列 1 = 板(配置・Whole)の後の効果。
+pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass], layer: crate::doc::store::LayerId, copy: u32, chain: u8) {
+    for (index, pass) in passes.iter_mut().enumerate() {
+        if pass.persistent {
+            pass.feedback = Some(crate::render::compositor::FeedbackKey { layer, copy, chain, index: index as u16 });
+        }
+    }
+}
+
 pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffect], stage: crate::render::compositor::EffectStage) -> Vec<crate::render::compositor::EffectPass> {
     let catalog = known_effects();
     effects
@@ -88,6 +98,8 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
                 (value.abs() * padding.scale).ceil() as u32
             });
             Some(crate::render::compositor::EffectPass {
+                persistent: descriptor.persistent,
+                feedback: None,
                 uses_clock: descriptor.uses_clock,
                 reads_backdrop: descriptor.reads_backdrop,
                 image_layers: descriptor.image_layer_fields.iter().filter_map(|field| effect.params.iter()

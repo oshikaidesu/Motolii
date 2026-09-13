@@ -46,6 +46,8 @@ pub struct EffectDescriptor {
     pub(crate) reads_backdrop: bool,
     /// 2 枚目の image が層を指す欄の名前(`LAYER`)。宣言順。
     pub(crate) image_layer_fields: Vec<String>,
+    /// PERSISTENT な target を持つ(feedback)。
+    pub(crate) persistent: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -338,6 +340,7 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
 fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     // shader を持たない棚の 1 枚(配置・表面・場)は doc の 1 つの表から。棚と Inspector には同じ列で並ぶ。
     let declared = crate::doc::store::kind::all().map(|kind| EffectDescriptor {
+        persistent: false,
         plugin_id: kind.plugin_id.to_owned(),
         label: kind.label.to_owned(),
         stage: match kind.family {
@@ -363,6 +366,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         image_layer_fields: Vec::new(),
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
+        persistent: d.manifest.passes.iter().any(|p| p.persistent),
         image_time_offsets: d.manifest.inputs.iter()
             .filter(|i| i.ty == isf::IsfInputType::Image)
             .skip(1)

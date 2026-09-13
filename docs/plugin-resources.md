@@ -140,4 +140,12 @@ Aₙ = Composite(DecayOrTransform(Aₙ₋₁), Drawₙ)
 `TIME_OFFSET`(秒の数値か、利用者が回す float 欄の名前)を書き、ホストが `view.resolved_layers(t′)` で層を引き直して絵を渡す
 (`engine/render.rs` の `sources_at_other_times`)。決定性は `time_reference_is_deterministic` が審判
 (飛んでも辿っても同じ絵)。取説は [Shadertoy の取り込み §8](vism-shadertoy-import.md)。
-`CompLookbehind` 本来の対象(Group / CompRoot)と、6-3 のフィードバック(チェックポイント)は予約のまま。
+`CompLookbehind` 本来の対象(Group / CompRoot)は予約のまま。
+
+**6-3 のフィードバックを実装した(2026-09-13)。** 利用者「制限を作りたくない」。ISF の `PERSISTENT` を受け、
+状態は層 × 効果ごとに compositor が持つ(`Compositor.feedback`)。時刻 t は入点を初期条件とする漸化式:
+状態が t−1 なら 1 歩、同じ t なら前の絵を読み直して同じ物を書き、それ以外は直近の checkpoint
+(30 フレームごと、`FEEDBACK_CHECKPOINT_EVERY`)か入点から `engine/render.rs` の `replay_feedback` が
+その層だけを順に描く。書類の指紋(`StoreView::revision_key`)が変われば状態を捨てる。
+審判は `feedback_is_a_recurrence_from_the_in_point`(飛んでも辿っても同じ・描き直しも同じ・checkpoint 越しの戻り・編集で入点から)。
+「恒久にやらない」は変わらない: 効果が `&self` に覚える道は今も無い — 覚える場所が host に在るので要らない。

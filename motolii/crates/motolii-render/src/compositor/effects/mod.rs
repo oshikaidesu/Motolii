@@ -112,12 +112,59 @@ impl EffectProgram {
         self.0.record_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame)
     }
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_feedback_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        params: &[(String, f32)], frame: vism::ImageFrame, feedback: Option<(&mut FeedbackState, FeedbackStep)>) {
+        self.0.record_feedback_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame, feedback)
+    }
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_over(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
         scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], render_size: [f32; 2]) {
         self.record(ctx, encoder, scratch, sources, dst_view, params, render_size)
     }
 }
+
+/// feedback(前のフレームを保つ pass)の状態の持ち主の鍵: 層 × 複製 × 効果列(効果 / 板の後の効果)× 効果の番。
+/// 効果は自分で覚えない。同じ鍵の状態を host(compositor)が持ち、時刻 t は入点からの漸化式で決める。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FeedbackKey {
+    pub layer: crate::doc::store::LayerId,
+    pub copy: u32,
+    pub chain: u8,
+    pub index: u16,
+}
+
+/// 1 つの PERSISTENT target の 2 枚: 前のフレーム(読む)と今のフレーム(書く)。
+pub(crate) struct FeedbackTarget {
+    pub(crate) prev: wgpu::Texture,
+    pub(crate) next: wgpu::Texture,
+}
+
+/// 層 × 効果の feedback の状態。`frame` は `next` が表すフレーム(comp の frame 番号)。
+#[derive(Default)]
+pub(crate) struct FeedbackState {
+    pub(crate) frame: Option<i64>,
+    pub(crate) targets: std::collections::HashMap<String, FeedbackTarget>,
+    /// K フレームごとの写し(frame, target 名 → texture)。スクラブは直近の写しから辿り直す。
+    pub(crate) checkpoints: Vec<(i64, std::collections::HashMap<String, wgpu::Texture>)>,
+}
+
+/// このフレームで状態をどう扱うか(compositor が frame の並びから決める)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FeedbackStep {
+    /// 同じフレームをもう一度: 前の絵を読み、同じ物を書き直す。
+    Reuse,
+    /// 次のフレーム: 今の絵が前の絵になる。
+    Advance,
+    /// 初期条件(入点)から: 前の絵は透明。
+    Restart,
+}
+
+/// checkpoint を焼く間隔(フレーム)。スクラブで辿り直す最大の歩数でもある。
+pub(crate) const FEEDBACK_CHECKPOINT_EVERY: i64 = 30;
+/// 1 つの状態が持つ checkpoint の上限(RAM の予算。古い物から捨てる)。
+pub(crate) const FEEDBACK_CHECKPOINTS_MAX: usize = 64;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EffectPass {
@@ -135,6 +182,10 @@ pub struct EffectPass {
     pub(crate) reads_backdrop: bool,
     /// 2 枚目以降の image が指す層(利用者が欄で選んだ)。ホストがその層の絵を渡す。
     pub(crate) image_layers: Vec<crate::doc::store::LayerId>,
+    /// PERSISTENT な target を持つ(前のフレームを読む)。状態は host が `feedback` の鍵で持つ。
+    pub(crate) persistent: bool,
+    /// 状態の持ち主の鍵。engine が層の識別を刻む(刻まれていない persistent は毎フレーム初期条件)。
+    pub(crate) feedback: Option<FeedbackKey>,
 }
 
 /// 多成分の欄(点・色)は、成分ごとに 1 つの f32 として運ぶ。0 番は欄の名前そのまま、

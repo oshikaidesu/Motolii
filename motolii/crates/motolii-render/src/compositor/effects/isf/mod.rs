@@ -13,8 +13,6 @@ pub(crate) enum IsfError {
     Validate(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
-    #[error("PERSISTENT なバッファは採らない — 効果が自分で前フレームを覚えると追跡できなくなる(純関数契約・フレーム並列・スクラブが壊れ、同じ時刻を 2 回描くと違う絵になる)。時間を使う表現はホストが渡す時間参照へ繋ぐ(docs/plugin-resources.md §6、口は予約済み・未実装)")]
-    PersistentBuffer,
     #[error("STAGE `{0}` は知らない(pass / warp / surface / field)")]
     UnknownStage(String),
     #[error("TIME_OFFSET: {0}")]
@@ -151,6 +149,9 @@ pub struct IsfPass {
     /// 32bit float の中間(蓄積・HDR)。
     pub float: bool,
     pub channels: u8,
+    /// 前のフレームの中身を保つ(ISF の PERSISTENT)。持ち主は効果ではなく host: 層 × 効果ごとの
+    /// 状態として compositor が持ち、時刻 t は入点からの漸化式で決まる(plugin-resources.md §6-3)。
+    pub persistent: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -215,6 +216,11 @@ impl IsfManifest {
 
     /// 中間 buffer の名前(初出順)。ISF の TARGET は名前付き buffer なので、同じ名前を
     /// 複数のパスが書けば同じ 1 枚を使い回す(jump flood や cascade の ping-pong)。
+    /// 前のフレームを保つ target(宣言順)。
+    pub fn persistent_targets(&self) -> Vec<&str> {
+        self.passes.iter().filter(|p| p.persistent).filter_map(|p| p.target.as_deref()).collect()
+    }
+
     pub fn target_slots(&self) -> Vec<&str> {
         let mut slots: Vec<&str> = Vec::new();
         for name in self.passes.iter().filter_map(|p| p.target.as_deref()) {
@@ -343,8 +349,8 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     .map(|v| v.as_bool().unwrap_or(v.as_i64().unwrap_or(0) != 0))
                     .unwrap_or(false)
             };
-            if truthy("PERSISTENT") {
-                return Err(IsfError::PersistentBuffer);
+            if truthy("PERSISTENT") && entry.get("TARGET").and_then(|v| v.as_str()).is_none() {
+                return Err(IsfError::Validate("PERSISTENT pass needs a TARGET".into()));
             }
             let dimension = |key: &str| -> Result<Option<IsfDimension>, IsfError> {
                 let Some(value) = entry.get(key) else { return Ok(None) };
@@ -371,6 +377,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     .and_then(|v| v.as_str())
                     .map(str::to_owned),
                 float: truthy("FLOAT"),
+                persistent: truthy("PERSISTENT"),
                 channels: match entry.get("CHANNELS").and_then(|v| v.as_u64()) { None => 4, Some(n @ (1 | 2 | 4)) => n as u8, _ => return Err(IsfError::Validate("CHANNELS must be 1, 2, or 4".into())) },
             });
         }

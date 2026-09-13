@@ -73,30 +73,41 @@ Shadertoy も ISF も**座標は下端が 0**(GL の作法)、wgpu の texture �
 | 近傍を舐める(Sobel・ぼかし) | **書ける** |
 | **複数パス**(抽出 → 横 → 縦 → 合成) | **書ける**(ISF の `PASSES`。`PASSINDEX` と中間 buffer が shader から見える) |
 | 中間 buffer の寸法を変える(`$WIDTH/2`) | **書ける** |
-| **フレーム跨ぎの持ち越し**(`PERSISTENT`・Shadertoy の Buffer 帰還) | **この口からは書けない**(下記) |
+| **フレーム跨ぎの持ち越し**(`PERSISTENT`・Shadertoy の Buffer 帰還) | **書ける**(2026-09-13、下記。持ち主は host) |
 
-### 持ち越しの扱いは 2026-07-10 に決着している
+### 持ち越し(feedback)は host が持つ — 2026-09-13
 
-恒久に禁じられているのは**効果が自分で前フレームを覚えること**(`StatefulFilter`、再生ヘッド依存の
-隠しバッファ)だけである。理由は能力ではなく**追跡できないこと** — 純関数契約・フレーム並列・
-スクラブが壊れ、同じ時刻を 2 回描くと違う絵になる。ISF の `PERSISTENT` を断るのはこれに当たる。
+ISF の `PERSISTENT: true` を宣言した target は、前のフレームの中身を保ったまま次のフレームへ渡る。
+残像・軌跡・蓄積・反応拡散が、Shadertoy の Buffer の書き方のまま書ける。
 
-時間を使う表現そのものは禁じられていない。解は「プラグインの賢さではなく、**ホストが渡す
-時間参照**」で、口の形まで予約済み — [`plugin-resources.md` §6](plugin-resources.md)(F-11):
+```json
+"PASSES": [ { "TARGET": "history", "PERSISTENT": true }, { } ]
+```
 
-| 形 | 何ができる | 状態 |
+```glsl
+if (PASSINDEX == 0) gl_FragColor = mix(IMG_THIS_PIXEL(history), IMG_THIS_PIXEL(inputImage), 0.2);
+else                 gl_FragColor = IMG_THIS_PIXEL(history);
+```
+
+**効果は覚えない。覚えるのは host。** 状態(前のフレームの texture)は層 × 効果ごとに compositor が持ち、
+時刻 t の絵は「**層の入点を初期条件とする漸化式**」で決まる([`plugin-resources.md` §6-3](plugin-resources.md))。
+
+| 場面 | host がすること | 重さ |
 |---|---|---|
-| **lookbehind**(非再帰。`exclude` で自己参照を切る) | 残像、時間差、フレーム間の比較 | **層の絵の別時刻は実装済み(§8、2026-09-12)**。合体後(Group / CompRoot)の別時刻は予約のまま |
-| **フィードバック**(再帰。クリップ先頭を初期条件とする漸化式 + チェックポイント/リプレイ) | 軌跡、蓄積、反応拡散 | **口の予約のみ。未実装** |
+| 順再生・書き出し | 1 歩進める(前の絵が今の絵になる) | 普通の pass と同じ |
+| 同じフレームをもう一度(2 つ目の窓) | 前の絵をもう一度読んで、同じ物を書く | 同上 |
+| スクラブ・seek | 直近の checkpoint(30 フレームごと)か入点から、その層だけを t の手前まで順に描く | 最大 29 歩 |
+| 書類を編集した | 状態を捨てて入点からやり直す(履歴は書類の関数) | 入点から t まで |
 
-後者は「スクラブすると変わる」TD / AviUtl 型ではなく、**コーデックの GOP と同型**(チェックポイント
-から再生)に定義することで決定性を保つ、と §6-3 が定めている。先人は Nuke の別時刻入力、
-反面教師は AE Echo(キャッシュ規律なしの素朴な再評価)。
+だから**同じ時刻は何度描いても、どの順で描いても同じ絵**(審判は `feedback_is_a_recurrence_from_the_in_point`)。
+TouchDesigner / AviUtl の「スクラブすると変わる」型でも、AE の CC Time Blend でもない。
+コーデックの GOP(checkpoint + 再生)と同型。
+
+まだ無い物: 板に焼けない層(網・点群・下の合成を読む列)の feedback は画面の道で 1 歩ずつは進むが、
+スクラブでは辿り直さず初期条件に戻る。合体後(Group / CompRoot)の別時刻は予約のまま。
 
 datamosh はさらに別トラックで、codec 領域の台帳が
 [decision-index.md](decision-index.md)(`M5-DATAMOSH-P0` = `DONE / PRIVATE PROBE`・`BUILD FORBIDDEN`)にある。
-
-つまり**この取り込み口の天井**は「時間を持ち越せない」ではなく、「**ホストの時間参照のうち、
 層の絵の別時刻だけが繋がっていて、合体後の別時刻と再帰はまだ**」である。
 
 ## 7. まだ無い物

@@ -75,6 +75,18 @@ impl<'a> StoreView<'a> {
         LatestAtQuery::new(*Timeline::new_sequence(EDIT_TIMELINE).name(), self.at)
     }
 
+    /// 書類のこの姿の指紋(保存された版 + 編集の頭 + 仮の値)。同じ指紋なら同じ時刻は同じ絵。
+    /// 効果の feedback の状態(compositor)は、指紋が変われば入点からやり直す。
+    pub fn revision_key(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        format!("{:?}", self.db.generation()).hash(&mut hasher);
+        self.at.hash(&mut hasher);
+        format!("{:?}", self.transient).hash(&mut hasher);
+        self.preview_edits.len().hash(&mut hasher);
+        hasher.finish()
+    }
+
     pub fn layers(&self) -> Vec<LayerId> {
         let query = self.query();
         let mut out: Vec<LayerId> = self

@@ -139,6 +139,69 @@ impl Engine {
             .collect()
     }
 
+    /// 時計(TIME 系)は comp の時刻と fps から。壁時計は使わない — 同じ時刻は何度描いても同じ絵。
+    fn stamp_clock(&mut self, view: &StoreView<'_>, t: RationalTime) {
+        self.compositor.clock = view.composition().ok().flatten().map(|c| {
+            let fps = c.fps;
+            let frame = t.try_to_frame_round(fps).unwrap_or(0) as f32;
+            [t.as_seconds_f64() as f32, fps.den() as f32 / fps.num() as f32, frame]
+        });
+    }
+
+    /// feedback は「入点を初期条件とする漸化式」(`docs/plugin-resources.md` §6-3)。状態が t−1 を
+    /// 表していなければ、直近の checkpoint(無ければ入点)から t の手前まで、その層だけを順に描く。
+    /// 順再生と書き出しは 1 歩ずつなのでここは何もしない。スクラブは最大 checkpoint 間隔ぶんの歩数。
+    #[allow(clippy::too_many_arguments)]
+    fn replay_feedback(
+        &mut self,
+        view: &StoreView<'_>,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        projection_camera: ResolvedCamera,
+        t: RationalTime,
+        resolved: &[ResolvedLayer],
+    ) -> Result<(), EngineError> {
+        let Some(composition) = view.composition().ok().flatten() else { return Ok(()) };
+        let fps = composition.fps;
+        let Ok(now) = t.try_to_frame_round(fps) else { return Ok(()) };
+        // 履歴は書類の関数: 書類が変われば捨てて入点から。
+        self.compositor.feedback_set_revision(view.revision_key());
+        let mut start: Option<i64> = None;
+        let mut ids: HashSet<LayerId> = HashSet::new();
+        for layer in resolved {
+            let mut effects = super::translate::translate_effect_passes(&layer.effects);
+            super::translate::stamp_feedback(&mut effects, layer.id, layer.copy, 0);
+            let mut after = super::translate::translate_plate_passes(&layer.after_effects);
+            super::translate::stamp_feedback(&mut after, layer.id, layer.copy, 1);
+            let keys: Vec<_> = effects.iter().chain(&after).filter_map(|p| p.feedback).collect();
+            if keys.is_empty() { continue; }
+            let in_point = view.meta(layer.id).ok().flatten().map_or(0, |m| m.timing.start);
+            for key in keys {
+                if matches!(self.compositor.feedback_frame(key), Some(have) if have == now || have + 1 == now) { continue; }
+                let from = self.compositor.feedback_restore(key, now - 1).map_or(in_point, |c| c + 1);
+                if from >= now { continue; }
+                ids.insert(layer.id);
+                start = Some(start.map_or(from, |s: i64| s.min(from)));
+            }
+        }
+        let Some(start) = start else { return Ok(()) };
+        self.feedback_replaying = true;
+        let result = (|| {
+            for frame in start..now {
+                let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Store(e.to_string()))?;
+                let then: Vec<ResolvedLayer> = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?
+                    .into_iter().filter(|l| ids.contains(&l.id) || l.plate.is_some_and(|g| ids.contains(&g))).collect();
+                let texts = collect_text_documents(view, &then, at)?;
+                let shapes = collect_shape_documents(view, &then, at)?;
+                let layers = self.layers_from_resolved(view, comp, camera, projection_camera, at, &then, &texts, &shapes)?;
+                self.compositor.effective_layer_textures(&layers)?;
+            }
+            Ok(())
+        })();
+        self.feedback_replaying = false;
+        result
+    }
+
     fn layers_from_resolved(
         &mut self,
         view: &StoreView<'_>,
@@ -160,12 +223,12 @@ impl Engine {
             resolved.iter().flat_map(|l| l.effects.iter().chain(&l.after_effects))
                 .any(|e| surface_ids.contains(e.plugin_id.as_str()))
         };
-        // 時計(TIME 系)は comp の時刻と fps から。壁時計は使わない — 同じ時刻は何度描いても同じ絵。
-        self.compositor.clock = view.composition().ok().flatten().map(|c| {
-            let fps = c.fps;
-            let frame = t.try_to_frame_round(fps).unwrap_or(0) as f32;
-            [t.as_seconds_f64() as f32, fps.den() as f32 / fps.num() as f32, frame]
-        });
+        self.stamp_clock(view, t);
+        // feedback(前のフレームを保つ効果)の状態が t−1 に無ければ、入点か直近の checkpoint から t の手前まで辿り直す。
+        if !self.feedback_replaying {
+            self.replay_feedback(view, comp, camera, projection_camera, t, resolved)?;
+            self.stamp_clock(view, t);
+        }
         // 別の時刻を要求した効果があれば、その時刻の層の姿をここで 1 回だけ引き直す(同じずれは共有)。
         let mut other_times: OtherTimes = BTreeMap::new();
         for layer in resolved {
@@ -188,7 +251,9 @@ impl Engine {
 
         let by_id: HashMap<LayerId, &ResolvedLayer> =
             resolved.iter().map(|layer| (layer.id, layer)).collect();
-        self.materials.retain(|id, _| by_id.contains_key(id));
+        if !self.feedback_replaying {
+            self.materials.retain(|id, _| by_id.contains_key(id));
+        }
         let matte_sources: HashSet<LayerId> = resolved
             .iter()
             .filter(|layer| !layer.clip_to_below)
@@ -232,7 +297,9 @@ impl Engine {
                 for &j in &members {
                     let member = &resolved[j];
                     if let Some(built) = self.build_layer_shared(&mut previous_build, member, text_documents, shape_documents, t, comp, camera, projection_camera, translate_blend_mode(member.blend_mode)?)? {
-                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&member.effects), pass_sources: Vec::new() });
+                        let mut passes = translate_effect_passes(&member.effects);
+                        super::translate::stamp_feedback(&mut passes, member.id, member.copy, 0);
+                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new() });
                     }
                 }
                 if copies.is_empty() {
@@ -242,12 +309,15 @@ impl Engine {
                 let plate_blend = translate_blend_mode(owner.map_or(layer.blend_mode, |g| g.blend_mode))?;
                 let mut plate = self.bake_isolated_layers(comp, camera, copies, plate_blend, layer.placement)?;
                 plate.placement.opacity = owner.map_or(1.0, |g| g.placement.opacity);
-                (plate, super::translate::translate_plate_passes(&layer.after_effects))
+                let mut after = super::translate::translate_plate_passes(&layer.after_effects);
+                super::translate::stamp_feedback(&mut after, layer.id, layer.copy, 1);
+                (plate, after)
             } else if layer.after_effects.is_empty() {
                 let Some(built) = self.build_layer_shared(&mut previous_build, layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? else {
                     continue;
                 };
-                let passes = translate_effect_passes(&layer.effects);
+                let mut passes = translate_effect_passes(&layer.effects);
+                super::translate::stamp_feedback(&mut passes, layer.id, layer.copy, 0);
                 // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
                 if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
                     continue;
@@ -260,14 +330,18 @@ impl Engine {
                 let mut copies = Vec::new();
                 for copy in &resolved[index..end] {
                     if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {
-                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&copy.effects), pass_sources: Vec::new() });
+                        let mut passes = translate_effect_passes(&copy.effects);
+                        super::translate::stamp_feedback(&mut passes, copy.id, copy.copy, 0);
+                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new() });
                     }
                 }
                 if copies.is_empty() {
                     continue;
                 }
                 let plate = self.bake_isolated_layers(comp, camera, copies, blend_mode, layer.placement)?;
-                (plate, super::translate::translate_plate_passes(&layer.after_effects))
+                let mut after = super::translate::translate_plate_passes(&layer.after_effects);
+                super::translate::stamp_feedback(&mut after, layer.id, layer.copy, 1);
+                (plate, after)
             };
 
             if layer.clip_to_below {
@@ -1484,5 +1558,113 @@ mod time_reference_is_deterministic {
         // 素材が時刻で変わる物であることの確認(変わらない素材なら試験になっていない)。
         let other = RationalTime::try_from_frame(4, Fps::try_new(10, 1).unwrap()).unwrap();
         assert_ne!(jumped, engine.render_frame(&doc.view(), other).unwrap(), "時刻で絵が変わる素材で測っている");
+    }
+}
+
+/// feedback(前のフレームを保つ効果)は**入点を初期条件とする漸化式**(`docs/plugin-resources.md` §6-3)。
+/// 効果は覚えない — host が状態を持ち、飛んで来ても入点(か checkpoint)から辿り直すので、
+/// 同じ時刻は何度描いても、どの順で描いても同じ絵(実 GPU)。
+#[cfg(test)]
+mod feedback_is_a_recurrence_from_the_in_point {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 64;
+    const FRAMES: i64 = 50;
+
+    fn clip(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let out = dir.join("ramp.mp4");
+        let status = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=64x64:d=5:r=10", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-y"])
+            .arg(&out).status().ok()?;
+        status.success().then_some(out)
+    }
+
+    fn fps() -> Fps { Fps::try_new(10, 1).unwrap() }
+    fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
+
+    fn document(path: &std::path::Path, with_trail: bool) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, FRAMES) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+        ]).unwrap();
+        if with_trail {
+            doc.apply(Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "import.ceil_trail".into() }] }).unwrap();
+        }
+        doc
+    }
+
+    fn walked_to(doc: &Document, frame: i64) -> (Engine, Vec<u8>) {
+        let mut engine = Engine::new().unwrap();
+        let mut last = Vec::new();
+        for f in 0..=frame { last = engine.render_frame(&doc.view(), at(f)).unwrap(); }
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        (engine, last)
+    }
+
+    #[test]
+    fn the_same_frame_is_the_same_picture_however_you_got_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let doc = document(&path, true);
+        let (mut engine, walked) = walked_to(&doc, 12);
+        // 同じフレームをもう一度(2 つ目の窓が同じ時刻を描く形)。
+        assert_eq!(engine.render_frame(&doc.view(), at(12)).unwrap(), walked, "同じフレームの描き直しで絵が変わった");
+        // いきなり飛ぶ(別の engine = 状態が無い)。
+        let mut fresh = Engine::new().unwrap();
+        let jumped = fresh.render_frame(&doc.view(), at(12)).unwrap();
+        assert!(fresh.layer_failures().is_empty(), "{:?}", fresh.layer_failures());
+        assert_eq!(jumped, walked, "飛んで来た絵が、辿った絵と違う");
+        // 効果が効いている(残像 ≠ 素の絵)、時刻で違う。
+        let plain = Engine::new().unwrap().render_frame(&document(&path, false).view(), at(12)).unwrap();
+        assert_ne!(walked, plain, "feedback が絵を変えていない");
+        assert_ne!(walked, engine.render_frame(&doc.view(), at(4)).unwrap(), "時刻で絵が変わる素材で測っている");
+    }
+
+    #[test]
+    fn going_back_and_forward_replays_from_the_nearest_checkpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let doc = document(&path, true);
+        let (_, straight) = walked_to(&doc, 45);
+        // 40 まで辿ってから(checkpoint 30 が焼けている)45 へ飛ぶ。
+        let (mut engine, _) = walked_to(&doc, 40);
+        assert_eq!(engine.render_frame(&doc.view(), at(45)).unwrap(), straight, "checkpoint から辿り直した絵が違う");
+        // 戻る(35 ← 45): checkpoint 30 から 5 歩。
+        let (_, back) = walked_to(&doc, 35);
+        assert_eq!(engine.render_frame(&doc.view(), at(35)).unwrap(), back, "戻った絵が違う");
+        // 入点より前は状態が無く、入点(0)は初期条件。
+        assert_eq!(engine.render_frame(&doc.view(), at(0)).unwrap(), walked_to(&doc, 0).1);
+    }
+
+    /// 静止した素材に残像を掛けると、history は 0.2 ずつ入力へ寄る(1 − 0.8ⁿ)。前のフレームを本当に
+    /// 読んでいれば 12 フレーム目は 0 フレーム目より明るい。毎フレーム初期条件なら同じ明るさのまま。
+    #[test]
+    fn history_accumulates_over_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("white.png");
+        image::save_buffer(&path, &vec![255u8; (SIZE * SIZE * 4) as usize], SIZE, SIZE, image::ColorType::Rgba8).unwrap();
+        let doc = document(&path, true);
+        let mean = |px: &[u8]| px.chunks_exact(4).map(|p| p[0] as f64).sum::<f64>() / (SIZE * SIZE) as f64;
+        let (_, first) = walked_to(&doc, 0);
+        let (_, later) = walked_to(&doc, 12);
+        assert!(mean(&later) > mean(&first) * 2.0, "history が積もっていない: {} → {}", mean(&first), mean(&later));
+    }
+
+    #[test]
+    fn editing_the_document_restarts_the_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let mut doc = document(&path, true);
+        let (mut engine, before) = walked_to(&doc, 12);
+        // 書類を変えると(位置を動かす)、履歴は新しい書類で入点から: 新しい engine の絵と一致する。
+        doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([6.0, 0.0]) }).unwrap();
+        let edited = engine.render_frame(&doc.view(), at(12)).unwrap();
+        assert_ne!(edited, before);
+        assert_eq!(edited, Engine::new().unwrap().render_frame(&doc.view(), at(12)).unwrap(), "編集後の絵が、入点からの絵と違う");
     }
 }

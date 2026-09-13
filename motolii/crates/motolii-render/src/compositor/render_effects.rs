@@ -11,11 +11,11 @@ pub(crate) struct BakedEffects {
     entries: Vec<BakedEntry>,
     generation: u64,
 }
-struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame>, others: Vec<GpuTexture2D>, clock: Option<Clock> }
+struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame>, others: Vec<GpuTexture2D>, clock: Option<Clock>, feedback_frame: Option<i64> }
 impl PartialEq for BakedKey {
     fn eq(&self, other: &Self) -> bool {
         self.source.handle() == other.source.handle() && self.passes == other.passes && self.frame == other.frame
-            && self.clock == other.clock
+            && self.clock == other.clock && self.feedback_frame == other.feedback_frame
             && self.others.len() == other.others.len()
             && self.others.iter().zip(&other.others).all(|(a, b)| a.handle() == b.handle())
     }
@@ -117,7 +117,9 @@ impl Compositor {
             }
             // 時計を読む効果が 1 つでもあれば時刻が鍵に入る。読まない列は時刻で焼き直さない。
             let clock = lwp.passes.iter().any(|p| p.uses_clock).then_some(self.clock).flatten();
-            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame, others: lwp.pass_sources.iter().flatten().cloned().collect(), clock };
+            // feedback を持つ列はフレーム番号が鍵(同じフレームの描き直しだけ当たる)。
+            let feedback_frame = lwp.passes.iter().any(|p| p.persistent).then(|| self.frame_index()).flatten();
+            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame, others: lwp.pass_sources.iter().flatten().cloned().collect(), clock, feedback_frame };
             if let Some((content, padding, spill)) = self.baked_effects.hit(&baked_key) {
                 self.surface_work.baked_hits += 1;
                 previous = Some((layer_texture, lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
@@ -341,17 +343,50 @@ impl Compositor {
                 .unwrap_or_default();
             let sources: Vec<_> = source_view.iter().chain(other_views.iter()).collect();
             let destination_view = destination.create_view(&Default::default());
+            // feedback: 状態の持ち主は host。frame の並びから今フレームの扱いを決める。
+            let frame_index = self.frame_index();
+            let feedback = pass.feedback.map(|key| {
+                let state = self.feedback.entry(key).or_default();
+                let step = match (state.frame, frame_index) {
+                    (Some(have), Some(now)) if have == now => effects::FeedbackStep::Reuse,
+                    (Some(have), Some(now)) if have + 1 == now => effects::FeedbackStep::Advance,
+                    _ => effects::FeedbackStep::Restart,
+                };
+                (key, step)
+            });
+            let clock_params = self.clock_params();
+            let state = feedback.map(|(key, step)| (self.feedback.get_mut(&key).expect("entry"), step));
             if is_warp {
                 let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
-                program.record_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame);
+                program.record_feedback_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame, state);
             } else {
                 // pass は ISF の作法(render_size = 画素)。論理 px の欄だけ host が密度で画素へ写す。
                 let density = frame.map_or(1.0, |f| f.density().into_iter().fold(1.0f32, f32::max));
                 let mut params = program.params_at_density(&pass.params, density);
                 if pass.uses_clock {
-                    params.extend(self.clock_params());
+                    params.extend(clock_params);
                 }
-                program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, [padded_width as f32,padded_height as f32]);
+                let render_size = [padded_width as f32, padded_height as f32];
+                program.record_feedback_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, effects::vism::ImageFrame { size: render_size, origin: [0.0;2], pixels: [padded_width, padded_height] }, state);
+            }
+            if let (Some((key, step)), Some(now)) = (feedback, frame_index) {
+                let state = self.feedback.get_mut(&key).expect("entry");
+                state.frame = Some(now);
+                // K フレームごとに写しを焼く(同じフレームの描き直しでは焼かない)。
+                if step != effects::FeedbackStep::Reuse && now.rem_euclid(effects::FEEDBACK_CHECKPOINT_EVERY) == 0 && !state.checkpoints.iter().any(|(f, _)| *f == now) {
+                    let copies = state.targets.iter().map(|(name, target)| {
+                        let copy = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
+                            label: Some("motolii-feedback-checkpoint"), size: target.next.size(), mip_level_count: 1, sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2, format: target.next.format(),
+                            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST, view_formats: &[],
+                        });
+                        encoder.copy_texture_to_texture(target.next.as_image_copy(), copy.as_image_copy(), target.next.size());
+                        (name.clone(), copy)
+                    }).collect();
+                    state.checkpoints.push((now, copies));
+                    state.checkpoints.sort_by_key(|(f, _)| *f);
+                    while state.checkpoints.len() > effects::FEEDBACK_CHECKPOINTS_MAX { state.checkpoints.remove(0); }
+                }
             }
             let destination = if program.image_input_count() == 0 {
                 self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
@@ -372,6 +407,35 @@ impl Compositor {
             current_is_scratch = true;
         }
         Ok((current, current_linear, current_premultiplied, current_is_scratch))
+    }
+
+    /// 今のフレーム番号(engine が置いた時計から)。無ければ feedback は毎回初期条件。
+    pub(crate) fn frame_index(&self) -> Option<i64> { self.clock.map(|c| c[2].round() as i64) }
+
+    /// feedback の状態が今表しているフレーム。
+    pub(crate) fn feedback_frame(&self, key: effects::FeedbackKey) -> Option<i64> { self.feedback.get(&key).and_then(|s| s.frame) }
+
+    /// `before` 以前で最も新しい checkpoint を今の状態へ戻し、そのフレームを返す。無ければ None(入点から)。
+    pub(crate) fn feedback_restore(&mut self, key: effects::FeedbackKey, before: i64) -> Option<i64> {
+        let state = self.feedback.get_mut(&key)?;
+        let (at, copies) = state.checkpoints.iter().filter(|(f, _)| *f <= before).max_by_key(|(f, _)| *f)?;
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-feedback-restore") });
+        for (name, copy) in copies {
+            let Some(target) = state.targets.get(name) else { return None };
+            encoder.copy_texture_to_texture(copy.as_image_copy(), target.next.as_image_copy(), copy.size());
+        }
+        state.frame = Some(*at);
+        let at = *at;
+        self.pending.push(encoder.finish());
+        Some(at)
+    }
+
+    /// 書類の指紋が変われば feedback の状態を全部捨てる(同じ時刻は同じ絵: 履歴は書類の関数)。
+    pub(crate) fn feedback_set_revision(&mut self, revision: u64) {
+        if self.feedback_revision != revision {
+            self.feedback_revision = revision;
+            self.feedback.clear();
+        }
     }
 
     /// 欄の列に足す時計(TIME 秒・TIMEDELTA 秒・FRAMEINDEX)。engine が frame ごとに `clock` を置く。
