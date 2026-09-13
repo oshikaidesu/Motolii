@@ -894,12 +894,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   /// A text layer: what it says, then how it is set.
   List<Widget> _text(Map<String, dynamic> layer, Map<String, dynamic> text) {
-    // Numbers that take keys stay here; the face, the class being dressed and
-    // the alignment are chosen on the Fonts shelf. The font row is a value:
+    // Numbers that take keys stay here; the face, the class being dressed,
+    // the character size and the alignment are chosen on the Fonts shelf
+    // (a size in px is not animated — Scale is). The font row is a value:
     // the family's name, and pressing it turns the shelf toward this layer.
     final rows = panelRows(layer['properties'])
         .where(_isTextProperty)
-        .where((r) => r['id'] != 'text_justify')
+        .where((r) => r['id'] != 'text_justify' && r['label'] != 'Size')
         .where((r) => r['kind'] != 'color')
         .toList();
     final family = '${text['fontFamily'] ?? ''}';
