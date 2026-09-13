@@ -894,12 +894,15 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   /// A text layer: what it says, then how it is set.
   List<Widget> _text(Map<String, dynamic> layer, Map<String, dynamic> text) {
+    // Numbers that take keys stay here; the face, the class being dressed and
+    // the alignment are chosen on the Fonts shelf. The font row is a value:
+    // the family's name, and pressing it turns the shelf toward this layer.
     final rows = panelRows(layer['properties'])
         .where(_isTextProperty)
-        .where((r) => r['id'] != 'text_justify' && r['label'] != 'Size')
+        .where((r) => r['id'] != 'text_justify')
         .where((r) => r['kind'] != 'color')
         .toList();
-    final align = _row('text_justify');
+    final family = '${text['fontFamily'] ?? ''}';
     return [
       RichTextEditor(
         key: ValueKey('rich:${layer['id']}'),
@@ -907,55 +910,38 @@ class _InspectorPanelState extends State<InspectorPanel> {
         layer: layer,
         text: text,
       ),
-      // Justification is one control, not three spread across the card: three
-      // squares of a well's height, side by side, the chosen one lit.
-      if (align != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: EditorMetrics.s6),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              height: EditorMetrics.row,
-              decoration: BoxDecoration(
-                color: EditorTheme.app,
-                border: Border.all(color: EditorTheme.line),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final entry in const {
-                    0: Icons.format_align_left,
-                    2: Icons.format_align_center,
-                    1: Icons.format_align_right,
-                  }.entries)
-                    SizedBox(
-                      width: EditorMetrics.control,
-                      child: IconButton(
-                        tooltip: const {
-                          0: 'Align left',
-                          2: 'Align center',
-                          1: 'Align right',
-                        }[entry.key],
-                        isSelected: align['value'] == entry.key,
-                        icon: Icon(entry.value, size: EditorMetrics.s14),
-                        color: align['value'] == entry.key
-                            ? EditorTheme.accent
-                            : EditorTheme.muted,
-                        onPressed: _canEdit(layer)
-                            ? () => _write(
-                                layer,
-                                align,
-                                entry.key,
-                                preview: false,
-                              )
-                            : null,
-                      ),
-                    ),
-                ],
-              ),
+      const SizedBox(height: EditorMetrics.s6),
+      EditorTooltip(
+        message: 'Font',
+        child: InkWell(
+          key: const ValueKey('inspector:font'),
+          onTap: _canEdit(layer) && c.supports('setFont')
+              ? () => c.focusFont(layer)
+              : null,
+          child: Container(
+            height: EditorMetrics.row,
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+            decoration: BoxDecoration(
+              color: EditorTheme.app,
+              border: Border.all(color: EditorTheme.line),
+            ),
+            child: Row(
+              children: [
+                const Text('Font', style: TextStyle(color: EditorTheme.muted)),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    family,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: EditorTheme.ink),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
+      ),
       if (rows.isNotEmpty) ...[
         const SizedBox(height: EditorMetrics.s6),
         _cells([for (final r in rows) _Cell(_control(layer, '${r['id']}'))]),

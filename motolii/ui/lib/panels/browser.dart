@@ -12,6 +12,7 @@ import 'browser/colors_shelf.dart';
 import 'browser/create_shelf.dart';
 import 'browser/effects_shelf.dart';
 import 'browser/files_shelf.dart';
+import 'browser/fonts_shelf.dart';
 import 'browser/media_shelf.dart';
 import 'browser/parts.dart';
 import 'browser/shelf.dart';
@@ -45,6 +46,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     CreateShelf(),
     MediaShelf(),
     EffectsShelf(),
+    FontsShelf(),
     ColorsShelf(),
     FilesShelf(initialFolder: widget.initialFolder),
   ];

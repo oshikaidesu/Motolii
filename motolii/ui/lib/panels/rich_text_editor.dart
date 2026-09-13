@@ -95,10 +95,10 @@ class StyledTextController extends TextEditingController {
   }
 }
 
-/// What the text says, drawn in proportion, then the face and size it wears.
-/// Size and font land on the whole text or on one class of characters (a
-/// script, a case) picked from the menu; the box highlights that class. No
-/// span of characters is ever held: a range is the animator's business.
+/// What the text says, drawn in proportion. The face, the size of a class of
+/// characters and the alignment are the Fonts shelf's business; the box only
+/// highlights the class the shelf is dressing. No span of characters is ever
+/// held: a range is the animator's business.
 class RichTextEditor extends StatefulWidget {
   const RichTextEditor({
     super.key,
@@ -117,7 +117,17 @@ class _RichTextEditorState extends State<RichTextEditor> {
     text: '${widget.text['content'] ?? ''}',
   );
   final _focus = FocusNode();
-  String _scope = 'all', _baseline = '';
+  String _baseline = '';
+
+  /// The characters the Fonts shelf is dressing for this layer; `all` unless
+  /// the shelf said otherwise. Only the highlight reads it.
+  String get _scope {
+    final held = c.textStyleTarget.value;
+    return held != null && held['layer'] == widget.layer['id']
+        ? '${held['scope'] ?? 'all'}'
+        : 'all';
+  }
+
   List? _knownFrom;
   Set<String> _known = const {};
 
@@ -144,8 +154,6 @@ class _RichTextEditorState extends State<RichTextEditor> {
   EditorSession get c => widget.controller;
   String get _inputTag =>
       'rich-input:${widget.layer['id']}:${identityHashCode(this)}';
-  String get _formatTag =>
-      'rich-format:${widget.layer['id']}:${identityHashCode(this)}';
   Future<void> _finish(String tag, bool cancel) {
     if (c.state.containsKey('previewInteraction') &&
         c.state['previewInteraction'] != tag)
@@ -157,21 +165,24 @@ class _RichTextEditorState extends State<RichTextEditor> {
 
   bool get _composing =>
       _text.value.composing.isValid && !_text.value.composing.isCollapsed;
-  bool get _enabled =>
-      widget.layer['locked'] != true &&
-      c.supports('styleText') &&
-      !_composing &&
-      !_committing;
   Map<String, dynamic> get _target => {
+    ...?c.textStyleTarget.value?['layer'] == widget.layer['id']
+        ? c.textStyleTarget.value
+        : null,
     'layer': widget.layer['id'],
     'scope': _scope,
     'text': _text.text,
   };
+  void _scopeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     _baseline = _text.text;
     c.pendingEditors.add(_flush);
+    c.textStyleTarget.addListener(_scopeChanged);
     _formats();
     _text.addListener(_changed);
     _focus.addListener(_focused);
@@ -270,23 +281,14 @@ class _RichTextEditorState extends State<RichTextEditor> {
     c.textStyleTarget.value = _target;
   }
 
-  Future<void> _format(Map<String, dynamic> patch) async {
-    if (_composing || widget.layer['locked'] == true) return;
-    await _commit();
-    if (!mounted || _dirty) return;
-    await c.command('styleText', {
-      ..._target,
-      ...patch,
-      'interaction': _formatTag,
-    });
-  }
-
   @override
   void didUpdateWidget(covariant RichTextEditor old) {
     super.didUpdateWidget(old);
     if (old.controller != c) {
       old.controller.pendingEditors.remove(_flush);
+      old.controller.textStyleTarget.removeListener(_scopeChanged);
       c.pendingEditors.add(_flush);
+      c.textStyleTarget.addListener(_scopeChanged);
     }
     _formats();
     final incoming = '${widget.text['content'] ?? ''}';
@@ -308,6 +310,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
   @override
   void dispose() {
     c.pendingEditors.remove(_flush);
+    c.textStyleTarget.removeListener(_scopeChanged);
     if (_dirty && !_committing)
       _previews.finish(true, () => _finish(_inputTag, true));
     _text.removeListener(_changed);
@@ -333,22 +336,6 @@ class _RichTextEditorState extends State<RichTextEditor> {
       for (final (i, kind) in classes.indexed)
         if (inScope('$kind', _scope)) i,
     };
-    final formats = _text.characterStyles();
-    final picked = [
-      for (final (i, f) in formats.indexed)
-        if (_scope == 'all' ||
-            (i < classes.length && inScope('${classes[i]}', _scope)))
-          f,
-    ];
-    if (picked.isEmpty && _scope == 'all' && _text.styles.isNotEmpty)
-      picked.add(_text.styles.first);
-    final sizes = picked
-        .map((s) => (s['size'] as num? ?? 24).toDouble())
-        .toSet();
-    final families = picked
-        .map((s) => '${EditorSession.map(s['font'])['family'] ?? ''}')
-        .toSet();
-    final canFormat = _enabled && picked.isNotEmpty;
     final known = _knownFamilies(c.state['fontFamilies'] as List?);
     final first =
         '${EditorSession.map(_text.styles.firstOrNull?['font'])['family'] ?? ''}';
@@ -379,96 +366,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
             onChanged: _typed,
           ),
         ),
-        const SizedBox(height: EditorMetrics.s6),
-        EditorChoice<String>(
-          value: _scope,
-          choices: const [
-            MapEntry('all', 'All text'),
-            MapEntry('hiragana', 'Hiragana'),
-            MapEntry('katakana', 'Katakana'),
-            MapEntry('han', 'Kanji'),
-            MapEntry('latin', 'Latin'),
-            MapEntry('upper', 'Uppercase'),
-            MapEntry('lower', 'Lowercase'),
-          ],
-          onChanged: !_enabled
-              ? null
-              : (scope) => setState(() {
-                  _scope = scope;
-                  c.textStyleTarget.value = _target;
-                }),
-        ),
-        const SizedBox(height: EditorMetrics.s6),
-        _FontField(
-          key: ValueKey('font:$_scope:${families.join('|')}'),
-          families: families,
-          known: known,
-          enabled: canFormat,
-          onPick: (f) => _format({'family': f}),
-        ),
-        const SizedBox(height: EditorMetrics.s6),
-        EditorNumericField(
-          key: const ValueKey('rich-text-size'),
-          value: sizes.isEmpty ? 24 : sizes.first,
-          label: 'Character size',
-          unit: 'px',
-          mixed: sizes.length > 1,
-          min: 1,
-          max: 1000,
-          enabled: canFormat,
-          onPreview: (size) => _format({'size': size, 'preview': true}),
-          onCommit: (size) => _format({'size': size}),
-          onFinish: () => _finish(_formatTag, false),
-          onCancel: () => _finish(_formatTag, true),
-        ),
       ],
     );
   }
-}
-
-/// A family, typed with the machine's list narrowing as it goes.
-class _FontField extends StatelessWidget {
-  const _FontField({
-    super.key,
-    required this.families,
-    required this.known,
-    required this.enabled,
-    required this.onPick,
-  });
-  final Set<String> families, known;
-  final bool enabled;
-  final ValueChanged<String> onPick;
-  @override
-  Widget build(BuildContext context) => EditorTooltip(
-    message: 'Font',
-    child: Autocomplete<String>(
-      initialValue: TextEditingValue(
-        text: families.length == 1 ? families.single : '',
-      ),
-      optionsBuilder: (value) => !enabled || value.text.isEmpty
-          ? const Iterable<String>.empty()
-          : known
-                .where(
-                  (n) => n.toLowerCase().contains(value.text.toLowerCase()),
-                )
-                .take(40),
-      onSelected: onPick,
-      fieldViewBuilder: (context, text, focus, submit) => EditorFieldFrame(
-        focus: focus,
-        child: TextField(
-          controller: text,
-          focusNode: focus,
-          enabled: enabled,
-          style: const TextStyle(
-            fontSize: EditorMetrics.font,
-            color: EditorTheme.ink,
-          ),
-          decoration: InputDecoration(
-            hintText: families.length > 1 ? 'Mixed fonts' : 'Font',
-          ),
-          onSubmitted: (_) => submit(),
-        ),
-      ),
-    ),
-  );
 }

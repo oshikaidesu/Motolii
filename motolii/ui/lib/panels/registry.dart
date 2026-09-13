@@ -7,7 +7,6 @@ import '../foundation/panel_catalog.dart';
 import '../session/editor_session.dart';
 import 'browser.dart';
 import 'inspector.dart';
-import 'font_browser.dart';
 import 'desk.dart';
 import 'timeline.dart';
 import 'stage.dart';
@@ -40,7 +39,7 @@ Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
 }
 
 Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
-  if (['Create', 'Media', 'Effects', 'Colors', 'Files'].contains(name))
+  if (['Create', 'Media', 'Effects', 'Fonts', 'Colors', 'Files'].contains(name))
     return BrowserPanel(
       key: key,
       controller: c,
@@ -50,7 +49,6 @@ Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
   return switch (name) {
     'Stage' => StagePanel(key: key, controller: c, view: 'User'),
     'Camera' => StagePanel(key: key, controller: c, view: 'Camera'),
-    'Fonts' => FontBrowser(key: key, controller: c),
     'Inspector' => InspectorPanel(key: key, controller: c),
     'Desk' => DeskPanel(
       key: key,

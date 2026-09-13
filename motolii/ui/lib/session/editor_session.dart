@@ -91,6 +91,21 @@ class EditorSession {
     'shape': newKeyShape,
   });
 
+  /// Point the Fonts shelf at a text layer: the Inspector's font value is the
+  /// name, choosing is the shelf's job (the colour swatch and wheel, likewise).
+  Future<void> focusFont(Map<String, dynamic> layer) async {
+    final held = textStyleTarget.value;
+    textStyleTarget.value = {
+      if (held != null && held['layer'] == layer['id']) ...held,
+      'layer': layer['id'],
+      'scope': held != null && held['layer'] == layer['id']
+          ? held['scope'] ?? 'all'
+          : 'all',
+    };
+    browserTab.value = 'Fonts';
+    await placePanel('Fonts', 'show');
+  }
+
   Future<void> focusColor(Map<String, dynamic> args) async {
     await command('focusColor', args);
     browserTab.value = 'Colors';

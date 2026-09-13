@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/theme.dart';
 import '../lib/panels/gradient_inspector.dart';
-import '../lib/panels/font_browser.dart';
 import '../lib/panels/browser.dart';
 import '../lib/session/editor_session.dart';
 
@@ -143,7 +142,11 @@ void main() {
           body: SizedBox(
             width: 300,
             height: 300,
-            child: FontBrowser(controller: c),
+            child: BrowserPanel(
+              controller: c,
+              fixedTab: 'Fonts',
+              showTabs: false,
+            ),
           ),
         ),
       ),

@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/panels/font_browser.dart';
+import '../lib/panels/browser.dart';
+import '../lib/panels/browser/fonts_shelf.dart';
 import '../lib/session/editor_session.dart';
 
 Map<String, dynamic> _style({
@@ -43,14 +44,8 @@ void main() {
     // Every style is scaled so the first lands at a fixed size.
     expect(fontSampleKey(_text(size: 60)), plain);
     // Only the first line's opening words are drawn.
-    expect(
-      fontSampleKey(_text(content: 'One two three\nfourth line')),
-      plain,
-    );
-    expect(
-      fontSampleKey(_text(content: 'One two four')),
-      isNot(plain),
-    );
+    expect(fontSampleKey(_text(content: 'One two three\nfourth line')), plain);
+    expect(fontSampleKey(_text(content: 'One two four')), isNot(plain));
   });
 
   testWidgets('touching a format redraws no specimen the shelf already holds', (
@@ -68,12 +63,7 @@ void main() {
       'visualSamples': true,
       'path': 'sample.rrd',
       'layers': [
-        {
-          'id': 1,
-          'kind': 'Text',
-          'name': name,
-          'text': _text(fill: fill),
-        },
+        {'id': 1, 'kind': 'Text', 'name': name, 'text': _text(fill: fill)},
       ],
       'selectedIds': [1],
       'fontFamilies': [for (var i = 0; i < 24; i++) 'Font $i'],
@@ -86,7 +76,11 @@ void main() {
           body: SizedBox(
             width: 300,
             height: 300,
-            child: FontBrowser(controller: c),
+            child: BrowserPanel(
+              controller: c,
+              fixedTab: 'Fonts',
+              showTabs: false,
+            ),
           ),
         ),
       ),
@@ -100,11 +94,11 @@ void main() {
 
     Future<void> readTheShelf() async {
       for (var step = 0; step < 8; step++) {
-        await tester.drag(find.byType(ListView), const Offset(0, -200));
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -200));
         await settle();
       }
       for (var step = 0; step < 8; step++) {
-        await tester.drag(find.byType(ListView), const Offset(0, 200));
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, 200));
         await settle();
       }
     }

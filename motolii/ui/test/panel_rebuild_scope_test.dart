@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
 import '../lib/panels/browser.dart';
-import '../lib/panels/font_browser.dart';
 import '../lib/panels/history_records.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/panels/timeline.dart';
@@ -43,9 +42,19 @@ void main() {
       'name': 'Title',
       'locked': false,
       'colors': const [],
-      'text': {'content': 'Hello', 'fontFamily': 'Arial', 'styles': [], 'runs': []},
+      'text': {
+        'content': 'Hello',
+        'fontFamily': 'Arial',
+        'styles': [],
+        'runs': [],
+      },
       'properties': [
-        {'id': 'position', 'label': 'Position', 'kind': 'point', 'value': [x, 0.0]},
+        {
+          'id': 'position',
+          'label': 'Position',
+          'kind': 'point',
+          'value': [x, 0.0],
+        },
       ],
       'effects': const [],
     };
@@ -82,9 +91,24 @@ void main() {
                 height: 300,
                 child: Row(
                   children: [
-                    SizedBox(width: 300, child: BrowserPanel(controller: c, fixedTab: 'Media', showTabs: false)),
+                    SizedBox(
+                      width: 300,
+                      child: BrowserPanel(
+                        controller: c,
+                        fixedTab: 'Media',
+                        showTabs: false,
+                      ),
+                    ),
                     SizedBox(width: 300, child: InspectorPanel(controller: c)),
-                    SizedBox(width: 300, child: FontBrowser(controller: c)),
+                    SizedBox(
+                      width: 300,
+                      child: BrowserPanel(
+                        key: const ValueKey('fonts-panel'),
+                        controller: c,
+                        fixedTab: 'Fonts',
+                        showTabs: false,
+                      ),
+                    ),
                     SizedBox(width: 300, child: HistoryRecords(controller: c)),
                   ],
                 ),
@@ -102,12 +126,21 @@ void main() {
         _inside(TimelinePanel, find.byKey(const ValueKey('timeline-lanes'))),
       ),
       _Rebuilds('Browser', _inside(BrowserPanel, find.byType(Focus))),
-      _Rebuilds('Inspector', _inside(InspectorPanel, find.byType(LayoutBuilder))),
+      _Rebuilds(
+        'Inspector',
+        _inside(InspectorPanel, find.byType(LayoutBuilder)),
+      ),
       _Rebuilds(
         'Position X',
         _inside(InspectorPanel, find.byType(EditorNumericField)),
       ),
-      _Rebuilds('Fonts', _inside(FontBrowser, find.byType(ColoredBox))),
+      _Rebuilds(
+        'Fonts',
+        find.descendant(
+          of: find.byKey(const ValueKey('fonts-panel')),
+          matching: find.byType(Focus),
+        ),
+      ),
       _Rebuilds('History', _inside(HistoryRecords, find.byType(LayoutBuilder))),
     ];
     for (final w in watched) {
@@ -130,11 +163,7 @@ void main() {
     }
     final counted = {for (final w in watched) w.name: w.count};
     debugPrint('PROBE room=rebuild-scope builds=$counted');
-    expect(
-      counted['Position X'],
-      3,
-      reason: 'the well that shows the value',
-    );
+    expect(counted['Position X'], 3, reason: 'the well that shows the value');
     expect(
       counted['Inspector'],
       0,

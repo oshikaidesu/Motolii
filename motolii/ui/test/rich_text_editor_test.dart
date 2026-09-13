@@ -89,69 +89,39 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets(
-    'selected characters and script groups send explicit formatting scope',
-    (tester) async {
-      final sent = <Map<String, dynamic>>[];
-      final c = await mount(tester, sent);
-      final field = find.byKey(const ValueKey('rich-text-content'));
-      final text = tester.widget<TextField>(field).controller!;
-      // A selection in the box is only a caret's business: no span is held.
-      text.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
-      await tester.pump();
-      expect(c.textStyleTarget.value?['scope'], 'all');
-      expect(c.textStyleTarget.value?.containsKey('start'), isFalse);
-      await tester.tap(find.byType(EditorChoice<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Hiragana').last);
-      await tester.pumpAndSettle();
-      expect(c.textStyleTarget.value?['scope'], 'hiragana');
-      Future<void> size(String value) async {
-        final control = find.byKey(const ValueKey('rich-text-size'));
-        await tester.tap(control);
-        await tester.pump(const Duration(milliseconds: 50));
-        await tester.tap(control);
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.descendant(of: control, matching: find.byType(TextField)),
-          value,
-        );
-        await tester.testTextInput.receiveAction(TextInputAction.done);
-        await tester.pumpAndSettle();
-      }
-
-      await size('80');
-      final edit = sent.firstWhere((m) => m['op'] == 'styleText');
-      expect(edit['scope'], 'hiragana');
-      expect(edit['size'], 80);
-      await tester.tap(find.byType(EditorChoice<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Katakana').last);
-      await tester.pumpAndSettle();
-      await size('60');
-      expect(
-        sent.lastWhere((m) => m['op'] == 'styleText')['scope'],
-        'katakana',
-      );
-      // Case is the other half of a class label: `latin-upper` answers to
-      // both `latin` and `upper`.
-      await tester.tap(find.byType(EditorChoice<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Uppercase').last);
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<TextField>(field).controller,
-        isA<StyledTextController>().having(
-          (t) => t.highlighted,
-          'highlighted',
-          {5},
-        ),
-      );
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-      c.dispose();
-    },
-  );
+  testWidgets('the box highlights the class the Fonts shelf is dressing', (
+    tester,
+  ) async {
+    final c = await mount(tester, []);
+    final field = find.byKey(const ValueKey('rich-text-content'));
+    final text = tester.widget<TextField>(field).controller!;
+    // A selection in the box is only a caret's business: no span is held.
+    text.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
+    await tester.pump();
+    expect(c.textStyleTarget.value?['scope'], 'all');
+    expect(c.textStyleTarget.value?.containsKey('start'), isFalse);
+    // The shelf picks the class; the box follows. Case is the other half of
+    // a class label: `latin-upper` answers to both `latin` and `upper`.
+    c.textStyleTarget.value = {'layer': 1, 'scope': 'upper'};
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(field).controller,
+      isA<StyledTextController>().having((t) => t.highlighted, 'highlighted', {
+        5,
+      }),
+    );
+    // Typing keeps the shelf's class and carries the draft.
+    await tester.enterText(field, 'ABC');
+    await tester.pump();
+    expect(c.textStyleTarget.value?['scope'], 'upper');
+    expect(c.textStyleTarget.value?['text'], 'ABC');
+    // No face or size chooser lives in the box any more.
+    expect(find.byType(EditorChoice<String>), findsNothing);
+    expect(find.byKey(const ValueKey('rich-text-size')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
   testWidgets('IME draft waits for composition and Escape restores the text', (
     tester,
   ) async {
