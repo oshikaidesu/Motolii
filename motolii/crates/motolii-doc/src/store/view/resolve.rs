@@ -490,7 +490,7 @@ impl<'a> StoreView<'a> {
     fn group_effects(&self, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
         let (mut each, mut whole) = (Vec::new(), Vec::new());
         for effect in self.resolved_effects(group, t)? {
-            if placement::kind(&effect.plugin_id).is_some() {
+            if placement::kind(&effect.plugin_id).is_some() || crate::doc::store::blob::is_blob_track(&effect.plugin_id) {
                 continue;
             }
             if !whole.is_empty() || effect.scope == crate::doc::store::EffectScope::Whole {
@@ -544,16 +544,19 @@ impl<'a> StoreView<'a> {
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
         let blur = base.effects.iter().position(|e| crate::doc::store::motion::is_motion_blur(&e.plugin_id));
-        let Some(first) = base.effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()) else {
+        let places = |e: &ResolvedEffect| placement::kind(&e.plugin_id).is_some() || crate::doc::store::blob::is_blob_track(&e.plugin_id);
+        let Some(first) = base.effects.iter().position(places) else {
             return match blur {
                 Some(at) => self.push_motion_blur(base, at, t, present, world_transforms, memo, visiting, out),
                 None => { out.push(base); Ok(()) }
             };
         };
-        let kind = placement::kind(&base.effects[first].plugin_id).expect("found above");
         let params = &base.effects[first].params;
-        let placements = placement::placements(kind, params);
         let layer = base.id;
+        let placements = match placement::kind(&base.effects[first].plugin_id) {
+            Some(kind) => placement::placements(kind, params),
+            None => self.blob_placements(layer, t, params)?,
+        };
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
         let is_group = base.source == crate::doc::store::LayerSource::Group;
         let children = if is_group { self.children_in_order(layer, present)? } else { Vec::new() };
@@ -596,7 +599,7 @@ impl<'a> StoreView<'a> {
                     copy
                 };
                 if !is_group {
-                    let Some(split) = copy.effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()) else {
+                    let Some(split) = copy.effects.iter().position(places) else {
                         out.push(copy);
                         continue;
                     };
@@ -616,6 +619,22 @@ impl<'a> StoreView<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Blob Track: host が解いた塊(`AnalysisInputs`)を配置に。素材(この層)の中心を塊の中心へ、Box なら素材を箱の大きさへ伸ばす。
+    /// 解析の入力が無ければ空(描く前・UI の問い合わせ)。鍵の効果の番号は、層の中で何番目の Blob Track か。
+    fn blob_placements(&self, layer: LayerId, t: RationalTime, params: &[(String, crate::doc::store::Value)]) -> Result<Vec<placement::Placement>, StoreError> {
+        use crate::doc::store::blob;
+        let Some(marks) = self.analysis().and_then(|a| a.blobs(layer, crate::doc::store::EffectId(0), t)) else { return Ok(Vec::new()) };
+        let position = glam::Vec2::from(self.resolve_position(layer, t)?);
+        let material = blob::vec2_of(params, "material").map(|v| v.max(1e-3) as f32);
+        let fit_box = blob::number_of(params, "fit") >= 0.5;
+        Ok(marks.iter().map(|mark| {
+            let stretch = if fit_box { [mark.size[0] / material[0], mark.size[1] / material[1]] } else { [1.0, 1.0] };
+            let half = glam::vec2(material[0] * stretch[0], material[1] * stretch[1]) * 0.5;
+            let offset = glam::Vec2::from(mark.center) - position - half;
+            placement::Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch }
+        }).collect())
     }
 
     /// Motion Blur: 1 コマの中のずらした時刻で位置・大きさ・角度だけを取り直した写しを、平均する枚数の印を付けて並べる。

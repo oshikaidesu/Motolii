@@ -11,6 +11,8 @@ mod persist;
 pub mod kind;
 pub mod placement;
 pub mod pathop;
+pub mod analysis;
+pub mod blob;
 pub mod motion;
 pub mod particles;
 pub mod solid;

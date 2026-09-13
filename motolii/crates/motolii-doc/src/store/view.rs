@@ -32,6 +32,8 @@ pub struct StoreView<'a> {
     revision: Revision,
     track_cache: &'a RefCell<TrackCache>,
     record_cache: &'a RefCell<super::document::RecordCache>,
+    /// host が描いた絵から解いた値(Blob の塊など)。無ければ解析を読む配置は空。
+    analysis: Option<&'a super::analysis::AnalysisInputs>,
 }
 
 const MAX_LINK_DEPTH: u32 = 64;
@@ -55,7 +57,18 @@ impl<'a> StoreView<'a> {
             revision,
             track_cache,
             record_cache,
+            analysis: None,
         }
+    }
+
+    /// 解析の入力を読む view(resolve が Blob Track の塊を配置にする)。
+    pub fn with_analysis(mut self, inputs: &'a super::analysis::AnalysisInputs) -> Self {
+        self.analysis = Some(inputs);
+        self
+    }
+
+    pub fn analysis(&self) -> Option<&'a super::analysis::AnalysisInputs> {
+        self.analysis
     }
 
     pub fn without_transients(mut self) -> Self {

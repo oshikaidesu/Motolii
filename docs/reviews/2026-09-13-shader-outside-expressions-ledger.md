@@ -99,13 +99,23 @@ Furikake の利用者向けの説明(aescripts / toolfarm / gfxplugin の紹介�
 4. 粒子(Furikake 型)— **済み(2026-09-14、L0)**: `LayerSource::Particles`(doc の `store/particles.rs`、欄は `ROWS` の 1 表)。動きは閉じた式(simulation-model.md §8 の L0): 率だけ入点からコマごとに積み、重力・風は放物線、跳ね返りは跳ねるたびに次の着地を解く、乱流は年齢で動く fbm。描くのは fork の点群(円の billboard、点ごとの直径)。Create の棚に Particles、Inspector は欄の表。審判 `particles_are_a_closed_form`・`creating_particles_shows_the_particle_rows`。**まだ**: 出す元の形(箱・球・格子 — 今は矩形の広がりだけ)、子の粒子、加算の混ぜ方と soft particle(fork の点群に加算のパイプラインが無い)、積み重なる乱流と衝突(L3 / StateTrack、SIM-1)、欄の値は t の値で過去の粒にも効く(率だけが積む)
 5. Plexus(粒子・パスの頂点・点群の点を距離で結ぶ。描くのは re_renderer の線)— **粒子の分済み(2026-09-14)**: 粒子の層の欄 Connect Distance / Line Width / Line Opacity(Stardust の Plexus が粒子のノードなのと同じ置き方)。近傍は結ぶ距離の升目で探し、1 点 12 本・全体 6 万本まで。線は近いほど濃く、8 段に分けて fork の `LineDrawableBuilder` で描く。審判 `plexus_links_near_particles_with_lines`。**まだ**: パスの頂点・点群・Blob の点を結ぶ(配置や点の出所を受ける口が要る)
 6. 2D 物理 — **止めた(2026-09-14、相談待ち)**: 物理の結果が層の位置・角度を書き換えるので座標の法に触れる(どの層が剛体か = 効果か属性か、書類の評価へどう戻すか)。rapier2d は新しい重い依存で、夜間に足すと build のリスク
-7. Blob(拾う元 3 つ・ID 持続の切り替え・配置 + 同梱プリセット)— **芯だけ済み(2026-09-14)**: `media/blob.rs`(明るさ / 動き / 色で二値 → 8 近傍の連結成分 → 箱・中心・面積、大きさで足切り、ID は持続なら最大移動距離の中で近い順に継いで revive、非持続は読む順)。審判 5 本。**まだ(相談待ち)**: 塊を配置として resolve へ渡す橋 — resolve は書類だけの純関数で画素を読めない。描いた絵の解析を書類の評価へ戻すのは新しい仕組み
+7. Blob(拾う元 3 つ・ID 持続の切り替え・配置 + 同梱プリセット)— **橋まで済み(2026-09-14)**: 芯は `media/blob.rs`。橋は §10。Blob Track(`motolii.blob_track`、配置効果の族)を素材の層に掛け、Track Layer に元の層を指す。審判 `blob_track_places_the_material_on_each_mark_from_the_analysis`(doc)・`analysis_contracts`(実 GPU、塊の上に素材・ID が動いても続く・飛んでも辿っても同じ絵)。**まだ**: 流行の見た目の同梱プリセット(箱 + ID の文字 + 箱どうしの線)、ID を文字にする口、棚の札の絵(今は白)
 
 ## 9. 朝の相談(2026-09-14 夜間の続き)
 
 1. **超解像**: 効果の出力を層より大きくする口(footprint 解像度・余白の宣言の法)をどうするか
 2. **2D 物理**: 剛体の印は効果か層の属性か、物理が書いた位置を書類の評価へどう戻すか(StateTrack)、rapier2d を足してよいか
-3. **Blob の橋**: 描いた絵の解析(塊)を配置として resolve へ渡す仕組み。同じ橋が Plexus の点の出所(パスの頂点・点群・Blob)にも要る
+3. ~~**Blob の橋**~~ → 2026-09-14 裁定・実装(§10)
 4. **見た目の検収**: Pixel Motion Blur・Motion Blur・Depth Map・Kuwahara・XDoG・Particles(Create の棚の Particles、Inspector の欄の表)・Plexus。Motion Blur の Position / Scale / Angle は今 Off/On の選択肢の部品で出る
 
 走らせる前に、この順番の形を利用者に見せて「うん」を待つ。
+
+## 10. 解析の橋 — 決定・実装(2026-09-14)
+
+利用者 2026-09-14「後々ガチのデータモッシュもエフェクトに入れるつもりなので必須」。推奨どおり、既存の設計(simulation-model.md §3.3「解析 DataTrack は書類に入れない再生成可能なキャッシュ、書類にはレシピだけ」)に載せた。
+
+- **doc**: `store/analysis.rs` の `AnalysisInputs`(層 × 効果の番号 × 時刻 → 解いた値)。`StoreView::with_analysis` で view に持たせ、resolve は入力として読むだけ(純関数のまま)。入力が無ければ解析を読む配置は空
+- **host**: `engine/analysis.rs`。層を本物で組んで効果の出口を読み戻す 1 本(`layer_linear_picture`、Freeze と共用)→ 長辺 480 へ縮めて非乗算 sRGB → `media/blob.rs` → 元の層の置き場所で comp の座標へ。ID の持続・動きで拾う時は入点から 1 コマずつ解き、解いたコマは書類の版と取っ手が変わるまで持つ
+- engine の中で描く時の resolve(本番・texture・窓)は全部 `resolved_with_analysis`。別時刻の読み・Freeze・UI の問い合わせは素の resolve(Blob の写しは出ない)
+- **次に載せる物**: データモッシュの動きの場、Plexus の点の出所(点群・パスの頂点・Blob)
+- **まだ**: 版の鍵は書類全体(どこを編集しても解き直す)。元の層だけの版にすると軽くなる

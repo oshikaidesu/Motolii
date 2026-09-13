@@ -118,6 +118,8 @@ pub struct Placement {
     pub opacity: f32,
     /// 正なら遅れて出る(この配置は `t - time_offset` の姿)。
     pub time_offset: RationalTime,
+    /// 縦横の伸び(Blob Track が素材を箱に合わせる)。Repeater は [1, 1]。
+    pub stretch: [f32; 2],
 }
 
 impl Placement {
@@ -125,7 +127,7 @@ impl Placement {
         use glam::{Affine2, Vec2};
         Affine2::from_translation(Vec2::from(self.offset) + pivot)
             * Affine2::from_angle(self.rotation_degrees.to_radians())
-            * Affine2::from_scale(Vec2::splat(self.scale))
+            * Affine2::from_scale(Vec2::new(self.scale * self.stretch[0], self.scale * self.stretch[1]))
             * Affine2::from_translation(-pivot)
     }
 
@@ -133,7 +135,7 @@ impl Placement {
         use glam::{Affine3A, Quat, Vec3};
         Affine3A::from_translation(Vec3::new(self.offset[0], self.offset[1], 0.0) + pivot)
             * Affine3A::from_quat(Quat::from_rotation_z(self.rotation_degrees.to_radians()))
-            * Affine3A::from_scale(Vec3::new(self.scale, self.scale, 1.0))
+            * Affine3A::from_scale(Vec3::new(self.scale * self.stretch[0], self.scale * self.stretch[1], 1.0))
             * Affine3A::from_translation(-pivot)
     }
 }
@@ -191,6 +193,7 @@ pub fn placements(kind: &PlacementKind, params: &[(String, Value)]) -> Vec<Place
                 opacity: (1.0 + get("opacity_each") * i + get("opacity_random") * u(4)).clamp(0.0, 1.0) as f32,
                 time_offset: RationalTime::try_new((seconds * TIME_DEN as f64).round() as i64, TIME_DEN)
                     .unwrap_or(RationalTime::ZERO),
+                stretch: [1.0, 1.0],
             }
         })
         .collect()

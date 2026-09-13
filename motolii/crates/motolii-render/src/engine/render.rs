@@ -33,9 +33,7 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let resolved = view
-            .resolved_layers(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = self.resolved_with_analysis(view, t)?;
         let camera = match camera_override {
             Some(camera) => camera,
             None => self.resolve_camera_in(view, &resolved, t)?,
@@ -263,34 +261,14 @@ impl Engine {
         let t = RationalTime::try_from_frame(comp_frame, composition.fps).map_err(|e| EngineError::Time(e.to_string()))?;
         let resolved = view.resolved_layers(t).map_err(|e| EngineError::Store(e.to_string()))?;
         let Some(target) = resolved.iter().find(|l| l.id == layer_id && l.copy == 0 && !l.ghost).cloned() else { return Ok(false) };
-        let texts = collect_text_documents(view, std::slice::from_ref(&target), t)?;
-        let shapes = collect_shape_documents(view, std::slice::from_ref(&target), t)?;
-        let camera = self.resolve_camera_in(view, &resolved, t)?;
         self.freezing = Some(layer_id);
-        let built = self.layers_from_resolved(view, comp, camera, camera, t, std::slice::from_ref(&target), &texts, &shapes);
+        let picture = self.layer_linear_picture(view, &resolved, &target, t, comp);
         self.freezing = None;
-        let Some(lwp) = built?.into_iter().next() else { return Ok(false) };
-        let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(&lwp))?;
-        let Some(texture) = textures.first().and_then(|c| c.texture()).cloned() else { return Ok(false) };
-        let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| EngineError::Store(e.to_string()))?.texture.clone();
-        // 効果の列の出口は乗算済み線形の Rgba16Float。列が空の層は素材のまま(非乗算 sRGB 等)なので同じ空間へ写す。
-        let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || raw.format().is_srgb();
-        let (half, owned) = if raw.format() == wgpu::TextureFormat::Rgba16Float {
-            (raw, None)
-        } else {
-            let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-freeze-encode") });
-            let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !linear, linear);
-            self.compositor.pending.push(encoder.finish());
-            (converted.clone(), Some(converted))
-        };
-        let bytes = self.compositor.read_texture_bytes(&half)?;
-        for (w, h, f, tx) in checked_out { self.compositor.effect_scratch.release(w, h, f, tx); }
-        if let Some(owned) = owned { self.compositor.effect_scratch.release(owned.width(), owned.height(), owned.format(), owned); }
-        let [w, h] = [half.width(), half.height()];
-        let uploaded = self.compositor.upload_rgba16f("motolii-frozen", bytes.clone(), w, h)?;
+        let Some(picture) = picture? else { return Ok(false) };
+        let uploaded = self.compositor.upload_rgba16f("motolii-frozen", picture.bytes.clone(), picture.width, picture.height)?;
         let start = view.meta(layer_id).map_err(|e| EngineError::Store(e.to_string()))?.map_or(0, |m| m.timing.start);
-        let picture = super::frozen::FrozenFrame { texture: uploaded, natural: lwp.layer.size, padding: paddings[0], frame: lwp.layer.frame };
-        self.frozen.remember(layer_id, comp_frame - start, picture, Some(&bytes)).map_err(|e| EngineError::Store(format!("Freeze の cache を書けない: {e}")))?;
+        let frozen = super::frozen::FrozenFrame { texture: uploaded, natural: picture.natural, padding: picture.padding, frame: picture.frame };
+        self.frozen.remember(layer_id, comp_frame - start, frozen, Some(&picture.bytes)).map_err(|e| EngineError::Store(format!("Freeze の cache を書けない: {e}")))?;
         Ok(true)
     }
 
@@ -329,7 +307,7 @@ impl Engine {
     /// - 板の道(層の絵に焼く列)は**その層だけ**を辿り直す。
     /// - 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持ち、**フレームを丸ごと**辿り直す。
     #[allow(clippy::too_many_arguments)]
-    fn layers_from_resolved(
+    pub(super) fn layers_from_resolved(
         &mut self,
         view: &StoreView<'_>,
         comp: CompSpec,
@@ -763,9 +741,7 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let resolved = view
-            .resolved_layers(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = self.resolved_with_analysis(view, t)?;
         let camera = self.resolve_camera_in(view, &resolved, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
@@ -792,9 +768,7 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let resolved = view
-            .resolved_layers(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = self.resolved_with_analysis(view, t)?;
         let camera = self.resolve_camera_in(view, &resolved, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
@@ -845,9 +819,7 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let resolved = view
-            .resolved_layers(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = self.resolved_with_analysis(view, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
         let document_camera = self.resolve_camera_in(view, &resolved, t)?;
@@ -1158,7 +1130,7 @@ impl Engine {
     }
 }
 
-fn collect_text_documents(
+pub(super) fn collect_text_documents(
     view: &StoreView<'_>,
     resolved: &[ResolvedLayer],
     t: RationalTime,
@@ -1186,7 +1158,7 @@ fn collect_text_documents(
     Ok(documents)
 }
 
-fn collect_shape_documents(
+pub(super) fn collect_shape_documents(
     view: &StoreView<'_>,
     resolved: &[ResolvedLayer],
     t: RationalTime,

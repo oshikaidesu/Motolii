@@ -4,6 +4,9 @@ pub mod mask;
 pub mod text;
 pub mod strokes;
 
+mod analysis;
+#[cfg(test)]
+mod analysis_contracts;
 mod motion;
 #[cfg(test)]
 mod motion_contracts;
@@ -150,6 +153,8 @@ pub struct Engine {
     point_clouds: HashMap<String, PointCloudData>,
     /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
     particle_frames: HashMap<LayerId, ParticleFrame>,
+    /// Blob Track の解いた塊(層ごと、書類の版と取っ手が変わるまで)。
+    blob_tracks: HashMap<LayerId, analysis::BlobTrackState>,
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
     /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
@@ -189,6 +194,7 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             particle_frames: HashMap::new(),
+            blob_tracks: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
@@ -254,6 +260,7 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             particle_frames: HashMap::new(),
+            blob_tracks: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
