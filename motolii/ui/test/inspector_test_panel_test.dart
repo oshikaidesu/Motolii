@@ -384,8 +384,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('TEXT'), findsOneWidget);
     expect(find.text('Hello'), findsOneWidget);
-    // The colour is a value row of the text, with the hex to type into.
+    // No colour row on the sheet; the Browser's wheel is the way to it.
     expect(find.text('COLOR'), findsNothing);
-    expect(find.text('#ff8000'), findsOneWidget);
+    expect(find.text('#ff8000'), findsNothing);
   });
 }

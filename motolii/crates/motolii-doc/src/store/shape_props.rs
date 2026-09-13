@@ -84,10 +84,6 @@ fn first_leaf(shapes: &[ShapeNode]) -> Option<&crate::doc::vector::Shape> {
     })
 }
 
-fn first_source(shapes: &[ShapeNode]) -> Option<&PathSource> {
-    first_leaf(shapes).map(|s| &s.source)
-}
-
 /// 開いた 1 本の Bezier(Line・Bezier の recipe)の横幅。Length の既定。
 fn open_width(source: &PathSource) -> Option<f64> {
     let PathSource::Bezier(path) = source else { return None };
@@ -98,9 +94,10 @@ fn open_width(source: &PathSource) -> Option<f64> {
     (hi - lo > f64::EPSILON).then_some(hi - lo)
 }
 
-/// 層の形が持つ欄。星と多角形は頂点数と半径、矩形と楕円は大きさ、開いた線は長さ。線の太さは全部に。
+/// 層の形が持つ欄は gradient の軸だけ。形の寸法は path が正本で欄を持たない(2026-08-29)。
+/// 線は効果の責務で、ここには欄も色も無い。
 pub fn rows(shapes: &[ShapeNode]) -> Vec<ShapeRow> {
-    let mut rows = source_rows(shapes);
+    let mut rows = Vec::new();
     if let Some(leaf) = first_leaf(shapes) {
         if let Some(Brush::Gradient(g)) = leaf.fill.as_ref().map(|f| &f.brush) {
             let axis = axis_of(&leaf.source, g);
@@ -108,39 +105,8 @@ pub fn rows(shapes: &[ShapeNode]) -> Vec<ShapeRow> {
             rows.push(ShapeRow { name: property::FILL_CENTER, label: "Center", value: Value::Vec2(axis.center), range: None });
             rows.push(ShapeRow { name: property::FILL_SPREAD, label: "Spread", value: Value::F64(axis.spread), range: Some((0.0, 1000.0)) });
         }
-        if let Some(Brush::Solid(c)) = leaf.fill.as_ref().map(|f| &f.brush) {
-            rows.push(ShapeRow { name: property::SHAPE_FILL_COLOR, label: "Fill", value: Value::Color([c.r, c.g, c.b, 1.0]), range: None });
-        }
-        let width = leaf.stroke.as_ref().map_or(0.0, |s| s.width);
-        rows.push(ShapeRow { name: property::SHAPE_STROKE_WIDTH, label: "Stroke width", value: Value::F64(width), range: Some((0.0, 400.0)) });
-        // 線の色は線の有無に関わらず欄を出す。色を付けた時に線が生える(太さは Create の線と同じ)。
-        let stroke = match leaf.stroke.as_ref().map(|s| &s.brush) { Some(Brush::Solid(c)) => [c.r, c.g, c.b, 1.0], _ => [0.0, 0.0, 0.0, 1.0] };
-        rows.push(ShapeRow { name: property::SHAPE_STROKE_COLOR, label: "Stroke", value: Value::Color(stroke), range: None });
     }
     rows
-}
-
-fn source_rows(shapes: &[ShapeNode]) -> Vec<ShapeRow> {
-    match first_source(shapes) {
-        Some(PathSource::PolyStar { points, outer_radius, inner_radius, star_type }) => {
-            let mut rows = vec![
-                ShapeRow { name: property::SHAPE_POINTS, label: "Points", value: Value::F64(*points), range: Some((3.0, 100.0)) },
-                ShapeRow { name: property::SHAPE_OUTER_RADIUS, label: "Outer Radius", value: Value::F64(*outer_radius), range: Some((0.0, f64::MAX)) },
-            ];
-            if *star_type == crate::doc::vector::StarType::Star {
-                rows.push(ShapeRow { name: property::SHAPE_INNER_RADIUS, label: "Inner Radius", value: Value::F64(*inner_radius), range: Some((0.0, f64::MAX)) });
-            }
-            rows
-        }
-        Some(PathSource::Rectangle { size }) | Some(PathSource::Ellipse { size }) => vec![
-            ShapeRow { name: property::SHAPE_SIZE, label: "Size", value: Value::Vec2([size.x, size.y]), range: Some((0.0, f64::MAX)) },
-        ],
-        Some(source) => match open_width(source) {
-            Some(width) => vec![ShapeRow { name: property::SHAPE_LENGTH, label: "Length", value: Value::F64(width), range: Some((0.0, f64::MAX)) }],
-            None => Vec::new(),
-        },
-        None => Vec::new(),
-    }
 }
 
 /// property で上書きした形。無い欄は書類の値のまま。群の中まで届く。
@@ -195,10 +161,6 @@ pub fn apply(shapes: &[ShapeNode], get: &dyn Fn(&str) -> Option<Value>) -> Vec<S
                 let fill = shape.fill.get_or_insert_with(Default::default);
                 if matches!(fill.brush, Brush::Solid(_)) { fill.brush = Brush::Solid(Rgb { r: c[0], g: c[1], b: c[2] }); }
             }
-            if let Some(Value::Color(c)) = get(property::SHAPE_STROKE_COLOR) {
-                let stroke = shape.stroke.get_or_insert_with(|| Stroke { width: DEFAULT_STROKE_WIDTH, ..Stroke::default() });
-                stroke.brush = Brush::Solid(Rgb { r: c[0], g: c[1], b: c[2] });
-            }
             if let Some(Value::F64(width)) = get(property::SHAPE_STROKE_WIDTH) {
                 if width.is_finite() {
                     if width <= 0.0 {
@@ -232,15 +194,12 @@ mod tests {
     /// 欄は形の種類で決まり、既定は書類の値。property があればそれが勝ち、無い欄は書類のまま。
     #[test]
     fn properties_override_the_documents_shape_values() {
-        let rows = super::rows(&star());
-        assert_eq!(rows.iter().map(|r| r.name).collect::<Vec<_>>(), vec![property::SHAPE_POINTS, property::SHAPE_OUTER_RADIUS, property::SHAPE_INNER_RADIUS, property::SHAPE_STROKE_WIDTH, property::SHAPE_STROKE_COLOR]);
-        assert_eq!(rows[0].value, Value::F64(5.0));
+        assert!(super::rows(&star()).is_empty(), "形の寸法は欄にならない");
         let shown = apply(&star(), &|name| (name == property::SHAPE_POINTS).then_some(Value::F64(7.0)));
         let ShapeNode::Leaf(leaf) = &shown[0] else { panic!("葉") };
         assert_eq!(leaf.source, PathSource::PolyStar { points: 7.0, outer_radius: 100.0, inner_radius: 50.0, star_type: StarType::Star });
         assert_eq!(apply(&star(), &|_| None), star());
         let rect = vec![ShapeNode::Leaf(Shape::new(PathSource::Rectangle { size: Point { x: 10.0, y: 20.0 } }))];
-        assert_eq!(super::rows(&rect)[0].value, Value::Vec2([10.0, 20.0]));
         let shown = apply(&rect, &|_| Some(Value::Vec2([30.0, 40.0])));
         assert!(matches!(&shown[0], ShapeNode::Leaf(s) if s.source == PathSource::Rectangle { size: Point { x: 30.0, y: 40.0 } }));
     }
@@ -289,17 +248,14 @@ mod tests {
         assert_eq!(diamond.color_at(0.5), Rgb { r: 0.5, g: 0.5, b: 0.5 });
     }
 
-    /// 線の太さは全部の形の欄。0 で線が消え、線の無い形に付ければ黒い線が生える。開いた線には長さの欄。
+    /// 線の太さと長さは property で上書きできるが欄は持たない。0 で線が消え、線の無い形に付ければ黒い線が生える。
     #[test]
-    fn stroke_width_and_length_are_rows_too() {
-        let labels = |shapes: &[ShapeNode]| super::rows(shapes).iter().map(|r| r.label).collect::<Vec<_>>();
-        assert_eq!(labels(&star()), vec!["Points", "Outer Radius", "Inner Radius", "Stroke width", "Stroke"]);
+    fn stroke_width_and_length_override_without_rows() {
         let grown = apply(&star(), &|n| (n == property::SHAPE_STROKE_WIDTH).then_some(Value::F64(3.0)));
         let ShapeNode::Leaf(leaf) = &grown[0] else { panic!("葉") };
         assert_eq!(leaf.stroke.as_ref().map(|s| (s.width, s.brush.clone())), Some((3.0, Brush::Solid(Rgb::BLACK))));
         let line = vec![ShapeNode::Leaf(crate::doc::vector::Shape { stroke: Some(Stroke { width: 6.0, ..Stroke::default() }), ..crate::doc::vector::Shape::new(PathSource::Bezier(vec![crate::doc::vector::Contour::open([Point { x: 10.0, y: 0.0 }, Point { x: 110.0, y: 0.0 }])])) })];
-        assert_eq!(labels(&line), vec!["Length", "Stroke width", "Stroke"]);
-        assert_eq!(super::rows(&line)[0].value, Value::F64(100.0));
+        assert!(super::rows(&line).is_empty());
         let longer = apply(&line, &|n| match n { property::SHAPE_LENGTH => Some(Value::F64(250.0)), property::SHAPE_STROKE_WIDTH => Some(Value::F64(0.0)), _ => None });
         let ShapeNode::Leaf(leaf) = &longer[0] else { panic!("葉") };
         let PathSource::Bezier(path) = &leaf.source else { panic!("線") };

@@ -846,6 +846,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final rows = panelRows(layer['properties'])
         .where(_isTextProperty)
         .where((r) => r['id'] != 'text_justify' && r['label'] != 'Size')
+        .where((r) => r['kind'] != 'color')
         .toList();
     final align = _row('text_justify');
     return [

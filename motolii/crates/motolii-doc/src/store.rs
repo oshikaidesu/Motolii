@@ -118,9 +118,8 @@ pub mod property {
     pub const SHAPE_INNER_RADIUS: &str = "shape.inner_radius";
     pub const SHAPE_SIZE: &str = "shape.size";
     pub const SHAPE_STROKE_WIDTH: &str = "shape.stroke_width";
-    /// 単色の塗りと線の色。書類の brush が既定で、鍵が打てる。gradient の塗りは stop ごと(`fill.stop.<n>.color`)。
+    /// 単色の塗りの色。書類の brush が既定で、鍵が打てる。gradient の塗りは stop ごと(`fill.stop.<n>.color`)。
     pub const SHAPE_FILL_COLOR: &str = "shape.fill_color";
-    pub const SHAPE_STROKE_COLOR: &str = "shape.stroke_color";
     pub const SHAPE_LENGTH: &str = "shape.length";
 
     /// 塗りの gradient(`shape_props`)。軸は形の bounds に対する比で持つ: 向き・中心のずれ(%)・広がり(%)。

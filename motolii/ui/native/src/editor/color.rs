@@ -115,7 +115,8 @@ pub(crate) fn property_of(doc: &Document, slot: &ColorSlot) -> Option<PropertyId
     let name = match slot {
         ColorSlot::TextFill { style, .. } => return Some(PropertyId::text_style_fill_color(*style)),
         ColorSlot::ShapeFill { .. } => property::SHAPE_FILL_COLOR.to_owned(),
-        ColorSlot::ShapeStroke { .. } => property::SHAPE_STROKE_COLOR.to_owned(),
+        // 線は効果の責務。ここからは書けない。
+        ColorSlot::ShapeStroke { .. } => return None,
         ColorSlot::Property { property, .. } => property.clone(),
         ColorSlot::ShapeGradientPoint { index, .. } => format!("{}{index}.color", property::FILL_STOP_PREFIX),
         ColorSlot::ShapeGradientStop { layer, path, end } => {
@@ -145,7 +146,6 @@ pub(crate) fn slot_of(doc: &Document, layer: LayerId, name: &str) -> Option<Colo
     let shapes = doc.view().shapes(layer).ok()?;
     match name {
         property::SHAPE_FILL_COLOR => read::first_shape_fill(&shapes, Vec::new()).map(|(path, _)| ColorSlot::ShapeFill { layer, path }),
-        property::SHAPE_STROKE_COLOR => read::first_leaf(&shapes, Vec::new()).map(|(path, _)| ColorSlot::ShapeStroke { layer, path }),
         _ => Some(ColorSlot::Property { layer, property: name.to_owned() }),
     }
 }
