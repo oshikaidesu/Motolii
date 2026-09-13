@@ -69,6 +69,42 @@ class ColorsShelf extends BrowserShelf {
   @override
   String classification(BrowserHost host, Map<String, dynamic> item) =>
       item['saved'] == true
+  /// What the swatch is: solid or gradient, how its stops are blended, how
+  /// many, and where it came from — all read off the swatch itself.
+  @override
+  List<FilterGroup> groups(BrowserHost host) => const [
+    FilterGroup('Kind', ['Solid', 'Gradient']),
+    FilterGroup('Blend', [], kind: FilterKind.actual),
+    FilterGroup('Stops', [], kind: FilterKind.actual),
+    FilterGroup('Source', ['Used here', 'Saved', 'Starter']),
+  ];
+
+  @override
+  Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) => {
+    stopsOf(item).length > 1 ? 'Gradient' : 'Solid',
+    classification(host, item),
+  };
+
+  @override
+  String? valueOf(BrowserHost host, Map<String, dynamic> item, String group) {
+    final stops = stopsOf(item).length;
+    if (stops < 2) return null;
+    return switch (group) {
+      'Blend' =>
+        const {
+              'rgb': 'RGB',
+              'linear_rgb': 'Linear',
+              'oklab': 'Oklab',
+              'oklch_short': 'Oklch short',
+              'oklch_long': 'Oklch long',
+              'steps': 'Steps',
+            }['${item['blend'] ?? 'oklab'}'] ??
+            '${item['blend']}',
+      'Stops' => '$stops',
+      _ => null,
+    };
+  }
+
       ? 'Saved'
       : item['used'] == true
       ? 'Used here'

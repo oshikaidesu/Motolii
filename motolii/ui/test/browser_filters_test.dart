@@ -199,4 +199,246 @@ void main() {
       c.dispose();
     },
   );
+
+  Future<EditorSession> mountShelf(
+    WidgetTester tester,
+    String tab,
+    Map<String, dynamic> state, {
+    Map<String, dynamic>? settings,
+  }) async {
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final kept = settings ?? <String, dynamic>{};
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(EditorSession.channel, (call) async {
+          if (call.method == 'readSettings') return kept;
+          if (call.method == 'writeSettings') {
+            kept.addAll(Map<String, dynamic>.from(call.arguments as Map));
+            return {};
+          }
+          return <String, dynamic>{};
+        });
+    final c = EditorSession();
+    c.document.value = state;
+    c.deskWork.value = {'browserRail': 120.0, 'browserView': 0};
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: EditorTheme.data,
+        home: Scaffold(
+          body: BrowserPanel(controller: c, fixedTab: tab),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('browser:filters-toggle')));
+    await tester.pumpAndSettle();
+    return c;
+  }
+
+  testWidgets(
+    'Media: the values files carry become tags, and duration is cut by the user',
+    (tester) async {
+      final settings = <String, dynamic>{};
+      final c = await mountShelf(tester, 'Media', {
+        'capabilities': ['placeAsset'],
+        'assets': [
+          {
+            'id': 'v1',
+            'name': 'clip.mp4',
+            'mime': 'video/mp4',
+            'path': '/m/clip.mp4',
+            'facts': {
+              'width': 1920,
+              'height': 1080,
+              'fps': 29.97,
+              'seconds': 12.0,
+            },
+          },
+          {
+            'id': 'v2',
+            'name': 'long.mov',
+            'mime': 'video/quicktime',
+            'path': '/m/long.mov',
+            'facts': {
+              'width': 3840,
+              'height': 2160,
+              'fps': 24,
+              'seconds': 95.0,
+            },
+          },
+          {
+            'id': 'i1',
+            'name': 'sky.png',
+            'mime': 'image/png',
+            'path': '/m/sky.png',
+            'facts': {'width': 1920, 'height': 1080},
+          },
+        ],
+      }, settings: settings);
+      Finder item(String id) => find.byKey(ValueKey('browser:Media:$id'));
+      // Resolution and frame rate are the values present, nothing invented.
+      expect(tag('Resolution', '1920×1080'), findsOneWidget);
+      expect(tag('Resolution', '3840×2160'), findsOneWidget);
+      expect(tag('Frame rate', '29.97'), findsOneWidget);
+      expect(tag('Frame rate', '24'), findsOneWidget);
+      await tester.tap(tag('Resolution', '1920×1080'));
+      await tester.pumpAndSettle();
+      expect(item('v1'), findsOneWidget);
+      expect(item('i1'), findsOneWidget);
+      expect(item('v2'), findsNothing);
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+      // Duration: the seeds, then a range of the user's own; a still has none.
+      await tester.tap(tag('Duration', '30-'));
+      await tester.pumpAndSettle();
+      expect(item('v2'), findsOneWidget);
+      expect(item('v1'), findsNothing);
+      expect(item('i1'), findsNothing);
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('browser:range:Duration')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('browser:range:min')),
+        '10',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('browser:range:max')),
+        '60',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(tag('Duration', '10-60'), findsOneWidget);
+      expect(Map<String, dynamic>.from(settings['deskWork'] as Map)['ranges'], {
+        'Media/Duration': ['-5', '5-30', '30-', '10-60'],
+      });
+      await tester.tap(tag('Duration', '10-60'));
+      await tester.pumpAndSettle();
+      expect(item('v1'), findsOneWidget);
+      expect(item('v2'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    },
+  );
+
+  testWidgets('Effects: seat, time and inputs come from the declaration', (
+    tester,
+  ) async {
+    final c = await mountShelf(tester, 'Effects', {
+      'capabilities': ['applyEffect'],
+      'catalog': [
+        {
+          'id': 'motolii.blur',
+          'name': 'Blur',
+          'stage': 'Pass',
+          'usesClock': false,
+          'persistent': false,
+          'readsBackdrop': false,
+          'layerInputs': 0,
+          'paramCount': 1,
+        },
+        {
+          'id': 'motolii.hold',
+          'name': 'Hold',
+          'stage': 'Pass',
+          'usesClock': true,
+          'persistent': true,
+          'readsBackdrop': false,
+          'layerInputs': 0,
+          'paramCount': 2,
+        },
+        {
+          'id': 'import.plasma',
+          'name': 'Plasma',
+          'stage': 'Pass',
+          'usesClock': true,
+          'persistent': false,
+          'readsBackdrop': true,
+          'layerInputs': 1,
+          'paramCount': 4,
+        },
+      ],
+    });
+    Finder item(String id) => find.byKey(ValueKey('browser:Effects:$id'));
+    await tester.tap(tag('Time', 'Feedback'));
+    await tester.pumpAndSettle();
+    expect(item('motolii.hold'), findsOneWidget);
+    expect(item('motolii.blur'), findsNothing);
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    await tester.tap(tag('Origin', 'Imported'));
+    await tester.pumpAndSettle();
+    expect(item('import.plasma'), findsOneWidget);
+    expect(item('motolii.hold'), findsNothing);
+    expect(tag('Parameters', '4'), findsOneWidget);
+    await tester.tap(tag('Inputs', 'Reads below'));
+    await tester.pumpAndSettle();
+    expect(item('import.plasma'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
+  testWidgets(
+    'Colors: solid or gradient, and the blend and stops of a gradient',
+    (tester) async {
+      final c = await mountShelf(
+        tester,
+        'Colors',
+        {
+          'capabilities': ['applyPalette', 'setGradient'],
+          'palette': [
+            {
+              'rgba': [1.0, 0.0, 0.0, 1.0],
+              'hex': 'ff0000',
+              'used': true,
+            },
+          ],
+        },
+        settings: {
+          'deskWork': {
+            'swatches': [
+              {
+                'stops': [
+                  [1.0, 0.0, 0.0, 1.0],
+                  [0.0, 0.0, 1.0, 1.0],
+                  [0.0, 1.0, 0.0, 1.0],
+                ],
+                'blend': 'oklch_short',
+              },
+            ],
+          },
+        },
+      );
+      c.deskWork.value = {
+        ...c.deskWork.value,
+        'swatches': [
+          {
+            'stops': [
+              [1.0, 0.0, 0.0, 1.0],
+              [0.0, 0.0, 1.0, 1.0],
+              [0.0, 1.0, 0.0, 1.0],
+            ],
+            'blend': 'oklch_short',
+          },
+        ],
+      };
+      await tester.pumpAndSettle();
+      expect(tag('Stops', '3'), findsOneWidget);
+      expect(tag('Blend', 'Oklch short'), findsOneWidget);
+      await tester.tap(tag('Kind', 'Gradient'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('browser:Colors:saved:0')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('browser:Colors:ff0000')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    },
+  );
 }

@@ -100,6 +100,62 @@ class EffectsShelf extends BrowserShelf {
         _ => 'Other',
       };
 
+  /// What the effect is, from its declaration alone: its seat, what it can
+  /// sit on, whether it reads the clock or keeps a frame, what it takes in,
+  /// how many fields it shows, and whether it shipped with Motolii.
+  @override
+  List<FilterGroup> groups(BrowserHost host) => const [
+    FilterGroup('Seat', [
+      'Pass',
+      'Warp',
+      'Surface',
+      'Field',
+      'Clip',
+      'Path',
+      'Placement',
+      'Solid',
+      'Text',
+    ]),
+    FilterGroup('Applies to', ['Image', 'Shape', 'Text', '3D', 'Any']),
+    FilterGroup('Time', ['Static', 'Uses time', 'Feedback']),
+    FilterGroup('Inputs', ['Single', 'Reads below', 'Takes a layer']),
+    FilterGroup('Parameters', [], kind: FilterKind.actual),
+    FilterGroup('Origin', ['Built-in', 'Imported']),
+  ];
+
+  @override
+  Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) {
+    final stage = '${item['stage']}';
+    return {
+      stage,
+      switch (stage) {
+        'Path' => 'Shape',
+        'Text' => 'Text',
+        'Field' || 'Surface' || 'Solid' => '3D',
+        'Pass' || 'Warp' => 'Image',
+        _ => 'Any',
+      },
+      if (item['persistent'] == true)
+        'Feedback'
+      else if (item['usesClock'] == true)
+        'Uses time'
+      else
+        'Static',
+      if (item['readsBackdrop'] == true) 'Reads below',
+      if ((item['layerInputs'] as num? ?? 0) > 0) 'Takes a layer',
+      if (item['readsBackdrop'] != true &&
+          (item['layerInputs'] as num? ?? 0) == 0)
+        'Single',
+      host.id(item).startsWith('motolii.') ? 'Built-in' : 'Imported',
+    };
+  }
+
+  @override
+  String? valueOf(BrowserHost host, Map<String, dynamic> item, String group) =>
+      group == 'Parameters'
+      ? '${(item['paramCount'] as num? ?? 0).toInt()}'
+      : null;
+
   @override
   bool supported(BrowserHost host, Map<String, dynamic> item) =>
       host.has('applyEffect') &&

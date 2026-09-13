@@ -75,11 +75,56 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   final quickAdd = TextEditingController();
   final quickAddFocus = FocusNode();
   ShelfFilter get filter => filters.putIfAbsent(tab, ShelfFilter.new);
-  List<FilterGroup> get groups => [
-    ...shelf.groups(this),
-    if (library.tagsOn(tab).isNotEmpty)
-      FilterGroup(userTagGroup, library.tagsOn(tab)),
-  ];
+
+  /// The groups with their tags filled in: declared as given, values from
+  /// what the items carry (sorted, numbers first), ranges from the user (or
+  /// the shelf's seeds until the user keeps their own), then the user's tags.
+  List<FilterGroup> get groups {
+    final items = shelf.items(this);
+    return [
+      for (final g in shelf.groups(this))
+        switch (g.kind) {
+          FilterKind.declared => g,
+          FilterKind.actual => FilterGroup(
+            g.name,
+            _sortedValues({
+              for (final i in items) ?shelf.valueOf(this, i, g.name),
+            }),
+            kind: g.kind,
+            unit: g.unit,
+          ),
+          FilterKind.range => FilterGroup(
+            g.name,
+            library.rangesOn(tab, g.name) ?? g.tags,
+            kind: g.kind,
+            unit: g.unit,
+          ),
+        },
+      if (library.tagsOn(tab).isNotEmpty)
+        FilterGroup(userTagGroup, library.tagsOn(tab)),
+    ];
+  }
+
+  static List<String> _sortedValues(Set<String> values) {
+    final list = values.toList();
+    list.sort((a, b) {
+      final x = double.tryParse(a.split('×').first),
+          y = double.tryParse(b.split('×').first);
+      if (x != null && y != null && x != y) return x.compareTo(y);
+      return a.compareTo(b);
+    });
+    return list;
+  }
+
+  bool _matches(FilterGroup g, Map<String, dynamic> item, Set<String> chosen) =>
+      switch (g.kind) {
+        FilterKind.declared => chosen.any(tagsOf(item).contains),
+        FilterKind.actual => chosen.contains(shelf.valueOf(this, item, g.name)),
+        FilterKind.range => switch (shelf.numberOf(this, item, g.name)) {
+          null => false,
+          final v => chosen.any((r) => inRange(r, v)),
+        },
+      };
   Set<String> tagsOf(Map<String, dynamic> item) => {
     ...shelf.tagsOf(this, item),
     ...library.tagsOf(tab, id(item)),
@@ -92,11 +137,11 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     if (f.collection != null &&
         library.collectionOf(tab, id(item)) != f.collection)
       return false;
-    Set<String>? tags;
+    final kinds = {for (final g in shelf.groups(this)) g.name: g};
     for (final e in f.groups.entries) {
       if (e.value.isEmpty || e.key == except) continue;
-      tags ??= tagsOf(item);
-      if (!e.value.any(tags.contains)) return false;
+      final g = kinds[e.key] ?? FilterGroup(e.key, const []);
+      if (!_matches(g, item, e.value)) return false;
     }
     return true;
   }
@@ -254,6 +299,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
         'tags',
         'collections',
         'labels',
+        'ranges',
         for (final s in shelves) ...s.deskKeys,
       ])
         d[k],
@@ -726,6 +772,38 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                         _derive();
                                       }),
                                       onSaveLabel: _saveLabel,
+                                      onAddRange: (group, range) {
+                                        final have =
+                                            library.rangesOn(tab, group) ??
+                                            shelf
+                                                .groups(this)
+                                                .firstWhere(
+                                                  (g) => g.name == group,
+                                                )
+                                                .tags;
+                                        library.setRanges(tab, group, [
+                                          ...have.where((r) => r != range),
+                                          range,
+                                        ]);
+                                      },
+                                      onDropRange: (group, range) {
+                                        final have =
+                                            library.rangesOn(tab, group) ??
+                                            shelf
+                                                .groups(this)
+                                                .firstWhere(
+                                                  (g) => g.name == group,
+                                                )
+                                                .tags;
+                                        filter.groups[group]?.remove(range);
+                                        library.setRanges(
+                                          tab,
+                                          group,
+                                          have
+                                              .where((r) => r != range)
+                                              .toList(),
+                                        );
+                                      },
                                     ),
                                   ),
                                 if (editor != null) editor,

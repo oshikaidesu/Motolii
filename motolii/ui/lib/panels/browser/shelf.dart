@@ -71,10 +71,26 @@ class ShelfLayout {
 /// carry in it. An item's own tags are facts about it; the user's tags live in
 /// one more group the frame adds.
 class FilterGroup {
-  const FilterGroup(this.name, this.tags);
+  const FilterGroup(
+    this.name,
+    this.tags, {
+    this.kind = FilterKind.declared,
+    this.unit = '',
+  });
   final String name;
+
+  /// Declared: the tags. Values: unused (the frame collects the values the
+  /// items actually have). Range: seed ranges as `min-max` (either end may
+  /// be empty), shown until the user keeps their own.
   final List<String> tags;
+  final FilterKind kind;
+  final String unit;
 }
+
+/// How a group gets its tags: declared by the shelf, collected from the
+/// values the items actually carry (a frame rate, a count), or ranges the
+/// user cuts on a continuous fact (a duration).
+enum FilterKind { declared, actual, range }
 
 /// One tab of the Browser: what it lists, how a tile looks, what applying
 /// does. Adding a tab is adding a shelf to [browserShelves]; the panel never
@@ -127,6 +143,12 @@ abstract class BrowserShelf {
   /// The item's own tags, as `group/tag` pairs are not needed: a tag name is
   /// unique within its group and the frame asks group by group.
   Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) => const {};
+
+  /// A values group's tag for the item (null: none), a range group's number.
+  String? valueOf(BrowserHost host, Map<String, dynamic> item, String group) =>
+      null;
+  double? numberOf(BrowserHost host, Map<String, dynamic> item, String group) =>
+      null;
 
   /// Called when the shelf comes to the front.
   void enter(BrowserHost host) {}

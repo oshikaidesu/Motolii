@@ -103,6 +103,20 @@ class BrowserLibrary {
     return controller.storeDesk('collections', next);
   }
 
+  /// The user's ranges on one range group (null: keep the shelf's seeds).
+  List<String>? rangesOn(String shelf, String group) {
+    final held = EditorSession.map(
+      controller.deskWork.value['ranges'],
+    )[key(shelf, group)];
+    return held is List ? held.whereType<String>().toList() : null;
+  }
+
+  Future<void> setRanges(String shelf, String group, List<String> ranges) =>
+      controller.storeDesk('ranges', {
+        ...EditorSession.map(controller.deskWork.value['ranges']),
+        key(shelf, group): ranges,
+      });
+
   /// Saved filters on one shelf: name and the filter it restores.
   List<Map<String, dynamic>> labelsOn(String shelf) =>
       EditorSession.maps(_labels[shelf]);
@@ -160,6 +174,32 @@ class ShelfFilter {
   ].join(' · ');
 }
 
+/// A range tag is `min-max`; either end may be empty. Matching is
+/// min ≤ value < max.
+(double?, double?) parseRange(String tag) {
+  final dash = tag.indexOf('-', 1);
+  if (dash < 0) return (double.tryParse(tag), null);
+  return (
+    double.tryParse(tag.substring(0, dash).trim()),
+    double.tryParse(tag.substring(dash + 1).trim()),
+  );
+}
+
+bool inRange(String tag, double value) {
+  final (lo, hi) = parseRange(tag);
+  return (lo == null || value >= lo) && (hi == null || value < hi);
+}
+
+String rangeLabel(String tag, String unit) {
+  final (lo, hi) = parseRange(tag);
+  String n(double v) => v == v.roundToDouble() ? '${v.toInt()}' : '$v';
+  final u = unit.isEmpty ? '' : ' $unit';
+  if (lo == null && hi == null) return 'any';
+  if (lo == null) return '< ${n(hi!)}$u';
+  if (hi == null) return '${n(lo)}$u +';
+  return '${n(lo)}–${n(hi)}$u';
+}
+
 /// The user's own tags live in one more group beside the item's own.
 const userTagGroup = 'Tags';
 
@@ -178,8 +218,14 @@ class FilterView extends StatelessWidget {
     required this.onToggle,
     required this.onClear,
     required this.onSaveLabel,
+    required this.onAddRange,
+    required this.onDropRange,
   });
   final List<FilterGroup> groups;
+
+  /// A range group's + pressed with a new `min-max`; a range chip's × pressed.
+  final void Function(String group, String range) onAddRange;
+  final void Function(String group, String range) onDropRange;
   final ShelfFilter filter;
   final Set<String> folded;
   final int results;
@@ -270,11 +316,22 @@ class FilterView extends StatelessWidget {
                                 key: ValueKey(
                                   'browser:filter:${group.name}:$tag',
                                 ),
-                                tag: tag,
+                                tag: group.kind == FilterKind.range
+                                    ? rangeLabel(tag, group.unit)
+                                    : tag,
                                 chosen:
                                     filter.groups[group.name]?.contains(tag) ??
                                     false,
                                 onTap: (add) => onToggle(group.name, tag, add),
+                                onRemove: group.kind == FilterKind.range
+                                    ? () => onDropRange(group.name, tag)
+                                    : null,
+                              ),
+                            if (group.kind == FilterKind.range)
+                              _RangeAdder(
+                                key: ValueKey('browser:range:${group.name}'),
+                                unit: group.unit,
+                                onAdd: (range) => onAddRange(group.name, range),
                               ),
                           ],
                         ),
@@ -353,10 +410,12 @@ class _TagChip extends StatelessWidget {
     required this.tag,
     required this.chosen,
     required this.onTap,
+    this.onRemove,
   });
   final String tag;
   final bool chosen;
   final ValueChanged<bool> onTap;
+  final VoidCallback? onRemove;
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: () => onTap(
@@ -374,15 +433,118 @@ class _TagChip extends StatelessWidget {
         color: chosen ? EditorTheme.accent : EditorTheme.raised,
         borderRadius: BorderRadius.circular(EditorMetrics.s2),
       ),
-      child: Text(
-        tag,
-        style: TextStyle(
-          fontSize: EditorMetrics.micro,
-          color: chosen ? EditorTheme.app : EditorTheme.ink,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            tag,
+            style: TextStyle(
+              fontSize: EditorMetrics.micro,
+              color: chosen ? EditorTheme.app : EditorTheme.ink,
+            ),
+          ),
+          if (onRemove != null)
+            GestureDetector(
+              onTap: onRemove,
+              child: Padding(
+                padding: const EdgeInsets.only(left: EditorMetrics.s3),
+                child: Icon(
+                  Icons.close,
+                  size: EditorMetrics.micro,
+                  color: chosen ? EditorTheme.app : EditorTheme.muted,
+                ),
+              ),
+            ),
+        ],
       ),
     ),
   );
+}
+
+/// The + at the end of a range group: two small fields, Enter makes the
+/// range a chip. Either end may stay empty.
+class _RangeAdder extends StatefulWidget {
+  const _RangeAdder({super.key, required this.unit, required this.onAdd});
+  final String unit;
+  final ValueChanged<String> onAdd;
+  @override
+  State<_RangeAdder> createState() => _RangeAdderState();
+}
+
+class _RangeAdderState extends State<_RangeAdder> {
+  bool open = false;
+  final lo = TextEditingController(), hi = TextEditingController();
+  @override
+  void dispose() {
+    lo.dispose();
+    hi.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final range = '${lo.text.trim()}-${hi.text.trim()}';
+    if (range != '-') widget.onAdd(range);
+    lo.clear();
+    hi.clear();
+    setState(() => open = false);
+  }
+
+  Widget _field(TextEditingController c, String hint, Key key) => SizedBox(
+    width: EditorMetrics.s36,
+    height: EditorMetrics.s16,
+    child: TextField(
+      key: key,
+      controller: c,
+      autofocus: c == lo,
+      style: const TextStyle(
+        fontSize: EditorMetrics.micro,
+        color: EditorTheme.ink,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: EditorMetrics.s3,
+        ),
+      ),
+      onSubmitted: (_) => _submit(),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => open
+      ? Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _field(lo, 'min', const ValueKey('browser:range:min')),
+            const Text('–', style: TextStyle(fontSize: EditorMetrics.micro)),
+            _field(hi, 'max', const ValueKey('browser:range:max')),
+            if (widget.unit.isNotEmpty)
+              Text(
+                ' ${widget.unit}',
+                style: const TextStyle(
+                  fontSize: EditorMetrics.micro,
+                  color: EditorTheme.muted,
+                ),
+              ),
+          ],
+        )
+      : InkWell(
+          onTap: () => setState(() => open = true),
+          child: Container(
+            height: EditorMetrics.s16,
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+            decoration: BoxDecoration(
+              border: Border.all(color: EditorTheme.line),
+              borderRadius: BorderRadius.circular(EditorMetrics.s2),
+            ),
+            child: const Icon(
+              Icons.add,
+              size: EditorMetrics.micro,
+              color: EditorTheme.muted,
+            ),
+          ),
+        );
 }
 
 /// The rail's lower half: the seven collections, then the saved labels.

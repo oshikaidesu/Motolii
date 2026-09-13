@@ -43,13 +43,13 @@ pub struct EffectDescriptor {
     /// 2 枚目以降の image が要求する時刻のずれ(秒。負が過去)。宣言順。
     pub(crate) image_time_offsets: Vec<isf::TimeOffset>,
     /// 時計(`TIME` 系)を読む。読む効果だけ、時刻が変われば焼き直す。
-    pub(crate) uses_clock: bool,
+    pub uses_clock: bool,
     /// pass が下の合成(BACKDROP_INPUT)を読む。層の絵へは焼けず、描いた後の窓で効く。
-    pub(crate) reads_backdrop: bool,
+    pub reads_backdrop: bool,
     /// 2 枚目の image が層を指す欄の名前(`LAYER`)。宣言順。
-    pub(crate) image_layer_fields: Vec<String>,
+    pub image_layer_fields: Vec<String>,
     /// PERSISTENT な target を持つ(feedback)。
-    pub(crate) persistent: bool,
+    pub persistent: bool,
     /// `image_time_offsets` と同じ並び: 別の時刻に読む相手。
     pub(crate) image_time_sources: Vec<isf::TimeSource>,
     /// `image_time_offsets` と同じ並び: true なら層の入点からの絶対時刻(TIME_AT)。

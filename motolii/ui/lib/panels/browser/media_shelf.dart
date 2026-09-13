@@ -55,6 +55,57 @@ class MediaShelf extends BrowserShelf {
     return kind == '2D' ? 'Images' : kind;
   }
 
+  /// What the file itself is: its kind and where it came from are declared;
+  /// resolution and frame rate are the values the files actually have (a
+  /// handful); duration is the one continuous fact, cut into ranges by the
+  /// user (the seeds are only a start).
+  @override
+  List<FilterGroup> groups(BrowserHost host) => const [
+    FilterGroup('Kind', ['Video', 'Image', 'HDR', 'Audio', '3D']),
+    FilterGroup('Resolution', [], kind: FilterKind.actual),
+    FilterGroup('Frame rate', [], kind: FilterKind.actual, unit: 'fps'),
+    FilterGroup(
+      'Duration',
+      ['-5', '5-30', '30-'],
+      kind: FilterKind.range,
+      unit: 's',
+    ),
+    FilterGroup('Source', ['Imported', 'Bundled', 'Reference', 'Material']),
+  ];
+
+  @override
+  Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) {
+    final kind = mediaFamily(item);
+    return {
+      kind == '2D' ? 'Image' : kind,
+      item['builtin'] == true ? 'Bundled' : 'Imported',
+      item['role'] == 'reference' ? 'Reference' : 'Material',
+    };
+  }
+
+  @override
+  String? valueOf(BrowserHost host, Map<String, dynamic> item, String group) {
+    final facts = EditorSession.map(item['facts']);
+    switch (group) {
+      case 'Resolution':
+        final w = facts['width'], h = facts['height'];
+        return w is num && h is num ? '${w.toInt()}×${h.toInt()}' : null;
+      case 'Frame rate':
+        final fps = facts['fps'];
+        if (fps is! num) return null;
+        final r = (fps * 1000).round() / 1000;
+        return r == r.roundToDouble() ? '${r.toInt()}' : '$r';
+    }
+    return null;
+  }
+
+  @override
+  double? numberOf(BrowserHost host, Map<String, dynamic> item, String group) {
+    if (group != 'Duration') return null;
+    final s = EditorSession.map(item['facts'])['seconds'] ?? item['seconds'];
+    return s is num ? s.toDouble() : null;
+  }
+
   @override
   bool supported(BrowserHost host, Map<String, dynamic> item) =>
       item['builtin'] == true
