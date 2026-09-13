@@ -67,11 +67,13 @@ pub struct PointDisplace {
     pub complexity: u32,
     pub evolution: f32,
     pub offset: glam::Vec3,
+    /// Direction の軸の伏せ(XY なら Z が 0)。Normal は点群に法線が無いので XYZ と同じ。
+    pub mask: glam::Vec3,
 }
 
 impl Default for PointDisplace {
     fn default() -> Self {
-        Self { amount: 0.0, size: 100.0, complexity: 3, evolution: 0.0, offset: glam::Vec3::ZERO }
+        Self { amount: 0.0, size: 100.0, complexity: 3, evolution: 0.0, offset: glam::Vec3::ZERO, mask: glam::Vec3::ONE }
     }
 }
 
@@ -100,7 +102,7 @@ pub(crate) fn displaced_points(
                 re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), octaves),
                 re_renderer::noise::fbm3(q + glam::vec3(0.0, 47.3, 0.0), octaves),
             );
-            p + obj_from_frame * (field * displace.amount)
+            p + obj_from_frame * (field * displace.mask * displace.amount)
         })
         .collect()
 }

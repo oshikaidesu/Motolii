@@ -53,6 +53,8 @@ fn field(in: FieldIn, p: FieldParams) -> FieldOut {
 - **場を持たない層は割らない。** 既定は 1(＝三角形 2 枚)で、従来と 1 命令も変わらない。
 - 描画・選択・picking の 5 位相すべてが同じ格子を使うので、**動いた形のまま選べる**。
 
+同梱の Turbulent Displace は板・網・点群に同じ札で乗る。Direction は Blender の Displace modifier の並び(`Normal / XYZ / X / Y / Z`)に **`XY`(Z を伏せる)** を足した物で、既定は `XYZ`。`XY` が AE の Turbulent Displace そのもの(面内だけ)、既定はそれに浮き沈みが足された物なので、2D の合成では AE と同じに見え、カメラを倒すと立体が現れる(2026-09-13)。2D 専用だった Turbulent Warp は棚から退いた(file は Warp 段の契約として `EXPOSE: false` で残る)。
+
 これにより板でも**シルエットが変わる**。AE で旗を波打たせる時に要る「マスクを描いて Repeat Edge Pixels」という儀式は、シルエットが動かせない事を隠すためのもので、ここでは要らない。
 
 ## 5. 乗らないもの

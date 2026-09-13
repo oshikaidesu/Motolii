@@ -147,7 +147,7 @@ mod domain_contract {
     fn differing(a:&[u8],b:&[u8]) -> usize { a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a,b)| a.iter().zip(b.iter()).any(|(a,b)| a.abs_diff(*b)>3)).count() }
 
     #[test]
-    fn the_same_material_warps_the_same_as_pixels_or_paths_and_survives_spatial_placement() {
+    fn the_same_material_displaces_the_same_as_pixels_or_paths_and_survives_spatial_placement() {
         let mut engine=Engine::new().unwrap();
         let mut source=document(LayerSource::Shape,34,[0.0,0.0]); shape(&mut source);
         let pixels=engine.render_frame(&source.view(),RationalTime::ZERO).unwrap();
@@ -158,46 +158,17 @@ mod domain_contract {
             let mut image=document(LayerSource::File{path:file.to_string_lossy().into_owned(),fingerprint:None},128,[40.0,40.0]);
             for doc in [&mut path,&mut image] {
                 doc.apply(Intent::SetAttrs{layer:LayerId(1),patch:LayerAttrsPatch{projection:Some(projection),..Default::default()}}).unwrap();
-                effect(doc,0,"motolii.turbulent_warp",&[("amount",6.0),("size",20.0),("evolution",0.7)]);
+                effect(doc,0,"motolii.turbulent_displace",&[("amount",6.0),("size",20.0),("evolution",0.7),("along",2.0)]);
             }
             let a=engine.render_frame(&path.view(),RationalTime::ZERO).unwrap();
             let b=engine.render_frame(&image.view(),RationalTime::ZERO).unwrap();
-            assert!(differing(&a,&b)<30,"source representation changed the warp ({projection:?}): {} pixels",differing(&a,&b));
+            assert!(differing(&a,&b)<30,"source representation changed the displace ({projection:?}): {} pixels",differing(&a,&b));
             image.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::new(property::POSITION).unwrap(),value:Value::Vec2([52.0,40.0])}).unwrap();
             let shifted=engine.render_frame(&image.view(),RationalTime::ZERO).unwrap();
             let mut moved=0;
             for y in 0..128 { for x in 0..116 { let i=(y*128+x)*4; let j=(y*128+x+12)*4; if b[i..i+4].iter().zip(&shifted[j..j+4]).any(|(a,b)|a.abs_diff(*b)>3){moved+=1;} } }
-            assert!(moved<30,"placement changed material-local warp: {moved}");
+            assert!(moved<30,"placement changed layer-local displace: {moved}");
         }
-    }
-
-    #[test]
-    fn logical_warp_amount_is_independent_of_raster_density() {
-        let mut compositor=Compositor::headless().unwrap();
-        let mut rendered=Vec::new();
-        for density in [1u32,2] {
-            let extent=64*density;
-            let mut bytes=Vec::new();
-            for y in 0..extent { for x in 0..extent {
-                bytes.extend_from_slice(&[((x as f32+0.5)/extent as f32*255.0) as u8,((y as f32+0.5)/extent as f32*255.0) as u8,128,255]);
-            } }
-            let raw=compositor.cached_rgba(density as u64,"density contract",||Ok::<_,std::convert::Infallible>((bytes,extent,extent))).unwrap();
-            let source=compositor.normalized_material(&raw).unwrap();
-            let effect=ResolvedEffect{plugin_id:"motolii.turbulent_warp".into(),params:vec![("amount".into(),Value::F64(6.0)),("size".into(),Value::F64(20.0))],..Default::default()};
-            let passes=super::super::translate::translate_image_effects(&[effect],EffectStage::Warp);
-            let frame=ImageFrame{size:[64.0;2],origin:[0.0;2],pixels:[extent;2]};
-            let input=LayerWithPasses{layer:image_layer(source,frame.size),passes,pass_sources:Vec::new()};
-            let (mut output,padding,_spills,_owned)=compositor.effective_layer_textures_in_frame(&[input],Some(frame)).unwrap();
-            let frame=frame.padded(padding[0]);
-            let texture=output.remove(0).texture().unwrap().clone();
-            let layer=LayerWithPasses{layer:image_layer(texture,frame.size),passes:Vec::new(),pass_sources:Vec::new()};
-            rendered.push(compositor.render_with_effects(CompSpec{width:76,height:76},Default::default(),&[layer],[0.0;4]).unwrap());
-        }
-        let mut total=0usize;let mut error=0usize;
-        for (a,b) in rendered[0].chunks_exact(4).zip(rendered[1].chunks_exact(4)) {
-            if a[3]>250 && b[3]>250 {total+=3;error+=a[..3].iter().zip(&b[..3]).map(|(a,b)|a.abs_diff(*b) as usize).sum::<usize>();}
-        }
-        assert!(total>6000 && error<total*2,"pixel density changed the material-local warp: {error}/{total}");
     }
 
     /// 溢れの法: Glow の halo(coverage の外)は層の Blend が Normal でも screen で下へ乗る。
@@ -257,12 +228,12 @@ mod domain_contract {
     }
 
     #[test]
-    fn neutral_warp_is_identity_and_evolution_and_seed_have_distinct_results() {
+    fn neutral_displace_is_identity_and_evolution_and_seed_have_distinct_results() {
         let mut doc=document(LayerSource::Shape,128,[40.0,40.0]);shape(&mut doc);
         let mut engine=Engine::new().unwrap();let plain=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
-        effect(&mut doc,0,"motolii.turbulent_warp",&[("amount",0.0),("size",20.0)]);
+        effect(&mut doc,0,"motolii.turbulent_displace",&[("amount",0.0),("size",20.0),("along",2.0)]);
         let zero=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
-        assert!(differing(&plain,&zero)<20,"neutral warp changed the material");
+        assert!(differing(&plain,&zero)<20,"neutral displace changed the material");
         let mut results=Vec::new();
         for (evolution,seed) in [(0.0,0.0),(1.0,0.0),(0.0,3.0)] {
             for (name,value) in [("amount",6.0),("evolution",evolution),("seed",seed)] {
@@ -273,23 +244,16 @@ mod domain_contract {
         assert!(differing(&results[0],&results[1])>30 && differing(&results[0],&results[2])>30);
     }
 
+    /// 場は層に 1 つ(後の場が勝つ)。同じ場の量を上げれば板が歪み、その後の pass は歪んだ絵に掛かる。
     #[test]
-    fn two_dimensional_warp_and_spatial_displacement_can_be_stacked() {
+    fn a_turbulent_displace_deforms_the_plane_and_a_pass_after_it_is_not_ignored() {
         let mut doc=document(LayerSource::Shape,128,[40.0,40.0]); shape(&mut doc);
-        effect(&mut doc,0,"motolii.turbulent_warp",&[("amount",6.0),("size",20.0)]);
+        effect(&mut doc,0,"motolii.turbulent_displace",&[("amount",6.0),("size",20.0),("along",2.0)]);
         let mut engine=Engine::new().unwrap();
-        let warp=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
-        effect(&mut doc,1,"motolii.turbulent_displace",&[("amount",0.0),("size",20.0),("along",1.0)]);
         let neutral=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
-        if let Some(dir)=std::env::var_os("MOTOLII_DOMAIN_EVIDENCE") {
-            let dir=std::path::PathBuf::from(dir);std::fs::create_dir_all(&dir).unwrap();
-            image::save_buffer(dir.join("warp.png"),&warp,128,128,image::ColorType::Rgba8).unwrap();
-            image::save_buffer(dir.join("neutral.png"),&neutral,128,128,image::ColorType::Rgba8).unwrap();
-        }
-        assert!(differing(&warp,&neutral)<40,"zero spatial displacement changed the material: {} pixels",differing(&warp,&neutral));
-        doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::effect_param(EffectId(1),"amount").unwrap(),value:Value::F64(20.0)}).unwrap();
+        doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::effect_param(EffectId(0),"amount").unwrap(),value:Value::F64(20.0)}).unwrap();
         let spatial=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
-        assert!(differing(&neutral,&spatial)>50,"spatial field must deform the warped plane");
+        assert!(differing(&neutral,&spatial)>50,"a larger field must deform the plane more");
         assert!(engine.materials[&LayerId(1)].mesh.is_some(),"a spatial field must receive geometry");
         effect(&mut doc,2,"motolii.gain",&[("gain",2.0)]);
         let bright=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();

@@ -40,7 +40,7 @@ mod snapshots {
         ("motolii.gain", &[("gain", 0.45)]),
         ("motolii.blur", &[("radius", 24.0)]),
         ("motolii.glow", &[("threshold", 0.7), ("intensity", 1.2), ("radius", 24.0), ("chromatic", 0.5)]),
-        ("motolii.turbulent_warp", &[("amount", 24.0), ("size", 80.0)]),
+        ("motolii.turbulent_displace", &[("amount", 24.0), ("size", 80.0)]),
         ("motolii.trim_paths", &[("end", 60.0)]),
         ("motolii.pucker_bloat", &[("amount", 60.0)]),
         ("motolii.twist", &[("angle", 120.0)]),

@@ -24,7 +24,7 @@ impl Compositor {
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
         let catalog = super::catalog_snapshot();
-        let effect_programs = catalog.definitions.iter().filter(|d| d.manifest.expose && matches!(d.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp))
+        let effect_programs = catalog.definitions.iter().filter(|d| (d.manifest.expose || d.manifest.stage == effects::IsfStage::Warp) && matches!(d.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp))
             .map(|d| (d.plugin_id().to_owned(), effects::EffectProgram::compile(&ctx, d))).collect();
         let builtin = |name: &str| -> Result<effects::EffectProgram, CompositorError> {
             let definition = catalog.definitions.iter().find(|d| d.source.name == name)
@@ -99,7 +99,8 @@ impl Compositor {
             match definition.source.name.as_str() {
                 "blend" => self.blend_vism = program,
                 "matte" => { self.matte_vism = program; self.coverage_programs.clear(); }
-                _ if definition.manifest.expose => { self.effect_programs.insert(definition.plugin_id().to_owned(), program); }
+                // 棚に出さない warp も段の契約として組む(turbulent_warp は退役後も material.rs の試験が使う)。
+                _ if definition.manifest.expose || definition.manifest.stage == effects::IsfStage::Warp => { self.effect_programs.insert(definition.plugin_id().to_owned(), program); }
                 _ => {}
             }
         }

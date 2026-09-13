@@ -28,7 +28,7 @@ void main() {
         {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass'},
         {'id': 'motolii.pucker_bloat', 'name': 'Pucker & Bloat', 'stage': 'Path'},
         {'id': 'motolii.turbulent_warp', 'name': 'Turbulent Warp 2D', 'stage': 'Warp'},
-        {'id': 'motolii.turbulent_displace', 'name': 'Turbulent Displace 3D', 'stage': 'Field'},
+        {'id': 'motolii.turbulent_displace', 'name': 'Turbulent Displace', 'stage': 'Field'},
       ],
     };
     c.deskWork.value = {'browserView': 0};

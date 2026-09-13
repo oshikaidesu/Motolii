@@ -1,9 +1,10 @@
 /*{
   "ID": "motolii.turbulent_warp",
-  "LABEL": "Turbulent Warp 2D",
+  "LABEL": "Turbulent Warp (2D, retired)",
   "STAGE": "warp",
+  "EXPOSE": false,
   "OUTPUT_FLOAT": true,
-  "DESCRIPTION": "Fractal noise warps material-local XY before spatial placement",
+  "DESCRIPTION": "Retired from the shelf 2026-09-13: Turbulent Displace (Direction XY) does this with the silhouette. Kept as the Warp stage's contract (material.rs tests)",
   "PADDING": { "PARAM": "amount", "SCALE": 1.0 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
