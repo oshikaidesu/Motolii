@@ -197,77 +197,94 @@ class FilterView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     key: const ValueKey('browser:filters'),
+    mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (final group in groups)
-        Container(
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: EditorTheme.line)),
-          ),
-          padding: const EdgeInsets.fromLTRB(
-            EditorMetrics.s8,
-            EditorMetrics.s3,
-            EditorMetrics.s8,
-            EditorMetrics.s4,
-          ),
+      Flexible(
+        child: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              InkWell(
-                key: ValueKey('browser:filter-group:${group.name}'),
-                onTap: () => onFold(group.name),
-                child: SizedBox(
-                  height: EditorMetrics.row,
-                  child: Row(
+              for (final group in groups)
+                Container(
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: EditorTheme.line)),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    EditorMetrics.s8,
+                    EditorMetrics.s3,
+                    EditorMetrics.s8,
+                    EditorMetrics.s4,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        group.name,
-                        style: const TextStyle(
-                          fontSize: EditorMetrics.font,
-                          color: EditorTheme.ink,
+                      InkWell(
+                        key: ValueKey('browser:filter-group:${group.name}'),
+                        onTap: () => onFold(group.name),
+                        child: SizedBox(
+                          height: EditorMetrics.row,
+                          child: Row(
+                            children: [
+                              Text(
+                                group.name,
+                                style: const TextStyle(
+                                  fontSize: EditorMetrics.font,
+                                  color: EditorTheme.ink,
+                                ),
+                              ),
+                              const SizedBox(width: EditorMetrics.s4),
+                              Icon(
+                                folded.contains(group.name)
+                                    ? Icons.arrow_right
+                                    : Icons.arrow_drop_down,
+                                size: EditorMetrics.s14,
+                                color: EditorTheme.muted,
+                              ),
+                              if (folded.contains(group.name) &&
+                                  (filter.groups[group.name]?.isNotEmpty ??
+                                      false))
+                                Text(
+                                  (filter.groups[group.name] ?? const {}).join(
+                                    ', ',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: EditorMetrics.dense,
+                                    color: EditorTheme.accent,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: EditorMetrics.s4),
-                      Icon(
-                        folded.contains(group.name)
-                            ? Icons.arrow_right
-                            : Icons.arrow_drop_down,
-                        size: EditorMetrics.s14,
-                        color: EditorTheme.muted,
-                      ),
-                      if (folded.contains(group.name) &&
-                          (filter.groups[group.name]?.isNotEmpty ?? false))
-                        Text(
-                          (filter.groups[group.name] ?? const {}).join(', '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: EditorMetrics.dense,
-                            color: EditorTheme.accent,
-                          ),
+                      if (!folded.contains(group.name))
+                        Wrap(
+                          spacing: EditorMetrics.s4,
+                          runSpacing: EditorMetrics.s3,
+                          children: [
+                            for (final tag in group.tags)
+                              _TagChip(
+                                key: ValueKey(
+                                  'browser:filter:${group.name}:$tag',
+                                ),
+                                tag: tag,
+                                chosen:
+                                    filter.groups[group.name]?.contains(tag) ??
+                                    false,
+                                onTap: (add) => onToggle(group.name, tag, add),
+                              ),
+                          ],
                         ),
                     ],
                   ),
                 ),
-              ),
-              if (!folded.contains(group.name))
-                Wrap(
-                  spacing: EditorMetrics.s4,
-                  runSpacing: EditorMetrics.s3,
-                  children: [
-                    for (final tag in group.tags)
-                      _TagChip(
-                        key: ValueKey('browser:filter:${group.name}:$tag'),
-                        tag: tag,
-                        chosen:
-                            filter.groups[group.name]?.contains(tag) ?? false,
-                        onTap: (add) => onToggle(group.name, tag, add),
-                      ),
-                  ],
-                ),
             ],
           ),
         ),
+      ),
       Container(
         height: EditorMetrics.control,
         padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
@@ -331,10 +348,13 @@ class _TagChip extends StatelessWidget {
       HardwareKeyboard.instance.isMetaPressed ||
           HardwareKeyboard.instance.isControlPressed,
     ),
+    // No alignment on the box: with one it would take the whole line.
     child: Container(
       height: EditorMetrics.row,
-      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(
+        horizontal: EditorMetrics.s6,
+        vertical: EditorMetrics.s3,
+      ),
       decoration: BoxDecoration(
         color: chosen ? EditorTheme.accent : EditorTheme.raised,
         borderRadius: BorderRadius.circular(EditorMetrics.s2),

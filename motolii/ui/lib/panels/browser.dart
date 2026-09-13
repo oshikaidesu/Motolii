@@ -699,29 +699,34 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                               children: [
                                 if ((filtersShown[tab] ?? false) &&
                                     groups.isNotEmpty)
-                                  FilterView(
-                                    groups: groups,
-                                    filter: filter,
-                                    folded: folded.putIfAbsent(
-                                      tab,
-                                      () => <String>{},
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight: constraints.maxHeight * .5,
                                     ),
-                                    results: visible.length,
-                                    onFold: (group) => setState(() {
-                                      final f = folded.putIfAbsent(
+                                    child: FilterView(
+                                      groups: groups,
+                                      filter: filter,
+                                      folded: folded.putIfAbsent(
                                         tab,
                                         () => <String>{},
-                                      );
-                                      f.contains(group)
-                                          ? f.remove(group)
-                                          : f.add(group);
-                                    }),
-                                    onToggle: _toggleTag,
-                                    onClear: () => setState(() {
-                                      filter.clear();
-                                      _derive();
-                                    }),
-                                    onSaveLabel: _saveLabel,
+                                      ),
+                                      results: visible.length,
+                                      onFold: (group) => setState(() {
+                                        final f = folded.putIfAbsent(
+                                          tab,
+                                          () => <String>{},
+                                        );
+                                        f.contains(group)
+                                            ? f.remove(group)
+                                            : f.add(group);
+                                      }),
+                                      onToggle: _toggleTag,
+                                      onClear: () => setState(() {
+                                        filter.clear();
+                                        _derive();
+                                      }),
+                                      onSaveLabel: _saveLabel,
+                                    ),
                                   ),
                                 if (editor != null) editor,
                                 Expanded(
