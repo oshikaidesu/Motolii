@@ -659,8 +659,11 @@ impl<'a> StoreView<'a> {
             return Ok(());
         };
         let (early, late) = (parent2 * local_delta(early)? * parent2.inverse(), parent2 * local_delta(late)? * parent2.inverse());
+        // 形・文字は宣言の大きさを持たない(描くまで分からない)。その時は層の原点のまわり 200 px 四方で数える
+        // (1 点に潰れると回転の道のりが 0 になり、写しが足りずに段が出る)。
         let [w, h] = base.declared_size;
-        let travel = [[0.0, 0.0], [w, 0.0], [0.0, h], [w, h]]
+        let (lo, hi) = if w > 0.0 && h > 0.0 { ([0.0, 0.0], [w, h]) } else { ([-100.0, -100.0], [100.0, 100.0]) };
+        let travel = [[lo[0], lo[1]], [hi[0], lo[1]], [lo[0], hi[1]], [hi[0], hi[1]]]
             .map(|corner| {
                 let p = base.placement.transform.transform_point2(glam::Vec2::from(corner));
                 early.transform_point2(p).distance(late.transform_point2(p))
