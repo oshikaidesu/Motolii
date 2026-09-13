@@ -51,14 +51,19 @@ impl BakedEffects {
 type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<LayerSpill>, Vec<(u32,u32,wgpu::TextureFormat,wgpu::Texture)>);
 
 impl Compositor {
-    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, to_linear: bool) -> wgpu::Texture {
+    /// 色の規約を写す。出口は乗算済み線形(`to_linear`)か乗算済み sRGB。入口の素性は
+    /// `source_encoded`(sRGB 符号化か)と `source_premultiplied` で言う。
+    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, to_linear: bool, source_encoded: bool, source_premultiplied: bool) -> wgpu::Texture {
         const ID: &str = "motolii.material_encoding";
         if !self.effect_programs.contains_key(ID) {
             let definition = self.catalog.definitions.iter().find(|d| d.plugin_id() == ID).expect("material encoding shader");
             self.effect_programs.insert(ID.into(), effects::EffectProgram::compile_for(&self.ctx, definition, wgpu::TextureFormat::Rgba16Float));
         }
         let out = self.effect_scratch.acquire(&self.ctx.device,source.width(),source.height(),wgpu::TextureFormat::Rgba16Float);
-        self.effect_programs[ID].record(&self.ctx, encoder, &mut self.effect_scratch, &[&source.create_view(&Default::default())], &out.create_view(&Default::default()), &[("to_linear".into(), if to_linear {1.0} else {0.0})], [source.width() as f32,source.height() as f32]);
+        let flag = |b: bool| if b { 1.0 } else { 0.0 };
+        self.effect_programs[ID].record(&self.ctx, encoder, &mut self.effect_scratch, &[&source.create_view(&Default::default())], &out.create_view(&Default::default()),
+            &[("to_linear".into(), flag(to_linear)), ("source_encoded".into(), flag(source_encoded)), ("source_premultiplied".into(), flag(source_premultiplied))],
+            [source.width() as f32,source.height() as f32]);
         out
     }
 
@@ -150,7 +155,9 @@ impl Compositor {
                 .get_from_handle(layer_texture.handle())
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
             let mut current = src.texture.clone();
+            // 素材の素性: 線形テクスチャと sRGB 形式は乗算済み線形、それ以外は非乗算 sRGB(層の法)。
             let mut current_linear = matches!(lwp.layer.content, LayerContent::LinearTexture(_)) || layer_texture.format().is_srgb();
+            let mut current_premultiplied = current_linear;
             let mut current_is_scratch = false;
             let encoder = copy_encoder.get_or_insert_with(|| {
                 self.ctx
@@ -171,13 +178,23 @@ impl Compositor {
                 row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()
             }).collect();
             let encoder = copy_encoder.as_mut().expect("直前に用意した");
-            let (next, next_linear, next_is_scratch) = self.record_pass_chain(
-                encoder, current, current_linear, current_is_scratch,
+            let (next, next_linear, next_premultiplied, next_is_scratch) = self.record_pass_chain(
+                encoder, current, current_linear, current_premultiplied, current_is_scratch,
                 &lwp.passes, &others, frame, [padded_width, padded_height], padding, [width, height],
             )?;
             current = next;
             current_linear = next_linear;
+            current_premultiplied = next_premultiplied;
             current_is_scratch = next_is_scratch;
+            // 置く時は乗算済み線形(rerun の AlreadyPremultiplied)。列の出口が乗算済み sRGB ならここで戻す。
+            if !current_linear {
+                let back = self.convert_image_encoding(encoder, &current, true, true, current_premultiplied);
+                if current_is_scratch { self.effect_scratch.release(padded_width, padded_height, current.format(), current); }
+                current = back;
+                current_linear = true;
+                current_premultiplied = true;
+                current_is_scratch = true;
+            }
 
             // 溢れの法: SPILL を宣言した効果があれば、出力を素材の coverage の内と外に分ける。
             // 内は層の Blend、外(光・影)は宣言された混ぜ方で下へ。分け方は 1 箇所、効果は分岐しない。
@@ -195,7 +212,7 @@ impl Compositor {
                 self.next_effect_key += 1;
                 let imported = self.ctx.texture_manager_2d.import_gpu_premultiplied(self.next_effect_key, &self.ctx, &outside)
                     .map_err(|error| CompositorError::Effect(error.to_string()))?;
-                spill = Some((if current_linear { LayerContent::LinearTexture(imported) } else { LayerContent::Texture(imported) }, mode));
+                spill = Some((LayerContent::LinearTexture(imported), mode));
                 owned.push((padded_width, padded_height, outside.format(), outside));
             }
 
@@ -205,7 +222,7 @@ impl Compositor {
                 .texture_manager_2d
                 .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &current)
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
-            let content = if current_linear { LayerContent::LinearTexture(imported) } else { LayerContent::Texture(imported) };
+            let content = LayerContent::LinearTexture(imported);
             previous = Some((layer_texture.clone(), lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
             effective_textures.push(content.clone());
             effective_paddings.push(padding);
@@ -282,6 +299,7 @@ impl Compositor {
         encoder: &mut wgpu::CommandEncoder,
         mut current: wgpu::Texture,
         mut current_linear: bool,
+        mut current_premultiplied: bool,
         mut current_is_scratch: bool,
         passes: &[EffectPass],
         // `others` は効果ごとの「別の時刻の絵」(`passes` と同じ並び)。空なら層の絵 1 枚だけ。
@@ -290,18 +308,22 @@ impl Compositor {
         size: [u32; 2],
         padding: u32,
         unpadded: [u32; 2],
-    ) -> Result<(wgpu::Texture, bool, bool), CompositorError> {
+    ) -> Result<(wgpu::Texture, bool, bool, bool), CompositorError> {
         let [padded_width, padded_height] = size;
         let [width, height] = unpadded;
         for (index, pass) in passes.iter().enumerate() {
             let is_warp = self.catalog.descriptors.iter().any(|d| d.plugin_id == pass.plugin_id && d.stage == EffectStage::Warp);
-            if current_linear != is_warp {
-                let converted = self.convert_image_encoding(encoder, &current, is_warp);
+            // 効果は**乗算済み線形**で受ける(warp も pass も。累算器と同じ空間)。sRGB のまま平均すると
+            // 縁で over が成り立たず沈む。素材(非乗算 sRGB)は最初の効果の前で 1 度だけ写す。
+            let _ = is_warp;
+            if !current_linear || !current_premultiplied {
+                let converted = self.convert_image_encoding(encoder, &current, true, !current_linear, current_premultiplied);
                 if current_is_scratch { self.effect_scratch.release(padded_width,padded_height,current.format(),current); }
                 current = converted;
                 current_is_scratch = true;
             }
-            current_linear = is_warp;
+            current_linear = true;
+            current_premultiplied = true;
             let program = &self.effect_programs[&pass.plugin_id];
             let format = pass
                 .intermediate_format()
@@ -349,7 +371,7 @@ impl Compositor {
             current = destination;
             current_is_scratch = true;
         }
-        Ok((current, current_linear, current_is_scratch))
+        Ok((current, current_linear, current_premultiplied, current_is_scratch))
     }
 
     /// 欄の列に足す時計(TIME 秒・TIMEDELTA 秒・FRAMEINDEX)。engine が frame ごとに `clock` を置く。
@@ -825,6 +847,67 @@ mod passes_can_read_what_is_beneath {
         [frame[i], frame[i + 1], frame[i + 2]]
     }
 
+    /// 形の縁は下へ滑らかに溶け、**黒くならない**。乗算済みと非乗算を取り違えると、縁の画素が
+    /// 内側とも外側とも違う暗さに沈む(2026-09-13、実写の旗の縁で発覚)。
+    #[test]
+    fn a_blurred_copy_fades_at_its_edge_without_going_dark() {
+        let dir = tempfile::tempdir().unwrap();
+        let white = png(dir.path(), "white.png", SIZE, [255, 255, 255, 255]);
+        let grey = png(dir.path(), "grey.png", 32, [128, 128, 128, 255]);
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        for (id, path, order, at) in [(1u64, &white, 0i16, 0.0), (2, &grey, 1, 16.0)] {
+            let layer = LayerId(id);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([at, at]) },
+            ]).unwrap();
+        }
+        doc.apply_all([
+            Intent::SetEffects { layer: LayerId(2), effects: vec![
+                EffectInstance { id: EffectId(0), plugin_id: "motolii.background_copy".into() },
+                EffectInstance { id: EffectId(1), plugin_id: "motolii.blur".into() },
+            ] },
+            Intent::SetConstant { layer: LayerId(2), property: PropertyId::effect_param(EffectId(1), "radius").unwrap(), value: Value::F64(8.0) },
+        ]).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        // 白の上に「白の写し」をぼかして重ねた。中も外も白なら、縁も白でなければならない。
+        let row: Vec<u8> = (8..40).map(|x| pixel(&frame, x, 32)[0]).collect();
+        let darkest = row.iter().copied().min().unwrap();
+        assert!(darkest >= 235, "縁が沈んでいる: x=8..40 の R = {row:?}");
+    }
+
+    /// 同じ縁の問いを、下を読まない普通の道(層の絵へ焼く)で。白い板を白の上でぼかす。
+    #[test]
+    fn a_blurred_layer_fades_at_its_edge_without_going_dark_on_the_baked_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let white = png(dir.path(), "white.png", SIZE, [255, 255, 255, 255]);
+        let square = png(dir.path(), "square.png", 32, [255, 255, 255, 255]);
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        for (id, path, order, at) in [(1u64, &white, 0i16, 0.0), (2, &square, 1, 16.0)] {
+            let layer = LayerId(id);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([at, at]) },
+            ]).unwrap();
+        }
+        doc.apply_all([
+            Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] },
+            Intent::SetConstant { layer: LayerId(2), property: PropertyId::effect_param(EffectId(0), "radius").unwrap(), value: Value::F64(8.0) },
+        ]).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let row: Vec<u8> = (8..40).map(|x| pixel(&frame, x, 32)[0]).collect();
+        let darkest = row.iter().copied().min().unwrap();
+        assert!(darkest >= 235, "焼く道でも縁が沈んでいる: x=8..40 の R = {row:?}");
+    }
+
     #[test]
     fn background_copy_then_gain_brightens_what_is_below_and_hides_the_layer() {
         let dir = tempfile::tempdir().unwrap();
@@ -854,6 +937,7 @@ mod passes_can_read_what_is_beneath {
         let inside = pixel(&frame, 32, 32);
         assert!(outside[2] > 60 && outside[0] < 10, "外は青のまま: {outside:?}");
         assert!(inside[0] < 10, "赤は消える(自分の絵は出ない): {inside:?}");
-        assert!(inside[2] > outside[2] + 40, "中は下の青を 2 倍にした青: 中 {inside:?} 外 {outside:?}");
+        // gain は線形で 2 倍(列の規約)。sRGB の 100 は線形 0.127 → 0.254 → sRGB ≈ 139。
+        assert!(inside[2] > outside[2] + 20, "中は下の青を線形で 2 倍にした青: 中 {inside:?} 外 {outside:?}");
     }
 }

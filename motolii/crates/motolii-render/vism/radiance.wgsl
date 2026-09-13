@@ -253,17 +253,14 @@ fn irradiance(pixel: vec2f) -> vec3f {
   return textureSampleLevel(casc_b_tex, casc_b_sampler, coordinate / vec2f(textureDimensions(casc_b_tex)), 0.0).rgb;
 }
 
-// --- 19: 素材 + 素材に当たる光 + 空気中の光。float 出力は非乗算 alpha として置かれる(glow と同じ) ---
+// --- 19: 素材 + 素材に当たる光 + 空気中の光。入力も出力も**乗算済み**(列の規約、glow と同じ) ---
 fn composite(texel: vec2i, pixel: vec2f) -> vec4f {
   let s = textureLoad(source_tex, texel, 0);
   let light = irradiance(pixel);
   let in_air = light * air * (1.0 - s.a);
   let air_alpha = clamp(max(in_air.r, max(in_air.g, in_air.b)), 0.0, 1.0);
-  let air_color = in_air / max(air_alpha, 0.0001);
-  let alpha = max(s.a, air_alpha);
-  let color = mix(air_color, s.rgb + light * s.rgb, s.a);
-  // 非乗算 alpha で置かれる float 出力なので、1.0 超は折り返る。glow と同じく丸める
-  return clamp(vec4f(color, alpha), vec4f(0.0), vec4f(1.0));
+  // 乗算済みなら光は足すだけ。α は空気を素材の上へ over。1.0 超は折り返るので丸める。
+  return clamp(vec4f(s.rgb + light * s.rgb + in_air, s.a + air_alpha * (1.0 - s.a)), vec4f(0.0), vec4f(1.0));
 }
 
 @fragment
@@ -275,8 +272,7 @@ fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
   if (physical_stage <= 3) { return energy_reduce(texel, physical_stage); }
   let stage = physical_stage - 3;
   if (stage > CASCADE_LAST && textureLoad(energy_tex, vec2i(0), 0).r == 0.0) {
-    let s = textureLoad(source_tex, texel, 0);
-    return clamp(vec4f(s.rgb * s.a, s.a), vec4f(0.0), vec4f(1.0));
+    return clamp(textureLoad(source_tex, texel, 0), vec4f(0.0), vec4f(1.0));
   }
   if (stage == 1) { return jfa_init(texel); }
   if (stage >= JFA_FIRST && stage <= JFA_LAST) { return jfa_step(texel, stage); }

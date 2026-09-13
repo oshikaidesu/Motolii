@@ -202,3 +202,28 @@ void main() { gl_FragColor = IMG_THIS_PIXEL(backdrop) * IMG_THIS_PIXEL(inputImag
 - 2 枚目の image は 1 つだけ、`TIME_OFFSET` とは併用しない。
 - 下に何も無ければ透明が入る。
 - 審判は `render_effects.rs` の `background_copy_then_gain_brightens_what_is_below_and_hides_the_layer`。
+
+## 11. 色の規約 — 効果の列は乗算済み(2026-09-13)
+
+効果(pass・warp)が受け取る絵は**乗算済み線形**。累算器・rerun・Skia・Nuke と同じ、普通の方法。
+ぼかし・縮小・段の平均が透明の隣(rgb = 0)を混ぜて縁が黒く沈むのを、効果ごとの当て木ではなく
+規約で防ぐ(白の上で白をぼかして縁が沈んだのが発覚の場)。sRGB のまま乗算済みで平均しても足りない
+— over が線形でしか成り立たず、縁が 220/255 に沈む(実測)。だから線形。
+
+| 所 | 規約 |
+|---|---|
+| 層の素材(文字・形・静止画・動画) | 非乗算 sRGB(2026-09-03 の法のまま。置く時に shader が decode → 乗算) |
+| **効果の列(pass・warp)の入出力** | **乗算済み線形**(Rgba16Float)。素材は最初の効果の前で 1 度だけ写す |
+| 列の出口・置く時 | 乗算済み線形(rerun の `AlreadyPremultiplied`) |
+| 下の合成(`BACKDROP_INPUT`) | 累算器そのまま(乗算済み線形) |
+
+写し替えは `vism/material_encoding.wgsl` 1 箇所(入口の素性 = 符号化か・乗算済みか)。
+見た目に出る差: **色を掛ける効果は線形で掛かる**(gain 2 倍は sRGB の 100 → 139 であって 200 ではない)。
+閾値・輝度で判定する効果は線形の乗算済みの値で判定する。生成する効果(gradient・tri_led)の
+出力も線形として置かれる。不透明で色を掛けない効果(ぼかし・歪み)は違いが出ない。
+
+貼る shader(Shadertoy / ISF)も乗算済みで受ける。非乗算が要る演算(色相・レベル補正)は
+`rgb / max(a, 1e-5)` で戻してから掛け、`* a` で戻す — Nuke の unpremult / premult と同じ。
+
+審判: `render_effects.rs` の `a_blurred_layer_fades_at_its_edge_without_going_dark_on_the_baked_path` と
+`a_blurred_copy_fades_at_its_edge_without_going_dark`(白の上の白の縁が沈まない、実 GPU)。

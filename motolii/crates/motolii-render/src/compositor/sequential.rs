@@ -346,8 +346,9 @@ impl Compositor {
         // まだ何も無ければ透明。
         let mut below: Option<wgpu::Texture> = None;
         if passes.iter().any(|p| p.reads_backdrop) {
+            // 累算器は乗算済み線形(sRGB 形式は読む時に hardware が decode)。そのまま渡せる。
             below = Some(match &backdrop {
-                Some(backing) => self.convert_image_encoding(encoder, backing, false),
+                Some(backing) => backing.clone(),
                 None => self.ctx.texture_manager_2d.zeroed_texture_float().texture.clone(),
             });
         }
@@ -356,14 +357,12 @@ impl Compositor {
             _ => Vec::new(),
         }).collect();
         // 窓は線形。効果列は層の絵と同じ作法(Pass は sRGB 符号化で受ける)で流し、終わりで線形へ戻す。
-        let (mut current, linear, mut is_scratch) = self.record_pass_chain(
-            encoder, canvas.clone(), true, false, passes, &others, None, [width, height], 0, [width, height],
+        let (mut current, linear, premultiplied, mut is_scratch) = self.record_pass_chain(
+            encoder, canvas.clone(), true, true, false, passes, &others, None, [width, height], 0, [width, height],
         )?;
-        if let (Some(b), Some(_)) = (below, &backdrop) {
-            self.effect_scratch.release(width, height, b.format(), b);
-        }
+        drop(below);
         if !linear {
-            let back = self.convert_image_encoding(encoder, &current, true);
+            let back = self.convert_image_encoding(encoder, &current, true, true, premultiplied);
             if is_scratch {
                 self.effect_scratch.release(width, height, current.format(), current);
             }

@@ -230,17 +230,14 @@ fn irradiance(pixel: vec2f) -> vec3f {
   return total;
 }
 
-// --- 19: 素材 + 素材に当たる光 + 空気中の光。float 出力は非乗算 alpha として置かれる(glow と同じ) ---
+// --- 19: 素材 + 素材に当たる光 + 空気中の光。入力も出力も乗算済み(2026-09-13 に列の規約が乗算済み線形へ
+// 変わった時、この参照写しも同じ適応をした。試験の主題(energy の pre-averaging)は触っていない) ---
 fn composite(texel: vec2i, pixel: vec2f) -> vec4f {
   let s = textureLoad(source_tex, texel, 0);
   let light = irradiance(pixel);
   let in_air = light * air * (1.0 - s.a);
   let air_alpha = clamp(max(in_air.r, max(in_air.g, in_air.b)), 0.0, 1.0);
-  let air_color = in_air / max(air_alpha, 0.0001);
-  let alpha = max(s.a, air_alpha);
-  let color = mix(air_color, s.rgb + light * s.rgb, s.a);
-  // 非乗算 alpha で置かれる float 出力なので、1.0 超は折り返る。glow と同じく丸める
-  return clamp(vec4f(color, alpha), vec4f(0.0), vec4f(1.0));
+  return clamp(vec4f(s.rgb + light * s.rgb + in_air, s.a + air_alpha * (1.0 - s.a)), vec4f(0.0), vec4f(1.0));
 }
 
 @fragment

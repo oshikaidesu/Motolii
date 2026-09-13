@@ -30,7 +30,8 @@ impl Compositor {
         if texture.format().is_srgb() { return Ok(texture.clone()); }
         let source = self.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| CompositorError::Effect(e.to_string()))?.texture.clone();
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("material normalization") });
-        let out = self.convert_image_encoding(&mut encoder, &source, true);
+        let srgb = source.format().is_srgb();
+        let out = self.convert_image_encoding(&mut encoder, &source, true, !srgb, srgb);
         self.pending.push(encoder.finish()); self.flush_pending();
         self.import_premultiplied(&out)
     }
