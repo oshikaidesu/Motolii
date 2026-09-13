@@ -22,8 +22,25 @@ void main() {
     final sent = <Map<String, dynamic>>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(EditorSession.channel, (call) async {
-          if (call.arguments is Map && call.arguments['command'] is String)
-            sent.add(jsonDecode(call.arguments['command']));
+          if (call.arguments is Map && call.arguments['command'] is String) {
+            final command = jsonDecode(call.arguments['command']);
+            // The font's own facts, read once when the shelf comes in front.
+            if (command['op'] == 'fontFacts')
+              return {
+                'facts': [
+                  {
+                    'family': 'Georgia',
+                    'styles': 4,
+                    'weights': 2,
+                    'monospaced': false,
+                    'axes': ['wght'],
+                    'scripts': ['Latin', 'Cyrillic'],
+                    'color': false,
+                  },
+                ],
+              };
+            sent.add(command);
+          }
           return <String, dynamic>{};
         });
     final c = EditorSession();
@@ -70,6 +87,20 @@ void main() {
 
   testWidgets('a family row dresses the selected text layer', (tester) async {
     final (c, sent) = await mount(tester);
+    // Facts ride on the name line as short labels; a family without facts
+    // shows none.
+    final georgia = tile('Georgia');
+    for (final label in ['A', 'Я', '4 styles', 'wght']) {
+      expect(
+        find.descendant(of: georgia, matching: find.text(label)),
+        findsOneWidget,
+        reason: label,
+      );
+    }
+    expect(
+      find.descendant(of: tile('Arial'), matching: find.text('A')),
+      findsNothing,
+    );
     await tester.enterText(find.byType(TextField).first, 'geo');
     await tester.pump();
     expect(tile('Arial'), findsNothing);

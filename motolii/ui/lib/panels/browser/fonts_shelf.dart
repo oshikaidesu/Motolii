@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../foundation/metrics.dart';
@@ -16,6 +18,32 @@ class FontsShelf extends BrowserShelf {
   String get name => 'Fonts';
   @override
   bool get showViews => false;
+
+  /// What each family is, read from the fonts once (the first time the shelf
+  /// is in front): faces, weights, axes, scripts, colour. Labels on the row.
+  Map<String, Map<String, dynamic>>? fontFacts;
+  bool _asking = false;
+  Future<void> _ask(BrowserHost host) async {
+    if (fontFacts != null || _asking) return;
+    _asking = true;
+    try {
+      final reply = await host.controller.native('request', {
+        'command': jsonEncode({'op': 'fontFacts'}),
+      });
+      fontFacts = {
+        for (final f in EditorSession.maps(EditorSession.map(reply)['facts']))
+          '${f['family']}': f,
+      };
+    } catch (_) {
+      fontFacts = const {};
+    } finally {
+      _asking = false;
+    }
+    if (host.mounted) host.refresh();
+  }
+
+  @override
+  void enter(BrowserHost host) => _ask(host);
 
   /// A click dresses the layer; the name rides above the specimen.
   @override
@@ -51,6 +79,7 @@ class FontsShelf extends BrowserShelf {
 
   @override
   List<Map<String, dynamic>> items(BrowserHost host) {
+    _ask(host);
     final c = host.controller;
     final used = {
       for (final layer in c.layers)
@@ -140,14 +169,21 @@ class FontsShelf extends BrowserShelf {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: EditorMetrics.dense,
-              color: chosen ? EditorTheme.ink : EditorTheme.muted,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: EditorMetrics.dense,
+                    color: chosen ? EditorTheme.ink : EditorTheme.muted,
+                  ),
+                ),
+              ),
+              for (final label in _labels(fontFacts?[name])) _FactChip(label),
+            ],
           ),
           Text(
             words.isEmpty ? name : words,
@@ -163,6 +199,31 @@ class FontsShelf extends BrowserShelf {
         ],
       ),
     );
+  }
+
+  /// The font's own facts as short labels, in a fixed order: the scripts it
+  /// covers, then how many faces, then its variable axes, monospace, colour.
+  static List<String> _labels(Map<String, dynamic>? fact) {
+    if (fact == null) return const [];
+    final scripts = (fact['scripts'] as List? ?? const []).cast<String>();
+    final axes = (fact['axes'] as List? ?? const []).cast<String>();
+    final styles = fact['styles'] as num? ?? 1;
+    return [
+      for (final s in scripts)
+        switch (s) {
+          'Latin' => 'A',
+          'Kana' => 'あ',
+          'Kanji' => '漢',
+          'Hangul' => '한',
+          'Cyrillic' => 'Я',
+          'Arabic' => 'ع',
+          _ => s,
+        },
+      if (styles > 1) '$styles styles',
+      if (axes.isNotEmpty) axes.join(' '),
+      if (fact['monospaced'] == true) 'Mono',
+      if (fact['color'] == true) 'Color',
+    ];
   }
 
   /// The characters being dressed: the scope the editor chose for this layer,
@@ -330,6 +391,30 @@ class _Justify extends StatelessWidget {
             ),
           ),
       ],
+    ),
+  );
+}
+
+/// One fact of a font, the size of the tile's format badge: quiet, bordered,
+/// never taking the name's width before the name has had it.
+class _FactChip extends StatelessWidget {
+  const _FactChip(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(left: EditorMetrics.s4),
+    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
+    decoration: BoxDecoration(
+      border: Border.all(color: EditorTheme.line),
+      borderRadius: BorderRadius.circular(EditorMetrics.s2),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: EditorMetrics.micro,
+        color: EditorTheme.muted,
+        letterSpacing: .3,
+      ),
     ),
   );
 }

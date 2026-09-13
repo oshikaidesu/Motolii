@@ -254,6 +254,10 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             model_reply = Some(if value["kind"] == "effect" { editor::effect_sample::reply(&value) } else { editor::visual_samples::reply(&probe.doc, at, &value) });
             return Ok(());
         }
+        if value["op"] == "fontFacts" {
+            model_reply = Some(Ok(json!({"facts": crate::doc::vector::text::font_facts()})));
+            return Ok(());
+        }
         if value["op"] == "easeModel" {
             model_reply = Some(editor::ease_kinds::model(&value));
             return Ok(());

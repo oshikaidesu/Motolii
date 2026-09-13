@@ -288,3 +288,70 @@ pub fn font_supports_sample(family: &str, text: &str) -> bool {
     let Some(font) = system.get_font(id, fontdb::Weight::NORMAL) else { return false };
     text.chars().filter(|c| !c.is_whitespace()).all(|c| font.as_swash().charmap().map(c) != 0)
 }
+
+/// What a family is, read from the font itself once: how many faces and
+/// weights, whether it is monospaced, its variable axes, the scripts its
+/// charmap covers, and whether it carries colour glyphs. Labels for a shelf,
+/// not shaping input.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct FontFacts {
+    pub family: String,
+    pub styles: usize,
+    pub weights: usize,
+    pub monospaced: bool,
+    /// fvar の軸の tag(`wght` など)。無ければ静的。
+    pub axes: Vec<String>,
+    /// 覆う文字種の名前(Latin / Kana / Kanji / Hangul / Cyrillic / Arabic)。
+    pub scripts: Vec<&'static str>,
+    pub color: bool,
+}
+
+const SCRIPT_PROBES: &[(&str, char)] = &[("Latin", 'A'), ("Kana", 'あ'), ("Kanji", '永'), ("Hangul", '한'), ("Cyrillic", 'Я'), ("Arabic", 'ع')];
+
+pub fn font_facts() -> &'static [FontFacts] {
+    static FACTS: std::sync::OnceLock<Vec<FontFacts>> = std::sync::OnceLock::new();
+    FACTS.get_or_init(|| {
+        let mut system = font_system();
+        let mut by_family: std::collections::BTreeMap<String, Vec<(fontdb::ID, fontdb::Weight, bool)>> = std::collections::BTreeMap::new();
+        for face in system.db().faces() {
+            if let Some((name, _)) = face.families.first() {
+                by_family.entry(name.clone()).or_default().push((face.id, face.weight, face.monospaced));
+            }
+        }
+        by_family.into_iter().map(|(family, faces)| {
+            let weights = faces.iter().map(|f| f.1).collect::<std::collections::BTreeSet<_>>().len();
+            let monospaced = faces.iter().any(|f| f.2);
+            let (axes, scripts, color) = match system.get_font(faces[0].0, faces[0].1) {
+                Some(font) => {
+                    let swash = font.as_swash();
+                    let axes = swash.variations().map(|v| String::from_utf8_lossy(&v.tag().to_be_bytes()).into_owned()).collect();
+                    let charmap = swash.charmap();
+                    let scripts = SCRIPT_PROBES.iter().filter(|(_, c)| charmap.map(*c) != 0).map(|(name, _)| *name).collect();
+                    (axes, scripts, swash.color_palettes().len() > 0)
+                }
+                None => (Vec::new(), Vec::new(), false),
+            };
+            FontFacts { family, styles: faces.len(), weights, monospaced, axes, scripts, color }
+        }).collect()
+    })
+}
+
+#[cfg(test)]
+mod facts_tests {
+    use super::*;
+
+    /// 台帳の書体が事実を持つ: ヒラギノ角ゴは仮名と漢字を覆い、10 の太さの静的書体。
+    #[test]
+    fn facts_come_from_the_font_itself() {
+        let facts = font_facts();
+        let Some(hiragino) = facts.iter().find(|f| f.family == "Hiragino Sans") else {
+            eprintln!("skipped: Hiragino Sans missing");
+            return;
+        };
+        assert!(hiragino.scripts.contains(&"Kana") && hiragino.scripts.contains(&"Kanji") && hiragino.scripts.contains(&"Latin"));
+        assert!(hiragino.weights >= 5, "{hiragino:?}");
+        assert!(hiragino.axes.is_empty());
+        assert!(!hiragino.monospaced);
+        assert!(facts.iter().all(|f| f.styles >= 1));
+    }
+}
