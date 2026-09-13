@@ -133,6 +133,8 @@ pub struct FeedbackKey {
     pub copy: u32,
     pub chain: u8,
     pub index: u16,
+    /// 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持つ: 窓の寸法。板の道は None。
+    pub screen: Option<[u32; 2]>,
 }
 
 /// 1 つの PERSISTENT target の 2 枚: 前のフレーム(読む)と今のフレーム(書く)。
@@ -145,6 +147,8 @@ pub(crate) struct FeedbackTarget {
 #[derive(Default)]
 pub(crate) struct FeedbackState {
     pub(crate) frame: Option<i64>,
+    /// 今の絵が初期条件(透明)から描かれた。入点以外でこうなっていたら、辿り直しが要る。
+    pub(crate) fresh: bool,
     pub(crate) targets: std::collections::HashMap<String, FeedbackTarget>,
     /// K フレームごとの写し(frame, target 名 → texture)。スクラブは直近の写しから辿り直す。
     pub(crate) checkpoints: Vec<(i64, std::collections::HashMap<String, wgpu::Texture>)>,

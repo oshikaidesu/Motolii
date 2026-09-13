@@ -372,6 +372,7 @@ impl Compositor {
             if let (Some((key, step)), Some(now)) = (feedback, frame_index) {
                 let state = self.feedback.get_mut(&key).expect("entry");
                 state.frame = Some(now);
+                match step { effects::FeedbackStep::Restart => state.fresh = true, effects::FeedbackStep::Advance => state.fresh = false, effects::FeedbackStep::Reuse => {} }
                 // K フレームごとに写しを焼く(同じフレームの描き直しでは焼かない)。
                 if step != effects::FeedbackStep::Reuse && now.rem_euclid(effects::FEEDBACK_CHECKPOINT_EVERY) == 0 && !state.checkpoints.iter().any(|(f, _)| *f == now) {
                     let copies = state.targets.iter().map(|(name, target)| {
@@ -414,6 +415,8 @@ impl Compositor {
 
     /// feedback の状態が今表しているフレーム。
     pub(crate) fn feedback_frame(&self, key: effects::FeedbackKey) -> Option<i64> { self.feedback.get(&key).and_then(|s| s.frame) }
+    /// 今の絵が初期条件から描かれたか(辿り直しの要否)。
+    pub(crate) fn feedback_is_fresh(&self, key: effects::FeedbackKey) -> bool { self.feedback.get(&key).is_some_and(|s| s.fresh) }
 
     /// `before` 以前で最も新しい checkpoint を今の状態へ戻し、そのフレームを返す。無ければ None(入点から)。
     pub(crate) fn feedback_restore(&mut self, key: effects::FeedbackKey, before: i64) -> Option<i64> {

@@ -103,8 +103,9 @@ else                 gl_FragColor = IMG_THIS_PIXEL(history);
 TouchDesigner / AviUtl の「スクラブすると変わる」型でも、AE の CC Time Blend でもない。
 コーデックの GOP(checkpoint + 再生)と同型。
 
-まだ無い物: 板に焼けない層(網・点群・下の合成を読む列)の feedback は画面の道で 1 歩ずつは進むが、
-スクラブでは辿り直さず初期条件に戻る。合体後(Group / CompRoot)の別時刻は予約のまま。
+板に焼けない層(網・点群)と下の合成を読む列は**画面の道**で効くので、状態は窓ごと(Camera / Stage)に持ち、
+辿り直す時はその窓の寸法で**フレームを丸ごと**描く(板の道は「その層だけ」)。重さは歩数 × 1 フレーム。
+まだ無い物: 合体後(Group / CompRoot)の別時刻は予約のまま。
 
 datamosh はさらに別トラックで、codec 領域の台帳が
 [decision-index.md](decision-index.md)(`M5-DATAMOSH-P0` = `DONE / PRIVATE PROBE`・`BUILD FORBIDDEN`)にある。

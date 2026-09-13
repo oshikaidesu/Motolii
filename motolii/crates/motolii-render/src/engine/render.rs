@@ -148,9 +148,57 @@ impl Engine {
         });
     }
 
-    /// feedback は「入点を初期条件とする漸化式」(`docs/plugin-resources.md` §6-3)。状態が t−1 を
-    /// 表していなければ、直近の checkpoint(無ければ入点)から t の手前まで、その層だけを順に描く。
-    /// 順再生と書き出しは 1 歩ずつなのでここは何もしない。スクラブは最大 checkpoint 間隔ぶんの歩数。
+    /// 今描いている窓の寸法(画面の道の feedback の鍵)。読み戻しの道は出力寸法。
+    fn window_size(&self, comp: CompSpec) -> [u32; 2] {
+        self.feedback_window.map_or([comp.width, comp.height], |w| [w.width, w.height])
+    }
+
+    /// feedback を持つ pass に状態の鍵を刻み、この frame で見た鍵として覚える(辿り直しの要否を後で見る)。
+    fn stamp_feedback(&mut self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>) {
+        super::translate::stamp_feedback(passes, layer, copy, chain, screen);
+        self.feedback_keys_seen.extend(passes.iter().filter_map(|p| p.feedback));
+    }
+
+    /// 層の組み立て + feedback の辿り直し。
+    ///
+    /// feedback は「入点を初期条件とする漸化式」(`docs/plugin-resources.md` §6-3)。組んだ後で、
+    /// 初期条件から描かれてしまった状態(飛んで来た)があれば、直近の checkpoint(無ければ入点)から
+    /// t の手前まで順に描いてから、t をもう一度組む。順再生と書き出しは 1 歩ずつなので何もしない。
+    ///
+    /// - 板の道(層の絵に焼く列)は**その層だけ**を辿り直す。
+    /// - 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持ち、**フレームを丸ごと**辿り直す。
+    #[allow(clippy::too_many_arguments)]
+    fn layers_from_resolved(
+        &mut self,
+        view: &StoreView<'_>,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        projection_camera: ResolvedCamera,
+        t: RationalTime,
+        resolved: &[ResolvedLayer],
+        text_documents: &HashMap<LayerId, TextDocument>,
+        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
+    ) -> Result<Vec<LayerWithPasses>, EngineError> {
+        if self.feedback_replaying {
+            return self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents);
+        }
+        self.compositor.feedback_set_revision(view.revision_key());
+        self.feedback_keys_seen.clear();
+        let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        if !self.replay_feedback(view, comp, camera, projection_camera, t, &seen)? {
+            return Ok(layers);
+        }
+        // 辿り直しで状態が動いた: 焼いた絵は辿り直す前の物なので捨て、t をもう一度組む。
+        let c = &mut self.compositor;
+        c.baked_effects.clear(&mut c.effect_scratch);
+        self.stamp_clock(view, t);
+        let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+        self.feedback_keys_seen.clear();
+        Ok(layers)
+    }
+
+    /// 辿り直しが要る鍵があれば辿り直し、動かしたら true。
     #[allow(clippy::too_many_arguments)]
     fn replay_feedback(
         &mut self,
@@ -159,50 +207,74 @@ impl Engine {
         camera: ResolvedCamera,
         projection_camera: ResolvedCamera,
         t: RationalTime,
-        resolved: &[ResolvedLayer],
-    ) -> Result<(), EngineError> {
-        let Some(composition) = view.composition().ok().flatten() else { return Ok(()) };
+        seen: &[crate::render::compositor::FeedbackKey],
+    ) -> Result<bool, EngineError> {
+        let Some(composition) = view.composition().ok().flatten() else { return Ok(false) };
         let fps = composition.fps;
-        let Ok(now) = t.try_to_frame_round(fps) else { return Ok(()) };
-        // 履歴は書類の関数: 書類が変われば捨てて入点から。
-        self.compositor.feedback_set_revision(view.revision_key());
+        let Ok(now) = t.try_to_frame_round(fps) else { return Ok(false) };
         let mut start: Option<i64> = None;
         let mut ids: HashSet<LayerId> = HashSet::new();
-        for layer in resolved {
-            let mut effects = super::translate::translate_effect_passes(&layer.effects);
-            super::translate::stamp_feedback(&mut effects, layer.id, layer.copy, 0);
-            let mut after = super::translate::translate_plate_passes(&layer.after_effects);
-            super::translate::stamp_feedback(&mut after, layer.id, layer.copy, 1);
-            let keys: Vec<_> = effects.iter().chain(&after).filter_map(|p| p.feedback).collect();
-            if keys.is_empty() { continue; }
-            let in_point = view.meta(layer.id).ok().flatten().map_or(0, |m| m.timing.start);
-            for key in keys {
-                if matches!(self.compositor.feedback_frame(key), Some(have) if have == now || have + 1 == now) { continue; }
-                let from = self.compositor.feedback_restore(key, now - 1).map_or(in_point, |c| c + 1);
-                if from >= now { continue; }
-                ids.insert(layer.id);
-                start = Some(start.map_or(from, |s: i64| s.min(from)));
-            }
+        let mut whole_frames = false;
+        for &key in seen {
+            let ok = match self.compositor.feedback_frame(key) {
+                // 板の道はこの frame の組み立てで既に描かれている: 初期条件からでなければ正しい。
+                Some(have) if have == now => !self.compositor.feedback_is_fresh(key),
+                Some(have) if have + 1 == now => true,
+                _ => false,
+            };
+            if ok { continue; }
+            let in_point = view.meta(key.layer).ok().flatten().map_or(0, |m| m.timing.start);
+            let from = self.compositor.feedback_restore(key, now - 1).map_or(in_point, |c| c + 1);
+            if from >= now { continue; }
+            ids.insert(key.layer);
+            whole_frames |= key.screen.is_some();
+            start = Some(start.map_or(from, |s: i64| s.min(from)));
         }
-        let Some(start) = start else { return Ok(()) };
+        let Some(start) = start else { return Ok(false) };
+        let window = self.feedback_window;
+        let background = composition.background;
         self.feedback_replaying = true;
         let result = (|| {
             for frame in start..now {
                 let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Store(e.to_string()))?;
-                let then: Vec<ResolvedLayer> = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?
-                    .into_iter().filter(|l| ids.contains(&l.id) || l.plate.is_some_and(|g| ids.contains(&g))).collect();
+                let mut then = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
+                if !whole_frames {
+                    then.retain(|l| ids.contains(&l.id) || l.plate.is_some_and(|g| ids.contains(&g)));
+                }
                 let texts = collect_text_documents(view, &then, at)?;
                 let shapes = collect_shape_documents(view, &then, at)?;
-                let layers = self.layers_from_resolved(view, comp, camera, projection_camera, at, &then, &texts, &shapes)?;
-                self.compositor.effective_layer_textures(&layers)?;
+                // 作中カメラの窓(出力)は t′ のカメラ、Stage の窓は利用者のカメラのまま。
+                let document_camera = self.resolve_camera_in(view, &then, at)?;
+                let (camera, projection_camera) = match window {
+                    Some(w) if w.projection_camera.is_some() => (camera, projection_camera),
+                    Some(_) => (document_camera, document_camera),
+                    None => (document_camera, document_camera),
+                };
+                let layers = self.build_layers(view, comp, camera, projection_camera, at, &then, &texts, &shapes)?;
+                if !whole_frames {
+                    self.compositor.effective_layer_textures(&layers)?;
+                } else if let Some(window) = window {
+                    let target = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("motolii-feedback-replay-window"),
+                        size: wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 },
+                        mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+                        format: crate::render::compositor::PRESENTABLE_FORMAT,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: &[],
+                    });
+                    self.compositor.render_into_window(&target, comp, camera, &layers, background, window)?;
+                } else {
+                    self.compositor.render_to_texture(comp, camera, &layers, background)?;
+                }
             }
             Ok(())
         })();
         self.feedback_replaying = false;
-        result
+        result.map(|()| true)
     }
 
-    fn layers_from_resolved(
+    #[allow(clippy::too_many_arguments)]
+    fn build_layers(
         &mut self,
         view: &StoreView<'_>,
         comp: CompSpec,
@@ -224,11 +296,6 @@ impl Engine {
                 .any(|e| surface_ids.contains(e.plugin_id.as_str()))
         };
         self.stamp_clock(view, t);
-        // feedback(前のフレームを保つ効果)の状態が t−1 に無ければ、入点か直近の checkpoint から t の手前まで辿り直す。
-        if !self.feedback_replaying {
-            self.replay_feedback(view, comp, camera, projection_camera, t, resolved)?;
-            self.stamp_clock(view, t);
-        }
         // 別の時刻を要求した効果があれば、その時刻の層の姿をここで 1 回だけ引き直す(同じずれは共有)。
         let mut other_times: OtherTimes = BTreeMap::new();
         for layer in resolved {
@@ -298,7 +365,8 @@ impl Engine {
                     let member = &resolved[j];
                     if let Some(built) = self.build_layer_shared(&mut previous_build, member, text_documents, shape_documents, t, comp, camera, projection_camera, translate_blend_mode(member.blend_mode)?)? {
                         let mut passes = translate_effect_passes(&member.effects);
-                        super::translate::stamp_feedback(&mut passes, member.id, member.copy, 0);
+                        let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
+                        self.stamp_feedback(&mut passes, member.id, member.copy, 0, screen);
                         copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new() });
                     }
                 }
@@ -310,14 +378,16 @@ impl Engine {
                 let mut plate = self.bake_isolated_layers(comp, camera, copies, plate_blend, layer.placement)?;
                 plate.placement.opacity = owner.map_or(1.0, |g| g.placement.opacity);
                 let mut after = super::translate::translate_plate_passes(&layer.after_effects);
-                super::translate::stamp_feedback(&mut after, layer.id, layer.copy, 1);
+                let screen = after.iter().any(|p| p.reads_backdrop).then(|| self.window_size(comp));
+                self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
             } else if layer.after_effects.is_empty() {
                 let Some(built) = self.build_layer_shared(&mut previous_build, layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? else {
                     continue;
                 };
                 let mut passes = translate_effect_passes(&layer.effects);
-                super::translate::stamp_feedback(&mut passes, layer.id, layer.copy, 0);
+                let screen = (built.content.texture().is_none() || passes.iter().any(|p| p.reads_backdrop)).then(|| self.window_size(comp));
+                self.stamp_feedback(&mut passes, layer.id, layer.copy, 0, screen);
                 // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
                 if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
                     continue;
@@ -331,7 +401,8 @@ impl Engine {
                 for copy in &resolved[index..end] {
                     if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {
                         let mut passes = translate_effect_passes(&copy.effects);
-                        super::translate::stamp_feedback(&mut passes, copy.id, copy.copy, 0);
+                        let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
+                        self.stamp_feedback(&mut passes, copy.id, copy.copy, 0, screen);
                         copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new() });
                     }
                 }
@@ -340,7 +411,8 @@ impl Engine {
                 }
                 let plate = self.bake_isolated_layers(comp, camera, copies, blend_mode, layer.placement)?;
                 let mut after = super::translate::translate_plate_passes(&layer.after_effects);
-                super::translate::stamp_feedback(&mut after, layer.id, layer.copy, 1);
+                let screen = after.iter().any(|p| p.reads_backdrop).then(|| self.window_size(comp));
+                self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
             };
 
@@ -571,7 +643,8 @@ impl Engine {
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
         let document_camera = self.resolve_camera_in(view, &resolved, t)?;
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        let mut layers = self.layers_from_resolved(
+        self.feedback_window = Some(window);
+        let built = self.layers_from_resolved(
             view,
             comp,
             camera,
@@ -580,7 +653,9 @@ impl Engine {
             &resolved,
             &text_documents,
             &shape_documents,
-        )?;
+        );
+        self.feedback_window = None;
+        let mut layers = built?;
         // 2D は出力の画面の物: どの窓でも作中カメラの箱に貼り付き、箱と一緒に動く(Boxcam)。
         // 2.5D と 3D は世界に居るので、窓の投影基準(Stage は既定)のまま。
         for layer in &mut layers {
@@ -1653,6 +1728,28 @@ mod feedback_is_a_recurrence_from_the_in_point {
         let (_, first) = walked_to(&doc, 0);
         let (_, later) = walked_to(&doc, 12);
         assert!(mean(&later) > mean(&first) * 2.0, "history が積もっていない: {} → {}", mean(&first), mean(&later));
+    }
+
+    /// 下の合成を読む列(Background Copy → 残像)は板に焼けず、画面の道で効く。それでも飛んで来た絵は
+    /// 辿った絵と同じ(窓ごとの状態を、フレームを丸ごと辿り直して作る)。
+    #[test]
+    fn a_chain_that_reads_below_is_also_a_recurrence() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+        let mut doc = document(&path, false);
+        doc.apply(Intent::SetEffects { layer: LayerId(1), effects: vec![
+            EffectInstance { id: EffectId(0), plugin_id: "motolii.background_copy".into() },
+            EffectInstance { id: EffectId(1), plugin_id: "import.ceil_trail".into() },
+        ] }).unwrap();
+        let (mut engine, walked) = walked_to(&doc, 12);
+        assert_eq!(engine.render_frame(&doc.view(), at(12)).unwrap(), walked, "同じフレームの描き直しで絵が変わった");
+        let mut fresh = Engine::new().unwrap();
+        let jumped = fresh.render_frame(&doc.view(), at(12)).unwrap();
+        assert!(fresh.layer_failures().is_empty(), "{:?}", fresh.layer_failures());
+        assert_eq!(jumped, walked, "画面の道の feedback が、飛んで来ると違う絵になる");
+        // 戻る(45 まで辿ってから 35 へ): checkpoint 30 からフレームを丸ごと 5 歩。
+        let (mut far, _) = walked_to(&doc, 45);
+        assert_eq!(far.render_frame(&doc.view(), at(35)).unwrap(), walked_to(&doc, 35).1, "戻った絵が違う");
     }
 
     #[test]

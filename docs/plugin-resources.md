@@ -146,6 +146,7 @@ Aₙ = Composite(DecayOrTransform(Aₙ₋₁), Drawₙ)
 状態は層 × 効果ごとに compositor が持つ(`Compositor.feedback`)。時刻 t は入点を初期条件とする漸化式:
 状態が t−1 なら 1 歩、同じ t なら前の絵を読み直して同じ物を書き、それ以外は直近の checkpoint
 (30 フレームごと、`FEEDBACK_CHECKPOINT_EVERY`)か入点から `engine/render.rs` の `replay_feedback` が
-その層だけを順に描く。書類の指紋(`StoreView::revision_key`)が変われば状態を捨てる。
+その層だけを順に描く(画面の道 — 網・点群・下の合成を読む列 — は窓ごとの状態で、フレームを丸ごと辿り直す)。
+書類の指紋(`StoreView::revision_key`)が変われば状態を捨てる。
 審判は `feedback_is_a_recurrence_from_the_in_point`(飛んでも辿っても同じ・描き直しも同じ・checkpoint 越しの戻り・編集で入点から)。
 「恒久にやらない」は変わらない: 効果が `&self` に覚える道は今も無い — 覚える場所が host に在るので要らない。

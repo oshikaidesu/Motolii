@@ -115,6 +115,10 @@ pub struct Engine {
     layer_failures: Vec<String>,
     /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
     feedback_replaying: bool,
+    /// 今描いている窓(画面の道の feedback は窓ごとに状態を持つ)。読み戻しの道では None = 出力寸法。
+    feedback_window: Option<crate::render::compositor::Window>,
+    /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
+    feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
     outline_layers: Vec<LayerId>,
     /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
@@ -173,6 +177,8 @@ impl Engine {
             realtime: false,
             renders_since_video_purge: 0,
             feedback_replaying: false,
+            feedback_window: None,
+            feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
@@ -230,6 +236,8 @@ impl Engine {
             realtime: false,
             renders_since_video_purge: 0,
             feedback_replaying: false,
+            feedback_window: None,
+            feedback_keys_seen: Vec::new(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
