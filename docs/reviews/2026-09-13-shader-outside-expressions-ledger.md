@@ -95,7 +95,7 @@ Furikake の利用者向けの説明(aescripts / toolfarm / gfxplugin の紹介�
 
 1. 光学フロー + Motion Blur b — **済み(2026-09-13)**: `TIME_OFFSET_FRAMES`(隣のコマをコマ数で読む)と同梱 Pixel Motion Blur。取説 [§8-0](../vism-shadertoy-import.md)。フローは shader の中(GPU)で、Blob・トラッカーが CPU で使う形はまだ
 2. Motion Blur a(効果、Alight Motion の型)— **済み(2026-09-14)**: `motolii.motion_blur`(doc の `store/motion.rs`、配置効果の族)。写しの枚数は 1 コマに四隅が動く道のり 1.5 px ごとに 1 枚(2〜64、止まっていれば素通し)。1 枚目を comp 大の板に 1 回だけ焼き、写しのずれで置いて足す(形・文字は矩形でないと足す合成に乗らない)。審判 `motion_blur_follows_the_keyframes`。グループ・親の動き・Repeater と同居した時は未対応(素通し)
-3. 静的な代替(深度・超解像・Kuwahara / XDoG)
+3. 静的な代替(深度・超解像・Kuwahara / XDoG)— **3 本済み(2026-09-14)**: `depth_map.fs`(縦位置・かすみ・細部の 3 手掛かり、1/4 で混ぜて joint bilateral で戻す)、`kuwahara.fs`(異方性・多項式重み)、`xdog.fs`(流れに沿う XDoG、閾値は見た目の明るさ)。審判 `stylize_without_machine_learning`。**超解像は保留(相談)**: 効果の出力を層より大きくする口が無く、「footprint 解像度・余白は効果が宣言」の法に触れる
 4. 粒子(Furikake 型)
 5. Plexus(粒子・パスの頂点・点群の点を距離で結ぶ。描くのは re_renderer の線)
 6. 2D 物理

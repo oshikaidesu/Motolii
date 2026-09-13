@@ -1076,3 +1076,81 @@ mod passes_can_read_a_picked_layer {
         assert!(engine.layer_failures().iter().any(|f| f.contains("指した層")), "{:?}", engine.layer_failures());
     }
 }
+
+/// 機械学習の代わりの静的な 3 本(Depth Map / Kuwahara / XDoG)が、それぞれの手掛かりどおりに振る舞う(実 GPU)。
+#[cfg(test)]
+mod stylize_without_machine_learning {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const SIZE: u32 = 96;
+
+    fn render(pixels: Vec<u8>, effect: &str, params: &[(&str, f64)]) -> Vec<u8> {
+        let stem = effect.trim_start_matches("motolii.");
+        let errors: Vec<_> = crate::render::compositor::refresh_effect_catalog().errors.into_iter().filter(|e| e.contains(stem)).collect();
+        assert!(errors.is_empty(), "{effect} が棚に載らない: {errors:?}");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("in.png");
+        image::save_buffer(&path, &pixels, SIZE, SIZE, image::ColorType::Rgba8).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: effect.into() }] },
+        ]).unwrap();
+        for (name, value) in params {
+            doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(*value) }).unwrap();
+        }
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{effect}: {:?}", engine.layer_failures());
+        frame
+    }
+
+    fn image(f: impl Fn(u32, u32) -> u8) -> Vec<u8> {
+        (0..SIZE * SIZE).flat_map(|i| { let v = f(i % SIZE, i / SIZE); [v, v, v, 255] }).collect()
+    }
+    fn at(frame: &[u8], x: u32, y: u32) -> u8 { frame[((y * SIZE + x) * 4) as usize] }
+    fn spread(frame: &[u8], xs: std::ops::Range<u32>) -> f64 {
+        let values: Vec<f64> = (20..76).flat_map(|y| xs.clone().map(move |x| (y, x))).map(|(y, x)| at(frame, x, y) as f64).collect();
+        let mean = values.iter().sum::<f64>() / values.len() as f64;
+        (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64).sqrt()
+    }
+
+    #[test]
+    fn depth_map_is_nearer_lower_in_the_frame() {
+        let flat = image(|_, _| 128);
+        let frame = render(flat.clone(), "motolii.depth_map", &[]);
+        let (top, bottom) = (at(&frame, 48, 6), at(&frame, 48, 90));
+        assert!(bottom > top + 40, "下ほど近い(白い): 上 {top} 下 {bottom}");
+        let inverted = render(flat, "motolii.depth_map", &[("invert", 1.0)]);
+        assert!(at(&inverted, 48, 6) > at(&inverted, 48, 90) + 40, "Invert で上下が逆");
+    }
+
+    #[test]
+    fn kuwahara_flattens_texture_and_keeps_the_edge() {
+        let noisy = image(|x, y| {
+            let n = ((x.wrapping_mul(73856093) ^ y.wrapping_mul(19349663)) % 81) as i32 - 40;
+            let base = if x < 48 { 60 } else { 190 };
+            (base + n).clamp(0, 255) as u8
+        });
+        let frame = render(noisy.clone(), "motolii.kuwahara", &[]);
+        for (half, xs) in [("暗い側", 8..40), ("明るい側", 56..88)] {
+            let (before, after) = (spread(&noisy, xs.clone()), spread(&frame, xs));
+            assert!(after < before * 0.5, "{half}: ざらつきが減る {before:.1} → {after:.1}");
+        }
+        assert!(at(&frame, 44, 48) < 110 && at(&frame, 52, 48) > 150, "縁は切り立ったまま: {} | {}", at(&frame, 44, 48), at(&frame, 52, 48));
+    }
+
+    #[test]
+    fn xdog_draws_a_line_on_the_edge_and_leaves_flat_areas_white() {
+        let square = image(|x, y| if (28..68).contains(&x) && (28..68).contains(&y) { 180 } else { 255 });
+        let frame = render(square, "motolii.xdog", &[]);
+        let (outside, inside, edge) = (at(&frame, 8, 48), at(&frame, 48, 48), (26..31).map(|x| at(&frame, x, 48)).min().unwrap());
+        assert!(outside > 240 && inside > 240, "平らな所は白: 外 {outside} 中 {inside}");
+        assert!(edge < 150, "縁に線: {edge}");
+    }
+}
