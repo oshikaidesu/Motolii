@@ -42,6 +42,12 @@ class CreateShelf extends BrowserShelf {
     },
     {'id': 'camera', 'name': 'Camera', 'detail': 'Adds a camera layer'},
     {
+      'id': 'particles',
+      'name': 'Particles',
+      'detail': 'Adds a particle emitter',
+      'glyph': '⁘',
+    },
+    {
       'id': 'stage',
       'name': 'Stage',
       'detail': 'Widens the working area around the frame',

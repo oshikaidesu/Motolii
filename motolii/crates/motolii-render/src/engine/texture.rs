@@ -299,6 +299,7 @@ impl Engine {
                 }, natural)
             }
             LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group => None,
+            LayerSource::Particles => self.particle_frames.get(&layer_id).map(|frame| frame.bounds),
             LayerSource::File { path, .. } => {
                 let spatial = if crate::render::media::is_mesh_path(path) {
                     Some(self.models.get(path)?.bounds())
@@ -371,7 +372,20 @@ impl Engine {
         // 輪郭の細分は 2 の冪の段で cache を使い回す。絵に描く時は投影の密度そのもので描く
         // (段に丸めると置いた時に再標本化され、縁が甘くなる)。
         let tolerance = (0.05 / if vector { density } else { exact_density }).max(1e-6);
-        let (content, natural, frame) = if layer.source == LayerSource::Text {
+        let (content, natural, frame) = if layer.source == LayerSource::Particles {
+            // 粒は焼かない: 点群と同じく点のまま view へ渡る(効果の法 2026-09-13「粒子は形」)。
+            match self.particle_frames.get(&layer.id) {
+                Some(frame) => (Some(LayerContent::Cloud {
+                    positions: frame.positions.clone(),
+                    colors: frame.colors.clone(),
+                    bounds: frame.bounds,
+                    point_size: 1.0,
+                    sizes: Some(frame.sizes.clone()),
+                    sprites: true,
+                }), [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)], None),
+                None => (None, [1.0, 1.0], None),
+            }
+        } else if layer.source == LayerSource::Text {
             self.text_texture_from_document(text_documents.get(&layer.id), text::morph_partner(layer, text_documents), layer.id, t, comp, vector, tolerance, flat, step)?
         } else if layer.source == LayerSource::Shape {
             let shapes = shape_documents
@@ -634,6 +648,8 @@ impl Engine {
                 colors: data.colors.clone(),
                 bounds: data.bounds(),
                 point_size: DEFAULT_POINT_SIZE,
+                sizes: None,
+                sprites: false,
             }),
             natural,
         ))
@@ -950,7 +966,7 @@ impl Engine {
             LayerSource::Text | LayerSource::Shape | LayerSource::File { .. } => {
                 Ok((None, [0.0, 0.0]))
             }
-            LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group => Ok((None, [0.0, 0.0])),
+            LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group | LayerSource::Particles => Ok((None, [0.0, 0.0])),
         }
     }
 }

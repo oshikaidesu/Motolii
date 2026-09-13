@@ -145,6 +145,8 @@ pub struct Engine {
     containers: HashMap<String, ContainerInfo>,
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
+    /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
+    particle_frames: HashMap<LayerId, ParticleFrame>,
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
     /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
@@ -183,6 +185,7 @@ impl Engine {
             containers: HashMap::new(),
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
+            particle_frames: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
@@ -247,6 +250,7 @@ impl Engine {
             containers: HashMap::new(),
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
+            particle_frames: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
@@ -1037,3 +1041,39 @@ mod response_tests;
 
 #[cfg(test)]
 mod visibility_tests;
+
+/// 粒子の層の 1 コマ分の点(層の局所 px、出す元が 0)。
+#[derive(Clone)]
+pub(crate) struct ParticleFrame {
+    pub(crate) positions: std::sync::Arc<Vec<[f32; 3]>>,
+    pub(crate) colors: std::sync::Arc<Vec<[u8; 4]>>,
+    pub(crate) sizes: std::sync::Arc<Vec<f32>>,
+    pub(crate) bounds: crate::render::media::SpatialBounds,
+}
+
+impl ParticleFrame {
+    /// 閉じた式で解いた粒に乱流(年齢で動く fbm)を足す。bounds の min は 0 に据える — 置き方が min を層の原点にするので、
+    /// 粒の散らばりで層が動かないように。
+    pub(crate) fn from_particles(particles: &[crate::doc::store::particles::Particle], turbulence: crate::doc::store::particles::Turbulence) -> Self {
+        let mut max = [1.0f32, 1.0];
+        let positions: Vec<[f32; 3]> = particles.iter().map(|p| {
+            let mut at = glam::Vec3::from(p.position);
+            if turbulence.amount != 0.0 {
+                let q = at / turbulence.size + glam::vec3(turbulence.seed * 1.31, turbulence.seed * 0.77, p.age * 0.6);
+                at += glam::vec3(re_renderer::noise::fbm3(q, 3), re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), 3), 0.0) * turbulence.amount * p.age.min(1.0);
+            }
+            max = [max[0].max(at.x), max[1].max(at.y)];
+            at.into()
+        }).collect();
+        let colors = particles.iter().map(|p| p.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)).collect();
+        // Size は直径。re_renderer の点の大きさは半径。
+        let sizes = particles.iter().map(|p| p.size * 0.5).collect();
+        Self {
+            positions: std::sync::Arc::new(positions),
+            colors: std::sync::Arc::new(colors),
+            sizes: std::sync::Arc::new(sizes),
+            bounds: crate::render::media::SpatialBounds { min: [0.0, 0.0, 0.0], max: [max[0], max[1], 0.0] },
+        }
+    }
+}
+

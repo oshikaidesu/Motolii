@@ -16,6 +16,8 @@ impl Compositor {
         colors: &[[u8; 4]],
         bounds: SpatialBounds,
         point_size: f32,
+        sizes: Option<&[f32]>,
+        sprites: bool,
         placement: crate::doc::core::LayerPlacement,
         opacity: f32,
         comp: crate::doc::core::CompSpec,
@@ -42,7 +44,10 @@ impl Compositor {
             })
             .collect();
 
-        let radii = vec![Size::new_ui_points(point_size.max(1e-4)); points.len()];
+        let radii: Vec<Size> = match sizes {
+            Some(sizes) => sizes.iter().map(|s| Size::new_ui_points(s.max(1e-4))).collect(),
+            None => vec![Size::new_ui_points(point_size.max(1e-4)); points.len()],
+        };
         let picking_ids = vec![Default::default(); points.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);
         builder
@@ -51,7 +56,7 @@ impl Compositor {
             .clip(clip)
             .outline_mask_ids(outline)
             .add_points_slow(&points, &radii, &colors, &picking_ids)
-            .flags(PointCloudBatchFlags::FLAG_ENABLE_SHADING);
+            .flags(if sprites { PointCloudBatchFlags::FLAG_DRAW_AS_CIRCLES } else { PointCloudBatchFlags::FLAG_ENABLE_SHADING });
         builder
             .into_draw_data()
             .map_err(|e| CompositorError::Draw(e.to_string()))

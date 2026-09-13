@@ -14,6 +14,7 @@ pub(crate) enum NewKind {
     Line,
     Bezier,
     Null,
+    Particles,
     Primitive { path: String, name: String },
     Media { path: String, name: String },
 }
@@ -244,6 +245,12 @@ pub(crate) fn new_layer_intents(
             Intent::AddLayer(layer),
             Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Camera, order, timing: LayerTiming::place(playhead,None,duration_frames) } },
             Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Camera".into()), label_color, ..Default::default() } },
+        ],
+        NewKind::Particles => vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Particles, order, timing: LayerTiming::place(playhead,None,duration_frames) } },
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Particles".into()), label_color, ..Default::default() } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).expect("known property"), value: Value::Vec2([comp.0 * 0.5, comp.1 * 0.5]) },
         ],
         NewKind::Stage => vec![
             Intent::AddLayer(layer),

@@ -454,6 +454,16 @@ impl Engine {
         self.layer_failures.clear();
         self.drawn_layers = 0;
         self.compositor.refresh_catalog_programs();
+        self.particle_frames.clear();
+        for layer in resolved.iter().filter(|l| l.source == LayerSource::Particles) {
+            if self.particle_frames.contains_key(&layer.id) {
+                continue;
+            }
+            match view.particles_at(layer.id, t) {
+                Ok((particles, turbulence)) => { self.particle_frames.insert(layer.id, super::ParticleFrame::from_particles(&particles, turbulence)); }
+                Err(e) => self.layer_failures.push(format!("粒子の層 {} を解けない: {e}", layer.id.0)),
+            }
+        }
         let needs_auxiliary_views = {
             let surface_ids: HashSet<_> = self.compositor.catalog.definitions.iter()
                 .filter(|d| d.manifest.stage == crate::render::compositor::IsfStage::Surface)
@@ -2364,5 +2374,83 @@ mod motion_blur_follows_the_keyframes {
         assert!(ramp(&render(&document(true, Some(&[("position", 0.0)])), 5)) <= 2, "Position を切ればぼけない");
         let double = ramp(&render(&document(true, Some(&[("tune", 2.0)])), 5));
         assert!(double > got + 10, "Tune 2 は Tune 1 より長い: {double} ≤ {got}");
+    }
+}
+
+/// 粒子の層(形の族、点の billboard)。閉じた式なので飛んでも辿っても同じ絵、跳ね返りは床の上に留まる(実 GPU)。
+#[cfg(test)]
+mod particles_are_a_closed_form {
+    use crate::doc::store::{particles, property, Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::render::engine::Engine;
+
+    const W: u32 = 320;
+    const H: u32 = 240;
+
+    fn fps() -> Fps { Fps::try_new(24, 1).unwrap() }
+    fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
+
+    fn document(values: &[(&str, Value)]) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 96, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Particles, order: 0, timing: LayerTiming::place(0, None, 96) } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([160.0, 160.0]) },
+        ]).unwrap();
+        for (name, value) in values {
+            doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value: value.clone() }).unwrap();
+        }
+        doc
+    }
+
+    /// 明るい画素の数を、y の境で上と下に分けて。
+    fn lit(frame: &[u8], split: u32) -> (usize, usize) {
+        let (mut above, mut below) = (0, 0);
+        for (i, px) in frame.chunks_exact(4).enumerate() {
+            if px[0] > 60 {
+                if (i as u32 / W) < split { above += 1 } else { below += 1 }
+            }
+        }
+        (above, below)
+    }
+
+    fn render(doc: &Document, frame: i64) -> Vec<u8> {
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.render_frame(&doc.view(), at(frame)).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        pixels
+    }
+
+    #[test]
+    fn particles_rise_from_the_emitter_and_land_the_same_however_you_arrive() {
+        let doc = document(&[]);
+        assert_eq!(lit(&render(&doc, 0), H), (0, 0), "入点ではまだ何も出ていない");
+        let jumped = render(&doc, 24);
+        let (above, below) = lit(&jumped, 150);
+        assert!(above > 200 && above > below * 4, "既定は上へ飛ぶ: 上 {above} 下 {below}");
+        let mut engine = Engine::new().unwrap();
+        let mut walked = Vec::new();
+        for f in 0..=24 { walked = engine.render_frame(&doc.view(), at(f)).unwrap(); }
+        assert_eq!(walked, jumped, "飛んで来た絵が辿った絵と違う");
+    }
+
+    #[test]
+    fn bouncing_particles_stay_above_the_floor() {
+        let doc = document(&[
+            (particles::DIRECTION, Value::F64(90.0)),
+            (particles::SPREAD, Value::F64(60.0)),
+            (particles::GRAVITY, Value::F64(900.0)),
+            (particles::BOUNCE, Value::F64(0.6)),
+            (particles::FLOOR, Value::F64(40.0)),
+            (particles::LIFE, Value::F64(3.0)),
+            (particles::SIZE_END, Value::F64(8.0)),
+            (particles::OPACITY_END, Value::F64(1.0)),
+        ]);
+        let frame = render(&doc, 48);
+        // 床は出す元(y = 160)の 40 px 下 = 200。粒の直径 8 px ぶんの余裕。
+        let (above, below) = lit(&frame, 206);
+        assert!(above > 100, "粒が居る: {above}");
+        assert_eq!(below, 0, "床より下に粒が居ない");
     }
 }

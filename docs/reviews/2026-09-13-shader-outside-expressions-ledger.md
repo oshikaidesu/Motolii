@@ -54,7 +54,7 @@ Motolii の同梱(`motolii/crates/motolii-render/vism/`)と突き合わせ、3 �
 
 ## 4. 粒子 — 決定(参考は Furikake)
 
-既存の裁定(配置効果の別カード、L3 Simulation + StateTrack、状態は host)の上で、**AE の Furikake を参考にする**。
+**2026-09-13 の効果の法「粒子は効果でなく形(PointCloud の billboard + blend 1 値 + soft particle)」に従う**(08-31 の「配置効果の別カード」より新しい)。その上で **AE の Furikake を参考にする**。
 
 Furikake の利用者向けの説明(aescripts / toolfarm / gfxplugin の紹介文):
 
@@ -96,7 +96,7 @@ Furikake の利用者向けの説明(aescripts / toolfarm / gfxplugin の紹介�
 1. 光学フロー + Motion Blur b — **済み(2026-09-13)**: `TIME_OFFSET_FRAMES`(隣のコマをコマ数で読む)と同梱 Pixel Motion Blur。取説 [§8-0](../vism-shadertoy-import.md)。フローは shader の中(GPU)で、Blob・トラッカーが CPU で使う形はまだ
 2. Motion Blur a(効果、Alight Motion の型)— **済み(2026-09-14)**: `motolii.motion_blur`(doc の `store/motion.rs`、配置効果の族)。写しの枚数は 1 コマに四隅が動く道のり 1.5 px ごとに 1 枚(2〜64、止まっていれば素通し)。1 枚目を comp 大の板に 1 回だけ焼き、写しのずれで置いて足す(形・文字は矩形でないと足す合成に乗らない)。審判 `motion_blur_follows_the_keyframes`。グループ・親の動き・Repeater と同居した時は未対応(素通し)
 3. 静的な代替(深度・超解像・Kuwahara / XDoG)— **3 本済み(2026-09-14)**: `depth_map.fs`(縦位置・かすみ・細部の 3 手掛かり、1/4 で混ぜて joint bilateral で戻す)、`kuwahara.fs`(異方性・多項式重み)、`xdog.fs`(流れに沿う XDoG、閾値は見た目の明るさ)。審判 `stylize_without_machine_learning`。**超解像は保留(相談)**: 効果の出力を層より大きくする口が無く、「footprint 解像度・余白は効果が宣言」の法に触れる
-4. 粒子(Furikake 型)
+4. 粒子(Furikake 型)— **済み(2026-09-14、L0)**: `LayerSource::Particles`(doc の `store/particles.rs`、欄は `ROWS` の 1 表)。動きは閉じた式(simulation-model.md §8 の L0): 率だけ入点からコマごとに積み、重力・風は放物線、跳ね返りは跳ねるたびに次の着地を解く、乱流は年齢で動く fbm。描くのは fork の点群(円の billboard、点ごとの直径)。Create の棚に Particles、Inspector は欄の表。審判 `particles_are_a_closed_form`・`creating_particles_shows_the_particle_rows`。**まだ**: 出す元の形(箱・球・格子 — 今は矩形の広がりだけ)、子の粒子、加算の混ぜ方と soft particle(fork の点群に加算のパイプラインが無い)、積み重なる乱流と衝突(L3 / StateTrack、SIM-1)、欄の値は t の値で過去の粒にも効く(率だけが積む)
 5. Plexus(粒子・パスの頂点・点群の点を距離で結ぶ。描くのは re_renderer の線)
 6. 2D 物理
 7. Blob(拾う元 3 つ・ID 持続の切り替え・配置 + 同梱プリセット)

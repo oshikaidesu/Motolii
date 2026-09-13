@@ -12,6 +12,7 @@ pub mod kind;
 pub mod placement;
 pub mod pathop;
 pub mod motion;
+pub mod particles;
 pub mod solid;
 pub mod textop;
 pub mod shape_props;
@@ -221,6 +222,8 @@ pub enum LayerSource {
     Shape,
     Text,
     Group,
+    /// 粒子(形の族、点の billboard で描く)。欄は `particles::ROWS`。
+    Particles,
 }
 
 impl LayerSource {
@@ -232,7 +235,8 @@ impl LayerSource {
             | Self::Stage
             | Self::Shape
             | Self::Text
-            | Self::Group => None,
+            | Self::Group
+            | Self::Particles => None,
         }
     }
 }

@@ -43,7 +43,7 @@ fn prop(view:&StoreView<'_>,layer:LayerId,id:&str,label:&str,fallback:&Value,ran
     Ok(json!({"id":id,"label":label,"kind":match current{Value::F64(_)=>"number",Value::Vec2(_)=>"vec2",Value::Color(_)=>"color",Value::Bool(_)|Value::Enum(_)|Value::LayerId(_)=>"enum",Value::Path(_)=>"text"},"value":value(&current),"min":range.map(|r|r.0),"max":range.map(|r|r.1),"keyedNow":keys.iter().any(|k|k["frame"]==here),"keys":keys}))
 }
 fn source_kind(source:&LayerSource)->&'static str{match source{
-    LayerSource::Camera=>"Camera",LayerSource::Stage=>"Stage",LayerSource::Text=>"Text",LayerSource::Shape=>"Shape",LayerSource::Group=>"Group",LayerSource::Null=>"Null",
+    LayerSource::Camera=>"Camera",LayerSource::Stage=>"Stage",LayerSource::Text=>"Text",LayerSource::Shape=>"Shape",LayerSource::Group=>"Group",LayerSource::Null=>"Null",LayerSource::Particles=>"Particles",
     LayerSource::File{path,..}=>{
         if crate::render::media::is_mesh_path(path){"Mesh"}else if crate::render::media::is_point_cloud_path(path){"PointCloud"}else{
             let mime=std::path::Path::new(path).extension().and_then(|e|e.to_str()).and_then(crate::render::media::asset_type_for_extension).unwrap_or_default();
@@ -347,6 +347,9 @@ impl EditorRuntime{
         if meta.source == LayerSource::Camera {
             properties = property::CAMERA_ROWS.iter().map(|(p,label,v,range)| prop(view,id,p,label,v,*range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
         }
+        if meta.source == LayerSource::Particles {
+            properties = crate::doc::store::particles::ROWS.iter().map(|(p,label,v,range)| prop(view,id,p,label,v,*range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
+        }
         if meta.source == LayerSource::Stage {
             properties = property::STAGE_MARGINS.iter().zip(["Left","Top","Right","Bottom"])
                 .map(|(p,label)| prop(view,id,p,label,&Value::F64(0.0),Some((0.0,100000.0)),at,fps,live)).collect::<Result<Vec<_>,_>>()?;
@@ -521,6 +524,22 @@ mod camera_target_tests {
         let reply=unsafe{crate::motolii_probe_request(rt,command.as_ptr())};
         let reply:Json=serde_json::from_str(unsafe{CStr::from_ptr(reply)}.to_str().unwrap()).unwrap();
         assert!(reply["error"].is_null(),"{reply}");reply
+    }
+    /// Create の particles で粒子の層ができ、Inspector には粒子の欄の表(Rate から Seed まで)が並び、鍵の打てる値として書ける。
+    #[test]
+    fn creating_particles_shows_the_particle_rows(){
+        let mut rt=EditorRuntime::open("").unwrap();
+        request(&mut rt,json!({"op":"create","kind":"particles"}));
+        let layer=rt.selected.unwrap();
+        assert_eq!(rt.doc.view().meta(layer).unwrap().unwrap().source,LayerSource::Particles);
+        request(&mut rt,json!({"op":"setProperty","layer":layer.0,"property":"particles.rate","value":120.0}));
+        let status=rt.status().unwrap();
+        let row=status["layers"].as_array().unwrap().iter().find(|l|l["id"]==layer.0).expect("the layer is listed");
+        let ids:Vec<&str>=row["properties"].as_array().unwrap().iter().filter_map(|p|p["id"].as_str()).collect();
+        let expected:Vec<&str>=crate::doc::store::particles::ROWS.iter().map(|r|r.0).collect();
+        assert_eq!(ids,expected);
+        let rate=row["properties"].as_array().unwrap().iter().find(|p|p["id"]=="particles.rate").unwrap();
+        assert_eq!(rate["value"],json!(120.0));
     }
     /// 層ターゲットは Stage の枠・Depth の点と同じ「bounds の中心」を見る。anchor をずらしても注視点は形の中心に残る。
     #[test]

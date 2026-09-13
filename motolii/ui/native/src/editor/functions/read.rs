@@ -206,6 +206,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         Some(LayerSource::Shape) => "shape",
         Some(LayerSource::Text) => "text",
         Some(LayerSource::Group) => "group",
+        Some(LayerSource::Particles) => "particles",
         None => "solid",
     };
 

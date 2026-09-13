@@ -299,12 +299,16 @@ impl Compositor {
                     colors,
                     bounds,
                     point_size,
+                    sizes,
+                    sprites,
                 } => {
                     clouds.push(self.point_cloud_draw_data(
                         positions,
                         colors,
                         bounds,
                         point_size,
+                        sizes,
+                        sprites,
                         input.placement,
                         input.opacity,
                         comp,

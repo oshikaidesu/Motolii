@@ -476,6 +476,10 @@ pub enum LayerContent {
         bounds: crate::render::media::SpatialBounds,
         /// 点の直径(comp のピクセル)。
         point_size: f32,
+        /// 点ごとの直径(粒子)。無ければ全部 `point_size`。
+        sizes: Option<std::sync::Arc<Vec<f32>>>,
+        /// 陰の無い円の billboard で描く(粒子)。点群は陰を付ける。
+        sprites: bool,
     },
     Model(std::sync::Arc<GpuModelData>),
     /// 環境(空)。板にならず、run の背景と網の照明になる。
@@ -501,6 +505,8 @@ pub(crate) enum SequentialContent<'a> {
         colors: &'a [[u8; 4]],
         bounds: crate::render::media::SpatialBounds,
         point_size: f32,
+        sizes: Option<&'a [f32]>,
+        sprites: bool,
     },
     Model(&'a GpuModelData),
     Environment(&'a GpuEnvironmentData),

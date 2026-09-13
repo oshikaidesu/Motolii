@@ -254,6 +254,10 @@ fn build_layer(
         LayerSource::Null => {
             out["ty"] = serde_json::json!(3);
         }
+        LayerSource::Particles => {
+            out["ty"] = serde_json::json!(3);
+            unsupported.push(UnsupportedForLottie { layer: Some(layer), category: "particles", detail: "Particle layers have no Lottie layer type and are exported as Null layers".into() });
+        }
         LayerSource::Stage => {
             out["ty"] = serde_json::json!(3);
             unsupported.push(UnsupportedForLottie { layer: Some(layer), category: "stage", detail: "Stage layers describe the working area and are not exported".into() });
