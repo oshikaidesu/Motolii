@@ -135,6 +135,15 @@ void main() {
       Map<String, dynamic>.from(settings['deskWork'] as Map)['collections'],
       {'Fonts/font:Arial': 3},
     );
+    // The row wears the collection's colour as a dot.
+    expect(
+      find.byKey(const ValueKey('browser:collected:font:Arial')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('browser:collected:font:Georgia')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

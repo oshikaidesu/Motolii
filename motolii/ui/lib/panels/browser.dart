@@ -1023,7 +1023,36 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     });
   }
 
-  Widget card(Map<String, dynamic> item) => Picked<Set<String>>(
+  /// A tile in a collection wears the collection's colour as a small dot in
+  /// its lower right corner.
+  Widget card(Map<String, dynamic> item) {
+    final which = library.collectionOf(tab, id(item));
+    final tile = _tile(item);
+    if (which == null) return tile;
+    return Stack(
+      children: [
+        tile,
+        Positioned(
+          right: EditorMetrics.s4,
+          bottom: EditorMetrics.s4,
+          child: IgnorePointer(
+            child: Container(
+              key: ValueKey('browser:collected:${id(item)}'),
+              width: EditorMetrics.s6,
+              height: EditorMetrics.s6,
+              decoration: BoxDecoration(
+                color: BrowserLibrary.collectionColors[which - 1],
+                shape: BoxShape.circle,
+                border: Border.all(color: EditorTheme.app, width: 1),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tile(Map<String, dynamic> item) => Picked<Set<String>>(
     of: picked,
     test: (chosen) => chosen.contains(id(item)),
     builder: (isSelected) => Hover(
