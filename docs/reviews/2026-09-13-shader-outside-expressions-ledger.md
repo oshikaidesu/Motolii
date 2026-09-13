@@ -18,8 +18,11 @@ Motolii の同梱(`motolii/crates/motolii-render/vism/`)と突き合わせ、3 �
 
 両方入れる。
 
-- **a. 層のブラー(AE 型)**: comp にシャッター角・位相・サンプル数、層に on/off のスイッチ。host が 1 フレームの中を複数回描いて平均する。既定のシャッター角は 180°。
-  feedback(`PERSISTENT`)の効果は、1 フレーム内の複数回描画に通さず **1 回だけ**(状態の漸化式を 1 フレーム 1 歩のまま保つ)。
+- **a. 層のブラー — 効果、家は Inspector**(2026-09-14 利用者裁定で改めた): 「エフェクトで十分。元から AE の仕組みには違和感があった。
+  場所をとるし、パラメータもいじれない。インスペクターが家」。**comp 設定のシャッター角と Timeline のスイッチ列は作らない。**
+  先例は北極星の [Alight Motion の Motion Blur](https://guide.alightmotion.com/effects/motion-blur): **Tune**(0〜4、既定 1 = 隣のコマとの差ぶん)、
+  **Position / Scale / Angle** の on/off(既定 on)。キーで動く位置・大きさ・角度だけをぼかし、色などはぼかさない。サンプル数の取っ手は無い(host が動きの量で決める)。
+  host が層の変換を 1 コマの中のずらした時刻で置いて平均する。feedback(`PERSISTENT`)の効果は 1 コマ 1 回のまま。
 - **b. 画素のブラー(RSMB 型)**: 素材の動きを光学フロー(ピラミッド Lucas-Kanade)で推定し、それに沿ってぼかす効果。フローはトラッキング・Blob と共用する下地。
 
 ## 2. 2D 物理 — 決定(推しのまま)
@@ -91,7 +94,7 @@ Furikake の利用者向けの説明(aescripts / toolfarm / gfxplugin の紹介�
 レーンは 1 本ずつ、本線の作業ツリーで丁寧に終わらせ(worktree は build のリスクで使わない、裏で別セッションが走る。自分の file だけ add)、それぞれヘッドレスの審判(飛んでも辿っても同じ絵)を付ける。
 
 1. 光学フロー + Motion Blur b — **済み(2026-09-13)**: `TIME_OFFSET_FRAMES`(隣のコマをコマ数で読む)と同梱 Pixel Motion Blur。取説 [§8-0](../vism-shadertoy-import.md)。フローは shader の中(GPU)で、Blob・トラッカーが CPU で使う形はまだ
-2. Motion Blur a
+2. Motion Blur a(効果、Alight Motion の型)— **済み(2026-09-14)**: `motolii.motion_blur`(doc の `store/motion.rs`、配置効果の族)。写しの枚数は 1 コマに四隅が動く道のり 1.5 px ごとに 1 枚(2〜64、止まっていれば素通し)。1 枚目を comp 大の板に 1 回だけ焼き、写しのずれで置いて足す(形・文字は矩形でないと足す合成に乗らない)。審判 `motion_blur_follows_the_keyframes`。グループ・親の動き・Repeater と同居した時は未対応(素通し)
 3. 静的な代替(深度・超解像・Kuwahara / XDoG)
 4. 粒子(Furikake 型)
 5. Plexus(粒子・パスの頂点・点群の点を距離で結ぶ。描くのは re_renderer の線)

@@ -576,7 +576,7 @@ impl Engine {
                 let screen = after.iter().any(|p| p.reads_backdrop || p.reads_composite()).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
-            } else if layer.after_effects.is_empty() {
+            } else if layer.after_effects.is_empty() && layer.averaged == 0 {
               // 凍った層は cache の絵で差し替え、素材の復号も効果の列も走らない(docs/freeze-and-flatten.md §2)。
               if let Some((built, padding)) = self.frozen_layer(view, layer, t, projection_camera, blend_mode)? {
                 frozen_padding = padding;
@@ -599,18 +599,43 @@ impl Engine {
                 let end = index + resolved[index..].iter().take_while(|copy| copy.id == layer.id).count();
                 skip_below = end;
                 let mut copies = Vec::new();
-                for copy in &resolved[index..end] {
-                    if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {
-                        let mut passes = translate_effect_passes(&copy.effects);
+                if layer.averaged > 0 {
+                    // Motion Blur: 写しは変換だけが違うので、1 枚目を comp 大の板に 1 回だけ焼き(上の効果もここで 1 回)、
+                    // 板を写しごとのずれで置いて足す。形・文字は矩形でないと足す合成に乗らないので、必ず板にする。
+                    let first = &resolved[index];
+                    if let Some(mut built) = self.build_layer_shared(&mut previous_build, first, text_documents, shape_documents, t, comp, camera, projection_camera, CompositeBlendMode::Normal)? {
+                        // 写しの不透明度(1/枚数)は置く時に 1 回だけ掛ける。板は層の不透明度で焼く。
+                        built.placement.opacity = (first.placement.opacity * layer.averaged as f32).min(1.0);
+                        let mut passes = translate_effect_passes(&first.effects);
                         let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
-                        self.stamp_feedback(&mut passes, copy.id, copy.copy, 0, screen);
-                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
+                        self.stamp_feedback(&mut passes, first.id, first.copy, 0, screen);
+                        let mut plate = self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 }], CompositeBlendMode::Normal, first.placement)?;
+                        let reference = first.placement.transform.inverse();
+                        let weight = 1.0 / layer.averaged as f32;
+                        plate.placement.opacity = 1.0;
+                        for copy in &resolved[index..end] {
+                            let mut moved = plate.clone();
+                            moved.placement.transform = copy.placement.transform * reference;
+                            moved.placement.opacity = weight;
+                            copies.push(LayerWithPasses { layer: moved, passes: Vec::new(), pass_sources: Vec::new(), padding: 0 });
+                        }
+                    }
+                } else {
+                    for copy in &resolved[index..end] {
+                        if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {
+                            let mut passes = translate_effect_passes(&copy.effects);
+                            let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
+                            self.stamp_feedback(&mut passes, copy.id, copy.copy, 0, screen);
+                            copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
+                        }
                     }
                 }
                 if copies.is_empty() {
                     continue;
                 }
-                let plate = self.bake_isolated_layers(comp, camera, copies, blend_mode, layer.placement)?;
+                let mut plate_placement = layer.placement;
+                if layer.averaged > 0 { plate_placement.opacity = 1.0; }
+                let plate = self.bake_isolated_layers_with(comp, camera, copies, blend_mode, plate_placement, layer.averaged > 0)?;
                 let mut after = super::translate::translate_plate_passes(&layer.after_effects);
                 let screen = after.iter().any(|p| p.reads_backdrop || p.reads_composite()).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
@@ -963,13 +988,26 @@ impl Engine {
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
-        mut sources: Vec<LayerWithPasses>,
+        sources: Vec<LayerWithPasses>,
         output_blend: CompositeBlendMode,
         placement: crate::doc::core::LayerPlacement,
     ) -> Result<Layer, EngineError> {
+        self.bake_isolated_layers_with(comp, camera, sources, output_blend, placement, false)
+    }
+
+    /// `average` なら写しを足す(Motion Blur: 各写しの不透明度は 1/枚数なので、足すと平均になる)。
+    fn bake_isolated_layers_with(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        mut sources: Vec<LayerWithPasses>,
+        output_blend: CompositeBlendMode,
+        placement: crate::doc::core::LayerPlacement,
+        average: bool,
+    ) -> Result<Layer, EngineError> {
         // BlendはMatteでcoverageを得た後、作品の下層との間に一度だけ掛ける。
         for source in &mut sources {
-            source.layer.blend_mode = CompositeBlendMode::Normal;
+            source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
         }
         let (texture, _view) = self.compositor.render_to_texture(
             comp,
@@ -2257,5 +2295,74 @@ mod pixel_motion_blur_follows_the_motion {
             assert_eq!(jumped, walked, "{fps}fps: 飛んで来た絵が辿った絵と違う");
             assert!(ramp(&Engine::new().unwrap().render_frame(&document(&path, fps, Some(0.0)).view(), at).unwrap()) <= 2, "シャッター 0 はぼけない");
         }
+    }
+}
+
+/// Motion Blur(層の動き、Alight Motion の型)の審判: キーで 1 コマに 20 px 動く形の縁が、Tune 1 で 1 コマぶん(20 px)の傾きになる。
+/// 真ん中は写しを足しても元の明るさのまま、止まった層と Position を切った層はぼけない、飛んでも辿っても同じ絵。
+#[cfg(test)]
+mod motion_blur_follows_the_keyframes {
+    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp, Keyframe, KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode};
+    use crate::render::engine::Engine;
+
+    const W: u32 = 320;
+    const H: u32 = 180;
+    const FRAMES: i64 = 24;
+
+    fn fps() -> Fps { Fps::try_new(24, 1).unwrap() }
+    fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
+
+    fn document(moving: bool, blur: Option<&[(&str, f64)]>) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe { t: RationalTime::ZERO, value: Value::Vec2([0.0, 60.0]), interp: Interp::Linear, spatial: None });
+        let end = if moving { 20.0 * FRAMES as f64 } else { 0.0 };
+        track.insert(Keyframe { t: at(FRAMES), value: Value::Vec2([end, 60.0]), interp: Interp::Linear, spatial: None });
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, FRAMES) } },
+            Intent::SetShapes { layer, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 40.0, y: 60.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }) })] },
+            Intent::SetTrack { layer, property: PropertyId::new(property::POSITION).unwrap(), track },
+        ]).unwrap();
+        if let Some(params) = blur {
+            doc.apply(Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::doc::store::motion::MOTION_BLUR.into() }] }).unwrap();
+            for (name, value) in params {
+                doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(*value) }).unwrap();
+            }
+        }
+        doc
+    }
+
+    fn row(pixels: &[u8]) -> Vec<u8> { (0..W as usize).map(|x| pixels[(90 * W as usize + x) * 4]).collect() }
+    fn ramp(pixels: &[u8]) -> usize { row(pixels).into_iter().filter(|v| (12..243).contains(v)).count() }
+
+    fn render(doc: &Document, frame: i64) -> Vec<u8> {
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.render_frame(&doc.view(), at(frame)).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        pixels
+    }
+
+    #[test]
+    fn the_edges_smear_by_one_frame_of_keyframed_motion() {
+        assert!(ramp(&render(&document(true, None), 5)) <= 2, "素の縁は切り立っている");
+        let doc = document(true, Some(&[]));
+        let blurred = render(&doc, 5);
+        let got = ramp(&blurred);
+        // Tune 1 = 1 コマの動き(20 px)の幅で平均する: 左右の縁がそれぞれ 20 px の傾きになる。
+        assert!(got.abs_diff(40) <= 6, "縁の傾き {got} px(期待 40 px): {:?}", row(&blurred));
+        // 四角(40 px)より動きが小さいので、真ん中は元の白のまま(足して平均しても暗くならない)。
+        assert!(row(&blurred).iter().filter(|v| **v >= 250).count() >= 15, "真ん中が暗い: {:?}", row(&blurred));
+        let mut engine = Engine::new().unwrap();
+        let mut walked = Vec::new();
+        for f in 0..=5 { walked = engine.render_frame(&doc.view(), at(f)).unwrap(); }
+        assert_eq!(walked, blurred, "飛んで来た絵が辿った絵と違う");
+        assert!(ramp(&render(&document(false, Some(&[])), 5)) <= 2, "止まった層はぼけない");
+        assert!(ramp(&render(&document(true, Some(&[("position", 0.0)])), 5)) <= 2, "Position を切ればぼけない");
+        let double = ramp(&render(&document(true, Some(&[("tune", 2.0)])), 5));
+        assert!(double > got + 10, "Tune 2 は Tune 1 より長い: {double} ≤ {got}");
     }
 }

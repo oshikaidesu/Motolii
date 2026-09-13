@@ -14,7 +14,18 @@ impl<'a> StoreView<'a> {
         layer: LayerId,
         t: RationalTime,
     ) -> Result<glam::Affine2, StoreError> {
-        let scalar = |name: &str, default: f32| -> Result<f32, StoreError> {
+        self.local_placement_transform_sampled(layer, t, None)
+    }
+
+    /// `sample` があれば、位置・大きさ・角度のうち印の付いた物だけをその時刻で取る(Motion Blur)。他は t。
+    pub(super) fn local_placement_transform_sampled(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        sample: Option<(RationalTime, [bool; 3])>,
+    ) -> Result<glam::Affine2, StoreError> {
+        let when = |which: usize| sample.filter(|(_, mask)| mask[which]).map_or(t, |(at, _)| at);
+        let scalar = |name: &str, default: f32, t: RationalTime| -> Result<f32, StoreError> {
             let property = PropertyId::new(name)?;
             match self.value_at(layer, &property, t)? {
                 Some(Value::F64(v)) => Ok(v as f32),
@@ -24,7 +35,7 @@ impl<'a> StoreView<'a> {
                 None => Ok(default),
             }
         };
-        let vec2 = |name: &str, default: [f32; 2]| -> Result<[f32; 2], StoreError> {
+        let vec2 = |name: &str, default: [f32; 2], t: RationalTime| -> Result<[f32; 2], StoreError> {
             let property = PropertyId::new(name)?;
             match self.value_at(layer, &property, t)? {
                 Some(Value::Vec2(v)) => Ok([v[0] as f32, v[1] as f32]),
@@ -35,12 +46,12 @@ impl<'a> StoreView<'a> {
             }
         };
         Ok(LayerPlacement::from_transform(
-            vec2(property::ANCHOR, [0.0, 0.0])?,
-            self.resolve_position(layer, t)?,
-            vec2(property::SCALE, [1.0, 1.0])?,
-            scalar(property::ROTATION, 0.0)?,
-            scalar(property::SKEW, 0.0)?,
-            scalar(property::SKEW_AXIS, 0.0)?,
+            vec2(property::ANCHOR, [0.0, 0.0], t)?,
+            self.resolve_position(layer, when(0))?,
+            vec2(property::SCALE, [1.0, 1.0], when(1))?,
+            scalar(property::ROTATION, 0.0, when(2))?,
+            scalar(property::SKEW, 0.0, t)?,
+            scalar(property::SKEW_AXIS, 0.0, t)?,
         ))
     }
 

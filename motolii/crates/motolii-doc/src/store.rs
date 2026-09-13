@@ -11,6 +11,7 @@ mod persist;
 pub mod kind;
 pub mod placement;
 pub mod pathop;
+pub mod motion;
 pub mod solid;
 pub mod textop;
 pub mod shape_props;
@@ -498,6 +499,8 @@ pub struct ResolvedLayer {
     /// このグループの板の一部。Whole の効果を積んだグループの子孫は、同じ板の物を 1 枚に焼いてから
     /// `after_effects` を掛け、板の不透明度と混ぜ方はそのグループの物(裁定 2026-09-11)。
     pub plate: Option<LayerId>,
+    /// Motion Blur の写しなら、足して平均する枚数(各写しの不透明度は 1/枚数)。0 なら普通に重ねる。
+    pub averaged: u32,
 }
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。

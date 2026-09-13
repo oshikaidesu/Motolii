@@ -481,6 +481,7 @@ impl<'a> StoreView<'a> {
             copy: 0,
             after_effects: plate.as_ref().map(|(_, effects)| effects.clone()).unwrap_or_default(),
             plate: plate.map(|(group, _)| group),
+            averaged: 0,
         }))
     }
 
@@ -542,9 +543,12 @@ impl<'a> StoreView<'a> {
         visiting: &mut HashSet<LayerId>,
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
+        let blur = base.effects.iter().position(|e| crate::doc::store::motion::is_motion_blur(&e.plugin_id));
         let Some(first) = base.effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()) else {
-            out.push(base);
-            return Ok(());
+            return match blur {
+                Some(at) => self.push_motion_blur(base, at, t, present, world_transforms, memo, visiting, out),
+                None => { out.push(base); Ok(()) }
+            };
         };
         let kind = placement::kind(&base.effects[first].plugin_id).expect("found above");
         let params = &base.effects[first].params;
@@ -610,6 +614,76 @@ impl<'a> StoreView<'a> {
                 copy.placement.opacity = (copy.placement.opacity * placement.opacity).clamp(0.0, 1.0);
                 out.push(copy);
             }
+        }
+        Ok(())
+    }
+
+    /// Motion Blur: 1 コマの中のずらした時刻で位置・大きさ・角度だけを取り直した写しを、平均する枚数の印を付けて並べる。
+    /// Motion Blur より下の効果は、平均した 1 枚に掛かる(`after_effects`)。
+    #[allow(clippy::too_many_arguments)]
+    fn push_motion_blur(
+        &self,
+        mut base: ResolvedLayer,
+        at_index: usize,
+        t: RationalTime,
+        present: &HashSet<LayerId>,
+        world_transforms: &HashMap<LayerId, glam::Affine3A>,
+        memo: &mut HashMap<LayerId, glam::Affine2>,
+        visiting: &mut HashSet<LayerId>,
+        out: &mut Vec<ResolvedLayer>,
+    ) -> Result<(), StoreError> {
+        use crate::doc::store::motion;
+        let (tune, mask) = motion::settings(&base.effects[at_index].params);
+        let below = base.effects.split_off(at_index + 1);
+        base.effects.pop();
+        base.after_effects.splice(0..0, below);
+        let frame_seconds = self.composition()?.map_or(0.0, |c| c.fps.den() as f64 / c.fps.num() as f64);
+        if tune <= 0.0 || frame_seconds <= 0.0 || !mask.contains(&true) || base.source == crate::doc::store::LayerSource::Group {
+            out.push(base);
+            return Ok(());
+        }
+        let layer = base.id;
+        let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
+        let parent2 = parent.map(|p| self.world_affine(p, t, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+        let parent3 = parent.and_then(|p| world_transforms.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
+        let now_inverse = self.local_placement_transform(layer, t)?.inverse();
+        let local_delta = |at: RationalTime| -> Result<glam::Affine2, StoreError> {
+            Ok(self.local_placement_transform_sampled(layer, t, Some((at, mask)))? * now_inverse)
+        };
+        // 枚数は 1 コマの両端で、層の四隅がどれだけ動くかから。
+        let edges = [-0.5, 0.5].map(|s| {
+            RationalTime::try_new((s * tune * frame_seconds * 1_000_000.0).round() as i64, 1_000_000).ok().and_then(|o| t.try_add(o).ok())
+        });
+        let [Some(early), Some(late)] = edges else {
+            out.push(base);
+            return Ok(());
+        };
+        let (early, late) = (parent2 * local_delta(early)? * parent2.inverse(), parent2 * local_delta(late)? * parent2.inverse());
+        let [w, h] = base.declared_size;
+        let travel = [[0.0, 0.0], [w, 0.0], [0.0, h], [w, h]]
+            .map(|corner| {
+                let p = base.placement.transform.transform_point2(glam::Vec2::from(corner));
+                early.transform_point2(p).distance(late.transform_point2(p))
+            })
+            .into_iter()
+            .fold(0.0f32, f32::max);
+        let count = motion::sample_count(travel);
+        if count <= 1 {
+            out.push(base);
+            return Ok(());
+        }
+        for (k, at) in motion::sample_times(t, frame_seconds, tune, count).into_iter().enumerate() {
+            let local = local_delta(at)?;
+            let mut copy = base.clone();
+            copy.copy = k as u32;
+            copy.averaged = count;
+            copy.placement.transform = parent2 * local * parent2.inverse() * base.placement.transform;
+            if let Some(world) = base.placement.world_transform {
+                let local3 = glam::Affine3A::from_mat3_translation(glam::Mat3::from_mat2(local.matrix2), local.translation.extend(0.0).into());
+                copy.placement.world_transform = Some(parent3 * local3 * parent3.inverse() * world);
+            }
+            copy.placement.opacity = base.placement.opacity / count as f32;
+            out.push(copy);
         }
         Ok(())
     }
