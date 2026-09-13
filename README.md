@@ -1,54 +1,253 @@
 # Motolii
 
-**After Effects の手つきで使える、rerun の上に建てた映像制作ソフト。** 文字・画像・動画・形・立体・点群を同じ舞台に置き、1 本の曲のタイムラインで MV を作るための物です。
+**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](VISION.ja.md)。
 
 <p align="center">
-  <img src="docs/assets/rgb-trail.gif" alt="実写の上で動く 3 つの形に、群ごと色ごとに減衰する残像。上の長方形は少し前の背景を映す" width="800">
+  <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
 </p>
-<p align="center"><em>群に残像、その上に「少し前の背景」— どちらも数十行の shader。スクラブしても同じ絵になる</em></p>
+<p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
 
-> **After Effects に渡した物は、全部、平らな長方形になる。** 3D スキャンも、点の群も、カメラの道も、音の波形も、合成に入った瞬間に「元が何だったか」を忘れた板に押し潰される。
+> **Everything you hand to After Effects becomes a flat rectangle.** A 3D scan, a particle field, a camera path, an audio waveform — the moment they enter the composition they are pressed into planar layers that no longer remember what they were.
 
-Motolii は、どちらも起こりかけて起こらなかった **2 つの if** の上に建っています。
+Motolii is built on two *what ifs* that were both nearly real:
 
-**もし合成が、意味を潰さなかったら。** Motolii の舞台は [rerun](https://rerun.io) — ロボットとコンピュータビジョンのために作られた、点群が点群のまま、網が網のまま、線が線のままでいる器です。その上で合成するとは、絵ではなく**意味**を重ねること。だから Motolii では、**1 個の効果を 1 度書けば、動画にも、文字の輪郭にも、網にも、点群にも同じ札のまま乗る**。乱流で歪ませれば、板の絵ではなくシルエットそのものが曲がる。
+**What if a compositor never flattened meaning?** Motolii's stage is [Rerun](https://rerun.io) — a semantic data engine built for robotics and computer vision, where a point cloud stays a point cloud, a path stays a path, a time series stays a time series. Compositing on top of that store means you combine *meanings*, not rasters: the same scene can hold video, procedural shapes, spatial data, and audio-driven motion while every piece remains inspectable, animatable, and re-interpretable. That is a playground for expression nobody has planned yet — the interesting work happens in the combinations.
 
-**もし AviUtl の文化が、After Effects の文法と出会っていたら。** 20 年、無料でローカルな日本の編集ソフトが、作者の想像を越える形に拡張され、その隙間に MV/MAD の文化が育った。一方で AE の深さは vendor の SDK の奥に封じられ、2 つの島に橋は架からなかった。Motolii はその架からなかった橋です。手が覚えている AE 系の編集の文法と、拡張の自由を憲法として。
+**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That crossing simply never happened — the freedom grew on one island, while AE's depth stayed sealed behind a vendor SDK, and no bridge was built between them. Motolii is the bridge that was never built: the AE-family editing grammar your hands already know (reverse-derived from AE, Godot, Blender, Unity, Unreal, and the Lottie-era editors — see [adopted UI behavior](docs/stage5/product-contract.md)), with extension freedom as a constitution — every stage of the pipeline is a deliberate seam, proven by running a datamosh effect through the same contract as a blur.
 
-## 約束していること
+Both futures were plausible. Neither happened. Motolii is being built so they can — and the whole build is public: every design decision is a numbered ruling, every capability a row in a [decision index you can grep](docs/decision-index.md).
 
-- **編集の文法は AE 系。** 層、キーフレーム、群、マット、クリッピング、カメラ、文字、形。手が覚えている操作を、覚え直させない
-- **素材は意味のまま舞台に居る。** 動画も点群も網も線も、板に焼かれてから合成されるのではなく、そのものとして置かれる
-- **効果は file である。** SDK も build も要らない。shader を 1 file 保存すれば棚に並び、Shadertoy を貼ればそのまま動く。壊れていれば理由が出て、前の物が残る
-- **1 個の効果はどの素材にも乗る。** 素材ごとの版を書かせない
-- **時間は host が持つ。** 別の時刻の絵も、前のフレームを保つ効果（残像・軌跡・蓄積）も、効果が自分で覚えるのではなく host が渡す。だから同じ時刻は、何度描いても、どの順で辿っても、同じ絵になる。プレビューと書き出しも同じ 1 本の道
-- **作品は開いた形式。** rerun の `.rrd`。裁定も試験も公開で、fork できる
+**And yes: native Rust, GPU-resident rendering, direct tools instead of setup rituals, typed plugins, local projects, one deterministic path from preview to export.**
 
-## 約束していないこと
+**Missing an effect? Describe it.** Motolii keeps its plugin contract small—typed parameters and GPU textures in/out—while the host generates the standard editing UI. Instead of spending weeks learning a large vendor SDK, an LLM can scaffold a plugin from the public contract and verify it with automated tests. Even a solo creator can grow the compositor around a particular project or style.
 
-- After Effects の代替であること。文法は借りるが、AE のプラグイン・プロジェクト・表現の互換は無い
-- Motolii の効果（Vism）が他のソフトで動くこと。万能の plugin 形式ではなく、この host と、同じ契約を採る fork のための物
-- 全ての OS で動くこと。今は macOS の開発用 build だけで、配布物は無い
-- 完成していること。UI は変わり続け、未完の機能がある。現在地と未完の一覧は [docs/stage5/README.md](docs/stage5/README.md)
+Motolii is an open, inspectable, plugin-extensible compositor focused on making 3–5 minute music videos. It brings motion graphics, video, procedural shapes, text, effects, and 2.5D/3D assets into one composition with a single-song timeline.
 
-## 効果を書く人へ
+The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
 
-`vism/` に file を置く。ISF（`.fs`）、Shadertoy（`.frag`、または Export の JSON）、WGSL（`.wgsl`、場・面・pass）。取説は [場の取説](docs/vism-field-model.md)、[Shadertoy の取り込み](docs/vism-shadertoy-import.md)、[時間の法](docs/plugin-resources.md)。
+Pre-1.0, under active development. The desktop editor is in daily use by its author; it is not yet a release.
 
-## 動かす・加わる
+## Why Motolii
 
-動かし方と現在地は [docs/stage5/README.md](docs/stage5/README.md)。設計と裁定の入口は [docs/README.md](docs/README.md)、[CONTRIBUTING.md](CONTRIBUTING.md)、[motolii/AGENTS.md](motolii/AGENTS.md)。なぜ作るかの長い版は [MANIFESTO.ja.md](MANIFESTO.ja.md)、要約は [VISION.ja.md](VISION.ja.md)。
+After Effects established much of the language of modern motion graphics. Cavalry and Autograph demonstrate strong alternatives. AviUtl demonstrates how far a lightweight, locally run tool and its extension community can carry a creative culture. Motolii learns from these achievements while exploring how to preserve professional control and make common intent more direct.
+
+Motolii does not treat proprietary software as a failed choice. It chooses open source because it favors a future that does not have to converge on one universal host. Code, project semantics, tests, and design decisions remain inspectable and forkable, so different communities can continue the work, disagree with it, or build compatible hosts without asking one owner to define the future for everyone.
+
+That choice does not make [Vism](docs/vism-package-concept.md) a universal plugin format. A Vism cannot currently be loaded into unrelated products such as After Effects or AviUtl. Motolii is its first host; the defined portability target is compatible hosts and forks that adopt the public contract. Adapters to other products may emerge later, but a universal cross-application standard is not a completion condition.
+
+Motolii's practical answer is a permissively licensed, local, forkable core that collects proven ideas, turns recurring workflows into explicit capabilities, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in [`docs/ae-pain-points.md`](docs/ae-pain-points.md) and the [prior-art reviews](docs/reviews/); the README stays focused on the resulting tool.
+
+## Simple is not the same as beginner-only
+
+Professional software often mistakes operational complexity for professional power. Motolii treats every unnecessary decision, setup ritual, hidden controller, and panel round-trip as lost creative attention.
+
+The goal is not to remove advanced control. It is to make common intent direct while keeping the underlying meaning inspectable.
+
+```text
+Direct operation ─┐
+Named tool        ├─→ typed document meaning
+Advanced editor  ─┘
+```
+
+A canvas drag, a named tool, and an Advanced control must edit the same document semantics. Moving from the simple path to the advanced path should never require rebuilding the work.
+
+Examples of this direction:
+
+- relative movement as a direct operation, not a Null/expression ritual;
+- depth placement as a visible Depth Rail, not repeated Z-field bookkeeping;
+- typed Follow/LookAt relationships, not string expressions;
+- explicit effect and depth scopes, not invisible adjacency rules;
+- interval easing controls, not mandatory graph surgery;
+- plugin parameters that always have a host-generated editing fallback.
+
+Complex expression and plugin escape hatches can exist, but repeated user recipes are evidence that the host should learn a smaller, named primitive.
+
+## Known parts, deliberately composed
+
+Motolii learns from After Effects, AviUtl, Cavalry, Autograph, Alight Motion, Nuke, Blender, game engines, DAWs, and many smaller tools.
+
+The useful question is not “which existing application should be cloned?” It is:
+
+> Which proven meaning belongs in the host, which expression belongs in a plugin, and which historical workaround should disappear entirely?
+
+Ideas and public semantics can be studied and recombined. Code, assets, trademarks, and proprietary implementation details remain separate and are not copied.
+
+The resulting system is intentionally conventional at its foundations:
+
+- a serializable document recipe;
+- typed values and deterministic evaluation at time `t`;
+- a render graph operating on GPU-resident textures;
+- one preview/export evaluation path;
+- command-based edits with Undo and journaling;
+- plugins behind narrow, testable contracts;
+- caches that are disposable and never become document truth.
+
+The value is in the composition of these parts, the removal of accidental complexity between them, and placing that composition in a core the community can inspect and change.
+
+## A small core is a long-term capability
+
+Motolii uses Rust, wgpu, WGSL, Flutter, a fork of Rerun's renderer, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
+
+```mermaid
+flowchart LR
+    C["Commands / Undo"] --> D["Document recipe"]
+    D --> E["Typed evaluation f(t)"]
+    E --> R["Render graph"]
+    R --> G["GPU-resident textures"]
+    G --> O["Preview / Export"]
+    P["Typed plugins"] --> E
+    P --> R
+```
+
+The core keeps a few boundaries explicit:
+
+- pixels remain in GPU textures while being processed;
+- frame format, color space, alpha, and dimensions are described explicitly;
+- color conversion has one owner and one final boundary;
+- `render_frame(t, Quality)` is deterministic;
+- preview and export use the same evaluation function;
+- the document stores recipes, while proxies, analysis, simulation results, and bakes remain replaceable caches;
+- vendor- and OS-specific GPU APIs do not enter the plugin contract.
+
+If a better GPU abstraction, rasterizer, cache strategy, or accelerator arrives, it should be possible to replace an implementation layer without redefining what a Motolii project means. Replacement is not assumed to be free—it still requires evidence, migration where necessary, and protected golden tests—but the architecture gives it a bounded place to happen.
+
+This is the internal form of the same simplicity promised to users: fewer hidden meanings, fewer scattered responsibilities, and less knowledge that must be reconstructed before making a change.
+
+## Extensible without becoming fragmented
+
+“Plugin-first” does not mean pushing product responsibility onto plugin authors.
+
+The host owns the meanings that must remain coherent across an entire project:
+
+- time and parameter evaluation;
+- coordinates, transforms, camera, and depth policy;
+- ownership, references, dependency order, and invalidation;
+- effect scope and compositing order;
+- commands, Undo, persistence, and migration;
+- missing-plugin diagnostics and export strictness;
+- preview/export equivalence.
+
+Plugins add expressions inside those boundaries: effects, generators, analyzers, simulations, text systems, materials, and specialized workflows. They do not silently mutate the document, search layers by name, create hidden controllers, or keep undeclared render state.
+
+Repeated community solutions can graduate deliberately:
+
+```text
+user plugin / recipe
+        ↓ repeated need
+validated preset / first-party plugin
+        ↓ stable meaning and tests
+host primitive / direct tool
+```
+
+This lets Motolii grow without turning every workaround into permanent core complexity.
+
+## Open, local, and inspectable
+
+- No account or online license is required.
+- Projects and rendering work locally.
+- The core is available under permissive MIT/Apache-2.0 terms.
+- The project can be forked and continued.
+- Design decisions, rejected alternatives, milestone specifications, and implementation guards are documented in the repository.
+
+Open source alone does not make a system understandable. Motolii also aims to make value origins, scopes, dependencies, fallbacks, plugin requirements, and recomputation reasons visible rather than burying them in a black box.
+
+## Scope
+
+Motolii is a motion-graphics compositor focused on music videos.
+
+It is intended to provide:
+
+- keyframes, interval easing, procedural and data-driven parameters;
+- raster video and vector shapes in the same composition;
+- groups, masks, effects, blending, and non-destructive recipes;
+- a shared XYZ world for 2D cards and glTF assets;
+- explicit layer-order and depth-occlusion policies;
+- one soundtrack, waveform/BPM-oriented editing, and final audio mux;
+- extensible effects and generators through typed plugin contracts.
+
+It is not trying to become:
+
+- a general-purpose NLE;
+- a color-grading suite;
+- a Nuke-style deep VFX compositor;
+- a full 3D content-creation package;
+- a universal node-programming environment.
+
+Heavy asset creation, character rigging, simulation authoring, grading, and specialist VFX can remain in dedicated tools and arrive as prepared assets or plugins.
+
+## Current status
+
+Stage 5: a Flutter editor over a shared Rust core (document, evaluation, rendering, export), on a pinned fork of Rerun's renderer. The effect system is the part that is furthest along: one effect on every material (video, text outlines, meshes, point clouds), Shadertoy pasted as-is (single file or exported tabs), time references and host-owned feedback with the same picture however you scrub. Current state, unfinished work and how to run it live in [`docs/stage5/README.md`](docs/stage5/README.md); this README intentionally stays at project level.
+
+## Architecture and technology
+
+| Layer | Current choice |
+|---|---|
+| Language | Rust |
+| Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
+| Vector rendering | the forked Rerun renderer (fills and strokes tessellated on the GPU) |
+| UI | Flutter (`motolii/ui`) over a thin Rust bridge (`motolii/ui/native`) |
+| Decode / encode | libavcodec through Rerun's video path; ffmpeg for export |
+| Project model | serde data, stable IDs, typed validation, command edits |
+| Verification | Rust tests, property tests, semantic and image goldens |
+| Structure | Cargo workspace (`motolii/crates/motolii-*`) |
+
+See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
+
+## Design and development model
+
+Motolii is specification-driven and verification-heavy so that both human and AI-assisted contributors can work in parallel without inventing incompatible local meanings.
+
+- Each implementation task has an explicit dependency and an automatic completion condition.
+- Public boundaries are proved with reference implementations before being frozen.
+- Semantic goldens protect meaning; image goldens protect output.
+- Document changes require validation, migration analysis, and a single-writer command path.
+- Plugins are tested for determinism and GPU-boundary conformance.
+
+Start here:
+
+- [`docs/README.md`](docs/README.md) — reading order and glossary
+- [`docs/concept.md`](docs/concept.md) — project definition and decision ledger
+- [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
+- [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
+- [`docs/specs/`](docs/specs/) — milestone specifications and task contracts
+
+## Build and run
+
+macOS development build only, no binaries yet. Install Rust, Flutter with macOS desktop support, Xcode's command line tools and FFmpeg; then, from the repository root:
+
+```sh
+scripts/motolii-ui.sh native       # first run, or after Rust changes
+scripts/motolii-ui.sh dev          # start an empty project
+```
+
+Details, the test lanes and the current unfinished list are in [`docs/stage5/README.md`](docs/stage5/README.md). Effects live in `motolii/crates/motolii-render/vism/` and reload on save; how to write one is in [the field model](docs/vism-field-model.md), [Shadertoy import](docs/vism-shadertoy-import.md) and [the laws of time](docs/plugin-resources.md).
+
+## Contributing
+
+Contributions are welcome in rendering, document semantics, tests, tooling, UI, plugins, documentation, and prior-art review.
+
+Before implementing a task:
+
+1. Read [`docs/README.md`](docs/README.md).
+2. Read the relevant milestone specification, including its implementation-guard section.
+3. Preserve the protected tests and existing user changes.
+
+Issues and design discussions belong in GitHub Issues. Small, independently verifiable pull requests are preferred.
+
+## About the name
+
+**Motolii** (モトリー) comes from *motley*: a varied, mismatched mixture of different colors, people, or parts forming one whole. The spelling deliberately passes that English word through a Japanese sound, then returns it to Roman letters without resolving cleanly back into either ordinary English or straightforward romanization—the final `lii` is intentional. The name is assembled, slightly crooked, and difficult to classify, like the project itself: known techniques, non-destructive recipes, and specialized plugins recomposed outside the conventions of the tools that produced them.
 
 ## License
 
-[Apache-2.0](LICENSE-APACHE) または [MIT](LICENSE-MIT)。
+Licensed under either:
 
----
+- Apache License 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)); or
+- MIT ([`LICENSE-MIT`](LICENSE-MIT)),
 
-## English
+at your option.
 
-**Motolii is a layer-based video editor with After Effects' grammar, built on [rerun](https://rerun.io).** Text, images, video, shapes, meshes and point clouds share one stage and one song-length timeline.
+Unless explicitly stated otherwise, contributions submitted for inclusion are dual-licensed under the same terms.
 
-Two *what ifs*: a compositor that never flattens meaning — a point cloud stays a point cloud, so **one effect written once lands on video, text outlines, meshes and clouds alike** and bends their silhouettes — and the bridge that was never built between AviUtl's extension culture and After Effects' depth.
-
-What it promises: AE-family editing grammar; materials that stay what they are; effects that are files (ISF, Shadertoy, WGSL — save and it is on the shelf); one effect for every material; time owned by the host, so effects that read other times or keep a history give the same picture however you scrub, and preview equals export; an open project format. What it does not promise: replacing After Effects, running its plugins, running on every OS, or being finished. macOS development build only, no binaries. Docs: [field model](docs/vism-field-model.md), [Shadertoy import](docs/vism-shadertoy-import.md), [the laws of time](docs/plugin-resources.md), [current status](docs/stage5/README.md). Dual-licensed Apache-2.0 / MIT.
+Third-party dependencies retain their own licenses. Flutter, the Rerun fork and ffmpeg have separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.
