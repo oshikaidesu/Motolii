@@ -76,6 +76,8 @@ private final class ProbeRuntime {
   typealias Request = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>) -> UnsafePointer<CChar>?
   typealias Render = @convention(c) (UnsafeMutableRawPointer, UInt32, UnsafePointer<CChar>) -> Int32
   typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
+  typealias Wake = @convention(c) (UnsafeMutableRawPointer?) -> Void
+  typealias Watch = @convention(c) (UnsafeMutableRawPointer, Wake, UnsafeMutableRawPointer?) -> Int32
   private var library: UnsafeMutableRawPointer?
   private var context: UnsafeMutableRawPointer?
   private var requestFunction: Request?
@@ -103,8 +105,11 @@ private final class ProbeRuntime {
       requestFunction = try symbol("motolii_probe_request", Request.self)
       renderFunction = try symbol("motolii_probe_render", Render.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
+      let watch = try symbol("motolii_probe_watch_effects", Watch.self)
       context = path.withCString { start($0) }
-      guard context != nil else { throw ProbeFailure.message("Rust could not open the document") }
+      guard let context else { throw ProbeFailure.message("Rust could not open the document") }
+      // vism/ の見張り。Rust は別 thread から起こすので、main へ戻してから棚を読み直す。
+      _ = watch(context, { _ in DispatchQueue.main.async { ProbeSession.shared.effectsChanged() } }, nil)
       rendered = 0
       let reply = try status()
       if let old = previous.context { previous.close?(old) }
@@ -243,7 +248,20 @@ final class ProbeSession {
   private var confirming = false
   var terminationApproved = false
 
-  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameOnly: Bool = false) {
+  /// 効果の file が変わった。棚を読み直し、全部の窓へ知らせる(絵は main の窓が描き直す)。
+  fileprivate func effectsChanged() {
+    precondition(Thread.isMainThread)
+    let epoch = self.epoch
+    worker.async {
+      guard let status = try? self.runtime.request("{\"op\":\"reloadEffects\"}") else { return }
+      DispatchQueue.main.async {
+        guard epoch == self.epoch else { return }
+        self.broadcast(status, effectsReloaded: true)
+      }
+    }
+  }
+
+  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameOnly: Bool = false, effectsReloaded: Bool = false) {
     precondition(Thread.isMainThread)
     self.state.merge(state) { _, next in next }
     latest.merge(buffers) { _, next in next }
@@ -254,6 +272,7 @@ final class ProbeSession {
         if host !== origin {
           var event = host.envelope(state, frameReady: !buffers.isEmpty)
           event["frameOnly"] = frameOnly
+          event["effectsReloaded"] = effectsReloaded
           host.channel.invokeMethod("documentChanged", arguments: event)
         }
       } catch {

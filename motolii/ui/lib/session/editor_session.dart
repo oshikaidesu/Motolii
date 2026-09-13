@@ -407,6 +407,12 @@ class EditorSession {
         } catch (e) {
           if (!_disposed) error.value = '$e';
         }
+        // vism/ の file が変わった。絵は main の窓が 1 回だけ描き直す(他の窓は絵を受け取る側)。
+        if (envelope['effectsReloaded'] == true &&
+            map(envelope['status'])['needsRender'] == true &&
+            windowInfo['main'] != false) {
+          refreshPreview();
+        }
       }
       if (call.method == 'documentClosed') {
         _cancelCadence();

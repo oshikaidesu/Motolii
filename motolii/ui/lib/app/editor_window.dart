@@ -16,6 +16,15 @@ import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
 
+/// 棚(vism/)で断った効果の理由。空なら ''。status の `catalogErrors` をそのまま 1 行に。
+String effectsNotice(Map<String, dynamic> status) {
+  final errors = (status['catalogErrors'] as List? ?? const [])
+      .map((e) => '$e')
+      .where((e) => e.isNotEmpty)
+      .toList();
+  return errors.isEmpty ? '' : 'Effects: ${errors.join('; ')}';
+}
+
 class EditorWindow extends StatefulWidget {
   const EditorWindow({super.key});
   @override
@@ -456,19 +465,24 @@ class _EditorWindowState extends State<EditorWindow> {
                 ),
                 ValueListenableBuilder<String?>(
                   valueListenable: c.error,
-                  builder: (_, message, __) => Container(
-                    height: EditorMetrics.row,
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: EditorMetrics.s6,
-                    ),
-                    color: EditorTheme.app,
-                    child: Text(
-                      message ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  builder: (_, message, __) =>
+                      ValueListenableBuilder<Map<String, dynamic>>(
+                        valueListenable: c.document,
+                        builder: (_, doc, __) => Container(
+                          height: EditorMetrics.row,
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: EditorMetrics.s6,
+                          ),
+                          color: EditorTheme.app,
+                          child: Text(
+                            // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
+                            message ?? effectsNotice(doc),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
                 ),
               ],
             ),

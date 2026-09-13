@@ -62,6 +62,8 @@ pub struct EditorRuntime {
     snapshot_cache: std::cell::RefCell<snapshot_cache::SnapshotCache>,
     /// 履歴の一本線。編集の段と保存・異常の記録を同じ列に持つ。
     pub(crate) history: editor::history::Ledger,
+    /// vism/ の見張り。file が変わると Swift の起こし口を叩き、窓が reloadEffects を送ってくる。
+    effects_watch: Option<motolii_render::engine::CatalogWatcher>,
 }
 
 impl EditorRuntime {
@@ -81,7 +83,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None })
     }
 
     fn time(&self) -> Result<RationalTime, String> {
@@ -289,6 +291,26 @@ pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_i
         Ok(Ok(())) => 0,
         Ok(Err(error)) => { probe.error=Some(error); -1 },
         Err(_) => { probe.error=Some("Rust render panic".into()); -2 },
+    }
+}
+
+/// 効果の棚(vism/)の見張りを立てる。file が変わる度に `wake(user)` が別 thread から呼ばれる。
+/// 呼ばれた側は自分の thread へ戻してから `{"op":"reloadEffects"}` を送る。
+/// 焼き込み build(load_shaders_from_disk 無し)では見張りは空で、0 を返すだけ。
+#[no_mangle]
+pub unsafe extern "C" fn motolii_probe_watch_effects(ctx: *mut EditorRuntime, wake: Option<unsafe extern "C" fn(*mut std::ffi::c_void)>, user: *mut std::ffi::c_void) -> i32 {
+    if ctx.is_null() { return -1; }
+    let probe = unsafe { &mut *ctx };
+    let Some(wake) = wake else { return -1; };
+    // closure は欄ごとに掴む(edition 2021)ので、method 越しに丸ごと掴ませる。
+    struct User(*mut std::ffi::c_void);
+    unsafe impl Send for User {}
+    unsafe impl Sync for User {}
+    impl User { fn pointer(&self) -> *mut std::ffi::c_void { self.0 } }
+    let user = User(user);
+    match motolii_render::engine::watch_effect_catalog(move || unsafe { wake(user.pointer()) }) {
+        Ok(watch) => { probe.effects_watch = Some(watch); 0 }
+        Err(error) => { probe.error = Some(format!("Effect watch: {error}")); -2 }
     }
 }
 

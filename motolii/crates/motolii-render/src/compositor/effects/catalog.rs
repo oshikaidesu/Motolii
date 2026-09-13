@@ -165,6 +165,15 @@ pub fn catalog_source_roots() -> Vec<PathBuf> { vec![directory(), prelude_path()
 
 pub fn catalog_generation() -> u64 { active_runtime().generation() }
 
+/// 最後の読み直しで断った物(名前: 理由)。空なら棚は全部生きている。
+/// 窓はこれを status に載せて出す — 効果を書く人が保存した瞬間に、なぜ載らないかを見るため。
+pub fn catalog_errors() -> Vec<String> {
+    active_runtime().0.owner.lock().unwrap().snapshot.as_ref().map(|s| s.errors.clone()).unwrap_or_default()
+}
+
+/// 棚が disk(vism/)を読んでいるか。焼き込み build では false で、保存しても窓は変わらない。
+pub fn catalog_reads_disk() -> bool { cfg!(load_shaders_from_disk) }
+
 pub(crate) fn catalog_snapshot() -> Arc<CatalogSnapshot> {
     let runtime = active_runtime();
     let owner = &runtime.0.owner;

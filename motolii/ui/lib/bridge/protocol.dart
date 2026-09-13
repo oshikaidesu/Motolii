@@ -74,7 +74,8 @@ enum DocumentOperation {
   play('play'),
   pause('pause'),
   tick('tick'),
-  moveLayers('moveLayers');
+  moveLayers('moveLayers'),
+  reloadEffects('reloadEffects');
 
   const DocumentOperation(this.wireName);
   final String wireName;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../app/editor_window.dart' show effectsNotice;
 import '../../foundation/metrics.dart';
+import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../native_visual_sample.dart';
 import 'shelf.dart';
@@ -31,6 +33,48 @@ class EffectsShelf extends BrowserShelf {
   @override
   List<Map<String, dynamic>> items(BrowserHost host) =>
       EditorSession.maps(host.controller.state['catalog']);
+
+  /// 棚を読み直す口と、断った効果の理由。保存すれば見張りが読み直すが、
+  /// 手でも押せる(ISF Editor の Reload)。理由は 1 行、全文は tooltip。
+  @override
+  Widget? header(BrowserHost host) {
+    if (!host.has('reloadEffects')) return null;
+    final notice = effectsNotice(host.controller.state);
+    return Container(
+      key: const ValueKey('browser:effects:header'),
+      height: EditorMetrics.control,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: EditorTheme.line)),
+      ),
+      child: Row(
+        children: [
+          EditorTooltip(
+            message: 'Reload effects',
+            child: IconButton(
+              key: const ValueKey('browser:effects:reload'),
+              iconSize: EditorMetrics.s14,
+              color: EditorTheme.muted,
+              onPressed: () => host.controller.command('reloadEffects'),
+              icon: const Icon(Icons.refresh),
+            ),
+          ),
+          const SizedBox(width: EditorMetrics.s4),
+          Expanded(
+            child: EditorTooltip(
+              message: notice,
+              child: Text(
+                notice,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: EditorTheme.error),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   String classification(BrowserHost host, Map<String, dynamic> item) =>

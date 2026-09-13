@@ -4,5 +4,10 @@ target-dir = "motolii/target"
 # libavcodec を直接 link する(re_video の `lavc`)。ffmpeg-sys-next は pkg-config が無いと FFMPEG_DIR を見る。
 # Homebrew の ffmpeg(7.1、libavcodec 61)。他の機械では自分の置き場に合わせる。
 [env]
+# 効果(vism/)と re_renderer の shader を disk から読む。re_build_tools はこの env var で
+# Environment::DeveloperInWorkspace と判定し、debug かつ非 wasm の時だけ load_shaders_from_disk を立てる。
+# 立っていると、vism/ の file を保存した瞬間に窓へ載る(見張りは motolii_probe_watch_effects)。
+# release build は焼き込みのまま。rerun 本家の .cargo/config.toml と同じ仕組み。
+IS_IN_RERUN_WORKSPACE = "yes"
 FFMPEG_DIR = "/opt/homebrew/opt/ffmpeg"
 LIBCLANG_PATH = "/Library/Developer/CommandLineTools/usr/lib"

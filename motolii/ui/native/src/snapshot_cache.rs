@@ -90,7 +90,8 @@ impl EditorRuntime {
 
 impl EditorRuntime {
     fn content_key(&self) -> String {
-        format!("{}:{:?}:{:?}:{:?}", self.doc.identity(), self.doc.display_revision(), self.stage_window, self.user_camera)
+        // 棚の世代も絵の鍵。効果の本文が変われば、同じ document でも絵は別物。
+        format!("{}:{:?}:{:?}:{:?}:{}", self.doc.identity(), self.doc.display_revision(), self.stage_window, self.user_camera, crate::render::engine::catalog_generation())
     }
 
     pub(crate) fn image_key(&self) -> String { format!("{}:{}:{:?}", self.content_key(), self.frame, self.selected_ids) }

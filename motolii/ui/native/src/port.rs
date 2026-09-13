@@ -3,7 +3,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use editor::session::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -118,7 +118,10 @@ impl EditorRuntime{
     pub(crate) fn request(&mut self,j:J)->Result<(),String>{
         self.clock.poll_audio(&self.doc);
         let op=j["op"].as_str().unwrap_or("status");
-        if op=="status"||op=="exportStatus"{return Ok(())}
+        // 棚(vism/)が変わっていれば読み直す。変わっていなければ lock 1 回で戻る。
+        // 見張りの起こしは reloadEffects で来るが、他の操作の途中で変わっても次の請求で拾う。
+        crate::render::engine::refresh_effect_catalog();
+        if op=="status"||op=="exportStatus"||op=="reloadEffects"{return Ok(())}
         if op=="stageView" {
             self.cancel_preview();
             if let Some(orbit)=j["orbit"].as_array() {
@@ -342,6 +345,76 @@ mod playback_probe {
         for key in ["width", "height", "fps", "durationFrames"] {
             assert_eq!(light[key], full[key], "軽い status に {key} が無い");
         }
+    }
+}
+
+/// 効果のホットリロードの一連: 見張りが起きる → reloadEffects で世代が進む → 壊しても前の物が残り理由が出る → 消せば理由が変わる。
+/// 本物の vism/ に file を置くので、他の試験と並べず単独で回す(cargo test -p motolii-ui --lib hot_reload -- --ignored)。
+#[cfg(test)]
+mod hot_reload_probe {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    struct Probe(std::path::PathBuf);
+    impl Drop for Probe { fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); } }
+
+    /// FSEvents は同じ file の続けざまの変更を 1 つに潰す。人の保存の間隔を真似る。
+    fn a_moment() { std::thread::sleep(std::time::Duration::from_millis(1500)); }
+
+    fn await_wake(flag: &AtomicBool) -> bool {
+        let started = std::time::Instant::now();
+        while started.elapsed() < std::time::Duration::from_secs(5) {
+            if flag.swap(false, Ordering::AcqRel) { return true; }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        false
+    }
+
+    #[test]
+    #[ignore]
+    fn saving_a_vism_file_reaches_the_window() {
+        assert!(crate::render::engine::catalog_reads_disk(), "焼き込み build: .cargo/config.toml の IS_IN_RERUN_WORKSPACE が無い");
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/motolii-render/vism");
+        let file = Probe(dir.join("zz_hot_probe.fs"));
+        let _ = std::fs::remove_file(&file.0);
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+        let before = crate::render::engine::catalog_generation();
+        let woke = Arc::new(AtomicBool::new(false));
+        let flag = woke.clone();
+        let _watch = crate::render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release)).unwrap();
+        let ids = |rt: &crate::EditorRuntime| -> Vec<String> {
+            rt.status_response(None, None).unwrap()["catalog"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap().to_owned()).collect()
+        };
+        let errors = |rt: &crate::EditorRuntime| -> Vec<String> {
+            rt.status_response(None, None).unwrap()["catalogErrors"].as_array().unwrap().iter().map(|e| e.as_str().unwrap().to_owned()).collect()
+        };
+        assert!(!ids(&rt).contains(&"probe.zz_hot".to_owned()));
+
+        // 1. 新しい効果を保存 → 見張りが起きる → 読み直せば棚に載り、絵の鍵(世代)が動く。
+        std::fs::write(&file.0, "/*{ \"ID\": \"probe.zz_hot\", \"LABEL\": \"Hot\", \"STAGE\": \"pass\", \"INPUTS\": [ { \"NAME\": \"inputImage\", \"TYPE\": \"image\" } ] }*/\nvoid main() { gl_FragColor = IMG_THIS_PIXEL(inputImage).bgra; }\n").unwrap();
+        assert!(await_wake(&woke), "見張りが 5 秒待っても起きない");
+        let key = rt.image_key();
+        rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+        assert!(crate::render::engine::catalog_generation() > before, "世代が進まない");
+        assert_ne!(rt.image_key(), key, "絵の鍵が世代を含んでいない");
+        assert!(ids(&rt).contains(&"probe.zz_hot".to_owned()), "{:?}", ids(&rt));
+        assert!(errors(&rt).iter().all(|e| !e.contains("zz_hot_probe")), "{:?}", errors(&rt));
+
+        // 2. 壊して保存 → 前の物が残り、理由が名前付きで出る。
+        a_moment();
+        std::fs::write(&file.0, "/*{ \"ID\": \"probe.zz_hot\", \"STAGE\": \"pass\", \"INPUTS\": [ { \"NAME\": \"inputImage\", \"TYPE\": \"image\" } ] }*/\nvoid main() { gl_FragColor = ; }\n").unwrap();
+        assert!(await_wake(&woke));
+        rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+        assert!(ids(&rt).contains(&"probe.zz_hot".to_owned()), "壊した瞬間に棚から消えた");
+        assert!(errors(&rt).iter().any(|e| e.starts_with("zz_hot_probe:")), "{:?}", errors(&rt));
+
+        // 3. 消す → 理由が「source removed」に変わる。
+        a_moment();
+        std::fs::remove_file(&file.0).unwrap();
+        assert!(await_wake(&woke));
+        rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+        assert!(errors(&rt).iter().any(|e| e.contains("zz_hot_probe") && e.contains("source removed")), "{:?}", errors(&rt));
     }
 }
 

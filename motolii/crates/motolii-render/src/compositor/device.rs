@@ -91,6 +91,8 @@ impl Compositor {
             pools.render_pipelines.begin_frame(&self.ctx.device, frame, &pools.shader_modules, &pools.pipeline_layouts);
         }
         self.surface_programs.clear();
+        // 焼いた絵は plugin_id と欄の値で引く。本文だけ変わった効果は同じ鍵で当たるので、世代が動いたら全部捨てる。
+        self.baked_effects.clear(&mut self.effect_scratch);
         for definition in changed {
             if !matches!(definition.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp) { continue; }
             let program = effects::EffectProgram::compile(&self.ctx, definition);
