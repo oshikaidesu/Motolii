@@ -90,10 +90,22 @@ void main() {
     };
     await tester.pumpAndSettle();
     sent.clear();
-    expect(find.text('Click a face to add a text layer'), findsOneWidget);
+    expect(
+      find.text('Double-click a face to add a text layer'),
+      findsOneWidget,
+    );
+    // One click only picks the row; making a layer takes a double-click.
+    await tester.tap(tile('Georgia'));
+    await tester.pumpAndSettle();
+    expect(sent, isEmpty);
+    await tester.tap(tile('Georgia'));
+    await tester.pump(const Duration(milliseconds: 60));
     await tester.tap(tile('Georgia'));
     await tester.pumpAndSettle();
     expect(sent.single, {'op': 'create', 'kind': 'text', 'family': 'Georgia'});
+    // The specimen is Flutter's own text in that family: no picture asked
+    // of the machine.
+    expect(sent.where((m) => m['op'] == 'visualSample'), isEmpty);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });

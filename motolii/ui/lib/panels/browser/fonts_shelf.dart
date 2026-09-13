@@ -4,7 +4,6 @@ import '../../foundation/metrics.dart';
 import '../../foundation/panel_controls.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
-import '../native_visual_sample.dart';
 import 'shelf.dart';
 
 /// Fonts: the editor at the top says which characters of the selected text
@@ -43,7 +42,6 @@ class FontsShelf extends BrowserShelf {
       layer?['name'],
       text['fontFamily'],
       text['content'],
-      fontSampleKey(text),
       _justify(layer)?['value'],
     ];
   }
@@ -81,12 +79,12 @@ class FontsShelf extends BrowserShelf {
   String classification(BrowserHost host, Map<String, dynamic> item) =>
       item['used'] == true ? 'Used here' : 'All';
 
-  /// One family per row, the specimen as tall as a line of the layer's words.
+  /// One family per row: the name, then one line of the layer's words in it.
   @override
   ShelfLayout layout(BrowserHost host, double width, double tile) =>
       ShelfLayout(
         column: width,
-        extent: EditorMetrics.s85,
+        extent: EditorMetrics.s48,
         gap: 0,
         padding: 0,
         ground: EditorTheme.app,
@@ -104,16 +102,29 @@ class FontsShelf extends BrowserShelf {
 
   /// With a text layer the row dresses it; with none it is a shortcut: a
   /// new text layer in that face.
+  /// Making a layer is a double-click; dressing one is a click.
+  @override
+  bool doubleClick(BrowserHost host, Map<String, dynamic> item) =>
+      _layer(host.controller) == null;
+
   @override
   bool supported(BrowserHost host, Map<String, dynamic> item) =>
       _enabled(host) || (_layer(host.controller) == null && host.has('create'));
 
+  /// The specimen is Flutter's own text in that family — no trip to the
+  /// machine, no picture: the words are the layer's first line, or the
+  /// family's name when nothing is selected. A face the machine never listed
+  /// is not on the shelf, so the name always resolves to an installed font.
   @override
   Widget preview(BrowserHost host, Map<String, dynamic> item, Color identity) {
     final c = host.controller;
     final layer = _layer(c);
     final text = EditorSession.map(layer?['text']);
-    final chosen = layer != null && text['fontFamily'] == item['name'];
+    final name = '${item['name']}';
+    final chosen = layer != null && text['fontFamily'] == name;
+    final words = layer == null
+        ? name
+        : '${text['content'] ?? ''}'.split('\n').first.trim();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
       decoration: BoxDecoration(
@@ -127,10 +138,10 @@ class FontsShelf extends BrowserShelf {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: EditorMetrics.s6),
           Text(
-            '${item['name']}',
+            name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -138,19 +149,17 @@ class FontsShelf extends BrowserShelf {
               color: chosen ? EditorTheme.ink : EditorTheme.muted,
             ),
           ),
-          Expanded(
-            child: NativeVisualSample(
-              controller: c,
-              request: {
-                'kind': 'font',
-                if (layer != null) 'layer': layer['id'],
-                'family': item['name'],
-                if (layer != null) 'sampleKey': fontSampleKey(text),
-                'path': c.state['path'],
-              },
+          Text(
+            words.isEmpty ? name : words,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: name,
+              fontSize: EditorMetrics.s22,
+              height: 1.1,
+              color: EditorTheme.ink,
             ),
           ),
-          const SizedBox(height: EditorMetrics.s4),
         ],
       ),
     );
@@ -200,7 +209,7 @@ class FontsShelf extends BrowserShelf {
           return const Padding(
             padding: EdgeInsets.all(EditorMetrics.s6),
             child: Text(
-              'Click a face to add a text layer',
+              'Double-click a face to add a text layer',
               style: TextStyle(color: EditorTheme.muted),
             ),
           );
@@ -323,36 +332,4 @@ class _Justify extends StatelessWidget {
       ],
     ),
   );
-}
-
-/// What a specimen actually depends on. The renderer overrides the family,
-/// the fill and the stroke, drops the wrap and the justification, and scales
-/// every style so the first one lands at a fixed size; only the first line's
-/// opening words are drawn.
-Map<String, dynamic> fontSampleKey(Map<String, dynamic> text) {
-  final styles = EditorSession.maps(text['styles']);
-  final first = (styles.firstOrNull?['size'] as num?)?.toDouble() ?? 1;
-  final base = first < 1 ? 1.0 : first;
-  double? share(dynamic value) => value is num ? value / base : null;
-  return {
-    'content': '${text['content'] ?? ''}'
-        .split('\n')
-        .first
-        .split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty)
-        .take(8)
-        .join(' '),
-    'runs': text['runs'],
-    'styles': [
-      for (final style in styles)
-        {
-          'style': EditorSession.map(style['font'])['style'],
-          'size': share(style['size']),
-          'line_height': share(style['line_height']),
-          'tracking': style['tracking'],
-          'axes': style['axes'],
-          'features': style['features'],
-        },
-    ],
-  };
 }

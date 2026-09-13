@@ -94,6 +94,10 @@ abstract class BrowserShelf {
   /// Tiles are the picture alone: a click applies, no caption, no ground.
   bool get bare => false;
 
+  /// A bare tile applies on a click; an item whose apply makes something new
+  /// (a layer) asks for a double-click instead, so a stray click adds nothing.
+  bool doubleClick(BrowserHost host, Map<String, dynamic> item) => false;
+
   /// Grid / List / Thumbnails beside the search field.
   bool get showViews => true;
 

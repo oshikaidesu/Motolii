@@ -110,63 +110,6 @@ void main() {
     },
   );
 
-  testWidgets('font samples are requested only for visible specimen rows', (
-    tester,
-  ) async {
-    final calls = <Map<String, dynamic>>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(EditorSession.channel, (call) async {
-          if (call.arguments is Map && call.arguments['command'] is String)
-            calls.add(jsonDecode(call.arguments['command']));
-          return <String, dynamic>{};
-        });
-    final c = EditorSession();
-    c.document.value = {
-      'visualSamples': true,
-      'path': 'sample.rrd',
-      'layers': [
-        {
-          'id': 1,
-          'kind': 'Text',
-          'name': 'Caption',
-          'text': {'content': 'Selected words', 'fontFamily': 'Font 0'},
-        },
-      ],
-      'selectedIds': [1],
-      'fontFamilies': [for (var i = 0; i < 100; i++) 'Font $i'],
-      'capabilities': ['setFont'],
-    };
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 300,
-            height: 300,
-            child: BrowserPanel(
-              controller: c,
-              fixedTab: 'Fonts',
-              showTabs: false,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(calls, isEmpty, reason: 'the shelf waits for the scroll to settle');
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 200));
-    }
-    await tester.pumpAndSettle();
-    expect(calls, isNotEmpty);
-    expect(calls.length, lessThan(10));
-    expect(calls.every((r) => r['op'] == 'visualSample'), isTrue);
-    final count = calls.length;
-    await tester.pump();
-    expect(calls.length, count);
-    await tester.pumpWidget(const SizedBox());
-    c.dispose();
-  });
-
   testWidgets('a saved gradient applies all colors to the current shape fill', (
     tester,
   ) async {

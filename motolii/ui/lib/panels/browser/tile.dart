@@ -41,6 +41,7 @@ class ShelfTile extends StatelessWidget {
     final markScale = math.sqrt(tileScale);
     final supported = shelf.supported(host, item);
     final bare = shelf.bare;
+    final twice = shelf.doubleClick(host, item);
     final identityColor = EditorTheme.kindColor(shelf.identity(host, item));
     final missing = item['missing'] == true;
     final name = '${item['name'] ?? item['id']}';
@@ -140,7 +141,7 @@ class ShelfTile extends StatelessWidget {
         if (item['used'] == true) 'In use by a layer',
         if (item['detail'] != null) '${item['detail']}',
         supported
-            ? (bare
+            ? (bare && !twice
                   ? 'Click to apply · Right-click for actions'
                   : 'Double-click or Enter to apply · Right-click for actions')
             : 'Apply unavailable',
@@ -154,9 +155,11 @@ class ShelfTile extends StatelessWidget {
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: bare && supported ? () => host.apply(item) : null,
+          onTap: bare && supported && !twice ? () => host.apply(item) : null,
           onSecondaryTapDown: (event) => host.menu(item, event.globalPosition),
-          onDoubleTap: bare ? null : () => host.apply(item),
+          onDoubleTap: !bare || (twice && supported)
+              ? () => host.apply(item)
+              : null,
           child: Container(
             decoration: BoxDecoration(
               color: EditorTheme.panel,
