@@ -102,16 +102,18 @@ class FontsShelf extends BrowserShelf {
     return layer != null && layer['locked'] != true && host.has('setFont');
   }
 
+  /// With a text layer the row dresses it; with none it is a shortcut: a
+  /// new text layer in that face.
   @override
-  bool supported(BrowserHost host, Map<String, dynamic> item) => _enabled(host);
+  bool supported(BrowserHost host, Map<String, dynamic> item) =>
+      _enabled(host) || (_layer(host.controller) == null && host.has('create'));
 
   @override
   Widget preview(BrowserHost host, Map<String, dynamic> item, Color identity) {
     final c = host.controller;
     final layer = _layer(c);
-    if (layer == null) return const SizedBox();
-    final text = EditorSession.map(layer['text']);
-    final chosen = text['fontFamily'] == item['name'];
+    final text = EditorSession.map(layer?['text']);
+    final chosen = layer != null && text['fontFamily'] == item['name'];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
       decoration: BoxDecoration(
@@ -141,9 +143,9 @@ class FontsShelf extends BrowserShelf {
               controller: c,
               request: {
                 'kind': 'font',
-                'layer': layer['id'],
+                if (layer != null) 'layer': layer['id'],
                 'family': item['name'],
-                'sampleKey': fontSampleKey(text),
+                if (layer != null) 'sampleKey': fontSampleKey(text),
                 'path': c.state['path'],
               },
             ),
@@ -167,7 +169,12 @@ class FontsShelf extends BrowserShelf {
   Future<void> apply(BrowserHost host, Map<String, dynamic> item) async {
     final c = host.controller;
     final layer = _layer(c);
-    if (layer == null || !_enabled(host)) return;
+    if (layer == null) {
+      if (host.has('create'))
+        await c.command('create', {'kind': 'text', 'family': item['name']});
+      return;
+    }
+    if (!_enabled(host)) return;
     await c.command('setFont', {
       ..._target(c, layer),
       'layer': layer['id'],
@@ -192,7 +199,10 @@ class FontsShelf extends BrowserShelf {
         if (layer == null) {
           return const Padding(
             padding: EdgeInsets.all(EditorMetrics.s6),
-            child: Text('Select a Text layer'),
+            child: Text(
+              'Click a face to add a text layer',
+              style: TextStyle(color: EditorTheme.muted),
+            ),
           );
         }
         final text = EditorSession.map(layer['text']);

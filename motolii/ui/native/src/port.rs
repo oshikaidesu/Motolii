@@ -86,14 +86,19 @@ impl EditorRuntime{
         for layer in view.layers(){if let Some(meta)=view.meta(layer).map_err(e)?{if let LayerSource::File{path,..}=meta.source{if a.path_absolute.as_deref()==Some(&path){return Ok(true)}}}}
         Ok(false)
     }
-    fn create_layer(&mut self,kind:editor::create::NewKind,visible:Option<i64>)->Result<(),String>{self.place_layer(kind,self.frame,None,visible)}
+    fn create_layer(&mut self,kind:editor::create::NewKind,visible:Option<i64>,family:Option<&str>)->Result<(),String>{self.place_layer(kind,self.frame,None,visible,family)}
     /// 置く場所を指す作成。drop 先は moveLayers と同じ語彙(target/placement)、開始コマは落とした x。作る→並べるを 1 手(Undo 一発)に。
-    fn place_layer(&mut self,kind:editor::create::NewKind,start:i64,landing:Option<(Option<LayerId>,String)>,visible:Option<i64>)->Result<(),String>{
+    /// `family` は文字の層をその書体で作る(Fonts 棚の行を押した時): 作る→着せるを 1 手に。
+    fn place_layer(&mut self,kind:editor::create::NewKind,start:i64,landing:Option<(Option<LayerId>,String)>,visible:Option<i64>,family:Option<&str>)->Result<(),String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;
         let id=LayerId(view.next_layer_id());let order=view.layers().iter().filter_map(|l|view.meta(*l).ok().flatten().map(|m|m.order)).max().unwrap_or(-1).checked_add(1).ok_or("Layer order full")?;
         let taken:Vec<_>=view.layers().iter().filter_map(|l|view.attrs(*l).ok().flatten().map(|a|a.name)).collect();
         let mut intents=editor::create::new_layer_intents(id,order,start,comp.duration_frames,comp.fps,(comp.width as f64,comp.height as f64),kind,editor::create::unbounded_frames(visible));
         editor::create::prefer_projection(&mut intents,self.flat_projection);
+        if let Some(family)=family{
+            if !crate::doc::vector::text::font_families().iter().any(|name|name==family){return Err("Font family is not installed".into())}
+            for i in &mut intents{if let Intent::SetTextDocument{document,..}=i{for style in &mut document.styles{style.font=crate::doc::store::FontRef{family:family.into(),..Default::default()};}}}
+        }
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
             let camera = self.engine.resolve_camera(&view,self.time()?).map_err(e)?;
             for (name,value) in property::camera_values(&camera) {
@@ -178,7 +183,7 @@ impl EditorRuntime{
                         layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
-            "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"roundedRectangle"=>editor::create::NewKind::RoundedRectangle,"ellipse"=>editor::create::NewKind::Ellipse,"star"=>editor::create::NewKind::Star,"polygon"=>editor::create::NewKind::Polygon,"line"=>editor::create::NewKind::Line,"bezier"=>editor::create::NewKind::Bezier,"null"=>editor::create::NewKind::Null,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,k=>match k.strip_prefix("background:"){Some(id)=>editor::create::background(id)?,None=>editor::create::primitive(k)?}};self.create_layer(kind,j["visibleFrames"].as_i64())?;}
+            "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"roundedRectangle"=>editor::create::NewKind::RoundedRectangle,"ellipse"=>editor::create::NewKind::Ellipse,"star"=>editor::create::NewKind::Star,"polygon"=>editor::create::NewKind::Polygon,"line"=>editor::create::NewKind::Line,"bezier"=>editor::create::NewKind::Bezier,"null"=>editor::create::NewKind::Null,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,k=>match k.strip_prefix("background:"){Some(id)=>editor::create::background(id)?,None=>editor::create::primitive(k)?}};let family=j["family"].as_str().map(str::to_owned);self.create_layer(kind,j["visibleFrames"].as_i64(),family.as_deref())?;}
             "copy"|"cut"=>{
                 if self.selected_keys.is_empty(){self.clipboard.copy_layers(&self.doc,self.selected_required()?).map_err(e)?;}else{self.clipboard.copy_keys(&self.doc,&self.selected_keys).map_err(e)?;}
                 if op=="cut"{self.delete_selection()?;}
@@ -224,7 +229,7 @@ impl EditorRuntime{
             "addMarker"|"setMarker"|"deleteMarker"=>self.edit_marker(op,&j)?,
             "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
             "import"=>{let paths:Vec<std::path::PathBuf>=j["paths"].as_array().ok_or("Expected paths")?.iter().map(|p|p.as_str().map(std::path::PathBuf::from).ok_or("Invalid path".into())).collect::<Result<_,String>>()?;let paths=editor::fixture::expand_folders(&paths);if paths.is_empty(){return Err("No files to import".into())}let mut intents=Vec::new();let mut known:std::collections::HashSet<_>=self.doc.view().assets().map_err(e)?.iter().map(|a|a.content_hash.clone()).collect();for path in paths{let draft=editor::fixture::prepare_path(&path,if j["role"]=="reference"{AssetRole::Reference}else{AssetRole::Material})?;if known.insert(draft.content_hash.clone()){intents.push(Intent::AdmitAsset{draft});}}self.apply(intents)?;}
-            "placeAsset"|"replaceAsset"=>{let a=self.doc.view().asset(asset_id(&j)?).map_err(e)?.ok_or("Asset missing")?;let path=a.path_absolute.ok_or("Asset path missing")?;if !std::path::Path::new(&path).exists(){return Err("Asset file missing".into())}if op=="placeAsset"{let start=j["start"].as_i64().unwrap_or(self.frame);let landing=j["placement"].as_str().map(|p|(j["target"].as_u64().map(LayerId),p.to_owned()));self.place_layer(editor::create::NewKind::Media{path,name:a.name},start,landing,j["visibleFrames"].as_i64())?;}else{let layer=self.selected.ok_or("Select layer to replace")?;self.apply([Intent::SetSource{layer,source:LayerSource::File{path,fingerprint:None}}])?;}}
+            "placeAsset"|"replaceAsset"=>{let a=self.doc.view().asset(asset_id(&j)?).map_err(e)?.ok_or("Asset missing")?;let path=a.path_absolute.ok_or("Asset path missing")?;if !std::path::Path::new(&path).exists(){return Err("Asset file missing".into())}if op=="placeAsset"{let start=j["start"].as_i64().unwrap_or(self.frame);let landing=j["placement"].as_str().map(|p|(j["target"].as_u64().map(LayerId),p.to_owned()));self.place_layer(editor::create::NewKind::Media{path,name:a.name},start,landing,j["visibleFrames"].as_i64(),None)?;}else{let layer=self.selected.ok_or("Select layer to replace")?;self.apply([Intent::SetSource{layer,source:LayerSource::File{path,fingerprint:None}}])?;}}
             "relinkAsset"=>{let id=asset_id(&j)?;let path=j["path"].as_str().ok_or("Missing path")?.to_owned();if !std::path::Path::new(&path).exists(){return Err("No file at that path".into())}let a=self.doc.view().asset(id).map_err(e)?.ok_or("Asset missing")?;let kind=std::path::Path::new(&path).extension().and_then(|x|x.to_str()).and_then(crate::render::media::asset_type_for_extension).ok_or("Unsupported file type")?;let same_family=kind.split('/').next()==a.asset_type.split('/').next();if !same_family{return Err(format!("Pick a {} file",a.asset_type.split('/').next().unwrap_or("matching")))}self.apply([Intent::RelinkAsset{asset:id,path_absolute:path,project_root:None}])?;}
             "removeAsset"=>{let id=asset_id(&j)?;if self.asset_used(id)?{return Err("Asset is still in use".into())}self.apply([Intent::RemoveAsset{asset:id}])?;}
             "export"=>self.exporter.start(&self.doc,std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
@@ -716,6 +721,22 @@ mod timing_drag_tests {
         let mut make=|rt:&mut EditorRuntime|{rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();rt.selected.unwrap()};
         let (a,b,c,d)=(make(&mut rt),make(&mut rt),make(&mut rt),make(&mut rt));
         let before=order(&mut rt);
+mod font_shortcut_tests {
+    use super::*;
+    /// Fonts 棚の行を何も選ばずに押す = その書体の文字の層を 1 手で作る。無い書体は断る。
+    #[test]
+    fn creating_text_with_a_family_is_one_step() {
+        let mut rt=EditorRuntime::open("").unwrap();
+        let family=crate::doc::vector::text::font_families().first().cloned().expect("a font");
+        let before=rt.doc.history_depth().0;
+        rt.request(json!({"op":"create","kind":"text","family":family})).unwrap();
+        assert_eq!(rt.doc.history_depth().0,before+1);
+        let id=rt.selected.expect("the new layer is picked");
+        assert_eq!(rt.doc.view().text_document(id).unwrap().unwrap().styles[0].font.family,family);
+        assert!(rt.request(json!({"op":"create","kind":"text","family":"No Such Face 9"})).is_err());
+    }
+}
+
         let a_above_c=pos(&before,a)<pos(&before,c);
         // 選んだ順は c, a — 並びは a, c のまま。
         rt.request(json!({"op":"select","ids":[c.0,a.0]})).unwrap();

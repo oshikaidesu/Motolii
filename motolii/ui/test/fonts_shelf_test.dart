@@ -81,13 +81,19 @@ void main() {
       'scope': 'all',
       'family': 'Georgia',
     });
-    // Nothing selected: the rows stay, the click does nothing.
-    c.document.value = {...c.state, 'selectedIds': <int>[]};
+    // Nothing selected: the rows stay as specimens, and a click is a
+    // shortcut — a new text layer in that face.
+    c.document.value = {
+      ...c.state,
+      'selectedIds': <int>[],
+      'capabilities': ['setFont', 'create'],
+    };
     await tester.pumpAndSettle();
     sent.clear();
+    expect(find.text('Click a face to add a text layer'), findsOneWidget);
     await tester.tap(tile('Georgia'));
     await tester.pumpAndSettle();
-    expect(sent, isEmpty);
+    expect(sent.single, {'op': 'create', 'kind': 'text', 'family': 'Georgia'});
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });

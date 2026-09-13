@@ -10,9 +10,15 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
     }
     let raster = match j["kind"].as_str() {
         Some("font")=>{
-            let id=LayerId(j["layer"].as_u64().ok_or("Missing layer")?);
-            let mut text=doc.view().resolved_text_document(id,time).map_err(|e|e.to_string())?.ok_or("Select a Text layer")?;
             let family=j["family"].as_str().ok_or("Missing family")?;
+            // 層が無ければ書体名を自分で組む(何も選んでいない Fonts 棚): 押せばその書体の文字の層になる。
+            let mut text=match j["layer"].as_u64(){
+                Some(id)=>doc.view().resolved_text_document(LayerId(id),time).map_err(|e|e.to_string())?.ok_or("Select a Text layer")?,
+                None=>{
+                    let mut content=ContentTrack::new();content.insert(ContentKeyframe{t:RationalTime::ZERO,content:family.to_owned()});
+                    crate::doc::store::TextDocument{content,justify:TextJustify::Left,wrap_size:None,styles:vec![crate::doc::store::TextDocumentStyle{id:crate::doc::store::TextStyleId(0),font:Default::default(),size:40.0,fill:[1.0;4],line_height:None,tracking:0.0,axes:Vec::new(),features:Vec::new()}],slot_id:None,ranges:Vec::new(),alignment:Default::default(),runs:Vec::new()}
+                }
+            };
             let content=text.content.eval(time).lines().next().unwrap_or("").split_whitespace().take(8).collect::<Vec<_>>().join(" ");
             if content.chars().count()>256 || !crate::doc::vector::text::font_supports_sample(family,&content) { return Ok(json!({"image":null})); }
             text.content=ContentTrack::new();text.content.insert(ContentKeyframe{t:RationalTime::ZERO,content});
@@ -76,5 +82,8 @@ mod tests {
         assert!(result["image"].is_string());
         assert!(!crate::doc::vector::text::font_supports_sample(family,"\u{10ffff}"));
         assert_eq!(doc.view().text_document(layer).unwrap(),before);assert_eq!(doc.history_depth(),history);
+        // 層が無くても書体名で見本が出る。
+        let result=reply(&doc,RationalTime::ZERO,&json!({"kind":"font","family":family})).unwrap();
+        assert!(result["image"].is_string());
     }
 }
