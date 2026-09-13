@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -159,11 +160,64 @@ void main() {
     await tester.pumpAndSettle();
     final desk = Map<String, dynamic>.from(settings['deskWork'] as Map);
     expect(desk['collections'], {'Fonts/font:Georgia': 2});
+    // A collection row also takes a double-click (rename), so a click lands
+    // after the double-tap deadline.
     await tester.tap(find.byKey(const ValueKey('browser:collection:2')));
     expect(find.text('Orange'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(tile('Georgia'), findsOneWidget);
     expect(tile('Arial'), findsNothing);
+    // The same row again lets the collection go.
+    await tester.tap(find.byKey(const ValueKey('browser:collection:2')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(tile('Arial'), findsOneWidget);
+    // The context menu offers the collections too, and a way out.
+    await tester.tap(tile('Arial'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Purple').last);
+    await tester.pumpAndSettle();
+    expect(
+      Map<String, dynamic>.from(settings['deskWork'] as Map)['collections'],
+      {'Fonts/font:Georgia': 2, 'Fonts/font:Arial': 6},
+    );
+    await tester.tap(tile('Arial'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from collection'));
+    await tester.pumpAndSettle();
+    expect(
+      Map<String, dynamic>.from(settings['deskWork'] as Map)['collections'],
+      {'Fonts/font:Georgia': 2},
+    );
+    // A double-click renames the collection; the name is kept with the desk.
+    await tester.tap(find.byKey(const ValueKey('browser:collection:2')));
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(find.byKey(const ValueKey('browser:collection:2')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('browser:collection:rename')),
+      findsOneWidget,
+      reason: 'dialog',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('browser:collection:rename')),
+      'Headlines',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('browser:collection:rename')),
+      findsNothing,
+      reason: 'dialog closed',
+    );
+    expect(
+      Map<String, dynamic>.from(settings['deskWork'] as Map)['collectionNames'],
+      {'2': 'Headlines'},
+    );
+    expect(find.text('Headlines'), findsOneWidget);
+    await tester.tap(tile('Georgia'));
+    await tester.pumpAndSettle();
     // 0 takes it back out.
     await tester.sendKeyEvent(LogicalKeyboardKey.digit0);
     await tester.pumpAndSettle();

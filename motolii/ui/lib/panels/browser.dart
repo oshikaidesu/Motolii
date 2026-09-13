@@ -71,7 +71,6 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   late final library = BrowserLibrary(widget.controller);
   final filters = <String, ShelfFilter>{};
   final filtersShown = <String, bool>{};
-  final folded = <String, Set<String>>{};
   final quickAdd = TextEditingController();
   final quickAddFocus = FocusNode();
   ShelfFilter get filter => filters.putIfAbsent(tab, ShelfFilter.new);
@@ -300,6 +299,8 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
         'collections',
         'labels',
         'ranges',
+        'folds',
+        'collectionNames',
         for (final s in shelves) ...s.deskKeys,
       ])
         d[k],
@@ -655,6 +656,15 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                         library.dropLabel(tab, name),
                                     onDrop: (which, ids) =>
                                         library.collect(tab, ids, which),
+                                    names: [
+                                      for (
+                                        var i = 1;
+                                        i <= BrowserLibrary.collectionCount;
+                                        i++
+                                      )
+                                        library.collectionName(i),
+                                    ],
+                                    onRename: library.renameCollection,
                                   ),
                                 ),
                               ),
@@ -754,20 +764,15 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                     child: FilterView(
                                       groups: groups,
                                       filter: filter,
-                                      folded: folded.putIfAbsent(
-                                        tab,
-                                        () => <String>{},
-                                      ),
+                                      folded: library.foldsOn(tab),
                                       results: visible.length,
-                                      onFold: (group) => setState(() {
-                                        final f = folded.putIfAbsent(
-                                          tab,
-                                          () => <String>{},
-                                        );
+                                      onFold: (group) {
+                                        final f = library.foldsOn(tab);
                                         f.contains(group)
                                             ? f.remove(group)
                                             : f.add(group);
-                                      }),
+                                        library.setFolds(tab, f);
+                                      },
                                       onToggle: _toggleTag,
                                       onClear: () => setState(() {
                                         filter.clear();
@@ -1017,8 +1022,41 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
         child: Text(shelf.applyLabel(this, item)),
       ),
       ...shelf.menu(this, item),
+      const EditorMenuDivider(),
+      // Collections, the way Live's context menu offers them: one row per
+      // colour, and a row to take the picked rows out again.
+      for (var i = 1; i <= BrowserLibrary.collectionCount; i++)
+        EditorMenuItem<String>(
+          value: 'collect:$i',
+          child: Row(
+            children: [
+              Container(
+                width: EditorMetrics.s8,
+                height: EditorMetrics.s8,
+                decoration: BoxDecoration(
+                  color: BrowserLibrary.collectionColors[i - 1],
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: EditorMetrics.s6),
+              Text(library.collectionName(i)),
+            ],
+          ),
+        ),
+      if (library.collectionOf(tab, id(item)) != null)
+        const EditorMenuItem<String>(
+          value: 'collect:0',
+          child: Text('Remove from collection'),
+        ),
     ]).then((action) {
       if (!mounted || action == null) return;
+      if (action.startsWith('collect:')) {
+        library.collect(tab, {
+          ...selectedIds,
+          id(item),
+        }, int.parse(action.substring(8)));
+        return;
+      }
       action == 'apply' ? apply(item) : shelf.act(this, action, item);
     });
   }

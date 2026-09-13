@@ -118,6 +118,35 @@ class BrowserLibrary {
         key(shelf, group): ranges,
       });
 
+  /// The collections' names: Live's colours until the user renames one.
+  String collectionName(int which) {
+    final held = EditorSession.map(
+      controller.deskWork.value['collectionNames'],
+    )['$which'];
+    return held is String && held.trim().isNotEmpty
+        ? held
+        : collectionNames[which - 1];
+  }
+
+  Future<void> renameCollection(int which, String name) =>
+      controller.storeDesk('collectionNames', {
+        ...EditorSession.map(controller.deskWork.value['collectionNames']),
+        '$which': name.trim(),
+      });
+
+  /// Which filter groups the user folded on a shelf.
+  Set<String> foldsOn(String shelf) =>
+      (EditorSession.map(controller.deskWork.value['folds'])[shelf] as List? ??
+              const [])
+          .whereType<String>()
+          .toSet();
+
+  Future<void> setFolds(String shelf, Set<String> folds) =>
+      controller.storeDesk('folds', {
+        ...EditorSession.map(controller.deskWork.value['folds']),
+        shelf: folds.toList(),
+      });
+
   /// Saved filters on one shelf: name and the filter it restores.
   List<Map<String, dynamic>> labelsOn(String shelf) =>
       EditorSession.maps(_labels[shelf]);
@@ -549,7 +578,9 @@ class _RangeAdderState extends State<_RangeAdder> {
 }
 
 /// The rail's lower half: the seven collections, then the saved labels.
-class RailCollections extends StatelessWidget {
+/// A double-click on a collection turns its row into a field (Live renames
+/// them in place too); Enter keeps the name, Escape or leaving drops it.
+class RailCollections extends StatefulWidget {
   const RailCollections({
     super.key,
     required this.chosen,
@@ -558,6 +589,8 @@ class RailCollections extends StatelessWidget {
     required this.onLabel,
     required this.onDropLabel,
     required this.onDrop,
+    required this.names,
+    required this.onRename,
   });
   final int? chosen;
   final List<Map<String, dynamic>> labels;
@@ -568,79 +601,150 @@ class RailCollections extends StatelessWidget {
   /// Rows dropped on a collection: (which, ids). A Media tile carries its
   /// asset id; any other tile carries the picked ids.
   final void Function(int which, Set<String> ids) onDrop;
+
+  /// The collections' names, and a rename (double-click on the row).
+  final List<String> names;
+  final void Function(int which, String name) onRename;
+  @override
+  State<RailCollections> createState() => _RailCollectionsState();
+}
+
+class _RailCollectionsState extends State<RailCollections> {
+  int? editing;
+  final field = TextEditingController();
+  final focus = FocusNode();
+  @override
+  void initState() {
+    super.initState();
+    focus.addListener(() {
+      if (!focus.hasFocus && editing != null) setState(() => editing = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    field.dispose();
+    focus.dispose();
+    super.dispose();
+  }
+
+  void _keep() {
+    final which = editing;
+    if (which != null && field.text.trim().isNotEmpty)
+      widget.onRename(which, field.text);
+    setState(() => editing = null);
+  }
+
+  Widget _row(int i) {
+    final chosen = widget.chosen;
+    if (editing == i) {
+      return SizedBox(
+        height: EditorMetrics.control,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+          child: TextField(
+            key: const ValueKey('browser:collection:rename'),
+            controller: field,
+            focusNode: focus,
+            autofocus: true,
+            style: const TextStyle(
+              fontSize: EditorMetrics.font,
+              color: EditorTheme.ink,
+            ),
+            decoration: const InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: EditorMetrics.s4,
+                vertical: EditorMetrics.s3,
+              ),
+            ),
+            onSubmitted: (_) => _keep(),
+          ),
+        ),
+      );
+    }
+    return DragTarget<Object>(
+      onWillAcceptWithDetails: (d) =>
+          d.data is BrowserDrag ||
+          (d.data is Map && (d.data as Map)['asset'] != null),
+      onAcceptWithDetails: (d) => widget.onDrop(i, switch (d.data) {
+        BrowserDrag(:final ids) => ids,
+        final Map m => {'${m['asset']}'},
+        _ => const <String>{},
+      }),
+      builder: (context, hovering, _) => EditorTooltip(
+        message:
+            '${widget.names[i - 1]} · drop rows here, or press $i on picked rows · double-click to rename',
+        child: InkWell(
+          key: ValueKey('browser:collection:$i'),
+          onTap: () => widget.onCollection(i),
+          onDoubleTap: () => setState(() {
+            editing = i;
+            field.text = widget.names[i - 1];
+            field.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: field.text.length,
+            );
+          }),
+          child: Container(
+            height: EditorMetrics.control,
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+            color: hovering.isNotEmpty
+                ? EditorTheme.spatial.withValues(alpha: .3)
+                : chosen == i
+                ? EditorTheme.raised
+                : Colors.transparent,
+            child: Row(
+              children: [
+                Container(
+                  width: EditorMetrics.s8,
+                  height: EditorMetrics.s8,
+                  decoration: BoxDecoration(
+                    color: BrowserLibrary.collectionColors[i - 1],
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: EditorMetrics.s6),
+                Expanded(
+                  child: Text(
+                    widget.names[i - 1],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: EditorMetrics.font,
+                      color: chosen == i ? EditorTheme.accent : EditorTheme.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       const _RailTitle('Collections'),
-      for (var i = 1; i <= BrowserLibrary.collectionCount; i++)
-        DragTarget<Object>(
-          onWillAcceptWithDetails: (d) =>
-              d.data is BrowserDrag ||
-              (d.data is Map && (d.data as Map)['asset'] != null),
-          onAcceptWithDetails: (d) => onDrop(i, switch (d.data) {
-            BrowserDrag(:final ids) => ids,
-            final Map m => {'${m['asset']}'},
-            _ => const <String>{},
-          }),
-          builder: (context, hovering, _) => EditorTooltip(
-            message:
-                '${BrowserLibrary.collectionNames[i - 1]} · drop rows here, or press $i on picked rows',
-            child: InkWell(
-              key: ValueKey('browser:collection:$i'),
-              onTap: () => onCollection(i),
-              child: Container(
-                height: EditorMetrics.control,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: EditorMetrics.s8,
-                ),
-                color: hovering.isNotEmpty
-                    ? EditorTheme.spatial.withValues(alpha: .3)
-                    : chosen == i
-                    ? EditorTheme.raised
-                    : Colors.transparent,
-                child: Row(
-                  children: [
-                    Container(
-                      width: EditorMetrics.s8,
-                      height: EditorMetrics.s8,
-                      decoration: BoxDecoration(
-                        color: BrowserLibrary.collectionColors[i - 1],
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: EditorMetrics.s6),
-                    Expanded(
-                      child: Text(
-                        BrowserLibrary.collectionNames[i - 1],
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: EditorMetrics.font,
-                          color: chosen == i
-                              ? EditorTheme.accent
-                              : EditorTheme.ink,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      if (labels.isNotEmpty) const _RailTitle('Labels'),
-      for (final label in labels)
+      for (var i = 1; i <= BrowserLibrary.collectionCount; i++) _row(i),
+      if (widget.labels.isNotEmpty) const _RailTitle('Labels'),
+      for (final label in widget.labels)
         Row(
           children: [
             Expanded(
-              child: shelfButton('${label['name']}', () => onLabel(label)),
+              child: shelfButton(
+                '${label['name']}',
+                () => widget.onLabel(label),
+              ),
             ),
             EditorTooltip(
               message: 'Forget this label',
               child: InkWell(
                 key: ValueKey('browser:label:drop:${label['name']}'),
-                onTap: () => onDropLabel('${label['name']}'),
+                onTap: () => widget.onDropLabel('${label['name']}'),
                 child: const Padding(
                   padding: EdgeInsets.all(EditorMetrics.s4),
                   child: Icon(

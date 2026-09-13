@@ -95,25 +95,26 @@ class FontsShelf extends BrowserShelf {
       axes.addAll((f['axes'] as List? ?? const []).cast<String>());
     return [
       const FilterGroup('Script', _scriptNames),
-      const FilterGroup('Family', ['Single', '2–5 styles', '6+ styles']),
+      const FilterGroup('Styles', [], kind: FilterKind.actual),
       FilterGroup('Axes', ['Static', ...axes.toList()..sort()]),
       const FilterGroup('Kind', ['Mono', 'Color']),
     ];
   }
 
   @override
+  String? valueOf(BrowserHost host, Map<String, dynamic> item, String group) {
+    if (group != 'Styles') return null;
+    final f = fontFacts?['${item['name']}'];
+    return f == null ? null : '${(f['styles'] as num? ?? 1).toInt()}';
+  }
+
+  @override
   Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) {
     final f = fontFacts?['${item['name']}'];
     if (f == null) return const {};
-    final styles = (f['styles'] as num? ?? 1).toInt();
     final axes = (f['axes'] as List? ?? const []).cast<String>();
     return {
       ...(f['scripts'] as List? ?? const []).cast<String>(),
-      styles <= 1
-          ? 'Single'
-          : styles <= 5
-          ? '2–5 styles'
-          : '6+ styles',
       if (axes.isEmpty) 'Static' else ...axes,
       if (f['monospaced'] == true) 'Mono',
       if (f['color'] == true) 'Color',
