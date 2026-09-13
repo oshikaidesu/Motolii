@@ -1937,16 +1937,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
                   controller: _scroll,
                   slivers: [
                     SliverList.list(
+                      // The shared cards keep their seats — Transform first,
+                      // World under it — whatever is selected. What a kind
+                      // owns (text, fill, matte) comes after, so a change of
+                      // selection never pushes Position up or down.
                       children: [
-                        if (!_multiple && text.isNotEmpty)
-                          EditorCard(
-                            title: 'Text',
-                            children: _text(layer, text),
-                          ),
-                        if (!_multiple &&
-                            layer['kind'] == 'Shape' &&
-                            layer['fill'] is Map)
-                          EditorCard(title: 'Fill', children: _colors(layer)),
                         if (layer['kind'] == 'Camera')
                           EditorCard(title: 'Camera', children: _camera(layer))
                         else
@@ -1956,6 +1951,15 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           ),
                         if (layer['kind'] != 'Camera')
                           EditorCard(title: 'World', children: _world(layer)),
+                        if (!_multiple && text.isNotEmpty)
+                          EditorCard(
+                            title: 'Text',
+                            children: _text(layer, text),
+                          ),
+                        if (!_multiple &&
+                            layer['kind'] == 'Shape' &&
+                            layer['fill'] is Map)
+                          EditorCard(title: 'Fill', children: _colors(layer)),
                         if (!_multiple &&
                             matte.isNotEmpty &&
                             layer['clipToBelow'] != true)
