@@ -114,6 +114,8 @@ pub struct Slot {
     pub position: [f32; 2],
     pub scale: [f32; 2],
     pub stretch: [f32; 2],
+    /// 横が Fill の文字: その幅で折り返す(素材座標の幅、Scale で割った値)。
+    pub wrap: Option<f32>,
 }
 
 /// view の寿命の間、時刻ごとに 1 回だけ解く(view は値を変えない)。
@@ -122,8 +124,17 @@ pub(crate) type Memo = Rc<RefCell<HashMap<RationalTime, Rc<Frame>>>>;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Sizing { Hug, Fill, Fixed }
 
+/// 幅で高さが決まる子(横が Fill の文字)。taffy が幅を決めてから問う。
+#[derive(Clone, Copy)]
+struct Measure {
+    layer: LayerId,
+    scale: f32,
+}
+
 struct Leaf {
     node: NodeId,
+    /// 横が Fill の文字(折り返し幅を枠から決める)。
+    text_fill: bool,
     layer: LayerId,
     /// 素材座標の箱(伸ばす前)。
     bounds: [f32; 4],
@@ -199,14 +210,7 @@ impl StoreView<'_> {
         let Some(meta) = self.meta(layer)? else { return Ok(None) };
         Ok(match meta.source {
             LayerSource::Shape => shape_box(&self.shapes_at(layer, t)?),
-            LayerSource::Text => {
-                let (Some(document), Some(comp)) = (self.resolved_text_document(layer, t)?, self.composition()?) else { return Ok(None) };
-                let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
-                crate::doc::store::text_frame::shape_document(&document, t, &canvas)
-                    .ok()
-                    .flatten()
-                    .and_then(|shaped| crate::doc::store::text_frame::line_box(&document, &shaped, &canvas))
-            }
+            LayerSource::Text => self.text_box(layer, t, None)?,
             LayerSource::Group => {
                 if self.display(layer, t)? != 0 {
                     return Ok(self.layout_frame(t)?.sizes.get(&layer).map(|s| [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + s[0], CANVAS_MARGIN + s[1]]));
@@ -260,7 +264,7 @@ impl StoreView<'_> {
             if parent.is_some_and(|p| displayed.contains(&p)) {
                 continue;
             }
-            let mut tree: TaffyTree<()> = TaffyTree::new();
+            let mut tree: TaffyTree<Measure> = TaffyTree::new();
             tree.disable_rounding();
             let (mut leaves, mut groups) = (Vec::new(), Vec::new());
             let node = self.container(&mut tree, root, t, &children, &displayed, true, &mut leaves, &mut groups)?;
@@ -269,7 +273,11 @@ impl StoreView<'_> {
                 Ok(if sizing[axis] == Sizing::Fixed { AvailableSpace::Definite(self.number(root, name, 0.0, t)? as f32) } else { AvailableSpace::MaxContent })
             };
             let space = Size { width: available(0, WIDTH)?, height: available(1, HEIGHT)? };
-            tree.compute_layout(node, space).map_err(|e| StoreError::Property(format!("layout: {e}")))?;
+            tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| match measure {
+                Some(m) => self.measure_text(*m, known, available, t),
+                None => Size::ZERO,
+            })
+            .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
             let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
             let shifted = |mut placed: taffy::Layout| { placed.location.x += CANVAS_MARGIN; placed.location.y += CANVAS_MARGIN; placed };
             for (node, layer, is_root) in groups {
@@ -283,7 +291,14 @@ impl StoreView<'_> {
             }
             for leaf in leaves {
                 let placed = shifted(*tree.layout(leaf.node).map_err(taffy)?);
-                let slot = self.slot(leaf.layer, t, leaf.bounds, leaf.sizing, leaf.fit, placed)?;
+                let slot = if leaf.text_fill {
+                    let scale = self.pair(leaf.layer, property::SCALE, [1.0, 1.0], t)?[0].abs().max(1e-3);
+                    let wrap = placed.size.width / scale;
+                    let bounds = self.text_box(leaf.layer, t, Some(wrap))?.unwrap_or(leaf.bounds);
+                    Slot { wrap: Some(wrap), ..self.slot(leaf.layer, t, bounds, [Sizing::Hug; 2], 3, placed)? }
+                } else {
+                    self.slot(leaf.layer, t, leaf.bounds, leaf.sizing, leaf.fit, placed)?
+                };
                 frame.slots.insert(leaf.layer, slot);
             }
         }
@@ -316,6 +331,43 @@ impl StoreView<'_> {
             transform: RepeaterTransform { position: Point { x: w * 0.5, y: h * 0.5 }, ..RepeaterTransform::IDENTITY },
             children: vec![leaf],
         })]))
+    }
+
+    /// 文字の行の箱。`wrap` があればその幅で折り返して組み、横は [0, wrap](CSS の block の幅、揃えはその中)。
+    fn text_box(&self, layer: LayerId, t: RationalTime, wrap: Option<f32>) -> Result<Option<[f32; 4]>, StoreError> {
+        let (Some(mut document), Some(comp)) = (self.authored_text_document(layer, t)?, self.composition()?) else { return Ok(None) };
+        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        if let Some(width) = wrap {
+            document.wrap_size = Some([width.max(1.0), comp.height as f32]);
+        }
+        let shaped = crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten();
+        Ok(shaped.and_then(|shaped| crate::doc::store::text_frame::line_box(&document, &shaped, &canvas)).map(|b| match wrap {
+            Some(width) => [0.0, b[1], width.max(1.0), b[3]],
+            None => b,
+        }))
+    }
+
+    /// 横が Fill の文字: 決まった幅で折り返した高さ(Scale の zoom 込み)。
+    fn measure_text(&self, measure: Measure, known: Size<Option<f32>>, available: Size<AvailableSpace>, t: RationalTime) -> Size<f32> {
+        let width = known.width.or(match available.width {
+            AvailableSpace::Definite(w) => Some(w),
+            _ => None,
+        });
+        let wrap = width.map(|w| w / measure.scale);
+        match self.text_box(measure.layer, t, wrap).ok().flatten() {
+            Some(b) => Size { width: width.unwrap_or((b[2] - b[0]) * measure.scale), height: known.height.unwrap_or((b[3] - b[1]) * measure.scale) },
+            None => Size::ZERO,
+        }
+    }
+
+    /// Overflow が Clip の並べる Group なら、その箱(素材座標)と角の丸み。
+    pub(crate) fn clip_box(&self, group: LayerId, t: RationalTime) -> Result<Option<([f32; 4], f32)>, StoreError> {
+        if self.display(group, t)? == 0 || self.choice(group, OVERFLOW, t)? != 1 {
+            return Ok(None);
+        }
+        let Some(size) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
+        let b = [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]];
+        Ok(Some((b, self.number(group, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)))
     }
 
     fn sizing(&self, layer: LayerId, t: RationalTime) -> Result<[Sizing; 2], StoreError> {
@@ -376,7 +428,7 @@ impl StoreView<'_> {
     #[allow(clippy::too_many_arguments)]
     fn container(
         &self,
-        tree: &mut TaffyTree<()>,
+        tree: &mut TaffyTree<Measure>,
         group: LayerId,
         t: RationalTime,
         children: &HashMap<LayerId, Vec<(i16, LayerId)>>,
@@ -436,8 +488,17 @@ impl StoreView<'_> {
             let natural = [(bounds[2] - bounds[0]) * scale[0].abs(), (bounds[3] - bounds[1]) * scale[1].abs()];
             let mut item = Style::default();
             let sizing = self.item_style(child, t, natural, &mut item)?;
-            let node = tree.new_leaf(item).map_err(|e| StoreError::Property(format!("layout: {e}")))?;
-            leaves.push(Leaf { node, layer: child, bounds, sizing, fit: self.choice(child, OBJECT_FIT, t)? });
+            let text_fill = sizing[0] == Sizing::Fill && self.meta(child)?.is_some_and(|m| m.source == LayerSource::Text);
+            let node = if text_fill {
+                if sizing[1] == Sizing::Hug {
+                    item.size.height = Dimension::auto();
+                }
+                tree.new_leaf_with_context(item, Measure { layer: child, scale: scale[0].abs().max(1e-3) })
+            } else {
+                tree.new_leaf(item)
+            }
+            .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
+            leaves.push(Leaf { node, text_fill, layer: child, bounds, sizing, fit: self.choice(child, OBJECT_FIT, t)? });
             nodes.push(node);
         }
         let node = tree.new_with_children(style, &nodes).map_err(|e| StoreError::Property(format!("layout: {e}")))?;
@@ -479,7 +540,7 @@ impl StoreView<'_> {
             let target = [placed.location.x, placed.location.y][axis] + (cell[axis] - shown[axis]) * 0.5;
             position[axis] = target - low + offset[axis];
         }
-        Ok(Slot { position, scale, stretch })
+        Ok(Slot { position, scale, stretch, wrap: None })
     }
 }
 
@@ -623,6 +684,59 @@ mod tests {
         assert_eq!(shown(&doc, wide, later), [0.0, 0.0, 200.0, 100.0], "the key on Column 1 moves the line");
     }
 
+    fn put_text(doc: &mut Document, layer: LayerId, content: &str) {
+        let mut track = ContentTrack::new();
+        track.insert(ContentKeyframe { t: T, content: content.to_owned() });
+        let style = TextDocumentStyle {
+            id: TextStyleId(0),
+            font: FontRef { path: String::new(), fingerprint: None, family: "Helvetica".to_owned(), style: String::new() },
+            size: 48.0, fill: [1.0; 4], line_height: None, tracking: 0.0, axes: vec![], features: vec![],
+        };
+        doc.apply(Intent::SetTextDocument { layer, document: TextDocument {
+            content: track, justify: TextJustify::Left, wrap_size: None, styles: vec![style], slot_id: None, ranges: vec![], alignment: Default::default(), runs: vec![],
+        } }).unwrap();
+    }
+
+    #[test]
+    fn text_filling_its_cell_wraps_at_the_cell_and_grows_down() {
+        let mut doc = blank_project();
+        let column = add(&mut doc, 1, LayerSource::Group, None);
+        for (name, value) in [(DISPLAY, Value::Enum(1)), (FLEX_DIRECTION, Value::Enum(1)), (HORIZONTAL_SIZING, Value::Enum(2)), (WIDTH, Value::F64(300.0))] {
+            put(&mut doc, column, name, value);
+        }
+        let words = add(&mut doc, 2, LayerSource::Text, Some(column));
+        put_text(&mut doc, words, "Taro Yamada is the creative director of this studio");
+        let below = rect(&mut doc, 3, column, [40.0, 40.0]);
+        let one_line = shown(&doc, below, T)[1];
+        put(&mut doc, words, HORIZONTAL_SIZING, Value::Enum(1));
+        let view = doc.view();
+        let wrap = view.resolved_text_document(words, T).unwrap().unwrap().wrap_size.expect("wraps");
+        assert_eq!(wrap[0], 300.0, "at the cell width");
+        drop(view);
+        assert!(shown(&doc, below, T)[1] > one_line + 40.0, "the wrapped lines push the next item down: {one_line} → {}", shown(&doc, below, T)[1]);
+
+        put(&mut doc, words, property::SCALE, Value::Vec2([2.0, 2.0]));
+        assert_eq!(doc.view().resolved_text_document(words, T).unwrap().unwrap().wrap_size.unwrap()[0], 150.0, "Scale is zoom: the words wrap at half the width, then double");
+    }
+
+    #[test]
+    fn overflow_clip_cuts_every_descendant_at_the_groups_box() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        let a = rect(&mut doc, 2, group, [100.0, 50.0]);
+        assert!(doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == a).unwrap().masks.is_empty(), "Visible cuts nothing");
+        put(&mut doc, group, OVERFLOW, Value::Enum(1));
+        put(&mut doc, group, property::POSITION, Value::Vec2([300.0, 200.0]));
+        put(&mut doc, a, property::POSITION, Value::Vec2([0.0, 30.0]));
+        let resolved = doc.view().resolved_layers(T).unwrap();
+        let layer = resolved.iter().find(|l| l.id == a).unwrap();
+        assert_eq!(layer.masks.len(), 1);
+        assert_eq!(layer.masks[0].mode, crate::doc::store::MaskMode::Intersect);
+        let world: Vec<glam::Vec2> = layer.masks[0].shape.vertices.iter().map(|v| layer.placement.transform.transform_point2(glam::vec2(v.point[0] as f32, v.point[1] as f32))).collect();
+        let (lo, hi) = world.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+        assert_eq!((lo.round(), hi.round()), (glam::vec2(301.0, 201.0), glam::vec2(441.0, 267.0)), "the group's box on screen, whatever the child's offset");
+    }
+
     #[test]
     fn a_growing_line_of_text_pushes_its_neighbour() {
         let mut doc = blank_project();
@@ -648,4 +762,27 @@ mod tests {
         let text = shown(&doc, name, T);
         assert_eq!((text[0], text[1]), (20.0, 8.0), "the line box sits at the padding");
     }
+}
+
+/// 角丸の矩形の閉じた道(時計回り、角は 3 次 Bézier の円弧近似)。`to` で各点を写す(接線は向きだけ写す)。
+pub(crate) fn rounded_rect_path(b: [f32; 4], radius: f32, to: glam::Affine2) -> crate::doc::eval::Path {
+    use crate::doc::eval::{Path, PathVertex};
+    let r = radius.min((b[2] - b[0]) * 0.5).min((b[3] - b[1]) * 0.5).max(0.0);
+    let k = r * 0.552_284_8;
+    let mut vertices = Vec::new();
+    let mut push = |p: [f32; 2], inn: [f32; 2], out: [f32; 2]| {
+        let point = to.transform_point2(glam::Vec2::from(p));
+        let (i, o) = (to.transform_vector2(glam::Vec2::from(inn)), to.transform_vector2(glam::Vec2::from(out)));
+        vertices.push(PathVertex { point: [point.x as f64, point.y as f64], in_tangent: [i.x as f64, i.y as f64], out_tangent: [o.x as f64, o.y as f64] });
+    };
+    let (l, top, rt, bot) = (b[0], b[1], b[2], b[3]);
+    push([l + r, top], [-k, 0.0], [0.0, 0.0]);
+    push([rt - r, top], [0.0, 0.0], [k, 0.0]);
+    push([rt, top + r], [0.0, -k], [0.0, 0.0]);
+    push([rt, bot - r], [0.0, 0.0], [0.0, k]);
+    push([rt - r, bot], [k, 0.0], [0.0, 0.0]);
+    push([l + r, bot], [0.0, 0.0], [-k, 0.0]);
+    push([l, bot - r], [0.0, k], [0.0, 0.0]);
+    push([l, top + r], [0.0, 0.0], [0.0, -k]);
+    Path { vertices, closed: true }
 }

@@ -126,7 +126,21 @@ impl<'a> StoreView<'a> {
             roll_degrees, ..Default::default() })
     }
 
+    /// 解いた文字の書類。横が Fill で並ぶ文字は、並べた幅で折り返す。
     pub fn resolved_text_document(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+    ) -> Result<Option<TextDocument>, StoreError> {
+        let Some(mut document) = self.authored_text_document(layer, t)? else { return Ok(None) };
+        if let (Some(wrap), Some(comp)) = (self.laid_out(layer, t)?.and_then(|slot| slot.wrap), self.composition()?) {
+            document.wrap_size = Some([wrap.max(1.0), comp.height as f32]);
+        }
+        Ok(Some(document))
+    }
+
+    /// 書類に書かれた値だけで解いた文字(並べる前。並べる計算が箱を測る時はこちら)。
+    pub(crate) fn authored_text_document(
         &self,
         layer: LayerId,
         t: RationalTime,
@@ -460,7 +474,7 @@ impl<'a> StoreView<'a> {
             source_frame,
             source_time: RationalTime::try_from_frame(source_frame, composition.fps)
                 .map_err(|e| StoreError::Property(e.to_string()))?,
-            masks: self.resolved_masks(layer, t)?,
+            masks: self.clipped_masks(layer, t, self.resolved_masks(layer, t)?, present, memo, visiting)?,
             effects,
             blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,
             matte: if attrs.clip_to_below {
@@ -883,6 +897,39 @@ impl<'a> StoreView<'a> {
         self.put_backgrounds_behind(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
+    }
+
+    /// Overflow が Clip の並べる Group の子孫は、その箱で切る: 箱を層の素材座標へ写した角丸の矩形を Intersect で足す。
+    fn clipped_masks(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        mut masks: Vec<ResolvedMask>,
+        present: &HashSet<LayerId>,
+        memo: &mut HashMap<LayerId, glam::Affine2>,
+        visiting: &mut HashSet<LayerId>,
+    ) -> Result<Vec<ResolvedMask>, StoreError> {
+        let mut seen = HashSet::from([layer]);
+        let mut next = self.attrs(layer)?.unwrap_or_default().parent;
+        let mut own: Option<glam::Affine2> = None;
+        while let Some(group) = next.filter(|g| seen.insert(*g) && present.contains(g)) {
+            if let Some((b, radius)) = self.clip_box(group, t)? {
+                let world = match own {
+                    Some(w) => w,
+                    None => *own.insert(self.world_affine(layer, t, present, memo, visiting)?),
+                };
+                let to = world.inverse() * self.world_affine(group, t, present, memo, visiting)?;
+                masks.push(ResolvedMask {
+                    mode: crate::doc::store::MaskMode::Intersect,
+                    inverted: false,
+                    opacity: 1.0,
+                    expansion: 0.0,
+                    shape: crate::doc::store::layout::rounded_rect_path(b, radius, to),
+                });
+            }
+            next = self.attrs(group)?.unwrap_or_default().parent;
+        }
+        Ok(masks)
     }
 
     /// 並べる Group の背景は子孫の一番奥の、さらに 1 つ下に積む(同じ番号だと描き順の鍵が同点になる)。

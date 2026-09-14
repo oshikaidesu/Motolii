@@ -130,6 +130,15 @@ Group "Grid"  Display Grid, Grid Columns 9, Grid Rows 9, Gap 1, Background(線�
 
 審判の定規は taffy の test(Chrome の実測から生成された fixture)。自作 test は「欄 → taffy の Style」の写像と、resolve が置いた位置だけを確かめる。
 
+## 実装(2026-09-14)
+
+- 並べる計算: doc `store/layout.rs`(taffy 0.13)。箱は形の輪郭の canvas・文字の行の箱・並べない Group の子の合わせ。結果は view の寿命で時刻ごとに 1 回解き、書類に書かない
+- 背景: 形の層と同じ道で描く。重ね順は子孫の一番奥の 1 つ下
+- **Overflow Clip**: 子孫の mask に、Group の箱(角丸)を子の素材座標へ写した Intersect を足す
+- **文字の Fill**: 横が Fill の文字は、taffy の measure(幅 → 高さ)で並べた幅に折り返す。Scale は zoom なので折り返し幅は「枠 ÷ Scale」
+- 2D の上下: 透明相の描き順が camera からの距離で決まっていた(並べる法の前から)。fork re_renderer に `layer_sort_key` を足し、2D は積み順を距離より先に比べる
+- 見本: `ui/native/src/editor/script/examples/` の bento.js・grid_squash.js・swiss_grid.js
+
 ## 裁定済み(2026-09-14)
 
 - 文字の大きさと Scale は同期する: 層の Scale = `zoom`、見た目だけは Transform 効果(利用者「逆に文字の大きさとスケールを同期できないか」)。
