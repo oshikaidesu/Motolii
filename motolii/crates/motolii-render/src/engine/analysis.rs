@@ -144,6 +144,18 @@ impl Engine {
                 if source.0 == 0 || source == layer { continue; }
                 (effect.params.clone(), Source::Layer(source), settings_of(&effect.params), blob::number_of(&effect.params, "detail"), false, false)
             } else if let Some(effect) = effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id)) {
+                // Layers: 絵を読まず、下の層の箱をそのまま塊にする(同じ親で自分より下。Repeater の写しは 1 枚ずつ)。
+                if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
+                    let resolved = view.resolved_layers(t).map_err(store)?;
+                    let marks = view.overlay_scope(layer, &resolved, t).map_err(store)?.into_iter().enumerate().map(|(k, (_, b))| BlobMark {
+                        id: k as u32,
+                        center: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5],
+                        size: [b[2] - b[0], b[3] - b[1]],
+                        age: 0,
+                    }).collect();
+                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone() });
+                    continue;
+                }
                 (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
             } else {
                 continue;

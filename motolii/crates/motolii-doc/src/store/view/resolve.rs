@@ -550,6 +550,64 @@ impl<'a> StoreView<'a> {
     /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
     /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
     #[allow(clippy::too_many_arguments)]
+    /// Track Overlay(Detection Method = Layers)が拾う物: 同じ親で自分より下の、描かれる層(Repeater の写しは 1 枚ずつ)と、その画面の上の箱。
+    pub fn overlay_scope(&self, overlay: LayerId, resolved: &[ResolvedLayer], t: RationalTime) -> Result<Vec<(usize, [f32; 4])>, StoreError> {
+        let Some(meta) = self.meta(overlay)? else { return Ok(Vec::new()) };
+        let parent = self.attrs(overlay)?.unwrap_or_default().parent;
+        let mut out = Vec::new();
+        for (index, layer) in resolved.iter().enumerate() {
+            if layer.id == overlay || layer.ghost || layer.placement.opacity <= 0.0 || layer.blend_mode.is_stencil()
+                || matches!(layer.source, crate::doc::store::LayerSource::Group | crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Null | crate::doc::store::LayerSource::Stage) {
+                continue;
+            }
+            if self.attrs(layer.id)?.unwrap_or_default().parent != parent || !self.meta(layer.id)?.is_some_and(|m| m.order < meta.order) {
+                continue;
+            }
+            let b = match layer.source {
+                crate::doc::store::LayerSource::Shape => crate::doc::store::layout::stretched_shape_box(&self.shapes_at(layer.id, t)?, layer.shape_stretch),
+                _ => self.layer_box(layer.id, t)?,
+            };
+            let Some(b) = b else { continue };
+            let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| layer.placement.transform.transform_point2(glam::Vec2::from(c)));
+            let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
+            let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
+            out.push((index, [lo.x, lo.y, hi.x, hi.y]));
+        }
+        Ok(out)
+    }
+
+    /// 見つけた格子へ寄せる(2026-09-15 利用者「ものは動かします。グリッドが動的に動くと Tracery のような効果になる」):
+    /// Track Overlay(Layers、Snap Strength > 0)が、拾った物の箱の辺から立てた格子の線(`overlay::edge_lines`)へ、物を画面の上で寄せる。
+    /// 線は寄せる前の箱から立てる(寄せた結果を読み直さない)。
+    fn snap_to_found_grids(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        use crate::doc::store::overlay;
+        let overlays: Vec<(LayerId, f32, f32)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
+            let effect = l.effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id))?;
+            let strength = overlay::number_of(&effect.params, "grid_snap").clamp(0.0, 1.0) as f32;
+            (overlay::number_of(&effect.params, "method").round() as i64 == 2 && strength > 0.0)
+                .then(|| (l.id, strength, overlay::number_of(&effect.params, "grid_merge").max(0.0) as f32))
+        }).collect();
+        for (overlay_layer, strength, merge) in overlays {
+            let scope = self.overlay_scope(overlay_layer, out, t)?;
+            if scope.is_empty() {
+                continue;
+            }
+            let xs: Vec<f32> = scope.iter().flat_map(|(_, b)| [b[0], b[2]]).collect();
+            let ys: Vec<f32> = scope.iter().flat_map(|(_, b)| [b[1], b[3]]).collect();
+            let (lx, ly) = (overlay::edge_lines(&xs, merge), overlay::edge_lines(&ys, merge));
+            for (k, &(index, b)) in scope.iter().enumerate() {
+                let dx = ((lx[2 * k].0 - b[0]) + (lx[2 * k + 1].0 - b[2])) * 0.5 * strength;
+                let dy = ((ly[2 * k].0 - b[1]) + (ly[2 * k + 1].0 - b[3])) * 0.5 * strength;
+                let layer = &mut out[index];
+                layer.placement.transform = glam::Affine2::from_translation(glam::vec2(dx, dy)) * layer.placement.transform;
+                if let Some(world) = layer.placement.world_transform {
+                    layer.placement.world_transform = Some(glam::Affine3A::from_translation(glam::vec3(dx, dy, 0.0)) * world);
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// 格子へ吸い付く(2026-09-15 利用者「無作為の配置も、グリッドで整えると意図した物という観点が付与される」):
     /// Grid の Group の子(流れの外の子、Repeater の写しは 1 枚ずつ)の箱の左上を、一番近い升目の角へ Snap to Grid の強さで寄せる。
     /// Snap Size が Fields なら、右下も一番近い升目の終わりへ(大きさを升目の倍数に)。寄せるのは画面の変換だけ(書類の値は変えない)。
@@ -1033,6 +1091,7 @@ impl<'a> StoreView<'a> {
         self.put_on_planes(&mut out, t)?;
         self.hand_out_stencils(&mut out)?;
         self.snap_to_grids(&mut out, t)?;
+        self.snap_to_found_grids(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
     }

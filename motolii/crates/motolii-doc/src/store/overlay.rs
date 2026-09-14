@@ -12,7 +12,9 @@ pub struct OverlayKind {
 }
 
 pub const TRACK_OVERLAY: &str = "motolii.track_overlay";
-pub const METHODS: &[&str] = &["Motion Detection", "Key Color"];
+pub const METHODS: &[&str] = &["Motion Detection", "Key Color", "Layers"];
+/// Grid の View Mode(Tracery 2 の Grid 節): Edge = 拾った物の箱の辺から格子を立てる、Cartesian = 等間隔の格子。
+pub const GRID_MODES: &[&str] = &["Edge", "Cartesian"];
 pub const BOX_SHAPES: &[&str] = &["Rectangle", "Square", "Ellipse", "Circle"];
 pub const MARKER_TYPES: &[&str] = &["Dot", "Plus", "Cross", "Polygon"];
 const SWITCH: &[&str] = &["Off", "On"];
@@ -67,6 +69,16 @@ pub const KINDS: &[OverlayKind] = &[OverlayKind {
         number("marker_rotation", "Marker Rotation", "Marker", 0.0, (-36000.0, 36000.0)),
         number("polygon_sides", "Polygon Sides", "Marker", 3.0, (3.0, 12.0)),
         switch("polygon_fill", "Polygon Fill", "Marker", false),
+        switch("grid", "Grid Enabled", "Grid", false),
+        choice("grid_mode", "View Mode", "Grid", GRID_MODES, 0.0),
+        number("grid_columns", "Grid Columns", "Grid", 12.0, (1.0, 400.0)),
+        number("grid_rows", "Grid Rows", "Grid", 8.0, (1.0, 400.0)),
+        color("grid_color", "Grid Color", "Grid", [0.62, 1.0, 0.24, 1.0]),
+        number("grid_opacity", "Grid Opacity", "Grid", 0.85, (0.0, 1.0)),
+        number("grid_thickness", "Line Thickness", "Grid", 1.0, (0.0, 200.0)),
+        // Motolii の足し: 近い辺を 1 本にまとめる幅(辺の分布の山の広がり、px)と、物をその線へ引き寄せる強さ(Layers の時)。
+        number("grid_merge", "Merge Distance", "Grid", 12.0, (0.0, 2000.0)),
+        number("grid_snap", "Snap Strength", "Grid", 0.0, (0.0, 1.0)),
     ],
 }];
 
@@ -93,5 +105,52 @@ pub fn color_of(params: &[(String, Value)], name: &str) -> [f64; 4] {
     match params.iter().find(|(n, _)| n == name).map(|(_, v)| v) {
         Some(Value::Color(c)) => *c,
         _ => default,
+    }
+}
+
+/// 箱の辺の位置(1 つの軸)から格子の線を立てる: 辺ごとに 1 本、近くの辺の重み付き平均へ寄せた位置(mean shift を 3 回)。
+/// 重みは幅 `merge` のガウス。近い辺同士の線は同じ所に重なって 1 本に見え、離れれば分かれる。分布の山を拾う方法と違い
+/// 枝分かれの点が無いので、辺が動いても線は滑らかに動く。濃さは 1 / (近くの辺の数) で、重なった線が 1 本分の濃さに近づく。
+/// 戻り値は辺と同じ順の (線の位置, 濃さ)。`merge` が 0 なら辺そのもの。
+pub fn edge_lines(edges: &[f32], merge: f32) -> Vec<(f32, f32)> {
+    if merge <= 1e-3 {
+        return edges.iter().map(|e| (*e, 1.0)).collect();
+    }
+    let kernel = |d: f32| (-(d * d) / (2.0 * merge * merge)).exp();
+    let mut positions: Vec<f32> = edges.to_vec();
+    for _ in 0..3 {
+        positions = positions.iter().map(|x| {
+            let (mut sum, mut total) = (0.0f32, 0.0f32);
+            for e in edges {
+                let w = kernel(x - e);
+                sum += e * w;
+                total += w;
+            }
+            if total > 1e-9 { sum / total } else { *x }
+        }).collect();
+    }
+    positions.iter().map(|x| (*x, 1.0 / edges.iter().map(|e| kernel(x - e)).sum::<f32>().max(1.0))).collect()
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    #[test]
+    fn near_edges_meet_on_one_line_and_lines_move_smoothly_as_edges_part() {
+        let lines = edge_lines(&[100.0, 104.0, 300.0], 12.0);
+        assert!((lines[0].0 - lines[1].0).abs() < 0.5 && (lines[0].0 - 102.0).abs() < 1.0, "edges 4 px apart share a line between them: {lines:?}");
+        assert!((lines[2].0 - 300.0).abs() < 0.1, "a far edge keeps its own line");
+        let mut previous: Option<Vec<(f32, f32)>> = None;
+        for k in 0..200 {
+            let d = k as f32 * 0.25;
+            let now = edge_lines(&[200.0 - d * 0.5, 200.0 + d * 0.5], 12.0);
+            if let Some(prev) = &previous {
+                for (a, b) in now.iter().zip(prev) {
+                    assert!((a.0 - b.0).abs() < 1.0, "each edge's line moves a little per step: {a:?} vs {b:?} at {d}");
+                }
+            }
+            previous = Some(now);
+        }
     }
 }

@@ -74,9 +74,49 @@ fn marker_shape(params: &Params, mark: &BlobMark) -> ShapeNode {
     }
 }
 
-/// このコマの塊から、Box → Marker の順に形を組む(comp の座標)。
-pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark]) -> Vec<ShapeNode> {
+/// Grid(Tracery 2 の Grid 節): Edge は塊の箱の辺から立てた線(`overlay::edge_lines`、近い辺は 1 本に)、Cartesian は等間隔。
+/// 線は画面の端から端まで。濃さは線ごと。
+fn grid_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<ShapeNode> {
+    let c = color_of(params, "grid_color");
+    let base = number_of(params, "grid_opacity").clamp(0.0, 1.0) * c[3];
+    let width = number_of(params, "grid_thickness").max(0.0);
+    let line = |from: Point, to: Point, opacity: f64| ShapeNode::Leaf(Shape {
+        source: PathSource::Bezier(vec![Contour::open([from, to])]),
+        ops: Vec::new(),
+        fill: None,
+        stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width, opacity: base * opacity, cap: LineCap::Butt, ..Default::default() }),
+    });
     let mut out = Vec::new();
+    if number_of(params, "grid_mode").round() as i64 == 1 {
+        let (columns, rows) = (number_of(params, "grid_columns").round().max(1.0), number_of(params, "grid_rows").round().max(1.0));
+        for i in 0..=columns as i64 {
+            let x = comp[0] * i as f64 / columns;
+            out.push(line(Point { x, y: 0.0 }, Point { x, y: comp[1] }, 1.0));
+        }
+        for i in 0..=rows as i64 {
+            let y = comp[1] * i as f64 / rows;
+            out.push(line(Point { x: 0.0, y }, Point { x: comp[0], y }, 1.0));
+        }
+        return out;
+    }
+    let merge = number_of(params, "grid_merge").max(0.0) as f32;
+    let xs: Vec<f32> = marks.iter().flat_map(|m| [m.center[0] - m.size[0] * 0.5, m.center[0] + m.size[0] * 0.5]).collect();
+    let ys: Vec<f32> = marks.iter().flat_map(|m| [m.center[1] - m.size[1] * 0.5, m.center[1] + m.size[1] * 0.5]).collect();
+    for (x, opacity) in crate::doc::store::overlay::edge_lines(&xs, merge) {
+        out.push(line(Point { x: f64::from(x), y: 0.0 }, Point { x: f64::from(x), y: comp[1] }, f64::from(opacity)));
+    }
+    for (y, opacity) in crate::doc::store::overlay::edge_lines(&ys, merge) {
+        out.push(line(Point { x: 0.0, y: f64::from(y) }, Point { x: comp[0], y: f64::from(y) }, f64::from(opacity)));
+    }
+    out
+}
+
+/// このコマの塊から、Grid → Box → Marker の順に形を組む(comp の座標)。
+pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<ShapeNode> {
+    let mut out = Vec::new();
+    if switch_of(params, "grid") {
+        out.extend(grid_shapes(params, marks, comp));
+    }
     if switch_of(params, "box") {
         out.extend(marks.iter().filter_map(|m| box_shape(params, m)));
     }
@@ -101,7 +141,7 @@ impl Engine {
             let texture = self.compositor.upload_rgba16f("motolii-overlay-mask", bytes, w, h)?;
             return Ok(Some((LayerContent::LinearTexture(texture), natural)));
         }
-        let shapes = overlay_shapes(&frame.params, &frame.marks);
+        let shapes = overlay_shapes(&frame.params, &frame.marks, [f64::from(comp.width), f64::from(comp.height)]);
         if shapes.is_empty() {
             return Ok(None);
         }
@@ -122,21 +162,39 @@ mod tests {
     #[test]
     fn boxes_follow_the_shape_choice_and_markers_are_optional() {
         let marks = [BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 }];
-        let shapes = overlay_shapes(&params(&[]), &marks);
+        let shapes = overlay_shapes(&params(&[]), &marks, [400.0, 300.0]);
         assert_eq!(shapes.len(), 1, "既定は箱だけ");
         let ShapeNode::Group(g) = &shapes[0] else { panic!() };
         assert_eq!((g.transform.position.x, g.transform.position.y), (100.0, 50.0));
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert_eq!(leaf.source, PathSource::Rectangle { size: Point { x: 40.0, y: 20.0 } });
-        let circle = overlay_shapes(&params(&[("box_shape", Value::F64(3.0)), ("marker", Value::F64(1.0))]), &marks);
+        let circle = overlay_shapes(&params(&[("box_shape", Value::F64(3.0)), ("marker", Value::F64(1.0))]), &marks, [400.0, 300.0]);
         assert_eq!(circle.len(), 2, "箱 + 印");
         let ShapeNode::Group(g) = &circle[0] else { panic!() };
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert_eq!(leaf.source, PathSource::Ellipse { size: Point { x: 40.0, y: 40.0 } }, "Circle は長辺の円");
-        let gapped = overlay_shapes(&params(&[("box_gap", Value::F64(1.0))]), &marks);
+        let gapped = overlay_shapes(&params(&[("box_gap", Value::F64(1.0))]), &marks, [400.0, 300.0]);
         let ShapeNode::Group(g) = &gapped[0] else { panic!() };
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert!(leaf.stroke.as_ref().and_then(|s| s.dash.as_ref()).is_some_and(|d| d.pattern.len() == 2), "Gap は破線");
-        assert!(overlay_shapes(&params(&[("box", Value::F64(0.0))]), &marks).is_empty());
+        assert!(overlay_shapes(&params(&[("box", Value::F64(0.0))]), &marks, [400.0, 300.0]).is_empty());
+    }
+
+    #[test]
+    fn an_edge_grid_raises_one_line_per_edge_across_the_screen() {
+        let marks = [
+            BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 },
+            BlobMark { id: 1, center: [102.0, 150.0], size: [40.0, 20.0], age: 0 },
+        ];
+        let grid = overlay_shapes(&params(&[("box", Value::F64(0.0)), ("grid", Value::F64(1.0)), ("grid_merge", Value::F64(10.0))]), &marks, [400.0, 300.0]);
+        assert_eq!(grid.len(), 8, "left, right, top, bottom of each box");
+        let xs: Vec<f64> = grid.iter().filter_map(|n| match n {
+            ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), .. }) if path[0].vertices[0].point.x == path[0].vertices[1].point.x => Some(path[0].vertices[0].point.x),
+            _ => None,
+        }).collect();
+        assert!((xs[0] - xs[2]).abs() < 0.5, "the two left edges 2 px apart share one vertical line: {xs:?}");
+        let ShapeNode::Leaf(first) = &grid[0] else { panic!() };
+        let PathSource::Bezier(path) = &first.source else { panic!() };
+        assert_eq!((path[0].vertices[0].point.y, path[0].vertices[1].point.y), (0.0, 300.0), "a line runs edge to edge of the screen");
     }
 }
