@@ -48,7 +48,10 @@ impl<'a> StoreView<'a> {
         let slot = self.laid_out(layer, when(0))?;
         let (position, scale) = match slot {
             Some(slot) => (slot.position, slot.scale),
-            None => (self.resolve_position(layer, when(0))?, vec2(property::SCALE, [1.0, 1.0], when(1))?),
+            None => {
+                let (p, d) = (self.resolve_position(layer, when(0))?, self.nudge(layer, when(0))?);
+                ([p[0] + d[0], p[1] + d[1]], vec2(property::SCALE, [1.0, 1.0], when(1))?)
+            }
         };
         Ok(LayerPlacement::from_transform(
             match slot { Some(slot) => slot.anchor, None => vec2(property::ANCHOR, [0.0, 0.0], t)? },
@@ -73,7 +76,10 @@ impl<'a> StoreView<'a> {
         let slot = self.laid_out(layer, t)?;
         let position = match slot {
             Some(slot) => slot.position,
-            None => self.resolve_position(layer, t)?,
+            None => {
+                let (p, d) = (self.resolve_position(layer, t)?, self.nudge(layer, t)?);
+                [p[0] + d[0], p[1] + d[1]]
+            }
         };
         let scalar = |name| self.split_position_component(layer, name, t).map(|v| v.unwrap_or(0.0));
         Ok(LayerPlacement::spatial_from_transform(

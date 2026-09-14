@@ -43,6 +43,13 @@ pub const DEPTH_ALIGNMENT: &str = "layout.depth_alignment";
 /// 映像の中身が格子の枠を占める(CSS Exclusions の写し): Blob Track を持つ層を指すと、その塊が重なる枠は空けて、
 /// 子は残りの枠へ流れる。塊は host が解いた箱(解析の橋)。
 pub const EXCLUSIONS: &str = "layout.exclusions";
+/// 間合いの法(2026-09-14): 物が外との距離を宣言する。容器の子なら CSS の margin、容器の外の兄弟同士は押し合う。
+pub const MARGIN: &str = "layout.margin";
+/// 詰まった時に誰がどれだけ譲るかの比(CSS の flex-shrink)。0 は譲らない。
+pub const FLEX_SHRINK: &str = "layout.flex_shrink";
+/// 解いた行き先が変わった時の移り方(CSS の transition)。秒と、区間の形。
+pub const TRANSITION_DURATION: &str = "layout.transition_duration";
+pub const TRANSITION_EASING: &str = "layout.transition_easing";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -99,6 +106,14 @@ pub const ITEM_ROWS: &[Row] = &[
 /// Display の Group の箱もその座標で [1, 1]..[1 + 幅, 1 + 高さ] に置き、背景の形と子の枠が同じ所に来る。
 const CANVAS_MARGIN: f32 = 1.0;
 
+/// 間合いの欄(容器の中でも外でも、すべての物)。
+pub const SPACE_ROWS: &[Row] = &[
+    (MARGIN, "Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
+    (FLEX_SHRINK, "Flex Shrink", Value::F64(1.0), Some((0.0, 1000.0)), &[]),
+    (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
+    (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
+];
+
 /// 格子の線の太さの既定(fr)。
 pub const TRACK_DEFAULT: f64 = 1.0;
 
@@ -109,7 +124,7 @@ pub fn track_label(property: &str) -> Option<String> {
 }
 
 pub fn row(property: &str) -> Option<&'static Row> {
-    GROUP_ROWS.iter().chain(ITEM_ROWS).find(|row| row.0 == property)
+    GROUP_ROWS.iter().chain(ITEM_ROWS).chain(SPACE_ROWS).find(|row| row.0 == property)
 }
 
 pub fn choices(property: &str) -> &'static [&'static str] {
@@ -121,6 +136,8 @@ pub fn choices(property: &str) -> &'static [&'static str] {
 pub struct Frame {
     pub slots: HashMap<LayerId, Slot>,
     pub sizes: HashMap<LayerId, [f32; 2]>,
+    /// 容器の外で押し合った物の、親の空間でのずれ。
+    pub nudges: HashMap<LayerId, [f32; 2]>,
     /// Display の Group の奥行きの範囲 [手前, 奥]。揃えなら面が奥で [-奥行き, 0]、奥へ積むなら [0, 積んだ厚み]。
     pub depths: HashMap<LayerId, [f32; 2]>,
 }
@@ -186,7 +203,65 @@ impl StoreView<'_> {
         if self.display(parent, t)? == 0 {
             return Ok(None);
         }
-        Ok(self.layout_frame(t)?.slots.get(&layer).copied())
+        let Some(mut slot) = self.layout_frame(t)?.slots.get(&layer).copied() else { return Ok(None) };
+        // 移り方: 少し前の行き先を、区間の重みで混ぜる(位置と大きさ)。
+        let mut acc = ([0.0f32; 2], [0.0f32; 2], 0.0f32);
+        for (at, weight) in self.transition_samples(layer, t)? {
+            if let Some(past) = self.layout_frame(at)?.slots.get(&layer) {
+                for axis in 0..2 {
+                    acc.0[axis] += past.position[axis] * weight;
+                    acc.1[axis] += past.scale[axis] * weight;
+                }
+                acc.2 += weight;
+            }
+        }
+        if acc.2 > 1e-6 {
+            slot.position = acc.0.map(|v| v / acc.2);
+            slot.scale = acc.1.map(|v| v / acc.2);
+        }
+        Ok(Some(slot))
+    }
+
+    /// 容器の外で押し合ったずれ(移り方を混ぜた後)。
+    pub(crate) fn nudge(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+        let now = self.layout_frame(t)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+        let samples = self.transition_samples(layer, t)?;
+        if samples.is_empty() {
+            return Ok(now);
+        }
+        let mut acc = [0.0f32; 2];
+        let mut total = 0.0f32;
+        for (at, weight) in samples {
+            let past = self.layout_frame(at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+            acc[0] += past[0] * weight;
+            acc[1] += past[1] * weight;
+            total += weight;
+        }
+        Ok(if total > 1e-6 { acc.map(|v| v / total) } else { now })
+    }
+
+    /// Transition の標本: (時刻, 重み)。位置(t) = Σ (E(uₖ₊₁) − E(uₖ)) · 行き先(t − D·uₖ)。時刻はコマに丸める。
+    /// Duration が 0 なら空(今の行き先そのまま)。
+    fn transition_samples(&self, layer: LayerId, t: RationalTime) -> Result<Vec<(RationalTime, f32)>, StoreError> {
+        let duration = self.number(layer, TRANSITION_DURATION, 0.0, t)?;
+        let Some(comp) = self.composition()? else { return Ok(Vec::new()) };
+        let fps = comp.fps;
+        let frames = (duration * fps.as_f64()).round();
+        if frames < 1.0 {
+            return Ok(Vec::new());
+        }
+        let easing = self.choice(layer, TRANSITION_EASING, t)?;
+        let now = t.try_to_frame_round(fps).map_err(|e| StoreError::Property(e.to_string()))?;
+        let n = frames.min(16.0) as usize;
+        let mut out = Vec::with_capacity(n);
+        for k in 0..n {
+            let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+            let weight = (ease(easing, u1) - ease(easing, u0)) as f32;
+            let back = (frames * u0).round() as i64;
+            let at = RationalTime::try_from_frame((now - back).max(0), fps).map_err(|e| StoreError::Property(e.to_string()))?;
+            out.push((at, weight));
+        }
+        Ok(out)
     }
 
     fn number(&self, layer: LayerId, name: &str, default: f64, t: RationalTime) -> Result<f64, StoreError> {
@@ -282,6 +357,7 @@ impl StoreView<'_> {
             }
         }
         if displayed.is_empty() {
+            self.push_apart(t, &displayed, &mut frame)?;
             return Ok(frame);
         }
         for list in children.values_mut() {
@@ -342,7 +418,89 @@ impl StoreView<'_> {
                 self.align_depth(group, t, &children, &mut frame)?;
             }
         }
+        self.push_apart(t, &displayed, &mut frame)?;
         Ok(frame)
+    }
+
+    /// 容器の外の兄弟同士の押し合い(間合いの法 2・3): Margin を宣言した物の箱(親の空間、間合いで広げる)の重なりを、
+    /// 決まった回数だけ押し戻す。浅い方の軸へ、Flex Shrink の比で分ける。その瞬間の宣言だけから解く。
+    fn push_apart(&self, t: RationalTime, displayed: &[LayerId], frame: &mut Frame) -> Result<(), StoreError> {
+        const ROUNDS: usize = 24;
+        let mut families: HashMap<Option<LayerId>, Vec<(LayerId, [f32; 4], f32)>> = HashMap::new();
+        for layer in self.layers() {
+            let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
+            if margin <= 0.0 || !self.here(layer, t)? {
+                continue;
+            }
+            let parent = self.attrs(layer)?.unwrap_or_default().parent;
+            if parent.is_some_and(|p| displayed.contains(&p)) {
+                continue;
+            }
+            let Some(b) = self.layer_box(layer, t)? else { continue };
+            // 押し合いの出発点は書いた位置(鍵・親)。ずれを含めた変換を読むと、前の時刻のずれを辿って巡る。
+            let local = self.authored_local(layer, t)?;
+            let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)));
+            let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p)) - glam::Vec2::splat(margin);
+            let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p)) + glam::Vec2::splat(margin);
+            let shrink = self.number(layer, FLEX_SHRINK, 1.0, t)?.max(0.0) as f32;
+            families.entry(parent).or_default().push((layer, [lo.x, lo.y, hi.x, hi.y], shrink));
+        }
+        for (_, mut items) in families {
+            if items.len() < 2 {
+                continue;
+            }
+            items.sort_by_key(|item| item.0);
+            let mut moved = vec![[0.0f32; 2]; items.len()];
+            for _ in 0..ROUNDS {
+                let mut any = false;
+                for i in 0..items.len() {
+                    for j in i + 1..items.len() {
+                        let (a, b) = (items[i].1, items[j].1);
+                        let dx = a[2].min(b[2]) - a[0].max(b[0]);
+                        let dy = a[3].min(b[3]) - a[1].max(b[1]);
+                        if dx <= 0.0 || dy <= 0.0 {
+                            continue;
+                        }
+                        let (si, sj) = (items[i].2, items[j].2);
+                        if si + sj <= 0.0 {
+                            continue;
+                        }
+                        let (wi, wj) = (si / (si + sj), sj / (si + sj));
+                        let centre = |r: [f32; 4]| [(r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5];
+                        let (ca, cb) = (centre(a), centre(b));
+                        let (axis, depth) = if dx < dy { (0, dx) } else { (1, dy) };
+                        let sign = if cb[axis] >= ca[axis] { 1.0 } else { -1.0 };
+                        let push = |r: &mut [f32; 4], d: f32| { r[axis] += d; r[axis + 2] += d; };
+                        push(&mut items[i].1, -sign * depth * wi);
+                        push(&mut items[j].1, sign * depth * wj);
+                        moved[i][axis] -= sign * depth * wi;
+                        moved[j][axis] += sign * depth * wj;
+                        any = true;
+                    }
+                }
+                if !any {
+                    break;
+                }
+            }
+            for (item, d) in items.iter().zip(moved) {
+                if d != [0.0, 0.0] {
+                    frame.nudges.insert(item.0, d);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 書いた値だけの層の変換(並べた結果・押し合いのずれを含まない)。
+    fn authored_local(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
+        Ok(crate::doc::core::LayerPlacement::from_transform(
+            self.pair(layer, property::ANCHOR, [0.0, 0.0], t)?,
+            self.resolve_position(layer, t)?,
+            self.pair(layer, property::SCALE, [1.0, 1.0], t)?,
+            self.number(layer, property::ROTATION, 0.0, t)? as f32,
+            self.number(layer, property::SKEW, 0.0, t)? as f32,
+            self.number(layer, property::SKEW_AXIS, 0.0, t)? as f32,
+        ))
     }
 
     /// Display の Group の背景(Background の色が透明でなければ)。角は Border Radius。描くのは形の層と同じ道。
@@ -588,7 +746,16 @@ impl StoreView<'_> {
         };
         style.size = Size { width: dimension(0), height: dimension(1) };
         style.min_size = Size { width: Dimension::length(0.0), height: Dimension::length(0.0) };
-        style.flex_shrink = 0.0;
+        // CSS の既定は 1 だが、書いていない子は縮めない(Hug の箱を潰さない)。書いた比だけ譲る。
+        style.flex_shrink = match self.value_at(layer, &PropertyId::new(FLEX_SHRINK)?, t)? {
+            Some(Value::F64(v)) => v.max(0.0) as f32,
+            _ => 0.0,
+        };
+        let margin = self.number(layer, MARGIN, 0.0, t)?.max(0.0) as f32;
+        if margin > 0.0 {
+            let m = LengthPercentageAuto::length(margin);
+            style.margin = Rect { left: m, right: m, top: m, bottom: m };
+        }
         if sizing.contains(&Sizing::Fill) {
             let row = matches!(self.choice_of_parent(layer, FLEX_DIRECTION, t)?, 0 | 2);
             let main = if row { 0 } else { 1 };
@@ -1054,6 +1221,52 @@ mod tests {
     }
 
     #[test]
+    fn free_boxes_keep_their_declared_distance_and_the_one_that_does_not_yield_stays() {
+        let mut doc = blank_project();
+        let a = add(&mut doc, 1, LayerSource::Shape, None);
+        let b = add(&mut doc, 2, LayerSource::Shape, None);
+        for (layer, x) in [(a, 100.0), (b, 150.0)] {
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+            put(&mut doc, layer, property::POSITION, Value::Vec2([x, 100.0]));
+            put(&mut doc, layer, MARGIN, Value::F64(10.0));
+        }
+        let left = |doc: &Document, id| shown(doc, id, T)[0];
+        // 素のままなら 50 px 重なる。間合い 10 ずつ → 箱の間は 20 空く。譲りは半分ずつ。
+        assert_eq!(left(&doc, b) - (left(&doc, a) + 100.0), 20.0, "they stand apart by both margins");
+        assert_eq!((left(&doc, a), left(&doc, b)), (65.0, 185.0), "each yields half");
+        put(&mut doc, a, FLEX_SHRINK, Value::F64(0.0));
+        assert_eq!((left(&doc, a), left(&doc, b)), (100.0, 220.0), "a does not yield, b takes all of it");
+    }
+
+    #[test]
+    fn a_transition_moves_to_the_new_place_over_its_duration_without_state() {
+        let mut doc = blank_project();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        let a = add(&mut doc, 1, LayerSource::Shape, None);
+        let b = add(&mut doc, 2, LayerSource::Shape, None);
+        for layer in [a, b] {
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+            put(&mut doc, layer, MARGIN, Value::F64(10.0));
+        }
+        put(&mut doc, a, property::POSITION, Value::Vec2([100.0, 100.0]));
+        put(&mut doc, a, FLEX_SHRINK, Value::F64(0.0));
+        // b は 30 コマ目に a の真上へ飛び込む(鍵は Hold)。押し戻されて右へ。
+        let mut track = crate::doc::eval::KeyframeTrack::new();
+        track.insert(crate::doc::eval::Keyframe { t: at(0), value: Value::Vec2([600.0, 100.0]), interp: crate::doc::eval::Interp::Hold, spatial: Default::default() });
+        track.insert(crate::doc::eval::Keyframe { t: at(30), value: Value::Vec2([150.0, 100.0]), interp: crate::doc::eval::Interp::Hold, spatial: Default::default() });
+        doc.apply(Intent::SetTrack { layer: b, property: PropertyId::new("position").unwrap(), track }).unwrap();
+        put(&mut doc, b, TRANSITION_DURATION, Value::F64(0.5));
+        put(&mut doc, b, TRANSITION_EASING, Value::Enum(1));
+        // 移り方が掛かるのは解いた関係(押し戻し)だけ。b 自身の鍵の動きは区間イージングの係で、そのまま効く。
+        let x = |f: i64| shown(&doc, b, at(f))[0];
+        assert!(x(30) < 160.0, "b lands where its key says, on top of a, and only begins to be pushed: {}", x(30));
+        assert!(x(37) > 170.0 && x(37) < 210.0, "halfway through the duration it is being pushed out: {}", x(37));
+        assert_eq!(x(45), 220.0, "after the duration it rests at the solved distance");
+        assert_eq!(x(37), shown(&doc, b, at(37))[0], "the same frame asked again gives the same picture");
+    }
+
+    #[test]
     fn a_picture_takes_the_size_the_host_measured() {
         let mut doc = blank_project();
         let group = flex_row(&mut doc);
@@ -1134,4 +1347,23 @@ fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3
         }
     }
     (lo.to_array(), hi.to_array())
+}
+
+/// CSS の timing function(区間の形)。Ease / Linear / Ease In / Ease Out / Ease In Out。
+fn ease(kind: i64, u: f64) -> f64 {
+    let (x1, y1, x2, y2) = match kind {
+        1 => return u.clamp(0.0, 1.0),
+        2 => (0.42, 0.0, 1.0, 1.0),
+        3 => (0.0, 0.0, 0.58, 1.0),
+        4 => (0.42, 0.0, 0.58, 1.0),
+        _ => (0.25, 0.1, 0.25, 1.0),
+    };
+    let bezier = |a: f64, b: f64, s: f64| 3.0 * a * s * (1.0 - s).powi(2) + 3.0 * b * s * s * (1.0 - s) + s.powi(3);
+    let u = u.clamp(0.0, 1.0);
+    let (mut lo, mut hi) = (0.0, 1.0);
+    for _ in 0..40 {
+        let mid = (lo + hi) * 0.5;
+        if bezier(x1, x2, mid) < u { lo = mid } else { hi = mid }
+    }
+    bezier(y1, y2, (lo + hi) * 0.5)
 }
