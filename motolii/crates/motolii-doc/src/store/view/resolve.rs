@@ -567,6 +567,7 @@ impl<'a> StoreView<'a> {
             return Ok(());
         }
         let whole = is_group && base.effects[first].scope == crate::doc::store::EffectScope::Whole;
+        let whole_transform = params.iter().any(|(n, v)| n == "transform" && matches!(v, crate::doc::store::Value::F64(x) if x.round() == f64::from(placement::TRANSFORM_WHOLE)));
         let picks = placement::picks(params, &children.iter().map(|c| c.0).collect::<Vec<_>>(), placements.len());
         for (placement, outline) in placements {
             let Ok(at) = t.try_sub(placement.time_offset) else { continue };
@@ -587,6 +588,9 @@ impl<'a> StoreView<'a> {
                 if let Some(p) = parent {
                     worlds_at.extend(self.world_transform3d_chain(p, at, present)?);
                 }
+                if whole_transform {
+                    worlds_at.extend(self.world_transform3d_chain(layer, at, present)?);
+                }
             }
             let worlds = if shifted { &worlds_at } else { world_transforms };
             let memo = if shifted { &mut memo_at } else { &mut *memo };
@@ -594,6 +598,17 @@ impl<'a> StoreView<'a> {
             let parent2 = parent.map(|p| self.world_affine(p, at, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
             let parent3 = parent.and_then(|p| worlds.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
             let pivot = glam::Vec2::from(self.resolve_position(layer, at)?);
+            // Each: ずれは親の空間、回転と大きさは層の位置が中心(複製 1 つずつ)。
+            // Whole: ずれは層自身の空間、中心は層のアンカー — 層を回すと並びごと回る。
+            let (frame2, frame3, around) = if whole_transform {
+                let anchor = match self.value_at(layer, &crate::doc::store::PropertyId::new(crate::doc::store::property::ANCHOR)?, at)? {
+                    Some(crate::doc::store::Value::Vec2(v)) => glam::Vec2::new(v[0] as f32, v[1] as f32),
+                    _ => glam::Vec2::ZERO,
+                };
+                (self.world_affine(layer, at, present, memo, visiting)?, worlds.get(&layer).copied().unwrap_or(glam::Affine3A::IDENTITY), anchor)
+            } else {
+                (parent2, parent3, pivot)
+            };
             for subject in subjects {
                 let mut copy = if !is_group && !shifted {
                     base.clone()
@@ -612,10 +627,11 @@ impl<'a> StoreView<'a> {
                 copy.copy = placement.index;
                 copy.shape_stretch = outline;
                 copy.placement.transform =
-                    parent2 * placement.affine2(pivot) * parent2.inverse() * copy.placement.transform;
+                    frame2 * placement.affine2(around) * frame2.inverse() * copy.placement.transform;
                 if let Some(world) = copy.placement.world_transform {
+                    let depth = if whole_transform { 0.0 } else { copy.placement.z };
                     copy.placement.world_transform = Some(
-                        parent3 * placement.affine3(pivot.extend(copy.placement.z)) * parent3.inverse() * world,
+                        frame3 * placement.affine3(around.extend(depth)) * frame3.inverse() * world,
                     );
                 }
                 copy.placement.opacity = (copy.placement.opacity * placement.opacity).clamp(0.0, 1.0);

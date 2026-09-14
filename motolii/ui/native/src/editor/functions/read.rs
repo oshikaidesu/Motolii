@@ -128,7 +128,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                 let rows = kind.params.iter().filter(|p| p.shown(mode)).filter_map(|param| {
                     let prop = PropertyId::effect_param(id, param.name).ok()?;
                     let keyed = view.track(layer, &prop).ok().flatten().is_some();
-                    let value = get(param.name).unwrap_or_else(|| param.default_value());
+                    let value = get(param.name).or_else(|| crate::doc::store::placement::default_for(kind, param.name, mode)).unwrap_or_else(|| param.default_value());
                     let (cells, vec2) = match value {
                         Value::Vec2([x, y]) => ([f(x), f(y), String::new()], true),
                         Value::F64(v) => ([String::new(), String::new(), f(v)], false),

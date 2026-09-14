@@ -396,6 +396,30 @@ fn a_placement_effect_multiplies_the_layer_and_delays_later_copies() {
     assert_eq!(early.iter().map(|c| c.copy).collect::<Vec<_>>(), [0]);
 }
 
+/// Repeater の Transform(2026-09-14 利用者裁定: 選べる)。Each は層を回すと複製が 1 つずつ回り、並びは動かない。
+/// Whole は並びごと層のアンカーを中心に回る(AE のシェイプ層の Repeater・Cavalry Duplicator・C4D Cloner)。
+#[test]
+fn a_repeaters_transform_turns_each_copy_or_the_whole_arrangement() {
+    use motolii::doc::store::{placement, property, EffectId, EffectInstance};
+    let origins = |choice: f64| {
+        let mut doc = document();
+        let paper = layer(&mut doc, 1, LayerSource::Shape);
+        put(&mut doc, paper, [100.0, 50.0]);
+        let repeat = EffectId(0);
+        doc.apply_all([
+            Intent::SetEffects { layer: paper, effects: vec![EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() }] },
+            Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(2.0) },
+            Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([20.0, 0.0]) },
+            Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "transform").unwrap(), value: Value::F64(choice) },
+            Intent::SetConstant { layer: paper, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(90.0) },
+        ])
+        .unwrap();
+        doc.view().resolved_layers(at(90)).unwrap().iter().map(|c| c.placement.transform.translation.to_array().map(|v| v.round())).collect::<Vec<_>>()
+    };
+    assert_eq!(origins(f64::from(placement::TRANSFORM_EACH)), [[100.0, 50.0], [120.0, 50.0]], "each copy turns in place; the row stays");
+    assert_eq!(origins(f64::from(placement::TRANSFORM_WHOLE)), [[100.0, 50.0], [100.0, 70.0]], "the row turns with the layer");
+}
+
 #[test]
 fn animate_decides_whether_a_touch_becomes_a_key_or_moves_the_whole_motion() {
     let mut doc = document();

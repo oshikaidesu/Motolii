@@ -47,6 +47,11 @@ pub const SHAPES: &[&str] = &["Line", "Circle", "Grid"];
 pub const PICK_RANDOM: u8 = 0;
 pub const PICK_ITERATE: u8 = 1;
 pub const PICKS: &[&str] = &["Random", "Iterate"];
+/// 層の変形(回転・大きさ)を複製 1 つずつに掛けるか、並び全体に掛けるか(2026-09-14 利用者裁定: 選べる)。
+/// Whole は AE のシェイプ層の Repeater・Cavalry Duplicator・C4D Cloner と同じく、層を回すと並びごと回る。
+pub const TRANSFORM_EACH: u8 = 0;
+pub const TRANSFORM_WHOLE: u8 = 1;
+pub const TRANSFORMS: &[&str] = &["Each", "Whole"];
 /// 子ごとの重みの param 名。`share.<layer id>`。無ければ 100。
 pub const SHARE_PREFIX: &str = "share.";
 pub const SHARE_DEFAULT: f64 = 100.0;
@@ -67,6 +72,7 @@ pub const KINDS: &[PlacementKind] = &[PlacementKind {
         number("count", "Count", "Shape", 3.0, Some((1.0, 1000.0)), None),
         PlacementParam { name: "mode", label: "Along", section: "Shape", kind: ParamKind::Choice(SHAPES), default: [0.0, 0.0], range: Some((0.0, 2.0)), modes: None },
         PlacementParam { name: "pick", label: "Pick", section: "Shape", kind: ParamKind::Choice(PICKS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None },
+        PlacementParam { name: "transform", label: "Transform", section: "Shape", kind: ParamKind::Choice(TRANSFORMS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None },
         number("columns", "Columns", "Shape", 3.0, Some((1.0, 1000.0)), Some(&[GRID])),
         number("radius", "Radius", "Shape", 200.0, Some((0.0, f64::MAX)), Some(&[CIRCLE])),
         number("start_angle", "Start", "Shape", 0.0, None, Some(&[CIRCLE])),
@@ -102,6 +108,16 @@ pub fn unit(name: &str) -> &'static str {
         "start_angle" | "sweep" => "°",
         _ => "",
     }
+}
+
+/// 形で変わる既定値。Circle の Position Each は 0 — 並べる向きの既定 [100, 0] が円を右へずらした螺旋にしないように
+/// (2026-09-14 利用者裁定。Each を足せば螺旋にもできる)。窓の欄と配置が同じここを読む。
+pub fn default_for(kind: &PlacementKind, name: &str, mode: u8) -> Option<Value> {
+    let param = kind.params.iter().find(|p| p.name == name)?;
+    if mode == CIRCLE && name == "position_each" {
+        return Some(Value::Vec2([0.0, 0.0]));
+    }
+    Some(param.default_value())
 }
 
 pub fn kind(plugin_id: &str) -> Option<&'static PlacementKind> {
@@ -151,14 +167,15 @@ pub fn placements(kind: &PlacementKind, params: &[(String, Value)]) -> Vec<Place
             _ => param(name).map_or(0.0, |p| p.default[0]),
         }
     };
+    let mode = get("mode").round().clamp(0.0, (SHAPES.len() - 1) as f64) as u8;
     let get2 = |name: &str| -> [f64; 2] {
-        match value(name) {
-            Some(Value::Vec2(v)) if v.iter().all(|c| c.is_finite()) => v,
-            _ => param(name).map_or([0.0, 0.0], |p| p.default),
+        match (value(name), default_for(kind, name, mode)) {
+            (Some(Value::Vec2(v)), _) if v.iter().all(|c| c.is_finite()) => v,
+            (_, Some(Value::Vec2(v))) => v,
+            _ => [0.0, 0.0],
         }
     };
     let count = get("count").round().clamp(1.0, 1000.0) as u32;
-    let mode = get("mode").round().clamp(0.0, (SHAPES.len() - 1) as f64) as u8;
     let seed = get("seed").round() as i64 as u64;
     let each = get2("position_each");
     let columns = get("columns").round().clamp(1.0, 1000.0) as u32;
@@ -282,6 +299,16 @@ mod pure_function_contract {
         let half = repeat(&[("mode", n(f64::from(CIRCLE))), ("count", n(3.0)), ("radius", n(10.0)), ("sweep", n(180.0)), ("position_each", Value::Vec2([0.0, 0.0]))]);
         let rounded: Vec<[f32; 2]> = half.iter().map(|p| p.offset.map(|c| c.round())).collect();
         assert_eq!(rounded, [[10.0, 0.0], [0.0, 10.0], [-10.0, 0.0]]);
+    }
+
+    #[test]
+    fn a_circle_left_at_its_defaults_closes_around_the_layer() {
+        let out = repeat(&[("mode", n(f64::from(CIRCLE))), ("count", n(4.0)), ("radius", n(10.0))]);
+        let centre = out.iter().fold([0.0f32; 2], |c, p| [c[0] + p.offset[0] / 4.0, c[1] + p.offset[1] / 4.0]);
+        assert!(centre[0].abs() < 1e-4 && centre[1].abs() < 1e-4, "{centre:?}");
+        assert_eq!(default_for(kind(REPEAT).unwrap(), "position_each", LINE), Some(Value::Vec2([100.0, 0.0])));
+        let spiral = repeat(&[("mode", n(f64::from(CIRCLE))), ("count", n(4.0)), ("radius", n(10.0)), ("position_each", Value::Vec2([5.0, 0.0]))]);
+        assert_eq!(spiral[3].offset.map(|c| c.round()), [15.0, -10.0], "an Each the user set still flows along the circle");
     }
 
     #[test]
