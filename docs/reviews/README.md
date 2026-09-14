@@ -840,4 +840,6 @@
 
 - [間合いの法 — 物が自分の距離を宣言し、関係の変化は時間の側で](2026-09-14-margin-law.md)
 
+- [物を避けて流れる文字 — CSS shape-outside を動画の骨格へ(提案)](2026-09-15-shape-outside.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
