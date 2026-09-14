@@ -911,6 +911,12 @@ impl<'a> StoreView<'a> {
         memo: &mut HashMap<LayerId, glam::Affine2>,
         visiting: &mut HashSet<LayerId>,
     ) -> Result<Vec<ResolvedMask>, StoreError> {
+        // 奥行きを持つ網・点群は 2D の mask で切れない(切り口は面の法の宿題)。
+        if let Some(crate::doc::store::LayerMeta { source: crate::doc::store::LayerSource::File { path, .. }, .. }) = self.meta(layer)? {
+            if self.analysis().and_then(|a| a.extent(&path)).is_some_and(|e| e[2] > 0.0) {
+                return Ok(masks);
+            }
+        }
         let mut seen = HashSet::from([layer]);
         let mut next = self.attrs(layer)?.unwrap_or_default().parent;
         let mut own: Option<glam::Affine2> = None;

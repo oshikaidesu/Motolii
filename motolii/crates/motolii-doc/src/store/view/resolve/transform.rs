@@ -51,7 +51,7 @@ impl<'a> StoreView<'a> {
             None => (self.resolve_position(layer, when(0))?, vec2(property::SCALE, [1.0, 1.0], when(1))?),
         };
         Ok(LayerPlacement::from_transform(
-            vec2(property::ANCHOR, [0.0, 0.0], t)?,
+            match slot { Some(slot) => slot.anchor, None => vec2(property::ANCHOR, [0.0, 0.0], t)? },
             position,
             scale,
             scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]),

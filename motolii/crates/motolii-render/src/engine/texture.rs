@@ -459,6 +459,9 @@ impl Engine {
             }
             LayerSource::Shape => {
                 let shapes = shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]);
+                // 並べる法の Fill / Blob の箱合わせで輪郭を伸ばした形は、押し出しも伸ばした輪郭から(板の絵と同じ形)。
+                let stretched = (layer.shape_stretch != [1.0, 1.0]).then(|| crate::doc::vector::stretch_outline(shapes, layer.shape_stretch));
+                let shapes = stretched.as_deref().unwrap_or(shapes);
                 match content_canvas(shapes)? {
                     Some(canvas) => crate::render::compositor::paths::outlines(shapes, &canvas)?,
                     None => Vec::new(),

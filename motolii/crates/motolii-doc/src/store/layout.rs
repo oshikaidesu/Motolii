@@ -131,10 +131,12 @@ pub struct Slot {
     pub wrap: Option<f32>,
     /// 奥行きの揃えで足す z(Position Z に足す)。面が奥(z = 0)、物は camera 側(負)へ出る。
     pub z: f32,
-    /// 3D の Object Fit で奥行きにも掛ける倍率(Scale Z に掛ける)。
+    /// 奥行きに足す倍率(Scale Z に掛ける)。網・点群の奥行きは描く側が xy の拡縮から伸ばすので、今は 1。
     pub scale_z: f32,
     /// 並びに効く回転(Tilt X・Tilt Y・Rotation、度)。層の Rotation / Tilt に足す。
     pub rotation: [f32; 3],
+    /// 拡縮・回転の中心(素材座標)。Anchor を書いていなければ箱の中心(CSS の transform-origin: 50% 50%)。
+    pub anchor: [f32; 2],
 }
 
 /// view の寿命の間、時刻ごとに 1 回だけ解く(view は値を変えない)。
@@ -403,7 +405,9 @@ impl StoreView<'_> {
         let range = match &meta.source {
             LayerSource::Shape | LayerSource::Text => [0.0, self.number(layer, property::DEPTH, 0.0, t)?.max(0.0) as f32],
             LayerSource::File { path, .. } => {
-                let d = self.analysis().and_then(|a| a.extent(path)).map_or(0.0, |e| e[2]);
+                // 描く側と同じ: 奥行きは xy の拡縮の平均で伸びる(depth_scaled)。
+                let scale = frame.slots.get(&layer).map_or(self.pair(layer, property::SCALE, [1.0, 1.0], t)?, |s| s.scale);
+                let d = self.analysis().and_then(|a| a.extent(path)).map_or(0.0, |e| e[2]) * (scale[0].abs() + scale[1].abs()) * 0.5;
                 [-d * 0.5, d * 0.5]
             }
             LayerSource::Group => frame.depths.get(&layer).copied().unwrap_or([0.0, 0.0]),
@@ -417,12 +421,20 @@ impl StoreView<'_> {
                     _ => self.layer_box(layer, t)?.unwrap_or([0.0; 4]),
                 };
                 let scale = self.pair(layer, property::SCALE, [1.0, 1.0], t)?;
-                let anchor = self.pair(layer, property::ANCHOR, [0.0, 0.0], t)?;
+                let anchor = self.item_anchor(layer, t, bounds)?;
                 let (lo, hi) = footprint(bounds, [range[0], range[1]], anchor, [scale[0], scale[1], 1.0], rotation);
                 Ok([lo[2], hi[2]])
             }
             None => Ok(range),
         }
+    }
+
+    /// 並ぶ子の拡縮・回転の中心。Anchor を書いた層はその値、書いていなければ箱の中心(CSS の transform-origin)。
+    fn item_anchor(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<[f32; 2], StoreError> {
+        Ok(match self.value_at(layer, &PropertyId::new(property::ANCHOR)?, t)? {
+            Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32],
+            _ => [(bounds[0] + bounds[2]) * 0.5, (bounds[1] + bounds[3]) * 0.5],
+        })
     }
 
     /// 並べる前の奥行きの範囲(Scale Z 込み、Object Fit と回転は無し)。葉の箱を測る時。
@@ -624,7 +636,6 @@ impl StoreView<'_> {
     /// 置かれた枠へ、層の箱を合わせる Position と Scale(と形の輪郭の伸び)。Position の値はずれとして足す。
     fn slot(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4], sizing: [Sizing; 2], fit: i64, placed: taffy::Layout) -> Result<Slot, StoreError> {
         let scale = self.pair(layer, property::SCALE, [1.0, 1.0], t)?;
-        let anchor = self.pair(layer, property::ANCHOR, [0.0, 0.0], t)?;
         let offset = self.resolve_position(layer, t)?;
         let cell = [placed.size.width, placed.size.height];
         let natural = [(bounds[2] - bounds[0]) * scale[0].abs(), (bounds[3] - bounds[1]) * scale[1].abs()];
@@ -649,6 +660,7 @@ impl StoreView<'_> {
             ([1.0, 1.0], bounds, [scale[0] * factor[0], scale[1] * factor[1]])
         };
         let rotation = self.layout_rotation(layer, t)?;
+        let anchor = self.item_anchor(layer, t, bounds)?;
         let (lo, hi) = footprint(bounds, self.raw_depth(layer, t)?, anchor, [scale[0], scale[1], 1.0], rotation);
         let shown = [hi[0] - lo[0], hi[1] - lo[1]];
         let mut position = [0.0; 2];
@@ -656,8 +668,9 @@ impl StoreView<'_> {
             let target = [placed.location.x, placed.location.y][axis] + (cell[axis] - shown[axis]) * 0.5;
             position[axis] = target - lo[axis] + offset[axis];
         }
-        let scale_z = if is_shape || !matches!(fit, 1 | 2) || factor[0] != factor[1] { 1.0 } else { factor[0] };
-        Ok(Slot { position, scale, stretch, wrap: None, z: 0.0, scale_z, rotation })
+        // 奥行きのある素材は、描く側が xy の拡縮の平均を奥行きに掛ける(球は球のまま)。ここで Scale Z に掛けると二重になる。
+        let scale_z = 1.0;
+        Ok(Slot { position, scale, stretch, wrap: None, z: 0.0, scale_z, rotation, anchor })
     }
 }
 
@@ -933,8 +946,9 @@ mod tests {
         let view = doc.view().with_analysis(&inputs);
         let frame = view.layout_frame(T).unwrap();
         assert_eq!(view.layer_box(picture, T).unwrap(), Some([0.0, 0.0, 320.0, 180.0]));
-        // 形の素材座標は輪郭の canvas の 1 画素外が原点、画は 0。
-        assert_eq!(frame.slots[&after].position[0] + 1.0, frame.slots[&picture].position[0] + 320.0 + 10.0, "the next item starts after the picture and the gap");
+        // 箱の左端 = 位置 - 中心 + 箱の左(形の素材座標は輪郭の canvas の 1 画素外が原点、画は 0)。
+        let left = |id: LayerId, min: f32| frame.slots[&id].position[0] - frame.slots[&id].anchor[0] + min;
+        assert_eq!(left(after, 1.0), left(picture, 0.0) + 320.0 + 10.0, "the next item starts after the picture and the gap");
     }
 
     #[test]
