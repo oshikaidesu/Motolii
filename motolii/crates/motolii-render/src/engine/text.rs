@@ -1,5 +1,5 @@
 use crate::doc::store::{RationalTime, TextDocument, TextDocumentStyle};
-use crate::doc::store::text_frame::shape_document;
+use crate::doc::store::text_frame::{shape_document, shape_document_around, Obstacle};
 use crate::doc::vector::text::TextShapeError;
 use crate::doc::store::ShapeNode;
 use crate::doc::vector::{
@@ -44,21 +44,37 @@ pub fn text_shapes_morphed(
     t: RationalTime,
     canvas: &Canvas,
 ) -> Result<Option<Vec<ShapeNode>>, TextRenderError> {
-    text_shapes_moving(document, morph, None, t, canvas)
+    text_shapes_moving(document, morph, Flow::default(), t, canvas)
+}
+
+/// 並べる法から文字の組みへ渡る物: 字ごとのずれ(折り返しの移り方)と、避けて流れる物(shape-outside)。
+#[derive(Clone, Copy, Default)]
+pub struct Flow<'a> {
+    pub offsets: Option<&'a [[f32; 2]]>,
+    pub around: &'a [Obstacle],
+}
+
+impl<'a> Flow<'a> {
+    pub fn of(layer: &'a crate::doc::store::ResolvedLayer) -> Self {
+        Self {
+            offsets: layer.glyph_offsets.as_deref().map(Vec::as_slice),
+            around: layer.flow_around.as_deref().map_or(&[], Vec::as_slice),
+        }
+    }
 }
 
 /// `offsets` は字ごとのずれ(組んだ順の字)。折り返しの移り方で、字を前の場所から今の場所へ運ぶ。
 pub fn text_shapes_moving(
     document: &TextDocument,
     morph: Option<(&TextDocument, f64)>,
-    offsets: Option<&[[f32; 2]]>,
+    flow: Flow<'_>,
     t: RationalTime,
     canvas: &Canvas,
 ) -> Result<Option<Vec<ShapeNode>>, TextRenderError> {
-    let Some(mut shaped) = shape_document(document, t, canvas)? else {
+    let Some(mut shaped) = shape_document_around(document, t, canvas, flow.around)? else {
         return Ok(None);
     };
-    if let Some(offsets) = offsets {
+    if let Some(offsets) = flow.offsets {
         for (contour, glyph) in shaped.contours.iter_mut().zip(&shaped.contour_glyphs) {
             if let Some(d) = offsets.get(*glyph) {
                 for v in &mut contour.vertices {

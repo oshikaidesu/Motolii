@@ -515,6 +515,8 @@ pub struct ResolvedLayer {
     pub shape_stretch: [f32; 2],
     /// 文字の字ごとのずれ(組んだ順の字、素材座標)。折り返しが変わった時、字が前の場所から移る(間合いの法 4 の Transition)。
     pub glyph_offsets: Option<std::sync::Arc<Vec<[f32; 2]>>>,
+    /// 折り返す文字が避ける物(CSS `shape-outside`)、文字の枠の座標。
+    pub flow_around: Option<std::sync::Arc<Vec<crate::doc::store::text_frame::Obstacle>>>,
 }
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。

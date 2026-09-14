@@ -58,7 +58,7 @@ Web は最初から要素が箱で、並べ方は値を 1 つ選ぶだけ。2026
 | `text-wrap: pretty` | Chromium・Safari 26 | 最終行に 1 語だけ残さない | 手で改行 | 無 |
 | `text-box-trim` | Chromium・Safari 18.2 | 字面の上下(cap・alphabetic)でぴったり揃える | 目で合わせる | 無(行の箱の上で自然) |
 | `writing-mode: vertical-rl`、`text-orientation`、`text-combine-upright`(縦中横) | 全ブラウザ | **縦書きの歌詞、縦中横の数字** | 1 字ずつ層を組む | 無 |
-| `shape-outside` | 全ブラウザ | **文字が物の輪郭(歌う人の影、Blob)を避けて流れる** | ほぼ不可能 | 無(Blob の輪郭を形として渡せる) |
+| `shape-outside` | 全ブラウザ | **文字が物の輪郭(歌う人の影、Blob)を避けて流れる** | ほぼ不可能 | 一部(提案 [2026-09-15](2026-09-15-shape-outside.md): 形・箱・Blob の塊。画のアルファは無) |
 | `initial-letter` | Safari・Chromium | 大きな頭文字が数行に沈む | 手で組む | 無 |
 | `background-clip: text` | 全ブラウザ | 文字の形に動画・グラデーション | マット | 係が違う(マット・クリッピングで済) |
 | `-webkit-text-stroke`・`paint-order` | 全ブラウザ | 縁取りを塗りの下に | 線の順番 | 一部(既定の黒の縁取りあり) |

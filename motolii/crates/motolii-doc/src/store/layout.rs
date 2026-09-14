@@ -50,6 +50,10 @@ pub const FLEX_SHRINK: &str = "layout.flex_shrink";
 /// 解いた行き先が変わった時の移り方(CSS の transition)。秒と、区間の形。
 pub const TRANSITION_DURATION: &str = "layout.transition_duration";
 pub const TRANSITION_EASING: &str = "layout.transition_easing";
+/// 文字が避けて流れる物の形(CSS `shape-outside`、宣言するのは避けられる物の側)。同じ親の、折り返す文字が避ける。
+/// Margin Box = 箱 + Margin、Content = 形の輪郭(Blob Track の層は塊の箱)。間は `Shape Margin`。
+pub const SHAPE_OUTSIDE: &str = "layout.shape_outside";
+pub const SHAPE_MARGIN: &str = "layout.shape_margin";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -112,6 +116,8 @@ pub const SPACE_ROWS: &[Row] = &[
     (FLEX_SHRINK, "Flex Shrink", Value::F64(1.0), Some((0.0, 1000.0)), &[]),
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
+    (SHAPE_OUTSIDE, "Shape Outside", Value::Enum(0), None, &["None", "Margin Box", "Content"]),
+    (SHAPE_MARGIN, "Shape Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
 ];
 
 /// 格子の線の太さの既定(fr)。
@@ -186,13 +192,19 @@ struct Leaf {
 
 impl StoreView<'_> {
     /// 移り方(Transition)が遡るコマ数の最大。host は解析の入力(Blob の塊)をこのコマ数だけ前まで置く。
+    /// 移り方は重なる(折り返しの移り方が前の時刻で組み、その時刻の避ける物がさらに前の形を混ぜる)ので、長い順に 2 つの和。
     pub fn transition_reach(&self, t: RationalTime) -> Result<i64, StoreError> {
         let Some(comp) = self.composition()? else { return Ok(0) };
-        let mut reach = 0.0f64;
+        let mut longest = [0.0f64; 2];
         for layer in self.layers() {
-            reach = reach.max(self.number(layer, TRANSITION_DURATION, 0.0, t)?);
+            let d = self.number(layer, TRANSITION_DURATION, 0.0, t)?;
+            if d > longest[0] {
+                longest = [d, longest[0]];
+            } else if d > longest[1] {
+                longest[1] = d;
+            }
         }
-        Ok((reach * comp.fps.as_f64()).round() as i64)
+        Ok(((longest[0] + longest[1]) * comp.fps.as_f64()).round() as i64 + 1)
     }
 
     /// その時刻に並べた結果。Display の Group が無ければ空。
@@ -267,7 +279,7 @@ impl StoreView<'_> {
     }
 
     /// 文字の折り返しの移り方: Transition を持つ文字は、少し前のコマの組の字の位置との差を区間の重みで混ぜる。
-    /// 字は組んだ順で対にする(Text Morph と同じ番)。字の数が違うコマは、共通の字だけ。差が無ければ None。
+    /// 字は元の文字の byte で対にする。前のコマに無い字は動かさない。差が無ければ None。
     pub(crate) fn glyph_offsets(&self, layer: LayerId, t: RationalTime) -> Result<Option<std::sync::Arc<Vec<[f32; 2]>>>, StoreError> {
         if !self.meta(layer)?.is_some_and(|m| m.source == LayerSource::Text) {
             return Ok(None);
@@ -278,20 +290,24 @@ impl StoreView<'_> {
         }
         let Some(comp) = self.composition()? else { return Ok(None) };
         let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
-        let glyphs = |at: RationalTime| -> Result<Vec<[f32; 2]>, StoreError> {
+        // 字は元の文字の byte で対にする(組み直しで行頭の空白が落ちても、隣の字と取り違えない)。
+        let glyphs = |at: RationalTime| -> Result<Vec<(usize, [f32; 2])>, StoreError> {
             let Some(document) = self.resolved_text_document(layer, at)? else { return Ok(Vec::new()) };
-            let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document(&document, at, &canvas) else { return Ok(Vec::new()) };
-            Ok(shaped.lines.iter().flat_map(|line| line.glyph_xs.iter().map(move |x| [*x, line.baseline_y])).collect())
+            let around = self.flow_around(layer, at)?;
+            let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document_around(&document, at, &canvas, around.as_deref().map_or(&[], Vec::as_slice)) else { return Ok(Vec::new()) };
+            Ok(shaped.lines.iter().flat_map(|line| line.glyph_bytes.iter().zip(&line.glyph_xs).map(move |(b, x)| (*b, [*x, line.baseline_y]))).collect())
         };
         let now = glyphs(t)?;
         let mut sum = vec![[0.0f32; 2]; now.len()];
         let mut weight = vec![0.0f32; now.len()];
         for (at, w) in samples {
-            let past = glyphs(at)?;
-            for (n, p) in past.iter().enumerate().take(now.len()) {
-                sum[n][0] += (p[0] - now[n][0]) * w;
-                sum[n][1] += (p[1] - now[n][1]) * w;
-                weight[n] += w;
+            let past: HashMap<usize, [f32; 2]> = glyphs(at)?.into_iter().collect();
+            for (n, (byte, here)) in now.iter().enumerate() {
+                if let Some(p) = past.get(byte) {
+                    sum[n][0] += (p[0] - here[0]) * w;
+                    sum[n][1] += (p[1] - here[1]) * w;
+                    weight[n] += w;
+                }
             }
         }
         let offsets: Vec<[f32; 2]> = sum.iter().zip(&weight).map(|(s, w)| if *w > 1e-6 { [s[0] / w, s[1] / w] } else { [0.0, 0.0] }).collect();
@@ -570,6 +586,104 @@ impl StoreView<'_> {
             self.number(layer, property::SKEW, 0.0, t)? as f32,
             self.number(layer, property::SKEW_AXIS, 0.0, t)? as f32,
         ))
+    }
+
+    /// 折り返す文字が避ける物(同じ親で Shape Outside を持つ兄弟)を、文字の枠の座標の多角形で。無ければ None。
+    /// 物が Transition を持てば、少し前の時刻の形も重みつきで渡す(文字の組みは重みの過半が覆う所を避ける)。
+    pub(crate) fn flow_around(&self, text: LayerId, t: RationalTime) -> Result<Option<std::sync::Arc<Vec<crate::doc::store::text_frame::Obstacle>>>, StoreError> {
+        if !self.meta(text)?.is_some_and(|m| m.source == LayerSource::Text) {
+            return Ok(None);
+        }
+        let parent = self.attrs(text)?.unwrap_or_default().parent;
+        let mut to_text: Option<glam::Affine2> = None;
+        let mut out = Vec::new();
+        for layer in self.layers() {
+            if layer == text || self.attrs(layer)?.unwrap_or_default().parent != parent {
+                continue;
+            }
+            let mode = self.choice(layer, SHAPE_OUTSIDE, t)?;
+            if mode == 0 || !self.here(layer, t)? {
+                continue;
+            }
+            if to_text.is_none() {
+                if self.resolved_text_document(text, t)?.and_then(|d| d.wrap_size).is_none() {
+                    return Ok(None);
+                }
+                to_text = Some(self.world_2d(text, t)?.inverse());
+            }
+            let to_text = to_text.unwrap_or(glam::Affine2::IDENTITY);
+            let margin = self.number(layer, SHAPE_MARGIN, 0.0, t)?.max(0.0) as f32;
+            let mut samples = self.transition_samples(layer, t)?;
+            if samples.is_empty() {
+                samples.push((t, 1.0));
+            }
+            for (at, weight) in samples {
+                for poly in self.declared_shape(layer, mode, at)? {
+                    if poly.len() >= 3 {
+                        out.push(crate::doc::store::text_frame::Obstacle { margin, weight, points: poly.into_iter().map(|p| to_text.transform_point2(p).to_array()).collect() });
+                    }
+                }
+            }
+        }
+        Ok((!out.is_empty()).then(|| std::sync::Arc::new(out)))
+    }
+
+    /// Shape Outside が宣言する形(comp の多角形)。Margin Box = 箱 + Margin、Content = 輪郭か Blob の塊の箱。
+    fn declared_shape(&self, layer: LayerId, mode: i64, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
+        let rect = |b: [f32; 4]| vec![glam::vec2(b[0], b[1]), glam::vec2(b[2], b[1]), glam::vec2(b[2], b[3]), glam::vec2(b[0], b[3])];
+        if mode == 2 {
+            if let Some(marks) = self.analysis().and_then(|a| a.blobs(layer, crate::doc::store::EffectId(0), t)) {
+                return Ok(marks.iter().map(|mark| {
+                    let (c, h) = (glam::Vec2::from(mark.center), glam::Vec2::from(mark.size) * 0.5);
+                    rect([c.x - h.x, c.y - h.y, c.x + h.x, c.y + h.y])
+                }).collect());
+            }
+        }
+        let world = self.world_2d(layer, t)?;
+        let local = self.outline(layer, t)?;
+        if mode == 1 {
+            let grow = self.number(layer, MARGIN, 0.0, t)? as f32;
+            let (lo, hi) = local.iter().flatten().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+            if lo.x > hi.x {
+                return Ok(Vec::new());
+            }
+            return Ok(vec![rect([lo.x - grow, lo.y - grow, hi.x + grow, hi.y + grow]).into_iter().map(|p| world.transform_point2(p)).collect()]);
+        }
+        Ok(local.into_iter().map(|poly| poly.into_iter().map(|p| world.transform_point2(p)).collect()).collect())
+    }
+
+    /// 層の輪郭(素材座標の多角形)。形は曲線を刻んだ輪郭(並べた伸びを込み)、他は層の箱。
+    fn outline(&self, layer: LayerId, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
+        let Some(meta) = self.meta(layer)? else { return Ok(Vec::new()) };
+        if meta.source == LayerSource::Shape {
+            let stretch = self.laid_out(layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch);
+            let shapes = crate::doc::vector::stretch_outline(&self.shapes_at(layer, t)?, stretch);
+            let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(Vec::new()) };
+            let origin = glam::vec2(canvas.origin_x as f32, canvas.origin_y as f32);
+            let mut out = Vec::new();
+            for shape in crate::doc::vector::flatten(&shapes).unwrap_or_default() {
+                for instance in crate::doc::vector::resolve(&shape).unwrap_or_default() {
+                    for contour in &instance.path {
+                        let n = contour.vertices.len();
+                        let mut poly = Vec::new();
+                        let p = |v: crate::doc::vector::Point| glam::vec2(v.x as f32, v.y as f32);
+                        for i in 0..if contour.closed { n } else { n.saturating_sub(1) } {
+                            let (a, b) = (&contour.vertices[i], &contour.vertices[(i + 1) % n]);
+                            let (p0, p3) = (p(a.point), p(b.point));
+                            let (p1, p2) = (p0 + p(a.out_tangent), p3 + p(b.in_tangent));
+                            for k in 0..8 {
+                                let u = k as f32 / 8.0;
+                                let w = 1.0 - u;
+                                poly.push(p0 * w * w * w + p1 * 3.0 * w * w * u + p2 * 3.0 * w * u * u + p3 * u * u * u + origin);
+                            }
+                        }
+                        out.push(poly);
+                    }
+                }
+            }
+            return Ok(out);
+        }
+        Ok(self.layer_box(layer, t)?.map(|b| vec![vec![glam::vec2(b[0], b[1]), glam::vec2(b[2], b[1]), glam::vec2(b[2], b[3]), glam::vec2(b[0], b[3])]]).unwrap_or_default())
     }
 
     /// Display の Group の背景(Background の色が透明でなければ)。角は Border Radius。描くのは形の層と同じ道。
@@ -1349,6 +1463,54 @@ mod tests {
         // 箱の左端 = 位置 - 中心 + 箱の左(形の素材座標は輪郭の canvas の 1 画素外が原点、画は 0)。
         let left = |id: LayerId, min: f32| frame.slots[&id].position[0] - frame.slots[&id].anchor[0] + min;
         assert_eq!(left(after, 1.0), left(picture, 0.0) + 320.0 + 10.0, "the next item starts after the picture and the gap");
+    }
+
+    #[test]
+    fn wrapping_text_flows_around_a_sibling_that_declares_its_shape() {
+        let mut doc = blank_project();
+        let words = add(&mut doc, 2, LayerSource::Text, None);
+        let mut track = ContentTrack::new();
+        track.insert(ContentKeyframe { t: T, content: "Shibuya crossing at nine in the evening, the lights change and three thousand people walk at once across the white lines".to_owned() });
+        let style = TextDocumentStyle {
+            id: TextStyleId(0),
+            font: FontRef { path: String::new(), fingerprint: None, family: "Helvetica".to_owned(), style: String::new() },
+            size: 40.0, fill: [1.0; 4], line_height: None, tracking: 0.0, axes: vec![], features: vec![],
+        };
+        let comp = doc.view().composition().unwrap().unwrap();
+        doc.apply(Intent::SetTextDocument { layer: words, document: TextDocument {
+            content: track, justify: TextJustify::Left, wrap_size: Some([600.0, comp.height as f32]), styles: vec![style], slot_id: None, ranges: vec![], alignment: Default::default(), runs: vec![],
+        } }).unwrap();
+        let object = add(&mut doc, 3, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: object, shapes: vec![rect_shape([255; 4], [160.0, 160.0])] }).unwrap();
+        let middle = doc.view().world_2d(words, T).unwrap().transform_point2(glam::vec2(300.0, comp.height as f32 * 0.5));
+        put(&mut doc, object, property::POSITION, Value::Vec2([middle.x as f64, middle.y as f64]));
+        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        // 物の占める範囲(文字の枠の座標)と重なる字の数。
+        let overlapping = |doc: &Document| {
+            let view = doc.view();
+            let resolved = view.resolved_layers(T).unwrap();
+            let around = resolved.iter().find(|l| l.id == words).unwrap().flow_around.clone().expect("the object is declared");
+            let (lo, hi) = around.iter().flat_map(|o| o.points.iter()).fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(glam::Vec2::from(*p)), hi.max(glam::Vec2::from(*p))));
+            let document = view.resolved_text_document(words, T).unwrap().unwrap();
+            let count = |shaped: &crate::doc::vector::text::ShapedText| shaped.contours.iter().filter(|c| {
+                let (a, b) = c.vertices.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), v| (a.min(glam::vec2(v.point.x as f32, v.point.y as f32)), b.max(glam::vec2(v.point.x as f32, v.point.y as f32))));
+                a.x < hi.x && b.x > lo.x && a.y < hi.y && b.y > lo.y
+            }).count();
+            let plain = crate::doc::store::text_frame::shape_document(&document, T, &canvas).unwrap().unwrap();
+            let flowed = crate::doc::store::text_frame::shape_document_around(&document, T, &canvas, &around).unwrap().unwrap();
+            let right_of = flowed.contours.iter().any(|c| c.vertices.iter().all(|v| v.point.x as f32 > hi.x && (v.point.y as f32) > lo.y && (v.point.y as f32) < hi.y));
+            (count(&plain), count(&flowed), plain.contours.len() == flowed.contours.len(), right_of)
+        };
+        put(&mut doc, object, SHAPE_OUTSIDE, Value::Enum(2));
+        assert!(doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == words).unwrap().flow_around.is_some());
+        let (before, after, all_glyphs, both_sides) = overlapping(&doc);
+        assert!(before > 0, "without flowing, the words run under the object");
+        assert_eq!(after, 0, "the words flow around it");
+        assert!(all_glyphs, "no word is lost");
+        assert!(both_sides, "lines continue on the other side of the object (wrap-flow: both)");
+
+        put(&mut doc, object, SHAPE_OUTSIDE, Value::Enum(0));
+        assert!(doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == words).unwrap().flow_around.is_none(), "None declares nothing");
     }
 
     #[test]

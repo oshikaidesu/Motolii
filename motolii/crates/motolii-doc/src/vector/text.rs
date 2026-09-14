@@ -70,6 +70,8 @@ pub struct LineMeasure {
     pub baseline_y: f32,
     pub width: f32,
     pub glyph_xs: Vec<f32>,
+    /// 字ごとの元の文字の byte の位置(組み直しても同じ字を対にする。移り方と物差し)。
+    pub glyph_bytes: Vec<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -150,8 +152,145 @@ pub fn shape_text(content: &str, font: &GlyphFont, layout: &TextLayout) -> Resul
 pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<ShapedText, TextShapeError> {
     let mut guard = font_system();
     let font_system = &mut *guard;
-    for span in spans { ensure_font(font_system, span.font)?; }
+    let attributes = span_attributes(font_system, spans)?;
     let metrics = Metrics::new(layout.size, layout.line_height.unwrap_or(layout.size * 1.2));
+    let align = to_align(layout.justify);
+
+    let mut buffer = Buffer::new(font_system, metrics);
+    // 幅が無いと Align::Center / Right が常に 0 補正になる。幅は wrap_size か枠の幅。
+    buffer.set_size(layout.wrap_width, None);
+    buffer.set_wrap(if layout.wrap { cosmic_text::Wrap::WordOrGlyph } else { cosmic_text::Wrap::None });
+    let default_attrs = attributes.first().cloned().unwrap_or_else(Attrs::new);
+    buffer.set_rich_text(spans.iter().zip(attributes.iter()).map(|(span, attrs)| (span.text, attrs.clone())), &default_attrs, Shaping::Advanced, Some(align));
+    buffer.shape_until_scroll(font_system, false);
+
+    let mut swash_cache = SwashCache::new();
+    let mut out = ShapedText::default();
+    let mut glyph_ordinal = 0usize;
+    let content: String = spans.iter().map(|s| s.text).collect();
+    let line_starts: Vec<usize> = std::iter::once(0).chain(content.match_indices('\n').map(|(i, _)| i + 1)).collect();
+    for run in buffer.layout_runs() {
+        let base = line_starts.get(run.line_i).copied().unwrap_or(0);
+        emit_run(font_system, &mut swash_cache, &run, 0.0, 0.0, base, &mut glyph_ordinal, &mut out);
+    }
+    Ok(out)
+}
+
+/// 障害物を避けて流す組み方(CSS `shape-outside`、CSS Exclusions の `wrap-flow: both`)。
+/// 行ごとに `segments(行の上, 行の下)` が空いている横の区間を返し、行はその区間を左から順に埋める。
+/// 区間ごとに残りの文字をその幅で組み、1 行目だけを取る(折り返しの規則は cosmic-text のまま)。
+/// 語が入らない区間は飛ばし、どの区間にも入らない行は 1 行下へ(CSS の float の横に入らない語は下へ)。
+pub fn shape_rich_text_around(
+    spans: &[StyledText<'_>],
+    layout: &TextLayout,
+    segments: &dyn Fn(f32, f32) -> Vec<(f32, f32)>,
+) -> Result<ShapedText, TextShapeError> {
+    let mut guard = font_system();
+    let font_system = &mut *guard;
+    let attributes = span_attributes(font_system, spans)?;
+    let align = to_align(layout.justify);
+    let full = layout.wrap_width.unwrap_or(f32::MAX);
+    let min_size = spans.iter().map(|s| s.layout.size).fold(layout.size, f32::min).max(1.0);
+    // 文字全体を 1 本に、スタイルの切れ目は byte で持つ。
+    let text: String = spans.iter().map(|s| s.text).collect();
+    let mut bounds = Vec::with_capacity(spans.len());
+    let mut at = 0usize;
+    for span in spans {
+        bounds.push((at, at + span.text.len()));
+        at += span.text.len();
+    }
+    let pieces = |from: usize, to: usize| -> Vec<(&str, Attrs)> {
+        spans.iter().zip(&bounds).zip(&attributes).filter_map(|((_, &(a, b)), attrs)| {
+            let (a, b) = (a.max(from), b.min(to));
+            (a < b).then(|| (&text[a..b], attrs.clone()))
+        }).collect()
+    };
+    let default_attrs = attributes.first().cloned().unwrap_or_else(Attrs::new);
+    let line_height = layout.line_height.unwrap_or(layout.size * 1.2);
+
+    let mut swash_cache = SwashCache::new();
+    let mut out = ShapedText::default();
+    let mut glyph_ordinal = 0usize;
+    let mut start = 0usize;
+    let mut top = 0.0f32;
+    let mut rows = 0;
+    while start < text.len() && rows < 4096 {
+        rows += 1;
+        // 段落の終わり(改行)まで。
+        let paragraph_end = text[start..].find('\n').map_or(text.len(), |i| start + i);
+        if start == paragraph_end {
+            start += 1;
+            top += line_height;
+            continue;
+        }
+        let spaces = |mut i: usize| { while i < paragraph_end && text[i..].starts_with(' ') { i += 1; } i };
+        let mut row_height = line_height;
+        let open = segments(top, top + line_height);
+        let only = open.len() == 1 && (open[0].1 - open[0].0) >= full - 0.5;
+        for (x0, x1) in open {
+            let width = x1 - x0;
+            if start >= paragraph_end || width < min_size {
+                continue;
+            }
+            // 組む窓は区間に入る字数より十分長く(残り全部を毎回組まない)。
+            let window = ((width / (min_size * 0.25)) as usize + 32).min(paragraph_end - start);
+            let mut end = start + window;
+            while !text.is_char_boundary(end) { end += 1; }
+            let mut buffer = Buffer::new(font_system, Metrics::new(layout.size, line_height));
+            buffer.set_size(Some(width), None);
+            buffer.set_wrap(if only { cosmic_text::Wrap::WordOrGlyph } else { cosmic_text::Wrap::Word });
+            buffer.set_rich_text(pieces(start, end), &default_attrs, Shaping::Advanced, Some(align));
+            buffer.shape_until_scroll(font_system, false);
+            let Some(run) = buffer.layout_runs().next() else { continue };
+            let Some(consumed) = run.glyphs.iter().map(|g| g.end).max() else { continue };
+            if run.line_w > width + 0.5 && !only {
+                continue;
+            }
+            emit_run(font_system, &mut swash_cache, &run, x0, top, start, &mut glyph_ordinal, &mut out);
+            row_height = row_height.max(run.line_height);
+            start = spaces(start + consumed);
+        }
+        if start >= paragraph_end && paragraph_end < text.len() {
+            start = paragraph_end + 1;
+        }
+        top += row_height;
+    }
+    Ok(out)
+}
+
+fn to_align(justify: TextJustify) -> Align {
+    match justify {
+        TextJustify::Left => Align::Left,
+        TextJustify::Right => Align::Right,
+        TextJustify::Center => Align::Center,
+    }
+}
+
+/// 組んだ 1 行を輪郭と行の寸法へ(`dx`・`dy` だけずらして)。
+fn emit_run(font_system: &mut FontSystem, swash_cache: &mut SwashCache, run: &cosmic_text::LayoutRun<'_>, dx: f32, dy: f32, byte_base: usize, glyph_ordinal: &mut usize, out: &mut ShapedText) {
+    let mut glyph_xs = Vec::with_capacity(run.glyphs.len());
+    let mut glyph_bytes = Vec::with_capacity(run.glyphs.len());
+    for glyph in run.glyphs {
+        glyph_bytes.push(byte_base + glyph.start);
+        let pen_x = dx + glyph.x + glyph.font_size * glyph.x_offset;
+        let pen_y = dy + run.line_y + glyph.y - glyph.font_size * glyph.y_offset;
+        glyph_xs.push(dx + glyph.x);
+        let cache_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
+        let ordinal = *glyph_ordinal;
+        *glyph_ordinal += 1;
+        let Some(commands) = swash_cache.get_outline_commands(font_system, cache_key) else {
+            continue; // 空白など、輪郭を持たない glyph。
+        };
+        let before = out.contours.len();
+        commands_to_contours(commands, pen_x, pen_y, &mut out.contours);
+        out.contour_styles.extend(std::iter::repeat_n(glyph.metadata, out.contours.len() - before));
+        out.contour_glyphs.extend(std::iter::repeat_n(ordinal, out.contours.len() - before));
+    }
+    out.lines.push(LineMeasure { baseline_y: dy + run.line_y, width: run.line_w, glyph_xs, glyph_bytes });
+}
+
+fn span_attributes<'a>(font_system: &mut FontSystem, spans: &[StyledText<'a>]) -> Result<Vec<Attrs<'a>>, TextShapeError> {
+    for span in spans { ensure_font(font_system, span.font)?; }
     let mut attributes = Vec::new();
     for span in spans {
         let mut features = FontFeatures::new();
@@ -163,51 +302,7 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
             .metrics(Metrics::new(span.layout.size, span.layout.line_height.unwrap_or(span.layout.size * 1.2)))
             .letter_spacing(span.layout.tracking / 1000.0).font_features(features).metadata(span.style));
     }
-    let align = match layout.justify {
-        TextJustify::Left => Align::Left,
-        TextJustify::Right => Align::Right,
-        TextJustify::Center => Align::Center,
-    };
-
-    let mut buffer = Buffer::new(font_system, metrics);
-    // 幅が無いと Align::Center / Right が常に 0 補正になる。幅は wrap_size か枠の幅。
-    buffer.set_size(layout.wrap_width, None);
-    buffer.set_wrap(if layout.wrap { cosmic_text::Wrap::WordOrGlyph } else { cosmic_text::Wrap::None });
-    let default_attrs = attributes.first().cloned().unwrap_or_else(Attrs::new);
-    buffer.set_rich_text(spans.iter().zip(attributes.iter()).map(|(span, attrs)| (span.text, attrs.clone())), &default_attrs, Shaping::Advanced, Some(align));
-    buffer.shape_until_scroll(font_system, false);
-
-    let mut swash_cache = SwashCache::new();
-    let mut contours = Vec::new();
-    let mut contour_styles = Vec::new();
-    let mut contour_glyphs = Vec::new();
-    let mut lines = Vec::new();
-    let mut glyph_ordinal = 0usize;
-    for run in buffer.layout_runs() {
-        let mut glyph_xs = Vec::with_capacity(run.glyphs.len());
-        for glyph in run.glyphs {
-            let pen_x = glyph.x + glyph.font_size * glyph.x_offset;
-            let pen_y = run.line_y + glyph.y - glyph.font_size * glyph.y_offset;
-            glyph_xs.push(glyph.x);
-            let cache_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
-            let ordinal = glyph_ordinal;
-            glyph_ordinal += 1;
-            let Some(commands) = swash_cache.get_outline_commands(font_system, cache_key)
-            else {
-                continue; // 空白など、輪郭を持たない glyph。
-            };
-            let before = contours.len();
-            commands_to_contours(commands, pen_x, pen_y, &mut contours);
-            contour_styles.extend(std::iter::repeat_n(glyph.metadata, contours.len() - before));
-            contour_glyphs.extend(std::iter::repeat_n(ordinal, contours.len() - before));
-        }
-        lines.push(LineMeasure {
-            baseline_y: run.line_y,
-            width: run.line_w,
-            glyph_xs,
-        });
-    }
-    Ok(ShapedText { contours, contour_styles, contour_glyphs, lines })
+    Ok(attributes)
 }
 
 fn commands_to_contours(commands: &[Command], pen_x: f32, pen_y: f32, out: &mut Vec<Contour>) {

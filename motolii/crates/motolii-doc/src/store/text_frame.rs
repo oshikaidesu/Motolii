@@ -41,11 +41,87 @@ fn to_layout(style: &TextDocumentStyle, justify: StoreJustify, wrap_width: Optio
     }
 }
 
+/// 文字が避けて流れる物(CSS `shape-outside`)。枠の座標の多角形と、その外へ取る間(`shape-margin`)。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Obstacle {
+    pub margin: f32,
+    /// 移り方の重み(少し前の時刻の形ほど軽い)。1 つの時刻の形だけなら 1。
+    pub weight: f32,
+    pub points: Vec<[f32; 2]>,
+}
+
+/// 行の帯 [y0, y1] で多角形が占める横の範囲(間を足す)。凹んだ形も 1 本の区間(CSS の float の行と同じ)。
+fn occupied(obstacle: &Obstacle, y0: f32, y1: f32) -> Option<(f32, f32)> {
+    let (y0, y1) = (y0 - obstacle.margin, y1 + obstacle.margin);
+    let n = obstacle.points.len();
+    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+    for i in 0..n {
+        let (a, b) = (obstacle.points[i], obstacle.points[(i + 1) % n]);
+        for p in [a, b] {
+            if p[1] >= y0 && p[1] <= y1 {
+                lo = lo.min(p[0]);
+                hi = hi.max(p[0]);
+            }
+        }
+        // 辺が帯の上下の線を横切る所。
+        for y in [y0, y1] {
+            if (a[1] - y) * (b[1] - y) < 0.0 {
+                let x = a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]);
+                lo = lo.min(x);
+                hi = hi.max(x);
+            }
+        }
+    }
+    lo.is_finite().then_some((lo - obstacle.margin, hi + obstacle.margin))
+}
+
+/// 幅 [0, width] から、帯にかかる物の範囲を抜いた区間。範囲は重みで数え、覆う重みが半分に届く所を塞ぐ
+/// (移り方を持つ物は、遡る時刻の形の過半が覆う所。1 つの時刻だけの物は覆えば塞ぐ)。
+fn open_segments(around: &[Obstacle], width: f32, y0: f32, y1: f32) -> Vec<(f32, f32)> {
+    let mut edges: Vec<(f32, f32)> = Vec::new();
+    for obstacle in around {
+        if let Some((lo, hi)) = occupied(obstacle, y0, y1) {
+            edges.push((lo, obstacle.weight));
+            edges.push((hi, -obstacle.weight));
+        }
+    }
+    edges.sort_by(|a, b| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)));
+    let mut open = Vec::new();
+    let mut cover = 0.0f32;
+    let mut free_from = Some(0.0f32);
+    for (x, dw) in edges {
+        cover += dw;
+        let blocked = cover >= 0.5 - 1e-4;
+        match (blocked, free_from) {
+            (true, Some(a)) => {
+                if x.min(width) > a { open.push((a, x.min(width))); }
+                free_from = None;
+            }
+            (false, None) => free_from = Some(x.max(0.0)),
+            _ => {}
+        }
+    }
+    if let Some(a) = free_from.filter(|a| *a < width) {
+        open.push((a, width));
+    }
+    open
+}
+
 /// 文字を組んで枠の縦中央へ置いた輪郭。
 pub fn shape_document(
     document: &TextDocument,
     t: RationalTime,
     canvas: &Canvas,
+) -> Result<Option<ShapedText>, TextShapeError> {
+    shape_document_around(document, t, canvas, &[])
+}
+
+/// 物を避けて流す組み方(折り返す文字だけ。折り返さない文字は物を見ない)。
+pub fn shape_document_around(
+    document: &TextDocument,
+    t: RationalTime,
+    canvas: &Canvas,
+    around: &[Obstacle],
 ) -> Result<Option<ShapedText>, TextShapeError> {
     let Some(style) = document.styles.first() else {
         return Ok(None);
@@ -58,33 +134,51 @@ pub fn shape_document(
     let font = to_glyph_font(style);
     // 幅は揃えに要る(無いと Center/Right が効かない)が、折り返すのは wrap 箱を持つ層だけ。
     let layout = to_layout(style, document.justify, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)), document.wrap_size.is_some());
-    let mut shaped = if document.runs.is_empty() {
-        shape_text(content, &font, &layout)?
+    let fonts: Vec<_> = document.styles.iter().map(to_glyph_font).collect();
+    let layouts: Vec<_> = document.styles.iter().map(|s| to_layout(s, document.justify, layout.wrap_width, layout.wrap)).collect();
+    let mut pieces: Vec<(String, usize)> = Vec::new();
+    if document.runs.is_empty() {
+        pieces.push((content.to_owned(), 0));
     } else {
         let ids = crate::doc::store::text_edit::style_ids(document, content);
-        let mut pieces: Vec<(String, usize)> = Vec::new();
         for (g,id) in crate::doc::store::text_edit::graphemes(content).into_iter().zip(ids) {
             let index = document.styles.iter().position(|s| s.id == id).unwrap_or(0);
             if let Some((text, _)) = pieces.last_mut().filter(|(_,i)|*i==index) { text.push_str(g); }
             else { pieces.push((g.to_owned(), index)); }
         }
-        let fonts: Vec<_> = document.styles.iter().map(to_glyph_font).collect();
-        let layouts: Vec<_> = document.styles.iter().map(|s|to_layout(s, document.justify, layout.wrap_width, layout.wrap)).collect();
-        let spans: Vec<_> = pieces.iter().map(|(text,i)|StyledText{text,font:&fonts[*i],layout:&layouts[*i],style:*i}).collect();
-        shape_rich_text(&spans, &layout)?
-    };
-
+    }
+    let size = pieces.iter().map(|(_, i)| f64::from(document.styles[*i].size)).fold(f64::from(style.size), f64::max);
     // 文字の塊を枠の縦中央へ。1 行目のベースラインの上に約 1 級、最終行の下に約 1/4 級を見る。
-    if let (Some(first), Some(last)) = (shaped.lines.first(), shaped.lines.last()) {
-        let size = shaped.contour_styles.iter().map(|i| f64::from(document.styles[*i].size)).fold(f64::from(style.size), f64::max);
-        let top = f64::from(first.baseline_y) - size;
-        let bottom = f64::from(last.baseline_y) + size * 0.25;
-        let dy = (f64::from(canvas.height) - (bottom - top)) * 0.5 - top;
-        for contour in &mut shaped.contours {
-            for v in &mut contour.vertices {
-                // 接線は点からの相対。動かすのは点だけ。
-                v.point.y += dy;
-            }
+    let centre = |shaped: &ShapedText| match (shaped.lines.first(), shaped.lines.last()) {
+        (Some(first), Some(last)) => {
+            let top = f64::from(first.baseline_y) - size;
+            let bottom = f64::from(last.baseline_y) + size * 0.25;
+            (f64::from(canvas.height) - (bottom - top)) * 0.5 - top
+        }
+        _ => 0.0,
+    };
+    let shape_plain = || -> Result<ShapedText, TextShapeError> {
+        if document.runs.is_empty() {
+            shape_text(content, &font, &layout)
+        } else {
+            let spans: Vec<_> = pieces.iter().map(|(text,i)|StyledText{text,font:&fonts[*i],layout:&layouts[*i],style:*i}).collect();
+            shape_rich_text(&spans, &layout)
+        }
+    };
+    let mut shaped = shape_plain()?;
+    let dy = centre(&shaped);
+    if layout.wrap && !around.is_empty() {
+        // 縦の寄せ方は避けない組みで決める(避けて行が増えれば下へ伸びる、CSS の block と同じ)。
+        // 避けた組みで寄せ直すと、帯が動いて組みが変わり、2 つの組みの間を往復する。
+        let spans: Vec<_> = pieces.iter().map(|(text,i)|StyledText{text,font:&fonts[*i],layout:&layouts[*i],style:*i}).collect();
+        let width = layout.wrap_width.unwrap_or(canvas.width as f32);
+        let band = dy as f32;
+        shaped = crate::doc::vector::text::shape_rich_text_around(&spans, &layout, &|y0, y1| open_segments(around, width, y0 + band, y1 + band))?;
+    }
+    for contour in &mut shaped.contours {
+        for v in &mut contour.vertices {
+            // 接線は点からの相対。動かすのは点だけ。
+            v.point.y += dy;
         }
     }
     Ok(Some(shaped))

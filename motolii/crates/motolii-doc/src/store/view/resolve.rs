@@ -499,6 +499,7 @@ impl<'a> StoreView<'a> {
             averaged: 0,
             shape_stretch: self.laid_out(layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch),
             glyph_offsets: self.glyph_offsets(layer, t)?,
+            flow_around: self.flow_around(layer, t)?,
         }))
     }
 

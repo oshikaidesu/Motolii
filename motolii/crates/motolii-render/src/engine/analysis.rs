@@ -95,12 +95,18 @@ impl Engine {
             }
             if layer.source == crate::doc::store::LayerSource::Text {
                 if let Some(document) = view.resolved_text_document(layer.id, t).map_err(store)? {
-                    if let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document(&document, t, &canvas) {
+                    let content = document.content.eval(t).to_owned();
+                    if let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document_around(&document, t, &canvas, layer.flow_around.as_deref().map_or(&[], Vec::as_slice)) {
                         let mut n = 0;
                         for line in &shaped.lines {
-                            for x in &line.glyph_xs {
+                            // 字は元の文字の byte で名付ける(組み直しても同じ字の軌跡)。空白は見えないので数えない。
+                            for (x, byte) in line.glyph_xs.iter().zip(&line.glyph_bytes) {
+                                if content.get(*byte..).and_then(|rest| rest.chars().next()).is_some_and(char::is_whitespace) {
+                                    n += 1;
+                                    continue;
+                                }
                                 let d = layer.glyph_offsets.as_ref().and_then(|o| o.get(n).copied()).unwrap_or([0.0, 0.0]);
-                                out.push((format!("L{} {name}.g{n}", layer.id.0), to_screen(glam::vec2(*x + d[0], line.baseline_y + d[1]))));
+                                out.push((format!("L{} {name}.g{byte}", layer.id.0), to_screen(glam::vec2(*x + d[0], line.baseline_y + d[1]))));
                                 n += 1;
                             }
                         }
