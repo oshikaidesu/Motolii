@@ -60,6 +60,8 @@ cpal = "0.18"
 rtrb = "0.4"
 waveform-data = "=0.1.1"
 serde_json = "1"
+# スクリプトの口(docs/reviews/2026-09-14-script-mouth.md): 中断の口と memory 上限を持つ小さな JS。
+rquickjs = "0.13"
 thiserror = "2"
 quick_cache = "0.7.0"
 tempfile = "3"

@@ -25,6 +25,7 @@
 - [動かす](drive.md) — 音・拍・乱れ・番号で値を動かす
 - [見た目](look.md) — 効果と色
 - [窓](window.md) — パネルと置き場
+- [書いて作る](script.md) — 窓の操作を JavaScript で並べる。p5.js と LLM から来た人へ
 - [gap](gap.md) — 理想と窓の差。**新しい1本を書いて新規の差が0なら収束**
 
 作る側が引く物は [コンセプト](../concept.md)(何を作らないか)と `motolii/AGENTS.md`。

@@ -13,3 +13,4 @@ pub mod visual_samples;
 
 pub mod text_format;
 pub mod history;
+pub mod script;

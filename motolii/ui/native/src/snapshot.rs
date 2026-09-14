@@ -330,7 +330,7 @@ impl EditorRuntime{
         Ok(status)
     }
     #[allow(clippy::too_many_arguments)]
-    fn layer_json(&self,view:&StoreView<'_>,id:LayerId,at:RationalTime,fps:Fps,catalog:&[crate::render::engine::EffectDescriptor],clipping:&std::collections::HashMap<LayerId,Option<LayerId>>,live:bool)->Result<Option<Json>,String>{
+    pub(crate) fn layer_json(&self,view:&StoreView<'_>,id:LayerId,at:RationalTime,fps:Fps,catalog:&[crate::render::engine::EffectDescriptor],clipping:&std::collections::HashMap<LayerId,Option<LayerId>>,live:bool)->Result<Option<Json>,String>{
         let attrs=view.attrs(id).map_err(e)?.unwrap_or_default();let Some(meta)=view.meta(id).map_err(e)? else{return Ok(None)};
         let data=editor::functions::read::inspector_data_from_doc(view,id,at,catalog);
         let mut properties=Vec::new();let mut seen=std::collections::BTreeSet::new();

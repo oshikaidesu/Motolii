@@ -345,6 +345,12 @@ class _EditorWindowState extends State<EditorWindow> {
       case 'Import':
         await c.importFiles();
         break;
+      case 'Run Script…':
+        await c.runScript();
+        break;
+      case 'Rerun Script':
+        await c.rerunScript();
+        break;
       case 'Reset layout':
         setState(() {
           dock = initialDock();
@@ -428,6 +434,8 @@ class _EditorWindowState extends State<EditorWindow> {
                           'Save',
                           'Save as',
                           'Import',
+                          'Run Script…',
+                          'Rerun Script',
                         ]),
                         topMenu('Edit', [
                           'Undo',

@@ -41,8 +41,16 @@ p5 との差: Timeline もキーも無く、書いた後に手で直せず、動
 - **Remotion**: 絵は `useCurrentFrame()` だけから作る、どの順で描いても同じ絵、乱数は `random(seed)` だけ、`Math.random()` は lint で警告。https://www.remotion.dev/docs/flickering
 - 写すもの: Theatre.js の「宣言 → 欄 → 押したら時間へ」と、rename で置き去りにしないこと(Motolii は表の id で持つ)。Motion Canvas の「コードの待ちを editor で掴める印にする」。Remotion の決定性の規則と、`Math.random` を lint で赤にすること。
 
+## 実装(2026-09-14)
+
+- エンジンは rquickjs 0.13(QuickJS-ng): 中断の口と memory 上限がある、C コンパイラだけで 3 OS。boa は中断と行・列が弱い、V8 は重すぎる
+- スクリプトは **port の op を呼ぶだけ**(Blender の operator の型): 窓でできない操作はスクリプトでもできない。名前は Inspector に渡す行(`layer_json`)から引く
+- 入口: File → Run Script… / Rerun Script、窓なしは ignored test `script_file`。断られたスクリプトは何も残さない
+- 説明書は [書いて作る](../wiki/script.md)、例は `ui/native/src/editor/script/examples/`(test が全部走らせる)
+
 ## 未決
 
-- JS エンジン(QuickJS 等)。取説を読んで比べてから選ぶ
+- TypeScript の型剥がし: swc_ts_fast_strip(行・列が変わらない、Node の amaro と同じ)が候補。依存が重いので後
+- 保存しただけで走り直す、1 本を Undo 1 回にまとめる
 - 台本型を実行した結果を、どの粒度でキーへ落とすか
 - スケッチの層の中身(何を返すか)

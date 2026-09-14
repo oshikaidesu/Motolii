@@ -67,6 +67,8 @@ pub struct EditorRuntime {
     pub(crate) history: editor::history::Ledger,
     /// vism/ の見張り。file が変わると Swift の起こし口を叩き、窓が reloadEffects を送ってくる。
     effects_watch: Option<motolii_render::engine::CatalogWatcher>,
+    /// 直前に走らせたスクリプト: (file, 走る前の履歴の位置, 走った後の位置)。Rerun はここへ戻して走らせ直す。
+    last_script: Option<(String, i64, i64)>,
 }
 
 impl EditorRuntime {
@@ -87,7 +89,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), freezer: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None, last_script: None })
     }
 
     /// Freeze の cache の置き場: 書類の隣。未保存の書類は temp(保存した時に引っ越さない — Freeze し直す)。

@@ -3,7 +3,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use editor::session::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -234,6 +234,8 @@ impl EditorRuntime{
             "removeAsset"=>{let id=asset_id(&j)?;if self.asset_used(id)?{return Err("Asset is still in use".into())}self.apply([Intent::RemoveAsset{asset:id}])?;}
             "export"=>self.exporter.start(&self.doc,std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
             "cancelExport"=>self.exporter.cancel(),
+            "runScript"=>self.run_script_file(string(&j,"path")?)?,
+            "rerunScript"=>self.rerun_script()?,
             "save"=>{let path=string(&j,"path")?;
                 self.doc.save(path).map_err(e)?;
                 if j["copy"].as_bool()!=Some(true){self.path=Some(path.into());self.engine.set_cache_root(Self::cache_root_for(Some(path)));self.saved_signature=snapshot::authored_signature(&self.doc)?;}

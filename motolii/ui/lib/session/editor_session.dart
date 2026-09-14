@@ -660,6 +660,18 @@ class EditorSession {
     if (path != null) await command('save', {'path': path});
   }
 
+  /// A script lays out window operations; its names are the window's names.
+  Future<void> runScript() async {
+    final picked = await native('pickImport', {
+      'extensions': ['js'],
+    });
+    if (picked is List && picked.isNotEmpty) {
+      await command('runScript', {'path': '${picked.first}'});
+    }
+  }
+
+  Future<void> rerunScript() => command('rerunScript');
+
   Future<void> importFiles() async {
     final picked = await native('pickImport', {
       'extensions': state['importExtensions'] ?? const [],
