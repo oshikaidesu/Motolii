@@ -10,7 +10,7 @@ use std::cell::RefCell;
 
 use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
-use crate::doc::store::layout::{CONNECT_FROM, CONNECT_TO, DASH, DASH_GAP, DASH_OFFSET, FROM_SIDE, LINE_PATH, MARGIN, SLACK, TO_SIDE};
+use crate::doc::store::layout::{CONNECT_FROM, CONNECT_TO, DASH, DASH_GAP, DASH_OFFSET, FROM_SIDE, HANDLE_SIZE, LINE_PATH, MARGIN, SLACK, TO_SIDE, TRACE};
 use crate::doc::store::{LayerId, PropertyId, ShapeNode, StoreError, StoreView};
 use crate::doc::vector::{Contour, Dash, PathSource, Point, Vertex};
 
@@ -39,17 +39,39 @@ impl StoreView<'_> {
         Ok(Some((from, to)))
     }
 
-    /// 形の層の姿を、つなぐ線なら解いた道に差し替える(色・太さ・効果の積みは形のまま、破線は Dash の欄)。
+    /// なぞる形なら、その相手と形の種類(`Connect To` が無く `Trace` が None でない)。
+    pub(crate) fn tracing(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, i64)>, StoreError> {
+        let kind = self.choice(layer, TRACE, t)?;
+        if kind <= 0 {
+            return Ok(None);
+        }
+        let target = match self.value_at(layer, &PropertyId::new(CONNECT_FROM)?, t)? {
+            Some(Value::LayerId(id)) if id != 0 => LayerId(id),
+            Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
+            _ => return Ok(None),
+        };
+        if target == layer || !self.here(target, t)? {
+            return Ok(None);
+        }
+        Ok(Some((target, kind)))
+    }
+
+    /// 形の層の姿を、つなぐ線なら解いた道に、なぞる形ならその輪郭に差し替える(色・太さ・効果の積みは形のまま、破線は Dash の欄)。
     pub(crate) fn connect_shapes(&self, layer: LayerId, t: RationalTime, shapes: Vec<ShapeNode>) -> Result<Vec<ShapeNode>, StoreError> {
-        let Some(route) = self.route(layer, t)? else { return Ok(shapes) };
-        let path = vec![Contour {
-            closed: false,
-            vertices: route.points.iter().map(|[p, i, o]| Vertex {
-                point: Point { x: f64::from(p.x), y: f64::from(p.y) },
-                in_tangent: Point { x: f64::from(i.x), y: f64::from(i.y) },
-                out_tangent: Point { x: f64::from(o.x), y: f64::from(o.y) },
-            }).collect(),
-        }];
+        let path = if let Some(route) = self.route(layer, t)? {
+            vec![Contour {
+                closed: false,
+                vertices: route.points.iter().map(|[p, i, o]| Vertex {
+                    point: Point { x: f64::from(p.x), y: f64::from(p.y) },
+                    in_tangent: Point { x: f64::from(i.x), y: f64::from(i.y) },
+                    out_tangent: Point { x: f64::from(o.x), y: f64::from(o.y) },
+                }).collect(),
+            }]
+        } else if let Some(path) = self.trace_path(layer, t)? {
+            path
+        } else {
+            return Ok(shapes);
+        };
         let dash = self.number(layer, DASH, 0.0, t)?.max(0.0);
         let gap = self.number(layer, DASH_GAP, dash, t)?.max(0.0);
         let offset = self.number(layer, DASH_OFFSET, 0.0, t)?;
@@ -57,7 +79,10 @@ impl StoreView<'_> {
             nodes.into_iter().map(|node| match node {
                 ShapeNode::Leaf(mut shape) => {
                     shape.source = PathSource::Bezier(path.clone());
-                    shape.fill = None;
+                    // 塗りは閉じた形(掴み・外枠・円)だけ。
+                    if !path.iter().any(|c| c.closed) {
+                        shape.fill = None;
+                    }
                     if let (Some(stroke), Some(dash)) = (shape.stroke.as_mut(), dash) {
                         stroke.dash = Some(dash.clone());
                     }
@@ -76,12 +101,61 @@ impl StoreView<'_> {
 
     /// つなぐ線の置き場所(親の空間での Position)。道は親の空間で解いてあるので、素材座標の原点のずれだけ戻す。
     pub(crate) fn connector_position(&self, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
-        if self.connection(layer, t)?.is_none() {
+        if self.connection(layer, t)?.is_none() && self.tracing(layer, t)?.is_none() {
             return Ok(None);
         }
         let shapes = self.shapes_at(layer, t)?;
         let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(None) };
         Ok(Some([-(canvas.origin_x as f32), -(canvas.origin_y as f32)]))
+    }
+
+    /// なぞる形の輪郭(線の層の親の空間)。
+    fn trace_path(&self, layer: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+        let Some((target, kind)) = self.tracing(layer, t)? else { return Ok(None) };
+        let Some((lo, hi)) = self.box_seen_from(target, layer, t)? else { return Ok(None) };
+        let m = self.number(layer, MARGIN, 0.0, t)? as f32;
+        let (lo, hi) = (lo - glam::Vec2::splat(m), hi + glam::Vec2::splat(m));
+        let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
+        let rect = |lo: glam::Vec2, hi: glam::Vec2| Contour::closed([p(lo), p(glam::vec2(hi.x, lo.y)), p(hi), p(glam::vec2(lo.x, hi.y))]);
+        Ok(Some(match kind {
+            2 => {
+                let h = self.number(layer, HANDLE_SIZE, 10.0, t)?.max(0.0) as f32 * 0.5;
+                [lo, glam::vec2(hi.x, lo.y), hi, glam::vec2(lo.x, hi.y)].into_iter().map(|c| rect(c - glam::Vec2::splat(h), c + glam::Vec2::splat(h))).collect()
+            }
+            3 => vec![Contour::open([p(lo), p(hi)]), Contour::open([p(glam::vec2(hi.x, lo.y)), p(glam::vec2(lo.x, hi.y))])],
+            4 => {
+                // 箱に内接する楕円(4 つの 3 次で円弧を近似)。
+                let (c, r) = ((lo + hi) * 0.5, (hi - lo) * 0.5);
+                let k = 0.552_284_8;
+                let v = |q: glam::Vec2, i: glam::Vec2, o: glam::Vec2| Vertex { point: p(q), in_tangent: p(i), out_tangent: p(o) };
+                vec![Contour { closed: true, vertices: vec![
+                    v(c + glam::vec2(r.x, 0.0), glam::vec2(0.0, -r.y * k), glam::vec2(0.0, r.y * k)),
+                    v(c + glam::vec2(0.0, r.y), glam::vec2(r.x * k, 0.0), glam::vec2(-r.x * k, 0.0)),
+                    v(c - glam::vec2(r.x, 0.0), glam::vec2(0.0, r.y * k), glam::vec2(0.0, -r.y * k)),
+                    v(c - glam::vec2(0.0, r.y), glam::vec2(-r.x * k, 0.0), glam::vec2(r.x * k, 0.0)),
+                ] }]
+            }
+            5 => {
+                // 箱の 4 辺を、画面(comp)の端から端まで伸ばす。
+                let Some(comp) = self.composition()? else { return Ok(None) };
+                let screen = [glam::Vec2::ZERO, glam::vec2(comp.width as f32, comp.height as f32)];
+                let (s_lo, s_hi) = match self.attrs(layer)?.unwrap_or_default().parent {
+                    Some(parent) => {
+                        let inverse = self.world_2d(parent, t)?.inverse();
+                        let corners = [screen[0], glam::vec2(screen[1].x, 0.0), screen[1], glam::vec2(0.0, screen[1].y)].map(|q| inverse.transform_point2(q));
+                        corners.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), q| (a.min(*q), b.max(*q)))
+                    }
+                    None => (screen[0], screen[1]),
+                };
+                vec![
+                    Contour::open([p(glam::vec2(s_lo.x, lo.y)), p(glam::vec2(s_hi.x, lo.y))]),
+                    Contour::open([p(glam::vec2(s_lo.x, hi.y)), p(glam::vec2(s_hi.x, hi.y))]),
+                    Contour::open([p(glam::vec2(lo.x, s_lo.y)), p(glam::vec2(lo.x, s_hi.y))]),
+                    Contour::open([p(glam::vec2(hi.x, s_lo.y)), p(glam::vec2(hi.x, s_hi.y))]),
+                ]
+            }
+            _ => vec![rect(lo, hi)],
+        }))
     }
 
     /// 道: 今の端に、移り方で遅れた腹(弦からのずれ)を足す。
@@ -263,6 +337,31 @@ mod tests {
         let world = view.world_2d(layer, T).unwrap();
         let (lo, hi) = (world.transform_point2(glam::vec2(b[0], b[1])), world.transform_point2(glam::vec2(b[2], b[3])));
         [lo.x.min(hi.x), lo.y.min(hi.y), lo.x.max(hi.x), lo.y.max(hi.y)]
+    }
+
+    #[test]
+    fn a_trace_draws_around_one_box_and_its_guides_cross_the_screen() {
+        let mut doc = blank_project();
+        let a = rect(&mut doc, 1, [200.0, 100.0], [500.0, 300.0]);
+        let ba = shown(&doc, a);
+        let hud = rect(&mut doc, 2, [10.0, 10.0], [0.0, 0.0]);
+        put(&mut doc, hud, CONNECT_FROM, Value::LayerId(a.0));
+        put(&mut doc, hud, MARGIN, Value::F64(4.0));
+        put(&mut doc, hud, TRACE, Value::Enum(1));
+        let h = shown(&doc, hud);
+        assert!((0..4).all(|i| (h[i] - ba[i] + if i < 2 { 4.0 } else { -4.0 }).abs() < 0.5), "Outline: the box a margin out: {ba:?} {h:?}");
+        put(&mut doc, hud, TRACE, Value::Enum(2));
+        put(&mut doc, hud, HANDLE_SIZE, Value::F64(12.0));
+        let h = shown(&doc, hud);
+        assert!((h[0] - (ba[0] - 4.0 - 6.0)).abs() < 0.5 && (h[3] - (ba[3] + 4.0 + 6.0)).abs() < 0.5, "Handles: squares centred on the corners: {h:?}");
+        put(&mut doc, hud, TRACE, Value::Enum(5));
+        let comp = doc.view().composition().unwrap().unwrap();
+        let h = shown(&doc, hud);
+        assert!(h[0] <= 0.5 && h[2] >= comp.width as f32 - 0.5 && h[1] <= 0.5 && h[3] >= comp.height as f32 - 0.5, "Guides run edge to edge of the screen: {h:?}");
+        put(&mut doc, a, property::POSITION, Value::Vec2([900.0, 600.0]));
+        put(&mut doc, hud, TRACE, Value::Enum(4));
+        let (ba, h) = (shown(&doc, a), shown(&doc, hud));
+        assert!(((h[0] + h[2]) - (ba[0] + ba[2])).abs() < 1.0, "Circle: centred on the box, and follows it: {ba:?} {h:?}");
     }
 
     #[test]

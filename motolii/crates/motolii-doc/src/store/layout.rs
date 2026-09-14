@@ -74,6 +74,9 @@ pub const SLACK: &str = "connect.slack";
 pub const DASH: &str = "connect.dash";
 pub const DASH_GAP: &str = "connect.dash_gap";
 pub const DASH_OFFSET: &str = "connect.dash_offset";
+/// 1 つの箱をなぞる形(`Connect From` だけを持つ時): 外枠(CSS の outline)・角の掴み(Figma の選択)・対角線・内接円・画面を横切る補助線。
+pub const TRACE: &str = "connect.trace";
+pub const HANDLE_SIZE: &str = "connect.handle_size";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -157,6 +160,8 @@ pub const CONNECT_ROWS: &[Row] = &[
     (DASH, "Dash", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_GAP, "Dash Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_OFFSET, "Dash Offset", Value::F64(0.0), None, &[]),
+    (TRACE, "Trace", Value::Enum(0), None, &["None", "Outline", "Handles", "Diagonals", "Circle", "Guides"]),
+    (HANDLE_SIZE, "Handle Size", Value::F64(10.0), Some((0.0, 10000.0)), &[]),
 ];
 
 /// 格子の線の太さの既定(fr)。

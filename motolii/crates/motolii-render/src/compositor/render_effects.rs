@@ -1151,6 +1151,56 @@ mod stylize_without_machine_learning {
         assert!(at(&frame, 44, 48) < 110 && at(&frame, 52, 48) > 150, "縁は切り立ったまま: {} | {}", at(&frame, 44, 48), at(&frame, 52, 48));
     }
 
+    fn rgba(f: impl Fn(u32, u32) -> [u8; 3]) -> Vec<u8> {
+        (0..SIZE * SIZE).flat_map(|i| { let [r, g, b] = f(i % SIZE, i / SIZE); [r, g, b, 255] }).collect()
+    }
+    fn px(frame: &[u8], x: u32, y: u32) -> [u8; 3] { let i = ((y * SIZE + x) * 4) as usize; [frame[i], frame[i + 1], frame[i + 2]] }
+
+    #[test]
+    fn hue_saturation_turns_red_blue_and_drains_to_grey() {
+        let red = rgba(|_, _| [220, 40, 40]);
+        let blue = px(&render(red.clone(), "motolii.hue_saturation", &[("hue", -120.0)]), 48, 48);
+        assert!(blue[2] > 180 && blue[0] < 80, "Master Hue -120: red becomes blue {blue:?}");
+        let grey = px(&render(red, "motolii.hue_saturation", &[("saturation", -100.0)]), 48, 48);
+        assert!(grey[0].abs_diff(grey[1]) < 4 && grey[1].abs_diff(grey[2]) < 4, "Master Saturation -100: grey {grey:?}");
+    }
+
+    #[test]
+    fn tint_maps_dark_and_light_to_two_colours_and_invert_flips() {
+        let ramp = image(|x, _| if x < 48 { 0 } else { 255 });
+        let blueprint = render(ramp.clone(), "motolii.tint", &[]);
+        assert!(px(&blueprint, 10, 48)[0] < 20 && px(&blueprint, 80, 48)[0] > 235, "default tint keeps black and white");
+        let inverted = render(ramp, "motolii.invert", &[]);
+        assert!(px(&inverted, 10, 48)[0] > 235 && px(&inverted, 80, 48)[0] < 20, "Invert: black becomes white");
+    }
+
+    #[test]
+    fn mosaic_flattens_blocks_and_block_dissolve_drops_some() {
+        let stripes = image(|x, _| if x % 4 < 2 { 0 } else { 255 });
+        let blocks = render(stripes.clone(), "motolii.mosaic", &[("columns", 8.0), ("rows", 8.0), ("sharp", 1.0)]);
+        let cell = SIZE / 8;
+        assert!((0..cell).all(|x| at(&blocks, x, 5) == at(&blocks, 0, 5)), "one block, one colour");
+        let white = image(|_, _| 255);
+        let half = render(white.clone(), "motolii.block_dissolve", &[("completion", 50.0), ("block_width", 12.0), ("block_height", 12.0)]);
+        let gone = (0..SIZE).step_by(12).flat_map(|y| (0..SIZE).step_by(12).map(move |x| (x + 6, y + 6))).filter(|&(x, y)| x < SIZE && y < SIZE && at(&half, x, y) < 20).count();
+        assert!((12..52).contains(&gone), "about half the blocks are gone: {gone} of 64");
+        assert_eq!(half, render(white, "motolii.block_dissolve", &[("completion", 50.0), ("block_width", 12.0), ("block_height", 12.0)]), "the same blocks every time");
+    }
+
+    #[test]
+    fn linear_wipe_clears_from_the_left_at_ninety_degrees() {
+        let white = image(|_, _| 255);
+        let wiped = render(white, "motolii.linear_wipe", &[("completion", 50.0), ("angle", 90.0)]);
+        assert!(at(&wiped, 10, 48) < 20 && at(&wiped, 86, 48) > 235, "left half gone, right half kept: {} {}", at(&wiped, 10, 48), at(&wiped, 86, 48));
+    }
+
+    #[test]
+    fn noise_roughens_a_flat_picture() {
+        let flat = image(|_, _| 128);
+        let grainy = render(flat.clone(), "motolii.noise", &[("amount", 40.0)]);
+        assert!(spread(&grainy, 20..76) > spread(&flat, 20..76) + 10.0, "grain appears");
+    }
+
     #[test]
     fn xdog_draws_a_line_on_the_edge_and_leaves_flat_areas_white() {
         let square = image(|x, y| if (28..68).contains(&x) && (28..68).contains(&y) { 180 } else { 255 });
