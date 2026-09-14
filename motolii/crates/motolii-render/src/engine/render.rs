@@ -522,6 +522,8 @@ impl Engine {
             if index < skip_below
                 || plated.contains(&index)
                 || matte_sources.contains(&layer.id)
+                // Stencil / Silhouette は自分では描かない(切る相手へ matte として配られる)。
+                || layer.blend_mode.is_stencil()
                 || (layer.clip_to_below && layer.matte.is_none())
                 || layer.placement.opacity <= 0.0
                 || unseen.contains(&index)
@@ -933,7 +935,8 @@ impl Engine {
         layer: Layer,
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
-        if passes.is_empty() {
+        // 形・文字の輪郭のままの層(絵でない)は、切る前に 1 枚の絵に焼く(matte は絵同士で掛ける)。
+        if passes.is_empty() && layer.content.texture().is_some() {
             return Ok(layer);
         }
 

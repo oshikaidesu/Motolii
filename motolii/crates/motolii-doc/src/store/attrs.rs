@@ -22,6 +22,11 @@ pub enum BlendMode {
     Saturation,
     Color,
     Luminosity,
+    /// この層の形が、下の層を切って残す(AE の Stencil Alpha)。自分は描かない。切る範囲は clip していれば自分のクリップの束、
+    /// していなければ同じ Group の中の自分より下(2026-09-15 利用者裁定「クリッピングマスクの逆」「全部切るのは使い勝手が悪い」)。
+    StencilAlpha,
+    /// この層の形で、下の層に穴を開ける(AE の Silhouette Alpha)。範囲は Stencil と同じ。
+    SilhouetteAlpha,
 }
 
 impl Default for BlendMode {
@@ -31,6 +36,11 @@ impl Default for BlendMode {
 }
 
 impl BlendMode {
+    /// 描かずに、下を切る層か。
+    pub fn is_stencil(self) -> bool {
+        matches!(self, BlendMode::StencilAlpha | BlendMode::SilhouetteAlpha)
+    }
+
     pub fn to_enum_value(self) -> i64 {
         match self {
             BlendMode::Normal => 0,
@@ -50,6 +60,8 @@ impl BlendMode {
             BlendMode::Saturation => 14,
             BlendMode::Color => 15,
             BlendMode::Luminosity => 16,
+            BlendMode::StencilAlpha => 17,
+            BlendMode::SilhouetteAlpha => 18,
         }
     }
 
@@ -72,6 +84,8 @@ impl BlendMode {
             14 => Some(BlendMode::Saturation),
             15 => Some(BlendMode::Color),
             16 => Some(BlendMode::Luminosity),
+            17 => Some(BlendMode::StencilAlpha),
+            18 => Some(BlendMode::SilhouetteAlpha),
             _ => None,
         }
     }

@@ -207,6 +207,37 @@ mod clipping_contract {
         assert!(orphan.chunks_exact(4).all(|px| px[3] == 0), "missing base left unbounded clipping");
     }
 
+    /// Stencil はクリッピングマスクの逆: clip した Stencil は自分の束(土台)だけを残し、下の背景は切らない。
+    /// Silhouette は穴を開ける。
+    #[test]
+    fn a_clipped_stencil_keeps_only_its_base_and_leaves_the_backdrop() {
+        let dir = tempfile::tempdir().unwrap();
+        let (width, height) = (16u32, 16u32);
+        let backdrop_path = dir.path().join("backdrop.png");
+        let base_path = dir.path().join("base.png");
+        let window_path = dir.path().join("window.png");
+        png(&backdrop_path, width, height, |_, _| [0, 0, 255, 255]);
+        png(&base_path, width, height, |_, _| [255, 0, 0, 255]);
+        png(&window_path, width, height, |x, _| [255, 255, 255, if x < width / 2 { 255 } else { 0 }]);
+        let mut doc = composition(width, height);
+        add_file_layer(&mut doc, 1, &backdrop_path, 0, [0.0, 0.0]);
+        add_file_layer(&mut doc, 2, &base_path, 1, [0.0, 0.0]);
+        let window = add_file_layer(&mut doc, 3, &window_path, 2, [0.0, 0.0]);
+        clip(&mut doc, window);
+        doc.apply(Intent::SetAttrs { layer: window, patch: LayerAttrsPatch { blend_mode: Some(crate::doc::store::BlendMode::StencilAlpha), ..Default::default() } }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let (inside, outside) = (at(&frame, width, 3, 8), at(&frame, width, 12, 8));
+        assert!(inside[0] > 240 && inside[2] < 15, "inside the window the base remains, the stencil itself is not drawn: {inside:?}");
+        assert!(outside[2] > 240 && outside[0] < 15, "outside the window the backdrop shows, untouched: {outside:?}");
+
+        doc.apply(Intent::SetAttrs { layer: window, patch: LayerAttrsPatch { blend_mode: Some(crate::doc::store::BlendMode::SilhouetteAlpha), ..Default::default() } }).unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let (hole, rest) = (at(&frame, width, 3, 8), at(&frame, width, 12, 8));
+        assert!(hole[2] > 240 && hole[0] < 15, "Silhouette: a hole through the base shows the backdrop: {hole:?}");
+        assert!(rest[0] > 240, "and the base stays elsewhere: {rest:?}");
+    }
+
     fn ply_plane(path: &std::path::Path, size: u32, rgb: [u8; 3]) {
         let mut text = format!(
             "ply\nformat ascii 1.0\nelement vertex {}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n",

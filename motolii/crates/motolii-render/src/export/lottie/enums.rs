@@ -23,6 +23,8 @@ pub(crate) fn blend_mode_to_int(mode: crate::doc::store::BlendMode) -> i64 {
         Color => 14,
         Luminosity => 15,
         Add => 16,
+        // Lottie に Stencil は無い(track matte の構造へ直すのは後)。
+        StencilAlpha | SilhouetteAlpha => 0,
     }
 }
 

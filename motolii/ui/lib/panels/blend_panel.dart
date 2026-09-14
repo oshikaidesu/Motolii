@@ -44,6 +44,11 @@ class BlendPanelState extends State<BlendPanel> {
     'Saturation',
     'Color',
     'Luminosity',
+    // The inverse of a clipping mask: this layer's shape keeps (Stencil) or
+    // cuts away (Silhouette) what is below it — its clipping stack when
+    // clipped, otherwise its group.
+    'StencilAlpha',
+    'SilhouetteAlpha',
   ];
 
   /// Kept between snapshots so the tiles never blink to empty while the

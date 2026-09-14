@@ -48,6 +48,9 @@ pub(crate) fn blend(mode: BlendMode, top: [f32; 3], bottom: [f32; 3]) -> [f32; 3
         Saturation => set_lum(set_sat(bottom, sat(top)), lum(bottom)),
         Color => set_lum(top, lum(bottom)),
         Luminosity => set_lum(bottom, lum(top)),
+        // 形の中の 1 画素: Stencil は下地がそのまま残り、Silhouette は穴(何も無い)。
+        StencilAlpha => bottom,
+        SilhouetteAlpha => [0.0; 3],
     }
 }
 

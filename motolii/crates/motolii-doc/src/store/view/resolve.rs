@@ -550,6 +550,81 @@ impl<'a> StoreView<'a> {
     /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
     /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
     #[allow(clippy::too_many_arguments)]
+    /// Stencil / Silhouette の層(クリッピングマスクの逆、2026-09-15 利用者裁定): 自分の形を、範囲の層へ matte として配る。
+    /// 範囲は clip していれば自分のクリップの土台(束の上の層は土台の形で切られるので一緒に切れる)、していなければ
+    /// 同じ Group の中で自分より下の層(と、その子孫)。自分の matte(clip の土台)は外す — 土台を切る側なので巡る。
+    /// 1 つの層に matte は 1 つ: 既に track matte を持つ層は切らない。複数の Stencil が重なる層は、一番近い(order の低い)物。
+    fn hand_out_stencils(&self, out: &mut [ResolvedLayer]) -> Result<(), StoreError> {
+        let mut stencils: Vec<(LayerId, i16, bool, crate::doc::store::MatteMode, Option<LayerId>)> = Vec::new();
+        for layer in out.iter().filter(|l| l.blend_mode.is_stencil() && !l.ghost && l.copy == 0) {
+            let Some(meta) = self.meta(layer.id)? else { continue };
+            let mode = if layer.blend_mode == crate::doc::store::BlendMode::SilhouetteAlpha {
+                crate::doc::store::MatteMode::InvertedAlpha
+            } else {
+                crate::doc::store::MatteMode::Alpha
+            };
+            stencils.push((layer.id, meta.order, layer.clip_to_below, mode, self.attrs(layer.id)?.unwrap_or_default().parent));
+        }
+        if stencils.is_empty() {
+            return Ok(());
+        }
+        // 近い物が勝つよう、order の高い Stencil から配って低い物で上書きする。
+        stencils.sort_by_key(|s| std::cmp::Reverse(s.1));
+        let handed: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
+        let mut handed = handed;
+        for &(stencil, order, clipped, mode, parent) in &stencils {
+            let matte = crate::doc::store::Matte { layer: stencil, mode };
+            let base = if clipped { self.clipping_base(stencil)? } else { None };
+            for i in 0..out.len() {
+                let layer = &out[i];
+                if layer.id == stencil || layer.ghost || layer.clip_to_below || layer.plate.is_some() {
+                    continue;
+                }
+                if layer.matte.is_some() && !handed.contains(&layer.id) {
+                    continue;
+                }
+                // 板にならない Group は自分では描かないので、切るのはその子孫(板の Group は板ごと切る)。
+                let is_plate = |id: LayerId| out.iter().any(|l| l.plate == Some(id));
+                if layer.source == crate::doc::store::LayerSource::Group && !is_plate(layer.id) {
+                    continue;
+                }
+                // 祖先を辿る(自分自身を含む)。
+                let mut chain = vec![layer.id];
+                let mut guard = 0;
+                while let Some(up) = self.attrs(*chain.last().unwrap_or(&layer.id))?.unwrap_or_default().parent {
+                    chain.push(up);
+                    guard += 1;
+                    if guard > 64 { break; }
+                }
+                let inside = if clipped {
+                    base.is_some_and(|b| chain.contains(&b))
+                } else {
+                    // 自分の親の直下の祖先の order が自分より下なら範囲。
+                    let mut found = None;
+                    for (k, id) in chain.iter().enumerate() {
+                        let up = chain.get(k + 1).copied();
+                        if up == parent {
+                            found = Some(*id);
+                            break;
+                        }
+                    }
+                    match found {
+                        Some(top) => top != stencil && self.meta(top)?.is_some_and(|m| m.order < order),
+                        None => false,
+                    }
+                };
+                if inside {
+                    out[i].matte = Some(matte);
+                    handed.insert(out[i].id);
+                }
+            }
+            if let Some(layer) = out.iter_mut().find(|l| l.id == stencil) {
+                layer.matte = None;
+            }
+        }
+        Ok(())
+    }
+
     fn push_placements(
         &self,
         base: ResolvedLayer,
@@ -899,6 +974,7 @@ impl<'a> StoreView<'a> {
         }
         self.put_backgrounds_behind(&mut out, t)?;
         self.put_on_planes(&mut out, t)?;
+        self.hand_out_stencils(&mut out)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
     }
@@ -1238,6 +1314,31 @@ mod clipping_contract {
             }},
         ]).unwrap();
         layer
+    }
+
+    /// Stencil はクリッピングマスクの逆: 自分の形で下を切る。範囲は clip していれば束、していなければ同じ Group の下だけ。
+    #[test]
+    fn a_stencil_cuts_its_group_below_it_or_only_its_clipping_stack() {
+        let mut doc = blank_project();
+        let background = add(&mut doc, 1, 0, None, false);
+        let group = add(&mut doc, 9, 5, None, false);
+        let low = add(&mut doc, 4, 1, Some(group), false);
+        let photo = add(&mut doc, 5, 3, Some(group), false);
+        let stencil = add(&mut doc, 6, 4, Some(group), false);
+        let above = add(&mut doc, 7, 8, Some(group), false);
+        doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { blend_mode: Some(BlendMode::StencilAlpha), ..Default::default() } }).unwrap();
+        let matte_of = |doc: &Document, id: LayerId| doc.view().resolved_layers(RationalTime::ZERO).unwrap().into_iter().find(|l| l.id == id).and_then(|l| l.matte);
+        let cut = Some(Matte { layer: stencil, mode: MatteMode::Alpha });
+        assert_eq!((matte_of(&doc, low), matte_of(&doc, photo)), (cut, cut), "without clip: everything below it in the group");
+        assert_eq!((matte_of(&doc, above), matte_of(&doc, background)), (None, None), "not what is above, not outside the group");
+
+        doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { clip_to_below: Some(true), ..Default::default() } }).unwrap();
+        assert_eq!(matte_of(&doc, photo), cut, "clipped: only its clipping base");
+        assert_eq!(matte_of(&doc, low), None, "the rest of the group is left alone");
+        assert_eq!(matte_of(&doc, stencil), None, "the stencil does not clip itself to the base it cuts");
+
+        doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { blend_mode: Some(BlendMode::SilhouetteAlpha), ..Default::default() } }).unwrap();
+        assert_eq!(matte_of(&doc, photo), Some(Matte { layer: stencil, mode: MatteMode::InvertedAlpha }), "Silhouette punches a hole");
     }
 
     #[test]

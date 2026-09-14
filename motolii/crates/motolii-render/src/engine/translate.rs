@@ -23,6 +23,8 @@ pub(crate) fn translate_blend_mode(
         Src::Saturation => Ok(Dst::Saturation),
         Src::Color => Ok(Dst::Color),
         Src::Luminosity => Ok(Dst::Luminosity),
+        // 切る層は自分では描かない。切る相手(matte の源)として普通に描いた絵を読む。
+        Src::StencilAlpha | Src::SilhouetteAlpha => Ok(Dst::Normal),
     }
 }
 
