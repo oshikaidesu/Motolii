@@ -21,6 +21,8 @@ pub struct BlobMark {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AnalysisInputs {
     blobs: HashMap<(LayerId, EffectId, i64, i64), Vec<BlobMark>>,
+    /// 素材ファイルの元の寸法(幅・高さ・奥行き、素材座標)。画・動画は奥行き 0、網・点群は bounds。並べる法の箱。
+    extents: HashMap<String, [f32; 3]>,
 }
 
 impl AnalysisInputs {
@@ -32,7 +34,15 @@ impl AnalysisInputs {
         self.blobs.get(&(layer, effect, t.num(), t.den())).map(Vec::as_slice)
     }
 
+    pub fn set_extent(&mut self, path: &str, extent: [f32; 3]) {
+        self.extents.insert(path.to_owned(), extent);
+    }
+
+    pub fn extent(&self, path: &str) -> Option<[f32; 3]> {
+        self.extents.get(path).copied()
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.blobs.is_empty()
+        self.blobs.is_empty() && self.extents.is_empty()
     }
 }

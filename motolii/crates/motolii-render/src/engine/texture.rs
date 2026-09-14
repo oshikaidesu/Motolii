@@ -583,6 +583,25 @@ impl Engine {
     }
 
     /// 網も焼かない。三角形のまま run の view へ渡り、深度で板と刺さり合う。
+    /// 素材ファイルの元の寸法(幅・高さ・奥行き)。網・点群は読み込んで bounds、画・動画は probe(どちらも一度だけ)。
+    pub(super) fn material_extent(&mut self, path: &str, comp: CompSpec) -> Option<[f32; 3]> {
+        if crate::render::media::is_mesh_path(path) {
+            self.mesh_content_for(path, comp).ok()?;
+            return self.models.get(path).map(|m| m.bounds().size());
+        }
+        if is_point_cloud_path(path) {
+            self.point_cloud_content_for(path, comp).ok()?;
+            return self.point_clouds.get(path).map(|c| c.bounds().size());
+        }
+        if !self.probes.contains_key(path) && !self.failed_probes.contains_key(path) {
+            match probe(path) {
+                Ok(info) => { self.probes.insert(path.to_owned(), info); }
+                Err(err) => { self.failed_probes.insert(path.to_owned(), err.to_string()); }
+            }
+        }
+        self.probes.get(path).map(|info| [info.width as f32, info.height as f32, 0.0])
+    }
+
     fn mesh_content_for(
         &mut self,
         path: &str,

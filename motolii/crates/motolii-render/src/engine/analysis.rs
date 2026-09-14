@@ -80,6 +80,11 @@ impl Engine {
         for layer in view.layers() {
             let Some(meta) = view.meta(layer).map_err(store)? else { continue };
             if !meta.timing.covers(frame) { continue; }
+            if let crate::doc::store::LayerSource::File { path, .. } = &meta.source {
+                if let Some(extent) = self.material_extent(path, composition.spec()) {
+                    inputs.set_extent(path, extent);
+                }
+            }
             let effects = view.resolved_effects(layer, t).map_err(store)?;
             // Blob Track は指した層を、Track Overlay は下の合成を読む。
             let (params, source, settings, detail, show_mask, overlay) = if let Some(effect) = effects.iter().find(|e| blob::is_blob_track(&e.plugin_id)) {

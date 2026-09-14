@@ -69,7 +69,8 @@ impl<'a> StoreView<'a> {
         t: RationalTime,
     ) -> Result<glam::Affine3A, StoreError> {
         let xy = self.local_placement_transform(layer, t)?;
-        let position = match self.laid_out(layer, t)? {
+        let slot = self.laid_out(layer, t)?;
+        let position = match slot {
             Some(slot) => slot.position,
             None => self.resolve_position(layer, t)?,
         };
@@ -77,10 +78,10 @@ impl<'a> StoreView<'a> {
         Ok(LayerPlacement::spatial_from_transform(
             xy,
             position,
-            scalar(property::POSITION_Z)?,
+            scalar(property::POSITION_Z)? + slot.map_or(0.0, |s| s.z),
             scalar(property::ROTATION_X)?,
             scalar(property::ROTATION_Y)?,
-            self.split_position_component(layer, property::SCALE_Z, t)?.unwrap_or(1.0),
+            self.split_position_component(layer, property::SCALE_Z, t)?.unwrap_or(1.0) * slot.map_or(1.0, |s| s.scale_z),
         ))
     }
 

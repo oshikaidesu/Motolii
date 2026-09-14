@@ -465,7 +465,7 @@ impl<'a> StoreView<'a> {
                 world_transform: world_transforms.get(&layer).copied(),
                 opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
                 order: meta.order,
-                z: scalar(property::POSITION_Z, 0.0)?,
+                z: scalar(property::POSITION_Z, 0.0)? + self.laid_out(layer, t)?.map_or(0.0, |slot| slot.z),
                 rotation_x: scalar(property::ROTATION_X, 0.0)?,
                 rotation_y: scalar(property::ROTATION_Y, 0.0)? as f32,
                 plane: None,

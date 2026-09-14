@@ -39,6 +39,7 @@ pub const ROW_START: &str = "layout.row_start";
 pub const COLUMN_SPAN: &str = "layout.column_span";
 pub const ROW_SPAN: &str = "layout.row_span";
 pub const OBJECT_FIT: &str = "layout.object_fit";
+pub const DEPTH_ALIGNMENT: &str = "layout.depth_alignment";
 
 /// 欄: (property, 窓の名前, 既定値, 範囲, 選択肢)。名前は CSS の語、大きさの決め方だけ Figma(裁定 2026-09-14)。
 pub type Row = (&'static str, &'static str, Value, Option<(f64, f64)>, &'static [&'static str]);
@@ -52,6 +53,7 @@ pub const GROUP_ROWS: &[Row] = &[
     (FLEX_WRAP, "Flex Wrap", Value::Enum(0), None, &["No Wrap", "Wrap", "Wrap Reverse"]),
     (JUSTIFY_CONTENT, "Justify Content", Value::Enum(0), None, &["Start", "End", "Center", "Space Between", "Space Around", "Space Evenly"]),
     (ALIGN_ITEMS, "Align Items", Value::Enum(0), None, &["Stretch", "Start", "End", "Center"]),
+    (DEPTH_ALIGNMENT, "Depth Alignment", Value::Enum(0), None, &["Back", "Center", "Front"]),
     (GRID_COLUMNS, "Grid Columns", Value::F64(2.0), Some((1.0, 64.0)), &[]),
     (GRID_ROWS, "Grid Rows", Value::F64(0.0), Some((0.0, 64.0)), &[]),
     (GAP, "Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
@@ -106,6 +108,8 @@ pub fn choices(property: &str) -> &'static [&'static str] {
 pub struct Frame {
     pub slots: HashMap<LayerId, Slot>,
     pub sizes: HashMap<LayerId, [f32; 2]>,
+    /// Display の Group の奥行き(子の最大)。面が奥で、[-奥行き, 0]。
+    pub depths: HashMap<LayerId, f32>,
 }
 
 /// 並ぶ子の変換の差し替え: 層の Position と Scale の代わりに使う値と、形の輪郭の伸び。
@@ -116,6 +120,10 @@ pub struct Slot {
     pub stretch: [f32; 2],
     /// 横が Fill の文字: その幅で折り返す(素材座標の幅、Scale で割った値)。
     pub wrap: Option<f32>,
+    /// 奥行きの揃えで足す z(Position Z に足す)。面が奥(z = 0)、物は camera 側(負)へ出る。
+    pub z: f32,
+    /// 3D の Object Fit で奥行きにも掛ける倍率(Scale Z に掛ける)。
+    pub scale_z: f32,
 }
 
 /// view の寿命の間、時刻ごとに 1 回だけ解く(view は値を変えない)。
@@ -211,6 +219,7 @@ impl StoreView<'_> {
         Ok(match meta.source {
             LayerSource::Shape => shape_box(&self.shapes_at(layer, t)?),
             LayerSource::Text => self.text_box(layer, t, None)?,
+            LayerSource::File { path, .. } => self.analysis().and_then(|a| a.extent(&path)).filter(|e| e[0] > 0.0 && e[1] > 0.0).map(|e| [0.0, 0.0, e[0], e[1]]),
             LayerSource::Group => {
                 if self.display(layer, t)? != 0 {
                     return Ok(self.layout_frame(t)?.sizes.get(&layer).map(|s| [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + s[0], CANVAS_MARGIN + s[1]]));
@@ -280,6 +289,7 @@ impl StoreView<'_> {
             .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
             let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
             let shifted = |mut placed: taffy::Layout| { placed.location.x += CANVAS_MARGIN; placed.location.y += CANVAS_MARGIN; placed };
+            let mut groups_order = groups.clone();
             for (node, layer, is_root) in groups {
                 let placed = shifted(*tree.layout(node).map_err(taffy)?);
                 frame.sizes.insert(layer, [placed.size.width, placed.size.height]);
@@ -300,6 +310,10 @@ impl StoreView<'_> {
                     self.slot(leaf.layer, t, leaf.bounds, leaf.sizing, leaf.fit, placed)?
                 };
                 frame.slots.insert(leaf.layer, slot);
+            }
+            // 奥行きの揃えは内の Group から(外の Group は内の奥行きを子の奥行きとして読む)。
+            for (_, group, _) in groups_order {
+                self.align_depth(group, t, &children, &mut frame)?;
             }
         }
         Ok(frame)
@@ -368,6 +382,48 @@ impl StoreView<'_> {
         let Some(size) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
         let b = [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]];
         Ok(Some((b, self.number(group, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)))
+    }
+
+    /// 層の奥行きの範囲(素材座標の z、[手前, 奥])。平らな物は [0, 0]、押し出しは [0, Depth]、網・点群は bounds の
+    /// 奥行きを中心に、並べる Group は [-奥行き, 0]。Scale Z(と 3D の Object Fit)を掛ける。
+    fn depth_range(&self, layer: LayerId, t: RationalTime, frame: &Frame) -> Result<[f32; 2], StoreError> {
+        let Some(meta) = self.meta(layer)? else { return Ok([0.0; 2]) };
+        let scale_z = self.number(layer, property::SCALE_Z, 1.0, t)? as f32 * frame.slots.get(&layer).map_or(1.0, |s| s.scale_z);
+        let range = match &meta.source {
+            LayerSource::Shape | LayerSource::Text => [0.0, self.number(layer, property::DEPTH, 0.0, t)?.max(0.0) as f32],
+            LayerSource::File { path, .. } => {
+                let d = self.analysis().and_then(|a| a.extent(path)).map_or(0.0, |e| e[2]);
+                [-d * 0.5, d * 0.5]
+            }
+            LayerSource::Group => [-frame.depths.get(&layer).copied().unwrap_or(0.0), 0.0],
+            _ => [0.0, 0.0],
+        };
+        Ok([range[0] * scale_z, range[1] * scale_z])
+    }
+
+    /// Depth Alignment: 子の奥行きの最大が Group の奥行き。Back = 子の奥を面(z = 0)に、Front = 子の手前を
+    /// Group の手前(-奥行き)に、Center = 中心を揃える(visionOS の depthAlignment)。
+    fn align_depth(&self, group: LayerId, t: RationalTime, children: &HashMap<LayerId, Vec<(i16, LayerId)>>, frame: &mut Frame) -> Result<(), StoreError> {
+        let alignment = self.choice(group, DEPTH_ALIGNMENT, t)?;
+        let mut ranges = Vec::new();
+        for &(_, child) in children.get(&group).map(Vec::as_slice).unwrap_or(&[]) {
+            if frame.slots.contains_key(&child) {
+                ranges.push((child, self.depth_range(child, t, frame)?));
+            }
+        }
+        let depth = ranges.iter().map(|(_, r)| r[1] - r[0]).fold(0.0f32, f32::max);
+        for (child, [front, back]) in ranges {
+            let z = match alignment {
+                1 => -depth * 0.5 - (front + back) * 0.5,
+                2 => -depth - front,
+                _ => -back,
+            };
+            if let Some(slot) = frame.slots.get_mut(&child) {
+                slot.z = z;
+            }
+        }
+        frame.depths.insert(group, depth);
+        Ok(())
     }
 
     fn sizing(&self, layer: LayerId, t: RationalTime) -> Result<[Sizing; 2], StoreError> {
@@ -540,7 +596,8 @@ impl StoreView<'_> {
             let target = [placed.location.x, placed.location.y][axis] + (cell[axis] - shown[axis]) * 0.5;
             position[axis] = target - low + offset[axis];
         }
-        Ok(Slot { position, scale, stretch, wrap: None })
+        let scale_z = if is_shape || !matches!(fit, 1 | 2) || factor[0] != factor[1] { 1.0 } else { factor[0] };
+        Ok(Slot { position, scale, stretch, wrap: None, z: 0.0, scale_z })
     }
 }
 
@@ -752,6 +809,39 @@ mod tests {
         assert_eq!(plane(group), Some(face), "the tilted group is the face");
         assert_eq!(plane(flat), Some(face), "a flat child lies on it and stacks by order");
         assert_eq!(plane(lifted), None, "a child lifted off the face sorts by distance");
+    }
+
+    #[test]
+    fn depth_alignment_sets_each_childs_z_against_the_deepest_one() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        let slab = rect(&mut doc, 2, group, [100.0, 50.0]);
+        let card = rect(&mut doc, 3, group, [60.0, 50.0]);
+        put(&mut doc, slab, property::DEPTH, Value::F64(100.0));
+        let z = |doc: &Document, id| doc.view().layout_frame(T).unwrap().slots[&id].z;
+        assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, 0.0), "Back: backs on the face, the slab stands out toward the camera");
+        assert_eq!(doc.view().layout_frame(T).unwrap().depths[&group], 100.0);
+        put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(1));
+        assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -50.0), "Center: the card floats at the slab's middle");
+        put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(2));
+        assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -100.0), "Front: fronts together");
+        let resolved = doc.view().resolved_layers(T).unwrap();
+        assert_eq!(resolved.iter().find(|l| l.id == card).unwrap().placement.z, -100.0, "the z reaches the resolved layer");
+    }
+
+    #[test]
+    fn a_picture_takes_the_size_the_host_measured() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        let picture = add(&mut doc, 2, LayerSource::File { path: "/tmp/photo.png".to_owned(), fingerprint: None }, Some(group));
+        let after = rect(&mut doc, 3, group, [40.0, 40.0]);
+        let mut inputs = crate::doc::store::analysis::AnalysisInputs::default();
+        inputs.set_extent("/tmp/photo.png", [320.0, 180.0, 0.0]);
+        let view = doc.view().with_analysis(&inputs);
+        let frame = view.layout_frame(T).unwrap();
+        assert_eq!(view.layer_box(picture, T).unwrap(), Some([0.0, 0.0, 320.0, 180.0]));
+        // 形の素材座標は輪郭の canvas の 1 画素外が原点、画は 0。
+        assert_eq!(frame.slots[&after].position[0] + 1.0, frame.slots[&picture].position[0] + 320.0 + 10.0, "the next item starts after the picture and the gap");
     }
 
     #[test]
