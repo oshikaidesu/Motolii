@@ -842,4 +842,6 @@
 
 - [物を避けて流れる文字 — CSS shape-outside を動画の骨格へ(提案)](2026-09-15-shape-outside.md)
 
+- [Stencil と Silhouette — クリッピングマスクの逆](2026-09-15-stencil.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
