@@ -885,7 +885,7 @@ impl<'a> StoreView<'a> {
         Ok(out)
     }
 
-    /// 並べる Group の背景は子孫の一番奥に積む: 重ね順を子孫の最も奥(小さい番号)に合わせ、同じ番号の中では先に積む。
+    /// 並べる Group の背景は子孫の一番奥の、さらに 1 つ下に積む(同じ番号だと描き順の鍵が同点になる)。
     fn put_backgrounds_behind(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
         let mut deepest: HashMap<LayerId, i16> = HashMap::new();
         for layer in out.iter() {
@@ -900,7 +900,7 @@ impl<'a> StoreView<'a> {
         for layer in out.iter_mut() {
             if layer.source == crate::doc::store::LayerSource::Group {
                 if let Some(order) = deepest.get(&layer.id).filter(|_| self.layout_display(layer.id, t).unwrap_or(0) != 0) {
-                    layer.placement.order = layer.placement.order.min(*order);
+                    layer.placement.order = layer.placement.order.min(order.saturating_sub(1));
                 }
             }
         }

@@ -7,7 +7,7 @@ const ball = ellipse({ name: "Ball" }).fill("#EF9F27");
 const grid = group(ball, ...tiles).name("Grid");
 grid.set("Display", "Grid").set("Grid Columns", 9).set("Grid Rows", 9).set("Gap", 4)
   .set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed").set("Width", 900).set("Height", 900)
-  .set("Position", [510, 90]);
+  .set("Background", "#0b0b0b").set("Position", [510, 90]);
 for (const tile of tiles) tile.set("Position", [0, 0]).set("Horizontal Sizing", "Fill").set("Vertical Sizing", "Fill");
 ball.set("Position", [0, 0]).set("Horizontal Sizing", "Fill").set("Vertical Sizing", "Fill").set("Object Fit", "Contain")
   .set("Column Start", 5);
