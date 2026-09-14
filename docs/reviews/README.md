@@ -834,4 +834,6 @@
 
 - [CSS の恩恵の台帳 — Web が軽々と使っている表現を、動画の骨格へ](2026-09-14-css-ledger.md)
 
+- [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
