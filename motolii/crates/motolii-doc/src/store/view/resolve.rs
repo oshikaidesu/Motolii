@@ -468,6 +468,7 @@ impl<'a> StoreView<'a> {
                 z: scalar(property::POSITION_Z, 0.0)?,
                 rotation_x: scalar(property::ROTATION_X, 0.0)?,
                 rotation_y: scalar(property::ROTATION_Y, 0.0)? as f32,
+                plane: None,
             },
             declared_size: size,
             source: meta.source,
@@ -895,6 +896,7 @@ impl<'a> StoreView<'a> {
             }
         }
         self.put_backgrounds_behind(&mut out, t)?;
+        self.put_on_planes(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
     }
@@ -930,6 +932,47 @@ impl<'a> StoreView<'a> {
             next = self.attrs(group)?.unwrap_or_default().parent;
         }
         Ok(masks)
+    }
+
+    /// 並べる Group の面に乗る物へ、その面の基準点を付ける(箱の奥行きの法 3)。面は、z・Tilt・Depth の無い層を
+    /// 親へ辿って届く一番外の Display の Group(面の Group 自身は傾いてよい)。
+    fn put_on_planes(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        let flat: HashMap<LayerId, (bool, Option<[f32; 3]>)> = out
+            .iter()
+            .filter(|l| !l.ghost && l.copy == 0)
+            .map(|l| {
+                let flat = l.placement.z == 0.0 && l.placement.rotation_x == 0.0 && l.placement.rotation_y == 0.0 && l.depth == 0.0;
+                (l.id, (flat, l.placement.world_transform.map(|w| w.translation.to_array())))
+            })
+            .collect();
+        let mut planes = HashMap::new();
+        for layer in out.iter() {
+            if planes.contains_key(&layer.id) {
+                continue;
+            }
+            let mut plane = None;
+            let mut here = layer.id;
+            let mut seen = HashSet::new();
+            while seen.insert(here) {
+                let Some(&(flat_here, anchor)) = flat.get(&here) else { break };
+                // 面の Group 自身はどう傾いてもよい。面から浮くのは、その下で z・Tilt・Depth を持つ物。
+                if self.layout_display(here, t).unwrap_or(0) != 0 {
+                    plane = anchor;
+                }
+                if !flat_here {
+                    break;
+                }
+                match self.attrs(here)?.unwrap_or_default().parent {
+                    Some(parent) => here = parent,
+                    None => break,
+                }
+            }
+            planes.insert(layer.id, plane);
+        }
+        for layer in out.iter_mut() {
+            layer.placement.plane = planes.get(&layer.id).copied().flatten();
+        }
+        Ok(())
     }
 
     /// 並べる Group の背景は子孫の一番奥の、さらに 1 つ下に積む(同じ番号だと描き順の鍵が同点になる)。

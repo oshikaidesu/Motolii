@@ -213,6 +213,9 @@ pub struct LayerPlacement {
     pub z: f32,
     pub rotation_x: f32,
     pub rotation_y: f32,
+    /// 並べる Group の面に乗っているなら、その面の基準点(world)。同じ面の物は描き順の距離をここで測り、
+    /// 積み順で重なる(3D でも深度で奪い合わない、箱の奥行きの法 3)。
+    pub plane: Option<[f32; 3]>,
 }
 
 impl Default for LayerPlacement {
@@ -225,6 +228,7 @@ impl Default for LayerPlacement {
             z: 0.0,
             rotation_x: 0.0,
             rotation_y: 0.0,
+            plane: None,
         }
     }
 }

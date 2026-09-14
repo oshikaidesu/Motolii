@@ -969,6 +969,7 @@ impl Compositor {
                 z: 0.0,
                 rotation_x: 0.0,
                 rotation_y: 0.0,
+                plane: None,
             },
             projection: crate::doc::store::LayerProjection::TwoD,
             projection_camera: camera,

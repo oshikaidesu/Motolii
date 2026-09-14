@@ -257,12 +257,12 @@ impl Compositor {
                     &input.shading,
                     input.clip,
                 );
-                layers.extend(std::iter::repeat_n(two_d_layer(input), made.len()));
+                layers.extend(std::iter::repeat_n(draw_order(input), made.len()));
                 source_layers.extend(std::iter::repeat_n(index, made.len()));
                 instances.extend(made);
             }
         }
-        let draw = MeshDrawData::new_layered(&self.ctx, &instances, ClipPlane::NONE, &layers)
+        let draw = MeshDrawData::new_ordered(&self.ctx, &instances, ClipPlane::NONE, &layers)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
         self.surface_work.mesh_batches += 1;
         self.surface_work.mesh_instances_uploaded += instances.len() as u64;
@@ -290,8 +290,8 @@ impl Compositor {
         let started = std::time::Instant::now();
         let mut clouds = Vec::new();
         let mut lines = Vec::new();
-        let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>, Vec<i32>)> = Vec::new();
-        let mut rect_layers = vec![0; rects.len()];
+        let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>, Vec<re_renderer::renderer::DrawOrder>)> = Vec::new();
+        let mut rect_layers = vec![re_renderer::renderer::DrawOrder::default(); rects.len()];
         for (index, input) in inputs.iter().enumerate() {
             #[cfg(test)]
             if capture && self.reflection_diagnostic_skip == Some(index) {
@@ -354,7 +354,7 @@ impl Compositor {
                             instance.world_from_mesh = glam::Affine3A::from_translation(-normal * two_d_stack_bias(input.depth_offset)) * instance.world_from_mesh;
                         }
                     }
-                    let layers = std::iter::repeat_n(if capture { 0 } else { two_d_layer(input) }, instances.len());
+                    let layers = std::iter::repeat_n(if capture { Default::default() } else { draw_order(input) }, instances.len());
                     if let Some((_, group, keys)) = mesh_groups.iter_mut().find(|(c, _, _)| *c == clip) {
                         group.extend(instances);
                         keys.extend(layers);
@@ -379,7 +379,7 @@ impl Compositor {
                     } else {
                         input.opacity
                     };
-                    rect_layers.push(if capture { 0 } else { two_d_layer(input) });
+                    rect_layers.push(if capture { Default::default() } else { draw_order(input) });
                     rects.push(TexturedRect {
                         top_left_corner_position: corner,
                         extent_u: u,
@@ -417,7 +417,7 @@ impl Compositor {
         let mut meshes: Vec<MeshDrawData> = mesh_groups
             .into_iter()
             .map(|(clip, instances, layers)| {
-                MeshDrawData::new_layered(&self.ctx, &instances, clip, &layers)
+                MeshDrawData::new_ordered(&self.ctx, &instances, clip, &layers)
                     .map_err(|e| CompositorError::Draw(e.to_string()))
             })
             .collect::<Result<_, _>>()?;
@@ -426,7 +426,7 @@ impl Compositor {
         }
         self.surface_work.draw_data_prepare_us += started.elapsed().as_micros() as u64;
         Ok(SceneDraws {
-            rects: RectangleDrawData::new_layered(&self.ctx, &rects, &rect_layers)
+            rects: RectangleDrawData::new_ordered(&self.ctx, &rects, &rect_layers)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?,
             clouds,
             lines,
@@ -740,10 +740,18 @@ impl Compositor {
 /// 2D は積み順だけで重なる(法 2026-09-12)。同じ面に重なった物の描き順を sort key の同点に
 /// 委ねると process ごとに揺れた(網は mesh ごとの束ね順が不定)ので、積み順ぶんだけ面に垂直に
 /// カメラ側へずらして「遠 → 近 = 下 → 上」を確定させる。1 段 0.02 px、視線に平行なので絵は動かない。
-/// 2D の積み順を描き順の鍵へ。透明相の並べ替えは camera からの距離が先なので、面をずらすだけでは
-/// 中心が横にずれた物同士(帯と端の丸)の上下が距離で決まった。鍵は距離より先に比べられる。
-fn two_d_layer(input: &SequentialInput<'_>) -> i32 {
-    if input.projection == crate::doc::store::LayerProjection::TwoD { i32::from(input.depth_offset) } else { 0 }
+/// 積み順を描き順へ。透明相の並べ替えは camera からの距離が先なので、面をずらすだけでは中心が横にずれた物同士
+/// (帯と端の丸)の上下が距離で決まった。2D は積み順を距離より先の鍵に、並べる Group の面に乗る物は面の基準点で
+/// 距離を測り積み順で重なる(別の面・浮いた物とは距離で並ぶ)。
+fn draw_order(input: &SequentialInput<'_>) -> re_renderer::renderer::DrawOrder {
+    use re_renderer::renderer::DrawOrder;
+    if input.projection == crate::doc::store::LayerProjection::TwoD {
+        return DrawOrder { layer: i32::from(input.depth_offset), ..Default::default() };
+    }
+    match input.placement.plane {
+        Some(point) => DrawOrder { position: Some(glam::Vec3A::from(point)), secondary: Some(f32::from(input.depth_offset)), ..Default::default() },
+        None => DrawOrder::default(),
+    }
 }
 
 fn two_d_stack_bias(order: i16) -> f32 {

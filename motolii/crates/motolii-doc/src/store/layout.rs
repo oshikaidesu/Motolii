@@ -738,6 +738,23 @@ mod tests {
     }
 
     #[test]
+    fn things_on_a_laid_out_face_share_its_point_even_when_the_face_is_tilted() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        put(&mut doc, group, property::POSITION, Value::Vec2([300.0, 200.0]));
+        put(&mut doc, group, property::ROTATION_Y, Value::F64(30.0));
+        let flat = rect(&mut doc, 2, group, [100.0, 50.0]);
+        let lifted = rect(&mut doc, 3, group, [60.0, 50.0]);
+        put(&mut doc, lifted, property::POSITION_Z, Value::F64(-40.0));
+        let resolved = doc.view().resolved_layers(T).unwrap();
+        let plane = |id| resolved.iter().find(|l| l.id == id).unwrap().placement.plane;
+        let face = resolved.iter().find(|l| l.id == group).unwrap().placement.world_transform.unwrap().translation.to_array();
+        assert_eq!(plane(group), Some(face), "the tilted group is the face");
+        assert_eq!(plane(flat), Some(face), "a flat child lies on it and stacks by order");
+        assert_eq!(plane(lifted), None, "a child lifted off the face sorts by distance");
+    }
+
+    #[test]
     fn a_growing_line_of_text_pushes_its_neighbour() {
         let mut doc = blank_project();
         let group = flex_row(&mut doc);
