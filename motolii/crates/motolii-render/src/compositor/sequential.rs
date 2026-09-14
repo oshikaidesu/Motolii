@@ -893,6 +893,10 @@ impl Compositor {
         matte_source: &Layer,
         mode: MatteMode,
     ) -> Result<Layer, CompositorError> {
+        // 窓はコマの組み立ての後で決まる。まだ 1 度も描いていない engine では寸法が 0 なので、出力の窓で描く。
+        if self.window.width == 0 || self.window.height == 0 {
+            self.window = crate::render::compositor::Window::output(comp);
+        }
         let projection = crate::doc::core::camera_projection(comp, camera);
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,

@@ -111,3 +111,22 @@ fn outlines_keep_their_stroke_width_whatever_the_box_size() {
     assert!((1..=4).contains(&left) && (1..=4).contains(&right), "枠線は 2 px 前後のまま: 左の箱 {left} 右の箱 {right}");
 }
 
+
+/// 箱でマスク: 元の層のトラックマットに Blob Track の層を指すと、写しの箱が全部マットになる(AE の track matte は相手の最終の絵)。
+/// 解析は元の層そのものの絵を読むので、マットがその塊に依っても回る。新しい engine の最初のコマでも描ける。
+#[test]
+fn a_track_matte_of_blob_boxes_reveals_every_box() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+    let mut doc = document(&path, false);
+    doc.apply(Intent::SetAttrs { layer: LayerId(1), patch: crate::doc::store::LayerAttrsPatch { matte: Some(Some(crate::doc::store::Matte { layer: LayerId(2), mode: crate::doc::store::MatteMode::Alpha })), ..Default::default() } }).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let frame = engine.render_frame(&doc.view(), at(10)).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    for (x, y) in [(75, 55), (260, 130)] {
+        let [r, g, b] = px(&frame, x, y);
+        assert!(r > 200 && g > 200 && b > 200, "どちらの箱の中も元の層の白が見える: ({x}, {y}) = {:?}", [r, g, b]);
+    }
+    let [r, g, b] = px(&frame, 160, 100);
+    assert!(r < 30 && g < 30 && b < 30, "箱の外は切られる: {:?}", [r, g, b]);
+}

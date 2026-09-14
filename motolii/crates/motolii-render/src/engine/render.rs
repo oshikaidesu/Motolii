@@ -647,12 +647,21 @@ impl Engine {
                     let Some(mut source_layer) = self.build_layer(source, text_documents, shape_documents, t, comp, camera, projection_camera, source_blend)? else { continue; };
                     source_layer.outline = 0;
                     let source_passes = translate_effect_passes(&source.effects);
-                    let source_layer = self.apply_effects_before_matte(
-                        comp,
-                        camera,
-                        source_layer,
-                        &source_passes,
-                    )?;
+                    // マットは相手の層の最終の絵(AE の track matte と同じ): 配置の写しが複数あるか、中身が絵でない(形の輪郭)なら
+                    // 写しを全部 comp 大の 1 枚に焼いてから使う。
+                    let copies: Vec<&ResolvedLayer> = resolved.iter().filter(|l| l.id == matte.layer && !l.ghost).collect();
+                    let source_layer = if copies.len() > 1 || source_layer.content.texture().is_none() {
+                        let mut plate = Vec::new();
+                        for copy in copies {
+                            if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, CompositeBlendMode::Normal)? {
+                                let passes = translate_effect_passes(&copy.effects);
+                                plate.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
+                            }
+                        }
+                        self.bake_isolated_layers(comp, camera, plate, CompositeBlendMode::Normal, source.placement, false)?
+                    } else {
+                        self.apply_effects_before_matte(comp, camera, source_layer, &source_passes)?
+                    };
                     (
                         self.apply_matte(comp, camera, &target, &source_layer, matte.mode)?,
                         Vec::new(),

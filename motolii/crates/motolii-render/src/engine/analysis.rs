@@ -132,6 +132,8 @@ impl Engine {
             state.tracker.step(Vec::new(), settings);
             return Ok(Vec::new());
         };
+        // 解析は元の層そのものの絵を読む。マットやクリップは合成の属性で、その相手がこの塊に依ることもある(動画を箱で切る)。
+        let target = ResolvedLayer { matte: None, clip_to_below: false, ..target };
         let Some(picture) = self.layer_linear_picture(view, &resolved, &target, at, comp)? else { return Ok(Vec::new()) };
         let (pixels, width, height, shrink) = shrink_to_srgb(&picture, detail);
         // 論理 px ↔ 縮めた絵の px。
