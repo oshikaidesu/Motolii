@@ -116,6 +116,9 @@ fn set_shape_fill_color(node: &mut ShapeNode, brush: Brush) {
         ShapeNode::Leaf(shape) => {
             if let Some(fill) = shape.fill.as_mut() {
                 fill.brush = brush;
+            } else if let Some(stroke) = shape.stroke.as_mut() {
+                // 塗りの無い線だけの形(Line・つなぐ線)は、色 = 線の色。
+                stroke.brush = brush;
             }
         }
         ShapeNode::Group(group) => {

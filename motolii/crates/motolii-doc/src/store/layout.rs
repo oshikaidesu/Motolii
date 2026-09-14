@@ -63,6 +63,11 @@ pub const SHAPE_MARGIN: &str = "layout.shape_margin";
 /// 付く相手の箱の外側 9 か所(Center は重ねる)へ、自分の Margin だけ離して置く。Blob Track の層なら ID の一番小さい塊。
 /// 付いた物は流れの外(CSS の absolute と同じ、押し合わない)。
 pub const POSITION_ANCHOR: &str = "layout.position_anchor";
+/// 格子へ吸い付く(Grid の Group の子、流れの外の子と Repeater の写し): 箱の左上を一番近い升目の角へ寄せる強さ 0..1。
+/// Size が Fields なら大きさも升目の倍数に丸める。先例: Müller-Brockmann のモジュラーグリッド、C4D MoGraph の Quantize、
+/// Illustrator / Photoshop の Snap to Grid。
+pub const SNAP_TO_GRID: &str = "layout.snap_to_grid";
+pub const SNAP_SIZE: &str = "layout.snap_size";
 pub const POSITION_AREA: &str = "layout.position_area";
 /// 箱と箱をつなぐ線(`store/connect.rs`)。形の層の欄。
 pub const CONNECT_FROM: &str = "connect.from";
@@ -116,6 +121,8 @@ pub const GROUP_ROWS: &[Row] = &[
 /// 並ぶ子の欄(親の Display が Flex / Grid の時)。
 pub const ITEM_ROWS: &[Row] = &[
     (POSITION_TYPE, "Position Type", Value::Enum(0), None, &["Relative", "Absolute"]),
+    (SNAP_TO_GRID, "Snap to Grid", Value::F64(0.0), Some((0.0, 1.0)), &[]),
+    (SNAP_SIZE, "Snap Size", Value::Enum(0), None, &["Off", "Fields"]),
     (HORIZONTAL_SIZING, "Horizontal Sizing", Value::Enum(0), None, SIZING),
     (VERTICAL_SIZING, "Vertical Sizing", Value::Enum(0), None, SIZING),
     (WIDTH, "Width", Value::F64(100.0), Some((0.0, 100000.0)), &[]),
@@ -160,7 +167,7 @@ pub const CONNECT_ROWS: &[Row] = &[
     (DASH, "Dash", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_GAP, "Dash Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_OFFSET, "Dash Offset", Value::F64(0.0), None, &[]),
-    (TRACE, "Trace", Value::Enum(0), None, &["None", "Outline", "Handles", "Diagonals", "Circle", "Guides"]),
+    (TRACE, "Trace", Value::Enum(0), None, &["None", "Outline", "Handles", "Diagonals", "Circle", "Guides", "Grid"]),
     (HANDLE_SIZE, "Handle Size", Value::F64(10.0), Some((0.0, 10000.0)), &[]),
 ];
 
@@ -192,6 +199,8 @@ pub struct Frame {
     pub nudges_z: HashMap<LayerId, f32>,
     /// Display の Group の奥行きの範囲 [手前, 奥]。揃えなら面が奥で [-奥行き, 0]、奥へ積むなら [0, 積んだ厚み]。
     pub depths: HashMap<LayerId, [f32; 2]>,
+    /// Grid の Group の升目(素材座標): 列の [始, 終] と行の [始, 終]。格子へ吸い付く子と、格子を描く線が読む。
+    pub fields: HashMap<LayerId, (Vec<(f32, f32)>, Vec<(f32, f32)>)>,
 }
 
 /// 並ぶ子の変換の差し替え: 層の Position と Scale の代わりに使う値と、形の輪郭の伸び。
@@ -565,7 +574,7 @@ impl StoreView<'_> {
     }
 
     /// 0 = None、1 = Flex、2 = Grid。Group 以外は None。
-    fn display(&self, layer: LayerId, t: RationalTime) -> Result<i64, StoreError> {
+    pub(crate) fn display(&self, layer: LayerId, t: RationalTime) -> Result<i64, StoreError> {
         if !self.meta(layer)?.is_some_and(|m| m.source == LayerSource::Group) {
             return Ok(0);
         }
@@ -668,6 +677,9 @@ impl StoreView<'_> {
             for (node, layer, is_root) in groups {
                 let placed = shifted(*tree.layout(node).map_err(taffy)?);
                 frame.sizes.insert(layer, [placed.size.width, placed.size.height]);
+                if let Some(fields) = grid_fields(&tree, node) {
+                    frame.fields.insert(layer, fields);
+                }
                 if !is_root {
                     let bounds = [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + placed.size.width, CANVAS_MARGIN + placed.size.height];
                     let slot = self.slot(layer, t, bounds, [Sizing::Hug; 2], 3, placed)?;
@@ -1277,6 +1289,11 @@ impl StoreView<'_> {
             leaves.push(Leaf { node, text_fill, layer: child, bounds, sizing, fit: self.choice(child, OBJECT_FIT, t)? });
             nodes.push(node);
         }
+        // 子が全部流れの外でも、格子は升目を持つ(吸い付く子と格子の線が読む): 大きさ 0 の見えない子で格子の計算を走らせる
+        // (taffy は子の無い箱を葉として解き、升目を出さない)。
+        if nodes.is_empty() && self.display(group, t)? == 2 {
+            nodes.push(tree.new_leaf(Style::default()).map_err(|e| StoreError::Property(format!("layout: {e}")))?);
+        }
         let node = tree.new_with_children(style, &nodes).map_err(|e| StoreError::Property(format!("layout: {e}")))?;
         groups.push((node, group, is_root));
         Ok(node)
@@ -1321,6 +1338,29 @@ impl StoreView<'_> {
         let scale_z = 1.0;
         Ok(Slot { position, scale, stretch, wrap: None, z: 0.0, scale_z, rotation, anchor })
     }
+}
+
+/// Grid の Group の明示の升目(素材座標、CANVAS_MARGIN と padding 込み)。Grid でなければ None。
+fn grid_fields(tree: &TaffyTree<Measure>, node: NodeId) -> Option<(Vec<(f32, f32)>, Vec<(f32, f32)>)> {
+    let taffy::tree::DetailedLayoutInfo::Grid(info) = tree.detailed_layout_info(node) else { return None };
+    let padding = tree.layout(node).ok()?.padding;
+    let lines = |tracks: &taffy::compute::detailed_info::DetailedGridTracksInfo, start: f32| {
+        let mut at = start;
+        let mut out = Vec::new();
+        for (i, size) in tracks.sizes.iter().enumerate() {
+            at += tracks.gutters.get(i).copied().unwrap_or(0.0);
+            out.push((at, at + size));
+            at += size;
+        }
+        let skip = tracks.negative_implicit_tracks as usize;
+        out.into_iter().skip(skip).take(tracks.explicit_tracks as usize).collect::<Vec<_>>()
+    };
+    Some((lines(&info.columns, padding.left + CANVAS_MARGIN), lines(&info.rows, padding.top + CANVAS_MARGIN)))
+}
+
+/// 形の層の素材座標の箱(伸ばした後)。
+pub(crate) fn stretched_shape_box(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<[f32; 4]> {
+    if stretch == [1.0, 1.0] { shape_box(shapes) } else { shape_box(&crate::doc::vector::stretch_outline(shapes, stretch)) }
 }
 
 fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
@@ -1744,6 +1784,39 @@ mod tests {
         put(&mut doc, label, POSITION_AREA, Value::Enum(0));
         let back = shown(&doc, label, T);
         assert!(back != placed && (back[0] + back[2]) * 0.5 < 100.0, "None: back where it was written: {back:?}");
+    }
+
+    #[test]
+    fn a_free_child_snaps_to_the_nearest_field_of_its_grid() {
+        let mut doc = blank_project();
+        let grid = add(&mut doc, 1, LayerSource::Group, None);
+        for (name, value) in [(DISPLAY, Value::Enum(2)), (GRID_COLUMNS, Value::F64(4.0)), (GRID_ROWS, Value::F64(4.0)), (GAP, Value::F64(20.0)),
+            (HORIZONTAL_SIZING, Value::Enum(2)), (VERTICAL_SIZING, Value::Enum(2)), (WIDTH, Value::F64(860.0)), (HEIGHT, Value::F64(860.0))] {
+            put(&mut doc, grid, name, value);
+        }
+        put(&mut doc, grid, property::POSITION, Value::Vec2([100.0, 50.0]));
+        let card = rect(&mut doc, 2, grid, [150.0, 120.0]);
+        put(&mut doc, card, POSITION_TYPE, Value::Enum(1));
+        put(&mut doc, card, property::POSITION, Value::Vec2([250.0, 470.0]));
+        let free = shown(&doc, card, T);
+        put(&mut doc, card, SNAP_TO_GRID, Value::F64(1.0));
+        let snapped = shown(&doc, card, T);
+        // 升目は 200 px + 溝 20 px: 画面の上で列は Group の Position から 220 px ごとに始まる。
+        let starts_x: Vec<f32> = (0..4).map(|i| 100.0 + i as f32 * 220.0).collect();
+        let starts_y: Vec<f32> = (0..4).map(|i| 50.0 + i as f32 * 220.0).collect();
+        let near = |v: f32, list: &[f32]| list.iter().cloned().min_by(|a, b| (a - v).abs().total_cmp(&(b - v).abs())).unwrap();
+        assert!((snapped[0] - near(free[0], &starts_x)).abs() < 0.5 && (snapped[1] - near(free[1], &starts_y)).abs() < 0.5,
+            "the box's corner lands on the nearest field's corner: free {free:?} snapped {snapped:?}");
+        assert!(((snapped[2] - snapped[0]) - (free[2] - free[0])).abs() < 0.5, "Size Off keeps the size");
+
+        put(&mut doc, card, SNAP_SIZE, Value::Enum(1));
+        let fitted = shown(&doc, card, T);
+        assert!(((fitted[2] - fitted[0]) - 200.0).abs() < 1.0 && ((fitted[3] - fitted[1]) - 200.0).abs() < 1.0, "Size Fields: one whole field: {fitted:?}");
+
+        put(&mut doc, card, SNAP_SIZE, Value::Enum(0));
+        put(&mut doc, card, SNAP_TO_GRID, Value::F64(0.5));
+        let half = shown(&doc, card, T);
+        assert!((half[0] - (free[0] + snapped[0]) * 0.5).abs() < 0.5, "half strength goes half way");
     }
 
     #[test]

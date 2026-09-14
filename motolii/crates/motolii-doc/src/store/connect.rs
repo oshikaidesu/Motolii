@@ -112,6 +112,9 @@ impl StoreView<'_> {
     /// なぞる形の輪郭(線の層の親の空間)。
     fn trace_path(&self, layer: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
         let Some((target, kind)) = self.tracing(layer, t)? else { return Ok(None) };
+        if kind == 6 {
+            return self.trace_grid(layer, target, t);
+        }
         let Some((lo, hi)) = self.box_seen_from(target, layer, t)? else { return Ok(None) };
         let m = self.number(layer, MARGIN, 0.0, t)? as f32;
         let (lo, hi) = (lo - glam::Vec2::splat(m), hi + glam::Vec2::splat(m));
@@ -156,6 +159,30 @@ impl StoreView<'_> {
             }
             _ => vec![rect(lo, hi)],
         }))
+    }
+
+    /// Grid の Group の升目の線(列と行の始まりと終わり、升目の端から端まで)。Grid でなければ何も描かない。
+    fn trace_grid(&self, layer: LayerId, group: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+        let frame = self.layout_frame(t)?;
+        let Some((columns, rows)) = frame.fields.get(&group) else { return Ok(None) };
+        let (Some(first_c), Some(last_c), Some(first_r), Some(last_r)) = (columns.first(), columns.last(), rows.first(), rows.last()) else { return Ok(None) };
+        let mut to_here = self.world_2d(group, t)?;
+        if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent {
+            to_here = self.world_2d(parent, t)?.inverse() * to_here;
+        }
+        let p = |x: f32, y: f32| { let q = to_here.transform_point2(glam::vec2(x, y)); Point { x: f64::from(q.x), y: f64::from(q.y) } };
+        let mut path = Vec::new();
+        for &(a, b) in columns.iter() {
+            for x in [a, b] {
+                path.push(Contour::open([p(x, first_r.0), p(x, last_r.1)]));
+            }
+        }
+        for &(a, b) in rows.iter() {
+            for y in [a, b] {
+                path.push(Contour::open([p(first_c.0, y), p(last_c.1, y)]));
+            }
+        }
+        Ok(Some(path))
     }
 
     /// 道: 今の端に、移り方で遅れた腹(弦からのずれ)を足す。

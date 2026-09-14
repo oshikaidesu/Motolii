@@ -550,6 +550,63 @@ impl<'a> StoreView<'a> {
     /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
     /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
     #[allow(clippy::too_many_arguments)]
+    /// 格子へ吸い付く(2026-09-15 利用者「無作為の配置も、グリッドで整えると意図した物という観点が付与される」):
+    /// Grid の Group の子(流れの外の子、Repeater の写しは 1 枚ずつ)の箱の左上を、一番近い升目の角へ Snap to Grid の強さで寄せる。
+    /// Snap Size が Fields なら、右下も一番近い升目の終わりへ(大きさを升目の倍数に)。寄せるのは画面の変換だけ(書類の値は変えない)。
+    fn snap_to_grids(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        use crate::doc::store::layout::{SNAP_SIZE, SNAP_TO_GRID};
+        let mut frame = None;
+        for layer in out.iter_mut() {
+            if layer.ghost || matches!(layer.source, crate::doc::store::LayerSource::Group | crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Null) {
+                continue;
+            }
+            let strength = self.number(layer.id, SNAP_TO_GRID, 0.0, t)?.clamp(0.0, 1.0) as f32;
+            if strength <= 0.0 {
+                continue;
+            }
+            let Some(parent) = self.attrs(layer.id)?.unwrap_or_default().parent else { continue };
+            if self.display(parent, t)? != 2 {
+                continue;
+            }
+            let frame = match &frame { Some(f) => f, None => { frame = Some(self.layout_frame(t)?); frame.as_ref().unwrap() } };
+            let Some((columns, rows)) = frame.fields.get(&parent) else { continue };
+            if columns.is_empty() || rows.is_empty() {
+                continue;
+            }
+            let b = match layer.source {
+                crate::doc::store::LayerSource::Shape => crate::doc::store::layout::stretched_shape_box(&self.shapes_at(layer.id, t)?, layer.shape_stretch),
+                _ => self.layer_box(layer.id, t)?,
+            };
+            let Some(b) = b else { continue };
+            let group = self.world_2d(parent, t)?;
+            let to_local = group.inverse() * layer.placement.transform;
+            let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| to_local.transform_point2(glam::Vec2::from(c)));
+            let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
+            let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
+            let nearest = |value: f32, candidates: &mut dyn Iterator<Item = f32>| candidates.min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs())).unwrap_or(value);
+            let start = glam::vec2(nearest(lo.x, &mut columns.iter().map(|c| c.0)), nearest(lo.y, &mut rows.iter().map(|r| r.0)));
+            let size = hi - lo;
+            let target_size = if self.choice(layer.id, SNAP_SIZE, t)? == 1 {
+                let end_x = nearest(hi.x, &mut columns.iter().map(|c| c.1).filter(|e| *e > start.x));
+                let end_y = nearest(hi.y, &mut rows.iter().map(|r| r.1).filter(|e| *e > start.y));
+                glam::vec2(end_x - start.x, end_y - start.y)
+            } else {
+                size
+            };
+            let k = glam::vec2(if size.x > 1e-3 { target_size.x / size.x } else { 1.0 }, if size.y > 1e-3 { target_size.y / size.y } else { 1.0 });
+            let at = lo.lerp(start, strength);
+            let scale = glam::Vec2::ONE.lerp(k, strength);
+            let adjust = glam::Affine2::from_translation(at) * glam::Affine2::from_scale(scale) * glam::Affine2::from_translation(-lo);
+            layer.placement.transform = group * adjust * group.inverse() * layer.placement.transform;
+            if let Some(world) = layer.placement.world_transform {
+                let group3 = self.world_transform3d(parent, t).unwrap_or(glam::Affine3A::IDENTITY);
+                let adjust3 = glam::Affine3A::from_translation(at.extend(0.0)) * glam::Affine3A::from_scale(scale.extend(1.0)) * glam::Affine3A::from_translation((-lo).extend(0.0));
+                layer.placement.world_transform = Some(group3 * adjust3 * group3.inverse() * world);
+            }
+        }
+        Ok(())
+    }
+
     /// Stencil / Silhouette の層(クリッピングマスクの逆、2026-09-15 利用者裁定): 自分の形を、範囲の層へ matte として配る。
     /// 範囲は clip していれば自分のクリップの土台(束の上の層は土台の形で切られるので一緒に切れる)、していなければ
     /// 同じ Group の中で自分より下の層(と、その子孫)。自分の matte(clip の土台)は外す — 土台を切る側なので巡る。
@@ -975,6 +1032,7 @@ impl<'a> StoreView<'a> {
         self.put_backgrounds_behind(&mut out, t)?;
         self.put_on_planes(&mut out, t)?;
         self.hand_out_stencils(&mut out)?;
+        self.snap_to_grids(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
     }
