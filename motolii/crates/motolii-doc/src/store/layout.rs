@@ -40,6 +40,12 @@ pub const COLUMN_SPAN: &str = "layout.column_span";
 pub const ROW_SPAN: &str = "layout.row_span";
 pub const OBJECT_FIT: &str = "layout.object_fit";
 pub const DEPTH_ALIGNMENT: &str = "layout.depth_alignment";
+/// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
+pub const LAYOUT_ROTATION: &str = "layout.rotation";
+pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
+pub const LAYOUT_TILT_Y: &str = "layout.tilt_y";
+/// Flex Direction の Depth(奥へ積む): 子を奥行き + Gap ずつ奥へ、面の上の位置は Align Items で揃える。
+pub const DIRECTION_DEPTH: i64 = 4;
 
 /// 欄: (property, 窓の名前, 既定値, 範囲, 選択肢)。名前は CSS の語、大きさの決め方だけ Figma(裁定 2026-09-14)。
 pub type Row = (&'static str, &'static str, Value, Option<(f64, f64)>, &'static [&'static str]);
@@ -49,7 +55,7 @@ const SIZING: &[&str] = &["Hug", "Fill", "Fixed"];
 /// Group の欄。Display が None の間は Display だけが意味を持つ。
 pub const GROUP_ROWS: &[Row] = &[
     (DISPLAY, "Display", Value::Enum(0), None, &["None", "Flex", "Grid"]),
-    (FLEX_DIRECTION, "Flex Direction", Value::Enum(0), None, &["Row", "Column", "Row Reverse", "Column Reverse"]),
+    (FLEX_DIRECTION, "Flex Direction", Value::Enum(0), None, &["Row", "Column", "Row Reverse", "Column Reverse", "Depth"]),
     (FLEX_WRAP, "Flex Wrap", Value::Enum(0), None, &["No Wrap", "Wrap", "Wrap Reverse"]),
     (JUSTIFY_CONTENT, "Justify Content", Value::Enum(0), None, &["Start", "End", "Center", "Space Between", "Space Around", "Space Evenly"]),
     (ALIGN_ITEMS, "Align Items", Value::Enum(0), None, &["Stretch", "Start", "End", "Center"]),
@@ -80,6 +86,9 @@ pub const ITEM_ROWS: &[Row] = &[
     (COLUMN_SPAN, "Column Span", Value::F64(1.0), Some((1.0, 64.0)), &[]),
     (ROW_SPAN, "Row Span", Value::F64(1.0), Some((1.0, 64.0)), &[]),
     (OBJECT_FIT, "Object Fit", Value::Enum(0), None, &["Fill", "Contain", "Cover", "None"]),
+    (LAYOUT_ROTATION, "Layout Rotation", Value::F64(0.0), None, &[]),
+    (LAYOUT_TILT_X, "Layout Tilt X", Value::F64(0.0), None, &[]),
+    (LAYOUT_TILT_Y, "Layout Tilt Y", Value::F64(0.0), None, &[]),
 ];
 
 /// 形の層の素材座標は、輪郭の canvas の左上(反アリアスの 1 画素の外)が原点。
@@ -108,8 +117,8 @@ pub fn choices(property: &str) -> &'static [&'static str] {
 pub struct Frame {
     pub slots: HashMap<LayerId, Slot>,
     pub sizes: HashMap<LayerId, [f32; 2]>,
-    /// Display の Group の奥行き(子の最大)。面が奥で、[-奥行き, 0]。
-    pub depths: HashMap<LayerId, f32>,
+    /// Display の Group の奥行きの範囲 [手前, 奥]。揃えなら面が奥で [-奥行き, 0]、奥へ積むなら [0, 積んだ厚み]。
+    pub depths: HashMap<LayerId, [f32; 2]>,
 }
 
 /// 並ぶ子の変換の差し替え: 層の Position と Scale の代わりに使う値と、形の輪郭の伸び。
@@ -124,6 +133,8 @@ pub struct Slot {
     pub z: f32,
     /// 3D の Object Fit で奥行きにも掛ける倍率(Scale Z に掛ける)。
     pub scale_z: f32,
+    /// 並びに効く回転(Tilt X・Tilt Y・Rotation、度)。層の Rotation / Tilt に足す。
+    pub rotation: [f32; 3],
 }
 
 /// view の寿命の間、時刻ごとに 1 回だけ解く(view は値を変えない)。
@@ -395,10 +406,33 @@ impl StoreView<'_> {
                 let d = self.analysis().and_then(|a| a.extent(path)).map_or(0.0, |e| e[2]);
                 [-d * 0.5, d * 0.5]
             }
-            LayerSource::Group => [-frame.depths.get(&layer).copied().unwrap_or(0.0), 0.0],
+            LayerSource::Group => frame.depths.get(&layer).copied().unwrap_or([0.0, 0.0]),
             _ => [0.0, 0.0],
         };
-        Ok([range[0] * scale_z, range[1] * scale_z])
+        let range = [range[0] * scale_z, range[1] * scale_z];
+        match frame.slots.get(&layer).map(|s| s.rotation).filter(|r| *r != [0.0; 3]) {
+            Some(rotation) => {
+                let bounds = match meta.source {
+                    LayerSource::Group => frame.sizes.get(&layer).map_or([0.0; 4], |s| [0.0, 0.0, s[0], s[1]]),
+                    _ => self.layer_box(layer, t)?.unwrap_or([0.0; 4]),
+                };
+                let scale = self.pair(layer, property::SCALE, [1.0, 1.0], t)?;
+                let anchor = self.pair(layer, property::ANCHOR, [0.0, 0.0], t)?;
+                let (lo, hi) = footprint(bounds, [range[0], range[1]], anchor, [scale[0], scale[1], 1.0], rotation);
+                Ok([lo[2], hi[2]])
+            }
+            None => Ok(range),
+        }
+    }
+
+    /// 並べる前の奥行きの範囲(Scale Z 込み、Object Fit と回転は無し)。葉の箱を測る時。
+    fn raw_depth(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+        self.depth_range(layer, t, &Frame::default())
+    }
+
+    /// 回転の欄(Tilt X・Tilt Y・Rotation)。
+    fn layout_rotation(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 3], StoreError> {
+        Ok([self.number(layer, LAYOUT_TILT_X, 0.0, t)? as f32, self.number(layer, LAYOUT_TILT_Y, 0.0, t)? as f32, self.number(layer, LAYOUT_ROTATION, 0.0, t)? as f32])
     }
 
     /// Depth Alignment: 子の奥行きの最大が Group の奥行き。Back = 子の奥を面(z = 0)に、Front = 子の手前を
@@ -411,6 +445,19 @@ impl StoreView<'_> {
                 ranges.push((child, self.depth_range(child, t, frame)?));
             }
         }
+        if self.display(group, t)? == 1 && self.choice(group, FLEX_DIRECTION, t)? == DIRECTION_DEPTH {
+            // 奥へ積む: 重ね順の上(番号の大きい物)が一番手前、面(z = 0)に手前を合わせ、奥行き + Gap ずつ奥へ。
+            let gap = self.number(group, GAP, 0.0, t)? as f32;
+            let mut cursor = 0.0f32;
+            for (child, [front, back]) in ranges.into_iter().rev() {
+                if let Some(slot) = frame.slots.get_mut(&child) {
+                    slot.z = cursor - front;
+                }
+                cursor += back - front + gap;
+            }
+            frame.depths.insert(group, [0.0, (cursor - gap).max(0.0)]);
+            return Ok(());
+        }
         let depth = ranges.iter().map(|(_, r)| r[1] - r[0]).fold(0.0f32, f32::max);
         for (child, [front, back]) in ranges {
             let z = match alignment {
@@ -422,7 +469,7 @@ impl StoreView<'_> {
                 slot.z = z;
             }
         }
-        frame.depths.insert(group, depth);
+        frame.depths.insert(group, [-depth, 0.0]);
         Ok(())
     }
 
@@ -471,6 +518,10 @@ impl StoreView<'_> {
         };
         style.grid_column = line(self.number(layer, COLUMN_START, 0.0, t)?, self.number(layer, COLUMN_SPAN, 1.0, t)?);
         style.grid_row = line(self.number(layer, ROW_START, 0.0, t)?, self.number(layer, ROW_SPAN, 1.0, t)?);
+        if self.choice_of_parent(layer, FLEX_DIRECTION, t)? == DIRECTION_DEPTH && self.attrs(layer)?.unwrap_or_default().parent.map(|p| self.display(p, t)).transpose()? == Some(1) {
+            style.grid_column = line(1.0, 1.0);
+            style.grid_row = line(1.0, 1.0);
+        }
         Ok(sizing)
     }
 
@@ -511,6 +562,13 @@ impl StoreView<'_> {
             },
             ..Style::default()
         };
+        if display == 1 && self.choice(group, FLEX_DIRECTION, t)? == DIRECTION_DEPTH {
+            // 面の上では全員が 1 つの枠に重なる(奥行きは後で積む)。揃えは Align Items を縦横に。
+            style.display = Display::Grid;
+            style.grid_template_columns = vec![GridTemplateComponent::Single(TrackSizingFunction::AUTO)];
+            style.grid_template_rows = vec![GridTemplateComponent::Single(TrackSizingFunction::AUTO)];
+            style.justify_items = style.align_items;
+        }
         if display == 2 {
             let tracks = |count: &str, prefix: &str, default: f64| -> Result<Vec<GridTemplateComponent<String>>, StoreError> {
                 let n = self.number(group, count, default, t)?.round().clamp(0.0, 64.0) as u32;
@@ -541,7 +599,8 @@ impl StoreView<'_> {
             }
             let bounds = self.layer_box(child, t)?.unwrap_or([0.0; 4]);
             let scale = self.pair(child, property::SCALE, [1.0, 1.0], t)?;
-            let natural = [(bounds[2] - bounds[0]) * scale[0].abs(), (bounds[3] - bounds[1]) * scale[1].abs()];
+            let (lo, hi) = footprint(bounds, self.raw_depth(child, t)?, [0.0, 0.0], [scale[0], scale[1], 1.0], self.layout_rotation(child, t)?);
+            let natural = [hi[0] - lo[0], hi[1] - lo[1]];
             let mut item = Style::default();
             let sizing = self.item_style(child, t, natural, &mut item)?;
             let text_fill = sizing[0] == Sizing::Fill && self.meta(child)?.is_some_and(|m| m.source == LayerSource::Text);
@@ -589,15 +648,16 @@ impl StoreView<'_> {
         } else {
             ([1.0, 1.0], bounds, [scale[0] * factor[0], scale[1] * factor[1]])
         };
-        let shown = [(bounds[2] - bounds[0]) * scale[0].abs(), (bounds[3] - bounds[1]) * scale[1].abs()];
+        let rotation = self.layout_rotation(layer, t)?;
+        let (lo, hi) = footprint(bounds, self.raw_depth(layer, t)?, anchor, [scale[0], scale[1], 1.0], rotation);
+        let shown = [hi[0] - lo[0], hi[1] - lo[1]];
         let mut position = [0.0; 2];
         for axis in 0..2 {
-            let low = (scale[axis] * (bounds[axis] - anchor[axis])).min(scale[axis] * (bounds[axis + 2] - anchor[axis]));
             let target = [placed.location.x, placed.location.y][axis] + (cell[axis] - shown[axis]) * 0.5;
-            position[axis] = target - low + offset[axis];
+            position[axis] = target - lo[axis] + offset[axis];
         }
         let scale_z = if is_shape || !matches!(fit, 1 | 2) || factor[0] != factor[1] { 1.0 } else { factor[0] };
-        Ok(Slot { position, scale, stretch, wrap: None, z: 0.0, scale_z })
+        Ok(Slot { position, scale, stretch, wrap: None, z: 0.0, scale_z, rotation })
     }
 }
 
@@ -820,13 +880,44 @@ mod tests {
         put(&mut doc, slab, property::DEPTH, Value::F64(100.0));
         let z = |doc: &Document, id| doc.view().layout_frame(T).unwrap().slots[&id].z;
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, 0.0), "Back: backs on the face, the slab stands out toward the camera");
-        assert_eq!(doc.view().layout_frame(T).unwrap().depths[&group], 100.0);
+        assert_eq!(doc.view().layout_frame(T).unwrap().depths[&group], [-100.0, 0.0]);
         put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(1));
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -50.0), "Center: the card floats at the slab's middle");
         put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(2));
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -100.0), "Front: fronts together");
         let resolved = doc.view().resolved_layers(T).unwrap();
         assert_eq!(resolved.iter().find(|l| l.id == card).unwrap().placement.z, -100.0, "the z reaches the resolved layer");
+    }
+
+    #[test]
+    fn flex_direction_depth_stacks_children_back_by_thickness_and_gap() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        put(&mut doc, group, FLEX_DIRECTION, Value::Enum(DIRECTION_DEPTH));
+        put(&mut doc, group, GAP, Value::F64(20.0));
+        let back = rect(&mut doc, 2, group, [100.0, 50.0]);
+        let slab = rect(&mut doc, 3, group, [100.0, 50.0]);
+        let front = rect(&mut doc, 4, group, [100.0, 50.0]);
+        put(&mut doc, slab, property::DEPTH, Value::F64(30.0));
+        let frame = doc.view().layout_frame(T).unwrap();
+        assert_eq!([frame.slots[&front].z, frame.slots[&slab].z, frame.slots[&back].z], [0.0, 20.0, 70.0], "top of the stack in front, then thickness + gap each");
+        assert_eq!(frame.depths[&group], [0.0, 70.0]);
+        assert_eq!(frame.slots[&front].position, frame.slots[&back].position, "one spot on the face");
+    }
+
+    #[test]
+    fn layout_rotation_lays_out_the_turned_box_and_rotation_does_not() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        let turned = rect(&mut doc, 2, group, [100.0, 50.0]);
+        let next = rect(&mut doc, 3, group, [60.0, 50.0]);
+        put(&mut doc, turned, property::ROTATION, Value::F64(90.0));
+        assert_eq!(shown(&doc, next, T)[0], 130.0, "Rotation is only the look");
+        put(&mut doc, turned, property::ROTATION, Value::F64(0.0));
+        put(&mut doc, turned, LAYOUT_ROTATION, Value::F64(90.0));
+        assert_eq!(shown(&doc, next, T)[0], 80.0, "Layout Rotation: the 100 x 50 box stands 50 wide");
+        let turned_box = shown(&doc, turned, T);
+        assert_eq!([turned_box[0], turned_box[2] - turned_box[0], turned_box[3] - turned_box[1]], [20.0, 50.0, 100.0], "and sits in its place turned");
     }
 
     #[test]
@@ -892,4 +983,21 @@ pub(crate) fn rounded_rect_path(b: [f32; 4], radius: f32, to: glam::Affine2) -> 
     push([l, bot - r], [0.0, k], [0.0, 0.0]);
     push([l, top + r], [0.0, 0.0], [0.0, -k]);
     Path { vertices, closed: true }
+}
+
+/// 箱(素材座標の x, y と奥行き z)を、アンカーのまわりで拡縮・回した時の軸に沿った範囲。回し方は層の変換と同じ
+/// (Tilt X・Tilt Y の後に Rotation と Scale)。回転が 0 なら拡縮した箱そのもの。
+fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3], rotation: [f32; 3]) -> ([f32; 3], [f32; 3]) {
+    let turn = glam::Quat::from_rotation_x(rotation[0].to_radians()) * glam::Quat::from_rotation_y(rotation[1].to_radians()) * glam::Quat::from_rotation_z(rotation[2].to_radians());
+    let (mut lo, mut hi) = (glam::Vec3::splat(f32::INFINITY), glam::Vec3::splat(f32::NEG_INFINITY));
+    for x in [bounds[0], bounds[2]] {
+        for y in [bounds[1], bounds[3]] {
+            for z in depth {
+                let p = turn * (glam::vec3(x - anchor[0], y - anchor[1], z) * glam::Vec3::from(scale));
+                lo = lo.min(p);
+                hi = hi.max(p);
+            }
+        }
+    }
+    (lo.to_array(), hi.to_array())
 }

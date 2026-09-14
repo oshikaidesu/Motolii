@@ -45,7 +45,8 @@ impl<'a> StoreView<'a> {
                 None => Ok(default),
             }
         };
-        let (position, scale) = match self.laid_out(layer, when(0))? {
+        let slot = self.laid_out(layer, when(0))?;
+        let (position, scale) = match slot {
             Some(slot) => (slot.position, slot.scale),
             None => (self.resolve_position(layer, when(0))?, vec2(property::SCALE, [1.0, 1.0], when(1))?),
         };
@@ -53,7 +54,7 @@ impl<'a> StoreView<'a> {
             vec2(property::ANCHOR, [0.0, 0.0], t)?,
             position,
             scale,
-            scalar(property::ROTATION, 0.0, when(2))?,
+            scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]),
             scalar(property::SKEW, 0.0, t)?,
             scalar(property::SKEW_AXIS, 0.0, t)?,
         ))
@@ -79,8 +80,8 @@ impl<'a> StoreView<'a> {
             xy,
             position,
             scalar(property::POSITION_Z)? + slot.map_or(0.0, |s| s.z),
-            scalar(property::ROTATION_X)?,
-            scalar(property::ROTATION_Y)?,
+            scalar(property::ROTATION_X)? + slot.map_or(0.0, |s| s.rotation[0]),
+            scalar(property::ROTATION_Y)? + slot.map_or(0.0, |s| s.rotation[1]),
             self.split_position_component(layer, property::SCALE_Z, t)?.unwrap_or(1.0) * slot.map_or(1.0, |s| s.scale_z),
         ))
     }
