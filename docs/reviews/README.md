@@ -832,4 +832,6 @@
 
 - [箱と流し込みの法 — Web の Flex / Grid を層の基礎に](2026-09-14-layout-law.md)
 
+- [CSS の恩恵の台帳 — Web が軽々と使っている表現を、動画の骨格へ](2026-09-14-css-ledger.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
