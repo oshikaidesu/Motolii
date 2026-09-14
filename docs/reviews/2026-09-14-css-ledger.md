@@ -69,11 +69,11 @@ Web は最初から要素が箱で、並べ方は値を 1 つ選ぶだけ。2026
 | CSS | Web の状況 | 動画の表現 | AE で難しい理由 | Motolii |
 |---|---|---|---|---|
 | `sibling-index()` / `sibling-count()` | Chromium 138(2025)・Safari 26、Firefox 実装中 | **兄弟の番号で時間差**(`animation-delay: calc(sibling-index() * 80ms)`)。文字も格子のセルも同じ規則 | Text Animator は文字だけ | 一部(Each = 番号比例)。行・列・中央から、は無 |
-| GSAP の stagger `grid` / `from: center`(先例) | 事実上の標準 | 中央から外へ、端から、ランダムに | 同上 | 無 |
+| GSAP の stagger `grid` / `from: center`(先例) | 事実上の標準 | 中央から外へ、端から、ランダムに | 同上 | 一部(提案 2026-09-15: 並べる容器の Stagger が関係の移り方の遅れを距離で配る。Random は無) |
 | `linear()` イージング | 全ブラウザ | 任意の曲線(バネ)を点列で | 式 | 係が違う(Bounce / Elastic / Steps のキー) |
 | `animation-composition: add` | 全ブラウザ | 揺れを重ねて足す | 式 | 係が違う(効果の積み) |
 | `@starting-style` | 新しい | 出現した瞬間の姿から始める | 手でキー | 一部(Position のずれで登場) |
-| View Transitions / FLIP | 全ブラウザ(同一文書) | **並び替え・折り返しで、物が新しい場所へ滑る** | 手で全部キー | 無(法で延期) |
+| View Transitions / FLIP | 全ブラウザ(同一文書) | **並び替え・折り返しで、物が新しい場所へ滑る** | 手で全部キー | 済(状態を持たない Transition、[間合いの法](2026-09-14-margin-law.md) 4・5) |
 | scroll / view timeline | Chromium・Safari | 物が画面の線を通る時に進む演出 | 式 | 無(時刻の代わりに位置を読む口) |
 
 ## F. 絵(多くは合成の係が既に持つ)

@@ -50,6 +50,11 @@ pub const FLEX_SHRINK: &str = "layout.flex_shrink";
 /// 解いた行き先が変わった時の移り方(CSS の transition)。秒と、区間の形。
 pub const TRANSITION_DURATION: &str = "layout.transition_duration";
 pub const TRANSITION_EASING: &str = "layout.transition_easing";
+/// 移り方を始めるまでの遅れ(CSS の transition-delay)。
+pub const TRANSITION_DELAY: &str = "layout.transition_delay";
+/// 並べる容器が子の移り方の遅れを配る(GSAP の stagger の amount と from)。遅れ = Stagger × 起点からの距離 / 容器の最大の距離。
+pub const STAGGER: &str = "layout.stagger";
+pub const STAGGER_FROM: &str = "layout.stagger_from";
 /// 文字が避けて流れる物の形(CSS `shape-outside`、宣言するのは避けられる物の側)。同じ親の、折り返す文字が避ける。
 /// Margin Box = 箱 + Margin、Content = 形の輪郭(Blob Track の層は塊の箱)。間は `Shape Margin`。
 pub const SHAPE_OUTSIDE: &str = "layout.shape_outside";
@@ -86,6 +91,8 @@ pub const GROUP_ROWS: &[Row] = &[
     (BACKGROUND, "Background", Value::Color([1.0, 1.0, 1.0, 0.0]), None, &[]),
     (BORDER_RADIUS, "Border Radius", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (OVERFLOW, "Overflow", Value::Enum(0), None, &["Visible", "Clip"]),
+    (STAGGER, "Stagger", Value::F64(0.0), Some((0.0, 60.0)), &[]),
+    (STAGGER_FROM, "Stagger From", Value::Enum(0), None, &["Start", "Center", "End", "Edges"]),
 ];
 
 /// 並ぶ子の欄(親の Display が Flex / Grid の時)。
@@ -116,6 +123,7 @@ pub const SPACE_ROWS: &[Row] = &[
     (FLEX_SHRINK, "Flex Shrink", Value::F64(1.0), Some((0.0, 1000.0)), &[]),
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
+    (TRANSITION_DELAY, "Transition Delay", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (SHAPE_OUTSIDE, "Shape Outside", Value::Enum(0), None, &["None", "Margin Box", "Content"]),
     (SHAPE_MARGIN, "Shape Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
 ];
@@ -192,11 +200,13 @@ struct Leaf {
 
 impl StoreView<'_> {
     /// 移り方(Transition)が遡るコマ数の最大。host は解析の入力(Blob の塊)をこのコマ数だけ前まで置く。
-    /// 移り方は重なる(折り返しの移り方が前の時刻で組み、その時刻の避ける物がさらに前の形を混ぜる)ので、長い順に 2 つの和。
+    /// 移り方は重なる(折り返しの移り方が前の時刻で組み、その時刻の避ける物がさらに前の形を混ぜる)ので、長い順に 2 つの和と遅れ 2 つ分。
     pub fn transition_reach(&self, t: RationalTime) -> Result<i64, StoreError> {
         let Some(comp) = self.composition()? else { return Ok(0) };
         let mut longest = [0.0f64; 2];
+        let mut waits = 0.0f64;
         for layer in self.layers() {
+            waits = waits.max(self.number(layer, TRANSITION_DELAY, 0.0, t)? + self.number(layer, STAGGER, 0.0, t)?);
             let d = self.number(layer, TRANSITION_DURATION, 0.0, t)?;
             if d > longest[0] {
                 longest = [d, longest[0]];
@@ -204,7 +214,7 @@ impl StoreView<'_> {
                 longest[1] = d;
             }
         }
-        Ok(((longest[0] + longest[1]) * comp.fps.as_f64()).round() as i64 + 1)
+        Ok(((longest[0] + longest[1] + 2.0 * waits) * comp.fps.as_f64()).round() as i64 + 1)
     }
 
     /// その時刻に並べた結果。Display の Group が無ければ空。
@@ -314,29 +324,88 @@ impl StoreView<'_> {
         Ok(offsets.iter().any(|o| o[0].abs() > 1e-3 || o[1].abs() > 1e-3).then(|| std::sync::Arc::new(offsets)))
     }
 
-    /// Transition の標本: (時刻, 重み)。位置(t) = Σ (E(uₖ₊₁) − E(uₖ)) · 行き先(t − D·uₖ)。時刻はコマに丸める。
-    /// Duration が 0 なら空(今の行き先そのまま)。
+    /// Transition の標本: (時刻, 重み)。位置(t) = Σ (E(uₖ₊₁) − E(uₖ)) · 行き先(t − 遅れ − D·uₖ)。時刻はコマに丸める。
+    /// 遅れがコマの途中なら、前後のコマへ重みを分ける(遅れが時刻で変わっても位置が跳ばない)。
+    /// Duration も遅れも 0 なら空(今の行き先そのまま)。
     fn transition_samples(&self, layer: LayerId, t: RationalTime) -> Result<Vec<(RationalTime, f32)>, StoreError> {
-        let duration = self.number(layer, TRANSITION_DURATION, 0.0, t)?;
         let Some(comp) = self.composition()? else { return Ok(Vec::new()) };
         let fps = comp.fps;
-        let frames = (duration * fps.as_f64()).round();
+        let base = self.base_samples(layer, t)?;
+        // 自分の移り方を持たない並ぶ子は、容器の移り方を借りる: 容器の箱が移る途中は、その見えている箱の中で並ぶ
+        // (CSS で幅が移る間、中身は毎コマその幅で並び直すのと同じ。揃え・伸びは箱の大きさに線形なので、同じ重みで混ぜれば一致する)。
+        if base.is_empty() && self.number(layer, TRANSITION_DELAY, 0.0, t)? <= 0.0 {
+            if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| self.display(*p, t).is_ok_and(|d| d != 0)) {
+                return self.transition_samples(parent, t);
+            }
+        }
+        let delay = self.transition_delay(layer, t, &base)? * fps.as_f64();
+        if delay <= 1e-6 {
+            return base.into_iter().map(|(back, w)| Ok((self.frame_time(back, t)?, w))).collect();
+        }
+        let base = if base.is_empty() { vec![(0.0, 1.0)] } else { base };
+        let mut out = Vec::with_capacity(base.len() * 2);
+        for (back, w) in base {
+            let at = back + delay;
+            let lo = at.floor();
+            let frac = (at - lo) as f32;
+            out.push((self.frame_time(lo, t)?, w * (1.0 - frac)));
+            if frac > 1e-4 {
+                out.push((self.frame_time(lo + 1.0, t)?, w * frac));
+            }
+        }
+        Ok(out)
+    }
+
+    /// 遅れの無い標本: (遡るコマ数, 重み)。
+    fn base_samples(&self, layer: LayerId, t: RationalTime) -> Result<Vec<(f64, f32)>, StoreError> {
+        let duration = self.number(layer, TRANSITION_DURATION, 0.0, t)?;
+        let Some(comp) = self.composition()? else { return Ok(Vec::new()) };
+        let frames = (duration * comp.fps.as_f64()).round();
         if frames < 1.0 {
             return Ok(Vec::new());
         }
         let easing = self.choice(layer, TRANSITION_EASING, t)?;
-        let now = t.try_to_frame_round(fps).map_err(|e| StoreError::Property(e.to_string()))?;
         // コマごとに 1 つ(時刻をずらしても重みの形が変わらない、畳み込みとして滑らか)。長い移り方だけ間引く。
         let n = frames.min(120.0) as usize;
-        let mut out = Vec::with_capacity(n);
-        for k in 0..n {
+        Ok((0..n).map(|k| {
             let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
-            let weight = (ease(easing, u1) - ease(easing, u0)) as f32;
-            let back = (frames * u0).round() as i64;
-            let at = RationalTime::try_from_frame((now - back).max(0), fps).map_err(|e| StoreError::Property(e.to_string()))?;
-            out.push((at, weight));
+            ((frames * u0).round(), (ease(easing, u1) - ease(easing, u0)) as f32)
+        }).collect())
+    }
+
+    /// 今のコマから `back` コマ前の時刻(0 より前は 0)。
+    fn frame_time(&self, back: f64, t: RationalTime) -> Result<RationalTime, StoreError> {
+        let Some(comp) = self.composition()? else { return Ok(t) };
+        let now = t.try_to_frame_round(comp.fps).map_err(|e| StoreError::Property(e.to_string()))?;
+        RationalTime::try_from_frame((now - back as i64).max(0), comp.fps).map_err(|e| StoreError::Property(e.to_string()))
+    }
+
+    /// 移り方の遅れ(秒): 自分の Transition Delay + 並べる親の Stagger が配る分。
+    /// 配る分は、遅れと長さの窓より前(t − Stagger − Duration)に並んでいた場所の、起点からの距離で決める
+    /// (GSAP の stagger が今居る場所で測るのと同じ)。動いている途中の位置で測ると、動くほど遅れが変わって戻る。
+    fn transition_delay(&self, layer: LayerId, t: RationalTime, base: &[(f64, f32)]) -> Result<f64, StoreError> {
+        let own = self.number(layer, TRANSITION_DELAY, 0.0, t)?.max(0.0);
+        let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent else { return Ok(own) };
+        let stagger = self.number(parent, STAGGER, 0.0, t)?.max(0.0);
+        if stagger <= 0.0 || self.display(parent, t)? == 0 {
+            return Ok(own);
         }
-        Ok(out)
+        let Some(comp) = self.composition()? else { return Ok(own) };
+        let window = base.iter().map(|(back, _)| *back).fold(0.0, f64::max) + 1.0 + ((stagger + own) * comp.fps.as_f64()).ceil();
+        let before = self.layout_frame(self.frame_time(window, t)?)?;
+        let (Some(size), Some(slot)) = (before.sizes.get(&parent).copied(), before.slots.get(&layer).copied()) else { return Ok(own) };
+        let p = glam::Vec2::from(slot.position);
+        let (w, h) = (size[0].max(1e-3), size[1].max(1e-3));
+        let corner = glam::vec2(CANVAS_MARGIN, CANVAS_MARGIN);
+        let diagonal = glam::vec2(w, h).length();
+        let from_centre = (p - corner - glam::vec2(w, h) * 0.5).length() / (diagonal * 0.5);
+        let reach = match self.choice(parent, STAGGER_FROM, t)? {
+            1 => from_centre,
+            2 => (p - corner - glam::vec2(w, h)).length() / diagonal,
+            3 => 1.0 - from_centre,
+            _ => (p - corner).length() / diagonal,
+        };
+        Ok(own + stagger * f64::from(reach.clamp(0.0, 1.0)))
     }
 
     fn number(&self, layer: LayerId, name: &str, default: f64, t: RationalTime) -> Result<f64, StoreError> {
@@ -1447,6 +1516,39 @@ mod tests {
         assert!(x(37) > 170.0 && x(37) < 210.0, "halfway through the duration it is being pushed out: {}", x(37));
         assert_eq!(x(45), 220.0, "after the duration it rests at the solved distance");
         assert_eq!(x(37), shown(&doc, b, at(37))[0], "the same frame asked again gives the same picture");
+    }
+
+    #[test]
+    fn a_container_staggers_its_childrens_transitions_by_distance_and_nothing_jumps() {
+        let mut doc = blank_project();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        // 1 行に 4 つ並べ、30 コマ目に Flex Direction を Column へ(Hold)。子は下へ積み直す。
+        let group = flex_row(&mut doc);
+        let mut track = crate::doc::eval::KeyframeTrack::new();
+        track.insert(crate::doc::eval::Keyframe { t: at(0), value: Value::Enum(0), interp: crate::doc::eval::Interp::Hold, spatial: Default::default() });
+        track.insert(crate::doc::eval::Keyframe { t: at(30), value: Value::Enum(1), interp: crate::doc::eval::Interp::Hold, spatial: Default::default() });
+        doc.apply(Intent::SetTrack { layer: group, property: PropertyId::new(FLEX_DIRECTION).unwrap(), track }).unwrap();
+        let children: Vec<LayerId> = (2..6).map(|id| rect(&mut doc, id, group, [60.0, 60.0])).collect();
+        for &child in &children {
+            put(&mut doc, child, TRANSITION_DURATION, Value::F64(0.5));
+            put(&mut doc, child, TRANSITION_EASING, Value::Enum(4));
+        }
+        put(&mut doc, group, STAGGER, Value::F64(1.0));
+        let y = |doc: &Document, child: LayerId, f: i64| shown(doc, child, at(f))[1];
+        // 最初の子は並びの上で位置が変わらない。2 番目から、起点から遠いほど遅れて動き出す。
+        let started = |doc: &Document, child: LayerId| (30..120).find(|f| (y(doc, child, *f) - y(doc, child, 29)).abs() > 1.0);
+        let (s1, s3) = (started(&doc, children[1]).expect("moves"), started(&doc, children[3]).expect("moves"));
+        assert!(s3 > s1 + 5, "the far child starts later than the near one: {s1} vs {s3}");
+        for &child in &children {
+            let ys: Vec<f32> = (25..120).map(|f| y(&doc, child, f)).collect();
+            // 速さの変わり方(2 階の差)が小さい = 跳ばない、尖らない。
+            let biggest = ys.windows(3).map(|w| (w[2] - 2.0 * w[1] + w[0]).abs()).fold(0.0, f32::max);
+            assert!(biggest < 12.0, "no frame jumps or kinks (largest change of speed {biggest})");
+        }
+        put(&mut doc, group, STAGGER_FROM, Value::Enum(2));
+        let (e1, e3) = (started(&doc, children[1]).expect("moves"), started(&doc, children[3]).expect("moves"));
+        assert!(e1 > e3, "from the end, the near-the-start child waits: {e1} vs {e3}");
     }
 
     #[test]
