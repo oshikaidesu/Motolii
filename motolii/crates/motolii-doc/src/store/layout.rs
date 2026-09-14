@@ -436,7 +436,11 @@ impl StoreView<'_> {
             if parent.is_some_and(|p| displayed.contains(&p)) {
                 continue;
             }
-            let Some(b) = self.layer_box(layer, t)? else { continue };
+            // 並べる Group の箱は今解いた大きさ(覚えにはまだ入っていない)。
+            let b = match frame.sizes.get(&layer) {
+                Some(size) => [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]],
+                None => match self.layer_box(layer, t)? { Some(b) => b, None => continue },
+            };
             // 押し合いの出発点は書いた位置(鍵・親)。ずれを含めた変換を読むと、前の時刻のずれを辿って巡る。
             let local = self.authored_local(layer, t)?;
             let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)));
