@@ -38,6 +38,14 @@ Pexels(無料・クレジット不要。写っている人を悪く描かない�
 
 3(映像の中身)→ 3' → 2(カメラ)→ 1(時間)→ 5 → 4。3 は解析の橋・Blob・並べる法が既に揃っていて、Web で作れない絵に一番近い。
 
+## 3 を作った(2026-09-14)
+
+- 素材: 利用者が置いた Pexels の縦の俯瞰 `15920770_540_960_30fps.mp4`(渋谷スクランブル交差点、21.6 秒)
+- 口: Grid の Group の `Exclusions`(Blob Track を持つ層を指す)。塊が重なる枠へ見えない子を明示の位置で置き、カードは CSS の自動配置で残りの枠へ流れる(先例: CSS Exclusions の wrap-flow、Grid の自動配置は明示の子の枠を飛ばす)
+- 拾い方: Blob Track の Find By = Motion、Threshold 0.05・Detail 270・Separation 0・Min Size 150(Brightness はアスファルトまで拾い、Motion 0.03 は画面ごと拾い、0.06 以上は何も拾わなかった)
+- 途中で直した物: 解析を読む view が、読まない view の並べた結果の覚えを共有していた(`with_analysis` で覚えを分ける)、層を指す欄が数(F64)で届く
+- 見え方: 群れの動きに合わせてカードの流れ込む枠がコマごとに変わる(跳ぶ)。滑らかにするなら FLIP(延期の欄)
+
 ## 既に作った例(同日)
 
 `ui/native/src/editor/script/examples/`: `bento.js`、`grid_squash.js`、`swiss_grid.js`(Overflow Clip と文字の Fill)、`depth_cards.js`(奥へ積む)。スクラッチの `swiss3d.js`(3D の物をセルに収めたスイス・ポスター)は、絵として面白くなかった記録として残す。

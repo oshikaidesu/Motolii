@@ -70,6 +70,8 @@ impl<'a> StoreView<'a> {
     /// 解析の入力を読む view(resolve が Blob Track の塊を配置にする)。
     pub fn with_analysis(mut self, inputs: &'a super::analysis::AnalysisInputs) -> Self {
         self.analysis = Some(inputs);
+        // 並べた結果は解析(塊・素材の寸法)を読むので、読まない view と覚えを分ける。
+        self.layout_memo = Default::default();
         self
     }
 

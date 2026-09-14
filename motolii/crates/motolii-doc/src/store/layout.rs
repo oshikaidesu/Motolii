@@ -40,6 +40,9 @@ pub const COLUMN_SPAN: &str = "layout.column_span";
 pub const ROW_SPAN: &str = "layout.row_span";
 pub const OBJECT_FIT: &str = "layout.object_fit";
 pub const DEPTH_ALIGNMENT: &str = "layout.depth_alignment";
+/// 映像の中身が格子の枠を占める(CSS Exclusions の写し): Blob Track を持つ層を指すと、その塊が重なる枠は空けて、
+/// 子は残りの枠へ流れる。塊は host が解いた箱(解析の橋)。
+pub const EXCLUSIONS: &str = "layout.exclusions";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -62,6 +65,7 @@ pub const GROUP_ROWS: &[Row] = &[
     (DEPTH_ALIGNMENT, "Depth Alignment", Value::Enum(0), None, &["Back", "Center", "Front"]),
     (GRID_COLUMNS, "Grid Columns", Value::F64(2.0), Some((1.0, 64.0)), &[]),
     (GRID_ROWS, "Grid Rows", Value::F64(0.0), Some((0.0, 64.0)), &[]),
+    (EXCLUSIONS, "Exclusions", Value::LayerId(0), None, &[]),
     (GAP, "Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (PADDING, "Padding", Value::Vec2([0.0, 0.0]), None, &[]),
     (HORIZONTAL_SIZING, "Horizontal Sizing", Value::Enum(0), None, SIZING),
@@ -169,6 +173,8 @@ impl StoreView<'_> {
         if let Some(hit) = self.layout_memo().borrow().get(&t) {
             return Ok(hit.clone());
         }
+        // 解いている間に同じ時刻を問われたら(面の Group の親を辿る時など)、空の結果で答えて巡らない。
+        self.layout_memo().borrow_mut().insert(t, Rc::new(Frame::default()));
         let frame = Rc::new(self.compute_layout(t)?);
         self.layout_memo().borrow_mut().insert(t, frame.clone());
         Ok(frame)
@@ -300,6 +306,13 @@ impl StoreView<'_> {
                 None => Size::ZERO,
             })
             .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
+            if self.exclude_blobs(&mut tree, &groups, t)? {
+                tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| match measure {
+                    Some(m) => self.measure_text(*m, known, available, t),
+                    None => Size::ZERO,
+                })
+                .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
+            }
             let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
             let shifted = |mut placed: taffy::Layout| { placed.location.x += CANVAS_MARGIN; placed.location.y += CANVAS_MARGIN; placed };
             let mut groups_order = groups.clone();
@@ -358,6 +371,80 @@ impl StoreView<'_> {
             transform: RepeaterTransform { position: Point { x: w * 0.5, y: h * 0.5 }, ..RepeaterTransform::IDENTITY },
             children: vec![leaf],
         })]))
+    }
+
+    /// Exclusions: 格子の Group が指す Blob Track の塊が重なる枠へ、見えない子を明示の位置で置く。自動の子は残りの枠へ流れる。
+    /// 塊は comp の px なので、Group の素材座標へ戻してから枠と比べる。置いたら true(並べ直す)。
+    fn exclude_blobs(&self, tree: &mut TaffyTree<Measure>, groups: &[(NodeId, LayerId, bool)], t: RationalTime) -> Result<bool, StoreError> {
+        let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
+        let mut changed = false;
+        for &(node, group, _) in groups {
+            if self.display(group, t)? != 2 {
+                continue;
+            }
+            let source = match self.value_at(group, &PropertyId::new(EXCLUSIONS)?, t)? {
+                // 層を指す欄は窓から数として届くこともある(Blob Track の Track Layer と同じ読み方)。
+                Some(Value::LayerId(id)) if id != 0 => LayerId(id),
+                Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
+                _ => continue,
+            };
+            let Some(marks) = self.analysis().and_then(|a| a.blobs(source, crate::doc::store::EffectId(0), t)) else { continue };
+            let taffy::tree::DetailedLayoutInfo::Grid(info) = tree.detailed_layout_info(node) else { continue };
+            let lines = |tracks: &taffy::compute::detailed_info::DetailedGridTracksInfo, start: f32| {
+                let mut at = start;
+                let mut out = Vec::new();
+                for (i, size) in tracks.sizes.iter().enumerate() {
+                    at += tracks.gutters.get(i).copied().unwrap_or(0.0);
+                    out.push((at, at + size));
+                    at += size;
+                }
+                out
+            };
+            let padding = tree.layout(node).map_err(taffy)?.padding;
+            let columns = lines(&info.columns, padding.left + CANVAS_MARGIN);
+            let rows = lines(&info.rows, padding.top + CANVAS_MARGIN);
+            let (skip_c, skip_r) = (info.columns.negative_implicit_tracks as usize, info.rows.negative_implicit_tracks as usize);
+            let (n_c, n_r) = (info.columns.explicit_tracks as usize, info.rows.explicit_tracks as usize);
+            let to_local = self.world_2d(group, t)?.inverse();
+            let mut taken = std::collections::BTreeSet::new();
+            for mark in marks {
+                let half = glam::Vec2::from(mark.size) * 0.5;
+                let (lo, hi) = (glam::Vec2::from(mark.center) - half, glam::Vec2::from(mark.center) + half);
+                let corners = [lo, glam::vec2(hi.x, lo.y), glam::vec2(lo.x, hi.y), hi].map(|p| to_local.transform_point2(p));
+                let min = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
+                let max = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
+                for (c, &(c0, c1)) in columns.iter().enumerate().skip(skip_c).take(n_c) {
+                    for (r, &(r0, r1)) in rows.iter().enumerate().skip(skip_r).take(n_r) {
+                        if min.x < c1 && max.x > c0 && min.y < r1 && max.y > r0 {
+                            taken.insert((c - skip_c, r - skip_r));
+                        }
+                    }
+                }
+            }
+            for (c, r) in taken {
+                let blocker = Style {
+                    grid_column: Line { start: GridPlacement::from_line_index(c as i16 + 1), end: GridPlacement::from_span(1) },
+                    grid_row: Line { start: GridPlacement::from_line_index(r as i16 + 1), end: GridPlacement::from_span(1) },
+                    ..Style::default()
+                };
+                let leaf = tree.new_leaf(blocker).map_err(taffy)?;
+                tree.add_child(node, leaf).map_err(taffy)?;
+                changed = true;
+            }
+        }
+        Ok(changed)
+    }
+
+    /// 層の 2D の world(親を辿る)。塊を Group の素材座標へ戻す時。
+    fn world_2d(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
+        let mut world = self.local_transform(layer, t)?;
+        let mut seen = std::collections::HashSet::from([layer]);
+        let mut next = self.attrs(layer)?.unwrap_or_default().parent;
+        while let Some(parent) = next.filter(|p| seen.insert(*p)) {
+            world = self.local_transform(parent, t)? * world;
+            next = self.attrs(parent)?.unwrap_or_default().parent;
+        }
+        Ok(world)
     }
 
     /// 文字の行の箱。`wrap` があればその幅で折り返して組み、横は [0, wrap](CSS の block の幅、揃えはその中)。
@@ -933,6 +1020,37 @@ mod tests {
         assert_eq!(shown(&doc, next, T)[0], 80.0, "Layout Rotation: the 100 x 50 box stands 50 wide");
         let turned_box = shown(&doc, turned, T);
         assert_eq!([turned_box[0], turned_box[2] - turned_box[0], turned_box[3] - turned_box[1]], [20.0, 50.0, 100.0], "and sits in its place turned");
+    }
+
+    #[test]
+    fn exclusions_leave_the_cells_a_tracked_blob_covers_empty() {
+        let mut doc = blank_project();
+        let grid = add(&mut doc, 1, LayerSource::Group, None);
+        for (name, value) in [
+            (DISPLAY, Value::Enum(2)), (GRID_COLUMNS, Value::F64(3.0)), (GRID_ROWS, Value::F64(3.0)),
+            (HORIZONTAL_SIZING, Value::Enum(2)), (VERTICAL_SIZING, Value::Enum(2)), (WIDTH, Value::F64(300.0)), (HEIGHT, Value::F64(300.0)),
+            (EXCLUSIONS, Value::LayerId(20)),
+        ] {
+            put(&mut doc, grid, name, value);
+        }
+        let cards: Vec<LayerId> = (2..11).map(|id| rect(&mut doc, id, grid, [10.0, 10.0])).collect();
+        for &card in &cards {
+            put(&mut doc, card, HORIZONTAL_SIZING, Value::Enum(1));
+            put(&mut doc, card, VERTICAL_SIZING, Value::Enum(1));
+        }
+        let mut inputs = crate::doc::store::analysis::AnalysisInputs::default();
+        // 真ん中の枠(comp の 101..201)に人の群れが 1 つ。
+        inputs.set_blobs(LayerId(20), crate::doc::store::EffectId(0), T, vec![crate::doc::store::analysis::BlobMark { id: 1, center: [151.0, 151.0], size: [30.0, 30.0], age: 0 }]);
+        let view = doc.view().with_analysis(&inputs);
+        let resolved = view.resolved_layers(T).unwrap();
+        let centre = |id: LayerId| {
+            let r = resolved.iter().find(|l| l.id == id).unwrap();
+            let b = shape_box(&crate::doc::vector::stretch_outline(&view.shapes_at(id, T).unwrap(), r.shape_stretch)).unwrap();
+            r.placement.transform.transform_point2(glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5))
+        };
+        let in_middle = cards.iter().filter(|&&c| { let p = centre(c); p.x > 101.0 && p.x < 201.0 && p.y > 101.0 && p.y < 201.0 }).count();
+        assert_eq!(in_middle, 0, "no card sits where the crowd is");
+        assert!(cards.iter().any(|&c| centre(c).y >= 300.0), "the ninth card flows into an implicit row below the grid");
     }
 
     #[test]
