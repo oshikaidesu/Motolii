@@ -775,6 +775,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
   // ---- Transform ---------------------------------------------------------
 
   /// A camera layer authors Center, Zoom and Roll instead of a transform.
+  /// The layout rows native hands over (the group's Display and what it
+  /// needs, or the item rows under a laid-out group), in table order.
+  List<Map<String, dynamic>> _layoutRows(Map<String, dynamic> layer) => [
+    for (final row in panelRows(layer['properties']))
+      if ('${row['id']}'.startsWith('layout.')) row,
+  ];
+
   List<Widget> _camera(Map<String, dynamic> layer) {
     return [
       if (_row('camera.center') != null)
@@ -2002,6 +2009,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           ),
                         if (layer['kind'] != 'Camera')
                           _card(title: 'World', children: _world(layer)),
+                        if (!_multiple && _layoutRows(layer).isNotEmpty)
+                          _card(
+                            title: 'Layout',
+                            children: [
+                              _cells([
+                                for (final row in _layoutRows(layer))
+                                  _Cell(_control(layer, '${row['id']}')),
+                              ]),
+                            ],
+                          ),
                         if (!_multiple && text.isNotEmpty)
                           _card(title: 'Text', children: _text(layer, text)),
                         if (!_multiple &&

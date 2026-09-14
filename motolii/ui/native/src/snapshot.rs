@@ -351,6 +351,47 @@ impl EditorRuntime{
         if meta.source == LayerSource::Particles {
             properties = crate::doc::store::particles::ROWS.iter().map(|(p,label,v,range)| prop(view,id,p,label,v,*range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
         }
+        // 並べる法の欄: Group は Display と、Display に応じた欄。並ぶ子は子の欄。表の順と選択肢で出す。
+        {
+            use crate::doc::store::layout;
+            properties.retain(|p| !p["id"].as_str().is_some_and(|id| id.starts_with("layout.")));
+            let number = |layer: LayerId, name: &str| -> Result<f64, String> {
+                Ok(match view.value_at(layer, &PropertyId::new(name).map_err(e)?, at).map_err(e)? { Some(Value::Enum(v)) => v as f64, Some(Value::F64(v)) => v, _ => 0.0 })
+            };
+            let push = |properties: &mut Vec<Json>, layer: LayerId, row: &layout::Row| -> Result<(), String> {
+                let mut json = prop(view, layer, row.0, row.1, &row.2, row.3, at, fps, live)?;
+                if !live && !row.4.is_empty() { json["choices"] = json!(row.4); }
+                properties.push(json);
+                Ok(())
+            };
+            if meta.source == LayerSource::Group {
+                let display = number(id, layout::DISPLAY)?.round() as i64;
+                for row in layout::GROUP_ROWS {
+                    let flex = matches!(row.0, layout::FLEX_DIRECTION | layout::FLEX_WRAP | layout::JUSTIFY_CONTENT | layout::ALIGN_ITEMS);
+                    let grid = matches!(row.0, layout::GRID_COLUMNS | layout::GRID_ROWS);
+                    if row.0 == layout::DISPLAY || (display == 1 && !grid) || (display == 2 && !flex) { push(&mut properties, id, row)?; }
+                }
+                if display == 2 {
+                    for (count, prefix, default) in [(layout::GRID_COLUMNS, layout::COLUMN_PREFIX, 2.0), (layout::GRID_ROWS, layout::ROW_PREFIX, 0.0)] {
+                        let n = match view.value_at(id, &PropertyId::new(count).map_err(e)?, at).map_err(e)? { Some(Value::F64(v)) => v, _ => default }.round().clamp(0.0, 64.0) as u32;
+                        for i in 1..=n {
+                            let track = format!("{prefix}{i}");
+                            let label = names::label_or_id(&track).into_owned();
+                            properties.push(prop(view, id, &track, &label, &Value::F64(layout::TRACK_DEFAULT), Some((0.0, 1000.0)), at, fps, live)?);
+                        }
+                    }
+                }
+            }
+            if let Some(parent) = attrs.parent.filter(|p| view.meta(*p).ok().flatten().is_some_and(|m| m.source == LayerSource::Group)) {
+                let display = number(parent, layout::DISPLAY)?.round() as i64;
+                if display != 0 {
+                    for row in layout::ITEM_ROWS {
+                        let grid = matches!(row.0, layout::COLUMN_START | layout::ROW_START | layout::COLUMN_SPAN | layout::ROW_SPAN);
+                        if display == 2 || !grid { push(&mut properties, id, row)?; }
+                    }
+                }
+            }
+        }
         if meta.source == LayerSource::Stage {
             properties = property::STAGE_MARGINS.iter()
                 .map(|p| prop(view,id,p,&names::label_or_id(p),&Value::F64(0.0),Some((0.0,100000.0)),at,fps,live)).collect::<Result<Vec<_>,_>>()?;

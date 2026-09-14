@@ -880,8 +880,31 @@ impl<'a> StoreView<'a> {
                 self.push_placements(resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
             }
         }
-        out.sort_by_key(|layer| layer.placement.order);
+        self.put_backgrounds_behind(&mut out, t)?;
+        out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
+    }
+
+    /// 並べる Group の背景は子孫の一番奥に積む: 重ね順を子孫の最も奥(小さい番号)に合わせ、同じ番号の中では先に積む。
+    fn put_backgrounds_behind(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        let mut deepest: HashMap<LayerId, i16> = HashMap::new();
+        for layer in out.iter() {
+            let mut seen = HashSet::from([layer.id]);
+            let mut next = self.attrs(layer.id)?.unwrap_or_default().parent;
+            while let Some(group) = next.filter(|g| seen.insert(*g)) {
+                let order = deepest.entry(group).or_insert(layer.placement.order);
+                *order = (*order).min(layer.placement.order);
+                next = self.attrs(group)?.unwrap_or_default().parent;
+            }
+        }
+        for layer in out.iter_mut() {
+            if layer.source == crate::doc::store::LayerSource::Group {
+                if let Some(order) = deepest.get(&layer.id).filter(|_| self.layout_display(layer.id, t).unwrap_or(0) != 0) {
+                    layer.placement.order = layer.placement.order.min(*order);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// ゴースト: 層を遅れ d だけ後に見た姿を 1 枚、同じ id で `ghost = true` にして積む。

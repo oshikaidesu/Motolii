@@ -1184,6 +1184,10 @@ pub(super) fn collect_shape_documents(
                 .shapes_at(layer.id, t)
                 .map_err(|e| EngineError::Store(e.to_string()))?;
             documents.insert(layer.id, shown_shapes(&shapes, layer));
+        } else if layer.source == LayerSource::Group {
+            if let Some(background) = view.background_shapes(layer.id, t).map_err(|e| EngineError::Store(e.to_string()))? {
+                documents.insert(layer.id, background);
+            }
         }
     }
     Ok(documents)

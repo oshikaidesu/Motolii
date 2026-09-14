@@ -348,9 +348,11 @@ impl Engine {
         let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image;
         let step = (vector && needs_field).then_some(FIELD_STEP);
         // Blob Track が形の素材を箱へ合わせた写し: 輪郭だけを伸ばす(線は太らない)。大きさは写しごとに違うので cache に残さない。
-        let stretched = (layer.source == LayerSource::Shape && layer.shape_stretch != [1.0, 1.0])
+        // Display の Group の背景も形の書類を持ち、形の層と同じ道で描く。
+        let shaped = layer.source == LayerSource::Shape || (layer.source == LayerSource::Group && shape_documents.contains_key(&layer.id));
+        let stretched = (shaped && layer.shape_stretch != [1.0, 1.0])
             .then(|| crate::doc::vector::stretch_outline(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]), layer.shape_stretch));
-        let natural = if layer.source == LayerSource::Shape {
+        let natural = if shaped {
             let canvas = content_canvas(stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
         } else { [comp.width as f32, comp.height as f32] };
@@ -396,7 +398,7 @@ impl Engine {
             }
         } else if layer.source == LayerSource::Text {
             self.text_texture_from_document(text_documents.get(&layer.id), text::morph_partner(layer, text_documents), layer.id, t, comp, vector, tolerance, flat, step)?
-        } else if layer.source == LayerSource::Shape {
+        } else if shaped {
             let shapes = stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]);
             let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp, step, stretched.is_none())?;
             // 密度 > 1 で描いた絵は、その枠を持ち歩く(効果の reach・radius は論理 px)。

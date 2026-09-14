@@ -80,6 +80,10 @@ pub const ITEM_ROWS: &[Row] = &[
     (OBJECT_FIT, "Object Fit", Value::Enum(0), None, &["Fill", "Contain", "Cover", "None"]),
 ];
 
+/// 形の層の素材座標は、輪郭の canvas の左上(反アリアスの 1 画素の外)が原点。
+/// Display の Group の箱もその座標で [1, 1]..[1 + 幅, 1 + 高さ] に置き、背景の形と子の枠が同じ所に来る。
+const CANVAS_MARGIN: f32 = 1.0;
+
 /// 格子の線の太さの既定(fr)。
 pub const TRACK_DEFAULT: f64 = 1.0;
 
@@ -170,6 +174,10 @@ impl StoreView<'_> {
         })
     }
 
+    pub(crate) fn layout_display(&self, layer: LayerId, t: RationalTime) -> Result<i64, StoreError> {
+        self.display(layer, t)
+    }
+
     /// 0 = None、1 = Flex、2 = Grid。Group 以外は None。
     fn display(&self, layer: LayerId, t: RationalTime) -> Result<i64, StoreError> {
         if !self.meta(layer)?.is_some_and(|m| m.source == LayerSource::Group) {
@@ -201,7 +209,7 @@ impl StoreView<'_> {
             }
             LayerSource::Group => {
                 if self.display(layer, t)? != 0 {
-                    return Ok(self.layout_frame(t)?.sizes.get(&layer).map(|s| [0.0, 0.0, s[0], s[1]]));
+                    return Ok(self.layout_frame(t)?.sizes.get(&layer).map(|s| [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + s[0], CANVAS_MARGIN + s[1]]));
                 }
                 let mut acc: Option<[f32; 4]> = None;
                 for child in self.layers() {
@@ -263,21 +271,51 @@ impl StoreView<'_> {
             let space = Size { width: available(0, WIDTH)?, height: available(1, HEIGHT)? };
             tree.compute_layout(node, space).map_err(|e| StoreError::Property(format!("layout: {e}")))?;
             let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
+            let shifted = |mut placed: taffy::Layout| { placed.location.x += CANVAS_MARGIN; placed.location.y += CANVAS_MARGIN; placed };
             for (node, layer, is_root) in groups {
-                let placed = *tree.layout(node).map_err(taffy)?;
+                let placed = shifted(*tree.layout(node).map_err(taffy)?);
                 frame.sizes.insert(layer, [placed.size.width, placed.size.height]);
                 if !is_root {
-                    let slot = self.slot(layer, t, [0.0, 0.0, placed.size.width, placed.size.height], [Sizing::Hug; 2], 3, placed)?;
+                    let bounds = [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + placed.size.width, CANVAS_MARGIN + placed.size.height];
+                    let slot = self.slot(layer, t, bounds, [Sizing::Hug; 2], 3, placed)?;
                     frame.slots.insert(layer, slot);
                 }
             }
             for leaf in leaves {
-                let placed = *tree.layout(leaf.node).map_err(taffy)?;
+                let placed = shifted(*tree.layout(leaf.node).map_err(taffy)?);
                 let slot = self.slot(leaf.layer, t, leaf.bounds, leaf.sizing, leaf.fit, placed)?;
                 frame.slots.insert(leaf.layer, slot);
             }
         }
         Ok(frame)
+    }
+
+    /// Display の Group の背景(Background の色が透明でなければ)。角は Border Radius。描くのは形の層と同じ道。
+    pub fn background_shapes(&self, group: LayerId, t: RationalTime) -> Result<Option<Vec<crate::doc::vector::ShapeNode>>, StoreError> {
+        use crate::doc::vector::{Brush, Fill, FillRule, OpKind, PathSource, Point, RepeaterTransform, Rgb, Shape, ShapeGroup, ShapeNode, ShapeOp};
+        if self.display(group, t)? == 0 {
+            return Ok(None);
+        }
+        let color = match self.value_at(group, &PropertyId::new(BACKGROUND)?, t)? {
+            Some(Value::Color(c)) => c,
+            _ => return Ok(None),
+        };
+        let Some(size) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
+        if color[3] <= 0.0 || size[0] <= 0.0 || size[1] <= 0.0 {
+            return Ok(None);
+        }
+        let radius = self.number(group, BORDER_RADIUS, 0.0, t)?.max(0.0);
+        let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+        let leaf = ShapeNode::Leaf(Shape {
+            source: PathSource::Rectangle { size: Point { x: w, y: h } },
+            ops: if radius > 0.0 { vec![ShapeOp::new(OpKind::RoundedCorners { radius: radius.min(w.min(h) * 0.5) })] } else { Vec::new() },
+            fill: Some(Fill { brush: Brush::Solid(Rgb { r: color[0], g: color[1], b: color[2] }), rule: FillRule::NonZero, opacity: color[3], hidden: false }),
+            stroke: None,
+        });
+        Ok(Some(vec![ShapeNode::Group(ShapeGroup {
+            transform: RepeaterTransform { position: Point { x: w * 0.5, y: h * 0.5 }, ..RepeaterTransform::IDENTITY },
+            children: vec![leaf],
+        })]))
     }
 
     fn sizing(&self, layer: LayerId, t: RationalTime) -> Result<[Sizing; 2], StoreError> {
@@ -494,7 +532,8 @@ mod tests {
             view.layer_box(layer, t).unwrap().unwrap()
         };
         let (lo, hi) = (r.placement.transform.transform_point2(glam::vec2(b[0], b[1])), r.placement.transform.transform_point2(glam::vec2(b[2], b[3])));
-        [lo.x.min(hi.x), lo.y.min(hi.y), lo.x.max(hi.x), lo.y.max(hi.y)].map(|v| (v * 100.0).round() / 100.0)
+        // 群の箱の左上(素材座標の 1 画素の外)から測る。
+        [lo.x.min(hi.x), lo.y.min(hi.y), lo.x.max(hi.x), lo.y.max(hi.y)].map(|v| ((v - CANVAS_MARGIN) * 100.0).round() / 100.0)
     }
 
     fn flex_row(doc: &mut Document) -> LayerId {
@@ -515,7 +554,12 @@ mod tests {
         assert_eq!(shown(&doc, a, T), [20.0, 8.0, 120.0, 58.0]);
         assert_eq!(shown(&doc, b, T), [130.0, 8.0, 190.0, 58.0]);
         assert_eq!(shown(&doc, c, T), [200.0, 8.0, 240.0, 58.0]);
-        assert_eq!(doc.view().layer_box(group, T).unwrap(), Some([0.0, 0.0, 260.0, 66.0]), "Hug: padding + boxes + gaps");
+        assert_eq!(doc.view().layer_box(group, T).unwrap(), Some([1.0, 1.0, 261.0, 67.0]), "Hug: padding + boxes + gaps");
+        let background = doc.view().background_shapes(group, T).unwrap();
+        assert!(background.is_none(), "no Background colour, nothing to draw");
+        put(&mut doc, group, BACKGROUND, Value::Color([0.2, 0.2, 0.6, 1.0]));
+        let background = doc.view().background_shapes(group, T).unwrap().unwrap();
+        assert_eq!(shape_box(&background), Some([1.0, 1.0, 261.0, 67.0]), "the background is drawn where the box is");
     }
 
     #[test]
