@@ -423,9 +423,9 @@ impl StoreView<'_> {
     }
 
     /// 容器の外の兄弟同士の押し合い(間合いの法 2・3): Margin を宣言した物の箱(親の空間、間合いで広げる)の重なりを、
-    /// 決まった回数だけ押し戻す。浅い方の軸へ、Flex Shrink の比で分ける。その瞬間の宣言だけから解く。
+    /// 決まった回数だけ押し戻す。中心から中心への向きへ、Flex Shrink の比で分ける。その瞬間の宣言だけから解く。
     fn push_apart(&self, t: RationalTime, displayed: &[LayerId], frame: &mut Frame) -> Result<(), StoreError> {
-        const ROUNDS: usize = 24;
+        const ROUNDS: usize = 32;
         let mut families: HashMap<Option<LayerId>, Vec<(LayerId, [f32; 4], f32)>> = HashMap::new();
         for layer in self.layers() {
             let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
@@ -455,35 +455,41 @@ impl StoreView<'_> {
             }
             items.sort_by_key(|item| item.0);
             let mut moved = vec![[0.0f32; 2]; items.len()];
+            // 各回で全部の対を今の箱から同時に測って、まとめて動かす(順に動かすと、対の順番と止まる回で結果が跳ぶ)。
             for _ in 0..ROUNDS {
-                let mut any = false;
+                let mut step = vec![glam::Vec2::ZERO; items.len()];
                 for i in 0..items.len() {
                     for j in i + 1..items.len() {
                         let (a, b) = (items[i].1, items[j].1);
-                        let dx = a[2].min(b[2]) - a[0].max(b[0]);
-                        let dy = a[3].min(b[3]) - a[1].max(b[1]);
-                        if dx <= 0.0 || dy <= 0.0 {
-                            continue;
-                        }
                         let (si, sj) = (items[i].2, items[j].2);
                         if si + sj <= 0.0 {
                             continue;
                         }
                         let (wi, wj) = (si / (si + sj), sj / (si + sj));
-                        let centre = |r: [f32; 4]| [(r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5];
-                        let (ca, cb) = (centre(a), centre(b));
-                        let (axis, depth) = if dx < dy { (0, dx) } else { (1, dy) };
-                        let sign = if cb[axis] >= ca[axis] { 1.0 } else { -1.0 };
-                        let push = |r: &mut [f32; 4], d: f32| { r[axis] += d; r[axis + 2] += d; };
-                        push(&mut items[i].1, -sign * depth * wi);
-                        push(&mut items[j].1, sign * depth * wj);
-                        moved[i][axis] -= sign * depth * wi;
-                        moved[j][axis] += sign * depth * wj;
-                        any = true;
+                        // 中心から中心への向きに、離れるのに要るだけ押す(浅い軸で押すと、軸が入れ替わる瞬間に向きが 90° 跳ぶ)。
+                        let centre = |r: [f32; 4]| glam::vec2((r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5);
+                        let gap = centre(b) - centre(a);
+                        let dir = if gap.length() > 1e-4 { gap.normalize() } else { glam::Vec2::X };
+                        let half = glam::vec2((a[2] - a[0] + b[2] - b[0]) * 0.5, (a[3] - a[1] + b[3] - b[1]) * 0.5);
+                        let need = |axis: usize| {
+                            let (g, u, h) = (gap[axis], dir[axis], half[axis]);
+                            if u.abs() < 1e-6 { f32::INFINITY } else { ((h - g.abs()) / u.abs()).max(0.0) }
+                        };
+                        let depth = need(0).min(need(1));
+                        if !depth.is_finite() || depth <= 0.0 {
+                            continue;
+                        }
+                        step[i] -= dir * depth * wi * 0.5;
+                        step[j] += dir * depth * wj * 0.5;
                     }
                 }
-                if !any {
-                    break;
+                for (k, d) in step.into_iter().enumerate() {
+                    items[k].1[0] += d.x;
+                    items[k].1[2] += d.x;
+                    items[k].1[1] += d.y;
+                    items[k].1[3] += d.y;
+                    moved[k][0] += d.x;
+                    moved[k][1] += d.y;
                 }
             }
             for (item, d) in items.iter().zip(moved) {

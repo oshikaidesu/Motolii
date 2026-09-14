@@ -70,6 +70,45 @@ impl Engine {
         if inputs.is_empty() { resolve(view.clone()) } else { resolve(view.clone().with_analysis(&inputs)) }
     }
 
+    /// 連続性の物差しの標本: 解析を読んだ view で解き、層の箱の角と文字の字の位置を画面の平面(px)で返す。
+    /// 鍵は `L<id> 名前.min` / `.max` / `.g<n>`(n は組んだ順の字)。関係の動きがコマごとに跳ばないかを測る。
+    pub fn continuity_samples(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<(String, [f32; 2])>, EngineError> {
+        let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
+        let inputs = self.analysis_inputs(view, t)?;
+        let view = if inputs.is_empty() { view.clone() } else { view.clone().with_analysis(&inputs) };
+        let Some(comp) = view.composition().map_err(store)? else { return Ok(Vec::new()) };
+        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        let mut out = Vec::new();
+        for layer in view.resolved_layers(t).map_err(store)? {
+            if layer.ghost || layer.copy != 0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {
+                continue;
+            }
+            let to_screen = |p: glam::Vec2| match layer.placement.world_transform {
+                Some(world) => world.transform_point3(p.extend(0.0)).truncate().to_array(),
+                None => layer.placement.transform.transform_point2(p).to_array(),
+            };
+            let name = view.attrs(layer.id).map_err(store)?.unwrap_or_default().name;
+            if let Some(b) = view.layer_box(layer.id, t).map_err(store)? {
+                out.push((format!("L{} {name}.min", layer.id.0), to_screen(glam::vec2(b[0], b[1]))));
+                out.push((format!("L{} {name}.max", layer.id.0), to_screen(glam::vec2(b[2], b[3]))));
+            }
+            if layer.source == crate::doc::store::LayerSource::Text {
+                if let Some(document) = view.resolved_text_document(layer.id, t).map_err(store)? {
+                    if let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document(&document, t, &canvas) {
+                        let mut n = 0;
+                        for line in &shaped.lines {
+                            for x in &line.glyph_xs {
+                                out.push((format!("L{} {name}.g{n}", layer.id.0), to_screen(glam::vec2(*x, line.baseline_y))));
+                                n += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
     fn analysis_inputs(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<AnalysisInputs, EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         let mut inputs = AnalysisInputs::default();
