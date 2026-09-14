@@ -253,3 +253,19 @@ mod particles_are_a_closed_form {
         assert_eq!(below, 0, "床より下に粒が居ない");
     }
 }
+
+/// 別の時刻の絵を読む効果は、形と文字の層でも 1 枚だけ描いて絵を貰える(総当たり 2026-09-14: 別の流れの id で
+/// 中身を引いて見つからず「◯秒前の絵が間に合わなかった」)。描く順に依らない — 冷えた 1 枚目で届く。
+#[test]
+fn time_effects_on_a_shape_render_one_cold_frame() {
+    use crate::doc::store::RationalTime;
+    for plugin in ["motolii.hold", "motolii.time_difference", "motolii.pixel_motion_blur"] {
+        let mut engine = crate::render::engine::Engine::new().unwrap();
+        let fps = crate::doc::store::Fps::try_new(30, 1).unwrap();
+        let pixels = engine.render_frame(&super::light_reach_contracts::lit(plugin).view(), RationalTime::try_from_frame(15, fps).unwrap()).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{plugin}: {:?}", engine.layer_failures());
+        if plugin == "motolii.hold" {
+            assert!(pixels.chunks_exact(4).any(|p| p[0] > 200), "{plugin}: the held picture is the circle");
+        }
+    }
+}

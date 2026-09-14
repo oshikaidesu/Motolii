@@ -7,7 +7,7 @@ use crate::render::engine::{content_canvas, Engine};
 const SIZE: u32 = 768;
 
 /// 黒地の真ん中に白い円(直径 96)、効果は既定値のまま。
-fn lit(plugin: &str) -> Document {
+pub(super) fn lit(plugin: &str) -> Document {
     let shapes = vec![ShapeNode::Leaf(Shape {
         source: PathSource::Ellipse { size: Point { x: 96.0, y: 96.0 } },
         ops: Vec::new(),

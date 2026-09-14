@@ -449,17 +449,22 @@ impl Engine {
                 for (i, offset) in pass.image_time_offsets().iter().enumerate() {
                     let base = pass.image_time_base(i);
                     let key = time_key(*offset, base, layer.id);
-                    if other_times.contains_key(&key) {
-                        continue;
+                    if !other_times.contains_key(&key) {
+                        let at = match base {
+                            TimeBase::Offset => shifted_by_seconds(t, *offset),
+                            TimeBase::At => shifted_by_seconds(in_point, *offset),
+                            TimeBase::Frames => super::motion::shifted_by_frames(view, t, *offset),
+                        };
+                        let Ok(then) = view.resolved_layers(at) else { continue };
+                        let (Ok(texts), Ok(shapes)) = (collect_text_documents(view, &then, at), collect_shape_documents(view, &then, at)) else { continue };
+                        other_times.insert(key, (at, then, texts, shapes));
                     }
-                    let at = match base {
-                        TimeBase::Offset => shifted_by_seconds(t, *offset),
-                        TimeBase::At => shifted_by_seconds(in_point, *offset),
-                        TimeBase::Frames => super::motion::shifted_by_frames(view, t, *offset),
-                    };
-                    let Ok(then) = view.resolved_layers(at) else { continue };
-                    let (Ok(texts), Ok(shapes)) = (collect_text_documents(view, &then, at), collect_shape_documents(view, &then, at)) else { continue };
-                    other_times.insert(key, (at, then, texts, shapes));
+                    // 別の時刻は別の流れの id で描く(lookbehind_layer_id)。文字と形の中身は id で引くので、その id でも引けるようにする。
+                    if let Some((_, _, texts, shapes)) = other_times.get_mut(&key) {
+                        let stream = lookbehind_layer_id(layer.id, key);
+                        if let Some(document) = texts.get(&layer.id).cloned() { texts.insert(stream, document); }
+                        if let Some(nodes) = shapes.get(&layer.id).cloned() { shapes.insert(stream, nodes); }
+                    }
                 }
             }
         }
