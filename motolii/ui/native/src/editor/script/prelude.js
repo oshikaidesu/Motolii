@@ -1,5 +1,5 @@
 // Motolii script prelude. Every call is a window operation; every name is a name the window shows.
-// Host: __op(json) -> json (throws on refusal), __layer(id) -> json, __effects() -> json, __comp() -> json.
+// Host: __op(json) -> json (throws on refusal), __layer(id) -> json, __effects() -> json, __comp() -> json, __assets() -> json.
 "use strict";
 
 const refuse = (what, instead) => () => { throw new Error(`${what} is not available in Motolii scripts. ${instead}`); };
@@ -163,6 +163,19 @@ const create = (kind, extra = {}) => (options = {}) => {
   const layer = new Layer(reply.selected);
   if (options.name !== undefined) layer.name(options.name);
   for (const [name, value] of Object.entries(options)) if (name !== "name") layer.set(name, value);
+  return layer;
+};
+
+/** A picture, video or 3D file placed as a layer. The path is absolute. */
+globalThis.media = (path, options = {}) => {
+  op("import", { paths: [path] });
+  const name = path.split("/").pop();
+  const asset = JSON.parse(__assets()).reverse().find((a) => a.path === path || (a.path ?? "").endsWith(`/${name}`));
+  if (!asset) throw new Error(`${path} was not admitted as a material`);
+  op("seek", { frame: 0 });
+  const layer = new Layer(op("placeAsset", { id: asset.id, start: 0 }).selected);
+  if (options.name !== undefined) layer.name(options.name);
+  for (const [key, value] of Object.entries(options)) if (key !== "name") layer.set(key, value);
   return layer;
 };
 

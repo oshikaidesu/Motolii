@@ -44,6 +44,7 @@ Motolii script API. Every call is a window operation; names are the window's nam
 comp({ width, height, fps, seconds, background })   // background "#rrggbb"
 text(content, options) / rectangle(options) / roundedRectangle / ellipse / star / polygon / line
 nullLayer(options) / particles(options) / camera(options)
+media(absolutePath, options)                         // a picture, video or 3D file as a layer
   options: { name, <Property>: value, ... }            // e.g. { name: "Title", Position: [960, 540] }
 group(...layers) -> Layer
 effects() -> [effect names]

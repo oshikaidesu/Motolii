@@ -55,6 +55,11 @@ impl EditorRuntime {
                 let rows: Vec<_> = crate::render::engine::known_effects().iter().map(|d| json!({ "name": d.label, "pluginId": d.plugin_id })).collect();
                 json!(rows).to_string()
             })?)?;
+            globals.set("__assets", Function::new(ctx.clone(), move |ctx: Ctx<'_>| -> rquickjs::Result<String> {
+                let runtime = unsafe { &*this };
+                let assets = runtime.doc.view().assets().map_err(|e| thrown(&ctx, e))?;
+                Ok(json!(assets.iter().map(|a| json!({ "id": a.id.get(), "path": a.path_absolute, "name": a.name })).collect::<Vec<_>>()).to_string())
+            })?)?;
             globals.set("__comp", Function::new(ctx.clone(), move |ctx: Ctx<'_>| -> rquickjs::Result<String> {
                 let runtime = unsafe { &*this };
                 let comp = runtime.doc.view().composition().map_err(|e| thrown(&ctx, e))?.ok_or_else(|| thrown(&ctx, "No composition"))?;
@@ -240,3 +245,7 @@ mod file {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "script/sweep.rs"]
+mod sweep;
