@@ -385,6 +385,9 @@ impl EditorRuntime{
             if !matches!(meta.source, LayerSource::Camera | LayerSource::Stage) {
                 for row in layout::SPACE_ROWS { push(&mut properties, id, row)?; }
             }
+            if meta.source == LayerSource::Shape {
+                for row in layout::CONNECT_ROWS { push(&mut properties, id, row)?; }
+            }
             if let Some(parent) = attrs.parent.filter(|p| view.meta(*p).ok().flatten().is_some_and(|m| m.source == LayerSource::Group)) {
                 let display = number(parent, layout::DISPLAY)?.round() as i64;
                 if display != 0 {

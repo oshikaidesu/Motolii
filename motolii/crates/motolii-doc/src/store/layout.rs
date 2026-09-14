@@ -64,6 +64,16 @@ pub const SHAPE_MARGIN: &str = "layout.shape_margin";
 /// 付いた物は流れの外(CSS の absolute と同じ、押し合わない)。
 pub const POSITION_ANCHOR: &str = "layout.position_anchor";
 pub const POSITION_AREA: &str = "layout.position_area";
+/// 箱と箱をつなぐ線(`store/connect.rs`)。形の層の欄。
+pub const CONNECT_FROM: &str = "connect.from";
+pub const CONNECT_TO: &str = "connect.to";
+pub const FROM_SIDE: &str = "connect.from_side";
+pub const TO_SIDE: &str = "connect.to_side";
+pub const LINE_PATH: &str = "connect.path";
+pub const SLACK: &str = "connect.slack";
+pub const DASH: &str = "connect.dash";
+pub const DASH_GAP: &str = "connect.dash_gap";
+pub const DASH_OFFSET: &str = "connect.dash_offset";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -135,6 +145,20 @@ pub const SPACE_ROWS: &[Row] = &[
     (POSITION_AREA, "Position Area", Value::Enum(0), None, &["None", "Top Left", "Top", "Top Right", "Left", "Center", "Right", "Bottom Left", "Bottom", "Bottom Right"]),
 ];
 
+/// つなぐ線の欄(形の層)。語は leader-line.js と FigJam のコネクタ、破線は AE の Stroke > Dashes。
+const SIDES: &[&str] = &["Auto", "Top", "Right", "Bottom", "Left", "Center"];
+pub const CONNECT_ROWS: &[Row] = &[
+    (CONNECT_FROM, "Connect From", Value::LayerId(0), None, &[]),
+    (CONNECT_TO, "Connect To", Value::LayerId(0), None, &[]),
+    (FROM_SIDE, "From Side", Value::Enum(0), None, SIDES),
+    (TO_SIDE, "To Side", Value::Enum(0), None, SIDES),
+    (LINE_PATH, "Line Path", Value::Enum(0), None, &["Straight", "Curved", "Elbow", "Hang"]),
+    (SLACK, "Slack", Value::F64(20.0), Some((0.0, 1000.0)), &[]),
+    (DASH, "Dash", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
+    (DASH_GAP, "Dash Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
+    (DASH_OFFSET, "Dash Offset", Value::F64(0.0), None, &[]),
+];
+
 /// 格子の線の太さの既定(fr)。
 pub const TRACK_DEFAULT: f64 = 1.0;
 
@@ -145,7 +169,7 @@ pub fn track_label(property: &str) -> Option<String> {
 }
 
 pub fn row(property: &str) -> Option<&'static Row> {
-    GROUP_ROWS.iter().chain(ITEM_ROWS).chain(SPACE_ROWS).find(|row| row.0 == property)
+    GROUP_ROWS.iter().chain(ITEM_ROWS).chain(SPACE_ROWS).chain(CONNECT_ROWS).find(|row| row.0 == property)
 }
 
 pub fn choices(property: &str) -> &'static [&'static str] {
@@ -304,26 +328,36 @@ impl StoreView<'_> {
         result
     }
 
-    fn anchored_inner(&self, layer: LayerId, anchor: LayerId, area: i64, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+    /// `target` の画面の上の箱を、`from` の親の空間で(軸に沿った箱)。Blob Track の層は ID の一番小さい塊。
+    /// 並べて伸ばした形は伸ばした後の箱。付いて置く札とつなぐ線が、相手の箱を読む口。
+    pub(crate) fn box_seen_from(&self, target: LayerId, from: LayerId, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
         let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
-        // 相手の箱(comp)。Blob Track の層は ID の一番小さい塊。
-        let marks = self.analysis().and_then(|a| a.blobs(anchor, crate::doc::store::EffectId(0), t)).filter(|m| !m.is_empty());
-        let (a_lo, a_hi) = if let Some(mark) = marks.and_then(|m| m.iter().min_by_key(|m| m.id)) {
+        let marks = self.analysis().and_then(|a| a.blobs(target, crate::doc::store::EffectId(0), t)).filter(|m| !m.is_empty());
+        let (lo, hi) = if let Some(mark) = marks.and_then(|m| m.iter().min_by_key(|m| m.id)) {
             let (c, h) = (glam::Vec2::from(mark.center), glam::Vec2::from(mark.size) * 0.5);
             (c - h, c + h)
         } else {
-            let Some(b) = self.layer_box(anchor, t)? else { return Ok(None) };
-            let world = self.world_2d(anchor, t)?;
+            let stretch = self.laid_out(target, t)?.map(|s| s.stretch).filter(|s| *s != [1.0, 1.0]);
+            let b = match (stretch, self.meta(target)?.map(|m| m.source)) {
+                (Some(stretch), Some(LayerSource::Shape)) => shape_box(&crate::doc::vector::stretch_outline(&self.shapes_at(target, t)?, stretch)),
+                _ => self.layer_box(target, t)?,
+            };
+            let Some(b) = b else { return Ok(None) };
+            let world = self.world_2d(target, t)?;
             bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point2(glam::Vec2::from(c))))
         };
-        // 親の空間へ。
-        let (a_lo, a_hi) = match self.attrs(layer)?.unwrap_or_default().parent {
+        Ok(Some(match self.attrs(from)?.unwrap_or_default().parent {
             Some(parent) => {
                 let inverse = self.world_2d(parent, t)?.inverse();
-                bound(&[a_lo, glam::vec2(a_hi.x, a_lo.y), glam::vec2(a_lo.x, a_hi.y), a_hi].map(|p| inverse.transform_point2(p)))
+                bound(&[lo, glam::vec2(hi.x, lo.y), glam::vec2(lo.x, hi.y), hi].map(|p| inverse.transform_point2(p)))
             }
-            None => (a_lo, a_hi),
-        };
+            None => (lo, hi),
+        }))
+    }
+
+    fn anchored_inner(&self, layer: LayerId, anchor: LayerId, area: i64, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+        let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+        let Some((a_lo, a_hi)) = self.box_seen_from(anchor, layer, t)? else { return Ok(None) };
         // 自分の箱の、位置からの広がり(親の空間)。
         let Some(b) = self.layer_box(layer, t)? else { return Ok(None) };
         let authored = self.resolve_position(layer, t)?;
@@ -417,7 +451,7 @@ impl StoreView<'_> {
     /// Transition の標本: (時刻, 重み)。位置(t) = Σ (E(uₖ₊₁) − E(uₖ)) · 行き先(t − 遅れ − D·uₖ)。時刻はコマに丸める。
     /// 遅れがコマの途中なら、前後のコマへ重みを分ける(遅れが時刻で変わっても位置が跳ばない)。
     /// Duration も遅れも 0 なら空(今の行き先そのまま)。
-    fn transition_samples(&self, layer: LayerId, t: RationalTime) -> Result<Vec<(RationalTime, f32)>, StoreError> {
+    pub(crate) fn transition_samples(&self, layer: LayerId, t: RationalTime) -> Result<Vec<(RationalTime, f32)>, StoreError> {
         let Some(comp) = self.composition()? else { return Ok(Vec::new()) };
         let fps = comp.fps;
         let base = self.base_samples(layer, t)?;
@@ -498,7 +532,7 @@ impl StoreView<'_> {
         Ok(own + stagger * f64::from(reach.clamp(0.0, 1.0)))
     }
 
-    fn number(&self, layer: LayerId, name: &str, default: f64, t: RationalTime) -> Result<f64, StoreError> {
+    pub(crate) fn number(&self, layer: LayerId, name: &str, default: f64, t: RationalTime) -> Result<f64, StoreError> {
         Ok(match self.value_at(layer, &PropertyId::new(name)?, t)? {
             Some(Value::F64(v)) => v,
             Some(Value::Enum(v)) => v as f64,
@@ -506,7 +540,7 @@ impl StoreView<'_> {
         })
     }
 
-    fn choice(&self, layer: LayerId, name: &str, t: RationalTime) -> Result<i64, StoreError> {
+    pub(crate) fn choice(&self, layer: LayerId, name: &str, t: RationalTime) -> Result<i64, StoreError> {
         Ok(match self.value_at(layer, &PropertyId::new(name)?, t)? {
             Some(Value::Enum(v)) => v,
             Some(Value::F64(v)) => v.round() as i64,
@@ -534,7 +568,7 @@ impl StoreView<'_> {
     }
 
     /// その時刻に居る層か(居ない層は並びに参加しない、`display: none`)。
-    fn here(&self, layer: LayerId, t: RationalTime) -> Result<bool, StoreError> {
+    pub(crate) fn here(&self, layer: LayerId, t: RationalTime) -> Result<bool, StoreError> {
         let (Some(meta), Some(comp)) = (self.meta(layer)?, self.composition()?) else { return Ok(false) };
         let frame = t.try_to_frame_floor(comp.fps).map_err(|e| StoreError::Property(e.to_string()))?;
         Ok(meta.timing.source_frame(frame).is_some())
@@ -950,7 +984,7 @@ impl StoreView<'_> {
     }
 
     /// 層の 2D の world(親を辿る)。塊を Group の素材座標へ戻す時。
-    fn world_2d(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
+    pub(crate) fn world_2d(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
         let mut world = self.local_transform(layer, t)?;
         let mut seen = std::collections::HashSet::from([layer]);
         let mut next = self.attrs(layer)?.unwrap_or_default().parent;

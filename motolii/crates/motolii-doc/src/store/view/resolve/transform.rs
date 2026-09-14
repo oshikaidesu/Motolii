@@ -45,6 +45,10 @@ impl<'a> StoreView<'a> {
                 None => Ok(default),
             }
         };
+        // つなぐ線は道を親の空間で解いてある: 回さず伸ばさず、素材座標の原点のずれだけ戻して置く。
+        if let Some(position) = self.connector_position(layer, t)? {
+            return Ok(LayerPlacement::from_transform([0.0, 0.0], position, [1.0, 1.0], 0.0, 0.0, 0.0));
+        }
         let slot = self.laid_out(layer, when(0))?;
         let (position, scale) = match slot {
             Some(slot) => (slot.position, slot.scale),
@@ -74,7 +78,9 @@ impl<'a> StoreView<'a> {
     ) -> Result<glam::Affine3A, StoreError> {
         let xy = self.local_placement_transform(layer, t)?;
         let slot = self.laid_out(layer, t)?;
+        let connector = self.connector_position(layer, t)?;
         let position = match slot {
+            _ if connector.is_some() => connector.unwrap_or_default(),
             Some(slot) => slot.position,
             None => {
                 let (p, d) = (self.resolve_position(layer, t)?, self.nudge(layer, t)?);

@@ -694,7 +694,8 @@ impl<'a> StoreView<'a> {
         let shapes = self.shapes(layer)?;
         if shapes.is_empty() { return Ok(shapes); }
         let get = |name: &str| PropertyId::new(name).ok().and_then(|p| self.value_at(layer, &p, t).ok().flatten());
-        Ok(crate::doc::store::shape_props::apply(&shapes, &get))
+        // つなぐ線は輪郭を 2 つの箱から解いた道に差し替える。
+        self.connect_shapes(layer, t, crate::doc::store::shape_props::apply(&shapes, &get))
     }
 
     pub fn shapes(&self, layer: LayerId) -> Result<Vec<ShapeNode>, StoreError> {
