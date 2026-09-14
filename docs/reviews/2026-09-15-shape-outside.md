@@ -1,4 +1,4 @@
-# 物を避けて流れる文字 — CSS `shape-outside` を動画の骨格へ(提案)
+# 物を避けて流れる文字と、物に付く札 — CSS `shape-outside` と anchor positioning を動画の骨格へ(提案)
 
 2026-09-15 夜間の提案(朝に取り消せる)。台帳 [CSS の恩恵](2026-09-14-css-ledger.md) の D「`shape-outside`」、ドッグフーディングの場面 3(文字が映像の中の物を避けて流れ直す)。判定の物差しは [間合いの法](2026-09-14-margin-law.md) の連続性(利用者「動きにガクつきはないか、充分に補完されているか」)。
 
@@ -31,6 +31,22 @@
 | 同、群れ(Motion の塊)を避ける | 塊が毎コマ入れ替わり、過半の塞ぎでは隙間が残らない。群れは避ける相手に向かない |
 
 見え方: 物が止まっている間は組版として読める(「THEY PART WHERE A / SHAPE STANDS AND / CLOSE AGAIN WHEN ● IT」)。物が速く動く間は、語が次々に行を渡り、途中の字が重なる波になる。面白いかは利用者の判定。
+
+## 付いて置く(CSS anchor positioning、提案)
+
+同じ夜。台帳 B「anchor positioning — 動く物に付いてくる吹き出し・注釈・価格札」、ドッグフーディングの場面 3'(車に付くカード)。
+
+| 先例 | 形 |
+|---|---|
+| CSS `position-anchor`・`position-area` | 付く相手を名指しし、相手の箱の外側 3×3 のどこに置くかを選ぶ。付いた物は absolute(流れの外) |
+
+- **`Position Anchor`(層)と `Position Area`**(None / Top Left / Top / Top Right / Left / Center / Right / Bottom Left / Bottom / Bottom Right)。すべての物(間合いの欄と同じ段)
+- 相手の箱(comp の画面上の箱、Blob Track の層は ID の一番小さい塊)の外側へ、**自分の Margin だけ離して**置く。Center は中心を重ねる。書いた位置は使わない(None に戻せば書いた位置)
+- 付いた物は流れの外: 押し合いに入らない(CSS の absolute)
+- 側を Hold で変えると、Transition で相手の周りを滑る。相手が動けば付いてくる(同じ重みで遅れる)
+- 付き合いが輪になれば 2 度目は付かない
+
+見本 `anchored_labels.js`(丸・四角・星に札、側が Top → Right → Bottom と変わる): 跳び 0・尖り 0。渋谷の俯瞰でバスの上に札(スクラッチ `flow_label.js`、文字は木とバスを避けて流れる): 跳び 0・尖り 0。
 
 ## 残り
 

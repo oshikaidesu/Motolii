@@ -39,7 +39,7 @@ Web は最初から要素が箱で、並べ方は値を 1 つ選ぶだけ。2026
 | `aspect-ratio` | 全ブラウザ | 幅が変わっても正方形のセル | 式 | 無 |
 | `minmax()`・`auto-fit`・`auto-fill` | 全ブラウザ | 枠に入る数だけ列が増減 | 無い | 無 |
 | `flex-grow` の比 | 全ブラウザ | 1 : 2 : 1 で伸びる帯、比にキーで重心が移る | 無い | 一部(Fill は 1 だけ) |
-| anchor positioning | 2024–25 に出荷 | 動く物に付いてくる吹き出し・注釈・価格札 | 親子と式 | 無 |
+| anchor positioning | 2024–25 に出荷 | 動く物に付いてくる吹き出し・注釈・価格札 | 親子と式 | 一部(提案 [2026-09-15](2026-09-15-shape-outside.md): Position Anchor・Position Area、Blob の塊にも付く。`anchor()` の式と fallback は無) |
 
 ## C. 大きさの単位と、比率違いの書き出し
 

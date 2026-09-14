@@ -59,6 +59,11 @@ pub const STAGGER_FROM: &str = "layout.stagger_from";
 /// Margin Box = 箱 + Margin、Content = 形の輪郭(Blob Track の層は塊の箱)。間は `Shape Margin`。
 pub const SHAPE_OUTSIDE: &str = "layout.shape_outside";
 pub const SHAPE_MARGIN: &str = "layout.shape_margin";
+/// 他の物の箱に付いて置く(CSS の anchor positioning: `position-anchor` と `position-area`)。
+/// 付く相手の箱の外側 9 か所(Center は重ねる)へ、自分の Margin だけ離して置く。Blob Track の層なら ID の一番小さい塊。
+/// 付いた物は流れの外(CSS の absolute と同じ、押し合わない)。
+pub const POSITION_ANCHOR: &str = "layout.position_anchor";
+pub const POSITION_AREA: &str = "layout.position_area";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -126,6 +131,8 @@ pub const SPACE_ROWS: &[Row] = &[
     (TRANSITION_DELAY, "Transition Delay", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (SHAPE_OUTSIDE, "Shape Outside", Value::Enum(0), None, &["None", "Margin Box", "Content"]),
     (SHAPE_MARGIN, "Shape Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
+    (POSITION_ANCHOR, "Position Anchor", Value::LayerId(0), None, &[]),
+    (POSITION_AREA, "Position Area", Value::Enum(0), None, &["None", "Top Left", "Top", "Top Right", "Left", "Center", "Right", "Bottom Left", "Bottom", "Bottom Right"]),
 ];
 
 /// 格子の線の太さの既定(fr)。
@@ -272,6 +279,67 @@ impl StoreView<'_> {
         Ok(if total > 1e-6 { acc / total } else { now })
     }
 
+    /// 付いて置く物の、書いた位置からのずれ(親の空間)。Position Area が None か、相手が居なければ None。
+    fn anchored(&self, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+        let area = self.choice(layer, POSITION_AREA, t)?;
+        if area <= 0 {
+            return Ok(None);
+        }
+        let anchor = match self.value_at(layer, &PropertyId::new(POSITION_ANCHOR)?, t)? {
+            Some(Value::LayerId(id)) if id != 0 => LayerId(id),
+            Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
+            _ => return Ok(None),
+        };
+        if anchor == layer || !self.here(anchor, t)? {
+            return Ok(None);
+        }
+        // 付き合いが輪になっていれば、2 度目は付かない。
+        thread_local! { static ANCHORING: RefCell<std::collections::HashSet<(u64, i64, i64)>> = RefCell::new(Default::default()); }
+        let key = (layer.0, t.num(), t.den());
+        if !ANCHORING.with(|a| a.borrow_mut().insert(key)) {
+            return Ok(None);
+        }
+        let result = self.anchored_inner(layer, anchor, area, t);
+        ANCHORING.with(|a| a.borrow_mut().remove(&key));
+        result
+    }
+
+    fn anchored_inner(&self, layer: LayerId, anchor: LayerId, area: i64, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+        let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+        // 相手の箱(comp)。Blob Track の層は ID の一番小さい塊。
+        let marks = self.analysis().and_then(|a| a.blobs(anchor, crate::doc::store::EffectId(0), t)).filter(|m| !m.is_empty());
+        let (a_lo, a_hi) = if let Some(mark) = marks.and_then(|m| m.iter().min_by_key(|m| m.id)) {
+            let (c, h) = (glam::Vec2::from(mark.center), glam::Vec2::from(mark.size) * 0.5);
+            (c - h, c + h)
+        } else {
+            let Some(b) = self.layer_box(anchor, t)? else { return Ok(None) };
+            let world = self.world_2d(anchor, t)?;
+            bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point2(glam::Vec2::from(c))))
+        };
+        // 親の空間へ。
+        let (a_lo, a_hi) = match self.attrs(layer)?.unwrap_or_default().parent {
+            Some(parent) => {
+                let inverse = self.world_2d(parent, t)?.inverse();
+                bound(&[a_lo, glam::vec2(a_hi.x, a_lo.y), glam::vec2(a_lo.x, a_hi.y), a_hi].map(|p| inverse.transform_point2(p)))
+            }
+            None => (a_lo, a_hi),
+        };
+        // 自分の箱の、位置からの広がり(親の空間)。
+        let Some(b) = self.layer_box(layer, t)? else { return Ok(None) };
+        let authored = self.resolve_position(layer, t)?;
+        let local = self.authored_local(layer, t)?;
+        let (o_lo, o_hi) = bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)) - glam::Vec2::from(authored)));
+        let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
+        let (col, row) = ((area - 1) % 3, (area - 1) / 3);
+        let along = |side: i64, a_lo: f32, a_hi: f32, o_lo: f32, o_hi: f32| match side {
+            0 => a_lo - margin - o_hi,
+            2 => a_hi + margin - o_lo,
+            _ => (a_lo + a_hi) * 0.5 - (o_lo + o_hi) * 0.5,
+        };
+        let target = [along(col, a_lo.x, a_hi.x, o_lo.x, o_hi.x), along(row, a_lo.y, a_hi.y, o_lo.y, o_hi.y)];
+        Ok(Some([target[0] - authored[0], target[1] - authored[1]]))
+    }
+
     /// 並べる Group の箱の大きさ(移り方を混ぜた後)。背景・切り抜き・層の箱が読む。
     pub(crate) fn group_size(&self, group: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
         let Some(now) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
@@ -289,7 +357,12 @@ impl StoreView<'_> {
 
     /// 容器の外で押し合ったずれ(移り方を混ぜた後)。
     pub(crate) fn nudge(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
-        let now = self.layout_frame(t)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+        let shift = |at: RationalTime| -> Result<[f32; 2], StoreError> {
+            let pushed = self.layout_frame(at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+            let anchored = self.anchored(layer, at)?.unwrap_or([0.0; 2]);
+            Ok([pushed[0] + anchored[0], pushed[1] + anchored[1]])
+        };
+        let now = shift(t)?;
         let samples = self.transition_samples(layer, t)?;
         if samples.is_empty() {
             return Ok(now);
@@ -297,7 +370,7 @@ impl StoreView<'_> {
         let mut acc = [0.0f32; 2];
         let mut total = 0.0f32;
         for (at, weight) in samples {
-            let past = self.layout_frame(at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+            let past = shift(at)?;
             acc[0] += past[0] * weight;
             acc[1] += past[1] * weight;
             total += weight;
@@ -596,7 +669,8 @@ impl StoreView<'_> {
             }
             let attrs = self.attrs(layer)?.unwrap_or_default();
             let parent = attrs.parent;
-            if parent.is_some_and(|p| displayed.contains(&p)) {
+            // 並ぶ子と、付いて置く物(流れの外)は押し合わない。
+            if parent.is_some_and(|p| displayed.contains(&p)) || self.choice(layer, POSITION_AREA, t)? > 0 {
                 continue;
             }
             // 並べる Group の箱は今解いた大きさ(覚えにはまだ入っていない)。
@@ -1604,6 +1678,33 @@ mod tests {
         doc.apply(Intent::SetAttrs { layer: b, patch: LayerAttrsPatch { projection: Some(crate::doc::store::LayerProjection::TwoD), ..Default::default() } }).unwrap();
         let frame = doc.view().layout_frame(T).unwrap();
         assert!(frame.nudges_z.is_empty(), "a 2D thing has no depth to push along");
+    }
+
+    #[test]
+    fn a_label_anchored_to_a_thing_sits_on_the_side_it_names_and_follows() {
+        let mut doc = blank_project();
+        let thing = add(&mut doc, 1, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: thing, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+        put(&mut doc, thing, property::POSITION, Value::Vec2([500.0, 300.0]));
+        let label = add(&mut doc, 2, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: label, shapes: vec![rect_shape([255; 4], [40.0, 20.0])] }).unwrap();
+        put(&mut doc, label, property::POSITION, Value::Vec2([10.0, 10.0]));
+        put(&mut doc, label, MARGIN, Value::F64(10.0));
+        put(&mut doc, label, POSITION_ANCHOR, Value::LayerId(thing.0));
+        put(&mut doc, label, POSITION_AREA, Value::Enum(2));
+        let (a, b) = (shown(&doc, thing, T), shown(&doc, label, T));
+        assert!((b[3] - (a[1] - 10.0)).abs() < 0.01, "Top: its bottom edge a margin above the thing's top: {a:?} {b:?}");
+        assert!(((b[0] + b[2]) * 0.5 - (a[0] + a[2]) * 0.5).abs() < 0.01, "centred along the thing");
+        put(&mut doc, label, POSITION_AREA, Value::Enum(6));
+        let b = shown(&doc, label, T);
+        assert!((b[0] - (a[2] + 10.0)).abs() < 0.01 && ((b[1] + b[3]) * 0.5 - (a[1] + a[3]) * 0.5).abs() < 0.01, "Right: beside it, middles level: {b:?}");
+        put(&mut doc, thing, property::POSITION, Value::Vec2([800.0, 600.0]));
+        let (a, b) = (shown(&doc, thing, T), shown(&doc, label, T));
+        assert!((b[0] - (a[2] + 10.0)).abs() < 0.01, "moving the thing carries the label");
+        let placed = shown(&doc, label, T);
+        put(&mut doc, label, POSITION_AREA, Value::Enum(0));
+        let back = shown(&doc, label, T);
+        assert!(back != placed && (back[0] + back[2]) * 0.5 < 100.0, "None: back where it was written: {back:?}");
     }
 
     #[test]
