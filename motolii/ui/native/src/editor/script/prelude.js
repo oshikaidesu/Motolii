@@ -83,6 +83,8 @@ class Effect {
     }
     return [...e.params.filter((p) => !gridded.has(p.id)), ...grid];
   }
+  /** Where the effect lands on a group: each child (default) or the whole group as one picture. */
+  whole(on = true) { op("scopeEffect", { layer: this.layer.id, id: this.id, whole: on }); return this; }
   property(name) {
     const rows = this.rows();
     const row = rows.find((p) => p.label === name);
@@ -132,6 +134,8 @@ class Layer {
   name(text) { op("setAttrs", { layers: [this.id], patch: { name: text } }); return this; }
   parent(layer) { op("setAttrs", { layers: [this.id], patch: { parent: layer ? layer.id : null } }); return this; }
   blend(mode) { op("setAttrs", { layers: [this.id], patch: { blendMode: mode } }); return this; }
+  /** Show this layer only where the layer just below it is (a clipping mask). */
+  clip(on = true) { op("setAttrs", { layers: [this.id], patch: { clipToBelow: on } }); return this; }
   projection(kind) { op("setAttrs", { layers: [this.id], patch: { projection: kind } }); return this; }
   /** When the layer is on screen, in seconds. */
   time(start, duration) {

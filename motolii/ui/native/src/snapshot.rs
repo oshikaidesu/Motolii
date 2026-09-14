@@ -354,7 +354,7 @@ impl EditorRuntime{
         // 並べる法の欄: Group は Display と、Display に応じた欄。並ぶ子は子の欄。表の順と選択肢で出す。
         {
             use crate::doc::store::layout;
-            properties.retain(|p| !p["id"].as_str().is_some_and(|id| id.starts_with("layout.")));
+            properties.retain(|p| !p["id"].as_str().is_some_and(|id| id.starts_with("layout.") || id.starts_with("connect.")));
             let number = |layer: LayerId, name: &str| -> Result<f64, String> {
                 Ok(match view.value_at(layer, &PropertyId::new(name).map_err(e)?, at).map_err(e)? { Some(Value::Enum(v)) => v as f64, Some(Value::F64(v)) => v, _ => 0.0 })
             };
@@ -387,6 +387,17 @@ impl EditorRuntime{
             }
             if meta.source == LayerSource::Shape {
                 for row in layout::CONNECT_ROWS { push(&mut properties, id, row)?; }
+                // 線の太さ(`shape.stroke_width`、書類の線の太さが既定)。つなぐ線・なぞる形の細さもこれで決める。
+                if !properties.iter().any(|p| p["id"] == property::SHAPE_STROKE_WIDTH) {
+                    fn first_width(nodes: &[crate::doc::store::ShapeNode]) -> Option<f64> {
+                        nodes.iter().find_map(|n| match n {
+                            crate::doc::store::ShapeNode::Leaf(shape) => Some(shape.stroke.as_ref().map_or(0.0, |s| s.width)),
+                            crate::doc::store::ShapeNode::Group(g) => first_width(&g.children),
+                        })
+                    }
+                    let width = first_width(&view.shapes(id).map_err(e)?).unwrap_or(0.0);
+                    properties.push(prop(view, id, property::SHAPE_STROKE_WIDTH, "Stroke Width", &Value::F64(width), Some((0.0, 1000.0)), at, fps, live)?);
+                }
             }
             if let Some(parent) = attrs.parent.filter(|p| view.meta(*p).ok().flatten().is_some_and(|m| m.source == LayerSource::Group)) {
                 let display = number(parent, layout::DISPLAY)?.round() as i64;
