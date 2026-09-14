@@ -1,5 +1,5 @@
-// A grid found in chance: cards drift where a Repeater's dice threw them. Track Overlay reads their boxes (Detection
-// Method = Layers) and raises a grid from their edges — near edges share one line — and, as Snap Strength rises, pulls the
+// A grid found in chance: cards drift where a Repeater's dice threw them. Found Grid (a Track Overlay reading
+// layer boxes) raises a grid from their edges — near edges share one line — and, as Snap Strength rises, pulls the
 // cards onto the lines it found. Nothing was placed on a grid; the grid is read out of the drift, and moves with it.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 8, background: "#F1EFEA" });
 
@@ -25,11 +25,8 @@ for (const [w, sc, at] of words) {
 
 // The reader of boxes, on top: grid lines from edges, thin corner brackets, and the pull.
 const hud = keep(rectangle({ name: "Found grid" }).fill("#ffffff")).set("Anchor", [0, 0]).set("Position", [0, 0]);
-const fx = hud.effect("Track Overlay", {
-  "Detection Method": "Layers",
-  "Grid Enabled": 1, "View Mode": "Edge", "Grid Color": RED, "Grid Opacity": 1, "Line Thickness": 1.2, "Merge Distance": 40,
-  "Box Enabled": 1, "Color Box Stroke": INK, "Box Stroke": 1, "Box Gap Enabled": 1, "Box Gap Size": 0.7,
-});
+// Found Grid: Track Overlay with the Layers source and the Edge grid on by default.
+const fx = hud.effect("Found Grid", {});
 fx.key("Snap Strength", 0, 0, "Hold").key("Snap Strength", 2.0, 0, "Bezier").key("Snap Strength", 3.2, 1, "Hold").key("Snap Strength", 5.6, 1, "Bezier").key("Snap Strength", 6.8, 0);
 
 op("setAttrs", { layers: made, patch: { projection: "2D" } });

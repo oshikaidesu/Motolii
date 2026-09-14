@@ -143,7 +143,8 @@ impl Engine {
                 let source = LayerId(blob::number_of(&effect.params, "source").round().max(0.0) as u64);
                 if source.0 == 0 || source == layer { continue; }
                 (effect.params.clone(), Source::Layer(source), settings_of(&effect.params), blob::number_of(&effect.params, "detail"), false, false)
-            } else if let Some(effect) = effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id)) {
+            } else if let Some(found) = effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id)) {
+                let effect = &crate::doc::store::ResolvedEffect { plugin_id: found.plugin_id.clone(), params: overlay::with_defaults(&found.plugin_id, &found.params), scope: found.scope };
                 // Layers: 絵を読まず、下の層の箱をそのまま塊にする(同じ親で自分より下。Repeater の写しは 1 枚ずつ)。
                 if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
                     let resolved = view.resolved_layers(t).map_err(store)?;

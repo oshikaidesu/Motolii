@@ -583,9 +583,10 @@ impl<'a> StoreView<'a> {
         use crate::doc::store::overlay;
         let overlays: Vec<(LayerId, f32, f32)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
             let effect = l.effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id))?;
-            let strength = overlay::number_of(&effect.params, "grid_snap").clamp(0.0, 1.0) as f32;
-            (overlay::number_of(&effect.params, "method").round() as i64 == 2 && strength > 0.0)
-                .then(|| (l.id, strength, overlay::number_of(&effect.params, "grid_merge").max(0.0) as f32))
+            let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
+            let strength = overlay::number_of(&params, "grid_snap").clamp(0.0, 1.0) as f32;
+            (overlay::number_of(&params, "method").round() as i64 == 2 && strength > 0.0)
+                .then(|| (l.id, strength, overlay::number_of(&params, "grid_merge").max(0.0) as f32))
         }).collect();
         for (overlay_layer, strength, merge) in overlays {
             let scope = self.overlay_scope(overlay_layer, out, t)?;

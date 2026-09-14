@@ -32,10 +32,7 @@ const fn color(name: &'static str, label: &'static str, section: &'static str, r
     Param { name, label, section, kind: ParamKind::Color(rgba), default: [0.0, 0.0], range: None, modes: None }
 }
 
-pub const KINDS: &[OverlayKind] = &[OverlayKind {
-    plugin_id: TRACK_OVERLAY,
-    label: "Track Overlay",
-    params: &[
+const TRACK_OVERLAY_PARAMS: &[Param] = &[
         choice("method", "Detection Method", "Keying", METHODS, 0.0),
         number("threshold", "Threshold", "Keying", 10.0, (0.0, 100.0)),
         number("blur", "Blur Strength", "Keying", 0.0, (0.0, 100.0)),
@@ -79,11 +76,61 @@ pub const KINDS: &[OverlayKind] = &[OverlayKind {
         // Motolii の足し: 近い辺を 1 本にまとめる幅(辺の分布の山の広がり、px)と、物をその線へ引き寄せる強さ(Layers の時)。
         number("grid_merge", "Merge Distance", "Grid", 12.0, (0.0, 2000.0)),
         number("grid_snap", "Snap Strength", "Grid", 0.0, (0.0, 1.0)),
-    ],
-}];
+    ];
+
+/// Found Grid(2026-09-15 利用者「かなりおもしろいね、Tracery 的にエフェクトとして足しておこう」): Track Overlay と同じ欄で、
+/// 既定だけが違う棚の 1 枚。下の層の箱を拾い(Layers)、辺から格子を立てる(Grid の Edge)。見つけた線へ物を寄せるのは Snap Strength。
+pub const FOUND_GRID: &str = "motolii.found_grid";
+const FOUND_GRID_DEFAULTS: &[(&str, [f64; 4])] = &[
+    ("method", [2.0, 0.0, 0.0, 0.0]),
+    ("grid", [1.0, 0.0, 0.0, 0.0]),
+    ("grid_color", [0.85, 0.33, 0.23, 1.0]),
+    ("grid_opacity", [1.0, 0.0, 0.0, 0.0]),
+    ("grid_thickness", [1.2, 0.0, 0.0, 0.0]),
+    ("grid_merge", [40.0, 0.0, 0.0, 0.0]),
+    ("box_stroke_color", [0.08, 0.08, 0.08, 1.0]),
+    ("box_stroke_width", [1.0, 0.0, 0.0, 0.0]),
+    ("box_gap", [1.0, 0.0, 0.0, 0.0]),
+    ("box_gap_size", [0.7, 0.0, 0.0, 0.0]),
+];
+
+/// 欄の表から、既定だけを差し替えた写し(欄の名前・並び・範囲は同じ 1 つの表から)。
+fn with_overrides(base: &[Param], overrides: &[(&str, [f64; 4])]) -> &'static [Param] {
+    let params: Vec<Param> = base.iter().map(|p| {
+        let over = overrides.iter().find(|(n, _)| *n == p.name).map(|(_, v)| *v);
+        let kind = match &p.kind {
+            ParamKind::Number => ParamKind::Number,
+            ParamKind::Vec2 => ParamKind::Vec2,
+            ParamKind::Choice(c) => ParamKind::Choice(c),
+            ParamKind::Layer => ParamKind::Layer,
+            ParamKind::Color(c) => ParamKind::Color(over.unwrap_or(*c)),
+        };
+        let default = match (&p.kind, over) { (ParamKind::Color(_), _) | (_, None) => p.default, (_, Some(v)) => [v[0], v[1]] };
+        Param { name: p.name, label: p.label, section: p.section, kind, default, range: p.range, modes: p.modes }
+    }).collect();
+    Box::leak(params.into_boxed_slice())
+}
+
+pub static KINDS: std::sync::LazyLock<Vec<OverlayKind>> = std::sync::LazyLock::new(|| vec![
+    OverlayKind { plugin_id: TRACK_OVERLAY, label: "Track Overlay", params: TRACK_OVERLAY_PARAMS },
+    OverlayKind { plugin_id: FOUND_GRID, label: "Found Grid", params: with_overrides(TRACK_OVERLAY_PARAMS, FOUND_GRID_DEFAULTS) },
+]);
+
+/// 効果の値に、その種類の既定を足す(書いていない欄も種類ごとの既定で読めるように)。
+pub fn with_defaults(plugin_id: &str, params: &[(String, Value)]) -> Vec<(String, Value)> {
+    let mut out = params.to_vec();
+    if let Some(kind) = KINDS.iter().find(|k| k.plugin_id == plugin_id) {
+        for p in kind.params {
+            if !out.iter().any(|(n, _)| n == p.name) {
+                out.push((p.name.to_owned(), match p.kind { ParamKind::Color(c) => Value::Color(c), _ => Value::F64(p.default[0]) }));
+            }
+        }
+    }
+    out
+}
 
 pub fn is_track_overlay(plugin_id: &str) -> bool {
-    plugin_id == TRACK_OVERLAY
+    plugin_id == TRACK_OVERLAY || plugin_id == FOUND_GRID
 }
 
 /// 数・選択の欄の値。無い欄は宣言の既定。
@@ -135,6 +182,17 @@ pub fn edge_lines(edges: &[f32], merge: f32) -> Vec<(f32, f32)> {
 #[cfg(test)]
 mod grid_tests {
     use super::*;
+
+    #[test]
+    fn found_grid_shares_the_rows_and_only_changes_defaults() {
+        let (track, found) = (&KINDS[0], &KINDS[1]);
+        assert_eq!(track.params.iter().map(|p| p.name).collect::<Vec<_>>(), found.params.iter().map(|p| p.name).collect::<Vec<_>>(), "one table of rows");
+        let found_values = with_defaults(FOUND_GRID, &[]);
+        assert_eq!(number_of(&found_values, "method"), 2.0, "Found Grid reads layers");
+        assert!(switch_of(&found_values, "grid"), "and draws the grid");
+        assert_eq!(number_of(&with_defaults(TRACK_OVERLAY, &[]), "method"), 0.0, "Track Overlay keeps its own defaults");
+        assert_eq!(number_of(&with_defaults(FOUND_GRID, &[("method".into(), Value::F64(1.0))]), "method"), 1.0, "a written value wins");
+    }
 
     #[test]
     fn near_edges_meet_on_one_line_and_lines_move_smoothly_as_edges_part() {

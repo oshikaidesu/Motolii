@@ -56,6 +56,10 @@ Tracery 2 の Grid 節の View Mode = **Edge**(拾った塊の箱の辺から線
 4. **Snap Strength**: 物を、見つけた線へ画面の上で寄せる(左右の辺のずれの平均だけ平行移動)。線は寄せる前の箱から立てる。一番近い線を選ばないので跳ばない
 5. 物が動けば線も動く(格子は毎コマ、その瞬間の箱から読む)
 
+### 棚の 1 枚: Found Grid
+
+利用者「かなりおもしろいね、Tracery 的にエフェクトとして足しておこう」: 棚に **Found Grid**(`motolii.found_grid`)。Track Overlay と同じ欄の表で、既定だけが違う(Layers、Grid Enabled、赤い線、Merge Distance 40、黒い細い角の枠)。掛けて Snap Strength に鍵を打つだけで同じ画になる。既定を差し替えた写しは同じ表から作る(欄を 2 か所に書かない)。
+
 ### 見本
 
 `found_grid.js`(Repeater で散らした灰・黒・赤のカードと字がゆっくり漂い、赤い格子線が辺から立ち、Snap Strength が上がると物が線へ揃い、また緩む): 跳び 0・尖り 0。
