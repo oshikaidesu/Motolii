@@ -152,6 +152,8 @@ pub struct Frame {
     pub sizes: HashMap<LayerId, [f32; 2]>,
     /// 容器の外で押し合った物の、親の空間でのずれ。
     pub nudges: HashMap<LayerId, [f32; 2]>,
+    /// 押し合いの奥行きのずれ(両方が 2D でない物同士、Position Z に足す)。
+    pub nudges_z: HashMap<LayerId, f32>,
     /// Display の Group の奥行きの範囲 [手前, 奥]。揃えなら面が奥で [-奥行き, 0]、奥へ積むなら [0, 積んだ厚み]。
     pub depths: HashMap<LayerId, [f32; 2]>,
 }
@@ -253,6 +255,21 @@ impl StoreView<'_> {
             [slot.position, slot.scale, slot.stretch, slot.anchor] = acc.map(|sum| sum.map(|v| v / total));
         }
         Ok(Some(slot))
+    }
+
+    /// 押し合いの奥行きのずれ(移り方を混ぜた後)。
+    pub(crate) fn nudge_z(&self, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
+        let now = self.layout_frame(t)?.nudges_z.get(&layer).copied().unwrap_or(0.0);
+        let samples = self.transition_samples(layer, t)?;
+        if samples.is_empty() {
+            return Ok(now);
+        }
+        let (mut acc, mut total) = (0.0f32, 0.0f32);
+        for (at, weight) in samples {
+            acc += self.layout_frame(at)?.nudges_z.get(&layer).copied().unwrap_or(0.0) * weight;
+            total += weight;
+        }
+        Ok(if total > 1e-6 { acc / total } else { now })
     }
 
     /// 並べる Group の箱の大きさ(移り方を混ぜた後)。背景・切り抜き・層の箱が読む。
@@ -570,13 +587,15 @@ impl StoreView<'_> {
     /// 決まった回数だけ押し戻す。中心から中心への向きへ、Flex Shrink の比で分ける。その瞬間の宣言だけから解く。
     fn push_apart(&self, t: RationalTime, displayed: &[LayerId], frame: &mut Frame) -> Result<(), StoreError> {
         const ROUNDS: usize = 32;
-        let mut families: HashMap<Option<LayerId>, Vec<(LayerId, [f32; 4], f32)>> = HashMap::new();
+        // (層, 箱の最小, 箱の最大, 譲る比, 奥行きを持つか)。2D の物は奥行きの向きに押さない。
+        let mut families: HashMap<Option<LayerId>, Vec<(LayerId, glam::Vec3, glam::Vec3, f32, bool)>> = HashMap::new();
         for layer in self.layers() {
             let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
             if margin <= 0.0 || !self.here(layer, t)? {
                 continue;
             }
-            let parent = self.attrs(layer)?.unwrap_or_default().parent;
+            let attrs = self.attrs(layer)?.unwrap_or_default();
+            let parent = attrs.parent;
             if parent.is_some_and(|p| displayed.contains(&p)) {
                 continue;
             }
@@ -590,37 +609,48 @@ impl StoreView<'_> {
             let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)));
             let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p)) - glam::Vec2::splat(margin);
             let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p)) + glam::Vec2::splat(margin);
+            let spatial = attrs.projection != crate::doc::store::LayerProjection::TwoD;
+            let (z0, z1) = if spatial {
+                let z = self.number(layer, property::POSITION_Z, 0.0, t)? as f32;
+                let range = self.depth_range(layer, t, frame)?;
+                ((z + range[0].min(range[1])) - margin, (z + range[0].max(range[1])) + margin)
+            } else {
+                (0.0, 0.0)
+            };
             let shrink = self.number(layer, FLEX_SHRINK, 1.0, t)?.max(0.0) as f32;
-            families.entry(parent).or_default().push((layer, [lo.x, lo.y, hi.x, hi.y], shrink));
+            families.entry(parent).or_default().push((layer, glam::vec3(lo.x, lo.y, z0), glam::vec3(hi.x, hi.y, z1), shrink, spatial));
         }
         for (_, mut items) in families {
             if items.len() < 2 {
                 continue;
             }
             items.sort_by_key(|item| item.0);
-            let mut moved = vec![[0.0f32; 2]; items.len()];
+            let mut moved = vec![glam::Vec3::ZERO; items.len()];
             // 各回で全部の対を今の箱から同時に測って、まとめて動かす(順に動かすと、対の順番と止まる回で結果が跳ぶ)。
             for _ in 0..ROUNDS {
-                let mut step = vec![glam::Vec2::ZERO; items.len()];
+                let mut step = vec![glam::Vec3::ZERO; items.len()];
                 for i in 0..items.len() {
                     for j in i + 1..items.len() {
-                        let (a, b) = (items[i].1, items[j].1);
-                        let (si, sj) = (items[i].2, items[j].2);
+                        let (a, b) = (&items[i], &items[j]);
+                        let (si, sj) = (a.3, b.3);
                         if si + sj <= 0.0 {
                             continue;
                         }
                         let (wi, wj) = (si / (si + sj), sj / (si + sj));
+                        // 両方が奥行きを持つ時だけ、奥行きも測って押す(2D の物は面の上だけ)。
+                        let axes = if a.4 && b.4 { 3 } else { 2 };
+                        let mask = if axes == 3 { glam::Vec3::ONE } else { glam::vec3(1.0, 1.0, 0.0) };
                         // 中心から中心への向きに、離れるのに要るだけ押す(浅い軸で押すと、軸が入れ替わる瞬間に向きが 90° 跳ぶ)。
-                        let centre = |r: [f32; 4]| glam::vec2((r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5);
-                        let gap = centre(b) - centre(a);
-                        let dir = if gap.length() > 1e-4 { gap.normalize() } else { glam::Vec2::X };
-                        let half = glam::vec2((a[2] - a[0] + b[2] - b[0]) * 0.5, (a[3] - a[1] + b[3] - b[1]) * 0.5);
+                        let gap = ((b.1 + b.2) * 0.5 - (a.1 + a.2) * 0.5) * mask;
+                        let dir = if gap.length() > 1e-4 { gap.normalize() } else { glam::Vec3::X };
+                        let half = ((a.2 - a.1) + (b.2 - b.1)) * 0.5;
                         let need = |axis: usize| {
                             let (g, u, h) = (gap[axis], dir[axis], half[axis]);
                             if u.abs() < 1e-6 { f32::INFINITY } else { ((h - g.abs()) / u.abs()).max(0.0) }
                         };
-                        let depth = need(0).min(need(1));
-                        if !depth.is_finite() || depth <= 0.0 {
+                        // 奥行きを測る対は、奥行きで重なっていなければ離れている。
+                        let depth = (0..axes).map(need).fold(f32::INFINITY, f32::min);
+                        if !depth.is_finite() || depth <= 0.0 || (0..axes).any(|axis| half[axis] - gap[axis].abs() <= 0.0) {
                             continue;
                         }
                         step[i] -= dir * depth * wi * 0.5;
@@ -628,17 +658,17 @@ impl StoreView<'_> {
                     }
                 }
                 for (k, d) in step.into_iter().enumerate() {
-                    items[k].1[0] += d.x;
-                    items[k].1[2] += d.x;
-                    items[k].1[1] += d.y;
-                    items[k].1[3] += d.y;
-                    moved[k][0] += d.x;
-                    moved[k][1] += d.y;
+                    items[k].1 += d;
+                    items[k].2 += d;
+                    moved[k] += d;
                 }
             }
             for (item, d) in items.iter().zip(moved) {
-                if d != [0.0, 0.0] {
-                    frame.nudges.insert(item.0, d);
+                if d.x != 0.0 || d.y != 0.0 {
+                    frame.nudges.insert(item.0, [d.x, d.y]);
+                }
+                if d.z != 0.0 {
+                    frame.nudges_z.insert(item.0, d.z);
                 }
             }
         }
@@ -1549,6 +1579,31 @@ mod tests {
         put(&mut doc, group, STAGGER_FROM, Value::Enum(2));
         let (e1, e3) = (started(&doc, children[1]).expect("moves"), started(&doc, children[3]).expect("moves"));
         assert!(e1 > e3, "from the end, the near-the-start child waits: {e1} vs {e3}");
+    }
+
+    #[test]
+    fn solid_things_push_apart_in_depth_only_when_their_depths_overlap() {
+        let mut doc = blank_project();
+        let a = add(&mut doc, 1, LayerSource::Shape, None);
+        let b = add(&mut doc, 2, LayerSource::Shape, None);
+        for layer in [a, b] {
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+            put(&mut doc, layer, MARGIN, Value::F64(5.0));
+            put(&mut doc, layer, property::DEPTH, Value::F64(100.0));
+            put(&mut doc, layer, property::POSITION, Value::Vec2([300.0, 300.0]));
+        }
+        put(&mut doc, b, property::POSITION_Z, Value::F64(400.0));
+        let frame = doc.view().layout_frame(T).unwrap();
+        assert!(frame.nudges.is_empty() && frame.nudges_z.is_empty(), "one behind the other with room between: nobody moves");
+        put(&mut doc, b, property::POSITION_Z, Value::F64(60.0));
+        let frame = doc.view().layout_frame(T).unwrap();
+        let (za, zb) = (frame.nudges_z.get(&a).copied().unwrap_or(0.0), frame.nudges_z.get(&b).copied().unwrap_or(0.0));
+        assert!(za < 0.0 && zb > 0.0, "overlapping in depth, they push apart along depth: {za} {zb}");
+        assert!((zb - za - 50.0).abs() < 2.0, "just enough to clear depth + margins: {}", zb - za);
+        assert!(frame.nudges.values().all(|d| d[0].abs() < 1e-3 && d[1].abs() < 1e-3), "straight behind each other: no sideways push");
+        doc.apply(Intent::SetAttrs { layer: b, patch: LayerAttrsPatch { projection: Some(crate::doc::store::LayerProjection::TwoD), ..Default::default() } }).unwrap();
+        let frame = doc.view().layout_frame(T).unwrap();
+        assert!(frame.nudges_z.is_empty(), "a 2D thing has no depth to push along");
     }
 
     #[test]

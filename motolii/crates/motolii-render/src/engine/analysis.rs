@@ -92,6 +92,11 @@ impl Engine {
             if let Some(b) = view.layer_box(layer.id, t).map_err(store)? {
                 out.push((format!("L{} {name}.min", layer.id.0), to_screen(glam::vec2(b[0], b[1]))));
                 out.push((format!("L{} {name}.max", layer.id.0), to_screen(glam::vec2(b[2], b[3]))));
+                // 奥行きの向きの動き(世界の z と、中心の x)。
+                if let Some(world) = layer.placement.world_transform {
+                    let c = world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0));
+                    out.push((format!("L{} {name}.z", layer.id.0), [c.z, 0.0]));
+                }
             }
             if layer.source == crate::doc::store::LayerSource::Text {
                 if let Some(document) = view.resolved_text_document(layer.id, t).map_err(store)? {

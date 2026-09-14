@@ -85,7 +85,7 @@ impl<'a> StoreView<'a> {
         Ok(LayerPlacement::spatial_from_transform(
             xy,
             position,
-            scalar(property::POSITION_Z)? + slot.map_or(0.0, |s| s.z),
+            scalar(property::POSITION_Z)? + match slot { Some(s) => s.z, None => self.nudge_z(layer, t)? },
             scalar(property::ROTATION_X)? + slot.map_or(0.0, |s| s.rotation[0]),
             scalar(property::ROTATION_Y)? + slot.map_or(0.0, |s| s.rotation[1]),
             self.split_position_component(layer, property::SCALE_Z, t)?.unwrap_or(1.0) * slot.map_or(1.0, |s| s.scale_z),
