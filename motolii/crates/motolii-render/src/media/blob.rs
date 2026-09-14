@@ -30,6 +30,8 @@ pub struct BlobSettings {
     pub revive_frames: u32,
     /// 数える前に塊を削る px(細い橋で触れた塊を切り離す)。箱は削った分だけ広げて戻す。
     pub separation: u32,
+    /// 閾値の前に絵をぼかす半径 px(粒の揺らぎで塊が千切れない。Tracery 2 の Blur Strength)。
+    pub blur: u32,
 }
 
 /// 1 コマで拾った塊(ID を振る前)。箱は画素の端を含む `[min, max + 1)`。
@@ -49,12 +51,45 @@ pub struct Blob {
     pub age: u32,
 }
 
-/// 非乗算 RGBA8 の 1 コマから塊を拾う(8 近傍の連結成分、2 回走査 + union-find)。
-pub fn detect(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, settings: &BlobSettings) -> Vec<Region> {
+/// 箱のぼかし(横・縦の 2 回、端は伸ばす)。
+fn box_blur(rgba: &[u8], width: usize, height: usize, radius: usize) -> Vec<u8> {
+    if radius == 0 {
+        return rgba.to_vec();
+    }
+    let pass = |src: &[u8], horizontal: bool| -> Vec<u8> {
+        let mut out = vec![0u8; src.len()];
+        let (along, across) = if horizontal { (width, height) } else { (height, width) };
+        let n = (2 * radius + 1) as u32;
+        for a in 0..across {
+            let at = |i: usize| if horizontal { (a * width + i) * 4 } else { (i * width + a) * 4 };
+            let mut sum = [0u32; 4];
+            for k in 0..=2 * radius {
+                let i = at(k.saturating_sub(radius).min(along - 1));
+                for c in 0..4 { sum[c] += u32::from(src[i + c]); }
+            }
+            for i in 0..along {
+                let o = at(i);
+                for c in 0..4 { out[o + c] = (sum[c] / n) as u8; }
+                let leave = at(i.saturating_sub(radius));
+                let enter = at((i + radius + 1).min(along - 1));
+                for c in 0..4 { sum[c] = sum[c] + u32::from(src[enter + c]) - u32::from(src[leave + c]); }
+            }
+        }
+        out
+    };
+    pass(&pass(rgba, true), false)
+}
+
+/// 塊と見なす画素(ぼかし → 閾値)。Show Mask はこれを出す。
+pub fn mask(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, settings: &BlobSettings) -> Vec<bool> {
     let (w, h) = (width as usize, height as usize);
     if rgba.len() < w * h * 4 {
         return Vec::new();
     }
+    let blurred = box_blur(rgba, w, h, settings.blur as usize);
+    let previous = previous.filter(|p| p.len() >= w * h * 4).map(|p| box_blur(p, w, h, settings.blur as usize));
+    let rgba = blurred.as_slice();
+    let previous = previous.as_deref();
     let channel = |px: &[u8], i: usize| [px[i * 4] as f32 / 255.0, px[i * 4 + 1] as f32 / 255.0, px[i * 4 + 2] as f32 / 255.0];
     let inside = |i: usize| -> bool {
         let c = channel(rgba, i);
@@ -67,7 +102,16 @@ pub fn detect(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, set
             BlobSource::Color { target, tolerance } => (0..3).map(|k| (c[k] - target[k]).powi(2)).sum::<f32>().sqrt() < tolerance,
         }
     };
-    let mut mask: Vec<bool> = (0..w * h).map(inside).collect();
+    (0..w * h).map(inside).collect()
+}
+
+/// 非乗算 RGBA8 の 1 コマから塊を拾う(8 近傍の連結成分、2 回走査 + union-find)。
+pub fn detect(rgba: &[u8], width: u32, height: u32, previous: Option<&[u8]>, settings: &BlobSettings) -> Vec<Region> {
+    let (w, h) = (width as usize, height as usize);
+    let mut mask = mask(rgba, width, height, previous, settings);
+    if mask.len() < w * h {
+        return Vec::new();
+    }
     // 削る(4 近傍の最小)。橋が切れて、人どうしが別の塊になる。
     for _ in 0..settings.separation {
         let before = mask.clone();
@@ -211,7 +255,7 @@ mod tests {
     const H: u32 = 48;
 
     fn settings(source: BlobSource, persist: bool) -> BlobSettings {
-        BlobSettings { source, min_area: 4, max_area: u32::MAX, max_blobs: 64, persist, max_move: 12.0, revive_frames: 3, separation: 0 }
+        BlobSettings { source, min_area: 4, max_area: u32::MAX, max_blobs: 64, persist, max_move: 12.0, revive_frames: 3, separation: 0, blur: 0 }
     }
 
     /// 黒地に白い四角 (x, y, 一辺) を描く。

@@ -127,6 +127,17 @@ mod snapshots {
                 out.push(Intent::SetConstant { layer: LayerId(2), property: PropertyId::new(property::OPACITY).map_err(|e| e.to_string())?, value: Value::F64(0.0) });
                 out
             }
+            EffectStage::Output => {
+                // 出力は下の合成を読む: 下に動く写真、上に効果を持つ層(画面座標、左上に置く)。
+                let mut out = place(LayerId(2), 0, NewKind::Media { path: photo()?, name: "Sample".into() });
+                let c = [comp.0 * 0.5, comp.1 * 0.5];
+                out.push(Intent::SetConstant { layer: LayerId(2), property: PropertyId::new(property::ANCHOR).map_err(|e| e.to_string())?, value: Value::Vec2([PHOTO_WIDTH as f64 * 0.5, comp.1 * 0.5]) });
+                let travel = (PHOTO_WIDTH - WIDTH * SCALE) as f64 * 0.5;
+                out.push(Intent::SetTrack { layer: LayerId(2), property: PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, track: track(Value::Vec2([c[0] - travel, c[1]]), Value::Vec2([c[0] + travel, c[1]])) });
+                out.extend(place(subject, 1, NewKind::Rectangle));
+                out.push(Intent::SetConstant { layer: subject, property: PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, value: Value::Vec2([0.0, 0.0]) });
+                out
+            }
             EffectStage::Surface | EffectStage::Field | EffectStage::Clip => {
                 let mut out = Vec::new();
                 if stage == EffectStage::Surface {

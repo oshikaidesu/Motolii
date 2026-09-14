@@ -24,6 +24,8 @@ pub enum EffectStage {
     Path,
     /// 平らな素材から立体を起こす(shader を持たない): 押し出し・縁の丸み。
     Solid,
+    /// 出力(shader を持たない、画面座標、AE の調整層): 下の合成を読んで上に描く。
+    Output,
     /// 文字の層の輪郭(shader を持たない): 文字を形にする段で効く。
     Text,
 }
@@ -360,12 +362,13 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             crate::doc::store::kind::Family::Placement => EffectStage::Placement,
             crate::doc::store::kind::Family::Path => EffectStage::Path,
             crate::doc::store::kind::Family::Solid => EffectStage::Solid,
+            crate::doc::store::kind::Family::Output => EffectStage::Output,
             crate::doc::store::kind::Family::Text => EffectStage::Text,
         },
         params: kind.params.iter().map(|p| EffectParamDescriptor {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
             point: matches!(p.kind, crate::doc::store::kind::ParamKind::Vec2).then_some(p.default),
-            color: None,
+            color: match p.kind { crate::doc::store::kind::ParamKind::Color(c) => Some(c), _ => None },
             layer: matches!(p.kind, crate::doc::store::kind::ParamKind::Layer),
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
             subtype: None, unit: None, group: None, advanced: false, hero: false,

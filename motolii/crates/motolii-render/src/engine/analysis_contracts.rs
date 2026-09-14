@@ -130,3 +130,40 @@ fn a_track_matte_of_blob_boxes_reveals_every_box() {
     let [r, g, b] = px(&frame, 160, 100);
     assert!(r < 30 && g < 30 && b < 30, "箱の外は切られる: {:?}", [r, g, b]);
 }
+
+/// Track Overlay(出力): 上の層に掛けると下の合成から塊を拾い、その上に箱の枠線を描く。中身は下の絵のまま。
+#[test]
+fn track_overlay_frames_what_it_finds_below() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    let (video, host) = (LayerId(1), LayerId(2));
+    doc.apply_all([
+        Intent::AddLayer(video),
+        Intent::SetMeta { layer: video, meta: LayerMeta { source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, None, 50) } },
+        Intent::SetConstant { layer: video, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+        Intent::AddLayer(host),
+        Intent::SetMeta { layer: host, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 50) } },
+        Intent::SetShapes { layer: host, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 10.0, y: 10.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill::default()) })] },
+        Intent::SetConstant { layer: host, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
+        Intent::SetEffects { layer: host, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::doc::store::overlay::TRACK_OVERLAY.into() }] },
+    ]).unwrap();
+    for (name, value) in [("method", Value::F64(1.0)), ("key_color", Value::Color([1.0, 1.0, 1.0, 1.0])), ("threshold", Value::F64(30.0)), ("min_region", Value::F64(50.0)), ("separation", Value::F64(0.0)),
+                          ("box_stroke_color", Value::Color([0.0, 1.0, 0.0, 1.0])), ("box_stroke_width", Value::F64(3.0))] {
+        doc.apply(Intent::SetConstant { layer: host, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value }).unwrap();
+    }
+    let mut engine = Engine::new().unwrap();
+    let frame = engine.render_frame(&doc.view(), at(10)).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    // 10 コマ目: 左の四角 x = 60..90、y = 40..70。右は 250..270、120..140。枠線は縁の上。
+    let green = |x: u32, y: u32| { let [r, g, b] = px(&frame, x, y); g > 150 && r < 120 && b < 120 };
+    assert!((56..70).any(|x| green(x, 55)) && (86..100).any(|x| green(x, 55)), "左の四角の左右の縁に枠線");
+    assert!((244..258).any(|x| green(x, 130)), "右の四角の縁にも枠線");
+    let [r, g, b] = px(&frame, 75, 55);
+    assert!(r > 200 && g > 200 && b > 200, "箱の中は下の白のまま(枠線だけ): {:?}", [r, g, b]);
+    let mut walker = Engine::new().unwrap();
+    let mut walked = Vec::new();
+    for f in 0..=10 { walked = walker.render_frame(&doc.view(), at(f)).unwrap(); }
+    assert_eq!(walked, frame, "飛んで来た絵が辿った絵と違う");
+}

@@ -10,6 +10,8 @@ pub enum ParamKind {
     Choice(&'static [&'static str]),
     /// 別の層を指す。値は LayerId(0 = 無し)。窓はカメラの target と同じ選択肢で描く。
     Layer,
+    /// 色(非乗算 RGBA 0..1)。既定の色をここに持つ。
+    Color([f64; 4]),
 }
 
 pub struct Param {
@@ -45,6 +47,7 @@ impl Param {
         match self.kind {
             ParamKind::Vec2 => Value::Vec2(self.default),
             ParamKind::Layer => Value::LayerId(0),
+            ParamKind::Color(c) => Value::Color(c),
             _ => Value::F64(self.default[0]),
         }
     }
@@ -68,6 +71,8 @@ pub enum Family {
     Solid,
     /// 文字の層の輪郭(文字を形にする段で効く)。
     Text,
+    /// 出力(画面座標、AE の調整層): 下の合成を読んで、その上に描く(2026-09-13 効果の法の 4 札)。
+    Output,
 }
 
 /// 棚に並ぶ 1 枚の見え方。
@@ -88,6 +93,7 @@ pub fn all() -> impl Iterator<Item = Kind> {
         .chain(crate::doc::store::blob::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement }))
         .chain(crate::doc::store::motion::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement }))
         .chain(crate::doc::store::solid::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Solid }))
+        .chain(crate::doc::store::overlay::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Output }))
         .chain(crate::doc::store::textop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Text }))
 }
 

@@ -78,7 +78,7 @@ impl Engine {
     /// 別の時刻 `at` の**合成**を 1 枚に描く(下の合成 / 自分の群 / comp 全体)。自分は除く(非再帰)。
     /// 組み立ての入れ子: 今の frame の失敗の記録と数は保ち、時計は呼び手が戻す。
     #[allow(clippy::too_many_arguments)]
-    fn composite_at(
+    pub(super) fn composite_at(
         &mut self,
         view: &StoreView<'_>,
         at: RationalTime,

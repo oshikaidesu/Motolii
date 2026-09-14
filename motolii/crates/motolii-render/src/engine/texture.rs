@@ -328,6 +328,10 @@ impl Engine {
         camera: crate::doc::core::ResolvedCamera,
         projection_camera: crate::doc::core::ResolvedCamera,
     ) -> Result<(Option<LayerContent>, [f32; 2], Option<crate::render::compositor::effects::vism::ImageFrame>), EngineError> {
+        // Track Overlay(出力の効果)を持つ層は、自分の素材の代わりに下の合成から組んだ箱・印を描く(調整層と同じ)。
+        if layer.effects.iter().any(|e| crate::doc::store::overlay::is_track_overlay(&e.plugin_id)) {
+            return Ok(match self.overlay_content(layer.id, comp)? { Some((content, natural)) => (Some(content), natural, None), None => (None, [0.0, 0.0], None) });
+        }
         let needs_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
         // 絵を読む効果(pass)は素材座標の絵を要る。comp 大に焼くと comp の外が失われ、
         // Blur が縁で切れる(広がりの法: 評価の入力を view・comp・カメラで切らない)。

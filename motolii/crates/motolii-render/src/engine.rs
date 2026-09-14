@@ -8,6 +8,7 @@ mod analysis;
 #[cfg(test)]
 mod analysis_contracts;
 mod motion;
+mod overlay;
 #[cfg(test)]
 mod motion_contracts;
 #[cfg(test)]
@@ -157,6 +158,8 @@ pub struct Engine {
     particle_frames: HashMap<LayerId, ParticleFrame>,
     /// Blob Track の解いた塊(層ごと、書類の版と取っ手が変わるまで)。
     blob_tracks: HashMap<LayerId, analysis::BlobTrackState>,
+    /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
+    overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
     /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
@@ -197,6 +200,7 @@ impl Engine {
             point_clouds: HashMap::new(),
             particle_frames: HashMap::new(),
             blob_tracks: HashMap::new(),
+            overlay_frames: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
@@ -263,6 +267,7 @@ impl Engine {
             point_clouds: HashMap::new(),
             particle_frames: HashMap::new(),
             blob_tracks: HashMap::new(),
+            overlay_frames: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),

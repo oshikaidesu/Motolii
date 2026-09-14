@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
-use crate::doc::store::{blob, EffectId, LayerId, RationalTime, ResolvedLayer, StoreView};
+use crate::doc::store::{blob, overlay, EffectId, LayerId, RationalTime, ResolvedLayer, StoreView};
 use crate::render::compositor::LayerContent;
 use crate::render::engine::render::{collect_shape_documents, collect_text_documents};
 use crate::render::engine::{Engine, EngineError};
-use crate::render::media::blob::{detect, BlobSettings, BlobSource, BlobTracker};
+use crate::render::media::blob::{detect, mask, BlobSettings, BlobSource, BlobTracker};
 
 /// 効果の列の出口を乗算済み線形 Rgba16Float で読み戻した 1 枚(Freeze の cache と Blob の解析が使う)。
 pub(crate) struct LinearPicture {
@@ -32,6 +32,8 @@ pub(crate) struct BlobTrackState {
     tracker: BlobTracker,
     previous: Option<(Vec<u8>, u32, u32)>,
     marks: BTreeMap<i64, Vec<BlobMark>>,
+    /// Show Mask の時だけ、コマごとの二値。
+    masks: BTreeMap<i64, (Vec<u8>, u32, u32)>,
 }
 
 impl Engine {
@@ -74,19 +76,23 @@ impl Engine {
         let Some(composition) = view.composition().map_err(store)? else { return Ok(inputs) };
         let Ok(frame) = t.try_to_frame_round(composition.fps) else { return Ok(inputs) };
         let mut seen = Vec::new();
+        self.overlay_frames.clear();
         for layer in view.layers() {
             let Some(meta) = view.meta(layer).map_err(store)? else { continue };
             if !meta.timing.covers(frame) { continue; }
             let effects = view.resolved_effects(layer, t).map_err(store)?;
-            let Some(effect) = effects.iter().find(|e| blob::is_blob_track(&e.plugin_id)) else { continue };
-            seen.push(layer);
-            let params = &effect.params;
-            let source = LayerId(blob::number_of(params, "source").round().max(0.0) as u64);
-            if source.0 == 0 || source == layer {
+            // Blob Track は指した層を、Track Overlay は下の合成を読む。
+            let (params, source, settings, detail, show_mask, overlay) = if let Some(effect) = effects.iter().find(|e| blob::is_blob_track(&e.plugin_id)) {
+                let source = LayerId(blob::number_of(&effect.params, "source").round().max(0.0) as u64);
+                if source.0 == 0 || source == layer { continue; }
+                (effect.params.clone(), Source::Layer(source), settings_of(&effect.params), blob::number_of(&effect.params, "detail"), false, false)
+            } else if let Some(effect) = effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id)) {
+                (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
+            } else {
                 continue;
-            }
-            let settings = settings_of(params);
-            let detail = blob::number_of(params, "detail").round().clamp(120.0, 3840.0) as u32;
+            };
+            seen.push(layer);
+            let detail = detail.round().clamp(120.0, 3840.0) as u32;
             let key = {
                 use std::hash::{Hash, Hasher};
                 let mut h = std::hash::DefaultHasher::new();
@@ -105,41 +111,67 @@ impl Engine {
                         state = BlobTrackState { key, next_frame: meta.timing.start, ..Default::default() };
                     }
                     for f in state.next_frame..=frame {
-                        let marks = self.blob_frame(view, source, f, &settings, detail, composition.spec(), composition.fps, &mut state)?;
+                        let marks = self.blob_frame(view, source, f, &settings, detail, show_mask, composition.spec(), composition.fps, &mut state)?;
                         state.marks.insert(f, marks);
                     }
                     state.next_frame = frame + 1;
                 } else {
-                    let marks = self.blob_frame(view, source, frame, &settings, detail, composition.spec(), composition.fps, &mut state)?;
+                    let marks = self.blob_frame(view, source, frame, &settings, detail, show_mask, composition.spec(), composition.fps, &mut state)?;
                     state.marks.insert(frame, marks);
                 }
             }
-            inputs.set_blobs(layer, EffectId(0), t, state.marks.get(&frame).cloned().unwrap_or_default());
+            let marks = state.marks.get(&frame).cloned().unwrap_or_default();
+            if overlay {
+                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params });
+            } else {
+                inputs.set_blobs(layer, EffectId(0), t, marks);
+            }
             self.blob_tracks.insert(layer, state);
         }
         self.blob_tracks.retain(|layer, _| seen.contains(layer));
         Ok(inputs)
     }
 
-    /// 1 コマ: 元の層を組んで読み戻し、縮めて塊を拾い、ID を振って comp の座標へ戻す。
-    #[allow(clippy::too_many_arguments)]
-    fn blob_frame(&mut self, view: &StoreView<'_>, source: LayerId, frame: i64, settings: &BlobSettings, detail: u32, comp: CompSpec, fps: crate::doc::store::Fps, state: &mut BlobTrackState) -> Result<Vec<BlobMark>, EngineError> {
-        let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Time(e.to_string()))?;
+    /// 下の合成(自分より下の層たち、背景込み)を、効果の出口と同じ乗算済み線形で読み戻す。
+    fn below_picture(&mut self, view: &StoreView<'_>, layer: LayerId, at: RationalTime, comp: CompSpec) -> Result<Option<LinearPicture>, EngineError> {
         let resolved = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
-        let Some(target) = resolved.iter().find(|l| l.id == source && l.copy == 0 && !l.ghost).cloned() else {
-            // 元の層が居ないコマ: 塊は無いまま 1 歩進める(見失いの数え)。
-            state.previous = None;
-            state.tracker.step(Vec::new(), settings);
-            return Ok(Vec::new());
+        let texts = collect_text_documents(view, &resolved, at)?;
+        let shapes = collect_shape_documents(view, &resolved, at)?;
+        let Some(composite) = self.composite_at(view, at, &resolved, &texts, &shapes, comp, layer, crate::render::compositor::TimeSource::Below) else { return Ok(None) };
+        let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(composite.handle()).map_err(|e| EngineError::Store(e.to_string()))?.texture.clone();
+        let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-below-picture-encode") });
+        let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !raw.format().is_srgb(), true);
+        self.compositor.pending.push(encoder.finish());
+        let bytes = self.compositor.read_texture_bytes(&converted)?;
+        let (width, height) = (converted.width(), converted.height());
+        self.compositor.effect_scratch.release(width, height, converted.format(), converted);
+        Ok(Some(LinearPicture { bytes, width, height, natural: [comp.width as f32, comp.height as f32], padding: 0, frame: None }))
+    }
+
+    /// 1 コマ: 元の絵を読み戻し、縮めて塊を拾い、ID を振って comp の座標へ戻す。
+    #[allow(clippy::too_many_arguments)]
+    fn blob_frame(&mut self, view: &StoreView<'_>, source: Source, frame: i64, settings: &BlobSettings, detail: u32, keep_mask: bool, comp: CompSpec, fps: crate::doc::store::Fps, state: &mut BlobTrackState) -> Result<Vec<BlobMark>, EngineError> {
+        let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Time(e.to_string()))?;
+        let (picture, transform) = match source {
+            Source::Layer(id) => {
+                let resolved = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
+                let Some(target) = resolved.iter().find(|l| l.id == id && l.copy == 0 && !l.ghost).cloned() else {
+                    // 元の層が居ないコマ: 塊は無いまま 1 歩進める(見失いの数え)。
+                    state.previous = None;
+                    state.tracker.step(Vec::new(), settings);
+                    return Ok(Vec::new());
+                };
+                // 解析は元の層そのものの絵を読む。マットやクリップは合成の属性で、その相手がこの塊に依ることもある(動画を箱で切る)。
+                let target = ResolvedLayer { matte: None, clip_to_below: false, ..target };
+                (self.layer_linear_picture(view, &resolved, &target, at, comp)?, target.placement.transform)
+            }
+            Source::Below(layer) => (self.below_picture(view, layer, at, comp)?, glam::Affine2::IDENTITY),
         };
-        // 解析は元の層そのものの絵を読む。マットやクリップは合成の属性で、その相手がこの塊に依ることもある(動画を箱で切る)。
-        let target = ResolvedLayer { matte: None, clip_to_below: false, ..target };
-        let Some(picture) = self.layer_linear_picture(view, &resolved, &target, at, comp)? else { return Ok(Vec::new()) };
+        let Some(picture) = picture else { return Ok(Vec::new()) };
         let (pixels, width, height, shrink) = shrink_to_srgb(&picture, detail);
         // 論理 px ↔ 縮めた絵の px。
         let per_logical = picture.width as f32 / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0) / shrink as f32;
         let to_local = |p: [f32; 2]| glam::vec2(p[0] / per_logical - picture.padding as f32, p[1] / per_logical - picture.padding as f32);
-        let transform = target.placement.transform;
         let comp_per_local = transform.matrix2.x_axis.length().max(1e-6);
         let small = |px: f32| px / comp_per_local * per_logical;
         let area = |a: u32| (a as f64 * f64::from(small(1.0)).powi(2)).round().min(u32::MAX as f64) as u32;
@@ -148,9 +180,14 @@ impl Engine {
             max_area: area(settings.max_area),
             max_move: small(settings.max_move),
             separation: small(settings.separation as f32).round() as u32,
+            blur: small(settings.blur as f32).round() as u32,
             ..*settings
         };
         let previous = state.previous.as_ref().filter(|(_, w, h)| *w == width && *h == height).map(|(p, _, _)| p.as_slice());
+        if keep_mask {
+            let bits = mask(&pixels, width, height, previous, &scaled);
+            state.masks.insert(frame, (bits.iter().map(|b| u8::from(*b) * 255).collect(), width, height));
+        }
         let regions = detect(&pixels, width, height, previous, &scaled);
         let blobs = state.tracker.step(regions, &scaled);
         state.previous = Some((pixels, width, height));
@@ -162,6 +199,40 @@ impl Engine {
             let center = transform.transform_point2(to_local(b.region.center));
             BlobMark { id: b.id, center: center.into(), size: (hi - lo).into(), age: b.age }
         }).collect())
+    }
+}
+
+/// 解析する絵の出所。
+#[derive(Clone, Copy)]
+enum Source {
+    /// その層そのもの(Blob Track)。
+    Layer(LayerId),
+    /// その層より下の合成(Track Overlay、調整層と同じ)。
+    Below(LayerId),
+}
+
+/// Track Overlay のこのコマの塊と取っ手(描く側が箱・印を組む)。
+pub(crate) struct OverlayFrame {
+    pub(crate) marks: Vec<BlobMark>,
+    /// Show Mask の二値(縮めた解析の絵の寸法)。
+    pub(crate) mask: Option<(Vec<u8>, u32, u32)>,
+    pub(crate) params: Vec<(String, crate::doc::store::Value)>,
+}
+
+fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
+    let n = |name| overlay::number_of(params, name);
+    let threshold = (n("threshold") / 100.0) as f32;
+    let key = overlay::color_of(params, "key_color");
+    BlobSettings {
+        source: if n("method").round() as i64 == 1 { BlobSource::Color { target: [key[0] as f32, key[1] as f32, key[2] as f32], tolerance: threshold } } else { BlobSource::Motion { threshold } },
+        min_area: n("min_region").max(0.0) as u32,
+        max_area: n("max_region").clamp(0.0, u32::MAX as f64) as u32,
+        max_blobs: 512,
+        persist: overlay::switch_of(params, "keep_ids"),
+        max_move: 60.0,
+        revive_frames: 5,
+        separation: n("separation").max(0.0).round() as u32,
+        blur: n("blur").max(0.0).round() as u32,
     }
 }
 
@@ -181,6 +252,7 @@ fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
         max_move: n("max_move").max(0.0) as f32,
         revive_frames: n("revive").max(0.0) as u32,
         separation: n("separation").max(0.0).round() as u32,
+        blur: 0,
     }
 }
 

@@ -14,6 +14,7 @@ pub mod pathop;
 pub mod analysis;
 pub mod blob;
 pub mod motion;
+pub mod overlay;
 pub mod particles;
 pub mod solid;
 pub mod textop;

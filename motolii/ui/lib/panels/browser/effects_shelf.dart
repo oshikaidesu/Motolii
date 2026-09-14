@@ -115,6 +115,7 @@ class EffectsShelf extends BrowserShelf {
       'Placement',
       'Solid',
       'Text',
+      'Output',
     ]),
     FilterGroup('Applies to', ['Image', 'Shape', 'Text', '3D', 'Any']),
     FilterGroup('Time', ['Static', 'Uses time', 'Feedback']),
