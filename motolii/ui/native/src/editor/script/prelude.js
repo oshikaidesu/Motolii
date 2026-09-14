@@ -30,6 +30,17 @@ const colorOf = (value) => {
   }
   throw new Error(`A color is "#rrggbb", "#rrggbbaa" or [r, g, b, a] in 0..1, got ${JSON.stringify(value)}`);
 };
+/** What the window stores for a written value: a choice by its name, a layer by the layer, a color by hex. */
+const valueFor = (row, value) => {
+  if (row.kind === "color" || row.subtype === "color") return colorOf(value);
+  if (row.choices && typeof value === "string") {
+    const index = row.choices.indexOf(value);
+    if (index < 0) throw new Error(`${row.label} is one of ${row.choices.join(", ")}, got ${JSON.stringify(value)}`);
+    return index;
+  }
+  if (value instanceof Layer) return value.id;
+  return value;
+};
 const EASES = ["Hold", "Linear", "Bezier", "Bounce", "Elastic", "Cyclic", "Random", "Steps", "ElasticSteps"];
 const easeShape = (ease) => {
   if (ease === undefined) return { kind: "Linear" };
@@ -60,11 +71,17 @@ class Effect {
   /** The window's names: a grid row shows its columns ("Position Each", "Position Random"). */
   rows() {
     const e = this.row();
-    const named = new Map();
+    const byId = new Map(e.params.map((p) => [p.id, p]));
+    const gridded = new Set();
+    const grid = [];
     for (const r of e.layout?.rows ?? []) {
-      for (const [column, id] of [["Each", r.each], ["Random", r.random]]) if (id) named.set(id, `${r.label} ${column}`);
+      for (const [column, id] of [["Each", r.each], ["Random", r.random]]) {
+        if (!id || !byId.has(id)) continue;
+        gridded.add(id);
+        grid.push({ ...byId.get(id), label: `${r.label} ${column}`, axis: r.axis ?? undefined });
+      }
     }
-    return e.params.map((p) => ({ ...p, label: named.get(p.id) ?? p.label }));
+    return [...e.params.filter((p) => !gridded.has(p.id)), ...grid];
   }
   property(name) {
     const rows = this.rows();
@@ -89,7 +106,13 @@ class Layer {
     return row;
   }
   write(row, value, keyed) {
-    const v = row.kind === "color" ? colorOf(value) : value;
+    let v = valueFor(row, value);
+    if (row.axis !== undefined) {
+      // One well of a pair (Position X of a Repeater row): the other half keeps its value.
+      const pair = [...row.value];
+      pair[row.axis] = v;
+      v = pair;
+    }
     const frame = keyed ? frameOf(keyed.seconds) : 0;
     op("animate", keyed ? { enabled: true, shape: easeShape(keyed.ease) } : { enabled: false });
     op("seek", { frame });

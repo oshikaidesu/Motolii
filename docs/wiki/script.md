@@ -21,7 +21,7 @@ MOTOLII_SCRIPT=$PWD/作品.js MOTOLII_SAVE=$PWD/作品.rrd cargo test -p motolii
 
 開くのは `scripts/motolii-ui.sh dev 作品.rrd`。
 
-例は `motolii/ui/native/src/editor/script/examples/` にある(`intro.js`・`wave_grid.js`)。
+例は `motolii/ui/native/src/editor/script/examples/` にある(`intro.js`・`wave_grid.js`・`burst.js`)。
 
 ## 時間の考え方
 
@@ -61,7 +61,8 @@ Layer
 
 Effect
   .set(name, value) .key(name, seconds, value, ease?) .names() .enabled(bool)
-  // grid rows are named with their column: "Position Each", "Position Random"
+  // grid rows are named with their column: "Rotation Each", "Position X Random"
+  // a choice is written by its name (Along: "Circle"), a layer-picking field takes a Layer
 
 Eases: Hold, Linear, Bezier, Bounce, Elastic, Cyclic, Random, Steps, ElasticSteps
 Units: Position px (comp origin top-left), Scale [1, 1] = 100%, Rotation degrees, Opacity 0..1, time seconds.

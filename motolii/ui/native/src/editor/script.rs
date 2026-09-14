@@ -149,6 +149,21 @@ mod tests {
         assert!(view.track(child, &PropertyId::new(property::ROTATION).unwrap()).unwrap().is_some());
     }
 
+    /// 選択肢は名前で、対の片方(Repeater の Position X)は片方だけ書ける。窓で見える値と同じになる。
+    #[test]
+    fn choices_are_written_by_name_and_a_pair_by_its_half() {
+        let (_, outcome) = run(r#"
+            const r = ellipse().effect("Repeater", { Along: "Circle", "Position Y Each": 40 }).set("Position X Each", 25);
+            const value = (name) => r.rows().find((p) => p.label === name).value;
+            if (value("Along") !== 1) throw new Error("Along " + value("Along"));
+            if (JSON.stringify(value("Position X Each")) !== "[25,40]") throw new Error("pair " + JSON.stringify(value("Position X Each")));
+            let refused = "";
+            try { r.set("Along", "Spiral"); } catch (e) { refused = e.message; }
+            if (!refused.includes("Line, Circle, Grid")) throw new Error("choices " + refused);
+        "#);
+        outcome.unwrap();
+    }
+
     /// 窓に無い名前・p5 の古い機構は、行き先を言って断る。
     #[test]
     fn names_the_window_does_not_show_are_refused_with_the_names_it_does() {
