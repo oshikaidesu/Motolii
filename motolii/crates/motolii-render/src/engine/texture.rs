@@ -282,7 +282,7 @@ impl Engine {
                 let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
                 let partner = crate::doc::store::textop::morph(&layer.effects)
                     .and_then(|(target, amount)| view.resolved_text_document(target, t).ok().flatten().map(|d| (d, amount)));
-                let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height);
+                let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height).moving(layer.glyph_offsets.as_deref().map(Vec::as_slice));
                 let cached = self.text_textures.get(&key)?;
                 planar(cached.bounds?, [comp.width as f32, comp.height as f32])
             }
@@ -397,7 +397,7 @@ impl Engine {
                 None => (None, [1.0, 1.0], None),
             }
         } else if layer.source == LayerSource::Text {
-            self.text_texture_from_document(text_documents.get(&layer.id), text::morph_partner(layer, text_documents), layer.id, t, comp, vector, tolerance, flat, step)?
+            self.text_texture_from_document(text_documents.get(&layer.id), text::morph_partner(layer, text_documents), layer.glyph_offsets.as_deref().map(Vec::as_slice), layer.id, t, comp, vector, tolerance, flat, step)?
         } else if shaped {
             let shapes = stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]);
             let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp, step, stretched.is_none())?;
@@ -452,7 +452,7 @@ impl Engine {
         let outlines = match &layer.source {
             LayerSource::Text => {
                 let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
-                match text_documents.get(&layer.id).and_then(|d| text::text_shapes_morphed(d, text::morph_partner(layer, text_documents), t, &canvas).ok().flatten()) {
+                match text_documents.get(&layer.id).and_then(|d| text::text_shapes_moving(d, text::morph_partner(layer, text_documents), layer.glyph_offsets.as_deref().map(Vec::as_slice), t, &canvas).ok().flatten()) {
                     Some(shapes) => crate::render::compositor::paths::outlines(&shapes, &canvas)?,
                     None => Vec::new(),
                 }
@@ -482,6 +482,7 @@ impl Engine {
         &mut self,
         document: Option<&TextDocument>,
         morph: Option<(&TextDocument, f64)>,
+        offsets: Option<&[[f32; 2]]>,
         layer_id: LayerId,
         t: RationalTime,
         comp: CompSpec,
@@ -501,7 +502,7 @@ impl Engine {
             origin_y: 0,
         };
 
-        let key = TextCacheKey::new(layer_id, document, morph, t, canvas.width, canvas.height);
+        let key = TextCacheKey::new(layer_id, document, morph, t, canvas.width, canvas.height).moving(offsets);
         if let Some(cached) = self.text_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance && c.step == step) {
             return Ok((
                 Some(cached.texture.clone()),
@@ -510,7 +511,7 @@ impl Engine {
             ));
         }
 
-        let Some(shapes) = text::text_shapes_morphed(document, morph, t, &canvas)? else {
+        let Some(shapes) = text::text_shapes_moving(document, morph, offsets, t, &canvas)? else {
             return Ok((None, [0.0, 0.0], None));
         };
         let bounds = crate::doc::vector::content_bounds(&shapes)?.map(|b| crate::render::media::SpatialBounds {
@@ -1109,6 +1110,14 @@ impl TextCacheKey {
             canvas_height,
             content_snapshot,
         }
+    }
+
+    /// 字ごとのずれも鍵: 折り返しの移り方の途中は、コマごとに組み直す。
+    fn moving(mut self, offsets: Option<&[[f32; 2]]>) -> Self {
+        if let Some(offsets) = offsets {
+            self.content_snapshot.push_str(&format!("|{offsets:?}"));
+        }
+        self
     }
 }
 

@@ -46,10 +46,10 @@ items.forEach((item, i) => {
   item.key("Position", at, [0, 90], "Bezier").key("Position", at + 0.55, [0, 0]);
   item.key("Opacity", at, 0, "Bezier").key("Opacity", at + 0.35, 1);
 });
-for (const d of dots) d.set("Object Fit", "Contain");
+for (const d of dots) d.set("Object Fit", "Contain").set("Transition Duration", 0.3);
 wide.set("Padding", [40, 24]);
 const wideText = all.find((l) => l.json().name === "Letter LAYOUT IS MOTION");
-wideText.set("Horizontal Sizing", "Fill").set("Alignment", "Left");
+wideText.set("Horizontal Sizing", "Fill").set("Alignment", "Left").set("Transition Duration", 0.5).set("Transition Easing", "Ease In Out");
 items[0].set("Column Span", 2).set("Row Span", 2);
 wide.set("Column Span", 4);
 

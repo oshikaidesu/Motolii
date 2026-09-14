@@ -240,6 +240,38 @@ impl StoreView<'_> {
         Ok(if total > 1e-6 { acc.map(|v| v / total) } else { now })
     }
 
+    /// 文字の折り返しの移り方: Transition を持つ文字は、少し前のコマの組の字の位置との差を区間の重みで混ぜる。
+    /// 字は組んだ順で対にする(Text Morph と同じ番)。字の数が違うコマは、共通の字だけ。差が無ければ None。
+    pub(crate) fn glyph_offsets(&self, layer: LayerId, t: RationalTime) -> Result<Option<std::sync::Arc<Vec<[f32; 2]>>>, StoreError> {
+        if !self.meta(layer)?.is_some_and(|m| m.source == LayerSource::Text) {
+            return Ok(None);
+        }
+        let samples = self.transition_samples(layer, t)?;
+        if samples.is_empty() {
+            return Ok(None);
+        }
+        let Some(comp) = self.composition()? else { return Ok(None) };
+        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        let glyphs = |at: RationalTime| -> Result<Vec<[f32; 2]>, StoreError> {
+            let Some(document) = self.resolved_text_document(layer, at)? else { return Ok(Vec::new()) };
+            let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document(&document, at, &canvas) else { return Ok(Vec::new()) };
+            Ok(shaped.lines.iter().flat_map(|line| line.glyph_xs.iter().map(move |x| [*x, line.baseline_y])).collect())
+        };
+        let now = glyphs(t)?;
+        let mut sum = vec![[0.0f32; 2]; now.len()];
+        let mut weight = vec![0.0f32; now.len()];
+        for (at, w) in samples {
+            let past = glyphs(at)?;
+            for (n, p) in past.iter().enumerate().take(now.len()) {
+                sum[n][0] += (p[0] - now[n][0]) * w;
+                sum[n][1] += (p[1] - now[n][1]) * w;
+                weight[n] += w;
+            }
+        }
+        let offsets: Vec<[f32; 2]> = sum.iter().zip(&weight).map(|(s, w)| if *w > 1e-6 { [s[0] / w, s[1] / w] } else { [0.0, 0.0] }).collect();
+        Ok(offsets.iter().any(|o| o[0].abs() > 1e-3 || o[1].abs() > 1e-3).then(|| std::sync::Arc::new(offsets)))
+    }
+
     /// Transition の標本: (時刻, 重み)。位置(t) = Σ (E(uₖ₊₁) − E(uₖ)) · 行き先(t − D·uₖ)。時刻はコマに丸める。
     /// Duration が 0 なら空(今の行き先そのまま)。
     fn transition_samples(&self, layer: LayerId, t: RationalTime) -> Result<Vec<(RationalTime, f32)>, StoreError> {

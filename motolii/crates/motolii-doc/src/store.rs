@@ -513,6 +513,8 @@ pub struct ResolvedLayer {
     pub averaged: u32,
     /// 形の輪郭を伸ばす倍率(Blob Track が形の素材を箱へ合わせる)。線の太さは伸ばさない。[1, 1] は素のまま。
     pub shape_stretch: [f32; 2],
+    /// 文字の字ごとのずれ(組んだ順の字、素材座標)。折り返しが変わった時、字が前の場所から移る(間合いの法 4 の Transition)。
+    pub glyph_offsets: Option<std::sync::Arc<Vec<[f32; 2]>>>,
 }
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。

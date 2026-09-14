@@ -98,7 +98,8 @@ impl Engine {
                         let mut n = 0;
                         for line in &shaped.lines {
                             for x in &line.glyph_xs {
-                                out.push((format!("L{} {name}.g{n}", layer.id.0), to_screen(glam::vec2(*x, line.baseline_y))));
+                                let d = layer.glyph_offsets.as_ref().and_then(|o| o.get(n).copied()).unwrap_or([0.0, 0.0]);
+                                out.push((format!("L{} {name}.g{n}", layer.id.0), to_screen(glam::vec2(*x + d[0], line.baseline_y + d[1]))));
                                 n += 1;
                             }
                         }

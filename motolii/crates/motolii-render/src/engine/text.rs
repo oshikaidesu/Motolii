@@ -44,9 +44,30 @@ pub fn text_shapes_morphed(
     t: RationalTime,
     canvas: &Canvas,
 ) -> Result<Option<Vec<ShapeNode>>, TextRenderError> {
+    text_shapes_moving(document, morph, None, t, canvas)
+}
+
+/// `offsets` は字ごとのずれ(組んだ順の字)。折り返しの移り方で、字を前の場所から今の場所へ運ぶ。
+pub fn text_shapes_moving(
+    document: &TextDocument,
+    morph: Option<(&TextDocument, f64)>,
+    offsets: Option<&[[f32; 2]]>,
+    t: RationalTime,
+    canvas: &Canvas,
+) -> Result<Option<Vec<ShapeNode>>, TextRenderError> {
     let Some(mut shaped) = shape_document(document, t, canvas)? else {
         return Ok(None);
     };
+    if let Some(offsets) = offsets {
+        for (contour, glyph) in shaped.contours.iter_mut().zip(&shaped.contour_glyphs) {
+            if let Some(d) = offsets.get(*glyph) {
+                for v in &mut contour.vertices {
+                    v.point.x += f64::from(d[0]);
+                    v.point.y += f64::from(d[1]);
+                }
+            }
+        }
+    }
     if let Some((target, amount)) = morph.filter(|(_, amount)| *amount > 0.0) {
         if let Some(other) = shape_document(target, t, canvas)? {
             let pairs = crate::doc::vector::morph::morph_glyphs(&shaped.contours, &shaped.contour_glyphs, &other.contours, &other.contour_glyphs, amount);
