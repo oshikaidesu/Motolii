@@ -937,14 +937,19 @@ impl<'a> StoreView<'a> {
     /// 並べる Group の面に乗る物へ、その面の基準点を付ける(箱の奥行きの法 3)。面は、z・Tilt・Depth の無い層を
     /// 親へ辿って届く一番外の Display の Group(面の Group 自身は傾いてよい)。
     fn put_on_planes(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
-        let flat: HashMap<LayerId, (bool, Option<[f32; 3]>)> = out
+        let flat: HashMap<LayerId, (bool, Option<glam::Affine3A>)> = out
             .iter()
             .filter(|l| !l.ghost && l.copy == 0)
             .map(|l| {
                 let flat = l.placement.z == 0.0 && l.placement.rotation_x == 0.0 && l.placement.rotation_y == 0.0 && l.depth == 0.0;
-                (l.id, (flat, l.placement.world_transform.map(|w| w.translation.to_array())))
+                (l.id, (flat, l.placement.world_transform))
             })
             .collect();
+        // 面の基準点は面の箱の中心(角だと、傾いた面同士で奥の面の角の方が camera に近くなる)。
+        let centre = |id: LayerId, world: glam::Affine3A| {
+            let b = self.layer_box(id, t).ok().flatten().unwrap_or([0.0; 4]);
+            world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0)).to_array()
+        };
         let mut planes = HashMap::new();
         for layer in out.iter() {
             if planes.contains_key(&layer.id) {
@@ -954,10 +959,10 @@ impl<'a> StoreView<'a> {
             let mut here = layer.id;
             let mut seen = HashSet::new();
             while seen.insert(here) {
-                let Some(&(flat_here, anchor)) = flat.get(&here) else { break };
+                let Some(&(flat_here, world)) = flat.get(&here) else { break };
                 // 面の Group 自身はどう傾いてもよい。面から浮くのは、その下で z・Tilt・Depth を持つ物。
                 if self.layout_display(here, t).unwrap_or(0) != 0 {
-                    plane = anchor;
+                    plane = world.map(|w| centre(here, w));
                 }
                 if !flat_here {
                     break;

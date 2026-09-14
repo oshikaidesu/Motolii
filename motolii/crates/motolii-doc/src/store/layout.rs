@@ -865,7 +865,9 @@ mod tests {
         put(&mut doc, lifted, property::POSITION_Z, Value::F64(-40.0));
         let resolved = doc.view().resolved_layers(T).unwrap();
         let plane = |id| resolved.iter().find(|l| l.id == id).unwrap().placement.plane;
-        let face = resolved.iter().find(|l| l.id == group).unwrap().placement.world_transform.unwrap().translation.to_array();
+        let world = resolved.iter().find(|l| l.id == group).unwrap().placement.world_transform.unwrap();
+        let b = doc.view().layer_box(group, T).unwrap().unwrap();
+        let face = world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0)).to_array();
         assert_eq!(plane(group), Some(face), "the tilted group is the face");
         assert_eq!(plane(flat), Some(face), "a flat child lies on it and stacks by order");
         assert_eq!(plane(lifted), None, "a child lifted off the face sorts by distance");
