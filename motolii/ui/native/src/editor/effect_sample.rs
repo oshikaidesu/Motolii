@@ -189,6 +189,15 @@ mod snapshots {
 mod tests {
     use super::*;
 
+    /// 窓に出る欄の名前は英語の見出し(スクリプトもこの名前で書く)。manifest に LABEL が無いと NAME の小文字が漏れる。
+    #[test]
+    fn every_field_on_the_shelf_has_an_english_label() {
+        let lowercase = crate::render::engine::known_effects().iter()
+            .flat_map(|d| d.params.iter().filter(|p| !p.label.starts_with(|c: char| c.is_uppercase() || c.is_ascii_digit())).map(move |p| format!("{}: {}", d.label, p.label)))
+            .collect::<Vec<_>>();
+        assert!(lowercase.is_empty(), "add a LABEL to these inputs: {lowercase:?}");
+    }
+
     /// 棚の全部の札に絵がある(shader の隣の `<id>_snapshot.png`)。
     #[test]
     fn every_effect_on_the_shelf_has_a_snapshot() {

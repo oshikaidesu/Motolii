@@ -1,11 +1,11 @@
 /*{
   "ID": "motolii.glow",
   "LABEL": "Glow",
-  "DESCRIPTION": "明部を抜いて、半分ずつ 6 段に落とし(13 tap、初段は Karis 平均で火花を殺す)、3×3 tent で戻しながら足す(Call of Duty: Advanced Warfare / Bevy の bloom の作法)。Radius が届く段まで、Spread で遠い光を持ち上げ、Anamorphic で横に伸ばし、Chromatic で外周ほど色相を回す。光は SPILL で層の Blend と独立に下へ乗る",
+  "DESCRIPTION": "明部を抜いて、半分ずつ 6 段に落とし(13 tap、初段は Karis 平均で火花を殺す)、3×3 tent で戻しながら足す(Call of Duty: Advanced Warfare / Bevy の bloom の作法)。Radius が届く段まで、Spread で遠い光を持ち上げ、Anamorphic で横に伸ばし、Chromatic で外周ほど色相を回す。光は SPILL で層の Blend と独立に下へ乗る。6 段の 13 tap と tent を足すと光は radius の約 4 倍まで届くので、余白も 4 倍",
   "OUTPUT_FLOAT": true,
   "FILTER": "linear",
   "SPILL": "screen",
-  "PADDING": { "PARAM": "radius", "SCALE": 1.5 },
+  "PADDING": { "PARAM": "radius", "SCALE": 4.0 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "threshold", "LABEL": "Threshold", "TYPE": "float", "DEFAULT": 0.6, "MIN": 0.0, "MAX": 1.0, "SUBTYPE": "LEVEL" },

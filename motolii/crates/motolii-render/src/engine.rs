@@ -10,6 +10,8 @@ mod analysis_contracts;
 mod motion;
 #[cfg(test)]
 mod motion_contracts;
+#[cfg(test)]
+mod light_reach_contracts;
 mod clip;
 mod render;
 mod texture;

@@ -4,7 +4,7 @@
   "OUTPUT_FLOAT": true,
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
-    { "NAME": "gain", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 4.0 }
+    { "NAME": "gain", "LABEL": "Gain", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 4.0 }
   ]
 }*/
 

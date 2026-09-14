@@ -13,6 +13,7 @@
 		},
 		{
 			"NAME": "threshold",
+			"LABEL": "Threshold",
 			"TYPE": "float",
 			"DEFAULT": 1.0,
 			"MIN": 0.0,
@@ -20,6 +21,7 @@
 		},
 		{
 			"NAME": "intensity",
+			"LABEL": "Intensity",
 			"TYPE": "float",
 			"DEFAULT": 0.75,
 			"MIN": 0.0,
@@ -27,6 +29,7 @@
 		},
 		{
 			"NAME": "radius",
+			"LABEL": "Radius",
 			"TYPE": "float",
 			"DEFAULT": 1.0,
 			"MIN": 1.0,

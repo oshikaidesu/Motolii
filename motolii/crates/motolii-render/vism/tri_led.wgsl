@@ -4,7 +4,7 @@
   "SOURCE": "https://github.com/vercel-labs/vgpu",
   "LICENSE": "MIT",
   "INPUTS": [
-    { "NAME": "glow", "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 1.0,
+    { "NAME": "glow", "LABEL": "Glow", "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 1.0,
       "MAPS": [
         { "CONST": "FALLOFF_K", "EXPR": "mix(120.0, 20.0, glow)" },
         { "CONST": "AMBIENT", "EXPR": "mix(0.0, 0.08, glow)" }

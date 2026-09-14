@@ -257,7 +257,9 @@ fn irradiance(pixel: vec2f) -> vec3f {
 fn composite(texel: vec2i, pixel: vec2f) -> vec4f {
   let s = textureLoad(source_tex, texel, 0);
   let light = irradiance(pixel);
-  let in_air = light * air * (1.0 - s.a);
+  // 空気中の光は素材から Reach で 0 に落ちる(宣言の PADDING = Reach と同じ距離。cascade 自体はもっと遠くまで飛ぶ)。
+  let away = clamp(1.0 - textureLoad(sdf_tex, texel, 0).r / max(radius, 1e-3), 0.0, 1.0);
+  let in_air = light * air * (1.0 - s.a) * away * away;
   let air_alpha = clamp(max(in_air.r, max(in_air.g, in_air.b)), 0.0, 1.0);
   // 乗算済みなら光は足すだけ。α は空気を素材の上へ over。1.0 超は折り返るので丸める。
   return clamp(vec4f(s.rgb + light * s.rgb + in_air, s.a + air_alpha * (1.0 - s.a)), vec4f(0.0), vec4f(1.0));
