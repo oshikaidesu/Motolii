@@ -80,7 +80,8 @@ impl Engine {
         let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let mut out = Vec::new();
         for layer in view.resolved_layers(t).map_err(store)? {
-            if layer.ghost || layer.copy != 0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {
+            // 見えない層(Opacity 0 の解析係など)の箱は動きとして読まない。
+            if layer.ghost || layer.copy != 0 || layer.placement.opacity <= 0.0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {
                 continue;
             }
             let to_screen = |p: glam::Vec2| match layer.placement.world_transform {
@@ -150,6 +151,16 @@ impl Engine {
                 state = BlobTrackState { key, next_frame: meta.timing.start, ..Default::default() };
             }
             let sequential = settings.persist || matches!(settings.source, BlobSource::Motion { .. });
+            // 移り方は少し前の時刻でも並べ直すので、その時刻の塊も置く(無いと前の時刻は避けない並びになる)。
+            let reach = view.transition_reach(t).map_err(store)?;
+            if !overlay && reach > 0 && !sequential {
+                for f in (frame - reach).max(meta.timing.start)..frame {
+                    if !state.marks.contains_key(&f) {
+                        let marks = self.blob_frame(view, source, f, &settings, detail, show_mask, composition.spec(), composition.fps, &mut state)?;
+                        state.marks.insert(f, marks);
+                    }
+                }
+            }
             if !state.marks.contains_key(&frame) {
                 if sequential {
                     if state.next_frame > frame || state.next_frame < meta.timing.start {
@@ -169,6 +180,11 @@ impl Engine {
             if overlay {
                 self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params });
             } else {
+                for f in (frame - reach).max(meta.timing.start)..frame {
+                    if let (Some(past), Ok(at)) = (state.marks.get(&f), RationalTime::try_from_frame(f, composition.fps)) {
+                        inputs.set_blobs(layer, EffectId(0), at, past.clone());
+                    }
+                }
                 inputs.set_blobs(layer, EffectId(0), t, marks);
             }
             self.blob_tracks.insert(layer, state);

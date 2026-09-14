@@ -22,4 +22,6 @@ grid.key("Row 8", at(-0.25), 1, "Bezier").key("Row 8", land, 1.7, "Bezier").key(
 grid.key("Column 5", at(-0.25), 1, "Bezier").key("Column 5", land, 1.9, "Bezier").key("Column 5", at(0.3), 1);
 grid.key("Column 4", at(-0.25), 1, "Bezier").key("Column 4", land, 0.55, "Bezier").key("Column 4", at(0.3), 1);
 grid.key("Column 6", at(-0.25), 1, "Bezier").key("Column 6", land, 0.55, "Bezier").key("Column 6", at(0.3), 1);
+// The ball and the tiles slide into their new cells instead of snapping (CSS transition on the solved cells).
+for (const layer of [ball, ...tiles]) layer.set("Transition Duration", 0.35).set("Transition Easing", "Ease In Out");
 for (const layer of [grid, ball, ...tiles]) layer.projection("2D");

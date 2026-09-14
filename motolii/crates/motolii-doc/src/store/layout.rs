@@ -185,6 +185,16 @@ struct Leaf {
 }
 
 impl StoreView<'_> {
+    /// 移り方(Transition)が遡るコマ数の最大。host は解析の入力(Blob の塊)をこのコマ数だけ前まで置く。
+    pub fn transition_reach(&self, t: RationalTime) -> Result<i64, StoreError> {
+        let Some(comp) = self.composition()? else { return Ok(0) };
+        let mut reach = 0.0f64;
+        for layer in self.layers() {
+            reach = reach.max(self.number(layer, TRANSITION_DURATION, 0.0, t)?);
+        }
+        Ok((reach * comp.fps.as_f64()).round() as i64)
+    }
+
     /// その時刻に並べた結果。Display の Group が無ければ空。
     pub fn layout_frame(&self, t: RationalTime) -> Result<Rc<Frame>, StoreError> {
         if let Some(hit) = self.layout_memo().borrow().get(&t) {
@@ -205,21 +215,37 @@ impl StoreView<'_> {
         }
         let Some(mut slot) = self.layout_frame(t)?.slots.get(&layer).copied() else { return Ok(None) };
         // 移り方: 少し前の行き先を、区間の重みで混ぜる(位置と大きさ)。
-        let mut acc = ([0.0f32; 2], [0.0f32; 2], 0.0f32);
+        let mut acc = [[0.0f32; 2]; 4];
+        let mut total = 0.0f32;
         for (at, weight) in self.transition_samples(layer, t)? {
             if let Some(past) = self.layout_frame(at)?.slots.get(&layer) {
-                for axis in 0..2 {
-                    acc.0[axis] += past.position[axis] * weight;
-                    acc.1[axis] += past.scale[axis] * weight;
+                for (sum, value) in acc.iter_mut().zip([past.position, past.scale, past.stretch, past.anchor]) {
+                    for axis in 0..2 {
+                        sum[axis] += value[axis] * weight;
+                    }
                 }
-                acc.2 += weight;
+                total += weight;
             }
         }
-        if acc.2 > 1e-6 {
-            slot.position = acc.0.map(|v| v / acc.2);
-            slot.scale = acc.1.map(|v| v / acc.2);
+        if total > 1e-6 {
+            [slot.position, slot.scale, slot.stretch, slot.anchor] = acc.map(|sum| sum.map(|v| v / total));
         }
         Ok(Some(slot))
+    }
+
+    /// 並べる Group の箱の大きさ(移り方を混ぜた後)。背景・切り抜き・層の箱が読む。
+    pub(crate) fn group_size(&self, group: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+        let Some(now) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
+        let mut acc = [0.0f32; 2];
+        let mut total = 0.0f32;
+        for (at, weight) in self.transition_samples(group, t)? {
+            if let Some(past) = self.layout_frame(at)?.sizes.get(&group) {
+                acc[0] += past[0] * weight;
+                acc[1] += past[1] * weight;
+                total += weight;
+            }
+        }
+        Ok(Some(if total > 1e-6 { acc.map(|v| v / total) } else { now }))
     }
 
     /// 容器の外で押し合ったずれ(移り方を混ぜた後)。
@@ -284,7 +310,8 @@ impl StoreView<'_> {
         }
         let easing = self.choice(layer, TRANSITION_EASING, t)?;
         let now = t.try_to_frame_round(fps).map_err(|e| StoreError::Property(e.to_string()))?;
-        let n = frames.min(16.0) as usize;
+        // コマごとに 1 つ(時刻をずらしても重みの形が変わらない、畳み込みとして滑らか)。長い移り方だけ間引く。
+        let n = frames.min(120.0) as usize;
         let mut out = Vec::with_capacity(n);
         for k in 0..n {
             let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
@@ -348,7 +375,7 @@ impl StoreView<'_> {
             LayerSource::File { path, .. } => self.analysis().and_then(|a| a.extent(&path)).filter(|e| e[0] > 0.0 && e[1] > 0.0).map(|e| [0.0, 0.0, e[0], e[1]]),
             LayerSource::Group => {
                 if self.display(layer, t)? != 0 {
-                    return Ok(self.layout_frame(t)?.sizes.get(&layer).map(|s| [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + s[0], CANVAS_MARGIN + s[1]]));
+                    return Ok(self.group_size(layer, t)?.map(|s| [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + s[0], CANVAS_MARGIN + s[1]]));
                 }
                 let mut acc: Option<[f32; 4]> = None;
                 for child in self.layers() {
@@ -555,7 +582,7 @@ impl StoreView<'_> {
             Some(Value::Color(c)) => c,
             _ => return Ok(None),
         };
-        let Some(size) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
+        let Some(size) = self.group_size(group, t)? else { return Ok(None) };
         if color[3] <= 0.0 || size[0] <= 0.0 || size[1] <= 0.0 {
             return Ok(None);
         }
@@ -679,7 +706,7 @@ impl StoreView<'_> {
         if self.display(group, t)? == 0 || self.choice(group, OVERFLOW, t)? != 1 {
             return Ok(None);
         }
-        let Some(size) = self.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
+        let Some(size) = self.group_size(group, t)? else { return Ok(None) };
         let b = [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]];
         Ok(Some((b, self.number(group, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)))
     }
