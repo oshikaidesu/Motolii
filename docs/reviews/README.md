@@ -838,4 +838,6 @@
 
 - [ドッグフーディング — 動画ソフト + CSS の例](2026-09-14-dogfooding-video-css.md)
 
+- [間合いの法 — 物が自分の距離を宣言し、関係の変化は時間の側で](2026-09-14-margin-law.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
