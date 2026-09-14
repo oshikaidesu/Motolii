@@ -836,4 +836,6 @@
 
 - [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
 
+- [ドッグフーディング — 動画ソフト + CSS の例](2026-09-14-dogfooding-video-css.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
