@@ -83,6 +83,12 @@ pub fn label(property: &str) -> Option<Cow<'static, str>> {
     if let Some(row) = crate::doc::store::particles::ROWS.iter().find(|row| row.0 == property) {
         return Some(Cow::Borrowed(row.1));
     }
+    if let Some(row) = crate::doc::store::layout::row(property) {
+        return Some(Cow::Borrowed(row.1));
+    }
+    if let Some(name) = crate::doc::store::layout::track_label(property) {
+        return Some(Cow::Owned(name));
+    }
     let numbered = |prefix: &str| property.strip_prefix(prefix).and_then(|rest| rest.split_once('.')).filter(|(id, _)| id.parse::<u64>().is_ok()).map(|(_, attr)| attr);
     if let Some(attr) = numbered(p::MASK_PREFIX) {
         return find(MASK, attr);
@@ -105,6 +111,7 @@ pub fn label(property: &str) -> Option<Cow<'static, str>> {
 /// 番号の無い属性の名前を全部(窓へ 1 回渡し、Inspector の見出しもここから引く)。
 pub fn fixed() -> impl Iterator<Item = (&'static str, &'static str)> {
     FIXED.iter().copied().chain(p::CAMERA_ROWS.iter().map(|row| (row.0, row.1))).chain(crate::doc::store::particles::ROWS.iter().map(|row| (row.0, row.1)))
+        .chain(crate::doc::store::layout::GROUP_ROWS.iter().chain(crate::doc::store::layout::ITEM_ROWS).map(|row| (row.0, row.1)))
 }
 
 /// 表に載っているはずの名前。無ければ内部の id を窓に出してしまうので、呼ぶ側は test で塞ぐ。

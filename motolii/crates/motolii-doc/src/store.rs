@@ -18,6 +18,8 @@ pub mod overlay;
 pub mod particles;
 pub mod solid;
 pub mod textop;
+pub mod text_frame;
+pub mod layout;
 pub mod shape_props;
 pub mod names;
 mod slot;

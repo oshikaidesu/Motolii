@@ -830,4 +830,6 @@
 
 - [スクリプトの口 — p5.js と LLM ポン出しの客](2026-09-14-script-mouth.md)
 
+- [箱と流し込みの法 — Web の Flex / Grid を層の基礎に](2026-09-14-layout-law.md)
+
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)

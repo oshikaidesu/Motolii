@@ -83,6 +83,45 @@ pub fn content_bounds(nodes: &[ShapeNode]) -> Result<Option<[f64; 4]>, VectorErr
     Ok(acc)
 }
 
+/// 形が占める範囲だけの canvas。層の箱が中身に吸い付く(形の層の素材座標は、この canvas の左上が原点)。
+/// 反アリアスのはみ出しを1画素見込む。
+pub fn content_canvas(nodes: &[ShapeNode]) -> Result<Option<Canvas>, VectorError> {
+    const AA: f64 = 1.0;
+    let Some(b) = content_bounds(nodes)? else {
+        return Ok(None);
+    };
+    let min_x = (b[0] - AA).floor();
+    let min_y = (b[1] - AA).floor();
+    let max_x = (b[2] + AA).ceil();
+    let max_y = (b[3] + AA).ceil();
+    Ok(Some(Canvas {
+        width: ((max_x - min_x) as i64).max(1) as u32,
+        height: ((max_y - min_y) as i64).max(1) as u32,
+        origin_x: -min_x as i32,
+        origin_y: -min_y as i32,
+    }))
+}
+
+/// 輪郭だけを素材座標の原点のまわりで伸ばした形(線の太さは伸ばさない)。Blob Track の箱合わせと、並べる法の Fill。
+pub fn stretch_outline(shapes: &[ShapeNode], stretch: [f32; 2]) -> Vec<ShapeNode> {
+    use crate::doc::vector::{Composite, OpKind, Point, RepeaterTransform, ShapeOp};
+    let op = ShapeOp::new(OpKind::Repeater {
+        copies: 1.0,
+        offset: 1.0,
+        transform: RepeaterTransform { scale: Point { x: stretch[0] as f64, y: stretch[1] as f64 }, ..RepeaterTransform::IDENTITY },
+        composite: Composite::Above,
+        start_opacity: 1.0,
+        end_opacity: 1.0,
+    });
+    fn push(node: &ShapeNode, op: &ShapeOp) -> ShapeNode {
+        match node {
+            ShapeNode::Leaf(shape) => { let mut shape = shape.clone(); shape.ops.push(op.clone()); ShapeNode::Leaf(shape) }
+            ShapeNode::Group(group) => { let mut group = group.clone(); group.children = group.children.iter().map(|c| push(c, op)).collect(); ShapeNode::Group(group) }
+        }
+    }
+    shapes.iter().map(|n| push(n, &op)).collect()
+}
+
 pub fn render_tree(nodes: &[ShapeNode], canvas: &Canvas) -> Result<crate::doc::vector::Raster, VectorError> {
     let mut pixmap = crate::doc::vector::raster::new_pixmap(canvas)?;
     let origin = crate::doc::vector::Point {

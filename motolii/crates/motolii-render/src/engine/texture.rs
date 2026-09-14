@@ -349,7 +349,7 @@ impl Engine {
         let step = (vector && needs_field).then_some(FIELD_STEP);
         // Blob Track が形の素材を箱へ合わせた写し: 輪郭だけを伸ばす(線は太らない)。大きさは写しごとに違うので cache に残さない。
         let stretched = (layer.source == LayerSource::Shape && layer.shape_stretch != [1.0, 1.0])
-            .then(|| stretch_outline(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]), layer.shape_stretch));
+            .then(|| crate::doc::vector::stretch_outline(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]), layer.shape_stretch));
         let natural = if layer.source == LayerSource::Shape {
             let canvas = content_canvas(stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
@@ -1089,25 +1089,6 @@ impl TextCacheKey {
 }
 
 /// 輪郭の点だけを原点から伸ばす(1 枚だけの Repeater の変換は、線を引く前の点に掛かる)。
-fn stretch_outline(shapes: &[ShapeNode], stretch: [f32; 2]) -> Vec<ShapeNode> {
-    use crate::doc::vector::{Composite, OpKind, Point, RepeaterTransform, ShapeOp};
-    let op = ShapeOp::new(OpKind::Repeater {
-        copies: 1.0,
-        offset: 1.0,
-        transform: RepeaterTransform { scale: Point { x: stretch[0] as f64, y: stretch[1] as f64 }, ..RepeaterTransform::IDENTITY },
-        composite: Composite::Above,
-        start_opacity: 1.0,
-        end_opacity: 1.0,
-    });
-    fn push(node: &ShapeNode, op: &ShapeOp) -> ShapeNode {
-        match node {
-            ShapeNode::Leaf(shape) => { let mut shape = shape.clone(); shape.ops.push(op.clone()); ShapeNode::Leaf(shape) }
-            ShapeNode::Group(group) => { let mut group = group.clone(); group.children = group.children.iter().map(|c| push(c, op)).collect(); ShapeNode::Group(group) }
-        }
-    }
-    shapes.iter().map(|n| push(n, &op)).collect()
-}
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ShapeCacheKey {
     layer: LayerId,
@@ -1139,20 +1120,7 @@ pub(crate) fn raster_pixel_budget(comp: CompSpec) -> u64 {
 pub fn content_canvas(
     shapes: &[ShapeNode],
 ) -> Result<Option<crate::doc::vector::Canvas>, EngineError> {
-    const AA: f64 = 1.0;
-    let Some(b) = crate::doc::vector::content_bounds(shapes)? else {
-        return Ok(None);
-    };
-    let min_x = (b[0] - AA).floor();
-    let min_y = (b[1] - AA).floor();
-    let max_x = (b[2] + AA).ceil();
-    let max_y = (b[3] + AA).ceil();
-    Ok(Some(crate::doc::vector::Canvas {
-        width: ((max_x - min_x) as i64).max(1) as u32,
-        height: ((max_y - min_y) as i64).max(1) as u32,
-        origin_x: -min_x as i32,
-        origin_y: -min_y as i32,
-    }))
+    Ok(crate::doc::vector::content_canvas(shapes)?)
 }
 
 /// 点の直径(comp のピクセル)。層の属性になるまでの既定値。

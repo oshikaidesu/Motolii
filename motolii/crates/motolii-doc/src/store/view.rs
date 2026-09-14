@@ -34,6 +34,7 @@ pub struct StoreView<'a> {
     record_cache: &'a RefCell<super::document::RecordCache>,
     /// host が描いた絵から解いた値(Blob の塊など)。無ければ解析を読む配置は空。
     analysis: Option<&'a super::analysis::AnalysisInputs>,
+    layout_memo: super::layout::Memo,
 }
 
 const MAX_LINK_DEPTH: u32 = 64;
@@ -58,7 +59,12 @@ impl<'a> StoreView<'a> {
             track_cache,
             record_cache,
             analysis: None,
+            layout_memo: Default::default(),
         }
+    }
+
+    pub(crate) fn layout_memo(&self) -> &super::layout::Memo {
+        &self.layout_memo
     }
 
     /// 解析の入力を読む view(resolve が Blob Track の塊を配置にする)。

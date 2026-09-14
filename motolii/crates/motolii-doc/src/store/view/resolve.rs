@@ -482,7 +482,7 @@ impl<'a> StoreView<'a> {
             after_effects: plate.as_ref().map(|(_, effects)| effects.clone()).unwrap_or_default(),
             plate: plate.map(|(group, _)| group),
             averaged: 0,
-            shape_stretch: [1.0, 1.0],
+            shape_stretch: self.laid_out(layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch),
         }))
     }
 

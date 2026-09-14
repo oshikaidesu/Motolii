@@ -22,6 +22,7 @@ re_log_encoding = { workspace = true }
 re_log_types = { workspace = true }
 tiny-skia = { workspace = true }
 cosmic-text = { workspace = true }
+taffy = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 re_log = { workspace = true }

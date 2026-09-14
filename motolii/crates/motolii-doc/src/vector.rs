@@ -15,7 +15,7 @@ pub mod strokes;
 use serde::{Deserialize, Serialize};
 
 pub use geom::{Contour, Path, Point, Vertex};
-pub use group::{content_bounds, flatten, render_tree, ShapeGroup, ShapeNode};
+pub use group::{content_bounds, content_canvas, flatten, stretch_outline, render_tree, ShapeGroup, ShapeNode};
 
 use geom::{ellipse, polystar, rect};
 pub use ops::Instance;

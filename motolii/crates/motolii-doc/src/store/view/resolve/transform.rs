@@ -45,10 +45,14 @@ impl<'a> StoreView<'a> {
                 None => Ok(default),
             }
         };
+        let (position, scale) = match self.laid_out(layer, when(0))? {
+            Some(slot) => (slot.position, slot.scale),
+            None => (self.resolve_position(layer, when(0))?, vec2(property::SCALE, [1.0, 1.0], when(1))?),
+        };
         Ok(LayerPlacement::from_transform(
             vec2(property::ANCHOR, [0.0, 0.0], t)?,
-            self.resolve_position(layer, when(0))?,
-            vec2(property::SCALE, [1.0, 1.0], when(1))?,
+            position,
+            scale,
             scalar(property::ROTATION, 0.0, when(2))?,
             scalar(property::SKEW, 0.0, t)?,
             scalar(property::SKEW_AXIS, 0.0, t)?,
@@ -65,7 +69,10 @@ impl<'a> StoreView<'a> {
         t: RationalTime,
     ) -> Result<glam::Affine3A, StoreError> {
         let xy = self.local_placement_transform(layer, t)?;
-        let position = self.resolve_position(layer, t)?;
+        let position = match self.laid_out(layer, t)? {
+            Some(slot) => slot.position,
+            None => self.resolve_position(layer, t)?,
+        };
         let scalar = |name| self.split_position_component(layer, name, t).map(|v| v.unwrap_or(0.0));
         Ok(LayerPlacement::spatial_from_transform(
             xy,
@@ -149,7 +156,7 @@ impl<'a> StoreView<'a> {
         Ok(world)
     }
 
-    pub(super) fn resolve_position(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+    pub(crate) fn resolve_position(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
         let position = PropertyId::new(property::POSITION)?;
         match self.value_at(layer, &position, t)? {
             Some(Value::Vec2(v)) => return Ok([v[0] as f32, v[1] as f32]),
