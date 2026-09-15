@@ -39,6 +39,18 @@ impl Compositor {
         if !inputs.iter().any(|i| i.blocks_light) {
             return Ok(None);
         }
+        // 嘘(2026-09-15): 2.5D の影は既定カメラで置いた形から落とす。見えている形はカメラごとに違うが、
+        // 影までカメラで揺れると「カメラを動かしたら影が動いた」になる。Stage(既定カメラ)と出力で影は同じ。
+        let placed: Vec<SequentialInput<'_>>;
+        let (inputs, shared) = if inputs.iter().any(|i| i.blocks_light && i.projection == crate::doc::store::LayerProjection::TwoPointFiveD && ResolvedCamera { near_fade: 0.0, ..i.projection_camera } != ResolvedCamera::default()) {
+            placed = inputs.iter().map(|i| SequentialInput {
+                projection_camera: if i.projection == crate::doc::store::LayerProjection::TwoPointFiveD { ResolvedCamera::default() } else { i.projection_camera },
+                ..i.clone()
+            }).collect();
+            (&placed[..], None)
+        } else {
+            (inputs, shared)
+        };
         let sun = environment.map_or(super::environment::SunSpec::fixed_lights(), |e| e.sun);
         let direction = sun.direction.normalize_or_zero();
         if sun.weight <= 0.0 || direction == glam::Vec3::ZERO {
@@ -350,7 +362,9 @@ impl Compositor {
                         instance.outline_mask_ids = outline_mask(input.outline);
                         if input.projection == crate::doc::store::LayerProjection::TwoD && !capture {
                             // 輪郭のままの文字・図形(planar な網)も同じ法: 面の法線に沿ってカメラ側へ積み順ぶん。
-                            let normal = glam::Vec3::from(instance.world_from_mesh.matrix3.z_axis).normalize_or_zero();
+                            // 奥行きがずらされた変形では z 列は面の法線ではない。矩形と同じく面の 2 辺の外積。
+                            let m = instance.world_from_mesh.matrix3;
+                            let normal = glam::Vec3::from(m.x_axis).cross(glam::Vec3::from(m.y_axis)).normalize_or_zero();
                             instance.world_from_mesh = glam::Affine3A::from_translation(-normal * two_d_stack_bias(input.depth_offset)) * instance.world_from_mesh;
                         }
                     }

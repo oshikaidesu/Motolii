@@ -150,6 +150,9 @@ impl Compositor {
                     .unwrap_or_else(|| self.create_blend_scratch_texture(self.window.width, self.window.height));
                 let mut solo_config = sequential_target_config("motolii-comp-sequential-solo", comp, self.window, view_from_world, projection, environment,
                 );
+                if input.projection != crate::doc::store::LayerProjection::TwoD && self.window.projection_camera.is_none() {
+                    solo_config.near_fade_distance = camera.near_fade;
+                }
                 solo_config.scene_reflection = reflection.clone();
                 solo_config.light = light.clone();
                 self.surface_work.main_runs += 1;
@@ -268,6 +271,10 @@ impl Compositor {
                 environment,
             );
             config.backdrop = backdrop;
+            // 近いと薄く: 作中カメラの絵の、世界に居る run だけ(2D は画面の物、Stage は作中カメラに従わない)。
+            if !flat(&run[0]) && self.window.projection_camera.is_none() {
+                config.near_fade_distance = camera.near_fade;
+            }
             config.scene_reflection = reflection.clone();
             config.light = light.clone();
             self.surface_work.main_runs += 1;

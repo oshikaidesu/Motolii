@@ -9,6 +9,8 @@ pub struct ResolvedCamera {
     pub orbit_degrees: [f32; 2],
     pub distance_scale: f32,
     pub target_z: f32,
+    /// 奥行き(カメラの前方向)がこれより近い世界の物は薄くなり、1/3 で消える。0 は薄くしない。
+    pub near_fade: f32,
 }
 
 impl Default for ResolvedCamera {
@@ -20,6 +22,7 @@ impl Default for ResolvedCamera {
             orbit_degrees: [0.0; 2],
             distance_scale: 1.0,
             target_z: 0.0,
+            near_fade: 0.0,
         }
     }
 }
@@ -143,9 +146,15 @@ pub fn layer_projection_transform(
     match mode {
         LayerProjection::ThreeD => glam::Affine3A::IDENTITY,
         LayerProjection::TwoPointFiveD => {
-            let rotation = camera_projection(comp, camera).rotation.inverse()
+            // 2.5D = 2D の絵を世界に置く(2026-09-15): 向きはカメラ基準、形は層の正面から見た形。
+            // 位置と距離(視差・大きさ)だけがカメラに従い、画面の端でも 3D の歪み方をしない。
+            let projection = camera_projection(comp, camera);
+            let rotation = projection.rotation.inverse()
                 * camera_projection(comp, ResolvedCamera::default()).rotation;
             glam::Affine3A::from_translation(center)
+                * glam::Affine3A::from_quat(projection.rotation.inverse())
+                * toward_own_axis(&projection, projection.view_matrix().transform_point3(center))
+                * glam::Affine3A::from_quat(projection.rotation)
                 * glam::Affine3A::from_quat(rotation)
                 * glam::Affine3A::from_translation(-center)
         }
@@ -174,6 +183,23 @@ fn two_d_center(comp: CompSpec, center: glam::Vec3) -> glam::Affine3A {
     Affine3A::from_mat3(glam::Mat3::from_cols(
         Vec3::X, Vec3::Y, glam::vec3(displacement.x, displacement.y, 1.0),
     )) * Affine3A::from_translation(-Vec3::Z * center.z)
+}
+
+/// In camera space, shear depth along the ray to `center` so the layer's vanishing point is
+/// its own center: the picture is the on-axis one, moved to where the center projects.
+/// `two_d_center` is the same shear for the default camera at z=0.
+/// 嘘(2026-09-15): 視線の傾きは画面 8 枚分で頭打ち(Stage を引いて見る枠の外も掴んだ点が合う広さ)、
+/// カメラの後ろ(と真横)ではずらさない。
+/// 描かずに消すのはしない — このカメラは配置の基準で、Stage の観測カメラには後ろの層も見えている。
+fn toward_own_axis(projection: &CameraProjection, center: glam::Vec3) -> glam::Affine3A {
+    use glam::Vec3;
+    // カメラ空間は -z が前。
+    let depth = -center.z;
+    if depth <= projection.near_plane_distance { return glam::Affine3A::IDENTITY; }
+    let tan_y = (projection.vertical_fov_radians * 0.5).tan();
+    let limit = glam::vec2(tan_y * projection.aspect_ratio, tan_y) * 8.0;
+    let slope = (center.truncate() / center.z).clamp(-limit, limit);
+    glam::Affine3A::from_mat3(glam::Mat3::from_cols(Vec3::X, Vec3::Y, slope.extend(1.0)))
 }
 
 /// World transform that draws the same picture under `to` that `world` draws under `from`.
@@ -343,27 +369,77 @@ mod projection_tests {
         }
     }
 
+    /// 2.5D は 2D の絵を世界に置く: 同じ奥行きならどこに置いても画面の形は同じ、既定カメラの z=0 では 2D と同じ絵。
     #[test]
-    fn two_point_five_d_keeps_its_camera_facing_angle_and_volume_wherever_it_sits() {
+    fn two_point_five_d_draws_the_two_d_shape_wherever_it_sits() {
         let comp = CompSpec { width: 1920, height: 1080 };
-        let normal = glam::Quat::from_rotation_x(0.6) * glam::Vec3::Z;
-        let vertices = [glam::Vec3::X*80.0, glam::Vec3::Y*60.0, glam::Vec3::Z*40.0];
-        let facing = |camera, v: glam::Vec3| camera_projection(comp, camera).rotation * v;
+        let rotation = glam::Quat::from_rotation_y(1.1) * glam::Quat::from_rotation_x(0.3);
+        let vertices = [glam::vec3(-80.0,-120.0,0.0), glam::vec3(80.0,-120.0,0.0), glam::vec3(80.0,120.0,0.0), glam::vec3(-80.0,120.0,0.0), glam::vec3(20.0,30.0,50.0)].map(|v| rotation * v);
+        let seen = |camera, mode, center: glam::Vec3, v: glam::Vec3| {
+            let t = layer_projection_transform(comp, camera, mode, center);
+            pixel(comp, camera, t.transform_point3(center + v)) - pixel(comp, camera, t.transform_point3(center))
+        };
         for camera in [ResolvedCamera::default(), ResolvedCamera { center:[90.0,-30.0], zoom:1.8, roll_degrees:33.0, ..Default::default() },
             ResolvedCamera { orbit_degrees:[20.0,-35.0], roll_degrees:-10.0, ..Default::default() }] {
-            for center in [glam::vec3(250.0,200.0,0.0),glam::vec3(1700.0,900.0,300.0)] {
-                let transform=layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,center);
-                assert!(transform.transform_point3(center).distance(center) < 1e-3);
-                assert!(facing(camera, transform.transform_vector3(normal)).distance(facing(ResolvedCamera::default(), normal)) < 1e-5);
-                for vertex in vertices {
-                    let moved = transform.transform_point3(center+vertex);
-                    assert!((moved.distance(center) - vertex.length()).abs() < 1e-3, "volume kept");
+            let projection = camera_projection(comp, camera);
+            let view = projection.view_matrix();
+            let depth = view.transform_point3(glam::vec3(960.0, 540.0, 0.0)).z;
+            let at_depth = |screen_x: f32, screen_y: f32| {
+                let offset = glam::vec3(screen_x, screen_y, 0.0) * (depth.abs() / base_distance(comp));
+                view.inverse().transform_point3(view.transform_point3(glam::vec3(960.0, 540.0, 0.0)) + offset)
+            };
+            let centers = [at_depth(0.0, 0.0), at_depth(-700.0, 380.0), at_depth(650.0, -300.0)];
+            for center in centers {
+                let t = layer_projection_transform(comp, camera, LayerProjection::TwoPointFiveD, center);
+                assert!(t.transform_point3(center).distance(center) < 1e-2, "the center stays in the world");
+                assert!((t.matrix3.determinant() - 1.0).abs() < 1e-4);
+                for v in vertices {
+                    let a = seen(camera, LayerProjection::TwoPointFiveD, center, v);
+                    let b = seen(camera, LayerProjection::TwoPointFiveD, centers[0], v);
+                    assert!(a.distance(b) < 0.01, "{camera:?} {center}: the shape changed with the place {a} != {b}");
                 }
             }
-            if camera.roll_degrees == 0.0 && camera.orbit_degrees == [0.0; 2] {
-                assert_eq!(layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,glam::vec3(700.0,100.0,50.0)), glam::Affine3A::IDENTITY);
+            if camera == ResolvedCamera::default() {
+                for center in [glam::vec3(250.0,200.0,0.0), glam::vec3(1700.0,900.0,0.0)] {
+                    for v in vertices {
+                        let a = seen(camera, LayerProjection::TwoPointFiveD, center, v);
+                        let b = seen(camera, LayerProjection::TwoD, center, v);
+                        assert!(a.distance(b) < 0.01, "2.5D at z=0 is the 2D picture: {a} != {b}");
+                    }
+                }
             }
         }
+    }
+
+    /// カメラの後ろや真横に来た 2.5D は発散しない: 後ろではずらさず、真横では傾きが頭打ちになる。
+    #[test]
+    fn two_point_five_d_stays_finite_beside_and_behind_the_camera() {
+        let comp = CompSpec { width: 1920, height: 1080 };
+        let camera = ResolvedCamera::default();
+        let eye = camera_projection(comp, camera).eye;
+        let rotation = |center| layer_projection_transform(comp, ResolvedCamera { roll_degrees: 0.0, ..camera }, LayerProjection::TwoPointFiveD, center);
+        for center in [eye + glam::vec3(900.0, 0.0, 0.0), eye + glam::vec3(900.0, 0.0, 0.0005), eye + glam::vec3(300.0, -200.0, -500.0), eye + glam::vec3(1e5, 0.0, 10.0)] {
+            let t = rotation(center);
+            assert!(t.is_finite(), "{center}");
+            assert!(t.matrix3.z_axis.truncate().length() < 20.0, "{center}: the shear is capped");
+        }
+        assert_eq!(rotation(eye + glam::vec3(300.0, -200.0, -500.0)), glam::Affine3A::IDENTITY, "behind the camera nothing is sheared");
+    }
+
+    /// 次元の違いは絵に出る: 画面の端で傾いた板は、3D だと端の歪み方、2.5D だと正面の形。
+    #[test]
+    fn a_tilted_card_off_center_is_drawn_differently_in_two_point_five_d_and_three_d() {
+        let comp = CompSpec { width: 1920, height: 1080 };
+        let camera = ResolvedCamera::default();
+        let center = glam::vec3(1700.0, 540.0, 0.0);
+        let edge = glam::Quat::from_rotation_y(0.9) * glam::vec3(200.0, 0.0, 0.0);
+        let draw = |mode| {
+            let t = layer_projection_transform(comp, camera, mode, center);
+            pixel(comp, camera, t.transform_point3(center + edge)) - pixel(comp, camera, t.transform_point3(center - edge))
+        };
+        let two_d = draw(LayerProjection::TwoD);
+        assert!(draw(LayerProjection::TwoPointFiveD).distance(two_d) < 0.01);
+        assert!(draw(LayerProjection::ThreeD).distance(two_d) > 5.0);
     }
 
     #[test]

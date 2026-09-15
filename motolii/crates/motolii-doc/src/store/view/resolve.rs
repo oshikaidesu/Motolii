@@ -52,6 +52,7 @@ impl<'a> StoreView<'a> {
             distance_scale: f(get(property::CAMERA_DISTANCE)?, 1.0).max(0.01),
             zoom: f(get(property::CAMERA_ZOOM)?, 1.0),
             roll_degrees: f(get(property::CAMERA_ROLL)?, 0.0),
+            near_fade: f(get(property::CAMERA_NEAR_FADE)?, 0.0).max(0.0),
         };
         if let Some(framed) = self.framed_camera(id, t, camera)? {
             return Ok(framed);

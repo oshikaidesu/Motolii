@@ -175,6 +175,9 @@ pub mod property {
     /// Target の層の箱が画面に占める割合(Unity Cinemachine の Group Framing Size: 1 で画面いっぱい、0.5 で半分)。0 は使わない(Distance のまま)。
     /// 箱の中心を注視点にし、箱が収まる Distance を解く。Target を Hold で替えると、Camera 層の Transition で箱から箱へ移る。
     pub const CAMERA_FRAMING: &str = "camera.framing";
+    /// カメラの前方向の奥行きがこの距離(px)より近い 2.5D・3D の物を薄くし、1/3 で消す(Unity の Camera Fading、Godot の Distance Fade)。
+    /// 0 は薄くしない — レンズを横切って画面を覆うのも表現なので、既定は通り抜ける。
+    pub const CAMERA_NEAR_FADE: &str = "camera.near_fade";
 
     use crate::doc::eval::Value;
     /// Camera 層の欄: (property, label, 既定値, 範囲)。登録・既定・生成時の複写はこの 1 表から。
@@ -187,6 +190,7 @@ pub mod property {
         (CAMERA_DISTANCE, "Distance", Value::F64(1.0), Some((0.01, 100.0))),
         (CAMERA_ZOOM, "Zoom", Value::F64(1.0), Some((0.01, 100.0))),
         (CAMERA_ROLL, "Roll", Value::F64(0.0), None),
+        (CAMERA_NEAR_FADE, "Near Fade", Value::F64(0.0), Some((0.0, 100000.0))),
     ];
 
     /// 解決済みカメラを Camera 層の欄の値へ戻す(層ターゲットは含まない)。

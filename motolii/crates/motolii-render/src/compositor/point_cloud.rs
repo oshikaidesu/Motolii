@@ -56,7 +56,10 @@ impl Compositor {
             .clip(clip)
             .outline_mask_ids(outline)
             .add_points_slow(&points, &radii, &colors, &picking_ids)
-            .flags(if sprites { PointCloudBatchFlags::FLAG_DRAW_AS_CIRCLES } else { PointCloudBatchFlags::FLAG_ENABLE_SHADING });
+            // 嘘(2026-09-15): 2.5D の球は円で塗る。本物の視線で球を切ると画面の端で楕円になり、正面から見た形の法と食い違う。
+            .flags(if sprites { PointCloudBatchFlags::FLAG_DRAW_AS_CIRCLES }
+                else if projection == crate::doc::store::LayerProjection::TwoPointFiveD { PointCloudBatchFlags::FLAG_DRAW_AS_CIRCLES | PointCloudBatchFlags::FLAG_ENABLE_SHADING }
+                else { PointCloudBatchFlags::FLAG_ENABLE_SHADING });
         builder
             .into_draw_data()
             .map_err(|e| CompositorError::Draw(e.to_string()))

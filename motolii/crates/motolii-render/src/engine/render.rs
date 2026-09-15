@@ -1716,6 +1716,31 @@ mod projection_contract {
         assert!(count(&px, false) < 100, "a 2.5D layer at z=0 sits behind a 3D layer at z=-200: {} blue pixels", count(&px, false));
     }
 
+    /// カメラの Near Fade: 奥行きがその 1/3 より近い 2.5D・3D の物は消え、2D は画面の物なので残る。0 なら何もしない。
+    #[test]
+    fn the_camera_near_fade_hides_close_world_layers_but_not_two_d() {
+        let mut engine = Engine::new().unwrap();
+        let mut doc = document();
+        layer(&mut doc, 1, 0, Rgb { r: 1.0, g: 0.0, b: 0.0 }, LayerProjection::ThreeD, [90.0, 128.0], 0.0);
+        layer(&mut doc, 2, 1, Rgb { r: 0.0, g: 0.2, b: 1.0 }, LayerProjection::TwoD, [170.0, 128.0], 0.0);
+        doc.apply_all([
+            Intent::AddLayer(LayerId(9)),
+            Intent::SetMeta { layer: LayerId(9), meta: LayerMeta { source: LayerSource::Camera, order: 2, timing: LayerTiming::place(0, None, 1) } },
+        ]).unwrap();
+        let fade = |doc: &mut Document, distance: f64| doc.apply(Intent::SetConstant { layer: LayerId(9), property: PropertyId::new(property::CAMERA_NEAR_FADE).unwrap(), value: Value::F64(distance) }).unwrap();
+        let px = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let (red, blue) = (count(&px, true), count(&px, false));
+        assert!(red > 4000 && blue > 4000, "no fade by default: red {red} blue {blue}");
+        // 既定の距離は 256 の comp で約 246。1000 の 1/3 = 333 より近いので消える。
+        fade(&mut doc, 1000.0);
+        let px = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(count(&px, true) < 50, "the 3D layer fades out: {} red pixels", count(&px, true));
+        assert!(count(&px, false) > 4000, "2D is not in the world: {} blue pixels", count(&px, false));
+        layer(&mut doc, 3, 3, Rgb { r: 1.0, g: 0.0, b: 0.0 }, LayerProjection::TwoPointFiveD, [128.0, 60.0], 0.0);
+        let px = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(count(&px, true) < 50, "2.5D fades too: {} red pixels", count(&px, true));
+    }
+
     /// 2D 同士は積み順。3D の間に挟まれても変わらない。
     #[test]
     fn two_d_layers_stack_in_timeline_order() {

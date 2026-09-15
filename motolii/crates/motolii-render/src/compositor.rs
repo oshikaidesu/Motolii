@@ -499,6 +499,7 @@ impl LayerContent {
 
 /// 層が run へ差し出す物。板は矩形、3D の素材は**上流の draw data のまま**積む
 /// (焼かない。深度で刺さり合う)。
+#[derive(Clone)]
 pub(crate) enum SequentialContent<'a> {
     Rect(&'a GpuTexture2D),
     LinearRect(&'a GpuTexture2D),
@@ -532,6 +533,7 @@ fn linear_texture(texture: GpuTexture2D) -> ColormappedTexture {
     mapped
 }
 
+#[derive(Clone)]
 pub(crate) struct SequentialInput<'a> {
     content: SequentialContent<'a>,
     local_min: glam::Vec2,
