@@ -431,4 +431,60 @@ mod tests {
         }
         assert!((y[0] - y[4]).abs() < 1e-3 && (y[0] + y[2]).abs() < 1e-3, "a wavelength apart: same; half: opposite {y:?}");
     }
+
+    /// 近くの物だけ見る押し合い(升目)は、全組を見る同じ手順と同じ結果になる(散らばった 2000 個、4 組)。
+    #[test]
+    fn push_apart_over_neighbours_matches_all_pairs_at_scale() {
+        use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
+        let mut rng = 3u32;
+        let mut next = || { rng = rng.wrapping_mul(1664525).wrapping_add(1013904223); (rng >> 8) as f32 / (1u32 << 24) as f32 };
+        let items: Vec<BlockItem> = (0..2000).map(|k| {
+            let (x, y, w, h) = (next() * 3000.0, next() * 3000.0, 6.0 + next() * 14.0, 6.0 + next() * 14.0);
+            BlockItem { lo: [x, y], hi: [x + w, y + h], room_size: [3000.0, 3000.0], group: k % 4, weight: 0.5 + next(), ..Default::default() }
+        }).collect();
+        let margin = 3.0f32;
+        // CPU: 同じ手順を全組で(32 回、全員を同時に測って動かす)。
+        let mut lo: Vec<[f32; 2]> = items.iter().map(|i| i.lo).collect();
+        let mut hi: Vec<[f32; 2]> = items.iter().map(|i| i.hi).collect();
+        for _ in 0..32 {
+            let mut step = vec![[0.0f32; 2]; items.len()];
+            for k in 0..items.len() {
+                for j in 0..items.len() {
+                    if j == k || items[j].group != items[k].group { continue; }
+                    let (alo, ahi) = ([lo[k][0] - margin, lo[k][1] - margin], [hi[k][0] + margin, hi[k][1] + margin]);
+                    let (blo, bhi) = ([lo[j][0] - margin, lo[j][1] - margin], [hi[j][0] + margin, hi[j][1] + margin]);
+                    let gap = [(blo[0] + bhi[0]) * 0.5 - (alo[0] + ahi[0]) * 0.5, (blo[1] + bhi[1]) * 0.5 - (alo[1] + ahi[1]) * 0.5];
+                    let len = (gap[0] * gap[0] + gap[1] * gap[1]).sqrt();
+                    let dir = if len > 1e-4 { [gap[0] / len, gap[1] / len] } else if k < j { [1.0, 0.0] } else { [-1.0, 0.0] };
+                    let half = [((ahi[0] - alo[0]) + (bhi[0] - blo[0])) * 0.5, ((ahi[1] - alo[1]) + (bhi[1] - blo[1])) * 0.5];
+                    if half[0] - gap[0].abs() <= 0.0 || half[1] - gap[1].abs() <= 0.0 { continue; }
+                    let need = |a: usize| if dir[a].abs() >= 1e-6 { ((half[a] - gap[a].abs()) / dir[a].abs()).max(0.0) } else { 1e30 };
+                    let depth = need(0).min(need(1));
+                    if depth <= 0.0 || depth >= 1e29 { continue; }
+                    let w = items[k].weight / (items[k].weight + items[j].weight);
+                    step[k][0] -= dir[0] * depth * w * 0.5;
+                    step[k][1] -= dir[1] * depth * w * 0.5;
+                }
+            }
+            for k in 0..items.len() {
+                for a in 0..2 { lo[k][a] += step[k][a]; hi[k][a] += step[k][a]; }
+            }
+        }
+        let engine = Engine::new().unwrap();
+        let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+        let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
+        let mut world = BlockWorld::new(device);
+        world.begin(device, queue, &items);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
+        push.record(device, queue, &mut encoder, &mut world, 0.0, &(0..items.len() as u32).collect::<Vec<u32>>(), &[margin]);
+        let gpu = read_state(device, queue, &world, encoder);
+        let mut moved = 0;
+        for k in 0..items.len() {
+            let cpu = [lo[k][0] - items[k].lo[0], lo[k][1] - items[k].lo[1]];
+            if cpu != [0.0, 0.0] { moved += 1; }
+            let g = gpu[k].translate;
+            assert!((g[0] - cpu[0]).abs() < 0.05 && (g[1] - cpu[1]).abs() < 0.05, "object {k}: gpu {g:?} cpu {cpu:?}");
+        }
+        assert!(moved > 20, "some of them overlapped and were pushed: {moved}");
+    }
 }

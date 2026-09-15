@@ -3,7 +3,7 @@
   "LABEL": "Push Apart",
   "STAGE": "block",
   "ROUNDS": 32,
-  "DESCRIPTION": "Things in the same box push each other apart until their margins clear (C4D Push Apart; Motolii's margin law). Each round measures everyone at once and moves them together",
+  "DESCRIPTION": "Things in the same box push each other apart until their margins clear (C4D Push Apart; Motolii's margin law). Each round measures everyone near at once and moves them together",
   "INPUTS": [
     { "NAME": "margin", "LABEL": "Margin", "TYPE": "float", "DEFAULT": 10.0, "MIN": 0.0, "MAX": 1000.0 }
   ]
@@ -15,9 +15,9 @@ fn block(k: u32, p: BlockParams) -> Offset {
     let alo = now_lo(k) - vec2f(ma);
     let ahi = now_hi(k) + vec2f(ma);
     var step = vec2f(0.0);
-    for (var j = 0u; j < host.objects; j++) {
+    for (var i = 0u; i < neighbor_count(k); i++) {
+        let j = neighbor(k, i);
         let b = objects[j];
-        if j == k || b.group != a.group { continue; }
         let s = a.weight + b.weight;
         if s <= 0.0 { continue; }
         let mb = select(p.margin, b.margin, b.margin > 0.0);

@@ -2,7 +2,8 @@
 //! ブロックが state を少しずつ書き換える計算シェーダー(提案 2026-09-15、利用者「わたしの推奨は gpu」「この天井を作るべきでない」)。
 //!
 //! 作者の file は `fn block(k: u32, p: BlockParams) -> Offset` だけを書く。`k` は物の番号、返すのは足すずれ。
-//! 読める物: `objects[k]`(箱・住む箱・間合い・重み・組)、`host`(時刻・物の数・何回目)、`now_lo(k)` / `now_hi(k)`(今のずれ込みの箱)。
+//! 読める物: `objects[k]`(箱・住む箱・間合い・重み・組)、`host`(時刻・物の数・何回目)、`now_lo(k)` / `now_hi(k)`(今のずれ込みの箱)、
+//! `neighbor_count(k)` / `neighbor(k, i)`(同じ組で近くに居る物。全員を回らずに済む — 物の数に天井を作らない)。
 //! 欄の struct と、掛かった物(`members`)全員に掛ける外枠、ずれを state へ足す所はここが manifest から組む。
 //! `"ROUNDS": n` なら n 回続けて解く(毎回、前の回の state を読む)。
 
@@ -67,6 +68,43 @@ pub(crate) fn offsets_from_bytes(bytes: &[u8]) -> Vec<BlockOffset> {
     }).collect()
 }
 
+/// 近くに居る物の一覧(CSR: `starts[k]..starts[k + 1]` が物 k の相手)。同じ組の物を、組の一番大きい箱の 2 倍の升目に振り、
+/// 周り 3×3 の升目の物を相手にする。物の数に比例する(全組を回らない)。押し合いで升目より遠くへ動く物は相手を取りこぼしうる。
+pub(crate) fn neighbors(items: &[BlockItem]) -> (Vec<u32>, Vec<u32>) {
+    use std::collections::HashMap;
+    let mut extent: HashMap<u32, f32> = HashMap::new();
+    for it in items {
+        let e = (it.hi[0] - it.lo[0]).abs().max((it.hi[1] - it.lo[1]).abs()) + 2.0 * it.margin;
+        let slot = extent.entry(it.group).or_insert(1.0);
+        *slot = slot.max(e);
+    }
+    let cell_of = |it: &BlockItem| {
+        let size = extent[&it.group] * 2.0;
+        let c = [(it.lo[0] + it.hi[0]) * 0.5, (it.lo[1] + it.hi[1]) * 0.5];
+        ((c[0] / size).floor() as i64, (c[1] / size).floor() as i64)
+    };
+    let mut cells: HashMap<(u32, i64, i64), Vec<u32>> = HashMap::new();
+    for (k, it) in items.iter().enumerate() {
+        let (x, y) = cell_of(it);
+        cells.entry((it.group, x, y)).or_default().push(k as u32);
+    }
+    let mut starts = Vec::with_capacity(items.len() + 1);
+    let mut list = Vec::new();
+    for (k, it) in items.iter().enumerate() {
+        starts.push(list.len() as u32);
+        let (x, y) = cell_of(it);
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                if let Some(bucket) = cells.get(&(it.group, x + dx, y + dy)) {
+                    list.extend(bucket.iter().copied().filter(|j| *j != k as u32));
+                }
+            }
+        }
+    }
+    starts.push(list.len() as u32);
+    (starts, list)
+}
+
 /// 作者も外枠も同じ型と束ねを読む。
 pub(crate) const PRELUDE: &str = "struct Item { lo: vec2f, hi: vec2f, room_lo: vec2f, room_size: vec2f, radius: f32, group: u32, margin: f32, weight: f32 };\n\
 struct Offset { translate: vec2f, rotate: f32, scale: f32 };\n\
@@ -77,7 +115,11 @@ struct BlockHost { time: f32, members: u32, objects: u32, round: u32 };\n\
 @group(0) @binding(3) var<uniform> block_params: array<vec4f, 6>;\n\
 @group(0) @binding(4) var<storage, read_write> state_out: array<Offset>;\n\
 @group(0) @binding(5) var<storage, read> members: array<u32>;\n\
+@group(0) @binding(6) var<storage, read> neighbor_starts: array<u32>;\n\
+@group(0) @binding(7) var<storage, read> neighbor_list: array<u32>;\n\
 const NO_OFFSET: Offset = Offset(vec2f(0.0), 0.0, 1.0);\n\
+fn neighbor_count(k: u32) -> u32 { return neighbor_starts[k + 1u] - neighbor_starts[k]; }\n\
+fn neighbor(k: u32, i: u32) -> u32 { return neighbor_list[neighbor_starts[k] + i]; }\n\
 fn now_lo(k: u32) -> vec2f { return objects[k].lo + state_in[k].translate; }\n\
 fn now_hi(k: u32) -> vec2f { return objects[k].hi + state_in[k].translate; }\n\n";
 
@@ -175,6 +217,8 @@ pub(crate) struct BlockWorld {
     capacity: u64,
     objects: wgpu::Buffer,
     states: [wgpu::Buffer; 2],
+    neighbor_starts: wgpu::Buffer,
+    neighbor_list: wgpu::Buffer,
     /// 今の state が `states` のどちらか。
     pub(crate) current: usize,
     pub(crate) count: u32,
@@ -182,7 +226,7 @@ pub(crate) struct BlockWorld {
 
 impl BlockProgram {
     pub(crate) fn new(device: &wgpu::Device, label: &str, source: &str, rounds: u32) -> Self {
-        let (pipeline, layout) = pipeline(device, label, source, &[storage(0, true), storage(1, true), uniform(2), uniform(3), storage(4, false), storage(5, true)], "motolii_block_main");
+        let (pipeline, layout) = pipeline(device, label, source, &[storage(0, true), storage(1, true), uniform(2), uniform(3), storage(4, false), storage(5, true), storage(6, true), storage(7, true)], "motolii_block_main");
         Self { pipeline, layout, rounds: rounds.max(1) }
     }
 
@@ -223,6 +267,8 @@ impl BlockProgram {
                     wgpu::BindGroupEntry { binding: 3, resource: params_buffer.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 4, resource: world.states[to].as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 5, resource: members_buffer.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 6, resource: world.neighbor_starts.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 7, resource: world.neighbor_list.as_entire_binding() },
                 ],
             });
             {
@@ -244,6 +290,8 @@ impl BlockWorld {
             capacity: 1,
             objects: buffer(ITEM_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST),
             states: [buffer(OFFSET_BYTES, state), buffer(OFFSET_BYTES, state)],
+            neighbor_starts: buffer(8, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST),
+            neighbor_list: buffer(4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST),
             current: 0,
             count: 0,
         }
@@ -265,6 +313,14 @@ impl BlockWorld {
             queue.write_buffer(&self.objects, 0, &item_bytes(items));
             queue.write_buffer(&self.states[0], 0, &offset_bytes(&vec![BlockOffset::default(); items.len()]));
         }
+        let (starts, list) = neighbors(items);
+        let storage = |bytes: &[u8]| {
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-neighbors"), size: bytes.len().max(4) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            queue.write_buffer(&buffer, 0, bytes);
+            buffer
+        };
+        self.neighbor_starts = storage(&starts.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
+        self.neighbor_list = storage(&list.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
     }
 
     pub(crate) fn state(&self) -> &wgpu::Buffer {

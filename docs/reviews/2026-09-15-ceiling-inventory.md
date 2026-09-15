@@ -38,3 +38,4 @@
 ## 追記(2026-09-16)
 
 - vism の fx は欄 1 つにつき uniform buffer を 1 本束ねる(vism.rs:194)。欄 + 2 本が段の uniform の上限を越えると束ねが無効になり、層は黙って描かれない(`layer_failures` にも出ない)。4-Color Gradient の欄 10 個で踏んだ。→ 2026-09-16 device を頼む時に uniform buffer の上限を adapter の範囲(31 本まで)に広げて外した(storage buffer と同じ構図: 選択の籠の分だけ小さく借りていた)。欄を 1 本に詰める直しは、31 本を越える fx が出た時に
+- 押し合いの全組(1 回 n²)→ 2026-09-16 近くの物の一覧(コマの始めに CPU で升目に振る、物の数に比例)を GPU のブロックに渡し、`neighbor_count(k)` / `neighbor(k, i)` で回る。2000 個 4 組で全組と一致(`push_apart_over_neighbours_matches_all_pairs_at_scale`)。弱み: 升目は箱の大きさの 2 倍で、ブロックの欄の Margin を知らない(Margin が箱よりずっと大きいと取りこぼす)。1 回の押しで升目より遠くへ動く物も
