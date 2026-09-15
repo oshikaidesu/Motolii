@@ -767,8 +767,9 @@ impl StoreView<'_> {
             }
             let attrs = self.attrs(layer)?.unwrap_or_default();
             let parent = attrs.parent;
-            // 並ぶ子と、付いて置く物(流れの外)は押し合わない。
-            if parent.is_some_and(|p| displayed.contains(&p)) || self.choice(layer, POSITION_AREA, t)? > 0 {
+            // 並ぶ子と、付いて置く物(流れの外)と、箱をつなぐ線・なぞる形(Margin は箱からの間合い)は押し合わない。
+            if parent.is_some_and(|p| displayed.contains(&p)) || self.choice(layer, POSITION_AREA, t)? > 0
+                || self.connection(layer, t)?.is_some() || self.tracing(layer, t)?.is_some() {
                 continue;
             }
             // 並べる Group の箱は今解いた大きさ(覚えにはまだ入っていない)。
@@ -1960,6 +1961,23 @@ mod tests {
         doc.apply(Intent::SetAttrs { layer: b, patch: LayerAttrsPatch { projection: Some(crate::doc::store::LayerProjection::TwoD), ..Default::default() } }).unwrap();
         let frame = doc.view().layout_frame(T).unwrap();
         assert!(frame.nudges_z.is_empty(), "a 2D thing has no depth to push along");
+    }
+
+    /// なぞる形の Margin は箱からの間合いで、押し合いの余白ではない(渋谷の窓で角の掴みが奥行きに押されて跳んだ)。
+    #[test]
+    fn a_trace_keeps_its_margin_to_its_box_and_is_not_pushed() {
+        let mut doc = blank_project();
+        let thing = add(&mut doc, 1, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: thing, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+        put(&mut doc, thing, MARGIN, Value::F64(5.0));
+        put(&mut doc, thing, property::POSITION, Value::Vec2([300.0, 300.0]));
+        let trace = add(&mut doc, 2, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: trace, shapes: vec![rect_shape([255; 4], [10.0, 10.0])] }).unwrap();
+        put(&mut doc, trace, CONNECT_FROM, Value::LayerId(thing.0));
+        put(&mut doc, trace, TRACE, Value::Enum(2));
+        put(&mut doc, trace, MARGIN, Value::F64(6.0));
+        let frame = doc.view().layout_frame(T).unwrap();
+        assert!(frame.nudges.is_empty() && frame.nudges_z.is_empty(), "the trace and its box overlap by design: nobody moves");
     }
 
     #[test]
