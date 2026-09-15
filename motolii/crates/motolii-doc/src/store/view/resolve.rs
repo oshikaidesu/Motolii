@@ -660,13 +660,15 @@ impl<'a> StoreView<'a> {
     }
 
     /// Track Overlay(Detection Method = Layers)が拾う物: 同じ親で自分より下の、描かれる層(Repeater の写しは 1 枚ずつ)と、その画面の上の箱。
+    /// 並べる Group(Display を持つ箱)は 1 つの箱として拾う(提案 2026-09-15)。線は立てるが寄せない(子と、箱を読むつなぐ線・札が寄せた位置を知らない)。
     pub fn overlay_scope(&self, overlay: LayerId, resolved: &[ResolvedLayer], t: RationalTime) -> Result<Vec<(usize, [f32; 4])>, StoreError> {
         let Some(meta) = self.meta(overlay)? else { return Ok(Vec::new()) };
         let parent = self.attrs(overlay)?.unwrap_or_default().parent;
         let mut out = Vec::new();
         for (index, layer) in resolved.iter().enumerate() {
             if layer.id == overlay || layer.ghost || layer.placement.opacity <= 0.0 || layer.blend_mode.is_stencil()
-                || matches!(layer.source, crate::doc::store::LayerSource::Group | crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Null | crate::doc::store::LayerSource::Stage) {
+                || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Null | crate::doc::store::LayerSource::Stage)
+                || (layer.source == crate::doc::store::LayerSource::Group && self.display(layer.id, t)? == 0) {
                 continue;
             }
             if self.attrs(layer.id)?.unwrap_or_default().parent != parent || !self.meta(layer.id)?.is_some_and(|m| m.order < meta.order) {
@@ -706,6 +708,9 @@ impl<'a> StoreView<'a> {
             let ys: Vec<f32> = scope.iter().flat_map(|(_, b)| [b[1], b[3]]).collect();
             let (lx, ly) = (overlay::edge_lines(&xs, merge), overlay::edge_lines(&ys, merge));
             for (k, &(index, b)) in scope.iter().enumerate() {
+                if out[index].source == crate::doc::store::LayerSource::Group {
+                    continue;
+                }
                 let dx = ((lx[2 * k].0 - b[0]) + (lx[2 * k + 1].0 - b[2])) * 0.5 * strength;
                 let dy = ((ly[2 * k].0 - b[1]) + (ly[2 * k + 1].0 - b[3])) * 0.5 * strength;
                 let layer = &mut out[index];
