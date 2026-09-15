@@ -56,6 +56,14 @@ pub const TRANSFORM_ORIGIN: &str = "layout.transform_origin";
 /// 箱の輪郭を道にする(CSS の offset-path: border-box、offset-distance、offset-rotate)。道は親の箱(並べる Group の箱、角丸込み)、
 /// 親が無ければ画面の枠。左上の角の後から時計回りに一周を 0〜100%(はみ出しは回る)。Auto なら道の向きに回る。Position の代わり。
 pub const OFFSET_PATH: &str = "layout.offset_path";
+/// 箱からの距離で効き方を変える(C4D の Fields の Box と Plain エフェクタ): Field が指す層の箱の中で強さ 1、縁から Field Falloff の
+/// 距離で 0(滑らかに)。強さに応じて、自分の箱(Repeater の写しは 1 枚ずつ)を中心から Field Scale 倍、不透明度を Field Opacity 倍、
+/// 箱の中心から離れる向きに Field Push px。画面の見え方だけ(並びは変えない)。
+pub const FIELD: &str = "layout.field";
+pub const FIELD_FALLOFF: &str = "layout.field_falloff";
+pub const FIELD_SCALE: &str = "layout.field_scale";
+pub const FIELD_OPACITY: &str = "layout.field_opacity";
+pub const FIELD_PUSH: &str = "layout.field_push";
 pub const OFFSET_DISTANCE: &str = "layout.offset_distance";
 pub const OFFSET_ROTATE: &str = "layout.offset_rotate";
 /// 移り方を始めるまでの遅れ(CSS の transition-delay)。
@@ -164,6 +172,11 @@ pub const SPACE_ROWS: &[Row] = &[
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
     (TRANSITION_DELAY, "Transition Delay", Value::F64(0.0), Some((0.0, 60.0)), &[]),
+    (FIELD, "Field", Value::LayerId(0), None, &[]),
+    (FIELD_FALLOFF, "Field Falloff", Value::F64(200.0), Some((0.0, 100000.0)), &[]),
+    (FIELD_SCALE, "Field Scale", Value::F64(1.0), Some((0.0, 100.0)), &[]),
+    (FIELD_OPACITY, "Field Opacity", Value::F64(1.0), Some((0.0, 1.0)), &[]),
+    (FIELD_PUSH, "Field Push", Value::F64(0.0), None, &[]),
     (OFFSET_PATH, "Offset Path", Value::Enum(0), None, &["None", "Border Box"]),
     (OFFSET_DISTANCE, "Offset Distance", Value::F64(0.0), None, &[]),
     (OFFSET_ROTATE, "Offset Rotate", Value::Enum(0), None, &["Auto", "None"]),
@@ -2049,6 +2062,38 @@ mod tests {
         }
         let shown_at = shown(&doc, dot, T);
         assert!(shown_at[0] < 60.0, "the object is drawn where the path puts it: {shown_at:?}");
+    }
+
+    #[test]
+    fn a_field_box_swells_what_is_near_it_and_leaves_the_far_alone() {
+        let mut doc = blank_project();
+        let lens = add(&mut doc, 1, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: lens, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+        put(&mut doc, lens, property::POSITION, Value::Vec2([500.0, 300.0]));
+        let near = add(&mut doc, 2, LayerSource::Shape, None);
+        let far = add(&mut doc, 3, LayerSource::Shape, None);
+        for (layer, at) in [(near, [540.0, 300.0]), (far, [1200.0, 300.0])] {
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [20.0, 20.0])] }).unwrap();
+            put(&mut doc, layer, property::POSITION, Value::Vec2(at));
+            put(&mut doc, layer, FIELD, Value::LayerId(lens.0));
+            put(&mut doc, layer, FIELD_SCALE, Value::F64(3.0));
+            put(&mut doc, layer, FIELD_FALLOFF, Value::F64(150.0));
+        }
+        let (n, f) = (shown(&doc, near, T), shown(&doc, far, T));
+        assert!(((n[2] - n[0]) - 60.0).abs() < 1.0, "inside the field box: full strength, three times the size: {n:?}");
+        assert!(((f[2] - f[0]) - 20.0).abs() < 0.5, "beyond the falloff: untouched: {f:?}");
+        put(&mut doc, near, property::POSITION, Value::Vec2([625.0, 300.0]));
+        let half = shown(&doc, near, T);
+        assert!((half[2] - half[0]) > 21.0 && (half[2] - half[0]) < 59.0, "in the falloff: part way: {half:?}");
+        put(&mut doc, near, FIELD_SCALE, Value::F64(1.0));
+        put(&mut doc, near, property::POSITION, Value::Vec2([540.0, 300.0]));
+        let still = shown(&doc, near, T);
+        put(&mut doc, near, FIELD_PUSH, Value::F64(40.0));
+        let pushed = shown(&doc, near, T);
+        let lens_box = shown(&doc, lens, T);
+        let away = glam::vec2((still[0] + still[2]) * 0.5 - (lens_box[0] + lens_box[2]) * 0.5, (still[1] + still[3]) * 0.5 - (lens_box[1] + lens_box[3]) * 0.5).normalize();
+        let moved = glam::vec2((pushed[0] + pushed[2] - still[0] - still[2]) * 0.5, (pushed[1] + pushed[3] - still[1] - still[3]) * 0.5);
+        assert!((moved - away * 40.0).length() < 1.5, "pushed 40 px away from the field's centre: {moved:?} along {away:?}");
     }
 
     #[test]

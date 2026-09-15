@@ -34,3 +34,12 @@
 - Position の代わりに道の上の点を置く(Transform Origin・Transition はそのまま効く)。親の箱が変われば道も変わる
 - 見本 `border_path.js`(大きさが呼吸する bento の各カードの縁を、白い札が回る): 跳び 0。尖り 65 は、角を曲がる時に回る札の軸に沿った箱の角が折れる分(位置の跳びではない)
 - 試験: `an_object_travels_the_border_box_of_its_parent_and_turns_with_it`
+
+## 5. 箱からの距離で効き方
+
+- 先例: C4D MoGraph の **Plain エフェクタ + Fields の Box**(箱の中で強さ 1、外へ Falloff で 0。エフェクタの Scale・Position に強さを掛ける)
+- すべての物に **Field**(層)、**Field Falloff**(px)、**Field Scale**(倍)、**Field Opacity**(倍、0..1)、**Field Push**(箱の中心から離れる向きへ px)。強さは場の箱までの距離(中にいれば 0)からの滑らかな段(smoothstep)
+- 画面の見え方だけ(並び・書類の値は変えない)。Repeater の写しは 1 枚ずつの箱で効く
+- 見本 `field_lens.js`(漂う半透明の箱の近くで、格子に並べた点が膨らんで退き、白い点は縮んで寄る)
+- 試験: `a_field_box_swells_what_is_near_it_and_leaves_the_far_alone`
+- 残り: 写しの Delay・色(Tint)に効かせる、場の形を Box 以外(Sphere・Linear)に

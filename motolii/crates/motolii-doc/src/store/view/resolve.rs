@@ -601,6 +601,64 @@ impl<'a> StoreView<'a> {
     /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
     /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
     #[allow(clippy::too_many_arguments)]
+    /// Field(C4D の Fields の Box): 指した層の箱からの距離で、画面の上の大きさ・不透明度・押し出しを変える。写しは 1 枚ずつ。
+    fn apply_fields(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        use crate::doc::store::layout::{FIELD, FIELD_FALLOFF, FIELD_OPACITY, FIELD_PUSH, FIELD_SCALE};
+        let mut field_boxes: HashMap<LayerId, Option<(glam::Vec2, glam::Vec2)>> = HashMap::new();
+        for i in 0..out.len() {
+            let layer = &out[i];
+            if layer.ghost || matches!(layer.source, crate::doc::store::LayerSource::Group | crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Null) {
+                continue;
+            }
+            let field = match self.value_at(layer.id, &PropertyId::new(FIELD)?, t)? {
+                Some(Value::LayerId(id)) if id != 0 && id != layer.id.0 => LayerId(id),
+                Some(Value::F64(v)) if v >= 1.0 && v.round() as u64 != layer.id.0 => LayerId(v.round() as u64),
+                _ => continue,
+            };
+            // 場の箱(画面)は場の層 1 つにつき 1 回。
+            if !field_boxes.contains_key(&field) {
+                let found = out.iter().find(|l| l.id == field && !l.ghost && l.copy == 0).map(|l| l.placement.transform);
+                let b = match found {
+                    Some(transform) => self.screen_box_of(field, transform, t)?,
+                    None => None,
+                };
+                field_boxes.insert(field, b);
+            }
+            let Some((f_lo, f_hi)) = field_boxes[&field] else { continue };
+            let Some((lo, hi)) = self.screen_box_of(layer.id, layer.placement.transform, t)? else { continue };
+            let centre = (lo + hi) * 0.5;
+            // 箱までの距離(中にいれば 0)。
+            let outside = (f_lo - centre).max(centre - f_hi).max(glam::Vec2::ZERO);
+            let falloff = self.number(layer.id, FIELD_FALLOFF, 200.0, t)?.max(0.0) as f32;
+            let u = if falloff > 1e-3 { (1.0 - outside.length() / falloff).clamp(0.0, 1.0) } else if outside.length() <= 0.0 { 1.0 } else { 0.0 };
+            let strength = u * u * (3.0 - 2.0 * u);
+            if strength <= 0.0 {
+                continue;
+            }
+            let scale = 1.0 + (self.number(layer.id, FIELD_SCALE, 1.0, t)? as f32 - 1.0) * strength;
+            let opacity = 1.0 + (self.number(layer.id, FIELD_OPACITY, 1.0, t)? as f32 - 1.0) * strength;
+            let away = centre - (f_lo + f_hi) * 0.5;
+            let push = self.number(layer.id, FIELD_PUSH, 0.0, t)? as f32 * strength;
+            let shift = if away.length() > 1e-3 { away.normalize() * push } else { glam::Vec2::ZERO };
+            let adjust = glam::Affine2::from_translation(centre + shift) * glam::Affine2::from_scale(glam::Vec2::splat(scale)) * glam::Affine2::from_translation(-centre);
+            let layer = &mut out[i];
+            layer.placement.transform = adjust * layer.placement.transform;
+            layer.placement.opacity = (layer.placement.opacity * opacity).clamp(0.0, 1.0);
+            if let Some(world) = layer.placement.world_transform {
+                let adjust3 = glam::Affine3A::from_translation((centre + shift).extend(0.0)) * glam::Affine3A::from_scale(glam::vec3(scale, scale, 1.0)) * glam::Affine3A::from_translation((-centre).extend(0.0));
+                layer.placement.world_transform = Some(adjust3 * world);
+            }
+        }
+        Ok(())
+    }
+
+    /// 層の箱を、与えた画面の変換で画面の上に(軸に沿った箱)。形は伸ばす前の輪郭。
+    fn screen_box_of(&self, layer: LayerId, transform: glam::Affine2, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
+        let Some(b) = self.layer_box(layer, t)? else { return Ok(None) };
+        let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| transform.transform_point2(glam::Vec2::from(c)));
+        Ok(Some((corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p)), corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p)))))
+    }
+
     /// Track Overlay(Detection Method = Layers)が拾う物: 同じ親で自分より下の、描かれる層(Repeater の写しは 1 枚ずつ)と、その画面の上の箱。
     pub fn overlay_scope(&self, overlay: LayerId, resolved: &[ResolvedLayer], t: RationalTime) -> Result<Vec<(usize, [f32; 4])>, StoreError> {
         let Some(meta) = self.meta(overlay)? else { return Ok(Vec::new()) };
@@ -1144,6 +1202,7 @@ impl<'a> StoreView<'a> {
         self.hand_out_stencils(&mut out)?;
         self.snap_to_grids(&mut out, t)?;
         self.snap_to_found_grids(&mut out, t)?;
+        self.apply_fields(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
     }
