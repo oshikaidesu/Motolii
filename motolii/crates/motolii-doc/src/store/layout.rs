@@ -142,7 +142,7 @@ pub const GROUP_ROWS: &[Row] = &[
     (HEIGHT, "Height", Value::F64(300.0), Some((0.0, 100000.0)), &[]),
     (BACKGROUND, "Background", Value::Color([1.0, 1.0, 1.0, 0.0]), None, &[]),
     (BORDER_RADIUS, "Border Radius", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
-    (OVERFLOW, "Overflow", Value::Enum(0), None, &["Visible", "Clip"]),
+    (OVERFLOW, "Overflow", Value::Enum(0), None, &["Visible", "Clip", "Bounce"]),
     (SHADOW_COLOR, "Shadow Color", Value::Color([0.0, 0.0, 0.0, 0.0]), None, &[]),
     (SHADOW_OFFSET, "Shadow Offset", Value::Vec2([0.0, 12.0]), None, &[]),
     (SHADOW_BLUR, "Shadow Blur", Value::F64(24.0), Some((0.0, 10000.0)), &[]),
@@ -172,6 +172,35 @@ pub const ITEM_ROWS: &[Row] = &[
     (LAYOUT_TILT_X, "Layout Tilt X", Value::F64(0.0), None, &[]),
     (LAYOUT_TILT_Y, "Layout Tilt Y", Value::F64(0.0), None, &[]),
 ];
+
+/// Overflow = Bounce(提案 2026-09-15、利用者「物理、これは嘘でできる」): 流れの外の子の箱を、親の箱の内側へ鏡で折り返す。
+/// 書いた動き(鍵・揺らぎ)がまっすぐなら、壁で跳ね返るビリヤードと同じ道になる。積み上げの物理は持たない(時刻の純関数)。
+/// 四角の箱は軸ごとに、角丸が短辺の半分に届く箱(円・帯)は中心からの向きに沿って、壁の間を往復する。戻り値は置き場所のずれ。
+pub(crate) fn bounced(lo: [f32; 2], hi: [f32; 2], size: [f32; 2], radius: f32) -> [f32; 2] {
+    // x を [a, a + room] の中へ鏡で折り返す(周期 2 room の三角波)。
+    let fold = |x: f32, a: f32, room: f32| {
+        if room <= 1e-3 { return a + room * 0.5; }
+        let m = (x - a).rem_euclid(2.0 * room);
+        a + if m <= room { m } else { 2.0 * room - m }
+    };
+    let origin = CANVAS_MARGIN;
+    if radius * 2.0 >= size[0].min(size[1]) - 1e-3 && size[0] > 0.0 && size[1] > 0.0 {
+        // 円(帯は短辺の円の中へ): 中心を通る直線の上で、向こうの壁まで往復する。
+        let center = glam::vec2(origin + size[0] * 0.5, origin + size[1] * 0.5);
+        let own = (glam::Vec2::from(hi) - glam::Vec2::from(lo)).max_element() * 0.5;
+        let room = (size[0].min(size[1]) * 0.5 - own).max(0.0);
+        let mid = (glam::Vec2::from(lo) + glam::Vec2::from(hi)) * 0.5;
+        let offset = mid - center;
+        let r = offset.length();
+        if r <= room || r < 1e-6 { return [0.0, 0.0]; }
+        let signed = fold(r, -room, 2.0 * room);
+        return (center + offset / r * signed - mid).to_array();
+    }
+    [0, 1].map(|axis| {
+        let w = hi[axis] - lo[axis];
+        fold(lo[axis], origin, size[axis] - w) - lo[axis]
+    })
+}
 
 /// 形の層の素材座標は、輪郭の canvas の左上(反アリアスの 1 画素の外)が原点。
 /// Display の Group の箱もその座標で [1, 1]..[1 + 幅, 1 + 高さ] に置き、背景の形と子の枠が同じ所に来る。
@@ -1177,7 +1206,8 @@ impl StoreView<'_> {
             return Ok(None);
         }
         let modes = [self.choice(child, HORIZONTAL_CONSTRAINT, t)?, self.choice(child, VERTICAL_CONSTRAINT, t)?];
-        if modes == [0, 0] {
+        let bounce = self.choice(parent, OVERFLOW, t)? == 2;
+        if modes == [0, 0] && !bounce {
             return Ok(None);
         }
         // 基準は時刻 0 の親の箱。
@@ -1205,6 +1235,12 @@ impl StoreView<'_> {
                 out_scale[axis] = scale[axis] * (new_hi - new_lo) / (hi - lo);
             }
             out_position[axis] = new_lo + (anchor[axis] - b[axis]) * out_scale[axis];
+        }
+        if bounce {
+            let lo = [0, 1].map(|axis| out_position[axis] + (b[axis] - anchor[axis]).min(b[axis + 2] - anchor[axis]) * out_scale[axis]);
+            let hi = [0, 1].map(|axis| out_position[axis] + (b[axis] - anchor[axis]).max(b[axis + 2] - anchor[axis]) * out_scale[axis]);
+            let shift = bounced(lo, hi, size, self.number(parent, BORDER_RADIUS, 0.0, t)? as f32);
+            out_position = [out_position[0] + shift[0], out_position[1] + shift[1]];
         }
         Ok(Some(Slot { position: out_position, scale: out_scale, stretch: [1.0, 1.0], wrap: None, z: 0.0, scale_z: 1.0, rotation: [0.0; 3], anchor }))
     }
@@ -2031,6 +2067,22 @@ mod tests {
         put(&mut doc, reader, READOUT_OF, Value::LayerId(b.0));
         let text = doc.view().resolved_text_document(reader, T).unwrap().unwrap();
         assert_eq!(text.content.eval(T), format!("{} px", pushed.length().round() as i64), "the # becomes the push in px");
+    }
+
+    /// Overflow = Bounce: 箱の外へ書いた動きは内側へ鏡で折り返る(四角は軸ごと、円は中心を通る線の上)。中にいれば動かない。
+    #[test]
+    fn a_bouncing_box_folds_what_leaves_it_back_inside() {
+        let m = CANVAS_MARGIN;
+        assert_eq!(bounced([m + 10.0, m + 10.0], [m + 30.0, m + 30.0], [200.0, 100.0], 0.0), [0.0, 0.0], "inside: untouched");
+        let right = bounced([m + 200.0, m + 10.0], [m + 220.0, m + 30.0], [200.0, 100.0], 0.0);
+        assert!((right[0] + 40.0).abs() < 1e-3 && right[1] == 0.0, "20 px past the right wall comes back 20 px from it: {right:?}");
+        let far = bounced([m + 180.0 + 360.0, m + 10.0], [m + 200.0 + 360.0, m + 30.0], [200.0, 100.0], 0.0);
+        assert!((far[0] + 360.0).abs() < 1e-3, "one full round trip lands where it started: {far:?}");
+        // 円: 半径 50 の中の直径 20 の物。中心から 60 外へ出た物は、同じ線の上を戻る。
+        let out = bounced([m + 100.0 + 60.0 - 10.0, m + 50.0 - 10.0], [m + 100.0 + 60.0 + 10.0, m + 50.0 + 10.0], [200.0, 100.0], 50.0);
+        assert!((out[0] + 40.0).abs() < 1e-3 && out[1].abs() < 1e-3, "room 40: 60 out folds to 20 out: {out:?}");
+        let through = bounced([m + 100.0 + 120.0 - 10.0, m + 40.0], [m + 100.0 + 120.0 + 10.0, m + 60.0], [200.0, 100.0], 50.0);
+        assert!((through[0] + 160.0).abs() < 1e-3, "80 past the wall crosses the centre and reaches the far wall: {through:?}");
     }
 
     #[test]
