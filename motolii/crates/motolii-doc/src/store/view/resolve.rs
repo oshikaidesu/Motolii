@@ -723,38 +723,6 @@ impl<'a> StoreView<'a> {
         Ok(())
     }
 
-    /// 見つけた格子を奥行きに立てる(提案 2026-09-15、利用者「根本原因は奥行きを考えきれていない」「3d のグリッド表現」):
-    /// 格子は画面ではなく物の関係に付く。3D の Track Overlay(Layers)は、拾った物 1 つにつき、その物の奥行きに同じ格子の面を 1 枚立てる。
-    /// 奥行きも辺と同じく近い物同士を 1 つに寄せ(`overlay::edge_lines`)、重なった面は重みで薄めて 1 枚分の濃さにする
-    /// (面の枚数は拾った物の数のまま変えない — 寄り合っても面が出たり消えたりしない)。
-    fn stand_found_grids(&self, out: &mut Vec<ResolvedLayer>, t: RationalTime) -> Result<(), StoreError> {
-        use crate::doc::store::overlay;
-        let overlays: Vec<(usize, f32)> = out.iter().enumerate().filter(|(_, l)| !l.ghost && l.copy == 0 && l.placement.world_transform.is_some()).filter_map(|(i, l)| {
-            let effect = l.effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id))?;
-            let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
-            (overlay::number_of(&params, "method").round() as i64 == 2 && overlay::switch_of(&params, "grid"))
-                .then(|| (i, overlay::number_of(&params, "grid_merge").max(0.0) as f32))
-        }).collect();
-        for &(index, merge) in overlays.iter().rev() {
-            let scope = self.overlay_scope(out[index].id, out, t)?;
-            let depths: Vec<f32> = scope.iter().filter_map(|(i, _)| out[*i].placement.world_transform.map(|w| w.translation.z)).collect();
-            if depths.len() < 2 {
-                continue;
-            }
-            let base = out[index].clone();
-            let own = base.placement.world_transform.map_or(0.0, |w| w.translation.z);
-            let planes: Vec<ResolvedLayer> = overlay::edge_lines(&depths, merge).into_iter().enumerate().map(|(k, (z, weight))| {
-                let mut plane = base.clone();
-                plane.copy = k as u32;
-                plane.placement.world_transform = base.placement.world_transform.map(|w| glam::Affine3A::from_translation(glam::vec3(0.0, 0.0, z - own)) * w);
-                plane.placement.opacity = base.placement.opacity * weight;
-                plane
-            }).collect();
-            out.splice(index..=index, planes);
-        }
-        Ok(())
-    }
-
     /// 格子へ吸い付く(2026-09-15 利用者「無作為の配置も、グリッドで整えると意図した物という観点が付与される」):
     /// Grid の Group の子(流れの外の子、Repeater の写しは 1 枚ずつ)の箱の左上を、一番近い升目の角へ Snap to Grid の強さで寄せる。
     /// Snap Size が Fields なら、右下も一番近い升目の終わりへ(大きさを升目の倍数に)。寄せるのは画面の変換だけ(書類の値は変えない)。
@@ -1239,7 +1207,6 @@ impl<'a> StoreView<'a> {
         self.hand_out_stencils(&mut out)?;
         self.snap_to_grids(&mut out, t)?;
         self.snap_to_found_grids(&mut out, t)?;
-        self.stand_found_grids(&mut out, t)?;
         self.apply_fields(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         Ok(out)
@@ -1474,30 +1441,6 @@ mod camera_target_contract {
         put(&mut doc, card, property::SCALE, Value::Vec2([2.0, 2.0]));
         let (w2, h2, middle2) = on_screen(&doc);
         assert!(middle2.length() < 1e-3 && ((w2.max(h2)) - 0.5).abs() < 0.01, "moving and growing the box keeps it framed: {w2} {h2} {middle2:?}");
-    }
-
-    /// 見つけた格子は物の関係に付く(提案 2026-09-15): 奥行きの違う物を読むと、物ごとの奥行きに格子の面が立ち、
-    /// 寄り合った奥行きの面は重みで 1 枚分の濃さになる。面の枚数は物の数のまま。
-    #[test]
-    fn a_found_grid_stands_a_sheet_at_each_depth_it_reads() {
-        let mut doc = blank_project();
-        let near = add(&mut doc, 2, LayerSource::Shape);
-        let far = add(&mut doc, 3, LayerSource::Shape);
-        let twin = add(&mut doc, 4, LayerSource::Shape);
-        for (layer, z) in [(near, 0.0), (far, 600.0), (twin, 601.0)] {
-            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [100.0, 60.0])] }).unwrap();
-            put(&mut doc, layer, property::POSITION_Z, Value::F64(z));
-        }
-        let grid = add(&mut doc, 9, LayerSource::Shape);
-        doc.apply(Intent::SetShapes { layer: grid, shapes: vec![rect_shape([255; 4], [10.0, 10.0])] }).unwrap();
-        doc.apply(Intent::SetEffects { layer: grid, effects: vec![EffectInstance { id: EffectId(1), plugin_id: crate::doc::store::overlay::FOUND_GRID.to_owned() }] }).unwrap();
-        let out = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
-        let sheets: Vec<(f32, f32)> = out.iter().filter(|l| l.id == grid).map(|l| (l.placement.world_transform.unwrap().translation.z, l.placement.opacity)).collect();
-        assert_eq!(sheets.len(), 3, "one sheet for each thing read: {sheets:?}");
-        assert!(sheets.iter().any(|(z, o)| z.abs() < 1.0 && (*o - 1.0).abs() < 1e-3), "a lone depth keeps a full sheet: {sheets:?}");
-        let far_sheets: Vec<_> = sheets.iter().filter(|(z, _)| *z > 500.0).collect();
-        assert!((far_sheets[0].0 - far_sheets[1].0).abs() < 0.5, "near depths share one sheet: {sheets:?}");
-        assert!((far_sheets.iter().map(|(_, o)| o).sum::<f32>() - 1.0).abs() < 0.05, "and together weigh as one: {sheets:?}");
     }
 
     /// AE の Point of Interest を rerun の球面座標で持つ: 注視点・軌道・距離が Camera 層から解決へ流れ、eye は導出。

@@ -111,6 +111,44 @@ fn grid_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<Shape
     out
 }
 
+/// 3D の見つけた格子(提案 2026-09-15、利用者「グリッドはオブジェクト関係に付与される」「3d のグリッド表現」):
+/// 物の箱の辺から x・y の面を、物の奥行きから z の面を立て(どれも `overlay::edge_lines` で近い物を 1 つに)、面どうしの交線を空間の線にする。
+/// 奥行きの面の上に x・y の線(画面の幅・高さいっぱい)、x と y の交点に奥行きの柱(一番手前から一番奥まで)。
+/// 線は寄り合っても消さず、重みで薄める(寄り合う途中で線が出たり消えたりしない)。奥行きが 1 つなら柱は無く、平面の格子と同じ。
+pub(crate) fn lattice(params: &Params, marks: &[BlobMark], depths: &[f32], comp: [f32; 2]) -> crate::render::compositor::CloudLinks {
+    use crate::doc::store::overlay::edge_lines;
+    let c = color_of(params, "grid_color");
+    let base = (number_of(params, "grid_opacity").clamp(0.0, 1.0) * c[3]) as f32;
+    let merge = number_of(params, "grid_merge").max(0.0) as f32;
+    let xs = edge_lines(&marks.iter().flat_map(|m| [m.center[0] - m.size[0] * 0.5, m.center[0] + m.size[0] * 0.5]).collect::<Vec<_>>(), merge);
+    let ys = edge_lines(&marks.iter().flat_map(|m| [m.center[1] - m.size[1] * 0.5, m.center[1] + m.size[1] * 0.5]).collect::<Vec<_>>(), merge);
+    let zs = edge_lines(depths, merge);
+    const LEVELS: usize = 16;
+    let mut levels: Vec<Vec<([f32; 3], [f32; 3])>> = vec![Vec::new(); LEVELS];
+    let mut put = |weight: f32, a: [f32; 3], b: [f32; 3]| {
+        let level = ((weight.clamp(0.0, 1.0) * LEVELS as f32).ceil() as usize).clamp(1, LEVELS) - 1;
+        levels[level].push((a, b));
+    };
+    for &(z, wz) in &zs {
+        for &(x, wx) in &xs { put(wx * wz, [x, 0.0, z], [x, comp[1], z]); }
+        for &(y, wy) in &ys { put(wy * wz, [0.0, y, z], [comp[0], y, z]); }
+    }
+    let (near, far) = zs.iter().fold((f32::MAX, f32::MIN), |(lo, hi), (z, _)| (lo.min(*z), hi.max(*z)));
+    if far - near > 1e-3 {
+        for &(x, wx) in &xs {
+            for &(y, wy) in &ys { put(wx * wy, [x, y, near], [x, y, far]); }
+        }
+    }
+    let rgb = [c[0], c[1], c[2]].map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+    crate::render::compositor::CloudLinks {
+        levels: levels.into_iter().enumerate().filter(|(_, s)| !s.is_empty()).map(|(k, segments)| {
+            let alpha = (base * (k as f32 + 1.0) / LEVELS as f32 * 255.0).round() as u8;
+            ([rgb[0], rgb[1], rgb[2], alpha], segments)
+        }).collect(),
+        width: number_of(params, "grid_thickness").max(0.0) as f32,
+    }
+}
+
 /// このコマの塊から、Grid → Box → Marker の順に形を組む(comp の座標)。
 pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<ShapeNode> {
     let mut out = Vec::new();
@@ -140,6 +178,19 @@ impl Engine {
             }).collect();
             let texture = self.compositor.upload_rgba16f("motolii-overlay-mask", bytes, w, h)?;
             return Ok(Some((LayerContent::LinearTexture(texture), natural)));
+        }
+        // 3D の格子は焼かず、空間の線のまま view へ(粒子の Plexus と同じ道)。
+        if let Some(depths) = frame.depths.as_ref().filter(|d| !d.is_empty() && switch_of(&frame.params, "grid") && number_of(&frame.params, "grid_mode").round() as i64 == 0) {
+            let links = lattice(&frame.params, &frame.marks, depths, natural);
+            return Ok(Some((LayerContent::Cloud {
+                positions: std::sync::Arc::new(Vec::new()),
+                colors: std::sync::Arc::new(Vec::new()),
+                bounds: crate::render::media::SpatialBounds { min: [0.0, 0.0, 0.0], max: [natural[0], natural[1], 0.0] },
+                point_size: 1.0,
+                sizes: None,
+                sprites: true,
+                links: Some(std::sync::Arc::new(links)),
+            }, natural)));
         }
         let shapes = overlay_shapes(&frame.params, &frame.marks, [f64::from(comp.width), f64::from(comp.height)]);
         if shapes.is_empty() {
@@ -178,6 +229,25 @@ mod tests {
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert!(leaf.stroke.as_ref().and_then(|s| s.dash.as_ref()).is_some_and(|d| d.pattern.len() == 2), "Gap は破線");
         assert!(overlay_shapes(&params(&[("box", Value::F64(0.0))]), &marks, [400.0, 300.0]).is_empty());
+    }
+
+    /// 奥行きの違う物を読むと、奥行きの面ごとの線と、面を貫く柱が立つ。奥行きが 1 つなら柱は無い。
+    #[test]
+    fn a_lattice_stands_sheets_at_the_depths_and_pillars_between_them() {
+        let marks = [
+            BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 },
+            BlobMark { id: 1, center: [300.0, 150.0], size: [40.0, 20.0], age: 0 },
+        ];
+        let p = params(&[("grid", Value::F64(1.0)), ("grid_merge", Value::F64(4.0))]);
+        let segments = |depths: &[f32]| -> Vec<([f32; 3], [f32; 3])> { lattice(&p, &marks, depths, [400.0, 300.0]).levels.into_iter().flat_map(|(_, s)| s).collect() };
+        let flat = segments(&[0.0, 0.0]);
+        assert!(flat.iter().all(|(a, b)| a[2] == b[2]), "one depth: no pillars");
+        assert_eq!(flat.len(), 2 * (4 + 4), "each depth copy carries 4 vertical and 4 horizontal lines");
+        let deep = segments(&[0.0, 500.0]);
+        let pillars: Vec<_> = deep.iter().filter(|(a, b)| a[2] != b[2]).collect();
+        assert_eq!(pillars.len(), 4 * 4, "a pillar at every crossing of an x line and a y line");
+        assert!(pillars.iter().all(|(a, b)| a[2] == 0.0 && b[2] == 500.0), "from the nearest sheet to the farthest");
+        assert!(deep.iter().any(|(a, b)| a[2] == 500.0 && b[2] == 500.0 && a[0] == b[0] && b[1] == 300.0), "the far sheet has its own lines, screen-high");
     }
 
     #[test]

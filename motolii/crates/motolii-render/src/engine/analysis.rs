@@ -152,13 +152,19 @@ impl Engine {
                 // Layers: 絵を読まず、下の層の箱をそのまま塊にする(同じ親で自分より下。Repeater の写しは 1 枚ずつ)。
                 if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
                     let resolved = view.resolved_layers(t).map_err(store)?;
-                    let marks = view.overlay_scope(layer, &resolved, t).map_err(store)?.into_iter().enumerate().map(|(k, (_, b))| BlobMark {
+                    let scope = view.overlay_scope(layer, &resolved, t).map_err(store)?;
+                    let marks = scope.iter().enumerate().map(|(k, (_, b))| BlobMark {
                         id: k as u32,
                         center: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5],
                         size: [b[2] - b[0], b[3] - b[1]],
                         age: 0,
                     }).collect();
-                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone() });
+                    // 3D の格子は物の奥行きも読む(自分の奥行きからの差)。
+                    let own = resolved.iter().find(|l| l.id == layer && l.copy == 0 && !l.ghost);
+                    let depths = own.filter(|l| l.projection == crate::doc::store::LayerProjection::ThreeD).and_then(|l| l.placement.world_transform).map(|w| {
+                        scope.iter().map(|(i, _)| resolved[*i].placement.world_transform.map_or(0.0, |o| o.translation.z) - w.translation.z).collect()
+                    });
+                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths });
                     continue;
                 }
                 (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
@@ -206,7 +212,7 @@ impl Engine {
             }
             let marks = state.marks.get(&frame).cloned().unwrap_or_default();
             if overlay {
-                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params });
+                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None });
             } else {
                 for f in (frame - reach).max(meta.timing.start)..frame {
                     if let (Some(past), Ok(at)) = (state.marks.get(&f), RationalTime::try_from_frame(f, composition.fps)) {
@@ -306,6 +312,8 @@ pub(crate) struct OverlayFrame {
     /// Show Mask の二値(縮めた解析の絵の寸法)。
     pub(crate) mask: Option<(Vec<u8>, u32, u32)>,
     pub(crate) params: Vec<(String, crate::doc::store::Value)>,
+    /// 3D の Found Grid(Layers)が読んだ物ごとの奥行き(`marks` と同じ順、層の奥行きからの差)。2D なら None。
+    pub(crate) depths: Option<Vec<f32>>,
 }
 
 fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
