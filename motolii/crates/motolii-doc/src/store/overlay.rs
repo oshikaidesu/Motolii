@@ -17,6 +17,8 @@ pub const METHODS: &[&str] = &["Motion Detection", "Key Color", "Layers"];
 pub const GRID_MODES: &[&str] = &["Edge", "Cartesian"];
 pub const BOX_SHAPES: &[&str] = &["Rectangle", "Square", "Ellipse", "Circle"];
 pub const MARKER_TYPES: &[&str] = &["Dot", "Plus", "Cross", "Polygon"];
+/// Labels の Display Mode(Tracery 2 の Coordinates / Dimensions と、Motolii の足しの Push = 押された px)。
+pub const LABEL_MODES: &[&str] = &["Coordinates", "Dimensions", "Push"];
 const SWITCH: &[&str] = &["Off", "On"];
 
 const fn number(name: &'static str, label: &'static str, section: &'static str, default: f64, range: (f64, f64)) -> Param {
@@ -76,7 +78,39 @@ const TRACK_OVERLAY_PARAMS: &[Param] = &[
         // Motolii の足し: 近い辺を 1 本にまとめる幅(辺の分布の山の広がり、px)と、物をその線へ引き寄せる強さ(Layers の時)。
         number("grid_merge", "Merge Distance", "Grid", 12.0, (0.0, 2000.0)),
         number("grid_snap", "Snap Strength", "Grid", 0.0, (0.0, 1.0)),
+        // Motolii の足し(Layers の時): 間合いの法で押された物の、いたかった箱と、今の中心への矢印。
+        switch("push", "Push Enabled", "Push", false),
+        color("push_color", "Push Color", "Push", [0.88, 0.23, 0.18, 1.0]),
+        number("push_opacity", "Push Opacity", "Push", 1.0, (0.0, 1.0)),
+        number("push_thickness", "Push Thickness", "Push", 2.0, (0.0, 200.0)),
+        switch("push_dash", "Push Dash", "Push", true),
+        // Tracery 2 の Labels(Display Mode の一部と、Motolii の足しの Push)。
+        switch("label", "Label Enabled", "Labels", false),
+        choice("label_mode", "Display Mode", "Labels", LABEL_MODES, 0.0),
+        color("label_color", "Label Color", "Labels", [0.62, 1.0, 0.24, 1.0]),
+        number("label_opacity", "Label Opacity", "Labels", 0.85, (0.0, 1.0)),
+        number("font_size", "Font Size", "Labels", 18.0, (1.0, 1000.0)),
+        number("label_offset_x", "Offset X", "Labels", 0.0, (-10000.0, 10000.0)),
+        number("label_offset_y", "Offset Y", "Labels", 10.0, (-10000.0, 10000.0)),
     ];
+
+/// Push Trace(2026-09-15 利用者「tracy が人気な理由は、簡単に関係性が可視化されているように見えるから」「ユーザーが触るのはひとつのオブジェクトだけ。旨みの最大値はそれ」):
+/// Track Overlay と同じ欄で、既定だけが違う棚の 1 枚。下の層を拾い(Layers)、押された物ごとに跡・矢印・押された px を描く。
+pub const PUSH_TRACE: &str = "motolii.push_trace";
+const PUSH_TRACE_DEFAULTS: &[(&str, [f64; 4])] = &[
+    ("method", [2.0, 0.0, 0.0, 0.0]),
+    ("box", [1.0, 0.0, 0.0, 0.0]),
+    ("box_stroke_color", [0.95, 0.93, 0.89, 1.0]),
+    ("box_stroke_opacity", [0.6, 0.0, 0.0, 0.0]),
+    ("box_stroke_width", [1.0, 0.0, 0.0, 0.0]),
+    ("box_gap", [1.0, 0.0, 0.0, 0.0]),
+    ("box_gap_size", [0.8, 0.0, 0.0, 0.0]),
+    ("push", [1.0, 0.0, 0.0, 0.0]),
+    ("label", [1.0, 0.0, 0.0, 0.0]),
+    ("label_mode", [2.0, 0.0, 0.0, 0.0]),
+    ("label_color", [0.88, 0.23, 0.18, 1.0]),
+    ("label_opacity", [1.0, 0.0, 0.0, 0.0]),
+];
 
 /// Found Grid(2026-09-15 利用者「かなりおもしろいね、Tracery 的にエフェクトとして足しておこう」): Track Overlay と同じ欄で、
 /// 既定だけが違う棚の 1 枚。下の層の箱を拾い(Layers)、辺から格子を立てる(Grid の Edge)。見つけた線へ物を寄せるのは Snap Strength。
@@ -114,6 +148,7 @@ fn with_overrides(base: &[Param], overrides: &[(&str, [f64; 4])]) -> &'static [P
 pub static KINDS: std::sync::LazyLock<Vec<OverlayKind>> = std::sync::LazyLock::new(|| vec![
     OverlayKind { plugin_id: TRACK_OVERLAY, label: "Track Overlay", params: TRACK_OVERLAY_PARAMS },
     OverlayKind { plugin_id: FOUND_GRID, label: "Found Grid", params: with_overrides(TRACK_OVERLAY_PARAMS, FOUND_GRID_DEFAULTS) },
+    OverlayKind { plugin_id: PUSH_TRACE, label: "Push Trace", params: with_overrides(TRACK_OVERLAY_PARAMS, PUSH_TRACE_DEFAULTS) },
 ]);
 
 /// 効果の値に、その種類の既定を足す(書いていない欄も種類ごとの既定で読めるように)。
@@ -130,7 +165,7 @@ pub fn with_defaults(plugin_id: &str, params: &[(String, Value)]) -> Vec<(String
 }
 
 pub fn is_track_overlay(plugin_id: &str) -> bool {
-    plugin_id == TRACK_OVERLAY || plugin_id == FOUND_GRID
+    plugin_id == TRACK_OVERLAY || plugin_id == FOUND_GRID || plugin_id == PUSH_TRACE
 }
 
 /// 数・選択の欄の値。無い欄は宣言の既定。

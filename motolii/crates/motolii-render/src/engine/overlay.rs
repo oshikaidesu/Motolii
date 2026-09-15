@@ -149,8 +149,66 @@ pub(crate) fn lattice(params: &Params, marks: &[BlobMark], depths: &[f32], comp:
     }
 }
 
-/// このコマの塊から、Grid → Box → Marker の順に形を組む(comp の座標)。
-pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<ShapeNode> {
+/// 押された跡(Push、Layers の時): いたかった箱(今の箱を押された分だけ戻した所)と、そこから今の中心への矢印。
+/// 押されていなければ箱は今の箱に重なり、矢印は長さと一緒に 0 へ縮む(出たり消えたりしない)。
+fn push_shapes(params: &Params, mark: &BlobMark, push: [f32; 2]) -> Vec<ShapeNode> {
+    let c = color_of(params, "push_color");
+    let width = number_of(params, "push_thickness").max(0.0);
+    let stroke = Stroke {
+        brush: Brush::Solid(rgb(c)),
+        width,
+        opacity: number_of(params, "push_opacity").clamp(0.0, 1.0) * c[3],
+        cap: LineCap::Butt,
+        dash: switch_of(params, "push_dash").then(|| Dash { pattern: vec![width * 3.0, width * 2.5], offset: 0.0 }),
+        ..Default::default()
+    };
+    let shift = glam::Vec2::from(push);
+    let now = glam::Vec2::from(mark.center);
+    let was = now - shift;
+    let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
+    let half = glam::Vec2::from(mark.size) * 0.5;
+    let mut path = vec![Contour::closed([p(was - half), p(was + glam::vec2(half.x, -half.y)), p(was + half), p(was + glam::vec2(-half.x, half.y))])];
+    let length = shift.length();
+    if length > 1e-3 {
+        let dir = shift / length;
+        let side = glam::vec2(-dir.y, dir.x);
+        let head = (width as f32 * 6.0).min(length * 0.5);
+        path.push(Contour::open([p(was), p(now)]));
+        path.push(Contour::open([p(now - dir * head + side * head * 0.6), p(now), p(now - dir * head - side * head * 0.6)]));
+    }
+    vec![ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), ops: Vec::new(), fill: None, stroke: Some(stroke) })]
+}
+
+/// 札の書体: 等幅の OS の書体(無ければ OS の既定へ落ちる)。
+fn label_family() -> &'static str {
+    static FAMILY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    FAMILY.get_or_init(|| {
+        let families = crate::doc::vector::text::font_families();
+        ["SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "Noto Sans Mono"].into_iter().find(|f| families.iter().any(|g| g == f)).unwrap_or("").to_owned()
+    })
+}
+
+/// 札(Tracery 2 の Labels): 箱の左下から Offset だけずらして、Display Mode の値を文字の輪郭で。
+fn label_shape(params: &Params, mark: &BlobMark, push: [f32; 2]) -> Option<ShapeNode> {
+    let content = match number_of(params, "label_mode").round() as i64 {
+        0 => format!("{}, {}", mark.center[0].round() as i64, mark.center[1].round() as i64),
+        1 => format!("{} \u{d7} {}", mark.size[0].round() as i64, mark.size[1].round() as i64),
+        _ => format!("{} px", glam::Vec2::from(push).length().round() as i64),
+    };
+    let font = crate::doc::vector::text::GlyphFont { path: String::new(), family: label_family().to_owned() };
+    let shaped = crate::doc::vector::text::shape_text(&content, &font, &crate::doc::vector::text::TextLayout::new(number_of(params, "font_size").max(1.0) as f32)).ok()?;
+    let c = color_of(params, "label_color");
+    let at = [mark.center[0] - mark.size[0] * 0.5 + number_of(params, "label_offset_x") as f32, mark.center[1] + mark.size[1] * 0.5 + number_of(params, "label_offset_y") as f32];
+    Some(self::at(at, 0.0, Shape {
+        source: PathSource::Bezier(shaped.contours),
+        ops: Vec::new(),
+        fill: Some(Fill { brush: Brush::Solid(rgb(c)), opacity: number_of(params, "label_opacity").clamp(0.0, 1.0) * c[3], ..Default::default() }),
+        stroke: None,
+    }))
+}
+
+/// このコマの塊から、Grid → Box → Push → Marker → Labels の順に形を組む(comp の座標)。`pushes` は Layers の時だけ(塊と同じ順)。
+pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], comp: [f64; 2]) -> Vec<ShapeNode> {
     let mut out = Vec::new();
     if switch_of(params, "grid") {
         out.extend(grid_shapes(params, marks, comp));
@@ -158,8 +216,14 @@ pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]
     if switch_of(params, "box") {
         out.extend(marks.iter().filter_map(|m| box_shape(params, m)));
     }
+    if switch_of(params, "push") {
+        out.extend(marks.iter().zip(pushes).flat_map(|(m, p)| push_shapes(params, m, *p)));
+    }
     if switch_of(params, "marker") {
         out.extend(marks.iter().map(|m| marker_shape(params, m)));
+    }
+    if switch_of(params, "label") {
+        out.extend(marks.iter().enumerate().filter_map(|(k, m)| label_shape(params, m, pushes.get(k).copied().unwrap_or([0.0; 2]))));
     }
     out
 }
@@ -192,7 +256,7 @@ impl Engine {
                 links: Some(std::sync::Arc::new(links)),
             }, natural)));
         }
-        let shapes = overlay_shapes(&frame.params, &frame.marks, [f64::from(comp.width), f64::from(comp.height)]);
+        let shapes = overlay_shapes(&frame.params, &frame.marks, &frame.pushes, [f64::from(comp.width), f64::from(comp.height)]);
         if shapes.is_empty() {
             return Ok(None);
         }
@@ -213,22 +277,22 @@ mod tests {
     #[test]
     fn boxes_follow_the_shape_choice_and_markers_are_optional() {
         let marks = [BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 }];
-        let shapes = overlay_shapes(&params(&[]), &marks, [400.0, 300.0]);
+        let shapes = overlay_shapes(&params(&[]), &marks, &[], [400.0, 300.0]);
         assert_eq!(shapes.len(), 1, "既定は箱だけ");
         let ShapeNode::Group(g) = &shapes[0] else { panic!() };
         assert_eq!((g.transform.position.x, g.transform.position.y), (100.0, 50.0));
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert_eq!(leaf.source, PathSource::Rectangle { size: Point { x: 40.0, y: 20.0 } });
-        let circle = overlay_shapes(&params(&[("box_shape", Value::F64(3.0)), ("marker", Value::F64(1.0))]), &marks, [400.0, 300.0]);
+        let circle = overlay_shapes(&params(&[("box_shape", Value::F64(3.0)), ("marker", Value::F64(1.0))]), &marks, &[], [400.0, 300.0]);
         assert_eq!(circle.len(), 2, "箱 + 印");
         let ShapeNode::Group(g) = &circle[0] else { panic!() };
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert_eq!(leaf.source, PathSource::Ellipse { size: Point { x: 40.0, y: 40.0 } }, "Circle は長辺の円");
-        let gapped = overlay_shapes(&params(&[("box_gap", Value::F64(1.0))]), &marks, [400.0, 300.0]);
+        let gapped = overlay_shapes(&params(&[("box_gap", Value::F64(1.0))]), &marks, &[], [400.0, 300.0]);
         let ShapeNode::Group(g) = &gapped[0] else { panic!() };
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert!(leaf.stroke.as_ref().and_then(|s| s.dash.as_ref()).is_some_and(|d| d.pattern.len() == 2), "Gap は破線");
-        assert!(overlay_shapes(&params(&[("box", Value::F64(0.0))]), &marks, [400.0, 300.0]).is_empty());
+        assert!(overlay_shapes(&params(&[("box", Value::F64(0.0))]), &marks, &[], [400.0, 300.0]).is_empty());
     }
 
     /// 奥行きの違う物を読むと、奥行きの面ごとの線と、面を貫く柱が立つ。奥行きが 1 つなら柱は無い。
@@ -250,13 +314,31 @@ mod tests {
         assert!(deep.iter().any(|(a, b)| a[2] == 500.0 && b[2] == 500.0 && a[0] == b[0] && b[1] == 300.0), "the far sheet has its own lines, screen-high");
     }
 
+    /// Push Trace の既定: 押された物に、いたかった箱と矢印と「N px」の札。押されていない物には跡の箱だけ(矢印は無い)。
+    #[test]
+    fn a_push_trace_draws_where_each_thing_wanted_to_be_and_how_far_it_went() {
+        let marks = [
+            BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 },
+            BlobMark { id: 1, center: [300.0, 150.0], size: [40.0, 20.0], age: 0 },
+        ];
+        let p = crate::doc::store::overlay::with_defaults(crate::doc::store::overlay::PUSH_TRACE, &[("box", Value::F64(0.0))].map(|(n, v)| (n.to_owned(), v)));
+        let shapes = overlay_shapes(&p, &marks, &[[30.0, -40.0], [0.0, 0.0]], [400.0, 300.0]);
+        let paths: Vec<&Vec<Contour>> = shapes.iter().filter_map(|n| match n { ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), stroke: Some(_), .. }) => Some(path), _ => None }).collect();
+        assert_eq!(paths.len(), 2, "one trace per thing");
+        assert_eq!(paths[0].len(), 3, "pushed: the wanted box, the shaft and the head");
+        assert_eq!((paths[0][0].vertices[0].point.x, paths[0][0].vertices[0].point.y), (50.0, 80.0), "the wanted box is the box moved back by the push");
+        assert_eq!(paths[1].len(), 1, "not pushed: only the box, lying on the thing");
+        let labels = shapes.iter().filter(|n| matches!(n, ShapeNode::Group(_))).count();
+        assert_eq!(labels, 2, "a label for each thing (50 px, 0 px)");
+    }
+
     #[test]
     fn an_edge_grid_raises_one_line_per_edge_across_the_screen() {
         let marks = [
             BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 },
             BlobMark { id: 1, center: [102.0, 150.0], size: [40.0, 20.0], age: 0 },
         ];
-        let grid = overlay_shapes(&params(&[("box", Value::F64(0.0)), ("grid", Value::F64(1.0)), ("grid_merge", Value::F64(10.0))]), &marks, [400.0, 300.0]);
+        let grid = overlay_shapes(&params(&[("box", Value::F64(0.0)), ("grid", Value::F64(1.0)), ("grid_merge", Value::F64(10.0))]), &marks, &[], [400.0, 300.0]);
         assert_eq!(grid.len(), 8, "left, right, top, bottom of each box");
         let xs: Vec<f64> = grid.iter().filter_map(|n| match n {
             ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), .. }) if path[0].vertices[0].point.x == path[0].vertices[1].point.x => Some(path[0].vertices[0].point.x),

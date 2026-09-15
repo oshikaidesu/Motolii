@@ -143,3 +143,6 @@
 - 試験: `a_push_trace_shows_where_it_wanted_to_be_and_a_readout_reads_how_far`
 - 見本 `make_way_readout.js`(スクラッチ、渋谷の窓): 群衆の窓が膨らみ、周りがどく。窓・跡・矢印は跳び 0。跳ぶのは読み取りの文字の箱の幅だけ(桁が増える時。数字は離散が意味)
 - 次の候補: 付いて置く札の引き出し線、場の効き具合、並びの番号、カメラの的
+- **棚の Push Trace(提案)**: 利用者「ユーザーが触るのはひとつのオブジェクトだけでしょうか。旨みの最大値はそれ」。物ごとに跡・札の層を足すのをやめ、Track Overlay と同じ欄の表で既定だけ違う 1 枚(Found Grid と同じ型)にした。下の層を全部読み(Layers)、Push 節(いたかった箱・矢印)と Tracery 2 の Labels 節(Display Mode: Coordinates / Dimensions / Push)を描く。触るのは動かす 1 つだけ
+- 試験: `a_push_trace_draws_where_each_thing_wanted_to_be_and_how_far_it_went`
+- 見本 `scramble.js`(スクラッチ、紙の地に渋谷の窓 12 枚、赤い窓 1 つが横切る): 跳び 0・尖り 0

@@ -164,7 +164,8 @@ impl Engine {
                     let depths = own.filter(|l| l.projection == crate::doc::store::LayerProjection::ThreeD).and_then(|l| l.placement.world_transform).map(|w| {
                         scope.iter().map(|(i, _)| resolved[*i].placement.world_transform.map_or(0.0, |o| o.translation.z) - w.translation.z).collect()
                     });
-                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths });
+                    let pushes = scope.iter().map(|(i, _)| view.pushed_on_screen(resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
+                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths, pushes });
                     continue;
                 }
                 (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
@@ -212,7 +213,7 @@ impl Engine {
             }
             let marks = state.marks.get(&frame).cloned().unwrap_or_default();
             if overlay {
-                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None });
+                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None, pushes: Vec::new() });
             } else {
                 for f in (frame - reach).max(meta.timing.start)..frame {
                     if let (Some(past), Ok(at)) = (state.marks.get(&f), RationalTime::try_from_frame(f, composition.fps)) {
@@ -314,6 +315,8 @@ pub(crate) struct OverlayFrame {
     pub(crate) params: Vec<(String, crate::doc::store::Value)>,
     /// 3D の Found Grid(Layers)が読んだ物ごとの奥行き(`marks` と同じ順、層の奥行きからの差)。2D なら None。
     pub(crate) depths: Option<Vec<f32>>,
+    /// Layers が読んだ物ごとの押されたずれ(comp の向き、`marks` と同じ順)。塊を読む時は空。
+    pub(crate) pushes: Vec<[f32; 2]>,
 }
 
 fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {

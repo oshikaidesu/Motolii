@@ -185,6 +185,15 @@ impl StoreView<'_> {
         Ok(Some(path))
     }
 
+    /// 物が押されたずれ(移り方を混ぜた後)を、comp の向きで(Push Trace が画面の箱と並べて読む)。
+    pub fn pushed_on_screen(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+        let mut shift = glam::Vec2::from(self.nudge(layer, t)?);
+        if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent {
+            shift = self.world_2d(parent, t)?.transform_vector2(shift);
+        }
+        Ok(shift.to_array())
+    }
+
     /// 物が押されたずれ(移り方を混ぜた後)を、`from` の親の空間の向きで。
     pub(crate) fn push_seen_from(&self, target: LayerId, from: LayerId, t: RationalTime) -> Result<glam::Vec2, StoreError> {
         let mut shift = glam::Vec2::from(self.nudge(target, t)?);
