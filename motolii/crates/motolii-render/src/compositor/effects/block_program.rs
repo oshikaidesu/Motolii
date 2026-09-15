@@ -108,7 +108,7 @@ pub(crate) fn neighbors(items: &[BlockItem], reach: f32) -> (Vec<u32>, Vec<u32>)
 /// 作者も外枠も同じ型と束ねを読む。
 pub(crate) const PRELUDE: &str = "struct Item { lo: vec2f, hi: vec2f, room_lo: vec2f, room_size: vec2f, radius: f32, group: u32, margin: f32, weight: f32 };\n\
 struct Offset { translate: vec2f, rotate: f32, scale: f32 };\n\
-struct BlockHost { time: f32, members: u32, objects: u32, round: u32 };\n\
+struct BlockHost { time: f32, members: u32, objects: u32, round: u32, source: u32 };\n\
 @group(0) @binding(0) var<storage, read> objects: array<Item>;\n\
 @group(0) @binding(1) var<storage, read> state_in: array<Offset>;\n\
 @group(0) @binding(2) var<uniform> host: BlockHost;\n\
@@ -232,6 +232,12 @@ impl BlockProgram {
 
     /// 掛かった物(`members`)に `rounds` 回掛ける。毎回、前の state を読み、写してから書く(掛からない物はそのまま)。
     pub(crate) fn record(&self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, world: &mut BlockWorld, time: f32, members: &[u32], params: &[f32]) {
+        self.record_from(device, queue, encoder, world, time, members, params, u32::MAX);
+    }
+
+    /// 場(`SCOPE: room`)は元の物の番号を `host.source` で渡す。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_from(&self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, world: &mut BlockWorld, time: f32, members: &[u32], params: &[f32], source: u32) {
         if members.is_empty() || world.count == 0 {
             return;
         }
@@ -248,12 +254,13 @@ impl BlockProgram {
         let bytes = u64::from(world.count) * OFFSET_BYTES;
         for round in 0..self.rounds {
             // uniform は submit 前の最後の書き込みが勝つので、回ごとに違う host は別の小さな buffer で渡す。
-            let host = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-host"), size: 16, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-            let mut h = [0u8; 16];
+            let host = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-host"), size: 32, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            let mut h = [0u8; 32];
             h[0..4].copy_from_slice(&time.to_le_bytes());
             h[4..8].copy_from_slice(&(members.len() as u32).to_le_bytes());
             h[8..12].copy_from_slice(&world.count.to_le_bytes());
             h[12..16].copy_from_slice(&round.to_le_bytes());
+            h[16..20].copy_from_slice(&source.to_le_bytes());
             queue.write_buffer(&host, 0, &h);
             let (from, to) = (world.current, 1 - world.current);
             encoder.copy_buffer_to_buffer(&world.states[from], 0, &world.states[to], 0, bytes);

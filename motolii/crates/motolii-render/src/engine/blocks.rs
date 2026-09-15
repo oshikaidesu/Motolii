@@ -16,6 +16,8 @@ pub(crate) struct BlockBatch {
     plugin: String,
     params: Vec<f32>,
     members: Vec<u32>,
+    /// 場(`SCOPE: room`)の元の物の番号。掛かった層そのものが動くブロックは `u32::MAX`。
+    source: u32,
 }
 
 /// 書類から先に読む、物ごとの住む箱と箱。
@@ -26,6 +28,8 @@ struct Placed {
     own: [f32; 4],
     group: u32,
     weight: f32,
+    /// 書類の間合い(CSS の margin)。物同士はこれだけ空けて当たる。
+    margin: f32,
 }
 
 #[derive(Default)]
@@ -40,6 +44,12 @@ pub(crate) struct BlockState {
     follows: HashMap<LayerId, LayerId>,
     /// 物の番号 → 層(付いて行く対を番号にする)。
     object_layers: Vec<LayerId>,
+    /// 場が立っている住む箱の組(そこに居る物は、効果を持たなくても動く物として並べる)。
+    field_rooms: std::collections::HashSet<u32>,
+    /// 壁を持つ住む箱の組(`Overflow = Bounce`)。中の物は最後に箱の中へ折り返される。
+    wall_rooms: std::collections::HashSet<u32>,
+    /// 場の元(物の番号)と、その効果の順・欄。動く相手は物が揃ってから決める。
+    fields: Vec<(usize, String, Vec<f32>, u32)>,
     objects: Vec<BlockItem>,
     bases: Vec<([f32; 3], [f32; 3])>,
     batches: Vec<BlockBatch>,
@@ -50,17 +60,40 @@ impl Engine {
     pub(super) fn prepare_blocks(&mut self, view: &StoreView<'_>, comp: CompSpec, t: RationalTime, resolved: &[ResolvedLayer]) -> Result<(), EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         let blocks: Vec<String> = self.compositor.catalog.definitions.iter().filter(|d| d.manifest.stage == IsfStage::Block).map(|d| d.plugin_id().to_owned()).collect();
+        let field_blocks: Vec<String> = self.compositor.catalog.definitions.iter()
+            .filter(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room)
+            .map(|d| d.plugin_id().to_owned()).collect();
         let state = &mut self.blocks;
         state.placed.clear();
         state.follows.clear();
         state.object_layers.clear();
+        state.field_rooms.clear();
+        state.wall_rooms.clear();
+        state.fields.clear();
         state.objects.clear();
         state.bases.clear();
         state.batches.clear();
         if blocks.is_empty() {
             return Ok(());
         }
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost && l.effects.iter().any(|e| blocks.contains(&e.plugin_id))) {
+        // 場が立っている住む箱を先に見る: その箱に居る物は、効果を持たなくても場に動かされる。
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost && l.effects.iter().any(|e| field_blocks.contains(&e.plugin_id))) {
+            let parent = view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent;
+            state.field_rooms.insert(parent.map_or(0, |p| p.0 as u32));
+        }
+        let field_rooms = state.field_rooms.clone();
+        let in_field_room = |view: &StoreView<'_>, id: LayerId| -> Result<bool, EngineError> {
+            let parent = view.attrs(id).map_err(store)?.unwrap_or_default().parent;
+            Ok(field_rooms.contains(&parent.map_or(0, |p| p.0 as u32)))
+        };
+        let mut wanted = Vec::new();
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            if layer.effects.iter().any(|e| blocks.contains(&e.plugin_id)) || in_field_room(view, layer.id)? {
+                wanted.push(layer.id);
+            }
+        }
+        let state = &mut self.blocks;
+        for layer in resolved.iter().filter(|l| wanted.contains(&l.id)) {
             let frame = ([0.0, 0.0, comp.width as f32, comp.height as f32], 0.0);
             let parent = view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent;
             let room = match parent {
@@ -85,7 +118,22 @@ impl Engine {
                 Some(Value::F64(v)) => v.max(0.0) as f32,
                 _ => 1.0,
             };
-            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight });
+            // 壁は箱の持ち物(`Overflow = Bounce`)。GPU はその法の速い解き手で、物ごとの効果は要らない(提案 2026-09-16)。
+            if let Some(parent) = parent {
+                let wall = match view.value_at(parent, &PropertyId::new(crate::doc::store::layout::OVERFLOW).map_err(store)?, t).map_err(store)? {
+                    Some(Value::Enum(v)) => v == 2,
+                    Some(Value::F64(v)) => v.round() as i64 == 2,
+                    _ => false,
+                };
+                if wall {
+                    state.wall_rooms.insert(parent.0 as u32);
+                }
+            }
+            let margin = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::MARGIN).map_err(store)?, t).map_err(store)? {
+                Some(Value::F64(v)) => v.max(0.0) as f32,
+                _ => 0.0,
+            };
+            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin });
         }
         // 付いて置く札の相手がブロックで動くなら、札も物として並べて付いて行かせる(CSS の transform を読まない anchor() とは違う、利用者 2026-09-15「付いていく方が自然」)。
         let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
@@ -103,7 +151,7 @@ impl Engine {
                 state.follows.insert(layer.id, target);
                 if !state.placed.contains_key(&layer.id) {
                     let own = view.layer_box(layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
-                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0 });
+                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0 });
                 }
             }
         }
@@ -117,7 +165,7 @@ impl Engine {
         if size.x <= 0.0 || size.y <= 0.0 {
             return;
         }
-        let chain: Vec<(String, Vec<f32>)> = layer.effects.iter().filter_map(|e| {
+        let chain: Vec<(String, Vec<f32>, bool)> = layer.effects.iter().filter_map(|e| {
             let d = self.compositor.catalog.definitions.iter().find(|d| d.manifest.stage == IsfStage::Block && d.plugin_id() == e.plugin_id)?;
             let params = d.manifest.param_inputs().map(|input| {
                 e.params.iter().find(|(n, _)| n == &input.name).and_then(|(_, v)| match v {
@@ -126,9 +174,9 @@ impl Engine {
                     _ => None,
                 }).unwrap_or(input.default[0])
             }).collect();
-            Some((e.plugin_id.clone(), params))
+            Some((e.plugin_id.clone(), params, d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room))
         }).collect();
-        if chain.is_empty() && !self.blocks.follows.contains_key(&layer.id) {
+        if chain.is_empty() && !self.blocks.follows.contains_key(&layer.id) && !self.blocks.field_rooms.contains(&placed.group) {
             return;
         }
         let m = built.placement.transform;
@@ -151,15 +199,20 @@ impl Engine {
             room_size: [placed.room[2] - placed.room[0], placed.room[3] - placed.room[1]],
             radius: placed.radius,
             group: placed.group,
-            margin: 0.0,
+            margin: placed.margin,
             weight: placed.weight,
         });
         state.bases.push((world(glam::Vec2::X), world(glam::Vec2::Y)));
         state.object_layers.push(layer.id);
-        for (stage, (plugin, params)) in chain.into_iter().enumerate() {
-            match state.batches.iter_mut().find(|b| b.stage == stage && b.plugin == plugin && b.params == params) {
+        for (stage, (plugin, params, is_field)) in chain.into_iter().enumerate() {
+            if is_field {
+                // 場は元。動く相手(同じ住む箱の他の全員)は、物が全部揃ってから決める。
+                state.fields.push((stage, plugin, params, k));
+                continue;
+            }
+            match state.batches.iter_mut().find(|b| b.stage == stage && b.plugin == plugin && b.params == params && b.source == u32::MAX) {
                 Some(batch) => batch.members.push(k),
-                None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k] }),
+                None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX }),
             }
         }
     }
@@ -170,6 +223,35 @@ impl Engine {
         if state.objects.is_empty() {
             self.compositor.motion = None;
             return;
+        }
+        // 場の相手: 元と同じ住む箱に居る、元でない物 全員。
+        for (stage, plugin, params, source) in std::mem::take(&mut state.fields) {
+            let group = state.objects[source as usize].group;
+            let members: Vec<u32> = state.objects.iter().enumerate()
+                .filter(|(k, it)| *k as u32 != source && it.group == group)
+                .map(|(k, _)| k as u32).collect();
+            if members.is_empty() {
+                continue;
+            }
+            state.batches.push(BlockBatch { stage, plugin, params, members, source });
+        }
+        // 物同士の当たりは既定(利用者 2026-09-16「お互いの箱にぶつかるとかの方がよく使う」)。場の立つ箱では、
+        // 場の後に、重なった物を書類の間合い(Margin)だけ空くまで押し合う。
+        let stage = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
+        let touching: Vec<u32> = state.objects.iter().enumerate()
+            .filter(|(_, it)| state.field_rooms.contains(&it.group))
+            .map(|(k, _)| k as u32).collect();
+        if !touching.is_empty() {
+            state.batches.push(BlockBatch { stage, plugin: "motolii.push_apart".into(), params: vec![0.0], members: touching, source: u32::MAX });
+        }
+        // 壁は箱が頼んだ時だけ(`Overflow = Bounce`)。既定ではない。
+        if !state.wall_rooms.is_empty() {
+            let members: Vec<u32> = state.objects.iter().enumerate()
+                .filter(|(_, it)| state.wall_rooms.contains(&it.group))
+                .map(|(k, _)| k as u32).collect();
+            if !members.is_empty() {
+                state.batches.push(BlockBatch { stage: stage + 1, plugin: "motolii.bounce_block".into(), params: vec![1.0], members, source: u32::MAX });
+            }
         }
         let ctx = &self.compositor.ctx;
         // 近くの物の升目は、ブロックが宣言した届く距離(`REACH` の欄)の一番大きい値だけ広げる。
@@ -191,7 +273,7 @@ impl Engine {
                     *source = definition.vertex_text.clone();
                     *program = BlockProgram::new(&ctx.device, &batch.plugin, source, definition.manifest.rounds);
                 }
-                program.record(&ctx.device, &ctx.queue, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params);
+                program.record_from(&ctx.device, &ctx.queue, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params, batch.source);
             }
         }
         let index_of = |id: LayerId| state.object_layers.iter().position(|l| *l == id).map(|k| k as u32);
@@ -268,6 +350,61 @@ mod tests {
             let (ce, ca) = (centre(&e), centre(&a));
             assert!((ce.0 - ca.0).abs() < 1.0 && (ce.1 - ca.1).abs() < 1.0, "frame {frame}: cpu centre {ce:?}, gpu centre {ca:?}");
         }
+    }
+
+    /// 場(`SCOPE: room`)は、掛かった層でなく**同じ住む箱に居る他の全員**を動かす。相手は効果を 1 枚も持たない。
+    #[test]
+    fn a_field_moves_everyone_in_its_room_who_carries_no_effect() {
+        let fps = Fps::try_new(30, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 60, background: [0.0; 4] })).unwrap();
+        let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
+        let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
+        let square = |size: f32, fill: Rgb| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size as f64, y: size as f64 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(fill), ..Default::default() }) });
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 60) } },
+            Intent::SetAttrs { layer: group, patch: two_d.clone() },
+            Intent::AddLayer(ball),
+            Intent::SetMeta { layer: ball, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 60) } },
+            Intent::SetAttrs { layer: ball, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d.clone() } },
+            Intent::SetShapes { layer: ball, shapes: vec![square(16.0, Rgb { r: 1.0, g: 1.0, b: 1.0 })] },
+            Intent::AddLayer(field),
+            Intent::SetMeta { layer: field, meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(0, None, 60) } },
+            Intent::SetAttrs { layer: field, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d } },
+            Intent::SetShapes { layer: field, shapes: vec![square(4.0, Rgb { r: 1.0, g: 0.0, b: 0.0 })] },
+        ]).unwrap();
+        let put = |doc: &mut Document, layer, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, group, property::POSITION, Value::Vec2([10.0, 10.0]));
+        put(&mut doc, group, layout::DISPLAY, Value::Enum(1));
+        put(&mut doc, group, layout::HORIZONTAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::VERTICAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::WIDTH, Value::F64(120.0));
+        put(&mut doc, group, layout::HEIGHT, Value::F64(70.0));
+        for layer in [ball, field] {
+            put(&mut doc, layer, layout::POSITION_TYPE, Value::Enum(1));
+        }
+        put(&mut doc, ball, property::POSITION, Value::Vec2([30.0, 15.0]));
+        put(&mut doc, field, property::POSITION, Value::Vec2([100.0, 15.0]));
+        // 平行(形 0)の場を下(+90°)へ、強さ 40: 1 秒で 0.5 * 40 * 1² = 20px 下がる。
+        doc.apply(Intent::SetEffects { layer: field, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.field".into() }] }).unwrap();
+        for (name, value) in [("shape", 0.0), ("angle", 90.0), ("strength", 40.0), ("reach", 0.0)] {
+            doc.apply(Intent::SetConstant { layer: field, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(value) }).unwrap();
+        }
+        let mut engine = Engine::new().unwrap();
+        // 白い四角(場の元は赤)の真ん中。
+        let centre = |pixels: &[u8]| {
+            let hits: Vec<(f32, f32)> = pixels.chunks_exact(4).enumerate()
+                .filter(|(_, c)| c[3] > 128 && c[2] > 128)
+                .map(|(i, _)| ((i as u32 % W) as f32, (i as u32 / W) as f32)).collect();
+            let n = hits.len().max(1) as f32;
+            (hits.len(), hits.iter().map(|p| p.0).sum::<f32>() / n, hits.iter().map(|p| p.1).sum::<f32>() / n)
+        };
+        let (n0, x0, y0) = centre(&engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap());
+        let (n1, x1, y1) = centre(&engine.render_frame(&doc.view(), RationalTime::try_from_frame(30, fps).unwrap()).unwrap());
+        assert!(n0 > 100 && n1 > 100, "白い四角が両方のコマに在る ({n0} / {n1} px)");
+        assert!((x1 - x0).abs() < 1.0, "横には動かない ({x0} → {x1})");
+        assert!((y1 - y0 - 20.0).abs() < 1.5, "1 秒で 20px 下がる ({y0} → {y1})");
     }
 
     /// Push Apart を GPU のブロックにしても、書類の間合いの押し合い(CPU、32 回)と同じだけ押す。

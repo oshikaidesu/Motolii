@@ -215,6 +215,19 @@ pub struct IsfManifest {
     pub rounds: u32,
     /// 箱のブロックが箱の外どこまで他の物を読むかを決める欄(`"REACH"`、fx の `PADDING` と同じ型)。近くの物の升目をその分広げる。
     pub reach: Option<String>,
+    /// 箱のブロックが誰を動かすか(`"SCOPE"`)。既定(`"members"`)は掛かった層そのもの。
+    /// `"room"` なら掛かった層は**元**になり、動くのは同じ住む箱に居る他の全員(場: 重力・風・引き寄せ・渦。提案 2026-09-16)。
+    pub scope: IsfScope,
+}
+
+/// 箱のブロックが誰を動かすか。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IsfScope {
+    /// 掛かった層そのものが動く。
+    #[default]
+    Members,
+    /// 掛かった層は元(`host.source`)で、同じ住む箱の他の全員が動く。
+    Room,
 }
 
 impl Default for IsfManifest {
@@ -237,6 +250,7 @@ impl Default for IsfManifest {
             passes: Vec::new(),
             rounds: 1,
             reach: None,
+            scope: IsfScope::Members,
         }
     }
 }
@@ -479,6 +493,10 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             passes,
             rounds: value.get("ROUNDS").and_then(|v| v.as_u64()).map_or(1, |r| r.clamp(1, 256) as u32),
             reach: value.get("REACH").and_then(|v| v.as_str()).map(str::to_owned),
+            scope: match value.get("SCOPE").and_then(|v| v.as_str()) {
+                Some("room") => IsfScope::Room,
+                _ => IsfScope::Members,
+            },
         },
         body,
     ))
