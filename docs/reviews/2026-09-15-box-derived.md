@@ -10,3 +10,10 @@
 - Target を Hold で替えると、Camera 層の **Transition** で、注視点・奥行き・Distance の対数を区間の重みで混ぜて箱から箱へ移る(Camera の欄に Transition Duration / Easing を出す)
 - 見本 `camera_frames.js`(格子に並べたカードの板を、カメラが 01 → 03 → 06 → 08 → 05 → 02 と渡り、最後に板全体を収める): 跳び 0・尖り 0(物差しにカメラの注視点と距離を足した)
 - 試験: `framing_size_fits_the_target_box_on_screen_and_follows_it`
+
+## 2. 変形の中心を箱の割合で
+
+- 先例: CSS の **transform-origin**(キーワード top left / center / bottom right …)。AE では Motion Tools の「アンカーを角へ」で 1 回きり動かし、中身が変わるとずれる
+- すべての物に **Transform Origin**(Anchor / Top Left / Top / Top Right / Left / Center / Right / Bottom Left / Bottom / Bottom Right)。Anchor は書いた px のまま、他は毎コマ層の箱から解く。並ぶ子も同じ(書いていなければ今どおり箱の中心)
+- Motolii の Position は中心が居る場所なので、Bottom Left なら左下の角が Position に居続け、文字が伸びても、大きさを変えても、角から伸びる
+- 試験: `a_transform_origin_keeps_its_corner_on_the_position_as_the_box_grows`

@@ -50,6 +50,9 @@ pub const FLEX_SHRINK: &str = "layout.flex_shrink";
 /// 解いた行き先が変わった時の移り方(CSS の transition)。秒と、区間の形。
 pub const TRANSITION_DURATION: &str = "layout.transition_duration";
 pub const TRANSITION_EASING: &str = "layout.transition_easing";
+/// 変形の中心を箱の割合で(CSS の transform-origin のキーワード)。Anchor は書いた px のまま、他は毎コマ層の箱から解く:
+/// 文字が伸びても Bottom Left なら左下の角が Position に居続け、そこを中心に拡大・回転する。
+pub const TRANSFORM_ORIGIN: &str = "layout.transform_origin";
 /// 移り方を始めるまでの遅れ(CSS の transition-delay)。
 pub const TRANSITION_DELAY: &str = "layout.transition_delay";
 /// 並べる容器が子の移り方の遅れを配る(GSAP の stagger の amount と from)。遅れ = Stagger × 起点からの距離 / 容器の最大の距離。
@@ -149,6 +152,7 @@ pub const SPACE_ROWS: &[Row] = &[
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
     (TRANSITION_DELAY, "Transition Delay", Value::F64(0.0), Some((0.0, 60.0)), &[]),
+    (TRANSFORM_ORIGIN, "Transform Origin", Value::Enum(0), None, &["Anchor", "Top Left", "Top", "Top Right", "Left", "Center", "Right", "Bottom Left", "Bottom", "Bottom Right"]),
     (SHAPE_OUTSIDE, "Shape Outside", Value::Enum(0), None, &["None", "Margin Box", "Content"]),
     (SHAPE_MARGIN, "Shape Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (POSITION_ANCHOR, "Position Anchor", Value::LayerId(0), None, &[]),
@@ -803,7 +807,7 @@ impl StoreView<'_> {
     /// 書いた値だけの層の変換(並べた結果・押し合いのずれを含まない)。
     fn authored_local(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
         Ok(crate::doc::core::LayerPlacement::from_transform(
-            self.pair(layer, property::ANCHOR, [0.0, 0.0], t)?,
+            self.free_anchor(layer, t)?,
             self.resolve_position(layer, t)?,
             self.pair(layer, property::SCALE, [1.0, 1.0], t)?,
             self.number(layer, property::ROTATION, 0.0, t)? as f32,
@@ -1081,8 +1085,34 @@ impl StoreView<'_> {
         }
     }
 
-    /// 並ぶ子の拡縮・回転の中心。Anchor を書いた層はその値、書いていなければ箱の中心(CSS の transform-origin)。
+    /// Transform Origin が Anchor 以外なら、箱の中のその点(素材座標)。
+    pub(crate) fn origin_in(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<Option<[f32; 2]>, StoreError> {
+        let origin = self.choice(layer, TRANSFORM_ORIGIN, t)?;
+        if origin <= 0 {
+            return Ok(None);
+        }
+        let (col, row) = ((origin - 1) % 3, (origin - 1) / 3);
+        let at = |k: i64, lo: f32, hi: f32| lo + (hi - lo) * k as f32 * 0.5;
+        Ok(Some([at(col, bounds[0], bounds[2]), at(row, bounds[1], bounds[3])]))
+    }
+
+    /// 並ばない層の中心: Transform Origin があれば箱から、無ければ Anchor の値。
+    pub(crate) fn free_anchor(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+        if self.choice(layer, TRANSFORM_ORIGIN, t)? > 0 {
+            if let Some(b) = self.layer_box(layer, t)? {
+                if let Some(origin) = self.origin_in(layer, t, b)? {
+                    return Ok(origin);
+                }
+            }
+        }
+        self.pair(layer, property::ANCHOR, [0.0, 0.0], t)
+    }
+
+    /// 並ぶ子の拡縮・回転の中心。Transform Origin があれば箱の中のその点、Anchor を書いた層はその値、書いていなければ箱の中心(CSS の transform-origin)。
     fn item_anchor(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<[f32; 2], StoreError> {
+        if let Some(origin) = self.origin_in(layer, t, bounds)? {
+            return Ok(origin);
+        }
         Ok(match self.value_at(layer, &PropertyId::new(property::ANCHOR)?, t)? {
             Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32],
             _ => [(bounds[0] + bounds[2]) * 0.5, (bounds[1] + bounds[3]) * 0.5],
@@ -1817,6 +1847,26 @@ mod tests {
         put(&mut doc, card, SNAP_TO_GRID, Value::F64(0.5));
         let half = shown(&doc, card, T);
         assert!((half[0] - (free[0] + snapped[0]) * 0.5).abs() < 0.5, "half strength goes half way");
+    }
+
+    #[test]
+    fn a_transform_origin_keeps_its_corner_on_the_position_as_the_box_grows() {
+        let mut doc = blank_project();
+        let card = add(&mut doc, 1, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: card, shapes: vec![rect_shape([255; 4], [100.0, 60.0])] }).unwrap();
+        put(&mut doc, card, property::POSITION, Value::Vec2([400.0, 300.0]));
+        put(&mut doc, card, TRANSFORM_ORIGIN, Value::Enum(7));
+        let b = shown(&doc, card, T);
+        assert!((b[0] - 400.0).abs() <= 1.01 && (b[3] - 300.0).abs() <= 1.01, "Bottom Left: that corner sits on the Position: {b:?}");
+        put(&mut doc, card, property::SHAPE_SIZE, Value::Vec2([300.0, 200.0]));
+        let grown = shown(&doc, card, T);
+        assert!((grown[0] - 400.0).abs() <= 1.01 && (grown[3] - 300.0).abs() <= 1.01, "the box grows up and to the right, the corner stays: {grown:?}");
+        put(&mut doc, card, property::SCALE, Value::Vec2([2.0, 2.0]));
+        let scaled = shown(&doc, card, T);
+        assert!((scaled[0] - 400.0).abs() <= 1.01 && (scaled[3] - 300.0).abs() <= 1.01 && (scaled[2] - scaled[0] - 600.0).abs() < 1.0, "and scaling grows from that corner: {scaled:?}");
+        put(&mut doc, card, TRANSFORM_ORIGIN, Value::Enum(5));
+        let centred = shown(&doc, card, T);
+        assert!(((centred[0] + centred[2]) * 0.5 - 400.0).abs() <= 1.01, "Center: the middle sits on the Position: {centred:?}");
     }
 
     #[test]
