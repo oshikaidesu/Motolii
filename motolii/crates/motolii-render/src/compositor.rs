@@ -437,6 +437,8 @@ pub struct Compositor {
     /// 同じ matte を、生成器の出力 format ごとに組んだ物(生成器を素材の alpha に閉じ込める)。
     pub(crate) coverage_programs: std::collections::HashMap<wgpu::TextureFormat, effects::EffectProgram>,
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
+    /// このコマの箱のブロックが GPU に書いた、物ごとの world のずれ(view の設定に差す)。
+    pub(crate) motion: Option<re_renderer::MotionBuffer>,
     pub(crate) sequential_submits: u64,
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
     pub(crate) pending: Vec<wgpu::CommandBuffer>,

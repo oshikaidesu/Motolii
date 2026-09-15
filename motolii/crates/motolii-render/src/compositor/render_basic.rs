@@ -88,6 +88,7 @@ impl Compositor {
                 },
                 pixels_per_point: 1.0,
                 blend_with_background: BlendWithBackground::Premultiplied,
+                motion: self.motion.clone(),
                 ..Default::default()
             },
             re_renderer::ViewBuilderId::new(self.next_readback),

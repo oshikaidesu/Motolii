@@ -9,7 +9,8 @@ use super::isf::IsfManifest;
 /// 欄の slot の数(uniform の `array<vec4f, 6>`)。
 pub(crate) const PARAM_SLOTS: usize = 24;
 
-/// 1 つの物の箱。座標は親の空間。`room_*` は住む箱(Bounce の壁、並べる Group の箱)。
+/// 1 つの物の箱。座標は comp(描く時と同じ置き方)。`room_*` は住む箱(Bounce の壁、並べる Group の箱)。
+/// `index` は描く側の motion の番号(0 始まり)、`world_u` / `world_v` は comp の 1px が world でどちら向きにどれだけか。
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct BlockItem {
@@ -19,7 +20,8 @@ pub struct BlockItem {
     pub room_size: [f32; 2],
     pub radius: f32,
     pub index: u32,
-    pub _pad: [f32; 2],
+    pub world_u: [f32; 3],
+    pub world_v: [f32; 3],
 }
 
 /// 物ごとのずれ(位置の差・回転の差(度)・大きさの倍率)。
@@ -31,15 +33,22 @@ pub struct BlockOffset {
     pub scale: f32,
 }
 
-/// 箱の並びを storage buffer の byte に(`Item` の 48 byte、WGSL の並びと同じ)。
+/// 1 つの物の byte(WGSL の `Item` と同じ並び、80 byte)。
+const ITEM_BYTES: u64 = 80;
+
+/// 箱の並びを storage buffer の byte に。
 fn item_bytes(items: &[BlockItem]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(items.len() * 48);
+    let mut out = Vec::with_capacity(items.len() * ITEM_BYTES as usize);
+    let mut put = |v: f32, out: &mut Vec<u8>| out.extend_from_slice(&v.to_le_bytes());
     for it in items {
         for v in [it.lo[0], it.lo[1], it.hi[0], it.hi[1], it.room_lo[0], it.room_lo[1], it.room_size[0], it.room_size[1], it.radius] {
-            out.extend_from_slice(&v.to_le_bytes());
+            put(v, &mut out);
         }
         out.extend_from_slice(&it.index.to_le_bytes());
         out.extend_from_slice(&[0u8; 8]);
+        for v in [it.world_u[0], it.world_u[1], it.world_u[2], 0.0, it.world_v[0], it.world_v[1], it.world_v[2], 0.0] {
+            put(v, &mut out);
+        }
     }
     out
 }
@@ -59,13 +68,14 @@ pub(crate) fn module_source(manifest: &IsfManifest, body: &str) -> Result<String
         return Err(format!("block の欄は {PARAM_SLOTS} 個まで"));
     }
     let mut out = String::from(
-        "struct Item { lo: vec2f, hi: vec2f, room_lo: vec2f, room_size: vec2f, radius: f32, index: u32, _pad: vec2f };\n\
+        "struct Item { lo: vec2f, hi: vec2f, room_lo: vec2f, room_size: vec2f, radius: f32, index: u32, _pad: vec2f, world_u: vec4f, world_v: vec4f };\n\
          struct Offset { translate: vec2f, rotate: f32, scale: f32 };\n\
          struct BlockHost { time: f32, count: u32, _pad: vec2f };\n\
          @group(0) @binding(0) var<storage, read> items: array<Item>;\n\
          @group(0) @binding(1) var<storage, read_write> offsets: array<Offset>;\n\
          @group(0) @binding(2) var<uniform> host: BlockHost;\n\
          @group(0) @binding(3) var<uniform> block_params: array<vec4f, 6>;\n\
+         @group(0) @binding(4) var<storage, read_write> motion: array<vec4f>;\n\
          const NO_OFFSET: Offset = Offset(vec2f(0.0), 0.0, 1.0);\n\n",
     );
     out.push_str("struct BlockParams {\n");
@@ -80,7 +90,8 @@ pub(crate) fn module_source(manifest: &IsfManifest, body: &str) -> Result<String
     let args: Vec<String> = if names.is_empty() { vec!["0.0".into()] } else { (0..names.len()).map(|s| format!("block_params[{}][{}]", s / 4, s % 4)).collect() };
     out.push_str(&format!(
         "\n\n@compute @workgroup_size(64)\nfn motolii_block_main(@builtin(global_invocation_id) gid: vec3u) {{\n    \
-         let i = gid.x;\n    if i >= host.count {{ return; }}\n    offsets[i] = block(i, BlockParams({}));\n}}\n",
+         let i = gid.x;\n    if i >= host.count {{ return; }}\n    let o = block(i, BlockParams({}));\n    offsets[i] = o;\n    \
+         let it = items[i];\n    if it.index < arrayLength(&motion) {{ motion[it.index] = vec4f(it.world_u.xyz * o.translate.x + it.world_v.xyz * o.translate.y, 0.0); }}\n}}\n",
         args.join(", ")
     ));
     Ok(out)
@@ -124,7 +135,7 @@ impl BlockProgram {
             ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
             count: None,
         };
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some(label), entries: &[storage(0, true), storage(1, false), uniform(2), uniform(3)] });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some(label), entries: &[storage(0, true), storage(1, false), uniform(2), uniform(3), storage(4, false)] });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some(label), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(label),
@@ -138,13 +149,14 @@ impl BlockProgram {
         Self { pipeline, layout, capacity: 0, items: None, offsets: None, host: uniform_buffer(16), params: uniform_buffer(96) }
     }
 
-    /// 箱の並びと欄を書き、計算を記録する。結果は `offsets()` の buffer に残る(描く側が読み戻さずに束ねる)。
-    pub(crate) fn record(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, time: f32, items: &[BlockItem], params: &[f32]) {
+    /// 箱の並びと欄を書き、計算を記録する。親の空間のずれは `offsets()` に、world のずれは `motion` の `index` 番に書く
+    /// (描く側が読み戻さずに束ねる)。
+    pub(crate) fn record(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, time: f32, items: &[BlockItem], params: &[f32], motion: &wgpu::Buffer) {
         let count = items.len().max(1) as u64;
         if count > self.capacity {
             let capacity = count.next_power_of_two();
             let buffer = |size: u64, usage| device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block"), size, usage, mapped_at_creation: false });
-            self.items = Some(buffer(capacity * 48, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST));
+            self.items = Some(buffer(capacity * ITEM_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST));
             self.offsets = Some(buffer(capacity * 16, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC));
             self.capacity = capacity;
         }
@@ -169,6 +181,7 @@ impl BlockProgram {
                 wgpu::BindGroupEntry { binding: 1, resource: offset_buffer.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: self.host.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: self.params.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: motion.as_entire_binding() },
             ],
         });
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("motolii-block"), timestamp_writes: None });
@@ -187,7 +200,8 @@ impl BlockProgram {
 #[cfg(test)]
 pub(crate) fn run_and_read(device: &wgpu::Device, queue: &wgpu::Queue, program: &mut BlockProgram, time: f32, items: &[BlockItem], params: &[f32]) -> Vec<BlockOffset> {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-test") });
-    program.record(device, queue, &mut encoder, time, items, params);
+    let motion = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-test-motion"), size: (items.len().max(1) * 16) as u64, usage: wgpu::BufferUsages::STORAGE, mapped_at_creation: false });
+    program.record(device, queue, &mut encoder, time, items, params, &motion);
     let bytes = (items.len() * 16) as u64;
     let staging = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-read"), size: bytes, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
     encoder.copy_buffer_to_buffer(program.offsets().unwrap(), 0, &staging, 0, bytes);
@@ -238,7 +252,7 @@ mod tests {
             let w = 10.0 + next() * 60.0;
             let x = m - 800.0 + next() * 2400.0;
             let y = m - 800.0 + next() * 2400.0;
-            items.push(BlockItem { lo: [x, y], hi: [x + w, y + w], room_lo: [m, m], room_size: size, radius, index, _pad: [0.0; 2] });
+            items.push(BlockItem { lo: [x, y], hi: [x + w, y + w], room_lo: [m, m], room_size: size, radius, index, world_u: [1.0, 0.0, 0.0], world_v: [0.0, 1.0, 0.0] });
         }
         let gpu = run_and_read(device, queue, &mut program, 0.0, &items, &[1.0]);
         let error = pollster::block_on(scope.pop());

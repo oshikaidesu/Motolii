@@ -319,20 +319,27 @@ impl Engine {
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         if self.feedback_replaying {
-            return self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents);
+            self.prepare_blocks(view, comp, t, resolved)?;
+            let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+            self.run_blocks(t);
+            return Ok(layers);
         }
         self.compositor.feedback_set_revision(view.revision_key());
         self.feedback_keys_seen.clear();
+        self.prepare_blocks(view, comp, t, resolved)?;
         let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
         let seen = std::mem::take(&mut self.feedback_keys_seen);
         if !self.replay_feedback(view, comp, camera, projection_camera, t, &seen)? {
+            self.run_blocks(t);
             return Ok(layers);
         }
         // 辿り直しで状態が動いた: 焼いた絵は辿り直す前の物なので捨て、t をもう一度組む。
         let c = &mut self.compositor;
         c.baked_effects.clear(&mut c.effect_scratch);
         self.stamp_clock(view, t);
+        self.prepare_blocks(view, comp, t, resolved)?;
         let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+        self.run_blocks(t);
         self.feedback_keys_seen.clear();
         Ok(layers)
     }
@@ -1017,12 +1024,14 @@ impl Engine {
     ) -> Result<Option<Layer>, EngineError> {
         if let Some((id, frame, built)) = previous {
             if *id == layer.id && *frame == layer.source_frame && layer.copy > 0 && !layer.flatten && !matches!(layer.source, LayerSource::Text | LayerSource::Shape) {
-                return Ok(Some(Layer { placement: layer.placement, blend_mode, ..built.clone() }));
+                let mut shared = Layer { placement: layer.placement, blend_mode, ..built.clone() };
+                self.attach_block(layer, &mut shared, comp);
+                return Ok(Some(shared));
             }
         }
         let built = self.build_layer(layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)?;
         *previous = built.clone().map(|built| (layer.id, layer.source_frame, built));
-        Ok(built)
+        Ok(built.map(|mut built| { self.attach_block(layer, &mut built, comp); built }))
     }
 
     /// 素材を取り、平面化と mask まで済ませた 1 枚。素材が無ければ None。

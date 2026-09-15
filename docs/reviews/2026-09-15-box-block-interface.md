@@ -93,3 +93,11 @@ block(t, params, items, world) -> outputs
 - 1 本目 `vism/bounce.wgsl`(欄 Strength)。試験: 4000 個の箱で GPU の結果が doc の `layout::bounced` と 0.05px 以内 `the_bounce_block_folds_boxes_like_the_cpu_law`、棚に段 Block で並ぶ `a_block_sits_on_the_shelf_like_an_effect`
 - 踏んだ天井: device の上限を選択の枠の分だけ小さく借りていた(storage buffer 1 本・64 KiB・workgroup 16)。adapter の範囲で広げた(8 本・1 GiB・256)
 - まだ: 描く所へ届いていない(試験だけ読み戻す)。次の段で fork の頂点の口(`motolii_field`)が物ごとのずれの buffer を読む。書類の Bounce(CPU)はその後に消す
+
+## 2 番の後半: 読み戻さずに描く所まで(2026-09-15、実装)
+
+- fork(`03801b1c`): `TargetConfiguration::motion`(物ごとの world のずれの storage buffer、全体の束ねの binding 11)。欄の最後(`params[23]`)が n > 0 の物は、網・板 2 つの頂点の段で n − 1 番のずれだけ動く。`MotionBuffer::new(ctx, 個数)` で Motolii が pool から借りて計算シェーダーで書く
+- Motolii: `engine/blocks.rs`。層を組む前に住む箱(親の Group の箱を comp で)と物の箱(書類の `layer_box`)を集め、`build_layer` の後に描く時と同じ置き方で comp の箱と comp → world の向きを出して並べ、24 個目の欄に番号を入れる。組み終えたらブロックの種類と欄の値ごとに計算シェーダーを回し、view の設定 5 か所に buffer を差す。fx の hook の欄は 23 個まで(1 つ空けた)
+- 試験: `the_bounce_block_draws_where_the_cpu_bounce_does`(Overflow = Bounce の CPU と、子に Bounce のブロックの GPU を 4 コマ描き、四角の中心が 1px 以内)
+- 踏んだ物: 形の素材の枠は縁のにじみの余白で 2px 大きい → 書類の `layer_box` を読む
+- 今の限り: 住む箱は comp で軸に沿う(親を回すと違う)。ブロックはつながらない(1 つの物に 1 本)。鏡の中の写し(反射)と選択の枠・当たり判定はずれを知らない。書類の CPU の Bounce はまだ残している

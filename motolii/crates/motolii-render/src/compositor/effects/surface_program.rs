@@ -13,7 +13,9 @@ use super::VismDefinition;
 use crate::doc::store::ResolvedEffect;
 
 /// instance が hook へ渡せる float の数(頂点属性 16 か所の上限、法線行列を shader で出して 6 本)(fork の `GpuMeshInstance::params`)。
+/// 最後の 1 個は箱のブロックの motion の番号(fork が頂点の段で読む)なので、hook の欄は `HOOK_SLOTS` まで。
 pub(crate) const PARAM_SLOTS: usize = 24;
+pub(crate) const HOOK_SLOTS: usize = PARAM_SLOTS - 1;
 
 /// 場が板を動かす時の格子の細かさ(一辺の升の数)。板は四角 1 枚では 4 隅しか動かせないので、
 /// mesh の頂点と同じ密さで動けるよう割る。場を持たない層は割らない(既定の 1 = 三角形 2 枚)。
@@ -93,8 +95,8 @@ fn snippet(def: &VismDefinition, stage: EffectStage, offset: usize) -> String {
 pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>) -> Result<SurfaceProgramDesc, String> {
     let field_count = field.map_or(0, |d| d.manifest.param_inputs().count());
     let surface_count = surface.map_or(0, |d| d.manifest.param_inputs().count());
-    if field_count + surface_count > PARAM_SLOTS {
-        return Err(format!("hook の欄が合わせて {PARAM_SLOTS} 個を越える"));
+    if field_count + surface_count > HOOK_SLOTS {
+        return Err(format!("hook の欄が合わせて {HOOK_SLOTS} 個を越える"));
     }
     Ok(SurfaceProgramDesc {
         label: format!("{}+{}", field.map_or("-", |d| d.plugin_id()), surface.map_or("-", |d| d.plugin_id())),
@@ -118,7 +120,7 @@ pub(crate) fn params(effects: &[ResolvedEffect], field: Option<&VismDefinition>,
                     _ => None,
                 })
                 .unwrap_or(input.default[0]);
-            if slot < PARAM_SLOTS {
+            if slot < HOOK_SLOTS {
                 out[slot] = value;
             }
             slot += 1;

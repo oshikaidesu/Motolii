@@ -101,6 +101,7 @@ impl Compositor {
             blend_with_background: BlendWithBackground::Premultiplied,
             environment: environment.map(|e| e.environment.clone()),
             light_capture: true,
+            motion: self.motion.clone(),
             ..Default::default()
         };
         let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture)
@@ -631,6 +632,7 @@ impl Compositor {
                     pixels_per_point: 1.0,
                     blend_with_background: BlendWithBackground::Premultiplied,
                     environment: environment.map(|e| e.environment.clone()),
+                    motion: self.motion.clone(),
                     ..Default::default()
                 };
                 let mut builder = ViewBuilder::new_with_external_resolved(

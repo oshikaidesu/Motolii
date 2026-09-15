@@ -154,6 +154,7 @@ impl Compositor {
                     solo_config.near_fade_distance = camera.near_fade;
                 }
                 solo_config.scene_reflection = reflection.clone();
+                solo_config.motion = self.motion.clone();
                 solo_config.light = light.clone();
                 self.surface_work.main_runs += 1;
                 if input.shading.reads_backdrop {
@@ -276,6 +277,7 @@ impl Compositor {
                 config.near_fade_distance = camera.near_fade;
             }
             config.scene_reflection = reflection.clone();
+            config.motion = self.motion.clone();
             config.light = light.clone();
             self.surface_work.main_runs += 1;
 

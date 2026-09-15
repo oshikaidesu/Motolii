@@ -20,6 +20,7 @@ mod material;
 pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 mod translate;
+mod blocks;
 mod frozen;
 
 use crate::doc::core::ResolvedCamera;
@@ -140,6 +141,8 @@ pub struct Engine {
     freezing: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
+    /// 箱のブロックの GPU の道と、このコマに集めた箱。
+    blocks: blocks::BlockState,
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
     outline_layers: Vec<LayerId>,
     /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
@@ -214,6 +217,7 @@ impl Engine {
             frozen: Default::default(),
             freezing: None,
             feedback_keys_seen: Vec::new(),
+            blocks: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
@@ -281,6 +285,7 @@ impl Engine {
             frozen: Default::default(),
             freezing: None,
             feedback_keys_seen: Vec::new(),
+            blocks: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
