@@ -57,3 +57,9 @@ Pexels(無料・クレジット不要。写っている人を悪く描かない�
 ## 既に作った例(同日)
 
 `ui/native/src/editor/script/examples/`: `bento.js`、`grid_squash.js`、`swiss_grid.js`(Overflow Clip と文字の Fill)、`depth_cards.js`(奥へ積む)。スクラッチの `swiss3d.js`(3D の物をセルに収めたスイス・ポスター)は、絵として面白くなかった記録として残す。
+
+## 砂場とレゴ(2026-09-15 利用者)
+
+- Cavalry は粒(砂場)、Motolii はブロック(レゴ)。建築の民衆化。ポッチ = 箱(全部の物が箱を持ち、関係は箱でつながる)、ブロック = 意図の 1 枚、揃いはポッチの規格から勝手に出る。プリセットは説明書つきのセット(本体ではない)
+- 利用者「たまたま css の抽象化で箱を得ていた」「cavalry の凄みであるグリッドは相互関係により生まれるもので、その間の抽象化は箱。ずっと web の持ち物だったが、web にはデコードや 3D の負荷の天井があった」
+- Motolii の居場所: web の箱の関係(Flex / Grid / anchor / container query を taffy で)を、天井の無い復号と 3D(rerun の描く道)と時間の上に置く
