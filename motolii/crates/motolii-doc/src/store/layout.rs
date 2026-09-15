@@ -109,6 +109,8 @@ pub const DASH_OFFSET: &str = "connect.dash_offset";
 /// 1 つの箱をなぞる形(`Connect From` だけを持つ時): 外枠(CSS の outline)・角の掴み(Figma の選択)・対角線・内接円・画面を横切る補助線。
 pub const TRACE: &str = "connect.trace";
 pub const HANDLE_SIZE: &str = "connect.handle_size";
+pub const READOUT: &str = "readout.kind";
+pub const READOUT_OF: &str = "readout.of";
 /// 並びに効く回転(visionOS の rotation3DLayout): 回した物の軸に沿った箱で並べる。層の Rotation / Tilt は見た目だけ。
 pub const LAYOUT_ROTATION: &str = "layout.rotation";
 pub const LAYOUT_TILT_X: &str = "layout.tilt_x";
@@ -209,8 +211,14 @@ pub const CONNECT_ROWS: &[Row] = &[
     (DASH, "Dash", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_GAP, "Dash Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_OFFSET, "Dash Offset", Value::F64(0.0), None, &[]),
-    (TRACE, "Trace", Value::Enum(0), None, &["None", "Outline", "Handles", "Diagonals", "Circle", "Guides", "Grid"]),
+    (TRACE, "Trace", Value::Enum(0), None, &["None", "Outline", "Handles", "Diagonals", "Circle", "Guides", "Grid", "Push"]),
     (HANDLE_SIZE, "Handle Size", Value::F64(10.0), Some((0.0, 10000.0)), &[]),
+];
+
+/// 文字が関係の値を読む(提案 2026-09-15、先例 AE の Source Text の expression と Figma の寸法の札): 文字の `#` を相手の値に置き換える(`#` が無ければ全部)。
+pub const READOUT_ROWS: &[Row] = &[
+    (READOUT, "Readout", Value::Enum(0), None, &["None", "Push", "Width", "Height"]),
+    (READOUT_OF, "Readout Of", Value::LayerId(0), None, &[]),
 ];
 
 /// 格子の線の太さの既定(fr)。
@@ -223,7 +231,7 @@ pub fn track_label(property: &str) -> Option<String> {
 }
 
 pub fn row(property: &str) -> Option<&'static Row> {
-    GROUP_ROWS.iter().chain(ITEM_ROWS).chain(SPACE_ROWS).chain(CONNECT_ROWS).find(|row| row.0 == property)
+    GROUP_ROWS.iter().chain(ITEM_ROWS).chain(SPACE_ROWS).chain(CONNECT_ROWS).chain(READOUT_ROWS).find(|row| row.0 == property)
 }
 
 pub fn choices(property: &str) -> &'static [&'static str] {
@@ -1978,6 +1986,51 @@ mod tests {
         put(&mut doc, trace, MARGIN, Value::F64(6.0));
         let frame = doc.view().layout_frame(T).unwrap();
         assert!(frame.nudges.is_empty() && frame.nudges_z.is_empty(), "the trace and its box overlap by design: nobody moves");
+    }
+
+    /// 押された跡(Trace = Push)と、押された量を読む文字(Readout = Push): 跡の箱は書いた場所、矢印は今の中心へ、文字は押された px。
+    #[test]
+    fn a_push_trace_shows_where_it_wanted_to_be_and_a_readout_reads_how_far() {
+        let mut doc = blank_project();
+        let a = add(&mut doc, 1, LayerSource::Shape, None);
+        let b = add(&mut doc, 2, LayerSource::Shape, None);
+        for (layer, x) in [(a, 300.0), (b, 360.0)] {
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+            put(&mut doc, layer, MARGIN, Value::F64(5.0));
+            put(&mut doc, layer, property::POSITION, Value::Vec2([x, 300.0]));
+            doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch { projection: Some(crate::doc::store::LayerProjection::TwoD), ..Default::default() } }).unwrap();
+        }
+        let trace = add(&mut doc, 3, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: trace, shapes: vec![rect_shape([255; 4], [10.0, 10.0])] }).unwrap();
+        put(&mut doc, trace, CONNECT_FROM, Value::LayerId(b.0));
+        put(&mut doc, trace, TRACE, Value::Enum(7));
+        let view = doc.view();
+        let pushed = glam::Vec2::from(view.nudge(b, T).unwrap());
+        assert!(pushed.x > 10.0, "b is pushed right, away from a: {pushed:?}");
+        let (lo, hi) = view.box_seen_from(b, trace, T).unwrap().unwrap();
+        let path = view.trace_path(trace, T).unwrap().unwrap();
+        assert_eq!(path.len(), 3, "the wanted box, the shaft and the head");
+        let ghost: Vec<glam::Vec2> = path[0].vertices.iter().map(|v| glam::vec2(v.point.x as f32, v.point.y as f32)).collect();
+        assert!((ghost[0] - (lo - pushed)).length() < 0.01, "the wanted box is the box moved back by the push: {ghost:?} {lo:?}");
+        let tip = path[1].vertices[1].point;
+        assert!((glam::vec2(tip.x as f32, tip.y as f32) - (lo + hi) * 0.5).length() < 0.01, "the arrow ends at the centre of where it is");
+        drop(view);
+
+        let reader = add(&mut doc, 4, LayerSource::Text, None);
+        let mut track = ContentTrack::new();
+        track.insert(ContentKeyframe { t: T, content: "# px".to_owned() });
+        let style = TextDocumentStyle {
+            id: TextStyleId(0),
+            font: FontRef { path: String::new(), fingerprint: None, family: "Helvetica".to_owned(), style: String::new() },
+            size: 48.0, fill: [1.0; 4], line_height: None, tracking: 0.0, axes: vec![], features: vec![],
+        };
+        doc.apply(Intent::SetTextDocument { layer: reader, document: TextDocument {
+            content: track, justify: TextJustify::Left, wrap_size: None, styles: vec![style], slot_id: None, ranges: vec![], alignment: Default::default(), runs: vec![],
+        } }).unwrap();
+        put(&mut doc, reader, READOUT, Value::Enum(1));
+        put(&mut doc, reader, READOUT_OF, Value::LayerId(b.0));
+        let text = doc.view().resolved_text_document(reader, T).unwrap().unwrap();
+        assert_eq!(text.content.eval(T), format!("{} px", pushed.length().round() as i64), "the # becomes the push in px");
     }
 
     #[test]

@@ -199,6 +199,17 @@ impl<'a> StoreView<'a> {
         let Some(mut document) = self.text_document(layer)? else {
             return Ok(None);
         };
+        // Readout: 文字の `#` を関係の値に(`#` が無ければ全部)。1 つの書体の文字として組み直す。
+        if let Some(value) = self.readout(layer, t)? {
+            let written = document.content.eval(t);
+            let content = if written.contains('#') { written.replace('#', &value) } else { value };
+            let mut track = crate::doc::store::text::ContentTrack::new();
+            track.insert(crate::doc::store::text::ContentKeyframe { t: RationalTime::ZERO, content: content.clone() });
+            document.content = track;
+            if let Some(style) = document.runs.first().map(|r| r.style) {
+                document.runs = vec![crate::doc::store::text::TextRun { len: unicode_segmentation::UnicodeSegmentation::graphemes(content.as_str(), true).count() as u32, style }];
+            }
+        }
 
         let justify_property = PropertyId::text_justify();
         match self.value_at(layer, &justify_property, t)? {

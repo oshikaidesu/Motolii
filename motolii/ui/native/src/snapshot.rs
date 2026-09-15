@@ -389,6 +389,9 @@ impl EditorRuntime{
             if meta.source == LayerSource::Camera {
                 for row in layout::SPACE_ROWS.iter().filter(|r| matches!(r.0, layout::TRANSITION_DURATION | layout::TRANSITION_EASING)) { push(&mut properties, id, row)?; }
             }
+            if meta.source == LayerSource::Text {
+                for row in layout::READOUT_ROWS { push(&mut properties, id, row)?; }
+            }
             if meta.source == LayerSource::Shape {
                 for row in layout::CONNECT_ROWS { push(&mut properties, id, row)?; }
                 // 線の太さ(`shape.stroke_width`、書類の線の太さが既定)。つなぐ線・なぞる形の細さもこれで決める。

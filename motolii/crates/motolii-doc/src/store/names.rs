@@ -111,7 +111,7 @@ pub fn label(property: &str) -> Option<Cow<'static, str>> {
 /// 番号の無い属性の名前を全部(窓へ 1 回渡し、Inspector の見出しもここから引く)。
 pub fn fixed() -> impl Iterator<Item = (&'static str, &'static str)> {
     FIXED.iter().copied().chain(p::CAMERA_ROWS.iter().map(|row| (row.0, row.1))).chain(crate::doc::store::particles::ROWS.iter().map(|row| (row.0, row.1)))
-        .chain(crate::doc::store::layout::GROUP_ROWS.iter().chain(crate::doc::store::layout::ITEM_ROWS).chain(crate::doc::store::layout::SPACE_ROWS).chain(crate::doc::store::layout::CONNECT_ROWS).map(|row| (row.0, row.1)))
+        .chain(crate::doc::store::layout::GROUP_ROWS.iter().chain(crate::doc::store::layout::ITEM_ROWS).chain(crate::doc::store::layout::SPACE_ROWS).chain(crate::doc::store::layout::CONNECT_ROWS).chain(crate::doc::store::layout::READOUT_ROWS).map(|row| (row.0, row.1)))
 }
 
 /// 表に載っているはずの名前。無ければ内部の id を窓に出してしまうので、呼ぶ側は test で塞ぐ。

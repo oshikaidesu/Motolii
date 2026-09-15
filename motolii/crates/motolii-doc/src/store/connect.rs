@@ -10,7 +10,7 @@ use std::cell::RefCell;
 
 use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
-use crate::doc::store::layout::{CONNECT_FROM, CONNECT_TO, DASH, DASH_GAP, DASH_OFFSET, FROM_SIDE, HANDLE_SIZE, LINE_PATH, MARGIN, SLACK, TO_SIDE, TRACE};
+use crate::doc::store::layout::{CONNECT_FROM, CONNECT_TO, DASH, DASH_GAP, DASH_OFFSET, FROM_SIDE, HANDLE_SIZE, LINE_PATH, MARGIN, READOUT, READOUT_OF, SLACK, TO_SIDE, TRACE};
 use crate::doc::store::{LayerId, PropertyId, ShapeNode, StoreError, StoreView};
 use crate::doc::vector::{Contour, Dash, PathSource, Point, Vertex};
 
@@ -110,10 +110,13 @@ impl StoreView<'_> {
     }
 
     /// なぞる形の輪郭(線の層の親の空間)。
-    fn trace_path(&self, layer: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+    pub(crate) fn trace_path(&self, layer: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
         let Some((target, kind)) = self.tracing(layer, t)? else { return Ok(None) };
         if kind == 6 {
             return self.trace_grid(layer, target, t);
+        }
+        if kind == 7 {
+            return self.trace_push(layer, target, t);
         }
         let Some((lo, hi)) = self.box_seen_from(target, layer, t)? else { return Ok(None) };
         let m = self.number(layer, MARGIN, 0.0, t)? as f32;
@@ -159,6 +162,63 @@ impl StoreView<'_> {
             }
             _ => vec![rect(lo, hi)],
         }))
+    }
+
+    /// 押された跡(提案 2026-09-15、利用者「tracy が人気な理由は、簡単に関係性が可視化されているように見えるから」):
+    /// 間合いの法で押された物の、書いた場所の箱(押される前にいたかった所)と、そこから今の箱の中心への矢印。
+    /// 押されていなければ跡の箱は今の箱に重なり、矢印は長さと一緒に 0 へ縮む(出たり消えたりしない)。
+    fn trace_push(&self, layer: LayerId, target: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+        let Some((lo, hi)) = self.box_seen_from(target, layer, t)? else { return Ok(None) };
+        let shift = self.push_seen_from(target, layer, t)?;
+        let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
+        let (was_lo, was_hi) = (lo - shift, hi - shift);
+        let mut path = vec![Contour::closed([p(was_lo), p(glam::vec2(was_hi.x, was_lo.y)), p(was_hi), p(glam::vec2(was_lo.x, was_hi.y))])];
+        let (from, to) = ((was_lo + was_hi) * 0.5, (lo + hi) * 0.5);
+        let length = shift.length();
+        if length > 1e-3 {
+            let dir = shift / length;
+            let head = (self.number(layer, HANDLE_SIZE, 10.0, t)? as f32).min(length * 0.5);
+            let side = glam::vec2(-dir.y, dir.x);
+            path.push(Contour::open([p(from), p(to)]));
+            path.push(Contour::open([p(to - dir * head + side * head * 0.6), p(to), p(to - dir * head - side * head * 0.6)]));
+        }
+        Ok(Some(path))
+    }
+
+    /// 物が押されたずれ(移り方を混ぜた後)を、`from` の親の空間の向きで。
+    pub(crate) fn push_seen_from(&self, target: LayerId, from: LayerId, t: RationalTime) -> Result<glam::Vec2, StoreError> {
+        let mut shift = glam::Vec2::from(self.nudge(target, t)?);
+        if let Some(parent) = self.attrs(target)?.unwrap_or_default().parent {
+            shift = self.world_2d(parent, t)?.transform_vector2(shift);
+        }
+        if let Some(parent) = self.attrs(from)?.unwrap_or_default().parent {
+            shift = self.world_2d(parent, t)?.inverse().transform_vector2(shift);
+        }
+        Ok(shift)
+    }
+
+    /// 文字が読む関係の値(`Readout`)。読まなければ None。
+    pub(crate) fn readout(&self, layer: LayerId, t: RationalTime) -> Result<Option<String>, StoreError> {
+        let kind = self.choice(layer, READOUT, t)?;
+        if kind <= 0 {
+            return Ok(None);
+        }
+        let target = match self.value_at(layer, &PropertyId::new(READOUT_OF)?, t)? {
+            Some(Value::LayerId(id)) if id != 0 && id != layer.0 => LayerId(id),
+            Some(Value::F64(v)) if v >= 1.0 && v.round() as u64 != layer.0 => LayerId(v.round() as u64),
+            _ => return Ok(None),
+        };
+        if !self.layers().contains(&target) {
+            return Ok(None);
+        }
+        let value = match kind {
+            1 => self.push_seen_from(target, target, t)?.length(),
+            _ => {
+                let Some((lo, hi)) = self.box_seen_from(target, target, t)? else { return Ok(None) };
+                if kind == 2 { hi.x - lo.x } else { hi.y - lo.y }
+            }
+        };
+        Ok(Some(format!("{}", value.round() as i64)))
     }
 
     /// Grid の Group の升目の線(列と行の始まりと終わり、升目の端から端まで)。Grid でなければ何も描かない。
