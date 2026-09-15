@@ -213,6 +213,8 @@ pub struct IsfManifest {
     pub passes: Vec<IsfPass>,
     /// 箱のブロック(`STAGE: block`)を何回続けて解くか(`"ROUNDS"`、押し合いのように少しずつ解く物)。
     pub rounds: u32,
+    /// 箱のブロックが箱の外どこまで他の物を読むかを決める欄(`"REACH"`、fx の `PADDING` と同じ型)。近くの物の升目をその分広げる。
+    pub reach: Option<String>,
 }
 
 impl Default for IsfManifest {
@@ -234,6 +236,7 @@ impl Default for IsfManifest {
             inputs: Vec::new(),
             passes: Vec::new(),
             rounds: 1,
+            reach: None,
         }
     }
 }
@@ -475,6 +478,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             inputs,
             passes,
             rounds: value.get("ROUNDS").and_then(|v| v.as_u64()).map_or(1, |r| r.clamp(1, 256) as u32),
+            reach: value.get("REACH").and_then(|v| v.as_str()).map(str::to_owned),
         },
         body,
     ))

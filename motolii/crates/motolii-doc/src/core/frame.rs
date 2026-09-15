@@ -208,7 +208,7 @@ pub struct CompSpec {
 pub struct LayerPlacement {
     pub transform: glam::Affine2,
     pub world_transform: Option<glam::Affine3A>,
-    pub order: i16,
+    pub order: i32,
     pub opacity: f32,
     pub z: f32,
     pub rotation_x: f32,

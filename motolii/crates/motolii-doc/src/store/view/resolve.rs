@@ -527,7 +527,7 @@ impl<'a> StoreView<'a> {
                 transform,
                 world_transform: world_transforms.get(&layer).copied(),
                 opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
-                order: meta.order,
+                order: i32::from(meta.order),
                 z: scalar(property::POSITION_Z, 0.0)? + self.laid_out(layer, t)?.map_or(0.0, |slot| slot.z),
                 rotation_x: scalar(property::ROTATION_X, 0.0)? + self.laid_out(layer, t)?.map_or(0.0, |slot| slot.rotation[0]),
                 rotation_y: scalar(property::ROTATION_Y, 0.0)? as f32 + self.laid_out(layer, t)?.map_or(0.0, |slot| slot.rotation[1]),
@@ -966,7 +966,7 @@ impl<'a> StoreView<'a> {
                 }
                 copy.copy = placement.index;
                 if let Some(slot) = copies_slot {
-                    copy.placement.order = slot;
+                    copy.placement.order = i32::from(slot);
                 }
                 copy.shape_stretch = outline;
                 copy.placement.transform =
@@ -1232,7 +1232,7 @@ impl<'a> StoreView<'a> {
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
         // 描き順は並べた順の番号(同じ order の写し同士を描く側の同点に委ねると、描き順が揺れる)。
         for (rank, layer) in out.iter_mut().enumerate() {
-            layer.placement.order = i16::try_from(rank).unwrap_or(i16::MAX);
+            layer.placement.order = i32::try_from(rank).unwrap_or(i32::MAX);
         }
         Ok(out)
     }
@@ -1324,7 +1324,7 @@ impl<'a> StoreView<'a> {
 
     /// 並べる Group の背景は子孫の一番奥の、さらに 1 つ下に積む(同じ番号だと描き順の鍵が同点になる)。
     fn put_backgrounds_behind(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
-        let mut deepest: HashMap<LayerId, i16> = HashMap::new();
+        let mut deepest: HashMap<LayerId, i32> = HashMap::new();
         for layer in out.iter() {
             let mut seen = HashSet::from([layer.id]);
             let mut next = self.attrs(layer.id)?.unwrap_or_default().parent;
@@ -1621,7 +1621,7 @@ mod clipping_contract {
         let resolved = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
         let drawn: Vec<(LayerId, u32)> = resolved.iter().filter(|l| l.id != group).map(|l| (l.id, l.copy)).collect();
         assert_eq!(drawn, vec![(ink, 0), (paper, 1), (ink, 2), (paper, 3)], "ink, paper, ink, paper from the bottom up");
-        let orders: Vec<i16> = resolved.iter().map(|l| l.placement.order).collect();
+        let orders: Vec<i32> = resolved.iter().map(|l| l.placement.order).collect();
         assert!(orders.windows(2).all(|w| w[0] < w[1]), "and each is drawn at its own step, never a tie: {orders:?}");
     }
 

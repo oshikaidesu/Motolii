@@ -407,7 +407,7 @@ impl Compositor {
                                 input.opacity,
                                 alpha,
                             ),
-                            depth_offset: if capture { 0 } else { input.depth_offset },
+                            depth_offset: if capture { 0 } else { input.depth_offset.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16 },
                             clip: input
                                 .clip
                                 .map_or(ClipPlane::NONE, |c| c.world_for_rect(corner, u, v)),
@@ -765,11 +765,11 @@ fn draw_order(input: &SequentialInput<'_>) -> re_renderer::renderer::DrawOrder {
         return DrawOrder { layer: i32::from(input.depth_offset), ..Default::default() };
     }
     match input.placement.plane {
-        Some(point) => DrawOrder { position: Some(glam::Vec3A::from(point)), secondary: Some(f32::from(input.depth_offset)), ..Default::default() },
+        Some(point) => DrawOrder { position: Some(glam::Vec3A::from(point)), secondary: Some(input.depth_offset as f32), ..Default::default() },
         None => DrawOrder::default(),
     }
 }
 
-fn two_d_stack_bias(order: i16) -> f32 {
-    f32::from(order.max(0)) * 0.02
+fn two_d_stack_bias(order: i32) -> f32 {
+    order.max(0) as f32 * 0.02
 }

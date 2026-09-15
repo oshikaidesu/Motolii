@@ -544,7 +544,7 @@ pub(crate) struct SequentialInput<'a> {
     projection: crate::doc::store::LayerProjection,
     projection_camera: ResolvedCamera,
     opacity: f32,
-    depth_offset: i16,
+    depth_offset: i32,
     blend_mode: BlendMode,
     shading: effects::surface_program::SurfaceShading,
     displace: point_cloud::PointDisplace,

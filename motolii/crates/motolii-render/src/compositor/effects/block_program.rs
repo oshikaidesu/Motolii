@@ -68,13 +68,13 @@ pub(crate) fn offsets_from_bytes(bytes: &[u8]) -> Vec<BlockOffset> {
     }).collect()
 }
 
-/// 近くに居る物の一覧(CSR: `starts[k]..starts[k + 1]` が物 k の相手)。同じ組の物を、組の一番大きい箱の 2 倍の升目に振り、
+/// 近くに居る物の一覧(CSR: `starts[k]..starts[k + 1]` が物 k の相手)。同じ組の物を、組の一番大きい箱(+ 両側の届く距離 `reach`)の 2 倍の升目に振り、
 /// 周り 3×3 の升目の物を相手にする。物の数に比例する(全組を回らない)。押し合いで升目より遠くへ動く物は相手を取りこぼしうる。
-pub(crate) fn neighbors(items: &[BlockItem]) -> (Vec<u32>, Vec<u32>) {
+pub(crate) fn neighbors(items: &[BlockItem], reach: f32) -> (Vec<u32>, Vec<u32>) {
     use std::collections::HashMap;
     let mut extent: HashMap<u32, f32> = HashMap::new();
     for it in items {
-        let e = (it.hi[0] - it.lo[0]).abs().max((it.hi[1] - it.lo[1]).abs()) + 2.0 * it.margin;
+        let e = (it.hi[0] - it.lo[0]).abs().max((it.hi[1] - it.lo[1]).abs()) + 2.0 * it.margin.max(reach);
         let slot = extent.entry(it.group).or_insert(1.0);
         *slot = slot.max(e);
     }
@@ -298,7 +298,7 @@ impl BlockWorld {
     }
 
     /// このコマの物の箱を置き、state を 0(ずれ無し)から始める。
-    pub(crate) fn begin(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, items: &[BlockItem]) {
+    pub(crate) fn begin(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, items: &[BlockItem], reach: f32) {
         let count = items.len().max(1) as u64;
         if count > self.capacity {
             self.capacity = count.next_power_of_two();
@@ -313,7 +313,7 @@ impl BlockWorld {
             queue.write_buffer(&self.objects, 0, &item_bytes(items));
             queue.write_buffer(&self.states[0], 0, &offset_bytes(&vec![BlockOffset::default(); items.len()]));
         }
-        let (starts, list) = neighbors(items);
+        let (starts, list) = neighbors(items, reach);
         let storage = |bytes: &[u8]| {
             let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-neighbors"), size: bytes.len().max(4) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
             queue.write_buffer(&buffer, 0, bytes);
@@ -487,7 +487,7 @@ mod tests {
             items.push(BlockItem { lo: [x, y], hi: [x + w, y + w], room_lo: [m, m], room_size: size, radius, group: 0, margin: 0.0, weight: 1.0 });
         }
         let mut world = BlockWorld::new(device);
-        world.begin(device, queue, &items);
+        world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
         let members: Vec<u32> = (0..items.len() as u32).collect();
         program.record(device, queue, &mut encoder, &mut world, 0.0, &members, &[1.0]);

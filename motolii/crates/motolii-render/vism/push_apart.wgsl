@@ -3,6 +3,7 @@
   "LABEL": "Push Apart",
   "STAGE": "block",
   "ROUNDS": 32,
+  "REACH": "margin",
   "DESCRIPTION": "Things in the same box push each other apart until their margins clear (C4D Push Apart; Motolii's margin law). Each round measures everyone near at once and moves them together",
   "INPUTS": [
     { "NAME": "margin", "LABEL": "Margin", "TYPE": "float", "DEFAULT": 10.0, "MIN": 0.0, "MAX": 1000.0 }

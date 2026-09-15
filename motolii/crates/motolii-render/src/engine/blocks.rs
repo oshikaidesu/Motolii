@@ -172,8 +172,14 @@ impl Engine {
             return;
         }
         let ctx = &self.compositor.ctx;
+        // 近くの物の升目は、ブロックが宣言した届く距離(`REACH` の欄)の一番大きい値だけ広げる。
+        let reach = state.batches.iter().filter_map(|batch| {
+            let d = self.compositor.catalog.definitions.iter().find(|d| d.plugin_id() == batch.plugin)?;
+            let name = d.manifest.reach.as_ref()?;
+            d.manifest.param_inputs().position(|p| &p.name == name).and_then(|i| batch.params.get(i).copied())
+        }).fold(0.0f32, f32::max);
         let world = state.world.get_or_insert_with(|| BlockWorld::new(&ctx.device));
-        world.begin(&ctx.device, &ctx.queue, &state.objects);
+        world.begin(&ctx.device, &ctx.queue, &state.objects, reach);
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-blocks") });
         let stages = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
         for stage in 0..stages {
@@ -302,7 +308,7 @@ mod tests {
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
         let program = program_for(device, include_str!("../../vism/push_apart.wgsl"));
         let mut world = BlockWorld::new(device);
-        world.begin(device, queue, &items);
+        world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
         program.record(device, queue, &mut encoder, &mut world, 0.0, &[0, 1, 2, 3, 4, 5], &[5.0]);
         let gpu = read_state(device, queue, &world, encoder);
@@ -332,7 +338,7 @@ mod tests {
             items.push(BlockItem { lo: [x, y], hi: [x + 12.0, y + 12.0], room_lo: [0.0; 2], room_size: room, radius: 0.0, group: 7, margin: 0.0, weight: 1.0 });
         }
         let mut world = BlockWorld::new(device);
-        world.begin(device, queue, &items);
+        world.begin(device, queue, &items, 0.0);
         let members: Vec<u32> = (0..40).collect();
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
         push.record(device, queue, &mut encoder, &mut world, 0.0, &members, &[2.0]);
@@ -356,7 +362,7 @@ mod tests {
         let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
         let items = [BlockItem { lo: [300.0, 20.0], hi: [310.0, 30.0], room_lo: [0.0; 2], room_size: [200.0, 100.0], radius: 0.0, group: 1, margin: 0.0, weight: 1.0 }];
         let mut world = BlockWorld::new(device);
-        world.begin(device, queue, &items);
+        world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
         bounce.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.0]);
         push.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[9.0]);
@@ -421,7 +427,7 @@ mod tests {
         let wave = program_for(device, include_str!("../../vism/wave.wgsl"));
         let items: Vec<BlockItem> = (0..8).map(|i| BlockItem { lo: [i as f32 * 20.0, 0.0], hi: [i as f32 * 20.0 + 10.0, 10.0], weight: 1.0, ..Default::default() }).collect();
         let mut world = BlockWorld::new(device);
-        world.begin(device, queue, &items);
+        world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
         wave.record(device, queue, &mut encoder, &mut world, 0.125, &(0..8).collect::<Vec<u32>>(), &[10.0, 2.0, 4.0]);
         let y: Vec<f32> = read_state(device, queue, &world, encoder).iter().map(|o| o.translate[1]).collect();
@@ -474,11 +480,12 @@ mod tests {
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
         let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
         let mut world = BlockWorld::new(device);
-        world.begin(device, queue, &items);
+        world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
         push.record(device, queue, &mut encoder, &mut world, 0.0, &(0..items.len() as u32).collect::<Vec<u32>>(), &[margin]);
         let gpu = read_state(device, queue, &world, encoder);
         let mut moved = 0;
+        assert_eq!(push_reach(), Some("margin".to_owned()), "Push Apart declares its margin as its reach");
         for k in 0..items.len() {
             let cpu = [lo[k][0] - items[k].lo[0], lo[k][1] - items[k].lo[1]];
             if cpu != [0.0, 0.0] { moved += 1; }
@@ -486,5 +493,23 @@ mod tests {
             assert!((g[0] - cpu[0]).abs() < 0.05 && (g[1] - cpu[1]).abs() < 0.05, "object {k}: gpu {g:?} cpu {cpu:?}");
         }
         assert!(moved > 20, "some of them overlapped and were pushed: {moved}");
+    }
+
+    fn push_reach() -> Option<String> {
+        crate::render::compositor::effects::isf::parse_isf_source(include_str!("../../vism/push_apart.wgsl")).unwrap().0.reach
+    }
+
+    /// Margin が箱よりずっと大きくても、届く距離の分だけ升目を広げるので相手を取りこぼさない。
+    #[test]
+    fn a_wide_margin_still_finds_its_neighbours() {
+        use crate::render::compositor::effects::block_program::{neighbors, BlockItem};
+        let items = [
+            BlockItem { lo: [0.0, 0.0], hi: [4.0, 4.0], weight: 1.0, ..Default::default() },
+            BlockItem { lo: [60.0, 0.0], hi: [64.0, 4.0], weight: 1.0, ..Default::default() },
+        ];
+        let (_, blind) = neighbors(&items, 0.0);
+        assert!(blind.is_empty(), "without the reach, 60 px apart is out of a 8 px cell's 3×3");
+        let (starts, list) = neighbors(&items, 40.0);
+        assert_eq!((starts, list), (vec![0, 1, 2], vec![1, 0]), "with a 40 px margin they see each other");
     }
 }

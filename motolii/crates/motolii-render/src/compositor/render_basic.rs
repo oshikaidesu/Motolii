@@ -56,7 +56,7 @@ impl Compositor {
                             layer.placement.opacity,
                             a,
                         ),
-                        depth_offset: layer.placement.order,
+                        depth_offset: layer.placement.order.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
                         ..Default::default()
                     },
                 })
