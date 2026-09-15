@@ -393,10 +393,13 @@ mod tests {
     #[test]
     fn a_block_sits_on_the_shelf_like_an_effect() {
         let refresh = crate::render::compositor::effects::catalog::refresh_effect_catalog();
-        assert!(!refresh.errors.iter().any(|e| e.contains("bounce") || e.contains("push_apart")), "{:?}", refresh.errors);
+        assert!(!refresh.errors.iter().any(|e| ["bounce", "push_apart", "four_color_gradient", "inner_shadow"].iter().any(|n| e.contains(n))), "{:?}", refresh.errors);
         let catalog = crate::render::compositor::effects::catalog::catalog_snapshot();
         let bounce = catalog.descriptors.iter().find(|d| d.plugin_id == "motolii.bounce_block").expect("on the shelf");
         assert_eq!(bounce.stage, crate::render::compositor::effects::catalog::EffectStage::Block);
         assert_eq!(bounce.params.iter().map(|p| p.label.as_str()).collect::<Vec<_>>(), ["Strength"]);
+        for fx in ["motolii.four_color_gradient", "motolii.inner_shadow"] {
+            assert!(catalog.descriptors.iter().any(|d| d.plugin_id == fx), "{fx} on the shelf");
+        }
     }
 }

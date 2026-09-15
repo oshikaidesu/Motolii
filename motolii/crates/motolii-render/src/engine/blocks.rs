@@ -342,10 +342,13 @@ mod tests {
         let fps = view.composition().unwrap().unwrap().fps;
         let t = RationalTime::try_from_frame(frame, fps).unwrap();
         let mut engine = Engine::new().unwrap();
+        let scope = engine.gpu_device().push_error_scope(wgpu::ErrorFilter::Validation);
         engine.render_frame(&view, t).unwrap();
+        eprintln!("gpu validation: {:?}", pollster::block_on(scope.pop()));
+        eprintln!("layer failures: {:?}", engine.layer_failures());
         for (k, o) in engine.blocks.objects.iter().enumerate() { eprintln!("object {k}: {o:?}"); }
         for b in &engine.blocks.batches { eprintln!("batch stage {} {} {:?} {:?}", b.stage, b.plugin, b.params, b.members); }
-        let world = engine.blocks.world.as_ref().unwrap();
+        let Some(world) = engine.blocks.world.as_ref() else { return };
         let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         for (k, o) in read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder).iter().enumerate() { eprintln!("state {k}: {o:?}"); }
     }
