@@ -272,6 +272,62 @@ impl BlockWorld {
     }
 }
 
+/// 付いて行く(付いて置く札の相手がブロックで動いた分だけ、札も動く): 対 (札, 相手) ごとに、札の state に相手の state を足す。
+/// 1 回で 1 段(札の札は次の回)。
+pub(crate) struct FollowPass {
+    pipeline: wgpu::ComputePipeline,
+    layout: wgpu::BindGroupLayout,
+}
+
+const FOLLOW_PASS: &str = "struct Offset { translate: vec2f, rotate: f32, scale: f32 };\n\
+@group(0) @binding(0) var<storage, read> state_in: array<Offset>;\n\
+@group(0) @binding(1) var<storage, read_write> state_out: array<Offset>;\n\
+@group(0) @binding(2) var<storage, read> pairs: array<vec2u>;\n\
+@group(0) @binding(3) var<uniform> count: vec4u;\n\
+@compute @workgroup_size(64)\n\
+fn main(@builtin(global_invocation_id) gid: vec3u) {\n\
+    if gid.x >= count.x { return; }\n\
+    let pair = pairs[gid.x];\n\
+    let own = state_in[pair.x];\n\
+    state_out[pair.x] = Offset(own.translate + state_in[pair.y].translate, own.rotate, own.scale);\n\
+}\n";
+
+impl FollowPass {
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        let (pipeline, layout) = pipeline(device, "motolii-block-follow", FOLLOW_PASS, &[storage(0, true), storage(1, false), storage(2, true), uniform(3)], "main");
+        Self { pipeline, layout }
+    }
+
+    pub(crate) fn record(&self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, world: &mut BlockWorld, pairs: &[(u32, u32)]) {
+        if pairs.is_empty() || world.count == 0 {
+            return;
+        }
+        let pair_buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-follow-pairs"), size: (pairs.len() * 8) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        queue.write_buffer(&pair_buffer, 0, &pairs.iter().flat_map(|(a, b)| [a.to_le_bytes(), b.to_le_bytes()].concat()).collect::<Vec<u8>>());
+        let count = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-follow-count"), size: 16, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        queue.write_buffer(&count, 0, &[(pairs.len() as u32).to_le_bytes(), [0; 4], [0; 4], [0; 4]].concat());
+        let (from, to) = (world.current, 1 - world.current);
+        encoder.copy_buffer_to_buffer(&world.states[from], 0, &world.states[to], 0, u64::from(world.count) * OFFSET_BYTES);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("motolii-block-follow"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: world.states[from].as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: world.states[to].as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: pair_buffer.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: count.as_entire_binding() },
+            ],
+        });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("motolii-block-follow"), timestamp_writes: None });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups((pairs.len() as u32).div_ceil(64), 1, 1);
+        }
+        world.current = to;
+    }
+}
+
 /// state(comp のずれ)を、物ごとの comp → world の向きで world のずれにして描く側の motion へ書く。
 pub(crate) struct WorldPass {
     pipeline: wgpu::ComputePipeline,

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::{LayerId, PropertyId, RationalTime, ResolvedLayer, StoreView, Value};
-use crate::render::compositor::effects::block_program::{BlockItem, BlockProgram, BlockWorld, WorldPass};
+use crate::render::compositor::effects::block_program::{BlockItem, BlockProgram, BlockWorld, FollowPass, WorldPass};
 use crate::render::compositor::effects::isf::IsfStage;
 use crate::render::compositor::Layer;
 use crate::render::engine::{Engine, EngineError};
@@ -34,7 +34,12 @@ pub(crate) struct BlockState {
     programs: HashMap<String, (String, BlockProgram)>,
     world: Option<BlockWorld>,
     world_pass: Option<WorldPass>,
+    follow_pass: Option<FollowPass>,
     placed: HashMap<LayerId, Placed>,
+    /// 付いて置く札 → 相手(相手がブロックを持つ時だけ)。
+    follows: HashMap<LayerId, LayerId>,
+    /// 物の番号 → 層(付いて行く対を番号にする)。
+    object_layers: Vec<LayerId>,
     objects: Vec<BlockItem>,
     bases: Vec<([f32; 3], [f32; 3])>,
     batches: Vec<BlockBatch>,
@@ -47,6 +52,8 @@ impl Engine {
         let blocks: Vec<String> = self.compositor.catalog.definitions.iter().filter(|d| d.manifest.stage == IsfStage::Block).map(|d| d.plugin_id().to_owned()).collect();
         let state = &mut self.blocks;
         state.placed.clear();
+        state.follows.clear();
+        state.object_layers.clear();
         state.objects.clear();
         state.bases.clear();
         state.batches.clear();
@@ -80,6 +87,26 @@ impl Engine {
             };
             state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight });
         }
+        // 付いて置く札の相手がブロックで動くなら、札も物として並べて付いて行かせる(CSS の transform を読まない anchor() とは違う、利用者 2026-09-15「付いていく方が自然」)。
+        let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
+        let area_row = PropertyId::new(crate::doc::store::layout::POSITION_AREA).map_err(store)?;
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            if !matches!(view.value_at(layer.id, &area_row, t).map_err(store)?, Some(Value::Enum(a)) if a > 0) {
+                continue;
+            }
+            let target = match view.value_at(layer.id, &anchor_row, t).map_err(store)? {
+                Some(Value::LayerId(id)) if id != 0 => LayerId(id),
+                Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
+                _ => continue,
+            };
+            if state.placed.contains_key(&target) {
+                state.follows.insert(layer.id, target);
+                if !state.placed.contains_key(&layer.id) {
+                    let own = view.layer_box(layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
+                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0 });
+                }
+            }
+        }
         Ok(())
     }
 
@@ -101,7 +128,7 @@ impl Engine {
             }).collect();
             Some((e.plugin_id.clone(), params))
         }).collect();
-        if chain.is_empty() {
+        if chain.is_empty() && !self.blocks.follows.contains_key(&layer.id) {
             return;
         }
         let m = built.placement.transform;
@@ -128,6 +155,7 @@ impl Engine {
             weight: placed.weight,
         });
         state.bases.push((world(glam::Vec2::X), world(glam::Vec2::Y)));
+        state.object_layers.push(layer.id);
         for (stage, (plugin, params)) in chain.into_iter().enumerate() {
             match state.batches.iter_mut().find(|b| b.stage == stage && b.plugin == plugin && b.params == params) {
                 Some(batch) => batch.members.push(k),
@@ -160,6 +188,11 @@ impl Engine {
                 program.record(&ctx.device, &ctx.queue, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params);
             }
         }
+        let index_of = |id: LayerId| state.object_layers.iter().position(|l| *l == id).map(|k| k as u32);
+        let pairs: Vec<(u32, u32)> = state.object_layers.iter().enumerate()
+            .filter_map(|(k, id)| state.follows.get(id).and_then(|target| index_of(*target)).map(|target| (k as u32, target)))
+            .collect();
+        state.follow_pass.get_or_insert_with(|| FollowPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &pairs);
         let motion = re_renderer::MotionBuffer::new(ctx, state.objects.len() as u64);
         state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, motion.buffer());
         ctx.queue.submit([encoder.finish()]);
@@ -351,5 +384,31 @@ mod tests {
         let Some(world) = engine.blocks.world.as_ref() else { return };
         let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         for (k, o) in read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder).iter().enumerate() { eprintln!("state {k}: {o:?}"); }
+    }
+
+    /// 付いて置く札は、相手がブロックで動いた分だけ一緒に動く(GPU の中で、読み戻さずに)。
+    #[test]
+    fn an_anchored_label_follows_what_a_block_moved() {
+        use crate::render::compositor::effects::block_program::read_state;
+        let mut doc = scene(true);
+        let label = LayerId(3);
+        doc.apply_all([
+            Intent::AddLayer(label),
+            Intent::SetMeta { layer: label, meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: label, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() } },
+            Intent::SetShapes { layer: label, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 6.0, y: 4.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 0.0, b: 0.0 }), ..Default::default() }) })] },
+            Intent::SetConstant { layer: label, property: PropertyId::new(layout::POSITION_ANCHOR).unwrap(), value: Value::LayerId(2) },
+            Intent::SetConstant { layer: label, property: PropertyId::new(layout::POSITION_AREA).unwrap(), value: Value::Enum(2) },
+        ]).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let t = RationalTime::try_from_frame(45, Fps::try_new(30, 1).unwrap()).unwrap();
+        engine.render_frame(&doc.view(), t).unwrap();
+        let layers = engine.blocks.object_layers.clone();
+        let world = engine.blocks.world.as_ref().unwrap();
+        let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let state = read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder);
+        let at = |id: u64| state[layers.iter().position(|l| l.0 == id).expect("an object")].translate;
+        assert!(at(2) != [0.0, 0.0], "the square was folded by Bounce");
+        assert_eq!(at(3), at(2), "its label moved with it");
     }
 }

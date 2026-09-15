@@ -109,3 +109,10 @@ block(t, params, items, world) -> outputs
 - 2 本目 `vism/push_apart.wgsl`(C4D の Push Apart、欄 Margin、ROUNDS 32)。試験 `the_push_apart_block_pushes_like_the_margin_law`(書類の間合いの押し合いの nudge と 0.05px 以内)
 - つながり: `blocks_chain_in_effect_order`(Push Apart → Bounce で 40 個が箱の中に収まる)
 - 押し合いは全組(1 回 n²)。4000 個 × 32 回は GPU でも重い見込み — 升目で近い物だけ読む口は次
+
+## 3 番の続き: 付いて置く札が GPU の結果に付いて行く(2026-09-16、実装)
+
+- 利用者 2026-09-15「付いていく方が自然」。CSS の anchor() は transform を読まないが、ここは読む側に揃えた
+- 札の置き方(書類の CPU、相手の箱の辺)はそのまま。相手がブロックを持つ時だけ札も物として並べ、全段の後の固定の計算で札の state に相手の state を足す(1 段、札の札は未)
+- 試験 `an_anchored_label_follows_what_a_block_moved`
+- 選択の籠は描いた画素の mask から取る作り(`selection_bounds.rs`)なので、GPU で動いた物にも付いて行く見込み(実窓で確かめる)
