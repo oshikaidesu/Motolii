@@ -124,7 +124,7 @@ typed.forEach((s, i) => during([words(s, i < 6 ? 0.18 : 0.34, [960, 540])], i * 
 {
   const a = 9.4, b = 10.9;
   const band = circle("Ring", PAPER, 560, [960, 540]);
-  band.effect("4-Color Gradient", { "Top Left": BLUE, "Top Right": "#FFFFFF", "Bottom Left": "#FFFFFF", "Bottom Right": PINK, "Blend": 180 });
+  band.effect("4-Color Gradient", { "Color 1": BLUE, "Color 2": "#FFFFFF", "Color 3": "#FFFFFF", "Color 4": PINK, "Blend": 180 });
   band.keys("Scale", [[a, [560 / D, 560 / D], "Bezier"], [b, [300 / D, 300 / D]]]);
   const hole = circle("Ring hole", LIGHT, 300, [960, 540]);
   hole.keys("Scale", [[a, [300 / D, 300 / D], "Bezier"], [b, [40 / D, 40 / D]]]);
@@ -168,7 +168,7 @@ typed.forEach((s, i) => during([words(s, i < 6 ? 0.18 : 0.34, [960, 540])], i * 
   // The lens: the white sun again, painted, clipped to the black sun below it.
   const lens = circle("Lens", PAPER, 900, [960, 1500]);
   lens.keys("Position", [[a, [960, 1500], "Bezier"], [meet, [960, 900], "Bezier"], [b, [960, 830]]]);
-  lens.effect("4-Color Gradient", { "Top Left": "#9DB8F5", "Top Right": "#F39AD9", "Bottom Left": "#F7B6E6", "Bottom Right": "#A9C4F7", "Blend": 90 });
+  lens.effect("4-Color Gradient", { "Color 1": "#9DB8F5", "Color 2": "#F39AD9", "Color 3": "#F7B6E6", "Color 4": "#A9C4F7", "Blend": 90 });
   lens.effect("Inner Shadow", { "Opacity": 35, "Distance": 6, "Size": 30, "Color": "#FFFFFF" });
   lens.clip();
   // The overlap is a box: the word sits where the two meet, and follows them as they close in.

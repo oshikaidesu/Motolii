@@ -34,6 +34,8 @@ impl HeadlessGpu {
             let have = adapter.limits();
             let want = &mut descriptor.required_limits;
             want.max_storage_buffers_per_shader_stage = have.max_storage_buffers_per_shader_stage.min(8);
+            // vism の fx は欄 1 つに uniform を 1 本束ねる。WebGL2 相当の 11 本では欄 9 個で束ねが無効になり、層が黙って描かれない。
+            want.max_uniform_buffers_per_shader_stage = want.max_uniform_buffers_per_shader_stage.max(have.max_uniform_buffers_per_shader_stage.min(31));
             want.max_storage_buffer_binding_size = have.max_storage_buffer_binding_size.min(1 << 30);
             want.max_buffer_size = want.max_buffer_size.max(have.max_buffer_size.min(1 << 30));
             want.max_compute_workgroup_storage_size = have.max_compute_workgroup_storage_size.min(16384);
