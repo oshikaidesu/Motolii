@@ -53,6 +53,11 @@ pub const TRANSITION_EASING: &str = "layout.transition_easing";
 /// 変形の中心を箱の割合で(CSS の transform-origin のキーワード)。Anchor は書いた px のまま、他は毎コマ層の箱から解く:
 /// 文字が伸びても Bottom Left なら左下の角が Position に居続け、そこを中心に拡大・回転する。
 pub const TRANSFORM_ORIGIN: &str = "layout.transform_origin";
+/// 箱の輪郭を道にする(CSS の offset-path: border-box、offset-distance、offset-rotate)。道は親の箱(並べる Group の箱、角丸込み)、
+/// 親が無ければ画面の枠。左上の角の後から時計回りに一周を 0〜100%(はみ出しは回る)。Auto なら道の向きに回る。Position の代わり。
+pub const OFFSET_PATH: &str = "layout.offset_path";
+pub const OFFSET_DISTANCE: &str = "layout.offset_distance";
+pub const OFFSET_ROTATE: &str = "layout.offset_rotate";
 /// 移り方を始めるまでの遅れ(CSS の transition-delay)。
 pub const TRANSITION_DELAY: &str = "layout.transition_delay";
 /// 並べる容器が子の移り方の遅れを配る(GSAP の stagger の amount と from)。遅れ = Stagger × 起点からの距離 / 容器の最大の距離。
@@ -159,6 +164,9 @@ pub const SPACE_ROWS: &[Row] = &[
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
     (TRANSITION_DELAY, "Transition Delay", Value::F64(0.0), Some((0.0, 60.0)), &[]),
+    (OFFSET_PATH, "Offset Path", Value::Enum(0), None, &["None", "Border Box"]),
+    (OFFSET_DISTANCE, "Offset Distance", Value::F64(0.0), None, &[]),
+    (OFFSET_ROTATE, "Offset Rotate", Value::Enum(0), None, &["Auto", "None"]),
     (TRANSFORM_ORIGIN, "Transform Origin", Value::Enum(0), None, &["Anchor", "Top Left", "Top", "Top Right", "Left", "Center", "Right", "Bottom Left", "Bottom", "Bottom Right"]),
     (SHAPE_OUTSIDE, "Shape Outside", Value::Enum(0), None, &["None", "Margin Box", "Content"]),
     (SHAPE_MARGIN, "Shape Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
@@ -822,7 +830,7 @@ impl StoreView<'_> {
             self.free_anchor(layer, t)?,
             self.resolve_position(layer, t)?,
             self.pair(layer, property::SCALE, [1.0, 1.0], t)?,
-            self.number(layer, property::ROTATION, 0.0, t)? as f32,
+            self.number(layer, property::ROTATION, 0.0, t)? as f32 + self.offset_rotation(layer, t)?,
             self.number(layer, property::SKEW, 0.0, t)? as f32,
             self.number(layer, property::SKEW_AXIS, 0.0, t)? as f32,
         ))
@@ -1133,6 +1141,64 @@ impl StoreView<'_> {
             out_position[axis] = new_lo + (anchor[axis] - b[axis]) * out_scale[axis];
         }
         Ok(Some(Slot { position: out_position, scale: out_scale, stretch: [1.0, 1.0], wrap: None, z: 0.0, scale_z: 1.0, rotation: [0.0; 3], anchor }))
+    }
+
+    /// Offset Path が Border Box なら、親の箱の輪郭の上の点(親の素材座標)と、その向き(度)。
+    pub(crate) fn on_offset_path(&self, layer: LayerId, t: RationalTime) -> Result<Option<([f32; 2], f32)>, StoreError> {
+        if self.choice(layer, OFFSET_PATH, t)? != 1 {
+            return Ok(None);
+        }
+        let (b, radius) = match self.attrs(layer)?.unwrap_or_default().parent {
+            Some(parent) => {
+                if self.display(parent, t)? == 0 {
+                    return Ok(None);
+                }
+                let Some(size) = self.group_size(parent, t)? else { return Ok(None) };
+                ([CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]], self.number(parent, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)
+            }
+            None => {
+                let Some(comp) = self.composition()? else { return Ok(None) };
+                ([0.0, 0.0, comp.width as f32, comp.height as f32], 0.0)
+            }
+        };
+        let fraction = (self.number(layer, OFFSET_DISTANCE, 0.0, t)? as f32 / 100.0).rem_euclid(1.0);
+        let (w, h) = (b[2] - b[0], b[3] - b[1]);
+        let r = radius.min(w * 0.5).min(h * 0.5);
+        let (sw, sh) = (w - 2.0 * r, h - 2.0 * r);
+        let arc = std::f32::consts::FRAC_PI_2 * r;
+        let total = 2.0 * (sw + sh) + 4.0 * arc;
+        if total <= 1e-3 {
+            return Ok(Some(([b[0], b[1]], 0.0)));
+        }
+        let mut d = fraction * total;
+        // 上の辺 → 右上の角 → 右の辺 → 右下 → 下の辺 → 左下 → 左の辺 → 左上。
+        let corners = [[b[2] - r, b[1] + r], [b[2] - r, b[3] - r], [b[0] + r, b[3] - r], [b[0] + r, b[1] + r]];
+        let starts = [[b[0] + r, b[1]], [b[2], b[1] + r], [b[2] - r, b[3]], [b[0], b[3] - r]];
+        let dirs = [[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]];
+        let lengths = [sw, sh, sw, sh];
+        for side in 0..4 {
+            if d <= lengths[side] {
+                let p = [starts[side][0] + dirs[side][0] * d, starts[side][1] + dirs[side][1] * d];
+                return Ok(Some((p, [0.0f32, 90.0, 180.0, 270.0][side])));
+            }
+            d -= lengths[side];
+            if d <= arc {
+                let angle = -std::f32::consts::FRAC_PI_2 + side as f32 * std::f32::consts::FRAC_PI_2 + if r > 0.0 { d / r } else { 0.0 };
+                let c = corners[side];
+                let p = [c[0] + r * angle.cos(), c[1] + r * angle.sin()];
+                return Ok(Some((p, angle.to_degrees() + 90.0)));
+            }
+            d -= arc;
+        }
+        Ok(Some(([b[0] + r, b[1]], 0.0)))
+    }
+
+    /// 道の向きに回る分(Offset Rotate = Auto)。
+    pub(crate) fn offset_rotation(&self, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
+        if self.choice(layer, OFFSET_ROTATE, t)? != 0 {
+            return Ok(0.0);
+        }
+        Ok(self.on_offset_path(layer, t)?.map_or(0.0, |(_, angle)| angle))
     }
 
     /// Transform Origin が Anchor 以外なら、箱の中のその点(素材座標)。
@@ -1946,6 +2012,43 @@ mod tests {
         put(&mut doc, badge, HORIZONTAL_CONSTRAINT, Value::Enum(3));
         let c30 = shown(&doc, badge, at(30));
         assert!(((c30[0] - b0[0]) - 100.0).abs() < 0.5, "Center: moves half as much: {c30:?}");
+    }
+
+    #[test]
+    fn an_object_travels_the_border_box_of_its_parent_and_turns_with_it() {
+        let mut doc = blank_project();
+        let card = add(&mut doc, 1, LayerSource::Group, None);
+        for (name, value) in [(DISPLAY, Value::Enum(1)), (HORIZONTAL_SIZING, Value::Enum(2)), (VERTICAL_SIZING, Value::Enum(2)), (WIDTH, Value::F64(400.0)), (HEIGHT, Value::F64(200.0))] {
+            put(&mut doc, card, name, value);
+        }
+        let dot = rect(&mut doc, 2, card, [10.0, 10.0]);
+        put(&mut doc, dot, POSITION_TYPE, Value::Enum(1));
+        put(&mut doc, dot, OFFSET_PATH, Value::Enum(1));
+        let at = |doc: &mut Document, percent: f64| {
+            put(doc, dot, OFFSET_DISTANCE, Value::F64(percent));
+            let view = doc.view();
+            (view.on_offset_path(dot, T).unwrap().unwrap(), view.offset_rotation(dot, T).unwrap())
+        };
+        let ((p, _), turn) = at(&mut doc, 25.0);
+        assert!((p[0] - (1.0 + 300.0)).abs() < 0.01 && (p[1] - 1.0).abs() < 0.01 && turn.abs() < 0.01, "a quarter of 1200 px is 300 px along the top: {p:?}");
+        let ((p, _), turn) = at(&mut doc, 40.0);
+        assert!((p[0] - 401.0).abs() < 0.01 && (p[1] - (1.0 + 80.0)).abs() < 0.01 && (turn - 90.0).abs() < 0.01, "down the right side, turned to face down: {p:?} {turn}");
+        let ((p, _), _) = at(&mut doc, 125.0);
+        assert!((p[0] - 301.0).abs() < 0.01, "past 100% it goes round again");
+        put(&mut doc, card, BORDER_RADIUS, Value::F64(50.0));
+        let ((p, _), turn) = at(&mut doc, 0.0);
+        assert!((p[0] - 51.0).abs() < 0.01 && turn.abs() < 0.01, "with round corners the path starts after the corner");
+        // 角を曲がる間も滑らかに(1% ずつで大きく跳ばない)。
+        let mut previous: Option<[f32; 2]> = None;
+        for k in 0..=100 {
+            let ((p, _), _) = at(&mut doc, k as f64);
+            if let Some(q) = previous {
+                assert!(((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt() < 12.0, "no jump around the corners at {k}%");
+            }
+            previous = Some(p);
+        }
+        let shown_at = shown(&doc, dot, T);
+        assert!(shown_at[0] < 60.0, "the object is drawn where the path puts it: {shown_at:?}");
     }
 
     #[test]

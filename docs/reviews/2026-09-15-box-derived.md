@@ -26,3 +26,11 @@
 - 置き場所は並ぶ子と同じ Slot(移り方も効く)。伸びは Scale で(線も伸びる、Figma と同じ)
 - 見本 `constraints_card.js`(幅と高さに鍵を打ったカードの中で、右上の丸・伸びる帯・中央の星・左上の題が付いていく): 跳び 0・尖り 0
 - 試験: `free_children_follow_the_parents_edges_by_their_constraints`
+
+## 4. 箱の輪郭を道に
+
+- 先例: CSS の **offset-path: border-box**(道は包む箱の輪郭)、**offset-distance**(道の上の位置)、**offset-rotate: auto**(道の向きに回る)
+- すべての物に **Offset Path**(None / Border Box)、**Offset Distance**(%、100 を越えると回る)、**Offset Rotate**(Auto / None)。道は親の箱(並べる Group の箱、Border Radius の角丸込み)、親が無ければ画面の枠。左上の角の後から時計回り
+- Position の代わりに道の上の点を置く(Transform Origin・Transition はそのまま効く)。親の箱が変われば道も変わる
+- 見本 `border_path.js`(大きさが呼吸する bento の各カードの縁を、白い札が回る): 跳び 0。尖り 65 は、角を曲がる時に回る札の軸に沿った箱の角が折れる分(位置の跳びではない)
+- 試験: `an_object_travels_the_border_box_of_its_parent_and_turns_with_it`
