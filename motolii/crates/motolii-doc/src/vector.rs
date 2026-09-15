@@ -158,6 +158,13 @@ pub enum OpKind {
         angle: f64,
         center: Point,
     },
+    /// Cavalry の Oscillator(Deformer、Use Normals)。
+    Oscillator {
+        amplitude: f64,
+        frequency: f64,
+        offset: f64,
+        detail: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -624,6 +631,7 @@ pub fn resolve(shape: &Shape) -> Result<Vec<Instance>, VectorError> {
             OpKind::Chop { length, gap } => each(instances, |p| ops::chop(p, *length, *gap)),
             OpKind::Resample { spacing, point_type } => each(instances, |p| ops::resample(p, *spacing, *point_type)),
             OpKind::Bend { angle, center } => each(instances, |p| ops::bend(p, *angle, *center)),
+            OpKind::Oscillator { amplitude, frequency, offset, detail } => each(instances, |p| ops::oscillate(p, *amplitude, *frequency, *offset, *detail)),
             OpKind::Repeater {
                 copies,
                 offset,

@@ -27,6 +27,7 @@ pub const EXTEND_PATHS: &str = "motolii.extend_paths";
 pub const CHOP_PATH: &str = "motolii.chop_path";
 pub const RESAMPLE_PATH: &str = "motolii.resample_path";
 pub const BEND: &str = "motolii.bend";
+pub const OSCILLATOR: &str = "motolii.oscillator";
 
 const fn point(name: &'static str, label: &'static str) -> Param {
     Param { name, label, section: "", kind: crate::doc::store::kind::ParamKind::Vec2, default: [0.0, 0.0], range: None, modes: None }
@@ -96,6 +97,13 @@ pub const KINDS: &[PathOpKind] = &[
         Param::number("angle", "Angle", 0.0, Some((-360.0, 360.0))),
         point("center", "Center"),
     ] },
+    // Cavalry の Oscillator を Deformer(Use Normals)として: 道に沿って法線の向きへ正弦波。
+    PathOpKind { plugin_id: OSCILLATOR, label: "Oscillator", params: &[
+        Param::number("amplitude", "Amplitude", 20.0, None),
+        Param::number("frequency", "Frequency", 2.0, Some((0.0, 1000.0))),
+        Param::number("offset", "Offset", 0.0, None),
+        Param::number("detail", "Detail", 16.0, Some((2.0, 256.0))),
+    ] },
 ];
 
 pub fn kind(plugin_id: &str) -> Option<&'static PathOpKind> {
@@ -163,6 +171,7 @@ pub fn op(effect: &ResolvedEffect) -> Option<OpKind> {
             let c = get2("center");
             OpKind::Bend { angle: get("angle"), center: Point { x: c[0], y: c[1] } }
         }
+        OSCILLATOR => OpKind::Oscillator { amplitude: get("amplitude"), frequency: get("frequency"), offset: get("offset"), detail: get("detail") },
         _ => return None,
     })
 }

@@ -194,12 +194,57 @@ pub(crate) fn bend(path: &Path, angle_degrees: f64, center: Point) -> Path {
     }).collect()
 }
 
+/// Cavalry の Oscillator(Deformer、Use Normals): 道の長さに沿って、法線の向きへ正弦波で揺らす。
+/// `frequency` は道 1 本あたりの波の数、`offset` は位相(波 1 つ = 1)、`detail` は波 1 つあたりの点の数。開いた道の両端も揺れる。
+pub(crate) fn oscillate(path: &Path, amplitude: f64, frequency: f64, offset: f64, detail: f64) -> Path {
+    if amplitude == 0.0 { return path.clone(); }
+    path.iter().map(|c| {
+        let mut samples = contour_polyline_samples(c);
+        if c.closed && samples.len() > 1 { samples.push(samples[0]); }
+        if samples.len() < 2 { return c.clone(); }
+        let mut lengths = vec![0.0];
+        for w in samples.windows(2) { lengths.push(lengths.last().unwrap() + w[1].sub(w[0]).length()); }
+        let total = *lengths.last().unwrap();
+        if !(total > f64::EPSILON) { return c.clone(); }
+        let count = ((frequency.abs() * detail.max(2.0)).ceil() as usize).clamp(8, 4096);
+        let last = if c.closed { count - 1 } else { count };
+        let mut segment = 0;
+        let points: Vec<Point> = (0..=last).map(|k| {
+            let u = k as f64 / count as f64;
+            let at = u * total;
+            while segment + 2 < lengths.len() && lengths[segment + 1] < at { segment += 1; }
+            let (a, b) = (samples[segment], samples[segment + 1]);
+            let span = (lengths[segment + 1] - lengths[segment]).max(f64::EPSILON);
+            let base = a.add(b.sub(a).scale((at - lengths[segment]) / span));
+            let unit = b.sub(a).normalized();
+            let normal = Point { x: -unit.y, y: unit.x };
+            base.add(normal.scale(amplitude * (std::f64::consts::TAU * (frequency * u + offset)).sin()))
+        }).collect();
+        Contour { vertices: build_point_type_vertices(&points, PointType::Smooth, c.closed), closed: c.closed }
+    }).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::doc::vector::geom::is_straight;
 
     fn p(x: f64, y: f64) -> Point { Point { x, y } }
+    /// Oscillator: 直線は法線の向きへ正弦波に揺れ、位相を 1 つ進めると同じ形に戻る(ループ)、半分で裏返る。
+    #[test]
+    fn an_oscillator_waves_a_line_along_its_normal_and_loops_with_offset() {
+        let straight = vec![Contour::open([p(0.0, 0.0), p(400.0, 0.0)])];
+        let wave = oscillate(&straight, 20.0, 2.0, 0.0, 16.0);
+        let ys: Vec<f64> = wave[0].vertices.iter().map(|v| v.point.y).collect();
+        assert!(ys.iter().cloned().fold(0.0, f64::max) > 19.0 && ys.iter().cloned().fold(0.0, f64::min) < -19.0, "swings the full amplitude both ways: {ys:?}");
+        let quarter = wave[0].vertices.iter().min_by(|a, b| (a.point.x - 50.0).abs().total_cmp(&(b.point.x - 50.0).abs())).unwrap();
+        assert!((quarter.point.y.abs() - 20.0).abs() < 1.0, "two waves on 400 px: a peak at 50 px: {:?}", quarter.point);
+        let looped = oscillate(&straight, 20.0, 2.0, 1.0, 16.0);
+        assert!(wave[0].vertices.iter().zip(&looped[0].vertices).all(|(a, b)| a.point.sub(b.point).length() < 1e-6), "offset 1 is the same wave");
+        let flipped = oscillate(&straight, 20.0, 2.0, 0.5, 16.0);
+        assert!(wave[0].vertices.iter().zip(&flipped[0].vertices).all(|(a, b)| (a.point.y + b.point.y).abs() < 1e-6), "offset 0.5 mirrors it");
+    }
+
     fn square() -> Path { vec![Contour::closed([p(0.0, 0.0), p(100.0, 0.0), p(100.0, 100.0), p(0.0, 100.0)])] }
     fn line() -> Path { vec![Contour::open([p(0.0, 0.0), p(100.0, 0.0)])] }
     fn arc() -> Path {

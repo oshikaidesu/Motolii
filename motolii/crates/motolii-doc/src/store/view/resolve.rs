@@ -903,6 +903,12 @@ impl<'a> StoreView<'a> {
         let whole = is_group && base.effects[first].scope == crate::doc::store::EffectScope::Whole;
         let whole_transform = params.iter().any(|(n, v)| n == "transform" && matches!(v, crate::doc::store::Value::F64(x) if x.round() == f64::from(placement::TRANSFORM_WHOLE)));
         let picks = placement::picks(params, &children.iter().map(|c| c.0).collect::<Vec<_>>(), placements.len());
+        // 引いた子の写しは番号の順に重ねる(AE の Repeater・Cavalry の Duplicator)。子の order のまま並べ直すと、同じ子の写しが全部まとまって重なる。
+        let copies_slot = if is_group && !whole {
+            children.iter().filter_map(|c| self.meta(*c).ok().flatten().map(|m| m.order)).min()
+        } else {
+            None
+        };
         for (placement, outline) in placements {
             let Ok(at) = t.try_sub(placement.time_offset) else { continue };
             let shifted = at != t;
@@ -959,6 +965,9 @@ impl<'a> StoreView<'a> {
                     copy.effects.pop();
                 }
                 copy.copy = placement.index;
+                if let Some(slot) = copies_slot {
+                    copy.placement.order = slot;
+                }
                 copy.shape_stretch = outline;
                 copy.placement.transform =
                     frame2 * placement.affine2(around) * frame2.inverse() * copy.placement.transform;
@@ -1221,6 +1230,10 @@ impl<'a> StoreView<'a> {
         self.snap_to_found_grids(&mut out, t)?;
         self.apply_fields(&mut out, t)?;
         out.sort_by_key(|layer| (layer.placement.order, layer.source != crate::doc::store::LayerSource::Group));
+        // 描き順は並べた順の番号(同じ order の写し同士を描く側の同点に委ねると、描き順が揺れる)。
+        for (rank, layer) in out.iter_mut().enumerate() {
+            layer.placement.order = i16::try_from(rank).unwrap_or(i16::MAX);
+        }
         Ok(out)
     }
 
@@ -1592,6 +1605,24 @@ mod clipping_contract {
             }},
         ]).unwrap();
         layer
+    }
+
+    /// Repeater が Group の子を 1 つずつ引く時、写しは番号の順に重なる(子ごとにまとまらない)。Cavalry の Concentrick で踏んだ。
+    #[test]
+    fn picked_copies_stack_by_their_number_not_by_child() {
+        let mut doc = blank_project();
+        let group = add(&mut doc, 9, 5, None, false);
+        let ink = add(&mut doc, 2, 1, Some(group), false);
+        let paper = add(&mut doc, 3, 2, Some(group), false);
+        doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: placement::REPEAT.to_owned() }] }).unwrap();
+        for (name, value) in [("count", 4.0), ("pick", 1.0)] {
+            doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(1), name).unwrap(), value: Value::F64(value) }).unwrap();
+        }
+        let resolved = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
+        let drawn: Vec<(LayerId, u32)> = resolved.iter().filter(|l| l.id != group).map(|l| (l.id, l.copy)).collect();
+        assert_eq!(drawn, vec![(ink, 0), (paper, 1), (ink, 2), (paper, 3)], "ink, paper, ink, paper from the bottom up");
+        let orders: Vec<i16> = resolved.iter().map(|l| l.placement.order).collect();
+        assert!(orders.windows(2).all(|w| w[0] < w[1]), "and each is drawn at its own step, never a tie: {orders:?}");
     }
 
     /// Stencil はクリッピングマスクの逆: 自分の形で下を切る。範囲は clip していれば束、していなければ同じ Group の下だけ。

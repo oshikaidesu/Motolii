@@ -7,7 +7,7 @@ use crate::doc::vector::{Composite, LineJoin, PointType, RepeaterTransform, Vect
 
 mod shaping;
 mod trim;
-pub(crate) use shaping::{bend, chop, extend, resample, reverse, smooth, subdivide, wiggle};
+pub(crate) use shaping::{bend, chop, extend, oscillate, resample, reverse, smooth, subdivide, wiggle};
 pub(crate) use trim::{split_bezier, trim};
 
 #[derive(Debug, Clone, PartialEq)]

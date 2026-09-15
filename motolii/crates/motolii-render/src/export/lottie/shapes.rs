@@ -178,7 +178,7 @@ fn op_kind_to_json(kind: &OpKind) -> Option<serde_json::Value> {
         }),
         // Lottie に無い演算(AE の Wiggle、Cavalry の behaviour)。書き出しでは落ちる。
         OpKind::Wiggle { .. } | OpKind::Smooth { .. } | OpKind::Subdivide { .. } | OpKind::Reverse
-        | OpKind::Extend { .. } | OpKind::Chop { .. } | OpKind::Resample { .. } | OpKind::Bend { .. } => return None,
+        | OpKind::Extend { .. } | OpKind::Chop { .. } | OpKind::Resample { .. } | OpKind::Bend { .. } | OpKind::Oscillator { .. } => return None,
     })
 }
 
