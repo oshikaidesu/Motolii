@@ -167,9 +167,12 @@ typed.forEach((s, i) => during([words(s, i < 6 ? 0.18 : 0.34, [960, 540])], i * 
   lens.effect("4-Color Gradient", { "Top Left": "#9DB8F5", "Top Right": "#F39AD9", "Bottom Left": "#F7B6E6", "Bottom Right": "#A9C4F7", "Blend": 90 });
   lens.effect("Inner Shadow", { "Opacity": 35, "Distance": 6, "Size": 30, "Color": "#FFFFFF" });
   lens.clip();
-  const sync = words("Sync", 0.55, [960, 520], "#FFFFFF", "Snell Roundhand");
+  // The overlap is a box: the word sits where the two meet, and follows them as they close in.
+  const sync = words("Sync", 0.55, [0, 0], "#FFFFFF", "Snell Roundhand")
+    .set("Position Anchor", top).set("Position Anchor 2", bottom).set("Position Area", "Center");
   sync.keys("Opacity", [[meet, 0, "Linear"], [meet + 0.6, 1]]);
-  const together = words("T o g e t h e r", 0.12, [960, 600], "#5B4A6A");
+  const together = words("T o g e t h e r", 0.12, [0, 0], "#5B4A6A")
+    .set("Position Anchor", sync).set("Position Area", "Bottom").set("Margin", 6);
   together.keys("Opacity", [[meet + 0.3, 0, "Linear"], [meet + 0.9, 1]]);
   during([rule, bottom, top, lens, sync, together], a, b);
 }

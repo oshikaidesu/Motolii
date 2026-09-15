@@ -85,6 +85,9 @@ pub const SHAPE_MARGIN: &str = "layout.shape_margin";
 /// 付く相手の箱の外側 9 か所(Center は重ねる)へ、自分の Margin だけ離して置く。Blob Track の層なら ID の一番小さい塊。
 /// 付いた物は流れの外(CSS の absolute と同じ、押し合わない)。
 pub const POSITION_ANCHOR: &str = "layout.position_anchor";
+/// 2 つ目の相手(提案 2026-09-16、CSS anchor positioning は辺ごとに別の相手を指せる: `top: anchor(--a bottom); bottom: anchor(--b top)`)。
+/// 指すと、相手の箱は 2 つの箱の重なり(軸ごとに、重ならなければ間)。Sync の「重なった所が箱になる」。
+pub const POSITION_ANCHOR_2: &str = "layout.position_anchor_2";
 /// 格子へ吸い付く(Grid の Group の子、流れの外の子と Repeater の写し): 箱の左上を一番近い升目の角へ寄せる強さ 0..1。
 /// Size が Fields なら大きさも升目の倍数に丸める。先例: Müller-Brockmann のモジュラーグリッド、C4D MoGraph の Quantize、
 /// Illustrator / Photoshop の Snap to Grid。
@@ -225,6 +228,7 @@ pub const SPACE_ROWS: &[Row] = &[
     (SHAPE_OUTSIDE, "Shape Outside", Value::Enum(0), None, &["None", "Margin Box", "Content"]),
     (SHAPE_MARGIN, "Shape Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (POSITION_ANCHOR, "Position Anchor", Value::LayerId(0), None, &[]),
+    (POSITION_ANCHOR_2, "Position Anchor 2", Value::LayerId(0), None, &[]),
     (POSITION_AREA, "Position Area", Value::Enum(0), None, &["None", "Top Left", "Top", "Top Right", "Left", "Center", "Right", "Bottom Left", "Bottom", "Bottom Right"]),
 ];
 
@@ -450,7 +454,21 @@ impl StoreView<'_> {
 
     fn anchored_inner(&self, layer: LayerId, anchor: LayerId, area: i64, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
         let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
-        let Some((a_lo, a_hi)) = self.box_seen_from(anchor, layer, t)? else { return Ok(None) };
+        let Some((mut a_lo, mut a_hi)) = self.box_seen_from(anchor, layer, t)? else { return Ok(None) };
+        let second = match self.value_at(layer, &PropertyId::new(POSITION_ANCHOR_2)?, t)? {
+            Some(Value::LayerId(id)) if id != 0 && id != layer.0 => Some(LayerId(id)),
+            Some(Value::F64(v)) if v >= 1.0 && v.round() as u64 != layer.0 => Some(LayerId(v.round() as u64)),
+            _ => None,
+        };
+        if let Some(second) = second.filter(|s| self.here(*s, t).unwrap_or(false)) {
+            if let Some((b_lo, b_hi)) = self.box_seen_from(second, layer, t)? {
+                // 軸ごとに、重なっていれば重なり、離れていれば間。
+                let (lo, hi) = (a_lo.max(b_lo), a_hi.min(b_hi));
+                let (gap_lo, gap_hi) = (a_hi.min(b_hi), a_lo.max(b_lo));
+                a_lo = glam::vec2(if lo.x <= hi.x { lo.x } else { gap_lo.x }, if lo.y <= hi.y { lo.y } else { gap_lo.y });
+                a_hi = glam::vec2(if lo.x <= hi.x { hi.x } else { gap_hi.x }, if lo.y <= hi.y { hi.y } else { gap_hi.y });
+            }
+        }
         // 自分の箱の、位置からの広がり(親の空間)。
         let Some(b) = self.layer_box(layer, t)? else { return Ok(None) };
         let authored = self.resolve_position(layer, t)?;
@@ -2083,6 +2101,34 @@ mod tests {
         assert!((out[0] + 40.0).abs() < 1e-3 && out[1].abs() < 1e-3, "room 40: 60 out folds to 20 out: {out:?}");
         let through = bounced([m + 100.0 + 120.0 - 10.0, m + 40.0], [m + 100.0 + 120.0 + 10.0, m + 60.0], [200.0, 100.0], 50.0);
         assert!((through[0] + 160.0).abs() < 1e-3, "80 past the wall crosses the centre and reaches the far wall: {through:?}");
+    }
+
+    /// 2 つ目の相手を指すと、相手の箱は 2 つの箱の重なり(離れていれば間)。
+    #[test]
+    fn a_label_with_two_anchors_sits_on_their_overlap_or_between_them() {
+        let mut doc = blank_project();
+        let square = |doc: &mut Document, id: u64, at: [f64; 2]| {
+            let layer = add(doc, id, LayerSource::Shape, None);
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [100.0, 100.0])] }).unwrap();
+            put(doc, layer, property::POSITION, Value::Vec2(at));
+            layer
+        };
+        let a = square(&mut doc, 1, [100.0, 100.0]);
+        let b = square(&mut doc, 2, [100.0, 160.0]);
+        let label = add(&mut doc, 3, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: label, shapes: vec![rect_shape([255; 4], [20.0, 10.0])] }).unwrap();
+        put(&mut doc, label, POSITION_ANCHOR, Value::LayerId(a.0));
+        put(&mut doc, label, POSITION_ANCHOR_2, Value::LayerId(b.0));
+        put(&mut doc, label, POSITION_AREA, Value::Enum(5));
+        let (ba, bb) = (shown(&doc, a, T), shown(&doc, b, T));
+        let bl2 = shown(&doc, label, T);
+        let centre = |r: [f32; 4]| [(r[0] + r[2]) * 0.5, (r[1] + r[3]) * 0.5];
+        let overlap = [ba[0].max(bb[0]), ba[1].max(bb[1]), ba[2].min(bb[2]), ba[3].min(bb[3])];
+        assert!((centre(bl2)[0] - centre(overlap)[0]).abs() < 0.01 && (centre(bl2)[1] - centre(overlap)[1]).abs() < 0.01, "centred on the overlap: {bl2:?} {overlap:?}");
+        put(&mut doc, b, property::POSITION, Value::Vec2([100.0, 300.0]));
+        let (ba, bb, bl) = (shown(&doc, a, T), shown(&doc, b, T), shown(&doc, label, T));
+        let gap_y = (ba[3] + bb[1]) * 0.5;
+        assert!((centre(bl)[1] - gap_y).abs() < 0.01, "apart: centred in the gap between them: {bl:?} {ba:?} {bb:?}");
     }
 
     #[test]
