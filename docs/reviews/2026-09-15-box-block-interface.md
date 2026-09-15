@@ -86,3 +86,10 @@ block(t, params, items, world) -> outputs
 - 形: 箱の並びを GPU のバッファに置き、ブロックは vism の fx と同じ置き場・頭の JSON・再読み込みの計算シェーダー。描く所まで GPU から出さない
 - 今の天井(コードから、測っていない): 関係を CPU で物ごとに解く(押し合いは全組 × 32 回、移り方は 1 コマに過去の配置を最大 120 回)/ 形は層ごとに輪郭を絵に描く / 写しは 1 つずつ層として解く / Blob Track は絵を CPU へ読み戻して塊を数える
 - taffy はコア(CPU)のまま。並べる計算は物の数に線形で、関係の天井ではない
+
+## 2 番の前半: ブロックの段(2026-09-15、実装)
+
+- `vism/` に置く fx と同じ頭の JSON に `"STAGE": "block"`。作者は `fn block(i: u32, p: BlockParams) -> Offset` だけを書く。箱の並び `items`(親の空間の lo / hi、住む箱、角丸、番号)・`host`(時刻と数)・欄の struct・全員に掛ける外枠は `block_program.rs` が組み、naga で確かめてから棚に載せる。読み直し・壊れた時に前の正しい物を残すのは fx と同じ
+- 1 本目 `vism/bounce.wgsl`(欄 Strength)。試験: 4000 個の箱で GPU の結果が doc の `layout::bounced` と 0.05px 以内 `the_bounce_block_folds_boxes_like_the_cpu_law`、棚に段 Block で並ぶ `a_block_sits_on_the_shelf_like_an_effect`
+- 踏んだ天井: device の上限を選択の枠の分だけ小さく借りていた(storage buffer 1 本・64 KiB・workgroup 16)。adapter の範囲で広げた(8 本・1 GiB・256)
+- まだ: 描く所へ届いていない(試験だけ読み戻す)。次の段で fork の頂点の口(`motolii_field`)が物ごとのずれの buffer を読む。書類の Bounce(CPU)はその後に消す

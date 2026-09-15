@@ -4,6 +4,7 @@ pub(crate) mod isf;
 pub(crate) mod vism;
 pub(crate) mod catalog;
 pub(crate) mod surface_program;
+pub(crate) mod block_program;
 mod wgsl_fragment;
 pub mod subtype;
 

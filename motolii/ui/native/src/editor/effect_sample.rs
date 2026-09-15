@@ -92,7 +92,7 @@ mod snapshots {
                 out.push(Intent::SetTrack { layer: subject, property: PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, track: track(Value::Vec2([c[0] - travel, c[1]]), Value::Vec2([c[0] + travel, c[1]])) });
                 out
             }
-            EffectStage::Placement | EffectStage::Path | EffectStage::Solid => {
+            EffectStage::Placement | EffectStage::Path | EffectStage::Solid | EffectStage::Block => {
                 let mut out = place(subject, 0, NewKind::Star);
                 // 星は枠の高さの半分ほどに(既定は 16:9 の枠では小さい)。
                 let grow = if stage == EffectStage::Placement { 1.3 } else { 1.8 };

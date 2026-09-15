@@ -13,7 +13,7 @@ pub(crate) enum IsfError {
     Validate(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
-    #[error("STAGE `{0}` は知らない(pass / warp / surface / field)")]
+    #[error("STAGE `{0}` は知らない(pass / warp / surface / field / clip / block)")]
     UnknownStage(String),
     #[error("TIME_OFFSET: {0}")]
     TimeOffset(String),
@@ -32,6 +32,8 @@ pub enum IsfStage {
     Field,
     /// 世界の平面で切る。shader は無く、欄だけ(fork の 1 式を板・点群・網が読む)。
     Clip,
+    /// 箱の並びから物ごとのずれを解く計算シェーダー(`block_program`)。
+    Block,
 }
 
 impl IsfStage {
@@ -42,6 +44,7 @@ impl IsfStage {
             "surface" => Some(Self::Surface),
             "field" => Some(Self::Field),
             "clip" => Some(Self::Clip),
+            "block" => Some(Self::Block),
             _ => None,
         }
     }

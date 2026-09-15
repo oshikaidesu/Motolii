@@ -28,6 +28,8 @@ pub enum EffectStage {
     Output,
     /// 文字の層の輪郭(shader を持たない): 文字を形にする段で効く。
     Text,
+    /// 箱の並びから物ごとのずれを GPU で解く(`block_program`)。
+    Block,
 }
 
 #[derive(Clone, Debug)]
@@ -284,6 +286,19 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
     };
     if source.extension != "fs" {
         let (manifest, body) = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?;
+        if manifest.stage == isf::IsfStage::Block {
+            for input in manifest.param_inputs() {
+                if input.ty.component_count() != 1 {
+                    return Err(format!("{}: block の欄は float / long / bool だけ", input.name));
+                }
+            }
+            let full = super::block_program::module_source(&manifest, &body)?;
+            super::block_program::validate(&full)?;
+            let interface = schema(&manifest);
+            let n = manifest.param_inputs().count();
+            return Ok(VismDefinition { source, manifest, interface, vertex_text: full.clone(), fragment_text: full,
+                vertex_entry: String::new(), fragment_entry: String::new(), subtypes: subtype::unknown(n) });
+        }
         if !matches!(manifest.stage, isf::IsfStage::Pass | isf::IsfStage::Warp) {
             // hook の snippet。型は fork の base と合わせて初めて決まるので、ここでは欄の型だけ縛る。
             for input in manifest.param_inputs() {
@@ -413,6 +428,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             isf::IsfStage::Surface => EffectStage::Surface,
             isf::IsfStage::Field => EffectStage::Field,
             isf::IsfStage::Clip => EffectStage::Clip,
+            isf::IsfStage::Block => EffectStage::Block,
         },
         params: d.manifest.param_inputs().enumerate().map(|(i, p)| {
             let range = p.min.zip(p.max).map(|(min, max)| (min[0] as f64, max[0] as f64))
