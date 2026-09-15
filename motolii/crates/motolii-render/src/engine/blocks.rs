@@ -312,4 +312,41 @@ mod tests {
         let spread = state.iter().filter(|o| o.translate != [0.0, 0.0]).count();
         assert!(spread > 20, "the crowd was pushed and folded: {spread} moved");
     }
+
+    /// ブロックごとに自分の欄を読む(1 コマに送る前の書き込みで、後のブロックの欄が前のブロックに混ざらない)。
+    #[test]
+    fn each_block_reads_its_own_params() {
+        use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
+        let engine = Engine::new().unwrap();
+        let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+        let bounce = program_for(device, include_str!("../../vism/bounce.wgsl"));
+        let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
+        let items = [BlockItem { lo: [300.0, 20.0], hi: [310.0, 30.0], room_lo: [0.0; 2], room_size: [200.0, 100.0], radius: 0.0, group: 1, margin: 0.0, weight: 1.0 }];
+        let mut world = BlockWorld::new(device);
+        world.begin(device, queue, &items);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
+        bounce.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.0]);
+        push.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[9.0]);
+        let state = read_state(device, queue, &world, encoder);
+        assert_eq!(state[0].translate, [0.0, 0.0], "Bounce at strength 0 does not fold, whatever the next block's margin is");
+    }
+
+    /// 調べる口: `MOTOLII_BLOCK_DOC` の書類の `MOTOLII_BLOCK_FRAME` コマの物の箱とブロックの結果を出す。
+    #[test]
+    #[ignore]
+    fn dump_blocks() {
+        use crate::render::compositor::effects::block_program::read_state;
+        let doc = Document::load(std::env::var("MOTOLII_BLOCK_DOC").unwrap()).unwrap();
+        let frame: i64 = std::env::var("MOTOLII_BLOCK_FRAME").unwrap().parse().unwrap();
+        let view = doc.view();
+        let fps = view.composition().unwrap().unwrap().fps;
+        let t = RationalTime::try_from_frame(frame, fps).unwrap();
+        let mut engine = Engine::new().unwrap();
+        engine.render_frame(&view, t).unwrap();
+        for (k, o) in engine.blocks.objects.iter().enumerate() { eprintln!("object {k}: {o:?}"); }
+        for b in &engine.blocks.batches { eprintln!("batch stage {} {} {:?} {:?}", b.stage, b.plugin, b.params, b.members); }
+        let world = engine.blocks.world.as_ref().unwrap();
+        let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        for (k, o) in read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder).iter().enumerate() { eprintln!("state {k}: {o:?}"); }
+    }
 }

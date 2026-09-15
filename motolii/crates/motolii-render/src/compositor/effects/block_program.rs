@@ -175,10 +175,6 @@ pub(crate) struct BlockWorld {
     capacity: u64,
     objects: wgpu::Buffer,
     states: [wgpu::Buffer; 2],
-    members: wgpu::Buffer,
-    member_capacity: u64,
-    host: wgpu::Buffer,
-    params: wgpu::Buffer,
     /// 今の state が `states` のどちらか。
     pub(crate) current: usize,
     pub(crate) count: u32,
@@ -195,13 +191,16 @@ impl BlockProgram {
         if members.is_empty() || world.count == 0 {
             return;
         }
-        world.ensure_members(device, members.len() as u64);
-        queue.write_buffer(&world.members, 0, &members.iter().flat_map(|m| m.to_le_bytes()).collect::<Vec<u8>>());
+        // 掛かった物の番号も同じ理由でブロックごとに別の buffer。
+        let members_buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-members"), size: (members.len() * 4) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        queue.write_buffer(&members_buffer, 0, &members.iter().flat_map(|m| m.to_le_bytes()).collect::<Vec<u8>>());
         let mut slots = [0.0f32; PARAM_SLOTS];
         for (slot, value) in slots.iter_mut().zip(params) {
             *slot = *value;
         }
-        queue.write_buffer(&world.params, 0, &slots.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
+        // uniform の書き込みは submit の時にまとめて届き、同じ buffer は最後の値が勝つ。ブロックごとの欄は別の buffer で渡す。
+        let params_buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-params"), size: 96, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        queue.write_buffer(&params_buffer, 0, &slots.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
         let bytes = u64::from(world.count) * OFFSET_BYTES;
         for round in 0..self.rounds {
             // uniform は submit 前の最後の書き込みが勝つので、回ごとに違う host は別の小さな buffer で渡す。
@@ -221,9 +220,9 @@ impl BlockProgram {
                     wgpu::BindGroupEntry { binding: 0, resource: world.objects.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 1, resource: world.states[from].as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 2, resource: host.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 3, resource: world.params.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 3, resource: params_buffer.as_entire_binding() },
                     wgpu::BindGroupEntry { binding: 4, resource: world.states[to].as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 5, resource: world.members.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 5, resource: members_buffer.as_entire_binding() },
                 ],
             });
             {
@@ -234,7 +233,6 @@ impl BlockProgram {
             }
             world.current = to;
         }
-        let _ = &world.host;
     }
 }
 
@@ -246,19 +244,8 @@ impl BlockWorld {
             capacity: 1,
             objects: buffer(ITEM_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST),
             states: [buffer(OFFSET_BYTES, state), buffer(OFFSET_BYTES, state)],
-            members: buffer(4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST),
-            member_capacity: 1,
-            host: buffer(16, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST),
-            params: buffer(96, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST),
             current: 0,
             count: 0,
-        }
-    }
-
-    fn ensure_members(&mut self, device: &wgpu::Device, count: u64) {
-        if count > self.member_capacity {
-            self.member_capacity = count.next_power_of_two();
-            self.members = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-members"), size: self.member_capacity * 4, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         }
     }
 
