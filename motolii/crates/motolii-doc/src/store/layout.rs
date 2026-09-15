@@ -70,6 +70,11 @@ pub const POSITION_ANCHOR: &str = "layout.position_anchor";
 /// Size が Fields なら大きさも升目の倍数に丸める。先例: Müller-Brockmann のモジュラーグリッド、C4D MoGraph の Quantize、
 /// Illustrator / Photoshop の Snap to Grid。
 pub const SNAP_TO_GRID: &str = "layout.snap_to_grid";
+/// 親の箱への制約(Figma の Constraints): 並べる Group の流れの外の子が、親の箱の大きさが変わった時にどう付いていくか。
+/// 基準は時刻 0 の親の箱(デザインした時の大きさ)。Left / Top は今のまま、Right / Bottom は向こうの辺からの距離を保つ、
+/// Left & Right / Top & Bottom は両方の辺からの距離を保って伸びる、Center は中心からのずれを保つ、Scale は割合で。
+pub const HORIZONTAL_CONSTRAINT: &str = "layout.horizontal_constraint";
+pub const VERTICAL_CONSTRAINT: &str = "layout.vertical_constraint";
 pub const SNAP_SIZE: &str = "layout.snap_size";
 pub const POSITION_AREA: &str = "layout.position_area";
 /// 箱と箱をつなぐ線(`store/connect.rs`)。形の層の欄。
@@ -125,6 +130,8 @@ pub const GROUP_ROWS: &[Row] = &[
 pub const ITEM_ROWS: &[Row] = &[
     (POSITION_TYPE, "Position Type", Value::Enum(0), None, &["Relative", "Absolute"]),
     (SNAP_TO_GRID, "Snap to Grid", Value::F64(0.0), Some((0.0, 1.0)), &[]),
+    (HORIZONTAL_CONSTRAINT, "Horizontal Constraint", Value::Enum(0), None, &["Left", "Right", "Left & Right", "Center", "Scale"]),
+    (VERTICAL_CONSTRAINT, "Vertical Constraint", Value::Enum(0), None, &["Top", "Bottom", "Top & Bottom", "Center", "Scale"]),
     (SNAP_SIZE, "Snap Size", Value::Enum(0), None, &["Off", "Fields"]),
     (HORIZONTAL_SIZING, "Horizontal Sizing", Value::Enum(0), None, SIZING),
     (VERTICAL_SIZING, "Vertical Sizing", Value::Enum(0), None, SIZING),
@@ -689,6 +696,11 @@ impl StoreView<'_> {
                     let slot = self.slot(layer, t, bounds, [Sizing::Hug; 2], 3, placed)?;
                     frame.slots.insert(layer, slot);
                 }
+                for &(_, child) in children.get(&layer).map(Vec::as_slice).unwrap_or(&[]) {
+                    if let Some(slot) = self.constrained(child, layer, t, [placed.size.width, placed.size.height])? {
+                        frame.slots.insert(child, slot);
+                    }
+                }
             }
             for leaf in leaves {
                 let placed = shifted(*tree.layout(leaf.node).map_err(taffy)?);
@@ -1083,6 +1095,44 @@ impl StoreView<'_> {
             }
             None => Ok(range),
         }
+    }
+
+    /// 流れの外の子の、親の箱への制約で付いていった置き場所(Figma の Constraints)。制約が Left / Top だけなら None(書いたまま)。
+    fn constrained(&self, child: LayerId, parent: LayerId, t: RationalTime, size: [f32; 2]) -> Result<Option<Slot>, StoreError> {
+        if self.choice(child, POSITION_TYPE, t)? != 1 {
+            return Ok(None);
+        }
+        let modes = [self.choice(child, HORIZONTAL_CONSTRAINT, t)?, self.choice(child, VERTICAL_CONSTRAINT, t)?];
+        if modes == [0, 0] {
+            return Ok(None);
+        }
+        // 基準は時刻 0 の親の箱。
+        let design = if t == RationalTime::ZERO { size } else { self.layout_frame(RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
+        let Some(b) = self.layer_box(child, t)? else { return Ok(None) };
+        let scale = self.pair(child, property::SCALE, [1.0, 1.0], t)?;
+        let position = self.resolve_position(child, t)?;
+        let anchor = self.free_anchor(child, t)?;
+        let mut out_position = position;
+        let mut out_scale = scale;
+        for axis in 0..2 {
+            let (lo, hi) = (position[axis] + (b[axis] - anchor[axis]) * scale[axis], position[axis] + (b[axis + 2] - anchor[axis]) * scale[axis]);
+            let delta = size[axis] - design[axis];
+            let ratio = if design[axis] > 1e-3 { size[axis] / design[axis] } else { 1.0 };
+            let origin = CANVAS_MARGIN;
+            let (new_lo, new_hi) = match modes[axis] {
+                1 => (lo + delta, hi + delta),
+                2 => (lo, hi + delta),
+                3 => (lo + delta * 0.5, hi + delta * 0.5),
+                4 => (origin + (lo - origin) * ratio, origin + (hi - origin) * ratio),
+                _ => (lo, hi),
+            };
+            let extent = (b[axis + 2] - b[axis]).abs();
+            if (hi - lo).abs() > 1e-6 && extent > 1e-6 {
+                out_scale[axis] = scale[axis] * (new_hi - new_lo) / (hi - lo);
+            }
+            out_position[axis] = new_lo + (anchor[axis] - b[axis]) * out_scale[axis];
+        }
+        Ok(Some(Slot { position: out_position, scale: out_scale, stretch: [1.0, 1.0], wrap: None, z: 0.0, scale_z: 1.0, rotation: [0.0; 3], anchor }))
     }
 
     /// Transform Origin が Anchor 以外なら、箱の中のその点(素材座標)。
@@ -1867,6 +1917,35 @@ mod tests {
         put(&mut doc, card, TRANSFORM_ORIGIN, Value::Enum(5));
         let centred = shown(&doc, card, T);
         assert!(((centred[0] + centred[2]) * 0.5 - 400.0).abs() <= 1.01, "Center: the middle sits on the Position: {centred:?}");
+    }
+
+    #[test]
+    fn free_children_follow_the_parents_edges_by_their_constraints() {
+        let mut doc = blank_project();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        let panel = add(&mut doc, 1, LayerSource::Group, None);
+        for (name, value) in [(DISPLAY, Value::Enum(1)), (HORIZONTAL_SIZING, Value::Enum(2)), (VERTICAL_SIZING, Value::Enum(2)), (HEIGHT, Value::F64(300.0))] {
+            put(&mut doc, panel, name, value);
+        }
+        let mut track = crate::doc::eval::KeyframeTrack::new();
+        track.insert(crate::doc::eval::Keyframe { t: at(0), value: Value::F64(400.0), interp: crate::doc::eval::Interp::Linear, spatial: Default::default() });
+        track.insert(crate::doc::eval::Keyframe { t: at(30), value: Value::F64(600.0), interp: crate::doc::eval::Interp::Linear, spatial: Default::default() });
+        doc.apply(Intent::SetTrack { layer: panel, property: PropertyId::new(WIDTH).unwrap(), track }).unwrap();
+        let badge = rect(&mut doc, 2, panel, [40.0, 40.0]);
+        let bar = rect(&mut doc, 3, panel, [300.0, 20.0]);
+        for (layer, position, mode) in [(badge, [360.0, 40.0], 1), (bar, [200.0, 280.0], 2)] {
+            put(&mut doc, layer, POSITION_TYPE, Value::Enum(1));
+            put(&mut doc, layer, property::POSITION, Value::Vec2(position));
+            put(&mut doc, layer, HORIZONTAL_CONSTRAINT, Value::Enum(mode));
+        }
+        let (b0, b30) = (shown(&doc, badge, at(0)), shown(&doc, badge, at(30)));
+        assert!(((b30[0] - b0[0]) - 200.0).abs() < 0.5 && ((b30[2] - b30[0]) - (b0[2] - b0[0])).abs() < 0.5, "Right: keeps its distance from the right edge: {b0:?} {b30:?}");
+        let (r0, r30) = (shown(&doc, bar, at(0)), shown(&doc, bar, at(30)));
+        assert!((r30[0] - r0[0]).abs() < 0.5 && ((r30[2] - r0[2]) - 200.0).abs() < 0.5, "Left & Right: both distances kept, it stretches: {r0:?} {r30:?}");
+        put(&mut doc, badge, HORIZONTAL_CONSTRAINT, Value::Enum(3));
+        let c30 = shown(&doc, badge, at(30));
+        assert!(((c30[0] - b0[0]) - 100.0).abs() < 0.5, "Center: moves half as much: {c30:?}");
     }
 
     #[test]

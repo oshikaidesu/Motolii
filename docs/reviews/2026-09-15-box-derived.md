@@ -17,3 +17,12 @@
 - すべての物に **Transform Origin**(Anchor / Top Left / Top / Top Right / Left / Center / Right / Bottom Left / Bottom / Bottom Right)。Anchor は書いた px のまま、他は毎コマ層の箱から解く。並ぶ子も同じ(書いていなければ今どおり箱の中心)
 - Motolii の Position は中心が居る場所なので、Bottom Left なら左下の角が Position に居続け、文字が伸びても、大きさを変えても、角から伸びる
 - 試験: `a_transform_origin_keeps_its_corner_on_the_position_as_the_box_grows`
+
+## 3. 親の箱への制約
+
+- 先例: Figma の **Constraints**(Horizontal: Left / Right / Left & Right / Center / Scale、Vertical: Top / Bottom / Top & Bottom / Center / Scale)。CSS なら absolute の left / right の組
+- 並べる Group の流れの外の子(Position Type = Absolute)に **Horizontal Constraint** と **Vertical Constraint**。親の箱の大きさが時刻で変わると、子の箱が付いていく
+- **基準は時刻 0 の親の箱**(デザインした時の大きさ)。Right は右の辺からの距離、Left & Right は両方の辺からの距離(伸びる)、Center は中心からのずれ、Scale は割合を保つ
+- 置き場所は並ぶ子と同じ Slot(移り方も効く)。伸びは Scale で(線も伸びる、Figma と同じ)
+- 見本 `constraints_card.js`(幅と高さに鍵を打ったカードの中で、右上の丸・伸びる帯・中央の星・左上の題が付いていく): 跳び 0・尖り 0
+- 試験: `free_children_follow_the_parents_edges_by_their_constraints`
