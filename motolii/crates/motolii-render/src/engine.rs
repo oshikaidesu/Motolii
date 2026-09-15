@@ -143,6 +143,8 @@ pub struct Engine {
     feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
+    /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
+    clip_bases: std::collections::HashSet<LayerId>,
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
     outline_layers: Vec<LayerId>,
     /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
@@ -218,6 +220,7 @@ impl Engine {
             freezing: None,
             feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
+            clip_bases: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
@@ -286,6 +289,7 @@ impl Engine {
             freezing: None,
             feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
+            clip_bases: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,

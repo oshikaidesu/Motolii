@@ -207,6 +207,36 @@ mod clipping_contract {
         assert!(orphan.chunks_exact(4).all(|px| px[3] == 0), "missing base left unbounded clipping");
     }
 
+    /// 形の層も clip の下地になれる(下地は網でなく絵に描く)。Sync のレンズで踏んだ: 網の形の下地では黙って落ちていた。
+    #[test]
+    fn a_shape_layer_is_a_clipping_base() {
+        use crate::doc::store::{LayerMeta, LayerSource, LayerTiming, PropertyId, ShapeNode};
+        use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape};
+        let (width, height) = (64u32, 64u32);
+        let mut doc = composition(width, height);
+        let square = |doc: &mut Document, id: u64, order: i16, at: [f64; 2], rgb: Rgb| {
+            let layer = LayerId(id);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetAttrs { layer, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() } },
+                Intent::SetShapes { layer, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 30.0, y: 30.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(rgb), ..Default::default() }) })] },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2(at) },
+            ]).unwrap();
+            layer
+        };
+        square(&mut doc, 1, 0, [24.0, 24.0], Rgb { r: 0.0, g: 0.0, b: 0.0 });
+        let upper = square(&mut doc, 2, 1, [40.0, 40.0], Rgb { r: 1.0, g: 0.0, b: 0.0 });
+        clip(&mut doc, upper);
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        // 素の書類の形は左上が置き場所: 下地 25..55、上 41..71。
+        assert!(at(&frame, width, 48, 48)[0] > 200, "the upper square shows inside the base: {:?}", at(&frame, width, 48, 48));
+        assert_eq!(at(&frame, width, 60, 60)[3], 0, "and nowhere outside it");
+        assert!(at(&frame, width, 30, 30)[3] > 200 && at(&frame, width, 30, 30)[0] < 30, "the base itself is still there");
+    }
+
     /// Stencil はクリッピングマスクの逆: clip した Stencil は自分の束(土台)だけを残し、下の背景は切らない。
     /// Silhouette は穴を開ける。
     #[test]

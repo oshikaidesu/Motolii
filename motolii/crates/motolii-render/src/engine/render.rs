@@ -511,6 +511,12 @@ impl Engine {
             .filter(|layer| !layer.clip_to_below)
             .filter_map(|layer| layer.matte.map(|matte| matte.layer))
             .collect();
+        // クリップの下地は絵が要る(網の形は切れない): 誰かが clip している層は、形でも絵に描く。
+        self.clip_bases = resolved
+            .iter()
+            .filter(|layer| layer.clip_to_below)
+            .filter_map(|layer| layer.matte.map(|matte| matte.layer))
+            .collect();
 
         let mut skip_below = 0;
         let mut previous_build: Option<(LayerId, i64, Layer)> = None;

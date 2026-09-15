@@ -345,7 +345,7 @@ impl Engine {
         // 場(Field)だけなら輪郭を刻んだ mesh のまま描く(線に場が乗る)。warp と絵の効果は素材の絵が要る。
         let needs_warp = self.compositor.catalog.descriptors.iter().any(|d| d.stage == crate::render::compositor::EffectStage::Warp && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
         let needs_field = needs_material && !needs_warp;
-        let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image;
+        let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image && !self.clip_bases.contains(&layer.id);
         let step = (vector && needs_field).then_some(FIELD_STEP);
         // Blob Track が形の素材を箱へ合わせた写し: 輪郭だけを伸ばす(線は太らない)。大きさは写しごとに違うので cache に残さない。
         // Display の Group の背景も形の書類を持ち、形の層と同じ道で描く。
