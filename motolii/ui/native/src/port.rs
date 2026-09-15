@@ -306,9 +306,10 @@ impl EditorRuntime{
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
+                let (point,guides)=drag.snap(point,j["snap"].as_bool().unwrap_or(false),self.stage_view_scale);self.stage_snap=guides;
                 let edits=drag.edits(&self.doc,point,j["shift"].as_bool().unwrap_or(false),j["alt"].as_bool().unwrap_or(false),self.animate)?;self.set_preview(edits)?;
             }
-            "commit"=>{self.stage_drag=None;if let Some((owner,edits))=self.preview.take(){self.doc.clear_preview_edits(owner);self.apply(edits)?;}}
+            "commit"=>{self.stage_drag=None;self.stage_snap=[None,None];if let Some((owner,edits))=self.preview.take(){self.doc.clear_preview_edits(owner);self.apply(edits)?;}}
             "cancel"=>self.cancel_preview(),
             _=>return Err("Unknown Stage gesture phase".into()),
         }Ok(())

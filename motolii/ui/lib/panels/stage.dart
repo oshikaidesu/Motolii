@@ -275,6 +275,31 @@ class _StagePanelState extends State<StagePanel> {
     }
   }
 
+  /// Snap guides arrive as composition x / y; the frame's corners carry
+  /// them to the screen (top-left, top-right, bottom-right, bottom-left).
+  List<(Offset, Offset)> _snapGuides() {
+    final guides = _observer['snapGuides'];
+    final frame = [
+      for (final p in (_observer['frame'] as List?) ?? []) ?_point(p),
+    ];
+    if (guides is! List || guides.length < 2 || frame.length != 4) {
+      return const [];
+    }
+    Offset along(Offset a, Offset b, double u) => a + (b - a) * u;
+    return [
+      if (guides[0] case final num x)
+        (
+          along(frame[0], frame[1], x / _width),
+          along(frame[3], frame[2], x / _width),
+        ),
+      if (guides[1] case final num y)
+        (
+          along(frame[0], frame[3], y / _height),
+          along(frame[1], frame[2], y / _height),
+        ),
+    ];
+  }
+
   Offset? _point(dynamic p) => p is List && p.length >= 2
       ? _toScreen(Offset(_num(p[0]), _num(p[1])))
       : null;
@@ -601,6 +626,8 @@ class _StagePanelState extends State<StagePanel> {
     'viewScale': _scale,
     'shift': _shift,
     'alt': HardwareKeyboard.instance.isAltPressed,
+    // Cmd while moving: snap to other boxes' edges and centres (After Effects).
+    'snap': HardwareKeyboard.instance.isMetaPressed,
     'held': _held,
   };
   void _update(Offset point) {
@@ -1224,6 +1251,7 @@ class _StagePanelState extends State<StagePanel> {
                                         spatialMesh: gizmos && _spatialActive
                                             ? _screenMesh()
                                             : null,
+                                        snapGuides: _snapGuides(),
                                         marquee: _marquee == null
                                             ? null
                                             : Rect.fromPoints(
@@ -1350,6 +1378,7 @@ class _StageOverlay extends CustomPainter {
     required this.viewport,
     this.spatialMesh,
     this.marquee,
+    this.snapGuides = const [],
   });
   final List<List<Offset>> outlines;
   final List<List<Offset?>> cameras, cameraFrustums;
@@ -1371,6 +1400,9 @@ class _StageOverlay extends CustomPainter {
   /// The 3D gizmo exactly as the native side hit-tests it, already on screen.
   final ui.Vertices? spatialMesh;
   final Rect? marquee;
+
+  /// The composition lines a Cmd-held move is holding to, already on screen.
+  final List<(Offset, Offset)> snapGuides;
   void _cross(Canvas canvas, Offset at, double half, Paint paint) {
     canvas.drawLine(at - Offset(half, 0), at + Offset(half, 0), paint);
     canvas.drawLine(at - Offset(0, half), at + Offset(0, half), paint);
@@ -1492,6 +1524,9 @@ class _StageOverlay extends CustomPainter {
         canvas.drawRect(rect, line);
       }
     }
+    for (final (a, b) in snapGuides) {
+      canvas.drawLine(a, b, line);
+    }
     if (marquee != null) {
       canvas.drawRect(
         marquee!,
@@ -1518,6 +1553,7 @@ class _StageOverlay extends CustomPainter {
       !listEquals(old.frame, frame) ||
       old.viewport != viewport ||
       old.marquee != marquee ||
+      !listEquals(old.snapGuides, snapGuides) ||
       !_samePolylines(old.outlines, outlines) ||
       !mapEquals(old.handles, handles) ||
       !identical(old.spatialMesh, spatialMesh);

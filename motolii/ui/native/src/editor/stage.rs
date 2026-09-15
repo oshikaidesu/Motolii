@@ -575,6 +575,10 @@ impl DragSession {
         }
         Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer,projection_camera)?))
     }
+    /// Cmd の吸い付きを掛けた点(平面ケージの移動だけ)と、合った線。
+    pub(crate) fn snap(&self,point:[f64;2],on:bool,view_scale:f64)->([f64;2],[Option<f64>;2]){
+        match self { Self::Cage(drag) if on => drag.snapped(point, view_scale), _ => (point, [None, None]) }
+    }
     pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:Animate)->Result<Vec<Intent>,String>{
         match self {
             Self::Cage(drag)=>drag.edits(doc,point,shift,alt,animate),
@@ -583,7 +587,39 @@ impl DragSession {
     }
 }
 
-pub(crate) struct CageDrag {drag:GizmoDrag,map:PlaneMap,revision:Revision,start:[f64;2],moves:Vec<(LayerId,(f64,f64),PlaneMap)>}
+pub(crate) struct CageDrag {drag:GizmoDrag,map:PlaneMap,revision:Revision,start:[f64;2],moves:Vec<(LayerId,(f64,f64),PlaneMap)>,
+    /// 吸い付く相手: 他の層の画面の箱と comp の枠 [左, 上, 右, 下](comp 座標)。移動で、傾いていない時だけ。
+    snap_targets:Vec<[f64;4]>}
+
+/// Cmd の吸い付き(AE の Snapping、宿題 2026-09-15): 動かす箱の左・中・右(上・中・下)を、相手の箱の同じ 3 本のうち一番近い線へ、
+/// しきい値(comp 座標)以内なら合わせる。戻り値は合わせた後の点と、合った線 [x, y]。
+pub(crate) fn snap_move(start: [f64; 2], point: [f64; 2], moving: (f64, f64, f64, f64), targets: &[[f64; 4]], threshold: f64) -> ([f64; 2], [Option<f64>; 2]) {
+    let (bx, by, bw, bh) = moving;
+    let delta = [point[0] - start[0], point[1] - start[1]];
+    let mut out = point;
+    let mut lines = [None, None];
+    for axis in 0..2 {
+        let (lo, size) = if axis == 0 { (bx, bw) } else { (by, bh) };
+        let ours = [lo + delta[axis], lo + delta[axis] + size * 0.5, lo + delta[axis] + size];
+        let mut best: Option<(f64, f64)> = None;
+        for t in targets {
+            let (a, b) = if axis == 0 { (t[0], t[2]) } else { (t[1], t[3]) };
+            for line in [a, (a + b) * 0.5, b] {
+                for mine in ours {
+                    let diff = line - mine;
+                    if diff.abs() <= threshold && best.map_or(true, |(d, _)| diff.abs() < d.abs()) {
+                        best = Some((diff, line));
+                    }
+                }
+            }
+        }
+        if let Some((diff, line)) = best {
+            out[axis] += diff;
+            lines[axis] = Some(line);
+        }
+    }
+    (out, lines)
+}
 impl CageDrag {
     pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,projection_camera:crate::doc::core::ResolvedCamera)->Result<Self,String>{
         let layer=*ids.last().ok_or("Select a layer")?;
@@ -612,7 +648,37 @@ impl CageDrag {
                 moves.push((id, g.position, mapping));
             }
         }
-        Ok(Self{drag,map,revision:doc.revision(),start,moves})
+        // 吸い付く相手: 動かす物と、その祖先・子孫でない、描かれる層の画面の箱と、comp の枠。
+        let mut snap_targets = Vec::new();
+        if mode == GizmoMode::Move && geom.rotation_x == 0.0 && geom.rotation_y == 0.0 {
+            let comp = fit.comp;
+            snap_targets.push([0.0, 0.0, comp.width as f64, comp.height as f64]);
+            if let Ok(resolved) = view.resolved_layers(at) {
+                let related = |a: LayerId, b: LayerId| -> bool {
+                    let mut up = Some(a);
+                    let mut guard = 0;
+                    while let Some(x) = up { if x == b { return true } up = view.attrs(x).ok().flatten().and_then(|t| t.parent); guard += 1; if guard > 64 { break } }
+                    false
+                };
+                for other in resolved.iter().filter(|l| !l.ghost && l.copy == 0 && l.placement.opacity > 0.0) {
+                    if matches!(other.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) { continue }
+                    if ids.iter().any(|id| related(*id, other.id) || related(other.id, *id)) { continue }
+                    if let Some(g) = selection_geom_resolved(engine, &view, &resolved, other.id, at) {
+                        let (x, y, w, h) = g.box_;
+                        if g.rotation.abs() < 1e-6 && w.is_finite() && h.is_finite() { snap_targets.push([x, y, x + w, y + h]); }
+                    }
+                }
+            }
+        }
+        Ok(Self{drag,map,revision:doc.revision(),start,moves,snap_targets})
+    }
+
+    /// 吸い付きの点と線(Cmd を押している間だけ)。`view_scale` は Stage の表示倍率(しきい値を画面の 6 px に)。
+    pub(crate) fn snapped(&self, point: [f64; 2], view_scale: f64) -> ([f64; 2], [Option<f64>; 2]) {
+        if self.drag.mode != GizmoMode::Move || self.snap_targets.is_empty() {
+            return (point, [None, None]);
+        }
+        snap_move(self.start, point, self.drag.orig_box, &self.snap_targets, 6.0 / view_scale.max(1e-3))
     }
     pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:Animate)->Result<Vec<Intent>,String>{
         if doc.revision()!=self.revision{return Err("Gesture canceled because document changed".into())}
@@ -675,5 +741,18 @@ mod drag_projection_tests {
             }
         }
         }
+    }
+
+    #[test]
+    fn a_moved_box_snaps_its_edges_and_centre_to_the_nearest_line_within_the_threshold() {
+        let targets = [[0.0, 0.0, 1920.0, 1080.0], [500.0, 300.0, 700.0, 400.0]];
+        // 100×50 の箱を左上 (100, 100) から動かす。左の辺が 497 に来る所へ引くと、相手の左の辺 500 に合う(3 px 以内)。
+        let (point, lines) = super::snap_move([0.0, 0.0], [397.0, 0.0], (100.0, 100.0, 100.0, 50.0), &targets, 6.0);
+        assert_eq!((point[0], lines[0]), (400.0, Some(500.0)), "left edge meets the other box's left edge");
+        // 中心 960 に中心を合わせる。
+        let (point, lines) = super::snap_move([0.0, 0.0], [812.0, 0.0], (100.0, 100.0, 100.0, 50.0), &targets, 6.0);
+        assert_eq!((point[0], lines[0]), (810.0, Some(960.0)), "centre meets the frame's centre");
+        let (point, lines) = super::snap_move([0.0, 0.0], [330.0, 0.0], (100.0, 100.0, 100.0, 50.0), &targets, 6.0);
+        assert_eq!((point, lines), ([330.0, 0.0], [None, None]), "nothing near: the pointer is left alone");
     }
 }
