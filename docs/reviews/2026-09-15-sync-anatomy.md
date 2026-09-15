@@ -64,3 +64,24 @@ Scene Graph の札(ページに出ている物): Background Shape、Basic Line�
 - エディタは同じ効果を 1 層に 1 枚まで(Bounce → Push Apart → Bounce は組めない)。押し合いで壁から数 px はみ出すことがある
 - 連続性: GPU の結果は CPU の物差しに見えないので、描いた絵のコマ間の画素の差で見た(中央値の 3 倍を越えるコマ無し)
 - 見本 `sync/letters.js`(スクラッチ)
+
+## 通しで組んだ(2026-09-16)
+
+見本 `ui/native/src/editor/script/examples/sync.js`(16 秒、1 本のスクリプト、外の素材なし)。10 ショットをショットごとの時刻で出し入れする。
+
+| ショット | 使った物 |
+|---|---|
+| 打たれる文字 | 文字の層を 0.18 秒ずつ差し替え、Transform Origin = Center |
+| 円の中の字 | 並べる Group(円)+ 字ごとに GPU のブロック Bounce → Push Apart、点の輪は Repeater(Circle)、格子は Repeater の細い矩形 |
+| 枠と回る札 | なぞる形 Outline、Repeater(Circle)の回転の鍵、塗りの色の Hold 鍵で反転 |
+| 升目の半円 | Grid の Group、升目ごとに Overflow Clip と clip、なぞる形 Handles |
+| 帯と波 | つなぐ線 + 形の効果 Oscillator(位相の鍵) |
+| カードの 2 つ | 並べる Group + Bounce → Push Apart、なぞる形 Circle |
+| 虹色の輪を回る | fx 4-Color Gradient、Offset Path = Border Box(角丸いっぱい = 円の周)、Width / Height の鍵で輪が縮む |
+| 半分黒の円と残像 | 円に clip した矩形(Transform Origin = Bottom)、遅れた輪の写し |
+| 迫る黒と白 → レンズ | 白 → 黒 → 白の写しに 4-Color Gradient と Inner Shadow を掛け、黒へ clip(= 交わり)、文字を上に |
+
+途中で直した物: 形の層が clip の下地になれなかった(網で描くので黙って落ちていた → 下地は絵に描く)、fx の欄が多いと束ねが無効で黙って描かれない(4-Color Gradient を欄 5 個に)、ブロックの欄の buffer の共有。
+コマ間の画素の差が大きいのはショットの切り替わりの 7 か所だけ。
+
+まだ: 交わりを 1 つの箱として読む口(今は文字の位置を手で置いた)、字ごとの跳ねる波(Between の波打ち)、光(Glow)、升目が 4×4 から 2×2 へ詰まる動き。

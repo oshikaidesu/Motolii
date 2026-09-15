@@ -13,4 +13,6 @@ const ink = ellipse({ name: "Ink dots" }).fill("#F2EDE4").set("Scale", [0.025, 0
 ink.effect("Repeater", { "Along": "Grid", "Count": 330, "Columns": 30, "Position X Each": 57, "Position Y Each": 80 });
 ink.set("Field", lens).set("Field Falloff", 260).set("Field Scale", 0.2).set("Field Push", -20);
 
-for (const layer of [lens, dots, ink]) layer.projection("2D");
+const caption = text("a box as a field", { name: "Caption" }).fill("#F2EDE4").font("Helvetica Neue").set("Scale", [0.18, 0.18]).set("Position", [140, 1000]);
+
+for (const layer of [lens, dots, ink, caption]) layer.projection("2D");
