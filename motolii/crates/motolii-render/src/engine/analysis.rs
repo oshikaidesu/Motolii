@@ -79,6 +79,10 @@ impl Engine {
         let Some(comp) = view.composition().map_err(store)? else { return Ok(Vec::new()) };
         let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let mut out = Vec::new();
+        // カメラの動き(注視点と、距離の対数を px 相当に)。
+        let camera = view.resolve_camera(t).map_err(store)?;
+        out.push(("camera.center".to_owned(), camera.center));
+        out.push(("camera.distance".to_owned(), [camera.distance_scale.max(1e-3).ln() * 300.0, camera.target_z]));
         for layer in view.resolved_layers(t).map_err(store)? {
             // 見えない層(Opacity 0 の解析係など)の箱は動きとして読まない。
             if layer.ghost || layer.copy != 0 || layer.placement.opacity <= 0.0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {

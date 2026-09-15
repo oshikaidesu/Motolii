@@ -172,6 +172,9 @@ pub mod property {
     pub const CAMERA_DISTANCE: &str = "camera.distance";
     /// 注視する層(AE の Point of Interest に null を親付けする型)。0 は無し。あれば center と target.z より優先。
     pub const CAMERA_TARGET: &str = "camera.target";
+    /// Target の層の箱が画面に占める割合(Unity Cinemachine の Group Framing Size: 1 で画面いっぱい、0.5 で半分)。0 は使わない(Distance のまま)。
+    /// 箱の中心を注視点にし、箱が収まる Distance を解く。Target を Hold で替えると、Camera 層の Transition で箱から箱へ移る。
+    pub const CAMERA_FRAMING: &str = "camera.framing";
 
     use crate::doc::eval::Value;
     /// Camera 層の欄: (property, label, 既定値, 範囲)。登録・既定・生成時の複写はこの 1 表から。
@@ -179,6 +182,7 @@ pub mod property {
         (CAMERA_CENTER, "Center", Value::Vec2([0.0, 0.0]), None),
         (CAMERA_TARGET_Z, "Target Z", Value::F64(0.0), None),
         (CAMERA_TARGET, "Target", Value::LayerId(0), None),
+        (CAMERA_FRAMING, "Framing Size", Value::F64(0.0), Some((0.0, 10.0))),
         (CAMERA_ORBIT, "Orbit", Value::Vec2([0.0, 0.0]), None),
         (CAMERA_DISTANCE, "Distance", Value::F64(1.0), Some((0.01, 100.0))),
         (CAMERA_ZOOM, "Zoom", Value::F64(1.0), Some((0.01, 100.0))),

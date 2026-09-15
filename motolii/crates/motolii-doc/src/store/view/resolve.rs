@@ -53,6 +53,9 @@ impl<'a> StoreView<'a> {
             zoom: f(get(property::CAMERA_ZOOM)?, 1.0),
             roll_degrees: f(get(property::CAMERA_ROLL)?, 0.0),
         };
+        if let Some(framed) = self.framed_camera(id, t, camera)? {
+            return Ok(framed);
+        }
         if let Some(target) = self.camera_target_layer(id, t)? {
             if let Some(comp) = self.composition()? {
                 let comp = comp.spec();
@@ -65,6 +68,54 @@ impl<'a> StoreView<'a> {
             }
         }
         Ok(camera)
+    }
+
+    /// Framing Size が 0 より大きく Target があれば、箱を画面に収めたカメラ。Camera 層の Transition があれば、少し前の時刻の
+    /// 収め方(注視点・奥行き・Distance の対数)を区間の重みで混ぜる(Target を替えると箱から箱へ滑る)。
+    fn framed_camera(&self, id: LayerId, t: RationalTime, authored: crate::doc::core::ResolvedCamera) -> Result<Option<crate::doc::core::ResolvedCamera>, StoreError> {
+        let framing = match self.value_at(id, &PropertyId::new(property::CAMERA_FRAMING)?, t)? {
+            Some(Value::F64(v)) if v > 0.0 => v as f32,
+            _ => return Ok(None),
+        };
+        let Some(now) = self.frame_of(id, t, framing, authored)? else { return Ok(None) };
+        let samples = self.transition_samples(id, t)?;
+        if samples.is_empty() {
+            return Ok(Some(now));
+        }
+        let (mut center, mut z, mut log_distance, mut total) = (glam::Vec2::ZERO, 0.0f32, 0.0f32, 0.0f32);
+        for (at, w) in samples {
+            let Some(past) = self.frame_of(id, at, framing, authored)? else { continue };
+            center += glam::Vec2::from(past.center) * w;
+            z += past.target_z * w;
+            log_distance += past.distance_scale.ln() * w;
+            total += w;
+        }
+        if total <= 1e-6 {
+            return Ok(Some(now));
+        }
+        Ok(Some(crate::doc::core::ResolvedCamera { center: (center / total).to_array(), target_z: z / total, distance_scale: (log_distance / total).exp(), ..now }))
+    }
+
+    /// その時刻の Target の箱(世界、軸に沿った箱)を画面の `framing` の割合に収めるカメラ。
+    fn frame_of(&self, id: LayerId, t: RationalTime, framing: f32, authored: crate::doc::core::ResolvedCamera) -> Result<Option<crate::doc::core::ResolvedCamera>, StoreError> {
+        let Some(target) = self.camera_target_layer(id, t)? else { return Ok(None) };
+        let Some(comp) = self.composition()? else { return Ok(None) };
+        let present = self.layers().into_iter().collect();
+        let Some(world) = self.world_transform3d_chain(target, t, &present)?.get(&target).copied() else { return Ok(None) };
+        let Some(b) = self.layer_box(target, t)? else { return Ok(None) };
+        let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point3(glam::vec3(c[0], c[1], 0.0)));
+        let lo = corners.iter().fold(glam::Vec3::MAX, |a, p| a.min(*p));
+        let hi = corners.iter().fold(glam::Vec3::MIN, |a, p| a.max(*p));
+        let (w, h) = ((hi.x - lo.x).max(1.0), (hi.y - lo.y).max(1.0));
+        let middle = (lo + hi) * 0.5;
+        // 注視点の面で、画面の倍率 = Zoom / Distance。箱が割合 framing に収まる倍率へ Distance を解く。
+        let magnify = (framing * comp.width as f32 / w).min(framing * comp.height as f32 / h);
+        Ok(Some(crate::doc::core::ResolvedCamera {
+            center: [middle.x - comp.width as f32 * 0.5, middle.y - comp.height as f32 * 0.5],
+            target_z: middle.z,
+            distance_scale: (authored.zoom.max(1e-3) / magnify.max(1e-3)).clamp(0.01, 100.0),
+            ..authored
+        }))
     }
 
     /// `camera.target` が指す、いま在る別の層。0・消えた層・自分自身は無し。
@@ -1293,6 +1344,39 @@ mod camera_target_contract {
         let projection = camera_projection(comp, camera);
         let clip = projection.projection_matrix() * projection.view_matrix() * point.extend(1.0);
         clip.w > 0.0 && (clip.x / clip.w).abs() < 1e-3 && (clip.y / clip.w).abs() < 1e-3
+    }
+
+    /// Framing Size: Target の箱の中心を注視点にし、箱が画面のその割合に収まる距離へ(Cinemachine の Group Framing Size)。
+    #[test]
+    fn framing_size_fits_the_target_box_on_screen_and_follows_it() {
+        let mut doc = blank_project();
+        let comp = doc.view().composition().unwrap().unwrap().spec();
+        let card = add(&mut doc, 2, LayerSource::Shape);
+        doc.apply(Intent::SetShapes { layer: card, shapes: vec![rect_shape([255; 4], [200.0, 100.0])] }).unwrap();
+        put(&mut doc, card, property::POSITION, Value::Vec2([300.0, 200.0]));
+        let camera = add(&mut doc, 1, LayerSource::Camera);
+        put(&mut doc, camera, property::CAMERA_TARGET, Value::LayerId(card.0));
+        put(&mut doc, camera, property::CAMERA_FRAMING, Value::F64(0.5));
+        let on_screen = |doc: &Document| {
+            let view = doc.view();
+            let resolved = view.resolve_camera(RationalTime::ZERO).unwrap();
+            let projection = camera_projection(comp, resolved);
+            let matrix = projection.projection_matrix() * projection.view_matrix();
+            let world = view.world_transform3d(card, RationalTime::ZERO).unwrap();
+            let b = view.layer_box(card, RationalTime::ZERO).unwrap().unwrap();
+            let ndc: Vec<glam::Vec2> = [[b[0], b[1]], [b[2], b[3]]].iter().map(|c| {
+                let clip = matrix * world.transform_point3(glam::vec3(c[0], c[1], 0.0)).extend(1.0);
+                glam::vec2(clip.x / clip.w, clip.y / clip.w)
+            }).collect();
+            (((ndc[1].x - ndc[0].x).abs() * 0.5), ((ndc[1].y - ndc[0].y).abs() * 0.5), (ndc[0] + ndc[1]) * 0.5)
+        };
+        let (w, h, middle) = on_screen(&doc);
+        assert!(middle.length() < 1e-3, "the box's centre is the centre of the frame: {middle:?}");
+        assert!(((w.max(h)) - 0.5).abs() < 0.01 && w.max(h) >= w.min(h), "the tighter side takes half the frame: {w} {h}");
+        put(&mut doc, card, property::POSITION, Value::Vec2([900.0, 700.0]));
+        put(&mut doc, card, property::SCALE, Value::Vec2([2.0, 2.0]));
+        let (w2, h2, middle2) = on_screen(&doc);
+        assert!(middle2.length() < 1e-3 && ((w2.max(h2)) - 0.5).abs() < 0.01, "moving and growing the box keeps it framed: {w2} {h2} {middle2:?}");
     }
 
     /// AE の Point of Interest を rerun の球面座標で持つ: 注視点・軌道・距離が Camera 層から解決へ流れ、eye は導出。

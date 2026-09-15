@@ -385,6 +385,10 @@ impl EditorRuntime{
             if !matches!(meta.source, LayerSource::Camera | LayerSource::Stage) {
                 for row in layout::SPACE_ROWS { push(&mut properties, id, row)?; }
             }
+            // Camera は移り方だけ(Framing Size で箱から箱へ移る時)。
+            if meta.source == LayerSource::Camera {
+                for row in layout::SPACE_ROWS.iter().filter(|r| matches!(r.0, layout::TRANSITION_DURATION | layout::TRANSITION_EASING)) { push(&mut properties, id, row)?; }
+            }
             if meta.source == LayerSource::Shape {
                 for row in layout::CONNECT_ROWS { push(&mut properties, id, row)?; }
                 // 線の太さ(`shape.stroke_width`、書類の線の太さが既定)。つなぐ線・なぞる形の細さもこれで決める。
