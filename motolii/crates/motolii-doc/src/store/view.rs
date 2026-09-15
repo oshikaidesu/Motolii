@@ -35,6 +35,7 @@ pub struct StoreView<'a> {
     /// host が描いた絵から解いた値(Blob の塊など)。無ければ解析を読む配置は空。
     analysis: Option<&'a super::analysis::AnalysisInputs>,
     layout_memo: super::layout::Memo,
+    layout_cache: &'a RefCell<super::layout::LayoutCache>,
 }
 
 const MAX_LINK_DEPTH: u32 = 64;
@@ -48,6 +49,7 @@ impl<'a> StoreView<'a> {
         revision: Revision,
         track_cache: &'a RefCell<TrackCache>,
         record_cache: &'a RefCell<super::document::RecordCache>,
+        layout_cache: &'a RefCell<super::layout::LayoutCache>,
     ) -> Self {
         Self {
             db,
@@ -60,11 +62,17 @@ impl<'a> StoreView<'a> {
             record_cache,
             analysis: None,
             layout_memo: Default::default(),
+            layout_cache,
         }
     }
 
     pub(crate) fn layout_memo(&self) -> &super::layout::Memo {
         &self.layout_memo
+    }
+
+    /// コマをまたぐ配置の覚えを使ってよい view か(解析・仮の編集・一時の値のどれも読まない)。
+    pub(crate) fn shared_layout_cache(&self) -> Option<(&RefCell<super::layout::LayoutCache>, &Revision)> {
+        (self.analysis.is_none() && self.preview_edits.is_empty() && (self.transient.is_empty() || self.ignore_transients)).then_some((self.layout_cache, &self.revision))
     }
 
     /// 解析の入力を読む view(resolve が Blob Track の塊を配置にする)。

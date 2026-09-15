@@ -305,7 +305,19 @@ pub struct Slot {
 }
 
 /// view の寿命の間、時刻ごとに 1 回だけ解く(view は値を変えない)。
-pub(crate) type Memo = Rc<RefCell<HashMap<RationalTime, Rc<Frame>>>>;
+pub(crate) type Memo = Rc<RefCell<HashMap<RationalTime, std::sync::Arc<Frame>>>>;
+
+/// 書類が持つ、コマをまたぐ配置の覚え。版が変われば丸ごと捨てる。移り方が 1 コマに過去の時刻の配置を何十回も解くので、
+/// 次のコマで同じ時刻を解き直さない(天井の棚卸し 2026-09-15)。
+#[derive(Default)]
+pub struct LayoutCache {
+    revision: Option<crate::doc::store::Revision>,
+    frames: HashMap<RationalTime, std::sync::Arc<Frame>>,
+}
+
+impl LayoutCache {
+    const LIMIT: usize = 4096;
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Sizing { Hug, Fill, Fixed }
@@ -348,14 +360,36 @@ impl StoreView<'_> {
     }
 
     /// その時刻に並べた結果。Display の Group が無ければ空。
-    pub fn layout_frame(&self, t: RationalTime) -> Result<Rc<Frame>, StoreError> {
+    pub fn layout_frame(&self, t: RationalTime) -> Result<std::sync::Arc<Frame>, StoreError> {
         if let Some(hit) = self.layout_memo().borrow().get(&t) {
             return Ok(hit.clone());
         }
+        if let Some((cache, revision)) = self.shared_layout_cache() {
+            let cache = cache.borrow();
+            if cache.revision.as_ref() == Some(revision) {
+                if let Some(hit) = cache.frames.get(&t) {
+                    self.layout_memo().borrow_mut().insert(t, hit.clone());
+                    return Ok(hit.clone());
+                }
+            }
+        }
         // 解いている間に同じ時刻を問われたら(面の Group の親を辿る時など)、空の結果で答えて巡らない。
-        self.layout_memo().borrow_mut().insert(t, Rc::new(Frame::default()));
-        let frame = Rc::new(self.compute_layout(t)?);
+        self.layout_memo().borrow_mut().insert(t, std::sync::Arc::new(Frame::default()));
+        // 解いている途中の内側の時刻は、巡り止めの空の結果を読んでいるかもしれない。コマをまたいで覚えるのは一番外側だけ。
+        thread_local! { static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) }; }
+        let outermost = DEPTH.with(|d| { let v = d.get(); d.set(v + 1); v == 0 });
+        let computed = self.compute_layout(t);
+        DEPTH.with(|d| d.set(d.get() - 1));
+        let frame = std::sync::Arc::new(computed?);
         self.layout_memo().borrow_mut().insert(t, frame.clone());
+        if let Some((cache, revision)) = self.shared_layout_cache().filter(|_| outermost) {
+            let mut cache = cache.borrow_mut();
+            if cache.revision.as_ref() != Some(revision) || cache.frames.len() >= LayoutCache::LIMIT {
+                cache.revision = Some(revision.clone());
+                cache.frames.clear();
+            }
+            cache.frames.insert(t, frame.clone());
+        }
         Ok(frame)
     }
 
@@ -2129,6 +2163,30 @@ mod tests {
         let (ba, bb, bl) = (shown(&doc, a, T), shown(&doc, b, T), shown(&doc, label, T));
         let gap_y = (ba[3] + bb[1]) * 0.5;
         assert!((centre(bl)[1] - gap_y).abs() < 0.01, "apart: centred in the gap between them: {bl:?} {ba:?} {bb:?}");
+    }
+
+    /// 配置はコマをまたいで覚えるが、書類を直せば古い覚えは読まない(版で捨てる)。仮の編集の view は覚えを使わない。
+    #[test]
+    fn the_layout_cache_forgets_on_edit_and_ignores_previews() {
+        let mut doc = blank_project();
+        let row = add(&mut doc, 1, LayerSource::Group, None);
+        put(&mut doc, row, DISPLAY, Value::Enum(1));
+        put(&mut doc, row, GAP, Value::F64(10.0));
+        let a = add(&mut doc, 2, LayerSource::Shape, Some(row));
+        let b = add(&mut doc, 3, LayerSource::Shape, Some(row));
+        for layer in [a, b] {
+            doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [40.0, 40.0])] }).unwrap();
+        }
+        let x = |doc: &Document| doc.view().layout_frame(T).unwrap().slots[&b].position[0];
+        let first = x(&doc);
+        assert_eq!(x(&doc), first, "a second view reads the same frame");
+        put(&mut doc, row, GAP, Value::F64(50.0));
+        assert!((x(&doc) - first - 40.0).abs() < 0.01, "the edit shows at once: {} → {}", first, x(&doc));
+        let owner = doc.begin_preview();
+        doc.preview_edits(owner, &[Intent::SetConstant { layer: row, property: PropertyId::new(GAP).unwrap(), value: Value::F64(0.0) }]).unwrap();
+        assert!((x(&doc) - (first - 10.0)).abs() < 0.01, "a preview is laid out fresh, not from the cache: {}", x(&doc));
+        doc.clear_preview_edits(owner);
+        assert!((x(&doc) - first - 40.0).abs() < 0.01, "and after the preview the committed layout is back");
     }
 
     #[test]

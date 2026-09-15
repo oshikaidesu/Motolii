@@ -223,6 +223,8 @@ pub struct Document {
     preview_owner: u64,
     track_cache: RefCell<TrackCache>,
     record_cache: RefCell<RecordCache>,
+    /// 並べた結果をコマをまたいで覚える(書類の版と時刻で。解析・仮の編集・一時の値を読まない view だけ)。
+    layout_cache: RefCell<super::layout::LayoutCache>,
 }
 
 impl Default for Document {
@@ -248,6 +250,7 @@ impl Document {
             preview_owner: 0,
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
+            layout_cache: RefCell::new(Default::default()),
         }
     }
 
@@ -272,6 +275,7 @@ impl Document {
             self.revision(),
             &self.track_cache,
             &self.record_cache,
+            &self.layout_cache,
         )
     }
 
