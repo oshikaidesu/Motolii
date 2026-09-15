@@ -411,4 +411,24 @@ mod tests {
         assert!(at(2) != [0.0, 0.0], "the square was folded by Bounce");
         assert_eq!(at(3), at(2), "its label moved with it");
     }
+
+    /// Wave: 時刻と物の順で縦の正弦波。Wavelength 個離れた物は同じ高さ、半分なら逆。
+    #[test]
+    fn the_wave_block_travels_along_things_in_order() {
+        use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
+        let engine = Engine::new().unwrap();
+        let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+        let wave = program_for(device, include_str!("../../vism/wave.wgsl"));
+        let items: Vec<BlockItem> = (0..8).map(|i| BlockItem { lo: [i as f32 * 20.0, 0.0], hi: [i as f32 * 20.0 + 10.0, 10.0], weight: 1.0, ..Default::default() }).collect();
+        let mut world = BlockWorld::new(device);
+        world.begin(device, queue, &items);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
+        wave.record(device, queue, &mut encoder, &mut world, 0.125, &(0..8).collect::<Vec<u32>>(), &[10.0, 2.0, 4.0]);
+        let y: Vec<f32> = read_state(device, queue, &world, encoder).iter().map(|o| o.translate[1]).collect();
+        let expect = |k: f32| 10.0 * (std::f32::consts::TAU * (2.0 * 0.125 - k / 4.0)).sin();
+        for (k, v) in y.iter().enumerate() {
+            assert!((v - expect(k as f32)).abs() < 1e-3, "object {k}: {v} vs {}", expect(k as f32));
+        }
+        assert!((y[0] - y[4]).abs() < 1e-3 && (y[0] + y[2]).abs() < 1e-3, "a wavelength apart: same; half: opposite {y:?}");
+    }
 }

@@ -112,8 +112,12 @@ typed.forEach((s, i) => during([words(s, i < 6 ? 0.18 : 0.34, [960, 540])], i * 
   white.set("Position Type", "Absolute").keys("Position", [[a, [760, 430], "Linear"], [b, [760 - 610, 430 + 260], "Linear"]]);
   for (const o of [black, white]) { o.effect("Bounce", {}); o.effect("Push Apart", { "Margin": 10 }); }
   halo.push(keep(line({ name: "Card halo" })).fill("#C9C9C9").set("Connect From", card).set("Trace", "Circle").set("Margin", 120).set("Stroke Width", 2));
-  const between = words("Between", 0.16, [960, 540], "#8E6FA8");
-  during([...halo, card, black, white, between], a, b);
+  // "Between", one letter to a layer in a row; a GPU Wave runs along them.
+  const glyphs = [..."Between"].map((ch, i) => keep(text(ch, { name: `Between ${i}` })).fill("#8E6FA8").font("Menlo").set("Position", [0, 0]).set("Scale", [0.2, 0.2]));
+  const between = keep(group(...glyphs)).name("Between");
+  between.set("Display", "Flex").set("Gap", 2).set("Transform Origin", "Center").set("Position", [960, 540]);
+  for (const g of glyphs) g.effect("Wave", { "Amplitude": 8, "Frequency": 1.2, "Wavelength": 5 });
+  during([...halo, card, black, white, between, ...glyphs], a, b);
 }
 
 // ── 7. the two go round an iridescent ring (9.4 – 10.9) ─────────────────
