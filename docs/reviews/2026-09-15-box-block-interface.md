@@ -101,3 +101,11 @@ block(t, params, items, world) -> outputs
 - 試験: `the_bounce_block_draws_where_the_cpu_bounce_does`(Overflow = Bounce の CPU と、子に Bounce のブロックの GPU を 4 コマ描き、四角の中心が 1px 以内)
 - 踏んだ物: 形の素材の枠は縁のにじみの余白で 2px 大きい → 書類の `layer_box` を読む
 - 今の限り: 住む箱は comp で軸に沿う(親を回すと違う)。ブロックはつながらない(1 つの物に 1 本)。鏡の中の写し(反射)と選択の枠・当たり判定はずれを知らない。書類の CPU の Bounce はまだ残している
+
+## 3 番の前半: 全員の state と、ブロックのつながり(2026-09-16、実装)
+
+- 作りを直した: GPU に「全員の箱(`objects`)」と「全員の今のずれ(state、2 本を交互)」を置き、ブロックは掛かった物(`members`)の state にずれを足す。`now_lo(k)` / `now_hi(k)` で他の物の今の箱を読める(押し合いのように全員を読むブロックが書ける)。`"ROUNDS": n` で n 回続けて解く
+- 物ごとの効果の列の順に段を分け、段の中はブロックと欄の値ごとに 1 回の計算。最後に固定の計算で state を world のずれにして motion へ
+- 2 本目 `vism/push_apart.wgsl`(C4D の Push Apart、欄 Margin、ROUNDS 32)。試験 `the_push_apart_block_pushes_like_the_margin_law`(書類の間合いの押し合いの nudge と 0.05px 以内)
+- つながり: `blocks_chain_in_effect_order`(Push Apart → Bounce で 40 個が箱の中に収まる)
+- 押し合いは全組(1 回 n²)。4000 個 × 32 回は GPU でも重い見込み — 升目で近い物だけ読む口は次

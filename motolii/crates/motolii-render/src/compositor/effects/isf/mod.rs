@@ -211,6 +211,8 @@ pub struct IsfManifest {
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
     pub passes: Vec<IsfPass>,
+    /// 箱のブロック(`STAGE: block`)を何回続けて解くか(`"ROUNDS"`、押し合いのように少しずつ解く物)。
+    pub rounds: u32,
 }
 
 impl Default for IsfManifest {
@@ -231,6 +233,7 @@ impl Default for IsfManifest {
             description: None,
             inputs: Vec::new(),
             passes: Vec::new(),
+            rounds: 1,
         }
     }
 }
@@ -471,6 +474,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             description,
             inputs,
             passes,
+            rounds: value.get("ROUNDS").and_then(|v| v.as_u64()).map_or(1, |r| r.clamp(1, 256) as u32),
         },
         body,
     ))
