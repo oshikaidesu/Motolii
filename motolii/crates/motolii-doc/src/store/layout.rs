@@ -27,6 +27,12 @@ pub const COLUMN_PREFIX: &str = "layout.column.";
 pub const ROW_PREFIX: &str = "layout.row.";
 pub const BACKGROUND: &str = "layout.background";
 pub const BORDER_RADIUS: &str = "layout.border_radius";
+/// 箱から落ちる影(CSS の box-shadow: offset-x offset-y blur spread color、Figma の Drop shadow)。背景の後ろに描く。
+/// ぼかしは、箱を広げて薄くした角丸の矩形を重ねて近づける(描く道は背景と同じ形の道、ぼかしの効果は使わない)。
+pub const SHADOW_COLOR: &str = "layout.shadow_color";
+pub const SHADOW_OFFSET: &str = "layout.shadow_offset";
+pub const SHADOW_BLUR: &str = "layout.shadow_blur";
+pub const SHADOW_SPREAD: &str = "layout.shadow_spread";
 pub const OVERFLOW: &str = "layout.overflow";
 pub const HORIZONTAL_SIZING: &str = "layout.horizontal_sizing";
 pub const VERTICAL_SIZING: &str = "layout.vertical_sizing";
@@ -135,6 +141,10 @@ pub const GROUP_ROWS: &[Row] = &[
     (BACKGROUND, "Background", Value::Color([1.0, 1.0, 1.0, 0.0]), None, &[]),
     (BORDER_RADIUS, "Border Radius", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (OVERFLOW, "Overflow", Value::Enum(0), None, &["Visible", "Clip"]),
+    (SHADOW_COLOR, "Shadow Color", Value::Color([0.0, 0.0, 0.0, 0.0]), None, &[]),
+    (SHADOW_OFFSET, "Shadow Offset", Value::Vec2([0.0, 12.0]), None, &[]),
+    (SHADOW_BLUR, "Shadow Blur", Value::F64(24.0), Some((0.0, 10000.0)), &[]),
+    (SHADOW_SPREAD, "Shadow Spread", Value::F64(0.0), None, &[]),
     (STAGGER, "Stagger", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (STAGGER_FROM, "Stagger From", Value::Enum(0), None, &["Start", "Center", "End", "Edges"]),
 ];
@@ -955,24 +965,58 @@ impl StoreView<'_> {
         }
         let color = match self.value_at(group, &PropertyId::new(BACKGROUND)?, t)? {
             Some(Value::Color(c)) => c,
-            _ => return Ok(None),
+            _ => [0.0; 4],
+        };
+        let shadow = match self.value_at(group, &PropertyId::new(SHADOW_COLOR)?, t)? {
+            Some(Value::Color(c)) => c,
+            _ => [0.0; 4],
         };
         let Some(size) = self.group_size(group, t)? else { return Ok(None) };
-        if color[3] <= 0.0 || size[0] <= 0.0 || size[1] <= 0.0 {
+        if (color[3] <= 0.0 && shadow[3] <= 0.0) || size[0] <= 0.0 || size[1] <= 0.0 {
             return Ok(None);
         }
         let radius = self.number(group, BORDER_RADIUS, 0.0, t)?.max(0.0);
         let (w, h) = (f64::from(size[0]), f64::from(size[1]));
-        let leaf = ShapeNode::Leaf(Shape {
-            source: PathSource::Rectangle { size: Point { x: w, y: h } },
-            ops: if radius > 0.0 { vec![ShapeOp::new(OpKind::RoundedCorners { radius: radius.min(w.min(h) * 0.5) })] } else { Vec::new() },
-            fill: Some(Fill { brush: Brush::Solid(Rgb { r: color[0], g: color[1], b: color[2] }), rule: FillRule::NonZero, opacity: color[3], hidden: false }),
-            stroke: None,
-        });
-        Ok(Some(vec![ShapeNode::Group(ShapeGroup {
-            transform: RepeaterTransform { position: Point { x: w * 0.5, y: h * 0.5 }, ..RepeaterTransform::IDENTITY },
-            children: vec![leaf],
-        })]))
+        // 箱を grow だけ広げた角丸の矩形(中心は箱の中心 + ずれ)。
+        let rounded = |grow: f64, offset: [f64; 2], rgba: [f64; 4]| -> Option<ShapeNode> {
+            let (sw, sh) = (w + 2.0 * grow, h + 2.0 * grow);
+            if sw <= 0.0 || sh <= 0.0 || rgba[3] <= 0.0 {
+                return None;
+            }
+            let r = (radius + grow).max(0.0).min(sw.min(sh) * 0.5);
+            Some(ShapeNode::Group(ShapeGroup {
+                transform: RepeaterTransform { position: Point { x: w * 0.5 + offset[0], y: h * 0.5 + offset[1] }, ..RepeaterTransform::IDENTITY },
+                children: vec![ShapeNode::Leaf(Shape {
+                    source: PathSource::Rectangle { size: Point { x: sw, y: sh } },
+                    ops: if r > 0.0 { vec![ShapeOp::new(OpKind::RoundedCorners { radius: r })] } else { Vec::new() },
+                    fill: Some(Fill { brush: Brush::Solid(Rgb { r: rgba[0], g: rgba[1], b: rgba[2] }), rule: FillRule::NonZero, opacity: rgba[3], hidden: false }),
+                    stroke: None,
+                })],
+            }))
+        };
+        let mut out = Vec::new();
+        if shadow[3] > 0.0 {
+            let offset = self.pair(group, SHADOW_OFFSET, [0.0, 12.0], t)?;
+            let offset = [f64::from(offset[0]), f64::from(offset[1])];
+            let blur = self.number(group, SHADOW_BLUR, 24.0, t)?.max(0.0);
+            let spread = self.number(group, SHADOW_SPREAD, 0.0, t)?;
+            if blur <= 0.5 {
+                out.extend(rounded(spread, offset, shadow));
+            } else {
+                // CSS のぼかしは標準偏差 blur / 2 のガウス。影の縁の前後 ±blur を外から内へ N 枚の輪で覆い、
+                // 重なった後の濃さが外の 0 から内の Shadow Color の α まで滑らかな段(smoothstep)で上がるよう、輪ごとの α を解く。
+                const RINGS: usize = 32;
+                let ramp = |n: usize| { let u = n as f64 / RINGS as f64; shadow[3] * u * u * (3.0 - 2.0 * u) };
+                for k in 0..RINGS {
+                    let grow = spread + blur * (1.0 - 2.0 * (k as f64 + 0.5) / RINGS as f64);
+                    let (before, after) = (ramp(k), ramp(k + 1));
+                    let each = if before >= 1.0 { 0.0 } else { 1.0 - (1.0 - after) / (1.0 - before) };
+                    out.extend(rounded(grow, offset, [shadow[0], shadow[1], shadow[2], each.clamp(0.0, 1.0)]));
+                }
+            }
+        }
+        out.extend(rounded(0.0, [0.0, 0.0], color));
+        Ok(Some(out))
     }
 
     /// Exclusions: 格子の Group が指す Blob Track の塊が重なる枠へ、見えない子を明示の位置で置く。自動の子は残りの枠へ流れる。

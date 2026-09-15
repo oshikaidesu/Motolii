@@ -1043,8 +1043,19 @@ impl Engine {
         let Some(content) = content else {
             return Ok(None);
         };
+        // Group の背景(と影)の形は、箱の左上が素材座標の 1 に来る前提で並ぶ子と揃う。影が箱の外へ出ると形の画布の原点がずれるので、その分だけ置き場所を戻す。
+        let mut placement = layer.placement;
+        if layer.source == LayerSource::Group {
+            if let Some(Ok(Some(canvas))) = shape_documents.get(&layer.id).map(|shapes| crate::doc::vector::content_canvas(shapes)) {
+                let shift = glam::vec2(canvas.origin_x as f32 - 1.0, canvas.origin_y as f32 - 1.0);
+                if shift != glam::Vec2::ZERO {
+                    placement.transform = placement.transform * glam::Affine2::from_translation(-shift);
+                    placement.world_transform = placement.world_transform.map(|w| w * glam::Affine3A::from_translation((-shift).extend(0.0)));
+                }
+            }
+        }
         let mut built = Layer {
-            content, size: layer_size(layer, natural), placement: layer.placement,
+            content, size: layer_size(layer, natural), placement,
             projection: layer.projection, projection_camera, blend_mode,
             shading: Default::default(), displace: translate_point_displace(&layer.effects),
             clip: translate_clip(&layer.effects), blocks_light: layer.blocks_light, outline: self.outline_id(layer.id),

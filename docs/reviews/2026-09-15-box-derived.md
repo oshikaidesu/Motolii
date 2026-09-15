@@ -43,3 +43,13 @@
 - 見本 `field_lens.js`(漂う半透明の箱の近くで、格子に並べた点が膨らんで退き、白い点は縮んで寄る)
 - 試験: `a_field_box_swells_what_is_near_it_and_leaves_the_far_alone`
 - 残り: 写しの Delay・色(Tint)に効かせる、場の形を Box 以外(Sphere・Linear)に
+
+## 6. 箱から落ちる影
+
+- 先例: CSS の **box-shadow**(offset-x offset-y blur spread color、ぼかしは標準偏差 blur / 2 のガウス)、Figma の Drop shadow(X・Y・Blur・Spread・Color)
+- 並べる Group に **Shadow Color**(α 0 で無し)、**Shadow Offset**、**Shadow Blur**、**Shadow Spread**。背景と同じ形の書類の中で、背景の前に描く(背景が透明でも影は出る)
+- ぼかしは効果を使わず、箱を広げて薄くした角丸の矩形 32 枚を外から内へ重ね、重なった濃さが外の 0 から内の α まで滑らかな段で上がるよう輪ごとの α を解く(描く道は形の道のまま)
+- 影が箱の外へ出ると形の画布の原点がずれるので、Group の置き場所をその分戻す(背景と子が揃う。3D の札でも)
+- 見本 `box_shadow.js`(机の上のカードが順に持ち上がり、影が遠くやわらかくなって、降りると戻る): 跳び 0・尖り 0
+- 試験: `a_box_shadow_falls_below_the_box_and_leaves_the_box_in_place`
+- 残り: inset、複数の影、形の層・文字の層の影(今は並べる Group の箱だけ)

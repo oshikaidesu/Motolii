@@ -238,6 +238,40 @@ mod clipping_contract {
         assert!(rest[0] > 240, "and the base stays elsewhere: {rest:?}");
     }
 
+    /// 箱から落ちる影(box-shadow): 影は箱の下へずれてぼけ、箱そのもの(背景)は影でずれない。
+    #[test]
+    fn a_box_shadow_falls_below_the_box_and_leaves_the_box_in_place() {
+        use crate::doc::store::{layout, LayerMeta, LayerSource, LayerTiming, PropertyId};
+        let (width, height) = (64u32, 64u32);
+        let mut doc = composition(width, height);
+        let group = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetAttrs { layer: group, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() } },
+        ]).unwrap();
+        let put = |doc: &mut Document, name: &str, value: Value| doc.apply(Intent::SetConstant { layer: group, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, property::POSITION, Value::Vec2([17.0, 10.0]));
+        put(&mut doc, layout::DISPLAY, Value::Enum(1));
+        put(&mut doc, layout::HORIZONTAL_SIZING, Value::Enum(2));
+        put(&mut doc, layout::VERTICAL_SIZING, Value::Enum(2));
+        put(&mut doc, layout::WIDTH, Value::F64(30.0));
+        put(&mut doc, layout::HEIGHT, Value::F64(30.0));
+        put(&mut doc, layout::BACKGROUND, Value::Color([1.0, 1.0, 1.0, 1.0]));
+        let mut engine = Engine::new().unwrap();
+        let plain = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        put(&mut doc, layout::SHADOW_COLOR, Value::Color([0.0, 0.0, 0.0, 1.0]));
+        put(&mut doc, layout::SHADOW_OFFSET, Value::Vec2([0.0, 8.0]));
+        put(&mut doc, layout::SHADOW_BLUR, Value::F64(4.0));
+        let shadowed = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        for (x, y) in [(18, 11), (45, 38), (32, 24)] {
+            assert_eq!(at(&plain, width, x, y), at(&shadowed, width, x, y), "the box itself does not move with its shadow at ({x}, {y})");
+        }
+        let below = at(&shadowed, width, 32, 44);
+        assert!(below[3] > 120, "under the box, the shadow: {below:?}");
+        assert!(at(&shadowed, width, 32, 2)[3] < 20, "above the box, nothing");
+    }
+
     fn ply_plane(path: &std::path::Path, size: u32, rgb: [u8; 3]) {
         let mut text = format!(
             "ply\nformat ascii 1.0\nelement vertex {}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n",
