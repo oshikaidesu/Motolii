@@ -306,6 +306,11 @@ impl BlockWorld {
 
     /// このコマの物の箱を置き、state を 0(ずれ無し)から始める。
     pub(crate) fn begin(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, items: &[BlockItem], reach: f32) {
+        self.begin_from(device, queue, items, reach, &[]);
+    }
+
+    /// 始まりの state を渡して始める(外の解き手 — Rapier — が出したずれを土台にする)。
+    pub(crate) fn begin_from(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, items: &[BlockItem], reach: f32, seed: &[BlockOffset]) {
         let count = items.len().max(1) as u64;
         if count > self.capacity {
             self.capacity = count.next_power_of_two();
@@ -318,7 +323,11 @@ impl BlockWorld {
         self.current = 0;
         if !items.is_empty() {
             queue.write_buffer(&self.objects, 0, &item_bytes(items));
-            queue.write_buffer(&self.states[0], 0, &offset_bytes(&vec![BlockOffset::default(); items.len()]));
+            let mut start = vec![BlockOffset::default(); items.len()];
+            for (slot, value) in start.iter_mut().zip(seed) {
+                *slot = *value;
+            }
+            queue.write_buffer(&self.states[0], 0, &offset_bytes(&start));
         }
         let (starts, list) = neighbors(items, reach);
         let storage = |bytes: &[u8]| {
