@@ -428,9 +428,20 @@ impl EditorRuntime{
             };
             properties.insert(0,content);
             let resolved=view.resolved_text_document(id,at).map_err(e)?.unwrap_or(t.clone());
-            properties.retain(|p|p["id"]!="text_justify");
-            let mut justify=prop(view,id,names::TEXT_JUSTIFY,&names::label_or_id(names::TEXT_JUSTIFY),&Value::Enum(resolved.justify.to_enum_value()),None,at,fps,live)?;
-            justify["choices"]=json!(["Left","Right","Center"]);properties.push(justify);
+            // 段落の欄(選択肢は名前で書ける): 揃えと文字組みの 3 法。
+            let laws = resolved.alignment;
+            let paragraph: [(&str, i64, &[&str]); 4] = [
+                (names::TEXT_JUSTIFY, resolved.justify.to_enum_value(), &["Left","Right","Center"]),
+                (names::TEXT_AUTOSPACE, laws.autospace.to_enum_value(), crate::doc::store::TextAutospace::CHOICES),
+                (names::TEXT_SPACING_TRIM, laws.spacing_trim.to_enum_value(), crate::doc::store::TextSpacingTrim::CHOICES),
+                (names::HANGING_PUNCTUATION, laws.hanging.to_enum_value(), crate::doc::store::HangingPunctuation::CHOICES),
+            ];
+            for (name, value, choices) in paragraph {
+                properties.retain(|p|p["id"]!=name);
+                let mut row=prop(view,id,name,&names::label_or_id(name),&Value::Enum(value),None,at,fps,live)?;
+                row["choices"]=json!(choices);
+                properties.push(row);
+            }
             let s=resolved.styles.first();
             json!({"classes":crate::doc::store::text_edit::classifications(t.content.eval(at)),"styles":resolved.styles,"runs":resolved.runs,"fontFamily":s.map(|s|&s.font.family),"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})
         }else{Json::Null};

@@ -1,4 +1,5 @@
 use super::{validate, Document, Intent, LayerId, PropertyId};
+use crate::doc::store::names;
 use crate::doc::store::{
     property, Interp, Keyframe, PropertyBase, RationalTime, StoreError, Value,
 };
@@ -236,6 +237,8 @@ impl crate::doc::store::StoreView<'_> {
             | property::PAN
             | property::FADE_IN
             | property::FADE_OUT => Some(Value::F64(0.0)),
+            // 段落の選択肢(文字組みの 3 法)。既定は CSS の初期値 = 選択肢の 0 番。
+            names::TEXT_AUTOSPACE | names::TEXT_SPACING_TRIM | names::HANGING_PUNCTUATION => Some(Value::Enum(0)),
             name => property::CAMERA_ROWS.iter().find(|row| row.0 == name).map(|row| row.2.clone())
                 .or_else(|| crate::doc::store::particles::default_of(name)),
         })

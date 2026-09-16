@@ -1106,6 +1106,7 @@ impl TextCacheKey {
         let snapshot = |document: &TextDocument| serde_json::to_string(&(
             document.content.eval(t),
             document.justify,
+            document.alignment,
             document.wrap_size,
             &document.styles,
             &document.runs,

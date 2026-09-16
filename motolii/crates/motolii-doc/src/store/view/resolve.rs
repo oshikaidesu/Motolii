@@ -229,6 +229,19 @@ impl<'a> StoreView<'a> {
             None => {}
         }
 
+        // 文字組みの 3 法(CSS の語)。値は選択肢の番、無ければ CSS の初期値。
+        let laws = &mut document.alignment;
+        let enum_at = |property: PropertyId| -> Result<Option<i64>, StoreError> {
+            match self.value_at(layer, &property, t)? {
+                Some(Value::Enum(v)) => Ok(Some(v)),
+                Some(other) => Err(StoreError::Property(format!("`{}` に enum でない値が入っている: {other:?}", property.name()))),
+                None => Ok(None),
+            }
+        };
+        if let Some(v) = enum_at(PropertyId::text_autospace())? { laws.autospace = crate::doc::store::TextAutospace::from_enum_value(v).unwrap_or_default(); }
+        if let Some(v) = enum_at(PropertyId::text_spacing_trim())? { laws.spacing_trim = crate::doc::store::TextSpacingTrim::from_enum_value(v).unwrap_or_default(); }
+        if let Some(v) = enum_at(PropertyId::hanging_punctuation())? { laws.hanging = crate::doc::store::HangingPunctuation::from_enum_value(v).unwrap_or_default(); }
+
         for style in &mut document.styles {
             let size_property = PropertyId::text_style_size(style.id);
             if let Some(value) = self.value_at(layer, &size_property, t)? {

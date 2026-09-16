@@ -29,6 +29,9 @@ pub const FIXED: &[(&str, &str)] = &[
     (p::TIME_REMAP, "Time Remap"),
     (p::SPEED, "Speed"),
     (TEXT_JUSTIFY, "Alignment"),
+    (TEXT_AUTOSPACE, "Text Autospace"),
+    (TEXT_SPACING_TRIM, "Text Spacing Trim"),
+    (HANGING_PUNCTUATION, "Hanging Punctuation"),
     (TEXT_CONTENT, "Content"),
     (p::SHAPE_POINTS, "Points"),
     (p::SHAPE_OUTER_RADIUS, "Outer Radius"),
@@ -47,6 +50,10 @@ pub const FIXED: &[(&str, &str)] = &[
 ];
 
 pub const TEXT_JUSTIFY: &str = "text_justify";
+/// 文字組みの 3 法。名前は CSS の property(裁定: 欄の名前は CSS の語)、選択肢は各 enum の `CHOICES`。
+pub const TEXT_AUTOSPACE: &str = "text_autospace";
+pub const TEXT_SPACING_TRIM: &str = "text_spacing_trim";
+pub const HANGING_PUNCTUATION: &str = "hanging_punctuation";
 /// 文字の中身。property ではなく text document が持つが、名前は同じ表に置く。
 pub const TEXT_CONTENT: &str = "content";
 
