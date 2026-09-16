@@ -96,6 +96,13 @@ debug = "line-tables-only"
 opt-level = 2
 debug = false
 
+# 描く側の見張り(zz_watch)用: release の最適化のまま debug-assertions だけ立てる。
+# motolii-render の build.rs は cfg!(debug_assertions) で「焼き込み/disk」を分けるので、
+# この profile では vism/ を disk から読む(保存が次のコマに載る、cargo 無し)。
+[profile.watch]
+inherits = "release"
+debug-assertions = true
+
 [patch.crates-io]
 # re_mp4 0.5.1 は edit list 付き mp4(ffmpeg の VFR 出力)で最後のコマの長さが桁溢れする。fork の 1 行修正。
 re_mp4 = { git = "file:///Users/member_ottoto/rust_ae/re_mp4", rev = "21d5de2a6f5a7c96970b8462d46213eed809a712" }

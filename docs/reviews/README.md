@@ -855,3 +855,5 @@
 - [Stencil と Silhouette — クリッピングマスクの逆](2026-09-15-stencil.md)
 
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
+
+- [build の置き場所 — 物理の調整と shader の編集で Rust を組み直さない](2026-09-17-build-placement.md)

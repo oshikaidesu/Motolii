@@ -1,8 +1,12 @@
-//! 常駐の見張り・描く側: 書類(`.rrd`)の保存を見張り、変わる度にコマを描いて敷き詰め PNG を吐く。
-//! 描く側(GPU・書体・棚)は開いたまま。release で組む(例は既にそうしている)ので、
-//! 台本の側の見張り(ui の `watch_shot`、debug)と組で使う。
-//! `zz_watch <doc.rrd> <out_dir>`、`MOTOLII_LAST` / `MOTOLII_STEP` / `MOTOLII_SHRINK`。
+//! 常駐の見張り・描く側: 書類(`.rrd`)の保存と棚(vism/)の保存を見張り、変わる度にコマを描いて敷き詰め PNG を吐く。
+//! 描く側(GPU・書体・棚)は開いたまま。台本の側の見張り(ui の `watch_shot`、debug)と組で使う。
+//! 組み方は `cargo build --profile watch -p motolii-render --example zz_watch`(release の最適化 + disk の棚。
+//! `--release` だと棚は焼き込みで、shader の保存は次の build まで載らない)。
+//! `motolii/target/watch/examples/zz_watch <doc.rrd> <out_dir>`、`MOTOLII_LAST` / `MOTOLII_STEP` / `MOTOLII_SHRINK`。
+//! 手順と計測は docs/reviews/2026-09-17-build-placement.md。
 use motolii_render::{doc::store::*, engine::Engine};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let path = args.next().ok_or("doc")?;
@@ -10,14 +14,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&out)?;
     let read = |name: &str, default: u32| std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default);
     let mut engine = Engine::new()?;
+    // 棚の見張り(port.rs と同じ): 起きたら旗、描く前に読み直す。焼き込み build では見張りは空。
+    let shelf = Arc::new(AtomicBool::new(false));
+    let flag = shelf.clone();
+    let _watch = motolii_render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release))?;
+    eprintln!("shelf: {}", if motolii_render::engine::catalog_reads_disk() { "disk (vism/ の保存が次のコマに載る)" } else { "baked (shader は build 時のまま)" });
     let mut seen = None;
     loop {
         let stamp = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
-        if stamp == seen || stamp.is_none() {
+        let shelf_changed = shelf.swap(false, Ordering::AcqRel);
+        if (stamp == seen && !shelf_changed) || stamp.is_none() {
             std::thread::sleep(std::time::Duration::from_millis(300));
             continue;
         }
         seen = stamp;
+        if shelf_changed {
+            let refresh = motolii_render::engine::refresh_effect_catalog();
+            for error in &refresh.errors { eprintln!("shelf: {error}"); }
+            eprintln!("shelf: generation {}", refresh.generation);
+        }
         let started = std::time::Instant::now();
         let (last, step, shrink) = (read("MOTOLII_LAST", 120) as i64, read("MOTOLII_STEP", 1).max(1) as i64, read("MOTOLII_SHRINK", 1).max(1));
         let Ok(doc) = Document::load(&path) else { eprintln!("load failed"); continue };
