@@ -102,6 +102,10 @@ impl Physics {
 
     /// 世界を組み直す(顔ぶれか始まりの場所が変わった時、または時刻が飛んだ時)。
     fn build(&mut self, rooms: &[Room], bodies: &[Body]) {
+        // 何が Rapier に渡ったかを見る口(`MOTOLII_PHYSICS_DEBUG=1`)。
+        if std::env::var("MOTOLII_PHYSICS_DEBUG").is_ok() {
+            eprintln!("physics build: rooms {rooms:?}, bodies {}", bodies.len());
+        }
         *self = Self::new();
         self.shape = Self::signature(bodies);
         for room in rooms {

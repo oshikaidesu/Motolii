@@ -49,12 +49,19 @@ pub(crate) struct BlockState {
     /// 場の元(物の番号)と、その効果の順・欄。動く相手は物が揃ってから決める。
     fields: Vec<(usize, String, Vec<f32>, u32)>,
     objects: Vec<BlockItem>,
+    /// 外の解き手(Rapier)。前のコマの力を覚えている。
+    physics: crate::render::engine::physics::Physics,
     bases: Vec<([f32; 3], [f32; 3], [f32; 3])>,
     batches: Vec<BlockBatch>,
 }
 
 impl Engine {
     /// 今のコマの物ごとのずれ(震えを測る道具のため。読み戻すので描画では使わない)。
+    /// 触れ合っている組の数(測り用)。
+    pub fn physics_contacts(&self) -> usize {
+        self.blocks.physics.contacts()
+    }
+
     pub fn block_states(&self) -> Vec<[f32; 3]> {
         let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
         let ctx = &self.compositor.ctx;
@@ -223,49 +230,65 @@ impl Engine {
     }
 
     /// 集めた物を GPU で効果の順に解き、world のずれにして描く側へ渡す。ブロックが無ければ外す。
-    pub(super) fn run_blocks(&mut self, t: RationalTime) {
+    pub(super) fn run_blocks(&mut self, t: RationalTime, fps: f64) {
         let state = &mut self.blocks;
         if state.objects.is_empty() {
             self.compositor.motion = None;
             return;
         }
-        // 場の相手: 元と同じ住む箱に居る、元でない物 全員。
+        // 場と箱は外の解き手(Rapier)に渡す。ここが持つのは意図からの訳だけで、解き方は持たない
+        // (利用者 2026-09-16「物理演算を 1 から作るんじゃなくてこれも外部に揃ったやつがあるだろ」)。
+        use crate::render::engine::physics::{Body, Room, Well};
+        let mut rooms: HashMap<u32, Room> = HashMap::new();
         for (stage, plugin, params, source) in std::mem::take(&mut state.fields) {
-            let group = state.objects[source as usize].group;
-            let members: Vec<u32> = state.objects.iter().enumerate()
-                .filter(|(k, it)| *k as u32 != source && it.group == group)
-                .map(|(k, _)| k as u32).collect();
-            if members.is_empty() {
-                continue;
+            let _ = (stage, &plugin);
+            let item = state.objects[source as usize];
+            let (turn, spread, angle, strength, reach, hold) = (
+                params.first().copied().unwrap_or(0.0).to_radians(),
+                params.get(1).copied().unwrap_or(0.0).clamp(0.0, 1.0),
+                params.get(2).copied().unwrap_or(90.0).to_radians(),
+                params.get(3).copied().unwrap_or(0.0),
+                params.get(4).copied().unwrap_or(0.0),
+                params.get(6).copied().unwrap_or(0.0).clamp(0.0, 1.0),
+            );
+            let room = rooms.entry(item.group).or_insert_with(|| Room {
+                rect: [item.room_lo[0], item.room_lo[1], item.room_lo[0] + item.room_size[0], item.room_lo[1] + item.room_size[1]],
+                round: item.radius * 2.0 >= item.room_size[0].min(item.room_size[1]) - 1e-3,
+                gravity: [0.0, 0.0],
+                wells: Vec::new(),
+            });
+            room.gravity[0] += angle.cos() * strength * spread;
+            room.gravity[1] += angle.sin() * strength * spread;
+            if spread < 1.0 {
+                room.wells.push(Well {
+                    at: [(item.lo[0] + item.hi[0]) * 0.5, (item.lo[1] + item.hi[1]) * 0.5],
+                    pull: turn.cos() * strength * (1.0 - spread),
+                    swirl: turn.sin() * strength * (1.0 - spread),
+                    reach,
+                    hold,
+                });
             }
-            state.batches.push(BlockBatch { stage, plugin, params, members, source });
         }
-        // 箱は既に在る: 場の立つ箱では、間合いを空けて中に留まるのを最後に解く。人は壁を頼まない
-        // (利用者 2026-09-16「そこに壁はなく環境を事前に作るといった思考は生まれません、もう既にあって当たり前だから」)。
-        let stage = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
-        // 家(レイアウト)に留めてある物は押し合わせない。紐で繋がれた物を押し合わせると、
-        // 密に触れた所で毎コマ別の並びに落ち着いて画がガタつく(利用者 2026-09-16)。
-        let held: std::collections::HashSet<u32> = state.batches.iter()
-            .filter(|b| b.plugin == "motolii.field" && b.params.get(6).copied().unwrap_or(0.0) >= 0.5)
-            .flat_map(|b| b.members.iter().copied())
+        let bodies: Vec<Body> = state.objects.iter().enumerate()
+            .filter(|(_, it)| rooms.contains_key(&it.group))
+            .map(|(k, it)| Body {
+                layer: state.object_layers[k],
+                centre: [(it.lo[0] + it.hi[0]) * 0.5, (it.lo[1] + it.hi[1]) * 0.5],
+                half: [(it.hi[0] - it.lo[0]) * 0.5, (it.hi[1] - it.lo[1]) * 0.5],
+                round: false,
+                margin: it.margin,
+                weight: it.weight,
+            })
             .collect();
-        let inside: Vec<u32> = state.objects.iter().enumerate()
-            .filter(|(k, it)| state.field_rooms.contains(&it.group) && !held.contains(&(*k as u32)))
-            .map(|(k, _)| k as u32).collect();
-        if !inside.is_empty() {
-            // 場が向いている先(一様な分だけ)を箱の解き手に渡す。人はそれを「下」と読む。
-            let mut down = [0.0f32, 0.0];
-            for batch in state.batches.iter().filter(|b| b.plugin == "motolii.field") {
-                let (turn, spread, angle, strength) = (batch.params.first().copied().unwrap_or(0.0), batch.params.get(1).copied().unwrap_or(0.0), batch.params.get(2).copied().unwrap_or(90.0), batch.params.get(3).copied().unwrap_or(0.0));
-                let _ = turn;
-                let a = angle.to_radians();
-                down[0] += a.cos() * spread * strength.signum();
-                down[1] += a.sin() * spread * strength.signum();
-            }
-            let len = (down[0] * down[0] + down[1] * down[1]).sqrt();
-            let down = if len > 1e-4 { vec![down[0] / len, down[1] / len] } else { vec![0.0, 0.0] };
-            state.batches.push(BlockBatch { stage, plugin: "motolii.room".into(), params: down, members: inside, source: u32::MAX });
-        }
+        let rooms: Vec<Room> = rooms.into_values().collect();
+        let frame = (t.as_seconds_f64() * fps).round() as i64;
+        state.physics.solve(&rooms, &bodies, frame, fps);
+        let seed: Vec<crate::render::compositor::effects::block_program::BlockOffset> = state.object_layers.iter()
+            .map(|layer| match state.physics.offset(*layer) {
+                Some((translate, rotate)) => crate::render::compositor::effects::block_program::BlockOffset { translate, rotate, scale: 1.0 },
+                None => crate::render::compositor::effects::block_program::BlockOffset::default(),
+            })
+            .collect();
         let ctx = &self.compositor.ctx;
         // 近くの物の升目は、ブロックが宣言した届く距離(`REACH` の欄)の一番大きい値だけ広げる。
         let reach = state.batches.iter().filter_map(|batch| {
@@ -274,7 +297,7 @@ impl Engine {
             d.manifest.param_inputs().position(|p| &p.name == name).and_then(|i| batch.params.get(i).copied())
         }).fold(0.0f32, f32::max);
         let world = state.world.get_or_insert_with(|| BlockWorld::new(&ctx.device));
-        world.begin(&ctx.device, &ctx.queue, &state.objects, reach);
+        world.begin_from(&ctx.device, &ctx.queue, &state.objects, reach, &seed);
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-blocks") });
         let stages = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
         for stage in 0..stages {
@@ -370,20 +393,20 @@ mod tests {
     fn a_field_moves_everyone_in_its_room_who_carries_no_effect() {
         let fps = Fps::try_new(30, 1).unwrap();
         let mut doc = Document::new();
-        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 60, background: [0.0; 4] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
         let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
         let square = |size: f32, fill: Rgb| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size as f64, y: size as f64 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(fill), ..Default::default() }) });
         doc.apply_all([
             Intent::AddLayer(group),
-            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 60) } },
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
             Intent::SetAttrs { layer: group, patch: two_d.clone() },
             Intent::AddLayer(ball),
-            Intent::SetMeta { layer: ball, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 60) } },
+            Intent::SetMeta { layer: ball, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 90) } },
             Intent::SetAttrs { layer: ball, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d.clone() } },
             Intent::SetShapes { layer: ball, shapes: vec![square(16.0, Rgb { r: 1.0, g: 1.0, b: 1.0 })] },
             Intent::AddLayer(field),
-            Intent::SetMeta { layer: field, meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(0, None, 60) } },
+            Intent::SetMeta { layer: field, meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(0, None, 90) } },
             Intent::SetAttrs { layer: field, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d } },
             Intent::SetShapes { layer: field, shapes: vec![square(4.0, Rgb { r: 1.0, g: 0.0, b: 0.0 })] },
         ]).unwrap();
@@ -399,8 +422,8 @@ mod tests {
         }
         put(&mut doc, ball, property::POSITION, Value::Vec2([30.0, 15.0]));
         put(&mut doc, field, property::POSITION, Value::Vec2([100.0, 15.0]));
-        // 一様(Spread 1)の場を下(+90°)へ、終端の速さ 40px/秒: 1 秒で 40 * (1 - 0.35 * (1 - e^-2.857)) = 26.8px 下がる
-        // (加速し続けず終端へ収まる、利用者 2026-09-16「ユーザはおさまりを求めます」)。
+        // 一様(Spread 1)の場を下(+90°)へ。落ちる速さは外の解き手(Rapier)が決めるので、
+        // ここで見るのは「効果を持たない隣人が場だけで下へ動き、箱の中で止まる」という法の意味。
         doc.apply(Intent::SetEffects { layer: field, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.field".into() }] }).unwrap();
         for (name, value) in [("spread", 1.0), ("turn", 0.0), ("angle", 90.0), ("strength", 40.0), ("reach", 0.0)] {
             doc.apply(Intent::SetConstant { layer: field, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(value) }).unwrap();
@@ -416,9 +439,12 @@ mod tests {
         };
         let (n0, x0, y0) = centre(&engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap());
         let (n1, x1, y1) = centre(&engine.render_frame(&doc.view(), RationalTime::try_from_frame(30, fps).unwrap()).unwrap());
-        assert!(n0 > 100 && n1 > 100, "白い四角が両方のコマに在る ({n0} / {n1} px)");
-        assert!((x1 - x0).abs() < 1.0, "横には動かない ({x0} → {x1})");
-        assert!((y1 - y0 - 26.8).abs() < 1.5, "1 秒で 26.8px 下がる ({y0} → {y1})");
+        let (n2, _, y2) = centre(&engine.render_frame(&doc.view(), RationalTime::try_from_frame(60, fps).unwrap()).unwrap());
+        assert!(n0 > 100 && n1 > 100 && n2 > 100, "白い四角がどのコマにも在る ({n0} / {n1} / {n2} px)");
+        assert!((x1 - x0).abs() < 2.0, "横には動かない ({x0} → {x1})");
+        assert!(y1 > y0 + 5.0 && y2 >= y1 - 1.0, "場だけで下へ動く ({y0} → {y1} → {y2})");
+        // 箱の床(親の Group の下辺)より下へは行かない。
+        assert!(y2 < 88.0, "箱の中で止まる (y {y2})");
     }
 
     /// 場の動きはコマからコマへ飛ばない(利用者 2026-09-16「動きは離散的にならないように」)。
@@ -476,6 +502,67 @@ mod tests {
         let jump = step.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
         let fastest = step.iter().copied().fold(0.0f32, f32::max);
         assert!(jump <= fastest * 0.5, "コマ間の変わり方が跳ばない(最大の差 {jump}px、一番速いコマ {fastest}px)");
+    }
+
+    /// 落ちて積もった後は震えない(利用者 2026-09-16「まだまだガッタガタやぞ」)。
+    /// 画素の平均差では物ごとの震えが見えないので、物ごとのずれをコマ順に読んで測る。
+    #[test]
+    fn things_stop_moving_once_they_have_settled() {
+        let fps = Fps::try_new(30, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
+        let (group, field) = (LayerId(1), LayerId(2));
+        let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
+        let square = |size: f64| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }) });
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: group, patch: two_d.clone() },
+            Intent::AddLayer(field),
+            Intent::SetMeta { layer: field, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: field, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d.clone() } },
+            Intent::SetShapes { layer: field, shapes: vec![square(2.0)] },
+        ]).unwrap();
+        let put = |doc: &mut Document, layer, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, group, property::POSITION, Value::Vec2([6.0, 6.0]));
+        put(&mut doc, group, layout::DISPLAY, Value::Enum(1));
+        put(&mut doc, group, layout::HORIZONTAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::VERTICAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::WIDTH, Value::F64(148.0));
+        put(&mut doc, group, layout::HEIGHT, Value::F64(88.0));
+        put(&mut doc, field, layout::POSITION_TYPE, Value::Enum(1));
+        put(&mut doc, field, property::POSITION, Value::Vec2([74.0, 44.0]));
+        // 12 個の四角を上からばらばらに落とす。
+        for i in 0..12u64 {
+            let layer = LayerId(10 + i);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 2 + i as i16, timing: LayerTiming::place(0, None, 90) } },
+                Intent::SetAttrs { layer, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d.clone() } },
+                Intent::SetShapes { layer, shapes: vec![square(16.0)] },
+            ]).unwrap();
+            put(&mut doc, layer, layout::POSITION_TYPE, Value::Enum(1));
+            put(&mut doc, layer, property::POSITION, Value::Vec2([8.0 + (i % 6) as f64 * 22.0, -20.0 - (i / 6) as f64 * 30.0]));
+        }
+        doc.apply(Intent::SetEffects { layer: field, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.field".into() }] }).unwrap();
+        for (name, value) in [("spread", 1.0), ("turn", 0.0), ("angle", 90.0), ("strength", 400.0), ("reach", 0.0), ("tumble", 0.4), ("hold", 0.0)] {
+            doc.apply(Intent::SetConstant { layer: field, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(value) }).unwrap();
+        }
+        let mut engine = Engine::new().unwrap();
+        // 2.0 秒から 2.5 秒(落ちて積もった後)。
+        let mut frames = Vec::new();
+        for frame in 60..=75 {
+            engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, fps).unwrap()).unwrap();
+            frames.push(engine.block_states());
+        }
+        assert!(frames[0].len() >= 12, "物が並んでいる ({})", frames[0].len());
+        let mut worst = 0.0f32;
+        for pair in frames.windows(2) {
+            for (a, b) in pair[0].iter().zip(pair[1].iter()) {
+                worst = worst.max(((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt());
+            }
+        }
+        assert!(worst < 1.0, "積もった後は震えない(1 コマの動きの最大 {worst}px)");
     }
 
     /// Push Apart を GPU のブロックにしても、書類の間合いの押し合い(CPU、32 回)と同じだけ押す。
