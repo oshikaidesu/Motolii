@@ -838,6 +838,10 @@
 
 - [CSS の恩恵の台帳 2 — 2024〜2026 の追補](2026-09-17-css-ledger-2.md)
 
+- [表現別の台帳(3)— 実サイトと Codrops の 20 表現](2026-09-17-expression-ledger.md)
+
+- [フレームワークの抽象の台帳(4)— 何を抽象化したか、何が記憶を持つか](2026-09-17-framework-ledger.md)
+
 - [文字組みの法 — CSS の text-autospace・text-spacing-trim・hanging-punctuation を写す](2026-09-17-cjk-typography-law.md)
 
 - [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
