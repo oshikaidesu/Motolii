@@ -155,8 +155,10 @@ impl Physics {
         }
         for body in bodies {
             let soft = body.hardness.clamp(0.0, 1.0);
+            // 重さ 0 は動かない(留め具・引力の元)。周りがそれに当たり、それは動かない。
+            let builder = if body.weight <= 0.0 { RigidBodyBuilder::fixed() } else { RigidBodyBuilder::dynamic() };
             let handle = self.bodies.insert(
-                RigidBodyBuilder::dynamic()
+                builder
                     .translation(Vec2::new(body.centre[0] * PX, body.centre[1] * PX))
                     .ccd_enabled(true)
                     .linear_damping(0.1 + soft * 1.6)

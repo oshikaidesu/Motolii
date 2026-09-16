@@ -1195,6 +1195,14 @@ impl StoreView<'_> {
     }
 
     /// 文字の行の箱。`wrap` があればその幅で折り返して組み、横は [0, wrap](CSS の block の幅、揃えはその中)。
+    /// 文字の層の字形の輪郭(`text_box` と同じ座標)。文字はベクターなので、当たりは絵の透過ではなく
+    /// 形の層と同じ輪郭の道で取る(利用者 2026-09-16「文字の透過は svg ルートなんだから普通にできそう」)。
+    pub fn text_outline(&self, layer: LayerId, t: RationalTime) -> Result<Option<Vec<crate::doc::vector::Contour>>, StoreError> {
+        let (Some(document), Some(comp)) = (self.authored_text_document(layer, t)?, self.composition()?) else { return Ok(None) };
+        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        Ok(crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten().map(|shaped| shaped.contours))
+    }
+
     fn text_box(&self, layer: LayerId, t: RationalTime, wrap: Option<f32>) -> Result<Option<[f32; 4]>, StoreError> {
         let (Some(mut document), Some(comp)) = (self.authored_text_document(layer, t)?, self.composition()?) else { return Ok(None) };
         let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };

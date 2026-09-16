@@ -21,7 +21,7 @@ pub const GRID_MODES: &[&str] = &["Edge", "Cartesian"];
 pub const BOX_SHAPES: &[&str] = &["Rectangle", "Square", "Ellipse", "Circle"];
 pub const MARKER_TYPES: &[&str] = &["Dot", "Plus", "Cross", "Polygon"];
 /// Labels の Display Mode(Tracery 2 の Coordinates / Dimensions と、Motolii の足しの Push = 押された px)。
-pub const LABEL_MODES: &[&str] = &["Coordinates", "Dimensions", "Push"];
+pub const LABEL_MODES: &[&str] = &["Coordinates", "Dimensions", "Push", "Speed"];
 const SWITCH: &[&str] = &["Off", "On"];
 
 const fn number(name: &'static str, label: &'static str, section: &'static str, default: f64, range: (f64, f64)) -> Param {
@@ -112,24 +112,30 @@ pub const PUSH_TRACE: &str = "motolii.push_trace";
 /// 物理の可視の既定: 箱は Layers、枠は細く切れた線、触れ合いの線と場の輪を出す。
 const PHYSICS_TRACE_DEFAULTS: &[(&str, [f64; 4])] = &[
     ("method", [2.0, 0.0, 0.0, 0.0]),
-    ("box", [1.0, 0.0, 0.0, 0.0]),
-    ("box_stroke_color", [0.95, 0.93, 0.89, 1.0]),
-    ("box_stroke_opacity", [0.5, 0.0, 0.0, 0.0]),
-    ("box_stroke_width", [1.0, 0.0, 0.0, 0.0]),
-    ("box_gap", [1.0, 0.0, 0.0, 0.0]),
-    ("box_gap_size", [0.7, 0.0, 0.0, 0.0]),
-    ("links", [0.0, 0.0, 0.0, 0.0]),
-    ("contacts", [1.0, 0.0, 0.0, 0.0]),
-    ("velocity", [1.0, 0.0, 0.0, 0.0]),
-    ("hull", [1.0, 0.0, 0.0, 0.0]),
-    ("well", [1.0, 0.0, 0.0, 0.0]),
+    // 線は全部細く、印は小さく、色は 1 つ(Tracery と Pinterest の計器の作法。太い線は 1 本も無い)。
     ("box", [0.0, 0.0, 0.0, 0.0]),
+    ("hull", [1.0, 0.0, 0.0, 0.0]),
+    ("box_stroke_color", [0.93, 0.98, 0.55, 1.0]),
+    ("contacts", [1.0, 0.0, 0.0, 0.0]),
+    ("links_color", [0.93, 0.98, 0.55, 1.0]),
+    ("links_width", [1.0, 0.0, 0.0, 0.0]),
+    ("velocity", [1.0, 0.0, 0.0, 0.0]),
+    ("velocity_color", [0.93, 0.98, 0.55, 0.55]),
+    ("well", [1.0, 0.0, 0.0, 0.0]),
+    ("well_color", [0.93, 0.98, 0.55, 0.7]),
     ("marker", [1.0, 0.0, 0.0, 0.0]),
     ("marker_type", [1.0, 0.0, 0.0, 0.0]),
-    ("marker_size", [7.0, 0.0, 0.0, 0.0]),
+    ("marker_size", [5.0, 0.0, 0.0, 0.0]),
     ("marker_thickness", [1.0, 0.0, 0.0, 0.0]),
-    ("marker_color", [0.95, 0.93, 0.89, 1.0]),
-    ("marker_opacity", [0.8, 0.0, 0.0, 0.0]),
+    ("marker_color", [0.93, 0.98, 0.55, 1.0]),
+    ("marker_opacity", [0.9, 0.0, 0.0, 0.0]),
+    ("label", [1.0, 0.0, 0.0, 0.0]),
+    ("label_mode", [3.0, 0.0, 0.0, 0.0]),
+    ("label_color", [0.93, 0.98, 0.55, 1.0]),
+    ("label_opacity", [0.75, 0.0, 0.0, 0.0]),
+    ("font_size", [10.0, 0.0, 0.0, 0.0]),
+    ("label_offset_x", [0.0, 0.0, 0.0, 0.0]),
+    ("label_offset_y", [6.0, 0.0, 0.0, 0.0]),
 ];
 
 const PUSH_TRACE_DEFAULTS: &[(&str, [f64; 4])] = &[

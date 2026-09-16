@@ -34,32 +34,36 @@ fn outline_of(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Op
             continue;
         }
         for instance in crate::doc::vector::resolve(shape).ok()?.iter() {
-            for contour in &instance.path {
-                let vs = &contour.vertices;
-                if vs.len() < 2 {
-                    continue;
-                }
-                let last = if contour.closed { vs.len() } else { vs.len() - 1 };
-                for i in 0..last {
-                    let (a, b) = (&vs[i], &vs[(i + 1) % vs.len()]);
-                    // 曲がりに合わせて点を割る(lyon の適応分割。固定の分割だと大きい丸が粗く、
-                    // 小さい丸が無駄に細かくなる)。
-                    let p = |x: f64, y: f64| lyon_geom::point(x as f32, y as f32);
-                    let curve = lyon_geom::CubicBezierSegment {
-                        from: p(a.point.x, a.point.y),
-                        ctrl1: p(a.point.x + a.out_tangent.x, a.point.y + a.out_tangent.y),
-                        ctrl2: p(b.point.x + b.in_tangent.x, b.point.y + b.in_tangent.y),
-                        to: p(b.point.x, b.point.y),
-                    };
-                    points.push([curve.from.x + ox, curve.from.y + oy]);
-                    curve.for_each_flattened(0.6, &mut |line| {
-                        points.push([line.to.x + ox, line.to.y + oy]);
-                    });
-                }
-            }
+            flatten_contours(&instance.path, [ox, oy], &mut points);
         }
     }
     (points.len() >= 3).then_some(points)
+}
+
+/// 輪郭の列を点に割る(曲がりに合わせて、lyon の適応分割)。文字も形も同じ。
+fn flatten_contours(contours: &[crate::doc::vector::Contour], offset: [f32; 2], points: &mut Vec<[f32; 2]>) {
+    let (ox, oy) = (offset[0], offset[1]);
+    for contour in contours {
+        let vs = &contour.vertices;
+        if vs.len() < 2 {
+            continue;
+        }
+        let last = if contour.closed { vs.len() } else { vs.len() - 1 };
+        for i in 0..last {
+            let (a, b) = (&vs[i], &vs[(i + 1) % vs.len()]);
+            let p = |x: f64, y: f64| lyon_geom::point(x as f32, y as f32);
+            let curve = lyon_geom::CubicBezierSegment {
+                from: p(a.point.x, a.point.y),
+                ctrl1: p(a.point.x + a.out_tangent.x, a.point.y + a.out_tangent.y),
+                ctrl2: p(b.point.x + b.in_tangent.x, b.point.y + b.in_tangent.y),
+                to: p(b.point.x, b.point.y),
+            };
+            points.push([curve.from.x + ox, curve.from.y + oy]);
+            curve.for_each_flattened(0.6, &mut |line| {
+                points.push([line.to.x + ox, line.to.y + oy]);
+            });
+        }
+    }
 }
 
 /// 書類から先に読む、物ごとの住む箱と箱。
@@ -217,7 +221,7 @@ impl Engine {
         // 抜いた後の形(効果を通した後の透過)は解析の段で取ってある。物理は「描かれた物の形」で当たる。
         let mut extents: HashMap<LayerId, [f32; 4]> = HashMap::new();
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if !matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::File { .. })) {
+            if matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Shape)) {
                 continue;
             }
             let extent = match view.layer_box(layer.id, t).map_err(store)? {
@@ -309,10 +313,14 @@ impl Engine {
                     let shapes = view.shapes_at(layer.id, t).map_err(store)?;
                     outline_of(&shapes, stretch).map(std::sync::Arc::new)
                 }
-                // 絵・動画は、キー(クロマキー・動きの差)の形をそのまま当たりにする
-                // (利用者 2026-09-16「クロマキーした動画で物理演算ができるかも」)。
-                Some(crate::doc::store::LayerSource::File { .. }) => keyed.get(&layer.id).cloned(),
-                _ => None,
+                // 文字はベクター: 字形の輪郭を形の層と同じ道で(絵の透過は読まない)。
+                Some(crate::doc::store::LayerSource::Text) => view.text_outline(layer.id, t).map_err(store)?.and_then(|contours| {
+                    let mut points = Vec::new();
+                    flatten_contours(&contours, [0.0, 0.0], &mut points);
+                    (points.len() >= 3).then(|| std::sync::Arc::new(points))
+                }),
+                // それ以外(絵・動画)は描かれた後の透過が形。抜き方を物理は知らない。
+                _ => keyed.get(&layer.id).cloned(),
             };
             let own = match solved.slots.get(&layer.id).map(|slot| slot.stretch) {
                 Some([sx, sy]) if sx > 0.0 && sy > 0.0 => [own[0] * sx, own[1] * sy, own[2] * sx, own[3] * sy],

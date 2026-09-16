@@ -148,13 +148,17 @@ impl Engine {
         };
         let frame = t.try_to_frame_round(view.composition().map_err(store)?.map_or(crate::doc::store::Fps::try_new(30, 1).unwrap(), |c| c.fps)).unwrap_or(0);
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            // 絵・動画で、形を変える効果が載っている物だけ(形の層は書類の輪郭の方が正確で軽い)。
-            let crate::doc::store::LayerSource::File { path, .. } = &layer.source else { continue };
-            if layer.effects.is_empty() {
+            // 描かれる物はみな同じ道(利用者 2026-09-16「手段が違うだけでコアは一緒。その度に専門ツールを
+            // 作るべきでない」): 文字も絵も動画も、描かれた後の透過が形。形の層だけは書類の輪郭が正確で軽い。
+            // 効果の無い絵は箱で足りる(読み戻す価値が無い)。
+            // 文字と形はベクターの輪郭で足りる。読み戻すのは絵・動画で、形を変える効果が載った物だけ。
+            let (still, worth) = match &layer.source {
+                crate::doc::store::LayerSource::File { path, .. } => (crate::render::media::is_still_image_path(path), !layer.effects.is_empty()),
+                _ => (true, false),
+            };
+            if !worth {
                 continue;
             }
-            // 止まった絵は 1 回だけ読む。動く物は版か コマが変わった時だけ読み直す。
-            let still = crate::render::media::is_still_image_path(path);
             if let Some((seen_revision, seen_frame, outline)) = self.keyed_cache.get(&layer.id) {
                 if *seen_revision == revision && (still || *seen_frame == frame) {
                     self.keyed_outlines.insert(layer.id, outline.clone());

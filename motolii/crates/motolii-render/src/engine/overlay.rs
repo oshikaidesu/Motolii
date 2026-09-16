@@ -193,7 +193,13 @@ fn label_shape(params: &Params, mark: &BlobMark, push: [f32; 2]) -> Option<Shape
     let content = match number_of(params, "label_mode").round() as i64 {
         0 => format!("{}, {}", mark.center[0].round() as i64, mark.center[1].round() as i64),
         1 => format!("{} \u{d7} {}", mark.size[0].round() as i64, mark.size[1].round() as i64),
-        _ => format!("{} px", glam::Vec2::from(push).length().round() as i64),
+        2 => format!("{} px", glam::Vec2::from(push).length().round() as i64),
+        // Speed: 物理の速さ(px/秒)。止まっている物には札を出さない。
+        _ => {
+            let speed = glam::Vec2::from(push).length();
+            if speed < 12.0 { return None; }
+            format!("{} px/s", speed.round() as i64)
+        }
     };
     let font = crate::doc::vector::text::GlyphFont { path: String::new(), family: label_family().to_owned() };
     let shaped = crate::doc::vector::text::shape_text(&content, &font, &crate::doc::vector::text::TextLayout::new(number_of(params, "font_size").max(1.0) as f32)).ok()?;
@@ -225,19 +231,20 @@ fn contact_shapes(params: &Params, contacts: &[([f32; 2], [f32; 2])]) -> Vec<Sha
     let c = color_of(params, "links_color");
     let point = |p: [f32; 2]| Point { x: p[0] as f64, y: p[1] as f64 };
     contacts.iter().flat_map(|(at, normal)| {
-        let tick = [at[0] + normal[0] * 14.0, at[1] + normal[1] * 14.0];
-        let side = [-normal[1], normal[0]];
-        let bar = (
-            [at[0] - side[0] * 7.0, at[1] - side[1] * 7.0],
-            [at[0] + side[0] * 7.0, at[1] + side[1] * 7.0],
-        );
+        let tick = [at[0] + normal[0] * 9.0, at[1] + normal[1] * 9.0];
         let line = |a: [f32; 2], b: [f32; 2], width: f64, opacity: f64| ShapeNode::Leaf(Shape {
             source: PathSource::Bezier(vec![Contour::open([point(a), point(b)])]),
             ops: Vec::new(),
             fill: None,
             stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width, opacity: c[3] * opacity, cap: LineCap::Butt, ..Default::default() }),
         });
-        [line(bar.0, bar.1, 2.0, 1.0), line(*at, tick, 1.0, 0.55)]
+        let dot = self::at(*at, 0.0, Shape {
+            source: PathSource::Ellipse { size: Point { x: 3.0, y: 3.0 } },
+            ops: Vec::new(),
+            fill: Some(Fill { brush: Brush::Solid(rgb(c)), opacity: c[3], ..Default::default() }),
+            stroke: None,
+        });
+        [dot, line(*at, tick, 1.0, 0.6)]
     }).collect()
 }
 
@@ -268,7 +275,7 @@ fn velocity_shapes(params: &Params, velocities: &[([f32; 2], [f32; 2])]) -> Vec<
             source: PathSource::Bezier(vec![Contour::open([point(*at), point(tip)])]),
             ops: Vec::new(),
             fill: None,
-            stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 1.5, opacity: c[3] * (0.35 + (speed / 900.0).min(0.65) as f64), cap: LineCap::Round, ..Default::default() }),
+            stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 1.0, opacity: c[3] * (0.4 + (speed / 900.0).min(0.6) as f64), cap: LineCap::Butt, ..Default::default() }),
         }))
     }).collect()
 }
@@ -289,13 +296,18 @@ fn well_shapes(params: &Params, wells: &[([f32; 2], f32, [f32; 2])]) -> Vec<Shap
         }
         let len = (gravity[0] * gravity[0] + gravity[1] * gravity[1]).sqrt();
         if len > 1e-3 {
-            let tip = [spot[0] + gravity[0] / len * 90.0, spot[1] + gravity[1] / len * 90.0];
-            out.push(ShapeNode::Leaf(Shape {
-                source: PathSource::Bezier(vec![Contour::open([point(*spot), point(tip)])]),
-                ops: Vec::new(),
-                fill: None,
-                stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 2.0, opacity: c[3], cap: LineCap::Round, ..Default::default() }),
-            }));
+            let d = [gravity[0] / len, gravity[1] / len];
+            let tip = [spot[0] + d[0] * 70.0, spot[1] + d[1] * 70.0];
+            let side = [-d[1] * 4.0, d[0] * 4.0];
+            let back = [tip[0] - d[0] * 9.0, tip[1] - d[1] * 9.0];
+            for (a, b) in [(*spot, tip), ([back[0] + side[0], back[1] + side[1]], tip), ([back[0] - side[0], back[1] - side[1]], tip)] {
+                out.push(ShapeNode::Leaf(Shape {
+                    source: PathSource::Bezier(vec![Contour::open([point(a), point(b)])]),
+                    ops: Vec::new(),
+                    fill: None,
+                    stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 1.0, opacity: c[3], cap: LineCap::Butt, ..Default::default() }),
+                }));
+            }
         }
     }
     out
@@ -361,7 +373,12 @@ impl Engine {
             let (marks, links, wells) = (self.physics_marks(), self.physics_links(), self.physics_wells());
             let (contacts, velocities, hulls) = (self.physics_contacts_at(), self.physics_velocities(), self.physics_hulls());
             if let Some(frame) = self.overlay_frames.get_mut(&layer) {
-                frame.pushes = vec![[0.0, 0.0]; marks.len()];
+                // 札の Speed は速さを読む(pushes の枠を借りる: 印と同じ順)。
+                frame.pushes = marks.iter().map(|m| velocities.iter().min_by(|a, b| {
+                    let da = (a.0[0] - m.center[0]).powi(2) + (a.0[1] - m.center[1]).powi(2);
+                    let db = (b.0[0] - m.center[0]).powi(2) + (b.0[1] - m.center[1]).powi(2);
+                    da.total_cmp(&db)
+                }).map_or([0.0, 0.0], |v| v.1)).collect();
                 frame.marks = marks;
                 frame.links = links;
                 frame.wells = wells;
