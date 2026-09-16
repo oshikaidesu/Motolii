@@ -5,7 +5,7 @@ const things = [], spots = [];
 for (let k = 0; k < 24; k++) {
   const side = 70 + rng() * 80;
   things.push((k % 3 === 0 ? ellipse : rectangle)({ name: `T${k}` }).fill(C[k % C.length]).set("Scale", [side / D, side / D]));
-  spots.push([90 + rng() * 620, -200 - rng() * 700]);
+  spots.push([300 + rng() * 240, -160 - rng() * 900]);
 }
 const g = ellipse({ name: "Gravity" }).fill("#0E0E12").set("Scale", [2 / D, 2 / D]);
 const room = group(...things, g).name("Jar");
