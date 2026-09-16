@@ -22,14 +22,17 @@ fn to_justify(justify: StoreJustify) -> TextJustify {
     }
 }
 
-fn to_layout(style: &TextDocumentStyle, justify: StoreJustify, wrap_width: Option<f32>, wrap: bool) -> TextLayout {
+fn to_layout(style: &TextDocumentStyle, document: &TextDocument, wrap_width: Option<f32>, wrap: bool) -> TextLayout {
     TextLayout {
+        autospace: document.alignment.autospace,
+        spacing_trim: document.alignment.spacing_trim,
+        hanging: document.alignment.hanging,
         wrap_width,
         wrap,
         size: style.size,
         line_height: style.line_height,
         tracking: style.tracking,
-        justify: to_justify(justify),
+        justify: to_justify(document.justify),
         features: style
             .features
             .iter()
@@ -133,9 +136,9 @@ pub fn shape_document_around(
 
     let font = to_glyph_font(style);
     // 幅は揃えに要る(無いと Center/Right が効かない)が、折り返すのは wrap 箱を持つ層だけ。
-    let layout = to_layout(style, document.justify, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)), document.wrap_size.is_some());
+    let layout = to_layout(style, document, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)), document.wrap_size.is_some());
     let fonts: Vec<_> = document.styles.iter().map(to_glyph_font).collect();
-    let layouts: Vec<_> = document.styles.iter().map(|s| to_layout(s, document.justify, layout.wrap_width, layout.wrap)).collect();
+    let layouts: Vec<_> = document.styles.iter().map(|s| to_layout(s, document, layout.wrap_width, layout.wrap)).collect();
     let mut pieces: Vec<(String, usize)> = Vec::new();
     if document.runs.is_empty() {
         pieces.push((content.to_owned(), 0));

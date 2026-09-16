@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::doc::core::RationalTime;
 
 use crate::doc::store::SlotId;
+pub use crate::doc::vector::text::{HangingPunctuation, TextAutospace, TextSpacingTrim};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FontRef {
@@ -202,10 +203,17 @@ fn duplicate_tag<'a>(mut tags: impl Iterator<Item = &'a str>) -> Option<&'a str>
     tags.find(|tag| !seen.insert(*tag))
 }
 
+/// 段落の組み方(AE の More Options に当たる欄)。文字組みの 3 法(CSS の text-autospace・text-spacing-trim・hanging-punctuation)もここ。
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextAlignmentOptions {
     pub anchor_offset: [f32; 2],
     pub grouping: TextGrouping,
+    #[serde(default)]
+    pub autospace: TextAutospace,
+    #[serde(default)]
+    pub spacing_trim: TextSpacingTrim,
+    #[serde(default)]
+    pub hanging: HangingPunctuation,
 }
 
 impl Default for TextAlignmentOptions {
@@ -213,6 +221,9 @@ impl Default for TextAlignmentOptions {
         Self {
             anchor_offset: [0.0, 0.0],
             grouping: TextGrouping::Characters,
+            autospace: TextAutospace::default(),
+            spacing_trim: TextSpacingTrim::default(),
+            hanging: HangingPunctuation::default(),
         }
     }
 }
@@ -326,5 +337,17 @@ impl crate::doc::store::PropertyId {
 
     pub fn text_justify() -> Self {
         Self::new("text_justify").expect("`text_justify` は予約語でも空でもない")
+    }
+
+    pub fn text_autospace() -> Self {
+        Self::new(crate::doc::store::names::TEXT_AUTOSPACE).expect("予約語でも空でもない")
+    }
+
+    pub fn text_spacing_trim() -> Self {
+        Self::new(crate::doc::store::names::TEXT_SPACING_TRIM).expect("予約語でも空でもない")
+    }
+
+    pub fn hanging_punctuation() -> Self {
+        Self::new(crate::doc::store::names::HANGING_PUNCTUATION).expect("予約語でも空でもない")
     }
 }

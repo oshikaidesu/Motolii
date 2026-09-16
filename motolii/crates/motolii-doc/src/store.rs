@@ -45,6 +45,7 @@ pub use text::{
     TextRangeSelector, TextRangeUnits, TextRun, TextShape, TextStyleAxis, TextStyleFeature,
     TextStyleId, TextVariationAxis,
 };
+pub use text::{HangingPunctuation, TextAutospace, TextSpacingTrim};
 pub use view::StoreView;
 
 pub use crate::doc::core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};

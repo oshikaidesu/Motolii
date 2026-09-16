@@ -27,6 +27,72 @@ pub struct TextFeature {
     pub value: u32,
 }
 
+/// CSS `text-autospace`(CSS Text 4 §8.4): 漢字と欧文の字・数字の境に、字送りの 1/8(0.125ic)を足す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum TextAutospace {
+    #[default]
+    Normal,
+    NoAutospace,
+}
+
+/// CSS `text-spacing-trim`(CSS Text 4 §8.5): 全角の約物を、行の端と隣どうしで半角に詰める。
+/// 隣どうしは font の `chws`、行頭は行分割の後で左半分を削る(halt と同じ量)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum TextSpacingTrim {
+    #[default]
+    Normal,
+    SpaceAll,
+    SpaceFirst,
+    TrimStart,
+}
+
+/// CSS `hanging-punctuation`(CSS Text 4 §9.2.1): `none | [ first || [ force-end | allow-end ] || last ]`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct HangingPunctuation {
+    pub first: bool,
+    pub end: HangEnd,
+    pub last: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum HangEnd {
+    #[default]
+    None,
+    AllowEnd,
+    ForceEnd,
+}
+
+impl TextAutospace {
+    pub const CHOICES: &'static [&'static str] = &["Normal", "No Autospace"];
+    pub fn to_enum_value(self) -> i64 { self as i64 }
+    pub fn from_enum_value(v: i64) -> Option<Self> { [Self::Normal, Self::NoAutospace].get(usize::try_from(v).ok()?).copied() }
+}
+
+impl TextSpacingTrim {
+    pub const CHOICES: &'static [&'static str] = &["Normal", "Space All", "Space First", "Trim Start"];
+    pub fn to_enum_value(self) -> i64 { self as i64 }
+    pub fn from_enum_value(v: i64) -> Option<Self> { [Self::Normal, Self::SpaceAll, Self::SpaceFirst, Self::TrimStart].get(usize::try_from(v).ok()?).copied() }
+}
+
+impl HangingPunctuation {
+    /// 文法の順(first, end, last)で全部の組合せ。
+    pub const CHOICES: &'static [&'static str] = &[
+        "None", "First", "Allow End", "Force End", "Last", "First Allow End", "First Force End", "First Last",
+        "Allow End Last", "Force End Last", "First Allow End Last", "First Force End Last",
+    ];
+    const TABLE: [(bool, HangEnd, bool); 12] = [
+        (false, HangEnd::None, false), (true, HangEnd::None, false), (false, HangEnd::AllowEnd, false), (false, HangEnd::ForceEnd, false),
+        (false, HangEnd::None, true), (true, HangEnd::AllowEnd, false), (true, HangEnd::ForceEnd, false), (true, HangEnd::None, true),
+        (false, HangEnd::AllowEnd, true), (false, HangEnd::ForceEnd, true), (true, HangEnd::AllowEnd, true), (true, HangEnd::ForceEnd, true),
+    ];
+    pub fn to_enum_value(self) -> i64 {
+        Self::TABLE.iter().position(|&(first, end, last)| first == self.first && end == self.end && last == self.last).unwrap_or(0) as i64
+    }
+    pub fn from_enum_value(v: i64) -> Option<Self> {
+        Self::TABLE.get(usize::try_from(v).ok()?).map(|&(first, end, last)| Self { first, end, last })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextLayout {
     /// 折返しと揃えの幅。None なら point text(揃えは効かない — cosmic-text は幅が無いと補正 0)。
@@ -38,6 +104,9 @@ pub struct TextLayout {
     pub tracking: f32,
     pub justify: TextJustify,
     pub features: Vec<TextFeature>,
+    pub autospace: TextAutospace,
+    pub spacing_trim: TextSpacingTrim,
+    pub hanging: HangingPunctuation,
 }
 
 impl TextLayout {
@@ -50,6 +119,9 @@ impl TextLayout {
             tracking: 0.0,
             justify: TextJustify::default(),
             features: Vec::new(),
+            autospace: TextAutospace::default(),
+            spacing_trim: TextSpacingTrim::default(),
+            hanging: HangingPunctuation::default(),
         }
     }
 }
@@ -169,9 +241,11 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
     let mut glyph_ordinal = 0usize;
     let content: String = spans.iter().map(|s| s.text).collect();
     let line_starts: Vec<usize> = std::iter::once(0).chain(content.match_indices('\n').map(|(i, _)| i + 1)).collect();
-    for run in buffer.layout_runs() {
+    let runs: Vec<_> = buffer.layout_runs().collect();
+    for (i, run) in runs.iter().enumerate() {
         let base = line_starts.get(run.line_i).copied().unwrap_or(0);
-        emit_run(font_system, &mut swash_cache, &run, 0.0, 0.0, base, &mut glyph_ordinal, &mut out);
+        let edge = (i == 0 || runs[i - 1].line_i != run.line_i, i + 1 == runs.len() || runs[i + 1].line_i != run.line_i);
+        emit_run(font_system, &mut swash_cache, run, 0.0, 0.0, base, layout, edge, &mut glyph_ordinal, &mut out);
     }
     Ok(out)
 }
@@ -218,6 +292,7 @@ pub fn shape_rich_text_around(
         rows += 1;
         // 段落の終わり(改行)まで。
         let paragraph_end = text[start..].find('\n').map_or(text.len(), |i| start + i);
+        let paragraph_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
         if start == paragraph_end {
             start += 1;
             top += line_height;
@@ -246,7 +321,8 @@ pub fn shape_rich_text_around(
             if run.line_w > width + 0.5 && !only {
                 continue;
             }
-            emit_run(font_system, &mut swash_cache, &run, x0, top, start, &mut glyph_ordinal, &mut out);
+            let edge = (paragraph_start == start, spaces(start + consumed) >= paragraph_end);
+            emit_run(font_system, &mut swash_cache, &run, x0, top, start, layout, edge, &mut glyph_ordinal, &mut out);
             row_height = row_height.max(run.line_height);
             start = spaces(start + consumed);
         }
@@ -266,15 +342,19 @@ fn to_align(justify: TextJustify) -> Align {
     }
 }
 
-/// 組んだ 1 行を輪郭と行の寸法へ(`dx`・`dy` だけずらして)。
-fn emit_run(font_system: &mut FontSystem, swash_cache: &mut SwashCache, run: &cosmic_text::LayoutRun<'_>, dx: f32, dy: f32, byte_base: usize, glyph_ordinal: &mut usize, out: &mut ShapedText) {
+/// 組んだ 1 行を輪郭と行の寸法へ(`dx`・`dy` だけずらして)。`edge` = (段落の最初の行か, 最後の行か)。
+/// 文字組みの 3 法(autospace・spacing-trim の行頭・hanging)は行分割の後にここで 1 度、字の x をずらすだけ。
+#[allow(clippy::too_many_arguments)]
+fn emit_run(font_system: &mut FontSystem, swash_cache: &mut SwashCache, run: &cosmic_text::LayoutRun<'_>, dx: f32, dy: f32, byte_base: usize, layout: &TextLayout, edge: (bool, bool), glyph_ordinal: &mut usize, out: &mut ShapedText) {
+    let (shift, extra, width) = line_laws(run, layout, edge);
     let mut glyph_xs = Vec::with_capacity(run.glyphs.len());
     let mut glyph_bytes = Vec::with_capacity(run.glyphs.len());
-    for glyph in run.glyphs {
+    for (i, glyph) in run.glyphs.iter().enumerate() {
         glyph_bytes.push(byte_base + glyph.start);
-        let pen_x = dx + glyph.x + glyph.font_size * glyph.x_offset;
+        let x = glyph.x + shift + extra[i];
+        let pen_x = dx + x + glyph.font_size * glyph.x_offset;
         let pen_y = dy + run.line_y + glyph.y - glyph.font_size * glyph.y_offset;
-        glyph_xs.push(dx + glyph.x);
+        glyph_xs.push(dx + x);
         let cache_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
         let ordinal = *glyph_ordinal;
         *glyph_ordinal += 1;
@@ -286,7 +366,95 @@ fn emit_run(font_system: &mut FontSystem, swash_cache: &mut SwashCache, run: &co
         out.contour_styles.extend(std::iter::repeat_n(glyph.metadata, out.contours.len() - before));
         out.contour_glyphs.extend(std::iter::repeat_n(ordinal, out.contours.len() - before));
     }
-    out.lines.push(LineMeasure { baseline_y: dy + run.line_y, width: run.line_w, glyph_xs, glyph_bytes });
+    out.lines.push(LineMeasure { baseline_y: dy + run.line_y, width, glyph_xs, glyph_bytes });
+}
+
+/// 字の種(CSS Text 4 §8.4.1・§8.5.2・§9.2.1 の定義を Unicode の性質で写す)。
+mod class {
+    use unicode_general_category::{get_general_category as category, GeneralCategory as G};
+    use unicode_script::{Script, UnicodeScript};
+    use unicode_width::UnicodeWidthChar;
+
+    /// East Asian Width = F(Fullwidth)。
+    fn fullwidth(c: char) -> bool { matches!(c, '\u{3000}' | '\u{FF01}'..='\u{FF60}' | '\u{FFE0}'..='\u{FFE6}') }
+    /// East Asian Width = W か F。
+    fn wide(c: char) -> bool { c.width().unwrap_or(0) == 2 }
+    fn cjk_block(c: char) -> bool { ('\u{3000}'..='\u{303F}').contains(&c) }
+    fn punctuation(c: char) -> bool { matches!(category(c), G::ConnectorPunctuation | G::DashPunctuation | G::OpenPunctuation | G::ClosePunctuation | G::InitialPunctuation | G::FinalPunctuation | G::OtherPunctuation) }
+
+    /// ideographs: U+3041–U+30FF(約物を除く)、CJK Strokes、Katakana Phonetic Extensions、Han(scx が名指しで Han を含む。
+    /// Common / Inherited の字は scx が全部の script を含むので、名指しの列で見る)。
+    pub(super) fn ideograph(c: char) -> bool {
+        let han = c.script() == Script::Han || (!matches!(c.script(), Script::Common | Script::Inherited) && c.script_extension().iter().any(|s| s == Script::Han));
+        (('\u{3041}'..='\u{30FF}').contains(&c) && !punctuation(c)) || ('\u{31C0}'..='\u{31FF}').contains(&c) || han
+    }
+    /// non-ideographic letters: L* と M*、ただし ideograph と W/F を除く。
+    pub(super) fn letter(c: char) -> bool {
+        matches!(category(c), G::UppercaseLetter | G::LowercaseLetter | G::TitlecaseLetter | G::ModifierLetter | G::OtherLetter | G::NonspacingMark | G::SpacingMark | G::EnclosingMark) && !ideograph(c) && !wide(c)
+    }
+    /// non-ideographic numerals: Nd、ただし F を除く。
+    pub(super) fn numeral(c: char) -> bool { category(c) == G::DecimalNumber && !fullwidth(c) }
+
+    /// fullwidth opening punctuation: CJK 記号ブロックか F の Ps、と ‘ “。
+    pub(super) fn fullwidth_opening(c: char) -> bool { (category(c) == G::OpenPunctuation && (cjk_block(c) || fullwidth(c))) || matches!(c, '\u{2018}' | '\u{201C}') }
+
+    /// hanging-punctuation first: Ps・Pf・Pi、' "、U+3000。
+    pub(super) fn hangs_first(c: char) -> bool { matches!(category(c), G::OpenPunctuation | G::FinalPunctuation | G::InitialPunctuation) || matches!(c, '\'' | '"' | '\u{3000}') }
+    /// hanging-punctuation last: Pe・Pf・Pi、' "。
+    pub(super) fn hangs_last(c: char) -> bool { matches!(category(c), G::ClosePunctuation | G::FinalPunctuation | G::InitialPunctuation) || matches!(c, '\'' | '"') }
+    /// 行末にぶら下がる句読点(仕様の表そのまま)。
+    pub(super) fn stop(c: char) -> bool { matches!(c, '\u{002C}' | '\u{002E}' | '\u{060C}' | '\u{06D4}' | '\u{3001}' | '\u{3002}' | '\u{FF0C}' | '\u{FF0E}' | '\u{FE50}' | '\u{FE51}' | '\u{FE52}' | '\u{FF61}' | '\u{FF64}') }
+}
+
+/// 1 行に 3 法を掛けた結果: (行全体のずれ, 字ごとの足し, 測った行の幅)。
+/// 行頭の詰めと、ぶら下げは行の測りから外れる(CSS「it is not considered when measuring the line's contents for alignment」)ので、
+/// Center / Right は短くなった分だけ寄せ直す。autospace は測りに入る(CSS「additive with letter-spacing」)。
+fn line_laws(run: &cosmic_text::LayoutRun<'_>, layout: &TextLayout, (first_line, last_line): (bool, bool)) -> (f32, Vec<f32>, f32) {
+    let glyphs = run.glyphs;
+    let n = glyphs.len();
+    let ch = |i: usize| run.text.get(glyphs[i].start..glyphs[i].end).and_then(|s| s.chars().next()).unwrap_or('\0');
+    let mut extra = vec![0.0f32; n];
+    if n == 0 {
+        return (0.0, extra, run.line_w);
+    }
+    // text-spacing-trim: 行頭の全角の開き約物を半角に(左半分を削る)。normal は行頭を詰めない。
+    let trim_here = match layout.spacing_trim {
+        TextSpacingTrim::TrimStart => true,
+        TextSpacingTrim::SpaceFirst => !first_line,
+        TextSpacingTrim::Normal | TextSpacingTrim::SpaceAll => false,
+    };
+    // 削るのは全角の字送りの空いた左半分。書体が既に詰めている(palt などでプロポーショナル)字は「足しも引きもしない」(§8.5.1)。
+    let start_cut = if trim_here && class::fullwidth_opening(ch(0)) { (glyphs[0].w - glyphs[0].font_size * 0.5).max(0.0) } else { 0.0 };
+    // hanging-punctuation: 端の 1 字を行の測りから外す。詰めた字は残りの半分がぶら下がる(§8.5.3 の第 3 式)。
+    let hang_start = if layout.hanging.first && first_line && class::hangs_first(ch(0)) { glyphs[0].w - start_cut } else { 0.0 };
+    let last = n - 1;
+    let fits = layout.wrap_width.is_none_or(|w| run.line_w <= w + 0.5);
+    let hang_end = if layout.hanging.last && last_line && class::hangs_last(ch(last)) {
+        glyphs[last].w
+    } else if class::stop(ch(last)) && (layout.hanging.end == HangEnd::ForceEnd || (layout.hanging.end == HangEnd::AllowEnd && !fits)) {
+        glyphs[last].w
+    } else {
+        0.0
+    };
+    // text-autospace: 漢字と欧文の字・数字が直に隣る境に 1/8 の字送り(隣る字の間に空白や約物があれば境ではない)。
+    let mut total = 0.0f32;
+    if layout.autospace == TextAutospace::Normal {
+        for i in 1..n {
+            let (a, b) = (ch(i - 1), ch(i));
+            let alpha = |c: char| class::letter(c) || class::numeral(c);
+            let ideograph_size = if class::ideograph(a) && alpha(b) { Some(glyphs[i - 1].font_size) } else if alpha(a) && class::ideograph(b) { Some(glyphs[i].font_size) } else { None };
+            if let Some(size) = ideograph_size { total += size * 0.125; }
+            extra[i] = total;
+        }
+    }
+    let width = run.line_w - start_cut - hang_start - hang_end + total;
+    let align = match (layout.wrap_width, layout.justify) {
+        (None, _) | (_, TextJustify::Left) => 0.0,
+        (_, TextJustify::Center) => 0.5,
+        (_, TextJustify::Right) => 1.0,
+    };
+    let shift = align * (run.line_w - width) - start_cut - hang_start;
+    (shift, extra, width)
 }
 
 fn span_attributes<'a>(font_system: &mut FontSystem, spans: &[StyledText<'a>]) -> Result<Vec<Attrs<'a>>, TextShapeError> {
@@ -294,6 +462,10 @@ fn span_attributes<'a>(font_system: &mut FontSystem, spans: &[StyledText<'a>]) -
     let mut attributes = Vec::new();
     for span in spans {
         let mut features = FontFeatures::new();
+        // text-spacing-trim の隣どうしの詰めは font の `chws`(仕様: halt/chws を使ってよい、hwid は使ってはならない)。
+        if span.layout.spacing_trim != TextSpacingTrim::SpaceAll {
+            features.set(FeatureTag::new(b"chws"), 1);
+        }
         for feature in &span.layout.features {
             let tag: &[u8;4] = feature.tag.as_bytes().try_into().map_err(|_| TextShapeError::FeatureTag(feature.tag.clone()))?;
             features.set(FeatureTag::new(tag), feature.value);
@@ -432,6 +604,97 @@ pub fn font_facts() -> &'static [FontFacts] {
 }
 
 #[cfg(test)]
+mod law_tests {
+    use super::*;
+
+    /// ヒラギノ角ゴで 100 級。書体が無ければ飛ばす(定規は CSS Text 4、字送りは書体)。
+    fn shaped(text: &str, edit: impl Fn(&mut TextLayout)) -> Option<ShapedText> {
+        let font = GlyphFont { path: String::new(), family: "Hiragino Sans".to_owned() };
+        if !font_supports_sample(&font.family, "漢A1「」。") { eprintln!("skipped: Hiragino Sans missing"); return None; }
+        let mut layout = TextLayout::new(100.0);
+        edit(&mut layout);
+        Some(shape_text(text, &font, &layout).unwrap())
+    }
+    fn xs(shaped: &ShapedText) -> Vec<f32> { shaped.lines[0].glyph_xs.clone() }
+
+    /// CSS Text 4 §8.4.1: 漢字と欧文の字・数字の境に 1/8 の字送り。漢字どうし・no-autospace は 0。
+    #[test]
+    fn autospace_is_an_eighth_of_the_ideograph_advance_at_script_boundaries() {
+        let Some(plain) = shaped("漢A1漢字 B", |l| l.autospace = TextAutospace::NoAutospace) else { return };
+        let spaced = shaped("漢A1漢字 B", |_| {}).unwrap();
+        let (a, b) = (xs(&plain), xs(&spaced));
+        let gaps: Vec<f32> = (1..a.len()).map(|i| (b[i] - b[i - 1]) - (a[i] - a[i - 1])).collect();
+        // 境: 漢|A(+12.5)、A|1(0)、1|漢(+12.5)、漢|字(0)、字| (0)、 |B(0 — 空白が間にある)。
+        assert_eq!(gaps, vec![12.5, 0.0, 12.5, 0.0, 0.0, 0.0], "{gaps:?}");
+        assert_eq!(spaced.lines[0].width - plain.lines[0].width, 25.0);
+    }
+
+    /// CSS Text 4 §8.5: trim-start は行頭の全角の開き括弧の左半分を削る。normal は行頭を詰めない。
+    #[test]
+    fn trim_start_kerns_half_of_the_opening_bracket_at_line_start() {
+        let Some(normal) = shaped("「漢」", |_| {}) else { return };
+        let trimmed = shaped("「漢」", |l| l.spacing_trim = TextSpacingTrim::TrimStart).unwrap();
+        assert_eq!(xs(&normal)[0], 0.0);
+        assert_eq!(xs(&trimmed)[0], -50.0);
+        assert_eq!(xs(&trimmed)[1], xs(&normal)[1] - 50.0);
+        assert_eq!(normal.lines[0].width - trimmed.lines[0].width, 50.0);
+        // 書体が既に詰めた字(palt でプロポーショナル)は足しも引きもしない(§8.5.1)。
+        let palt = |l: &mut TextLayout| l.features = vec![TextFeature { tag: "palt".into(), value: 1 }];
+        let proportional = shaped("「漢」", |l| palt(l)).unwrap();
+        let bracket = xs(&proportional)[1] - xs(&proportional)[0];
+        let trimmed = shaped("「漢」", |l| { palt(l); l.spacing_trim = TextSpacingTrim::TrimStart }).unwrap();
+        assert_eq!(xs(&trimmed)[0], -(bracket - 50.0).max(0.0), "palt 「 advance {bracket}");
+    }
+
+    /// CSS Text 4 §9.2.1: first は最初の行の行頭の開き括弧を箱の外へ、last は最後の行の行末の閉じ括弧を外へ。
+    /// ぶら下がった字は行の測りに入らないので、Center は残りの字で寄せ直す。
+    #[test]
+    fn hanging_first_and_last_move_the_brackets_outside_the_line() {
+        let Some(plain) = shaped("「漢」", |_| {}) else { return };
+        let hung = shaped("「漢」", |l| l.hanging = HangingPunctuation { first: true, end: HangEnd::None, last: true }).unwrap();
+        let bracket = xs(&plain)[1] - xs(&plain)[0];
+        assert_eq!(xs(&hung)[0], -bracket, "「 hangs by its own advance");
+        assert_eq!(xs(&hung)[1], 0.0, "漢 sits on the edge");
+        assert_eq!(hung.lines[0].width, plain.lines[0].width - 2.0 * bracket);
+        let centred = shaped("「漢」", |l| { l.wrap_width = Some(1000.0); l.justify = TextJustify::Center; l.hanging = HangingPunctuation { first: true, end: HangEnd::None, last: true } }).unwrap();
+        assert_eq!(xs(&centred)[1], (1000.0 - hung.lines[0].width) * 0.5);
+    }
+
+    /// force-end は行末の句点をぶら下げる。allow-end は入り切る行では何もしない。
+    #[test]
+    fn end_stops_hang_only_when_forced_or_not_fitting() {
+        let Some(plain) = shaped("漢字。", |_| {}) else { return };
+        let allowed = shaped("漢字。", |l| l.hanging.end = HangEnd::AllowEnd).unwrap();
+        let forced = shaped("漢字。", |l| l.hanging.end = HangEnd::ForceEnd).unwrap();
+        assert_eq!(xs(&allowed), xs(&plain));
+        assert_eq!(xs(&forced), xs(&plain));
+        assert_eq!(forced.lines[0].width, plain.lines[0].width - 100.0);
+    }
+
+    /// 貼れるか: 欧文だけの行に autospace と trim-start は掛からない(境も全角の約物も無い)。
+    /// hanging は仕様の通り欧文の約物にも掛かる(§9.2.1 の表に U+002E、first/last は Ps/Pe)。
+    #[test]
+    fn latin_only_lines_are_untouched_except_by_hanging() {
+        let Some(plain) = shaped("Hello, world (again).", |_| {}) else { return };
+        let pressed = shaped("Hello, world (again).", |l| l.spacing_trim = TextSpacingTrim::TrimStart).unwrap();
+        assert_eq!(xs(&plain), xs(&pressed));
+        assert_eq!(plain.lines[0].width, pressed.lines[0].width);
+        let hung = shaped("Hello, world (again).", |l| l.hanging.end = HangEnd::ForceEnd).unwrap();
+        let stop = plain.lines[0].width - xs(&plain).last().unwrap();
+        assert_eq!(hung.lines[0].width, plain.lines[0].width - stop, "the full stop hangs, as CSS says it does in Latin too");
+    }
+
+    /// 選択肢の番と値は往復する(窓・台本が番で書く)。
+    #[test]
+    fn choices_round_trip() {
+        for i in 0..HangingPunctuation::CHOICES.len() as i64 { assert_eq!(HangingPunctuation::from_enum_value(i).unwrap().to_enum_value(), i); }
+        assert_eq!(HangingPunctuation::from_enum_value(HangingPunctuation::CHOICES.len() as i64), None);
+        for i in 0..4 { assert_eq!(TextSpacingTrim::from_enum_value(i).unwrap().to_enum_value(), i); }
+        assert_eq!(TextAutospace::from_enum_value(1), Some(TextAutospace::NoAutospace));
+    }
+}
+
+#[cfg(test)]
 mod facts_tests {
     use super::*;
 
@@ -450,3 +713,5 @@ mod facts_tests {
         assert!(facts.iter().all(|f| f.styles >= 1));
     }
 }
+
+
