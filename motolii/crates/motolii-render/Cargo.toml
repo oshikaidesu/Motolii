@@ -9,6 +9,8 @@ build = "build.rs"
 path = "src/lib.rs"
 
 [dependencies]
+rapier2d = { workspace = true }
+lyon_geom = { workspace = true }
 motolii-doc = { path = "../motolii-doc" }
 tobj = { workspace = true }
 gltf = { workspace = true }

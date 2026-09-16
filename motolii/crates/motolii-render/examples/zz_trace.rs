@@ -3,12 +3,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = Document::load(&std::env::args().nth(1).ok_or("doc")?)?;
     let view = doc.view();
     let comp = view.composition()?.ok_or("comp")?;
-    let t = RationalTime::try_from_frame(100, comp.fps)?;
-    let resolved = view.resolved_layers(t)?;
-    for l in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-        if l.effects.iter().any(|e| overlay::is_track_overlay(&e.plugin_id)) {
-            let scope = view.overlay_scope(l.id, &resolved, t)?;
-            println!("trace layer {:?}: scope {} boxes", l.id, scope.len());
+    let t = RationalTime::try_from_frame(120, comp.fps)?;
+    for id in view.layers() {
+        let name = view.meta(id)?.map(|m| format!("{:?}", m.source)).unwrap_or_default();
+        let from = view.value_at(id, &PropertyId::new(layout::CONNECT_FROM)?, t)?;
+        if from.is_none() { continue; }
+        let shapes = view.shapes_at(id, t)?;
+        let points: usize = shapes.iter().map(|_| 1).sum();
+        println!("{id:?} {name} connect_from={from:?} shapes={points}");
+        if let Some(motolii_render::doc::vector::ShapeNode::Leaf(leaf)) = shapes.first() {
+            println!("   source={:?}", std::mem::discriminant(&leaf.source));
+            if let motolii_render::doc::vector::PathSource::Bezier(cs) = &leaf.source {
+                for c in cs { println!("   contour: {} pts {:?}", c.vertices.len(), c.vertices.iter().map(|v| (v.point.x as f32, v.point.y as f32)).collect::<Vec<_>>()); }
+            }
         }
     }
     Ok(())

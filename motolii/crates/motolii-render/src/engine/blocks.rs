@@ -42,17 +42,19 @@ fn outline_of(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Op
                 let last = if contour.closed { vs.len() } else { vs.len() - 1 };
                 for i in 0..last {
                     let (a, b) = (&vs[i], &vs[(i + 1) % vs.len()]);
-                    let p0 = glam::vec2(a.point.x as f32, a.point.y as f32);
-                    let p3 = glam::vec2(b.point.x as f32, b.point.y as f32);
-                    let p1 = p0 + glam::vec2(a.out_tangent.x as f32, a.out_tangent.y as f32);
-                    let p2 = p3 + glam::vec2(b.in_tangent.x as f32, b.in_tangent.y as f32);
-                    // 曲がりは 6 点で足りる(当たりは凸包にするので、細かくしても形は変わらない)。
-                    for step in 0..6 {
-                        let u = step as f32 / 6.0;
-                        let v = 1.0 - u;
-                        let at = p0 * (v * v * v) + p1 * (3.0 * v * v * u) + p2 * (3.0 * v * u * u) + p3 * (u * u * u);
-                        points.push([at.x + ox, at.y + oy]);
-                    }
+                    // 曲がりに合わせて点を割る(lyon の適応分割。固定の分割だと大きい丸が粗く、
+                    // 小さい丸が無駄に細かくなる)。
+                    let p = |x: f64, y: f64| lyon_geom::point(x as f32, y as f32);
+                    let curve = lyon_geom::CubicBezierSegment {
+                        from: p(a.point.x, a.point.y),
+                        ctrl1: p(a.point.x + a.out_tangent.x, a.point.y + a.out_tangent.y),
+                        ctrl2: p(b.point.x + b.in_tangent.x, b.point.y + b.in_tangent.y),
+                        to: p(b.point.x, b.point.y),
+                    };
+                    points.push([curve.from.x + ox, curve.from.y + oy]);
+                    curve.for_each_flattened(0.6, &mut |line| {
+                        points.push([line.to.x + ox, line.to.y + oy]);
+                    });
                 }
             }
         }
@@ -101,6 +103,8 @@ pub(crate) struct BlockState {
     bases: Vec<([f32; 3], [f32; 3], [f32; 3])>,
     /// 物ごとの輪郭(comp の px、`objects` と同じ順)。
     outlines: Vec<Option<std::sync::Arc<Vec<[f32; 2]>>>>,
+    /// 層 → 物の番号(層を組む時に motion の番号を配るため)。
+    slots: HashMap<LayerId, u32>,
     batches: Vec<BlockBatch>,
 }
 
@@ -175,6 +179,15 @@ impl Engine {
     pub(super) fn prepare_blocks(&mut self, view: &StoreView<'_>, comp: CompSpec, t: RationalTime, resolved: &[ResolvedLayer]) -> Result<(), EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         let blocks: Vec<String> = self.compositor.catalog.definitions.iter().filter(|d| d.manifest.stage == IsfStage::Block).map(|d| d.plugin_id().to_owned()).collect();
+        // ブロックの宣言(id・場かどうか・欄の名前と既定)を先に写す(借りの重なりを避ける)。
+        let definitions: Vec<(String, bool, Vec<(String, f32)>)> = self.compositor.catalog.definitions.iter()
+            .filter(|d| d.manifest.stage == IsfStage::Block)
+            .map(|d| (
+                d.plugin_id().to_owned(),
+                d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room,
+                d.manifest.param_inputs().map(|p| (p.name.clone(), p.default[0])).collect(),
+            ))
+            .collect();
         let field_blocks: Vec<String> = self.compositor.catalog.definitions.iter()
             .filter(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room)
             .map(|d| d.plugin_id().to_owned()).collect();
@@ -184,6 +197,7 @@ impl Engine {
         state.placed.clear();
         state.follows.clear();
         state.object_layers.clear();
+        state.slots.clear();
         state.field_rooms.clear();
         state.fields.clear();
         state.objects.clear();
@@ -297,72 +311,86 @@ impl Engine {
                 }
             }
         }
+        // 物を先に決める: 層を組む前に箱・輪郭・場を揃えて解く。こうすると、つなぐ線も札も可視も
+        // 同じコマの結果を読める(利用者 2026-09-16 の穴「つなぐ線が付いて来ない」)。
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            let Some(placed) = state.placed.get(&layer.id).cloned() else { continue };
+            let blocks_here: Vec<(String, Vec<f32>, bool)> = layer.effects.iter().filter_map(|e| {
+                let d = definitions.iter().find(|d| d.0 == e.plugin_id)?;
+                let params = d.2.iter().map(|(name, default)| {
+                    e.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v {
+                        Value::F64(v) => Some(*v as f32),
+                        Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+                        _ => None,
+                    }).unwrap_or(*default)
+                }).collect();
+                Some((e.plugin_id.clone(), params, d.1))
+            }).collect();
+            if blocks_here.is_empty() && !state.follows.contains_key(&layer.id) && !state.field_rooms.contains(&placed.group) {
+                continue;
+            }
+            let m = layer.placement.transform;
+            let own = placed.own;
+            let corners = [[own[0], own[1]], [own[2], own[1]], [own[0], own[3]], [own[2], own[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
+            let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
+            let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
+            let k = state.objects.len() as u32;
+            state.slots.insert(layer.id, k);
+            state.objects.push(BlockItem {
+                lo: lo.to_array(),
+                hi: hi.to_array(),
+                room_lo: [placed.room[0], placed.room[1]],
+                room_size: [placed.room[2] - placed.room[0], placed.room[3] - placed.room[1]],
+                radius: placed.radius,
+                group: placed.group,
+                margin: placed.margin,
+                weight: placed.weight,
+            });
+            state.outlines.push(placed.outline.as_ref().map(|points| {
+                std::sync::Arc::new(points.iter().map(|p| m.transform_point2(glam::Vec2::from(*p)).to_array()).collect::<Vec<[f32; 2]>>())
+            }));
+            state.bases.push(([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]));
+            state.object_layers.push(layer.id);
+            for (stage, (plugin, params, is_field)) in blocks_here.into_iter().enumerate() {
+                if is_field {
+                    state.fields.push((stage, plugin, params, k));
+                    continue;
+                }
+                match state.batches.iter_mut().find(|b| b.stage == stage && b.plugin == plugin && b.params == params && b.source == u32::MAX) {
+                    Some(batch) => batch.members.push(k),
+                    None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX }),
+                }
+            }
+        }
+        self.solve_physics(t);
+        // 解き終わったずれを書類へ渡す: つなぐ線と付いて置く札が、動いた相手に付いて行く。
+        let shifts: HashMap<LayerId, [f32; 2]> = self.blocks.object_layers.iter()
+            .filter_map(|layer| self.blocks.physics.offset(*layer).map(|(shift, _)| (*layer, shift)))
+            .collect();
+        crate::doc::store::layout::set_physics_shifts(shifts);
         Ok(())
     }
 
     /// 組んだ 1 枚にブロックが掛かっていれば、描く時と同じ置き方の箱を物として並べ、motion の番号を最後の欄に入れる。
     pub(super) fn attach_block(&mut self, layer: &ResolvedLayer, built: &mut Layer, comp: CompSpec) {
-        let Some(placed) = self.blocks.placed.get(&layer.id).cloned() else { return };
+        // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
+        // その物の comp → world の向き(組んだ素材の大きさが要るのでここでしか作れない)。
+        let Some(&k) = self.blocks.slots.get(&layer.id) else { return };
         let size = glam::Vec2::from(built.size);
         if size.x <= 0.0 || size.y <= 0.0 {
             return;
         }
-        let chain: Vec<(String, Vec<f32>, bool)> = layer.effects.iter().filter_map(|e| {
-            let d = self.compositor.catalog.definitions.iter().find(|d| d.manifest.stage == IsfStage::Block && d.plugin_id() == e.plugin_id)?;
-            let params = d.manifest.param_inputs().map(|input| {
-                e.params.iter().find(|(n, _)| n == &input.name).and_then(|(_, v)| match v {
-                    Value::F64(v) => Some(*v as f32),
-                    Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
-                    _ => None,
-                }).unwrap_or(input.default[0])
-            }).collect();
-            Some((e.plugin_id.clone(), params, d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room))
-        }).collect();
-        if chain.is_empty() && !self.blocks.follows.contains_key(&layer.id) && !self.blocks.field_rooms.contains(&placed.group) {
-            return;
-        }
+        built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (k + 1) as f32;
         let m = built.placement.transform;
-        let own = placed.own;
-        let corners = [[own[0], own[1]], [own[2], own[1]], [own[0], own[3]], [own[2], own[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
-        let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
-        let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
-        // comp の 1px が world でどちら向きか: 素材の辺の world の長さ ÷ 素材の px、を comp → 素材の逆写しに掛ける。
         let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, built.projection_camera, built.projection, built.placement, glam::Vec2::ZERO, size);
         let (per_x, per_y) = (u / size.x, v / size.y);
         let inverse = if m.matrix2.determinant().abs() > 1e-12 { m.matrix2.inverse() } else { glam::Mat2::IDENTITY };
         let world = |comp_step: glam::Vec2| { let material = inverse * comp_step; (per_x * material.x + per_y * material.y).to_array() };
-        let state = &mut self.blocks;
-        let k = state.objects.len() as u32;
-        built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (k + 1) as f32;
-        state.objects.push(BlockItem {
-            lo: lo.to_array(),
-            hi: hi.to_array(),
-            room_lo: [placed.room[0], placed.room[1]],
-            room_size: [placed.room[2] - placed.room[0], placed.room[3] - placed.room[1]],
-            radius: placed.radius,
-            group: placed.group,
-            margin: placed.margin,
-            weight: placed.weight,
-        });
-        // 回る軸が通る所: 物の箱の真ん中を world で。
+        let own = self.blocks.placed.get(&layer.id).map(|p| p.own).unwrap_or([0.0; 4]);
         let middle = glam::Vec2::new((own[0] + own[2]) * 0.5, (own[1] + own[3]) * 0.5);
         let centre = origin + u * (middle.x / size.x) + v * (middle.y / size.y);
-        state.bases.push((world(glam::Vec2::X), world(glam::Vec2::Y), centre.to_array()));
-        // 輪郭を comp の座標へ(描く時と同じ置き方)。
-        state.outlines.push(placed.outline.as_ref().map(|points| {
-            std::sync::Arc::new(points.iter().map(|p| m.transform_point2(glam::Vec2::from(*p)).to_array()).collect::<Vec<[f32; 2]>>())
-        }));
-        state.object_layers.push(layer.id);
-        for (stage, (plugin, params, is_field)) in chain.into_iter().enumerate() {
-            if is_field {
-                // 場は元。動く相手(同じ住む箱の他の全員)は、物が全部揃ってから決める。
-                state.fields.push((stage, plugin, params, k));
-                continue;
-            }
-            match state.batches.iter_mut().find(|b| b.stage == stage && b.plugin == plugin && b.params == params && b.source == u32::MAX) {
-                Some(batch) => batch.members.push(k),
-                None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX }),
-            }
+        if let Some(slot) = self.blocks.bases.get_mut(k as usize) {
+            *slot = (world(glam::Vec2::X), world(glam::Vec2::Y), centre.to_array());
         }
     }
 
