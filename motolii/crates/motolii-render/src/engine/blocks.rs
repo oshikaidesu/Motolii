@@ -891,7 +891,7 @@ mod tests {
         }).collect();
         let engine = Engine::new().unwrap();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-        let program = program_for(device, include_str!("../../vism/push_apart.wgsl"));
+        let program = program_for(device, "push_apart");
         let mut world = BlockWorld::new(device);
         world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
@@ -913,8 +913,8 @@ mod tests {
         use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
         let engine = Engine::new().unwrap();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-        let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
-        let bounce = program_for(device, include_str!("../../vism/bounce.wgsl"));
+        let push = program_for(device, "push_apart");
+        let bounce = program_for(device, "bounce");
         let room = [200.0f32, 120.0];
         let mut items = Vec::new();
         for i in 0..40 {
@@ -943,8 +943,8 @@ mod tests {
         use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
         let engine = Engine::new().unwrap();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-        let bounce = program_for(device, include_str!("../../vism/bounce.wgsl"));
-        let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
+        let bounce = program_for(device, "bounce");
+        let push = program_for(device, "push_apart");
         let items = [BlockItem { lo: [300.0, 20.0], hi: [310.0, 30.0], room_lo: [0.0; 2], room_size: [200.0, 100.0], radius: 0.0, group: 1, margin: 0.0, weight: 1.0 }];
         let mut world = BlockWorld::new(device);
         world.begin(device, queue, &items, 0.0);
@@ -1009,7 +1009,7 @@ mod tests {
         use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
         let engine = Engine::new().unwrap();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-        let wave = program_for(device, include_str!("../../vism/wave.wgsl"));
+        let wave = program_for(device, "wave");
         let items: Vec<BlockItem> = (0..8).map(|i| BlockItem { lo: [i as f32 * 20.0, 0.0], hi: [i as f32 * 20.0 + 10.0, 10.0], weight: 1.0, ..Default::default() }).collect();
         let mut world = BlockWorld::new(device);
         world.begin(device, queue, &items, 0.0);
@@ -1063,7 +1063,7 @@ mod tests {
         }
         let engine = Engine::new().unwrap();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-        let push = program_for(device, include_str!("../../vism/push_apart.wgsl"));
+        let push = program_for(device, "push_apart");
         let mut world = BlockWorld::new(device);
         world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
@@ -1081,7 +1081,7 @@ mod tests {
     }
 
     fn push_reach() -> Option<String> {
-        crate::render::compositor::effects::isf::parse_isf_source(include_str!("../../vism/push_apart.wgsl")).unwrap().0.reach
+        crate::render::compositor::effects::block_program::catalog_definition("push_apart").manifest.reach
     }
 
     /// Margin が箱よりずっと大きくても、届く距離の分だけ升目を広げるので相手を取りこぼさない。

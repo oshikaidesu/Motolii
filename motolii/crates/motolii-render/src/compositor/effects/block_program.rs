@@ -473,13 +473,17 @@ pub fn read_state(device: &wgpu::Device, queue: &wgpu::Queue, world: &BlockWorld
     out
 }
 
+/// test の入口: 棚に載った札(disk の構成では vism/ の今の file、焼き込みでは埋めた物 — 描く時と同じ道)。
 #[cfg(test)]
-pub(crate) fn program_for(device: &wgpu::Device, file: &str) -> BlockProgram {
-    let (manifest, body) = super::isf::parse_isf_source(file).unwrap();
-    assert_eq!(manifest.stage, super::isf::IsfStage::Block);
-    let source = module_source(&manifest, &body).unwrap();
-    validate(&source).unwrap();
-    BlockProgram::new(device, "block-test", &source, manifest.rounds)
+pub(crate) fn catalog_definition(name: &str) -> super::VismDefinition {
+    super::catalog::catalog_snapshot().definitions.iter().find(|d| d.source.name == name).unwrap_or_else(|| panic!("{name} is not on the shelf")).clone()
+}
+
+#[cfg(test)]
+pub(crate) fn program_for(device: &wgpu::Device, name: &str) -> BlockProgram {
+    let definition = catalog_definition(name);
+    assert_eq!(definition.manifest.stage, super::isf::IsfStage::Block);
+    BlockProgram::new(device, "block-test", &definition.vertex_text, definition.manifest.rounds)
 }
 
 #[cfg(test)]
@@ -496,7 +500,7 @@ mod tests {
         let engine = gpu();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
         let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let program = program_for(device, include_str!("../../../vism/bounce.wgsl"));
+        let program = program_for(device, "bounce");
         let m = 1.0; // doc の CANVAS_MARGIN(箱の素材座標の原点)
         let mut items = Vec::new();
         let mut rng = 7u32;
