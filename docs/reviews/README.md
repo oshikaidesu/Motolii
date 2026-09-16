@@ -826,6 +826,8 @@
 
 - [Browser UI phases](2026-09-09-browser-ui-phases.md)
 
+- [Color selection flow — 実窓所見](2026-09-13-color-selection-flow-findings.md)
+
 - [shader の外に仕組みが要る表現 — 宿題の台帳](2026-09-13-shader-outside-expressions-ledger.md)
 
 - [スクリプトの口 — p5.js と LLM ポン出しの客](2026-09-14-script-mouth.md)
