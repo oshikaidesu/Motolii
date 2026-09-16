@@ -246,21 +246,17 @@ mod file {
     }
 }
 
-/// 常駐の見張り(往復を速くする、2026-09-16 利用者「こういう往復を早くしたい」): 台本の保存を見張り、
-/// 変わる度に 台本 → 書類 → コマ → 敷き詰め PNG を、cargo を起動せずに回す。描く側(GPU・書体・棚)は
-/// 開いたまま。`MOTOLII_SCRIPT`(台本)、`MOTOLII_OUT`(出力の dir)、`MOTOLII_LAST` / `MOTOLII_STEP` /
-/// `MOTOLII_SHRINK`(最後のコマ・コマ飛ばし・縮小)。`script_file` と同じく試験の器を入口に借りる。
+/// 常駐の見張り・台本の側(往復を速くする、2026-09-16 利用者「こういう往復を早くしたい」「リリースいるかなー」):
+/// 台本の保存を見張り、変わる度に 台本 → 書類(`MOTOLII_OUT/shot.rrd`)を、cargo を起動せずに作り直す。
+/// 描くのは render の側の見張り(`zz_watch`、release で組んである)に任せる — ここは描かないので debug で足りる。
 #[cfg(test)]
 mod watch {
     #[test]
     #[ignore]
     fn watch_shot() {
-        use crate::doc::store::{Document, RationalTime};
         let script = std::env::var("MOTOLII_SCRIPT").expect("MOTOLII_SCRIPT");
         let out = std::env::var("MOTOLII_OUT").expect("MOTOLII_OUT");
-        let read = |name: &str, default: u32| std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default);
         std::fs::create_dir_all(&out).unwrap();
-        let mut engine = crate::render::engine::Engine::new().unwrap();
         let mut seen = None;
         loop {
             let stamp = std::fs::metadata(&script).and_then(|m| m.modified()).ok();
@@ -270,50 +266,17 @@ mod watch {
             }
             seen = stamp;
             let started = std::time::Instant::now();
-            let (last, step, shrink) = (read("MOTOLII_LAST", 120) as i64, read("MOTOLII_STEP", 1).max(1) as i64, read("MOTOLII_SHRINK", 1).max(1));
             let source = std::fs::read_to_string(&script).unwrap_or_default();
             let mut rt = match crate::EditorRuntime::open("") { Ok(rt) => rt, Err(e) => { eprintln!("open: {e}"); continue } };
             if let Err(message) = rt.run_script(&source, &script) {
                 eprintln!("script: {message}");
                 continue;
             }
-            let saved = format!("{out}/shot.rrd");
-            if let Err(e) = rt.request(serde_json::json!({ "op": "save", "path": saved })) { eprintln!("save: {e:?}"); continue }
-            let Ok(doc) = Document::load(&saved) else { eprintln!("load failed"); continue };
-            let Some(comp) = doc.view().composition().ok().flatten() else { continue };
-            let mut picked: Vec<image::RgbaImage> = Vec::new();
-            let mut frame = 0i64;
-            while frame <= last {
-                let Ok(t) = RationalTime::try_from_frame(frame, comp.fps) else { break };
-                match engine.render_frame(&doc.view(), t) {
-                    Ok(pixels) => {
-                        let image = image::RgbaImage::from_raw(comp.width, comp.height, pixels).expect("pixels");
-                        let saved = if shrink > 1 { image::imageops::resize(&image, comp.width / shrink, comp.height / shrink, image::imageops::FilterType::Triangle) } else { image };
-                        let _ = saved.save(format!("{out}/{frame:04}.png"));
-                        picked.push(saved);
-                    }
-                    Err(e) => { eprintln!("frame {frame}: {e:?}"); break }
-                }
-                for skipped in frame + 1..(frame + step).min(last + 1) {
-                    if let Ok(t) = RationalTime::try_from_frame(skipped, comp.fps) { let _ = engine.render_frame(&doc.view(), t); }
-                }
-                frame += step;
-            }
-            // 敷き詰め: 始め・1/3・2/3・終わり。
-            if !picked.is_empty() {
-                let n = picked.len();
-                let idx: Vec<usize> = { let mut v = vec![0, n / 3, 2 * n / 3, n - 1]; v.dedup(); v };
-                let (w, h) = (picked[0].width(), picked[0].height());
-                let scale = 300.0 / w.max(h) as f32;
-                let (tw, th) = (((w as f32 * scale) as u32).max(1), ((h as f32 * scale) as u32).max(1));
-                let mut sheet = image::RgbaImage::from_pixel(tw * idx.len() as u32 + 10 * (idx.len() as u32 - 1), th, image::Rgba([16, 18, 22, 255]));
-                for (k, i) in idx.iter().enumerate() {
-                    let thumb = image::imageops::resize(&picked[*i], tw, th, image::imageops::FilterType::Triangle);
-                    image::imageops::overlay(&mut sheet, &thumb, (k as u32 * (tw + 10)) as i64, 0);
-                }
-                let _ = sheet.save(format!("{out}/sheet.png"));
-            }
-            eprintln!("shot: {} frames in {:.1}s -> {out}/sheet.png", picked.len(), started.elapsed().as_secs_f32());
+            // 書きかけを描かせないよう、別名で保存してから差し替える。
+            let (tmp, saved) = (format!("{out}/shot.rrd.tmp"), format!("{out}/shot.rrd"));
+            if let Err(e) = rt.request(serde_json::json!({ "op": "save", "path": tmp })) { eprintln!("save: {e:?}"); continue }
+            let _ = std::fs::rename(&tmp, &saved);
+            eprintln!("doc: {saved} in {:.1}s", started.elapsed().as_secs_f32());
         }
     }
 }

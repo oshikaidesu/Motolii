@@ -1,0 +1,58 @@
+//! 常駐の見張り・描く側: 書類(`.rrd`)の保存を見張り、変わる度にコマを描いて敷き詰め PNG を吐く。
+//! 描く側(GPU・書体・棚)は開いたまま。release で組む(例は既にそうしている)ので、
+//! 台本の側の見張り(ui の `watch_shot`、debug)と組で使う。
+//! `zz_watch <doc.rrd> <out_dir>`、`MOTOLII_LAST` / `MOTOLII_STEP` / `MOTOLII_SHRINK`。
+use motolii_render::{doc::store::*, engine::Engine};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = std::env::args().skip(1);
+    let path = args.next().ok_or("doc")?;
+    let out = args.next().ok_or("out")?;
+    std::fs::create_dir_all(&out)?;
+    let read = |name: &str, default: u32| std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default);
+    let mut engine = Engine::new()?;
+    let mut seen = None;
+    loop {
+        let stamp = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        if stamp == seen || stamp.is_none() {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            continue;
+        }
+        seen = stamp;
+        let started = std::time::Instant::now();
+        let (last, step, shrink) = (read("MOTOLII_LAST", 120) as i64, read("MOTOLII_STEP", 1).max(1) as i64, read("MOTOLII_SHRINK", 1).max(1));
+        let Ok(doc) = Document::load(&path) else { eprintln!("load failed"); continue };
+        let Some(comp) = doc.view().composition().ok().flatten() else { continue };
+        let mut picked: Vec<image::RgbaImage> = Vec::new();
+        let mut frame = 0i64;
+        while frame <= last {
+            let Ok(t) = RationalTime::try_from_frame(frame, comp.fps) else { break };
+            match engine.render_frame(&doc.view(), t) {
+                Ok(pixels) => {
+                    let image = image::RgbaImage::from_raw(comp.width, comp.height, pixels).ok_or("pixels")?;
+                    let saved = if shrink > 1 { image::imageops::resize(&image, comp.width / shrink, comp.height / shrink, image::imageops::FilterType::Triangle) } else { image };
+                    let _ = saved.save(format!("{out}/{frame:04}.png"));
+                    picked.push(saved);
+                }
+                Err(e) => { eprintln!("frame {frame}: {e:?}"); break }
+            }
+            for skipped in frame + 1..(frame + step).min(last + 1) {
+                if let Ok(t) = RationalTime::try_from_frame(skipped, comp.fps) { let _ = engine.render_frame(&doc.view(), t); }
+            }
+            frame += step;
+        }
+        if !picked.is_empty() {
+            let n = picked.len();
+            let idx: Vec<usize> = { let mut v = vec![0, n / 3, 2 * n / 3, n - 1]; v.dedup(); v };
+            let (w, h) = (picked[0].width(), picked[0].height());
+            let scale = 300.0 / w.max(h) as f32;
+            let (tw, th) = (((w as f32 * scale) as u32).max(1), ((h as f32 * scale) as u32).max(1));
+            let mut sheet = image::RgbaImage::from_pixel(tw * idx.len() as u32 + 10 * (idx.len() as u32 - 1), th, image::Rgba([16, 18, 22, 255]));
+            for (k, i) in idx.iter().enumerate() {
+                let thumb = image::imageops::resize(&picked[*i], tw, th, image::imageops::FilterType::Triangle);
+                image::imageops::overlay(&mut sheet, &thumb, (k as u32 * (tw + 10)) as i64, 0);
+            }
+            let _ = sheet.save(format!("{out}/sheet.png"));
+        }
+        eprintln!("shot: {} frames in {:.1}s -> {out}/sheet.png", picked.len(), started.elapsed().as_secs_f32());
+    }
+}
