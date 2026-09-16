@@ -11,7 +11,8 @@
     { "NAME": "angle", "LABEL": "Angle", "TYPE": "float", "DEFAULT": 90.0, "MIN": -360.0, "MAX": 360.0 },
     { "NAME": "strength", "LABEL": "Strength", "TYPE": "float", "DEFAULT": 400.0, "MIN": -100000.0, "MAX": 100000.0 },
     { "NAME": "reach", "LABEL": "Reach", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 100000.0 },
-    { "NAME": "tumble", "LABEL": "Tumble", "TYPE": "float", "DEFAULT": 0.35, "MIN": 0.0, "MAX": 4.0 }
+    { "NAME": "tumble", "LABEL": "Tumble", "TYPE": "float", "DEFAULT": 0.35, "MIN": 0.0, "MAX": 4.0 },
+    { "NAME": "hold", "LABEL": "Hold", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 1.0 }
   ]
 }*/
 
@@ -66,8 +67,19 @@ fn block(k: u32, p: BlockParams) -> Offset {
     }
     // まわり: 進んだ長さを自分の大きさで割った分だけ転がる(落ちれば転がり、止まれば止まる)。
     // 向きと速さは物ごとのさいころで散らす — 揃って回ると作り物に見える。
-    let moved = mix(local, uniform, spread);
+    var moved = mix(local, uniform, spread);
     let own = max(max(objects[k].hi.x - objects[k].lo.x, objects[k].hi.y - objects[k].lo.y), 1.0);
+    // Hold: 配置(レイアウト)が家。人は箱を並べた時点で床も余白も決めている(利用者 2026-09-16
+    // 「ユーザはもう既にレイアウト構図という形で、壁や地面を無意識下で設定している」)。
+    // 0 = 家を離れて箱の底まで行く、1 = 家から離れない(膨らんで戻る)。間は連続。
+    let hold = clamp(p.hold, 0.0, 1.0);
+    if hold > 0.0 {
+        let leash = mix(1.0e9, own * 1.2, hold);
+        let far = length(moved);
+        if far > 1e-4 {
+            moved = moved * (leash / (leash + far));
+        }
+    }
     let spin = degrees(length(moved) / (own * 0.5)) * p.tumble * (0.4 + 0.6 * abs(dice(k))) * sign(dice(k + 977u));
     return Offset(moved, spin, 1.0);
 }

@@ -79,6 +79,7 @@ impl Engine {
             state.field_rooms.insert(parent.map_or(0, |p| p.0 as u32));
         }
         let field_rooms = state.field_rooms.clone();
+        let solved = view.layout_frame(t).map_err(store)?;
         let in_field_room = |view: &StoreView<'_>, id: LayerId| -> Result<bool, EngineError> {
             let parent = view.attrs(id).map_err(store)?.unwrap_or_default().parent;
             Ok(field_rooms.contains(&parent.map_or(0, |p| p.0 as u32)))
@@ -111,6 +112,12 @@ impl Engine {
                 None => frame,
             };
             let Some(own) = view.layer_box(layer.id, t).map_err(store)? else { continue };
+            // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
+            // 当たりが元の形の大きさのままになる。
+            let own = match solved.slots.get(&layer.id).map(|slot| slot.stretch) {
+                Some([sx, sy]) if sx > 0.0 && sy > 0.0 => [own[0] * sx, own[1] * sy, own[2] * sx, own[3] * sy],
+                _ => own,
+            };
             let weight = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::FLEX_SHRINK).map_err(store)?, t).map_err(store)? {
                 Some(Value::F64(v)) => v.max(0.0) as f32,
                 _ => 1.0,
