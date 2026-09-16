@@ -4,7 +4,20 @@ fn main() {
     let manifest_dir =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let vism_dir = manifest_dir.join("vism");
-    println!("cargo:rerun-if-changed={}", vism_dir.display());
+
+    let environment = Environment::detect();
+    let is_release = cfg!(not(debug_assertions));
+    let targets_wasm =
+        re_build_tools::get_and_track_env_var("CARGO_CFG_TARGET_FAMILY").unwrap() == "wasm";
+    let load_shaders_from_disk =
+        environment == Environment::DeveloperInWorkspace && !is_release && !targets_wasm;
+
+    // disk から読む構成では vism/ は実行時に読むので、保存で crate を組み直さない(build.rs 自身と env だけ)。
+    // 焼き込む構成だけが vism/ を見張る。
+    println!("cargo:rerun-if-changed=build.rs");
+    if !load_shaders_from_disk {
+        println!("cargo:rerun-if-changed={}", vism_dir.display());
+    }
     let mut paths: Vec<_> = std::fs::read_dir(&vism_dir)
         .expect("vism directory")
         .filter_map(Result::ok)
@@ -55,15 +68,7 @@ fn main() {
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("out dir"));
     std::fs::write(out_dir.join("vism_inventory.rs"), inventory).expect("write vism inventory");
 
-    let environment = Environment::detect();
-    let is_release = cfg!(not(debug_assertions));
-    let targets_wasm =
-        re_build_tools::get_and_track_env_var("CARGO_CFG_TARGET_FAMILY").unwrap() == "wasm";
-
     println!("cargo::rustc-check-cfg=cfg(load_shaders_from_disk)");
-
-    let load_shaders_from_disk =
-        environment == Environment::DeveloperInWorkspace && !is_release && !targets_wasm;
     if load_shaders_from_disk {
         println!("cargo:rustc-cfg=load_shaders_from_disk");
     }
