@@ -28,6 +28,9 @@ pub(crate) struct Body {
     pub margin: f32,
     /// 重さ(0 なら動かない)。
     pub weight: f32,
+    /// 手触り(提案 2026-09-16 の 1 本の軸): 0 返す ↔ 0.5 吸う ↔ 1 引きずる。
+    /// 解き手の欄(摩擦・反発・減衰)はここから作る — 人は摩擦係数を操作しない。
+    pub hardness: f32,
 }
 
 /// 1 つの住む箱(壁)と、その中に効く場。
@@ -146,12 +149,13 @@ impl Physics {
             }
         }
         for body in bodies {
+            let soft = body.hardness.clamp(0.0, 1.0);
             let handle = self.bodies.insert(
                 RigidBodyBuilder::dynamic()
                     .translation(Vec2::new(body.centre[0] * PX, body.centre[1] * PX))
                     .ccd_enabled(true)
-                    .linear_damping(0.4)
-                    .angular_damping(0.6)
+                    .linear_damping(0.1 + soft * 1.6)
+                    .angular_damping(0.2 + soft * 2.4)
                     .build(),
             );
             let margin = body.margin.max(0.0) * PX;
@@ -161,7 +165,11 @@ impl Physics {
                 ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3))
             };
             self.colliders.insert_with_parent(
-                collider.friction(0.5).restitution(0.15).density(body.weight.max(0.05)).build(),
+                collider
+                    .friction(0.15 + soft * 1.05)
+                    .restitution((0.55 * (1.0 - soft * 2.0)).max(0.0))
+                    .density(body.weight.max(0.05))
+                    .build(),
                 handle,
                 &mut self.bodies,
             );

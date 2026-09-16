@@ -30,6 +30,8 @@ struct Placed {
     weight: f32,
     /// 書類の間合い(CSS の margin)。物同士はこれだけ空けて当たる。
     margin: f32,
+    /// 手触り(0 返す ↔ 0.5 吸う ↔ 1 引きずる)。
+    hardness: f32,
 }
 
 #[derive(Default)]
@@ -142,7 +144,16 @@ impl Engine {
                 Some(Value::F64(v)) => v.max(0.0) as f32,
                 _ => 0.0,
             };
-            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin });
+            // 手触りの軸(提案 2026-09-16): 返す ↔ 吸う ↔ 引きずる。解き手の摩擦・反発へ訳す。
+            let hardness = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::HARDNESS).map_err(store)?, t).map_err(store)? {
+                Some(Value::F64(v)) => v.clamp(0.0, 1.0) as f32,
+                _ => 0.5,
+            };
+            let weight = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::HEAVINESS).map_err(store)?, t).map_err(store)? {
+                Some(Value::F64(v)) => v.max(0.0) as f32,
+                _ => weight,
+            };
+            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin, hardness });
         }
         // 付いて置く札の相手がブロックで動くなら、札も物として並べて付いて行かせる(CSS の transform を読まない anchor() とは違う、利用者 2026-09-15「付いていく方が自然」)。
         let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
@@ -160,7 +171,7 @@ impl Engine {
                 state.follows.insert(layer.id, target);
                 if !state.placed.contains_key(&layer.id) {
                     let own = view.layer_box(layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
-                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0 });
+                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0, hardness: 0.5 });
                 }
             }
         }
@@ -278,6 +289,7 @@ impl Engine {
                 round: false,
                 margin: it.margin,
                 weight: it.weight,
+                hardness: state.placed.get(&state.object_layers[k]).map_or(0.5, |p| p.hardness),
             })
             .collect();
         let rooms: Vec<Room> = rooms.into_values().collect();

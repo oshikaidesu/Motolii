@@ -75,6 +75,11 @@ pub const OFFSET_ROTATE: &str = "layout.offset_rotate";
 /// 移り方を始めるまでの遅れ(CSS の transition-delay)。
 pub const TRANSITION_DELAY: &str = "layout.transition_delay";
 /// 並べる容器が子の移り方の遅れを配る(GSAP の stagger の amount と from)。遅れ = Stagger × 起点からの距離 / 容器の最大の距離。
+/// 物の手触り(提案 2026-09-16 の felt な軸)。0 = 返す(跳ねる・硬い)、0.5 = 吸う(布・スポンジ)、
+/// 1 = 引きずる(粘る・くっつく)。物理の解き手の摩擦・反発・減衰に訳す。
+pub const HARDNESS: &str = "layout.hardness";
+/// 物の重さ。0 なら動かない(留め具のように扱う)。既定は大きさから。
+pub const HEAVINESS: &str = "layout.heaviness";
 pub const STAGGER: &str = "layout.stagger";
 pub const STAGGER_FROM: &str = "layout.stagger_from";
 /// 文字が避けて流れる物の形(CSS `shape-outside`、宣言するのは避けられる物の側)。同じ親の、折り返す文字が避ける。
@@ -174,6 +179,8 @@ pub const ITEM_ROWS: &[Row] = &[
     (LAYOUT_ROTATION, "Layout Rotation", Value::F64(0.0), None, &[]),
     (LAYOUT_TILT_X, "Layout Tilt X", Value::F64(0.0), None, &[]),
     (LAYOUT_TILT_Y, "Layout Tilt Y", Value::F64(0.0), None, &[]),
+    (HARDNESS, "Hardness", Value::F64(0.5), Some((0.0, 1.0)), &[]),
+    (HEAVINESS, "Heaviness", Value::F64(1.0), Some((0.0, 100.0)), &[]),
 ];
 
 /// Overflow = Bounce(提案 2026-09-15、利用者「物理、これは嘘でできる」): 流れの外の子の箱を、親の箱の内側へ鏡で折り返す。
