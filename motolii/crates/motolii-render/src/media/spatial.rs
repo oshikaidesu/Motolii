@@ -159,6 +159,57 @@ pub fn silhouette_from_mask(bits: &[u8], width: u32, height: u32) -> Vec<[f32; 2
     kept
 }
 
+/// The outline of a keyed picture, walked along its edge (Moore neighbourhood), so a concave shape
+/// stays concave — the farthest-point way loses the valleys of a star. Simplified by perpendicular
+/// distance so the solver gets tens of points, not thousands.
+pub fn outline_from_mask(bits: &[u8], width: u32, height: u32) -> Vec<[f32; 2]> {
+    let (w, h) = (width as i64, height as i64);
+    if w < 3 || h < 3 || bits.len() < (w * h) as usize {
+        return Vec::new();
+    }
+    let lit = |x: i64, y: i64| x >= 0 && y >= 0 && x < w && y < h && bits[(y * w + x) as usize] > 127;
+    let Some(start) = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|(x, y)| lit(*x, *y)) else {
+        return Vec::new();
+    };
+    // 8 近傍を時計回りに。辺を辿って一周する。
+    const STEPS: [(i64, i64); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
+    let mut walk: Vec<[f32; 2]> = Vec::new();
+    let (mut at, mut dir) = (start, 6usize);
+    for _ in 0..(w * h * 4) {
+        walk.push([at.0 as f32 + 0.5, at.1 as f32 + 0.5]);
+        let mut found = false;
+        for turn in 0..8 {
+            let d = (dir + 6 + turn) % 8;
+            let next = (at.0 + STEPS[d].0, at.1 + STEPS[d].1);
+            if lit(next.0, next.1) {
+                at = next;
+                dir = d;
+                found = true;
+                break;
+            }
+        }
+        if !found || (walk.len() > 2 && at == start) {
+            break;
+        }
+    }
+    if walk.len() < 8 {
+        return Vec::new();
+    }
+    // 角だけ残す(垂線の距離で間引く)。
+    let span = (w.max(h) as f32) * 0.012;
+    let mut kept: Vec<[f32; 2]> = vec![walk[0]];
+    for point in walk.iter().skip(1) {
+        let last = *kept.last().unwrap();
+        if (point[0] - last[0]).hypot(point[1] - last[1]) >= span.max(1.5) {
+            kept.push(*point);
+        }
+    }
+    if kept.len() < 4 {
+        return Vec::new();
+    }
+    kept
+}
+
 #[cfg(test)]
 mod silhouette_tests {
     use super::*;

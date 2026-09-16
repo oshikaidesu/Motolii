@@ -21,6 +21,7 @@ pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 mod translate;
 mod blocks;
+mod physics;
 mod frozen;
 
 use crate::doc::core::ResolvedCamera;
@@ -127,6 +128,10 @@ pub struct Engine {
     layer_failures: Vec<String>,
     /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
     feedback_replaying: bool,
+    /// 解析の途中(層を 1 枚だけ組んで読み戻している間)。この間は物理を解かない。
+    analysing: bool,
+    /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
+    keyed_outlines: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>>,
     /// 今描いている窓(画面の道の feedback は窓ごとに状態を持つ)。読み戻しの道では None = 出力寸法。
     feedback_window: Option<crate::render::compositor::Window>,
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
@@ -212,6 +217,8 @@ impl Engine {
             realtime: false,
             renders_since_video_purge: 0,
             feedback_replaying: false,
+            analysing: false,
+            keyed_outlines: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
@@ -281,6 +288,8 @@ impl Engine {
             realtime: false,
             renders_since_video_purge: 0,
             feedback_replaying: false,
+            analysing: false,
+            keyed_outlines: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,

@@ -133,6 +133,53 @@ impl Engine {
         Ok(out)
     }
 
+    /// 効果を通した後の透過から、層ごとの形を取る(提案 2026-09-16、利用者「根本から解決する。
+    /// 将来的にはアルファで抜きたいためです。クロマキー以外のエフェクトで抜くようにもしたいから」)。
+    /// 当たりは「描かれた物の形」— 抜き方(クロマキー・マット・アルファ)を物理は知らなくていい。
+    fn alpha_outlines(&mut self, view: &StoreView<'_>, t: RationalTime, comp: CompSpec) -> Result<(), EngineError> {
+        let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
+        self.keyed_outlines.clear();
+        let resolved = view.resolved_layers(t).map_err(store)?;
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            // 絵・動画で、形を変える効果が載っている物だけ(形の層は書類の輪郭の方が正確で軽い)。
+            if !matches!(layer.source, crate::doc::store::LayerSource::File { .. }) || layer.effects.is_empty() {
+                continue;
+            }
+            let target = ResolvedLayer { matte: None, clip_to_below: false, ..layer.clone() };
+            let Some(picture) = self.layer_linear_picture(view, &resolved, &target, t, comp)? else { continue };
+            let (width, height) = (picture.width, picture.height);
+            if width == 0 || height == 0 {
+                continue;
+            }
+            // Rgba16Float の透過だけを見て二値にする。細かさは 192px で足りる(輪郭は方向ごとの最遠点)。
+            let step = (width.max(height) / 192).max(1);
+            let (w, h) = (width.div_ceil(step), height.div_ceil(step));
+            let mut bits = vec![0u8; (w * h) as usize];
+            for y in 0..h {
+                for x in 0..w {
+                    let (sx, sy) = (x * step, y * step);
+                    let index = ((sy * width + sx) * 8 + 6) as usize;
+                    let alpha = picture.bytes.get(index..index + 2)
+                        .map(|b| half::f16::from_le_bytes([b[0], b[1]]).to_f32())
+                        .unwrap_or(0.0);
+                    bits[(y * w + x) as usize] = u8::from(alpha > 0.5) * 255;
+                }
+            }
+            let points = crate::render::media::outline_from_mask(&bits, w, h);
+            if points.len() < 3 {
+                continue;
+            }
+            // 縮めた絵 → 素材の論理座標(余白を外す)。
+            let per_logical = width as f32 / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0);
+            let pad = picture.padding as f32;
+            let outline: Vec<[f32; 2]> = points.iter()
+                .map(|p| [p[0] * step as f32 / per_logical - pad, p[1] * step as f32 / per_logical - pad])
+                .collect();
+            self.keyed_outlines.insert(layer.id, std::sync::Arc::new(outline));
+        }
+        Ok(())
+    }
+
     fn analysis_inputs(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<AnalysisInputs, EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         let mut inputs = AnalysisInputs::default();
@@ -140,6 +187,13 @@ impl Engine {
         let Ok(frame) = t.try_to_frame_round(composition.fps) else { return Ok(inputs) };
         let mut seen = Vec::new();
         self.overlay_frames.clear();
+        // 抜いた後の形を先に取る(この間は層を 1 枚ずつ組んで読み戻すので、物理は解かない)。
+        if !self.analysing {
+            self.analysing = true;
+            let outlines = self.alpha_outlines(view, t, composition.spec());
+            self.analysing = false;
+            outlines?;
+        }
         for layer in view.layers() {
             let Some(meta) = view.meta(layer).map_err(store)? else { continue };
             if !meta.timing.covers(frame) { continue; }

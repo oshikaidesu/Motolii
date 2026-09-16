@@ -164,10 +164,15 @@ impl Physics {
                     .build(),
             );
             let margin = body.margin.max(0.0) * PX;
-            // 形そのもので当たる(凸包)。輪郭が無い物だけ箱で当たる。
+            // 形そのもので当たる。凹みも効くように凸の塊へ分ける(星の谷に物が乗る)。
+            // 分けられない形は凸包で、輪郭が無い物だけ箱で当たる。
             let hull = body.outline.as_ref().and_then(|points| {
                 let pts: Vec<Vec2> = points.iter().map(|p| Vec2::new((p[0] - body.centre[0]) * PX, (p[1] - body.centre[1]) * PX)).collect();
-                ColliderBuilder::convex_hull(&pts)
+                if pts.len() < 3 {
+                    return None;
+                }
+                let indices: Vec<[u32; 2]> = (0..pts.len() as u32).map(|i| [i, (i + 1) % pts.len() as u32]).collect();
+                Some(ColliderBuilder::convex_decomposition(&pts, &indices)).filter(|_| pts.len() >= 4).or_else(|| ColliderBuilder::convex_hull(&pts))
             });
             let collider = match hull {
                 Some(hull) => hull,
