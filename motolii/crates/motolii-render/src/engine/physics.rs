@@ -28,14 +28,24 @@ pub(crate) struct Lies {
     pub keep_box: bool,
     pub gather: bool,
     pub substeps: usize,
-    pub iterations: usize,
+    /// 以下 3 つは Rapier の IntegrationParameters と同じ名前・同じ既定(取説 rapier 0.32 integration_parameters.rs:311-321)。
+    pub num_solver_iterations: usize,
+    pub max_ccd_substeps: usize,
+    pub normalized_allowed_linear_error: f32,
     pub soft_ccd: f32,
     pub corrective: f32,
 }
 
 impl Default for Lies {
     fn default() -> Self {
-        Self { room_ancestor: true, walls_follow: true, keep_box: true, gather: true, substeps: 4, iterations: 12, soft_ccd: 2.0, corrective: 60.0 }
+        let rapier = IntegrationParameters::default();
+        Self {
+            room_ancestor: true, walls_follow: true, keep_box: true, gather: true, substeps: 4,
+            num_solver_iterations: rapier.num_solver_iterations,
+            max_ccd_substeps: rapier.max_ccd_substeps,
+            normalized_allowed_linear_error: rapier.normalized_allowed_linear_error,
+            soft_ccd: 2.0, corrective: 60.0,
+        }
     }
 }
 
@@ -50,7 +60,9 @@ impl Lies {
             keep_box: word("KEEP") != Some("none"),
             gather: word("TIME") != Some("forward"),
             substeps: num("SUBSTEPS", base.substeps as f64).clamp(1.0, 16.0) as usize,
-            iterations: num("ITERATIONS", base.iterations as f64).clamp(1.0, 64.0) as usize,
+            num_solver_iterations: num("NUM_SOLVER_ITERATIONS", base.num_solver_iterations as f64).clamp(1.0, 64.0) as usize,
+            max_ccd_substeps: num("MAX_CCD_SUBSTEPS", base.max_ccd_substeps as f64).clamp(1.0, 16.0) as usize,
+            normalized_allowed_linear_error: num("NORMALIZED_ALLOWED_LINEAR_ERROR", base.normalized_allowed_linear_error as f64) as f32,
             soft_ccd: num("SOFT_CCD", base.soft_ccd as f64) as f32,
             corrective: num("CORRECTIVE", base.corrective as f64) as f32,
         }
@@ -338,11 +350,11 @@ impl Physics {
                 0
             }
         };
-        // 取説(rapier.rs, docs.rs 0.32): 既定は反復 4・CCD の刻み 1。積み上げと壁のめり込みには
-        // 反復を増やし、速い物は CCD で刻む。長さの単位は m(PX で写している)のまま。
-        self.params.num_solver_iterations = self.lies.iterations;
-        self.params.max_ccd_substeps = 4;
-        self.params.normalized_allowed_linear_error = 0.0005;
+        // 解き手の欄は棚の札(field.wgsl の PHYSICS)から。積み上げと壁のめり込みには反復を増やし、
+        // 速い物は CCD で刻む。長さの単位は m(PX で写している)のまま。
+        self.params.num_solver_iterations = self.lies.num_solver_iterations;
+        self.params.max_ccd_substeps = self.lies.max_ccd_substeps;
+        self.params.normalized_allowed_linear_error = self.lies.normalized_allowed_linear_error;
         // 箱が中身より狭くなった時、壁 2 枚に挟まれた物は 1 歩で大きく押し戻して上へ逃がす
         // (既定 10 では字が壁を押し抜けた)。
         self.params.normalized_max_corrective_velocity = self.lies.corrective;
