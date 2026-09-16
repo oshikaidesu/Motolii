@@ -386,9 +386,9 @@ mod tests {
         }
         put(&mut doc, ball, property::POSITION, Value::Vec2([30.0, 15.0]));
         put(&mut doc, field, property::POSITION, Value::Vec2([100.0, 15.0]));
-        // 平行(形 0)の場を下(+90°)へ、強さ 40: 1 秒で 0.5 * 40 * 1² = 20px 下がる。
+        // 一様(Spread 1)の場を下(+90°)へ、強さ 40: 1 秒で 0.5 * 40 * 1² = 20px 下がる。
         doc.apply(Intent::SetEffects { layer: field, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.field".into() }] }).unwrap();
-        for (name, value) in [("shape", 0.0), ("angle", 90.0), ("strength", 40.0), ("reach", 0.0)] {
+        for (name, value) in [("spread", 1.0), ("turn", 0.0), ("angle", 90.0), ("strength", 40.0), ("reach", 0.0)] {
             doc.apply(Intent::SetConstant { layer: field, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(value) }).unwrap();
         }
         let mut engine = Engine::new().unwrap();
