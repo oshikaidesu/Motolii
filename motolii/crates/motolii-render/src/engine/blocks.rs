@@ -20,8 +20,48 @@ pub(crate) struct BlockBatch {
     source: u32,
 }
 
+/// 形の層の輪郭(素材座標)。当たりは四角ではなく、この形そのもので見る
+/// (利用者 2026-09-16「今のコリジョンの当たり判定は四角で変です。2d も 3d もシルエットが算出できるはず」)。
+/// 2D は書類の形(`vector::resolve`)、3D の網・粒は `media::silhouette_points`(まだ箱のまま)。
+fn outline_of(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<Vec<[f32; 2]>> {
+    let shapes = if stretch == [1.0, 1.0] { shapes.to_vec() } else { crate::doc::vector::stretch_outline(shapes, stretch) };
+    let leaves = crate::doc::vector::flatten(&shapes).ok()?;
+    let canvas = crate::doc::vector::content_canvas(&shapes).ok().flatten()?;
+    let (ox, oy) = (canvas.origin_x as f32, canvas.origin_y as f32);
+    let mut points = Vec::new();
+    for shape in &leaves {
+        if shape.fill.is_none() {
+            continue;
+        }
+        for instance in crate::doc::vector::resolve(shape).ok()?.iter() {
+            for contour in &instance.path {
+                let vs = &contour.vertices;
+                if vs.len() < 2 {
+                    continue;
+                }
+                let last = if contour.closed { vs.len() } else { vs.len() - 1 };
+                for i in 0..last {
+                    let (a, b) = (&vs[i], &vs[(i + 1) % vs.len()]);
+                    let p0 = glam::vec2(a.point.x as f32, a.point.y as f32);
+                    let p3 = glam::vec2(b.point.x as f32, b.point.y as f32);
+                    let p1 = p0 + glam::vec2(a.out_tangent.x as f32, a.out_tangent.y as f32);
+                    let p2 = p3 + glam::vec2(b.in_tangent.x as f32, b.in_tangent.y as f32);
+                    // 曲がりは 6 点で足りる(当たりは凸包にするので、細かくしても形は変わらない)。
+                    for step in 0..6 {
+                        let u = step as f32 / 6.0;
+                        let v = 1.0 - u;
+                        let at = p0 * (v * v * v) + p1 * (3.0 * v * v * u) + p2 * (3.0 * v * u * u) + p3 * (u * u * u);
+                        points.push([at.x + ox, at.y + oy]);
+                    }
+                }
+            }
+        }
+    }
+    (points.len() >= 3).then_some(points)
+}
+
 /// 書類から先に読む、物ごとの住む箱と箱。
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Placed {
     room: [f32; 4],
     radius: f32,
@@ -32,6 +72,8 @@ struct Placed {
     margin: f32,
     /// 手触り(0 返す ↔ 0.5 吸う ↔ 1 引きずる)。
     hardness: f32,
+    /// 形そのものの輪郭(素材座標)。無ければ箱で当たる。
+    outline: Option<std::sync::Arc<Vec<[f32; 2]>>>,
 }
 
 #[derive(Default)]
@@ -57,6 +99,8 @@ pub(crate) struct BlockState {
     fps: f64,
     now: Option<RationalTime>,
     bases: Vec<([f32; 3], [f32; 3], [f32; 3])>,
+    /// 物ごとの輪郭(comp の px、`objects` と同じ順)。
+    outlines: Vec<Option<std::sync::Arc<Vec<[f32; 2]>>>>,
     batches: Vec<BlockBatch>,
 }
 
@@ -119,6 +163,7 @@ impl Engine {
         state.fields.clear();
         state.objects.clear();
         state.bases.clear();
+        state.outlines.clear();
         state.batches.clear();
         if blocks.is_empty() {
             return Ok(());
@@ -176,6 +221,14 @@ impl Engine {
             let Some(own) = view.layer_box(layer.id, t).map_err(store)? else { continue };
             // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
             // 当たりが元の形の大きさのままになる。
+            let stretch = solved.slots.get(&layer.id).map_or([1.0, 1.0], |slot| slot.stretch);
+            let outline = match view.meta(layer.id).map_err(store)?.map(|m| m.source) {
+                Some(crate::doc::store::LayerSource::Shape) => {
+                    let shapes = view.shapes_at(layer.id, t).map_err(store)?;
+                    outline_of(&shapes, stretch).map(std::sync::Arc::new)
+                }
+                _ => None,
+            };
             let own = match solved.slots.get(&layer.id).map(|slot| slot.stretch) {
                 Some([sx, sy]) if sx > 0.0 && sy > 0.0 => [own[0] * sx, own[1] * sy, own[2] * sx, own[3] * sy],
                 _ => own,
@@ -197,7 +250,7 @@ impl Engine {
                 Some(Value::F64(v)) => v.max(0.0) as f32,
                 _ => weight,
             };
-            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin, hardness });
+            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin, hardness, outline });
         }
         // 付いて置く札の相手がブロックで動くなら、札も物として並べて付いて行かせる(CSS の transform を読まない anchor() とは違う、利用者 2026-09-15「付いていく方が自然」)。
         let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
@@ -215,7 +268,7 @@ impl Engine {
                 state.follows.insert(layer.id, target);
                 if !state.placed.contains_key(&layer.id) {
                     let own = view.layer_box(layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
-                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0, hardness: 0.5 });
+                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0, hardness: 0.5, outline: None });
                 }
             }
         }
@@ -224,7 +277,7 @@ impl Engine {
 
     /// 組んだ 1 枚にブロックが掛かっていれば、描く時と同じ置き方の箱を物として並べ、motion の番号を最後の欄に入れる。
     pub(super) fn attach_block(&mut self, layer: &ResolvedLayer, built: &mut Layer, comp: CompSpec) {
-        let Some(&placed) = self.blocks.placed.get(&layer.id) else { return };
+        let Some(placed) = self.blocks.placed.get(&layer.id).cloned() else { return };
         let size = glam::Vec2::from(built.size);
         if size.x <= 0.0 || size.y <= 0.0 {
             return;
@@ -270,6 +323,10 @@ impl Engine {
         let middle = glam::Vec2::new((own[0] + own[2]) * 0.5, (own[1] + own[3]) * 0.5);
         let centre = origin + u * (middle.x / size.x) + v * (middle.y / size.y);
         state.bases.push((world(glam::Vec2::X), world(glam::Vec2::Y), centre.to_array()));
+        // 輪郭を comp の座標へ(描く時と同じ置き方)。
+        state.outlines.push(placed.outline.as_ref().map(|points| {
+            std::sync::Arc::new(points.iter().map(|p| m.transform_point2(glam::Vec2::from(*p)).to_array()).collect::<Vec<[f32; 2]>>())
+        }));
         state.object_layers.push(layer.id);
         for (stage, (plugin, params, is_field)) in chain.into_iter().enumerate() {
             if is_field {
@@ -341,6 +398,7 @@ impl Engine {
                 margin: it.margin,
                 weight: it.weight,
                 hardness: state.placed.get(&state.object_layers[k]).map_or(0.5, |p| p.hardness),
+                outline: state.outlines.get(k).cloned().flatten(),
             })
             .collect();
         let rooms: Vec<Room> = rooms.into_values().collect();

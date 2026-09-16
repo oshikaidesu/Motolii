@@ -16,7 +16,7 @@ use crate::doc::store::LayerId;
 const PX: f32 = 0.01;
 
 /// 1 つの物(comp の座標、描く時と同じ置き方)。
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Body {
     pub layer: LayerId,
     /// 箱の真ん中と半分の大きさ(comp の px)。
@@ -31,6 +31,8 @@ pub(crate) struct Body {
     /// 手触り(提案 2026-09-16 の 1 本の軸): 0 返す ↔ 0.5 吸う ↔ 1 引きずる。
     /// 解き手の欄(摩擦・反発・減衰)はここから作る — 人は摩擦係数を操作しない。
     pub hardness: f32,
+    /// 形そのものの輪郭(comp の px)。当たりは四角ではなくこの形で見る。
+    pub outline: Option<std::sync::Arc<Vec<[f32; 2]>>>,
 }
 
 /// 1 つの住む箱(壁)と、その中に効く場。
@@ -162,10 +164,15 @@ impl Physics {
                     .build(),
             );
             let margin = body.margin.max(0.0) * PX;
-            let collider = if body.round {
-                ColliderBuilder::ball((body.half[0].min(body.half[1]) * PX + margin).max(1e-3))
-            } else {
-                ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3))
+            // 形そのもので当たる(凸包)。輪郭が無い物だけ箱で当たる。
+            let hull = body.outline.as_ref().and_then(|points| {
+                let pts: Vec<Vec2> = points.iter().map(|p| Vec2::new((p[0] - body.centre[0]) * PX, (p[1] - body.centre[1]) * PX)).collect();
+                ColliderBuilder::convex_hull(&pts)
+            });
+            let collider = match hull {
+                Some(hull) => hull,
+                None if body.round => ColliderBuilder::ball((body.half[0].min(body.half[1]) * PX + margin).max(1e-3)),
+                None => ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3)),
             };
             self.colliders.insert_with_parent(
                 collider
@@ -260,6 +267,37 @@ impl Physics {
                 return vec![(at, 0.0, room.gravity)];
             }
             room.wells.iter().map(|w| (w.at, w.reach, room.gravity)).collect::<Vec<_>>()
+        }).collect()
+    }
+
+    /// 触れ合っている点と、その法線(comp の px)。可視のモードが読む — 真ん中どうしを結ぶより、
+    /// どこで当たっているかが見える方が説明になる。
+    pub(crate) fn contact_marks(&self) -> Vec<([f32; 2], [f32; 2])> {
+        let mut out = Vec::new();
+        for pair in self.narrow.contact_pairs().filter(|pair| pair.has_any_active_contact()) {
+            let Some(first) = self.colliders.get(pair.collider1) else { continue };
+            let iso = first.position();
+            for manifold in &pair.manifolds {
+                let normal = iso.rotation * manifold.local_n1;
+                for point in &manifold.points {
+                    if point.dist > 0.01 {
+                        continue;
+                    }
+                    let at = iso * point.local_p1;
+                    out.push(([at.x / PX, at.y / PX], [normal.x, normal.y]));
+                }
+            }
+        }
+        out
+    }
+
+    /// 物の真ん中と、今の速さ(comp の px/秒)。
+    pub(crate) fn velocities(&self) -> Vec<([f32; 2], [f32; 2])> {
+        self.handles.values().filter_map(|&(handle, _)| {
+            let rb = self.bodies.get(handle)?;
+            let at = rb.translation();
+            let v = rb.linvel();
+            Some(([at.x / PX, at.y / PX], [v.x / PX, v.y / PX]))
         }).collect()
     }
 
