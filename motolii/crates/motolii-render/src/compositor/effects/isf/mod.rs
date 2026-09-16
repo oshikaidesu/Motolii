@@ -218,6 +218,9 @@ pub struct IsfManifest {
     /// 箱のブロックが誰を動かすか(`"SCOPE"`)。既定(`"members"`)は掛かった層そのもの。
     /// `"room"` なら掛かった層は**元**になり、動くのは同じ住む箱に居る他の全員(場: 重力・風・引き寄せ・渦。提案 2026-09-16)。
     pub scope: IsfScope,
+    /// 場の嘘と解き手の欄(`"PHYSICS": { ... }`)。世界(Rust の部品)は揺らがず、どう組むかは棚の札で言う
+    /// (利用者 2026-09-16「ビルドが必要なものは、世界なはずです。揺らがないもの」)。読むのは engine/physics.rs。
+    pub physics: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 /// 箱のブロックが誰を動かすか。
@@ -251,6 +254,7 @@ impl Default for IsfManifest {
             rounds: 1,
             reach: None,
             scope: IsfScope::Members,
+            physics: Default::default(),
         }
     }
 }
@@ -497,6 +501,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 Some("room") => IsfScope::Room,
                 _ => IsfScope::Members,
             },
+            physics: value.get("PHYSICS").and_then(|v| v.as_object()).map(|o| o.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default(),
         },
         body,
     ))

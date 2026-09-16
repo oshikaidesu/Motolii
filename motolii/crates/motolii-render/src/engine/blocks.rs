@@ -96,6 +96,8 @@ pub(crate) struct BlockState {
     object_layers: Vec<LayerId>,
     /// 場が立っている住む箱の組(そこに居る物は、効果を持たなくても動く物として並べる)。
     field_rooms: std::collections::HashSet<u32>,
+    /// comp の最後のコマ(集まる時の「終わり」)。
+    last_frame: i64,
     /// 場の元(物の番号)と、その効果の順・欄。動く相手は物が揃ってから決める。
     fields: Vec<(usize, String, Vec<f32>, u32)>,
     objects: Vec<BlockItem>,
@@ -218,6 +220,14 @@ impl Engine {
         let field_blocks: Vec<String> = self.compositor.catalog.definitions.iter()
             .filter(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room)
             .map(|d| d.plugin_id().to_owned()).collect();
+        // 嘘と解き手の欄は棚の札から(場の vism の `"PHYSICS"`)。Rust は部品だけ。
+        let lies = self.compositor.catalog.definitions.iter()
+            .find(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room && !d.manifest.physics.is_empty())
+            .map(|d| crate::render::engine::physics::Lies::from_manifest(&d.manifest.physics)).unwrap_or_default();
+        if self.blocks.physics.lies != lies {
+            self.blocks.physics = Default::default();
+            self.blocks.physics.lies = lies.clone();
+        }
         // 抜いた後の形(効果を通した後の透過)は解析の段で取ってある。物理は「描かれた物の形」で当たる。
         let mut extents: HashMap<LayerId, [f32; 4]> = HashMap::new();
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
@@ -239,6 +249,7 @@ impl Engine {
         let keyed = self.keyed_outlines.clone();
         let state = &mut self.blocks;
         state.fps = view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64());
+        state.last_frame = view.composition().ok().flatten().map_or(0, |c| c.duration_frames.max(1) - 1);
         state.now = Some(t);
         state.placed.clear();
         state.follows.clear();
@@ -260,10 +271,24 @@ impl Engine {
         }
         let field_rooms = state.field_rooms.clone();
         let solved = view.layout_frame(t).map_err(store)?;
-        let in_field_room = |view: &StoreView<'_>, id: LayerId| -> Result<bool, EngineError> {
-            let parent = view.attrs(id).map_err(store)?.unwrap_or_default().parent;
-            Ok(field_rooms.contains(&parent.map_or(0, |p| p.0 as u32)))
+        // 部屋 = 場の立っている一番近い先祖の箱(提案 2026-09-16「場のある箱が部屋」)。入れ子の中の字も、
+        // ポスター全体に立った場で散れる。箱(Group)そのものは物にならず、中の葉が物。
+        let room_ancestor = lies.room_ancestor;
+        let room_of = |view: &StoreView<'_>, id: LayerId| -> Result<Option<u32>, EngineError> {
+            let mut at = view.attrs(id).map_err(store)?.unwrap_or_default().parent;
+            loop {
+                let key = at.map_or(0, |p| p.0 as u32);
+                if field_rooms.contains(&key) {
+                    return Ok(Some(key));
+                }
+                if !room_ancestor {
+                    return Ok(None);
+                }
+                let Some(p) = at else { return Ok(None) };
+                at = view.attrs(p).map_err(store)?.unwrap_or_default().parent;
+            }
         };
+        let mut room_ids: HashMap<LayerId, u32> = HashMap::new();
         let mut wanted = Vec::new();
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
             // 見せるための層(可視の重ね、つなぐ線)は物にしない。物理の相手は画の中身だけ。
@@ -278,14 +303,26 @@ impl Engine {
             if connects(crate::doc::store::layout::CONNECT_FROM)? || connects(crate::doc::store::layout::CONNECT_TO)? {
                 continue;
             }
-            if layer.effects.iter().any(|e| blocks.contains(&e.plugin_id)) || in_field_room(view, layer.id)? {
-                wanted.push(layer.id);
+            let has_block = layer.effects.iter().any(|e| blocks.contains(&e.plugin_id));
+            let is_group = matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Group));
+            match room_of(view, layer.id)? {
+                Some(room) if has_block || !is_group || !room_ancestor => {
+                    room_ids.insert(layer.id, room);
+                    wanted.push(layer.id);
+                }
+                None if has_block => wanted.push(layer.id),
+                _ => {}
             }
         }
         let state = &mut self.blocks;
         for layer in resolved.iter().filter(|l| wanted.contains(&l.id)) {
             let frame = ([0.0, 0.0, comp.width as f32, comp.height as f32], 0.0);
-            let parent = view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent;
+            // 住む箱: 場の部屋(先祖)か、無ければ直の親。
+            let parent = match room_ids.get(&layer.id) {
+                Some(0) => None,
+                Some(room) => Some(LayerId(*room as u64)),
+                None => view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent,
+            };
             let room = match parent {
                 Some(parent) => match (resolved.iter().find(|l| l.id == parent && l.copy == 0 && !l.ghost), view.layer_box(parent, t).map_err(store)?) {
                     (Some(owner), Some(b)) => {
@@ -466,18 +503,22 @@ impl Engine {
         // (利用者 2026-09-16「物理演算を 1 から作るんじゃなくてこれも外部に揃ったやつがあるだろ」)。
         use crate::render::engine::physics::{Body, Room, Well};
         let mut rooms: HashMap<u32, Room> = HashMap::new();
+        let mut gathering = false;
         for (stage, plugin, params, source) in std::mem::take(&mut state.fields) {
             let _ = (stage, &plugin);
             let item = state.objects[source as usize];
-            let (turn, spread, angle, strength, reach, hold) = (
+            let (turn, spread, angle, strength, reach, hold, gather) = (
                 params.first().copied().unwrap_or(0.0).to_radians(),
                 params.get(1).copied().unwrap_or(0.0).clamp(0.0, 1.0),
                 params.get(2).copied().unwrap_or(90.0).to_radians(),
                 params.get(3).copied().unwrap_or(0.0),
                 params.get(4).copied().unwrap_or(0.0),
-                params.get(6).copied().unwrap_or(0.0).clamp(0.0, 1.0),
+                params.get(5).copied().unwrap_or(0.0).clamp(0.0, 1.0),
+                params.get(6).copied().unwrap_or(0.0) >= 0.5 && state.physics.lies.gather,
             );
+            gathering |= gather;
             let room = rooms.entry(item.group).or_insert_with(|| Room {
+                group: item.group,
                 rect: [item.room_lo[0], item.room_lo[1], item.room_lo[0] + item.room_size[0], item.room_lo[1] + item.room_size[1]],
                 round: item.radius * 2.0 >= item.room_size[0].min(item.room_size[1]) - 1e-3,
                 gravity: [0.0, 0.0],
@@ -499,6 +540,7 @@ impl Engine {
             .filter(|(_, it)| rooms.contains_key(&it.group))
             .map(|(k, it)| Body {
                 layer: state.object_layers[k],
+                group: it.group,
                 centre: [(it.lo[0] + it.hi[0]) * 0.5, (it.lo[1] + it.hi[1]) * 0.5],
                 half: [(it.hi[0] - it.lo[0]) * 0.5, (it.hi[1] - it.lo[1]) * 0.5],
                 round: false,
@@ -508,9 +550,13 @@ impl Engine {
                 outline: state.outlines.get(k).cloned().flatten(),
             })
             .collect();
-        let rooms: Vec<Room> = rooms.into_values().collect();
+        // 箱の順は毎コマ同じに(当たりの組が箱の順で決まる)。
+        let mut rooms: Vec<Room> = rooms.into_values().collect();
+        rooms.sort_by_key(|r| r.group);
         let frame = (t.as_seconds_f64() * fps).round() as i64;
-        state.physics.solve(&rooms, &bodies, frame, fps);
+        // 集まる: 終わりは構図。comp の最後まで前向きに解いて焼き、最後から逆に読む。
+        let last = state.last_frame;
+        state.physics.solve(&rooms, &bodies, frame, fps, gathering.then_some(last));
     }
 
     /// 集めた物を GPU で効果の順に解き、world のずれにして描く側へ渡す。ブロックが無ければ外す。
