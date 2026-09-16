@@ -53,12 +53,42 @@ pub(crate) struct BlockState {
     objects: Vec<BlockItem>,
     /// 外の解き手(Rapier)。前のコマの力を覚えている。
     physics: crate::render::engine::physics::Physics,
+    /// このコマの秒あたりのコマ数と時刻(可視の層が描く直前に解くために覚える)。
+    fps: f64,
+    now: Option<RationalTime>,
     bases: Vec<([f32; 3], [f32; 3], [f32; 3])>,
     batches: Vec<BlockBatch>,
 }
 
 impl Engine {
     /// 今のコマの物ごとのずれ(震えを測る道具のため。読み戻すので描画では使わない)。
+    /// 可視のモードが読む: 物理の物の箱(comp の px、解き手が動かした後)。
+    pub(crate) fn physics_marks(&self) -> Vec<crate::doc::store::analysis::BlobMark> {
+        self.blocks.objects.iter().enumerate().filter_map(|(k, it)| {
+            let layer = *self.blocks.object_layers.get(k)?;
+            let (shift, _) = self.blocks.physics.offset(layer)?;
+            Some(crate::doc::store::analysis::BlobMark {
+                id: k as u32,
+                center: [(it.lo[0] + it.hi[0]) * 0.5 + shift[0], (it.lo[1] + it.hi[1]) * 0.5 + shift[1]],
+                size: [it.hi[0] - it.lo[0], it.hi[1] - it.lo[1]],
+                age: 0,
+            })
+        }).collect()
+    }
+
+    /// 可視のモードが読む: 物ごとのずれ、触れ合いの線、場の元と届く輪。
+    pub(crate) fn physics_offset(&self, layer: LayerId) -> Option<([f32; 2], f32)> {
+        self.blocks.physics.offset(layer)
+    }
+
+    pub(crate) fn physics_links(&self) -> Vec<([f32; 2], [f32; 2])> {
+        self.blocks.physics.contact_lines()
+    }
+
+    pub(crate) fn physics_wells(&self) -> Vec<([f32; 2], f32, [f32; 2])> {
+        self.blocks.physics.wells()
+    }
+
     /// 触れ合っている組の数(測り用)。
     pub fn physics_contacts(&self) -> usize {
         self.blocks.physics.contacts()
@@ -80,6 +110,8 @@ impl Engine {
             .filter(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room)
             .map(|d| d.plugin_id().to_owned()).collect();
         let state = &mut self.blocks;
+        state.fps = view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64());
+        state.now = Some(t);
         state.placed.clear();
         state.follows.clear();
         state.object_layers.clear();
@@ -104,6 +136,18 @@ impl Engine {
         };
         let mut wanted = Vec::new();
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            // 見せるための層(可視の重ね、つなぐ線)は物にしない。物理の相手は画の中身だけ。
+            if layer.effects.iter().any(|e| crate::doc::store::overlay::is_track_overlay(&e.plugin_id)) {
+                continue;
+            }
+            let connects = |name: &str| -> Result<bool, EngineError> {
+                Ok(matches!(view.value_at(layer.id, &PropertyId::new(name).map_err(store)?, t).map_err(store)?,
+                    Some(Value::LayerId(id)) if id != 0) || matches!(view.value_at(layer.id, &PropertyId::new(name).map_err(store)?, t).map_err(store)?,
+                    Some(Value::F64(v)) if v >= 1.0))
+            };
+            if connects(crate::doc::store::layout::CONNECT_FROM)? || connects(crate::doc::store::layout::CONNECT_TO)? {
+                continue;
+            }
             if layer.effects.iter().any(|e| blocks.contains(&e.plugin_id)) || in_field_room(view, layer.id)? {
                 wanted.push(layer.id);
             }
@@ -240,11 +284,18 @@ impl Engine {
         }
     }
 
-    /// 集めた物を GPU で効果の順に解き、world のずれにして描く側へ渡す。ブロックが無ければ外す。
-    pub(super) fn run_blocks(&mut self, t: RationalTime, fps: f64) {
+    /// 意図(場・箱)を外の解き手へ渡してこのコマまで進める。同じコマなら何度呼んでも進まない。
+    /// 可視の層は、絵を組む途中でこれを呼んでから中身を読む。
+    pub(crate) fn solve_physics_now(&mut self) {
+        if let Some(t) = self.blocks.now {
+            self.solve_physics(t);
+        }
+    }
+
+    pub(crate) fn solve_physics(&mut self, t: RationalTime) {
+        let fps = self.blocks.fps.max(1.0);
         let state = &mut self.blocks;
         if state.objects.is_empty() {
-            self.compositor.motion = None;
             return;
         }
         // 場と箱は外の解き手(Rapier)に渡す。ここが持つのは意図からの訳だけで、解き方は持たない
@@ -295,6 +346,17 @@ impl Engine {
         let rooms: Vec<Room> = rooms.into_values().collect();
         let frame = (t.as_seconds_f64() * fps).round() as i64;
         state.physics.solve(&rooms, &bodies, frame, fps);
+    }
+
+    /// 集めた物を GPU で効果の順に解き、world のずれにして描く側へ渡す。ブロックが無ければ外す。
+    pub(super) fn run_blocks(&mut self, t: RationalTime, fps: f64) {
+        let state = &mut self.blocks;
+        if state.objects.is_empty() {
+            self.compositor.motion = None;
+            return;
+        }
+        self.solve_physics(t);
+        let state = &mut self.blocks;
         let seed: Vec<crate::render::compositor::effects::block_program::BlockOffset> = state.object_layers.iter()
             .map(|layer| match state.physics.offset(*layer) {
                 Some((translate, rotate)) => crate::render::compositor::effects::block_program::BlockOffset { translate, rotate, scale: 1.0 },

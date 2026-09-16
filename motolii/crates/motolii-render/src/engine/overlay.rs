@@ -207,9 +207,61 @@ fn label_shape(params: &Params, mark: &BlobMark, push: [f32; 2]) -> Option<Shape
     }))
 }
 
+/// 触れ合っている組の線(物理の可視)。関係が見えるように見える事が芯(2026-09-15 の裁定)。
+fn link_shapes(params: &Params, links: &[([f32; 2], [f32; 2])]) -> Vec<ShapeNode> {
+    let c = color_of(params, "links_color");
+    let width = number_of(params, "links_width").max(0.0);
+    let point = |p: [f32; 2]| Point { x: p[0] as f64, y: p[1] as f64 };
+    links.iter().map(|(a, b)| ShapeNode::Leaf(Shape {
+        source: PathSource::Bezier(vec![Contour::open([point(*a), point(*b)])]),
+        ops: Vec::new(),
+        fill: None,
+        stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width, opacity: c[3], cap: LineCap::Round, ..Default::default() }),
+    })).collect()
+}
+
+/// 場の元: 届く輪(点線)と、一様な向きの矢。
+fn well_shapes(params: &Params, wells: &[([f32; 2], f32, [f32; 2])]) -> Vec<ShapeNode> {
+    let c = color_of(params, "well_color");
+    let point = |p: [f32; 2]| Point { x: p[0] as f64, y: p[1] as f64 };
+    let mut out = Vec::new();
+    for (spot, reach, gravity) in wells {
+        if *reach > 0.0 {
+            out.push(at(*spot, 0.0, Shape {
+                source: PathSource::Ellipse { size: Point { x: (*reach * 2.0) as f64, y: (*reach * 2.0) as f64 } },
+                ops: Vec::new(),
+                fill: None,
+                stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 1.5, opacity: c[3] * 0.7, dash: Some(Dash { pattern: vec![10.0, 10.0], offset: 0.0 }), cap: LineCap::Butt, ..Default::default() }),
+            }));
+        }
+        let len = (gravity[0] * gravity[0] + gravity[1] * gravity[1]).sqrt();
+        if len > 1e-3 {
+            let tip = [spot[0] + gravity[0] / len * 90.0, spot[1] + gravity[1] / len * 90.0];
+            out.push(ShapeNode::Leaf(Shape {
+                source: PathSource::Bezier(vec![Contour::open([point(*spot), point(tip)])]),
+                ops: Vec::new(),
+                fill: None,
+                stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 2.0, opacity: c[3], cap: LineCap::Round, ..Default::default() }),
+            }));
+        }
+    }
+    out
+}
+
 /// このコマの塊から、Grid → Box → Push → Marker → Labels の順に形を組む(comp の座標)。`pushes` は Layers の時だけ(塊と同じ順)。
 pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], comp: [f64; 2]) -> Vec<ShapeNode> {
+    overlay_shapes_with(params, marks, pushes, &[], &[], comp)
+}
+
+/// 物理の可視は、同じ形の上に触れ合いの線と場の輪を足す。
+pub(crate) fn overlay_shapes_with(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], links: &[([f32; 2], [f32; 2])], wells: &[([f32; 2], f32, [f32; 2])], comp: [f64; 2]) -> Vec<ShapeNode> {
     let mut out = Vec::new();
+    if switch_of(params, "well") {
+        out.extend(well_shapes(params, wells));
+    }
+    if switch_of(params, "links") {
+        out.extend(link_shapes(params, links));
+    }
     if switch_of(params, "grid") {
         out.extend(grid_shapes(params, marks, comp));
     }
@@ -231,6 +283,17 @@ pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], pushes: &[[f32
 impl Engine {
     /// Track Overlay を持つ層の中身(comp 大、左上が層の位置)。Show Mask なら解析の二値。
     pub(super) fn overlay_content(&mut self, layer: LayerId, comp: CompSpec) -> Result<Option<(LayerContent, [f32; 2])>, EngineError> {
+        // 物理の可視は、絵を組む途中で解き手を進めてから読む(そうしないと 1 コマ遅れる・空になる)。
+        if self.overlay_frames.get(&layer).is_some_and(|f| f.physics) {
+            self.solve_physics_now();
+            let (marks, links, wells) = (self.physics_marks(), self.physics_links(), self.physics_wells());
+            if let Some(frame) = self.overlay_frames.get_mut(&layer) {
+                frame.pushes = vec![[0.0, 0.0]; marks.len()];
+                frame.marks = marks;
+                frame.links = links;
+                frame.wells = wells;
+            }
+        }
         let Some(frame) = self.overlay_frames.get(&layer) else { return Ok(None) };
         let natural = [comp.width as f32, comp.height as f32];
         if switch_of(&frame.params, "show_mask") {
@@ -256,7 +319,7 @@ impl Engine {
                 links: Some(std::sync::Arc::new(links)),
             }, natural)));
         }
-        let shapes = overlay_shapes(&frame.params, &frame.marks, &frame.pushes, [f64::from(comp.width), f64::from(comp.height)]);
+        let shapes = overlay_shapes_with(&frame.params, &frame.marks, &frame.pushes, &frame.links, &frame.wells, [f64::from(comp.width), f64::from(comp.height)]);
         if shapes.is_empty() {
             return Ok(None);
         }

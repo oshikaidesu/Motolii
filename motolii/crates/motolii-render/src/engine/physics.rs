@@ -72,6 +72,8 @@ pub(crate) struct Physics {
     pub(crate) frame: Option<i64>,
     /// 組んだ時の顔ぶれ(変わったら世界を組み直す)。
     shape: Vec<(LayerId, [f32; 2], [f32; 2])>,
+    /// 直近に渡された箱と場(可視のモードが読む)。
+    last_rooms: Vec<Room>,
 }
 
 impl Default for Physics {
@@ -96,6 +98,7 @@ impl Physics {
             handles: HashMap::new(),
             frame: None,
             shape: Vec::new(),
+            last_rooms: Vec::new(),
         }
     }
 
@@ -183,6 +186,7 @@ impl Physics {
             self.frame = None;
             return;
         }
+        self.last_rooms = rooms.to_vec();
         let same = self.shape == Self::signature(bodies);
         let step_from = match (same, self.frame) {
             (true, Some(last)) if frame == last => return,
@@ -245,6 +249,28 @@ impl Physics {
             rb.reset_forces(true);
             rb.add_force(force, true);
         }
+    }
+
+    /// 場の元・届く距離・一様な向き(可視のモードが読む)。
+    pub(crate) fn wells(&self) -> Vec<([f32; 2], f32, [f32; 2])> {
+        self.last_rooms.iter().flat_map(|room| {
+            if room.wells.is_empty() {
+                // 元の無い場(一様な重力)は、箱の真ん中から向きの矢だけ出す。
+                let at = [(room.rect[0] + room.rect[2]) * 0.5, (room.rect[1] + room.rect[3]) * 0.5];
+                return vec![(at, 0.0, room.gravity)];
+            }
+            room.wells.iter().map(|w| (w.at, w.reach, room.gravity)).collect::<Vec<_>>()
+        }).collect()
+    }
+
+    /// 触れ合っている組の線(comp の px、真ん中どうし)。可視のモードが読む。
+    pub(crate) fn contact_lines(&self) -> Vec<([f32; 2], [f32; 2])> {
+        self.narrow.contact_pairs().filter(|pair| pair.has_any_active_contact()).filter_map(|pair| {
+            let a = self.colliders.get(pair.collider1)?.parent()?;
+            let b = self.colliders.get(pair.collider2)?.parent()?;
+            let (a, b) = (self.bodies.get(a)?.translation(), self.bodies.get(b)?.translation());
+            Some(([a.x / PX, a.y / PX], [b.x / PX, b.y / PX]))
+        }).collect()
     }
 
     /// 触れ合っている組の数(測り用)。

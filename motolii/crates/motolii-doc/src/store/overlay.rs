@@ -12,6 +12,9 @@ pub struct OverlayKind {
 }
 
 pub const TRACK_OVERLAY: &str = "motolii.track_overlay";
+/// 物理の可視(提案 2026-09-16、利用者「画の引力やハンドルも可視できるモードがいるべきだ」)。
+/// 箱は Layers と同じく下の層から取り、そこに触れ合っている線と、場の届く輪・向きを足す。
+pub const PHYSICS_TRACE: &str = "motolii.physics_trace";
 pub const METHODS: &[&str] = &["Motion Detection", "Key Color", "Layers"];
 /// Grid の View Mode(Tracery 2 の Grid 節): Edge = 拾った物の箱の辺から格子を立てる、Cartesian = 等間隔の格子。
 pub const GRID_MODES: &[&str] = &["Edge", "Cartesian"];
@@ -46,6 +49,11 @@ const TRACK_OVERLAY_PARAMS: &[Param] = &[
         number("separation", "Separation", "Keying", 2.0, (0.0, 200.0)),
         number("max_region", "Max Region Pixels", "Keying", 1.0e9, (0.0, 1.0e9)),
         switch("keep_ids", "Keep IDs", "Keying", true),
+        switch("links", "Contact Lines", "Physics", false),
+        color("links_color", "Contact Line Color", "Physics", [1.0, 0.85, 0.2, 1.0]),
+        number("links_width", "Contact Line Width", "Physics", 2.0, (0.0, 100.0)),
+        switch("well", "Field Reach", "Physics", false),
+        color("well_color", "Field Color", "Physics", [0.4, 0.9, 1.0, 1.0]),
         switch("box", "Box Enabled", "Box", true),
         choice("box_shape", "Box Shape", "Box", BOX_SHAPES, 0.0),
         switch("custom_size", "Custom Size", "Box", false),
@@ -97,6 +105,21 @@ const TRACK_OVERLAY_PARAMS: &[Param] = &[
 /// Push Trace(2026-09-15 利用者「tracy が人気な理由は、簡単に関係性が可視化されているように見えるから」「ユーザーが触るのはひとつのオブジェクトだけ。旨みの最大値はそれ」):
 /// Track Overlay と同じ欄で、既定だけが違う棚の 1 枚。下の層を拾い(Layers)、押された物ごとに跡・矢印・押された px を描く。
 pub const PUSH_TRACE: &str = "motolii.push_trace";
+/// 物理の可視の既定: 箱は Layers、枠は細く切れた線、触れ合いの線と場の輪を出す。
+const PHYSICS_TRACE_DEFAULTS: &[(&str, [f64; 4])] = &[
+    ("method", [2.0, 0.0, 0.0, 0.0]),
+    ("box", [1.0, 0.0, 0.0, 0.0]),
+    ("box_stroke_color", [0.95, 0.93, 0.89, 1.0]),
+    ("box_stroke_opacity", [0.5, 0.0, 0.0, 0.0]),
+    ("box_stroke_width", [1.0, 0.0, 0.0, 0.0]),
+    ("box_gap", [1.0, 0.0, 0.0, 0.0]),
+    ("box_gap_size", [0.7, 0.0, 0.0, 0.0]),
+    ("links", [1.0, 0.0, 0.0, 0.0]),
+    ("well", [1.0, 0.0, 0.0, 0.0]),
+    ("marker", [1.0, 0.0, 0.0, 0.0]),
+    ("marker_size", [6.0, 0.0, 0.0, 0.0]),
+];
+
 const PUSH_TRACE_DEFAULTS: &[(&str, [f64; 4])] = &[
     ("method", [2.0, 0.0, 0.0, 0.0]),
     ("box", [1.0, 0.0, 0.0, 0.0]),
@@ -149,6 +172,7 @@ pub static KINDS: std::sync::LazyLock<Vec<OverlayKind>> = std::sync::LazyLock::n
     OverlayKind { plugin_id: TRACK_OVERLAY, label: "Track Overlay", params: TRACK_OVERLAY_PARAMS },
     OverlayKind { plugin_id: FOUND_GRID, label: "Found Grid", params: with_overrides(TRACK_OVERLAY_PARAMS, FOUND_GRID_DEFAULTS) },
     OverlayKind { plugin_id: PUSH_TRACE, label: "Push Trace", params: with_overrides(TRACK_OVERLAY_PARAMS, PUSH_TRACE_DEFAULTS) },
+    OverlayKind { plugin_id: PHYSICS_TRACE, label: "Physics Trace", params: with_overrides(TRACK_OVERLAY_PARAMS, PHYSICS_TRACE_DEFAULTS) },
 ]);
 
 /// 効果の値に、その種類の既定を足す(書いていない欄も種類ごとの既定で読めるように)。
@@ -165,7 +189,7 @@ pub fn with_defaults(plugin_id: &str, params: &[(String, Value)]) -> Vec<(String
 }
 
 pub fn is_track_overlay(plugin_id: &str) -> bool {
-    plugin_id == TRACK_OVERLAY || plugin_id == FOUND_GRID || plugin_id == PUSH_TRACE
+    plugin_id == TRACK_OVERLAY || plugin_id == FOUND_GRID || plugin_id == PUSH_TRACE || plugin_id == PHYSICS_TRACE
 }
 
 /// 数・選択の欄の値。無い欄は宣言の既定。

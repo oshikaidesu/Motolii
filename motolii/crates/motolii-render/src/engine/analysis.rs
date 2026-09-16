@@ -153,7 +153,7 @@ impl Engine {
                 if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
                     let resolved = view.resolved_layers(t).map_err(store)?;
                     let scope = view.overlay_scope(layer, &resolved, t).map_err(store)?;
-                    let marks = scope.iter().enumerate().map(|(k, (_, b))| BlobMark {
+                    let marks: Vec<BlobMark> = scope.iter().enumerate().map(|(k, (_, b))| BlobMark {
                         id: k as u32,
                         center: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5],
                         size: [b[2] - b[0], b[3] - b[1]],
@@ -164,8 +164,18 @@ impl Engine {
                     let depths = own.filter(|l| l.projection == crate::doc::store::LayerProjection::ThreeD).and_then(|l| l.placement.world_transform).map(|w| {
                         scope.iter().map(|(i, _)| resolved[*i].placement.world_transform.map_or(0.0, |o| o.translation.z) - w.translation.z).collect()
                     });
-                    let pushes = scope.iter().map(|(i, _)| view.pushed_on_screen(resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
-                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths, pushes });
+                    let mut pushes = scope.iter().map(|(i, _)| view.pushed_on_screen(resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
+                    // 物理の可視は、下の層ではなく解き手が持っている物そのものから拾う
+                    // (箱の中の子は「下の層」に出て来ないため)。
+                    let physics = effect.plugin_id == crate::doc::store::overlay::PHYSICS_TRACE;
+                    let mut marks = marks;
+                    let (mut links, mut wells) = (Vec::new(), Vec::new());
+                    if physics {
+                        // 中身は描く直前に取る(この時点ではまだ解いていない)。
+                        marks = Vec::new();
+                        pushes = Vec::new();
+                    }
+                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths, pushes, links, wells, physics });
                     continue;
                 }
                 (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
@@ -213,7 +223,7 @@ impl Engine {
             }
             let marks = state.marks.get(&frame).cloned().unwrap_or_default();
             if overlay {
-                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None, pushes: Vec::new() });
+                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None, pushes: Vec::new(), links: Vec::new(), wells: Vec::new(), physics: false });
             } else {
                 for f in (frame - reach).max(meta.timing.start)..frame {
                     if let (Some(past), Ok(at)) = (state.marks.get(&f), RationalTime::try_from_frame(f, composition.fps)) {
@@ -317,6 +327,12 @@ pub(crate) struct OverlayFrame {
     pub(crate) depths: Option<Vec<f32>>,
     /// Layers が読んだ物ごとの押されたずれ(comp の向き、`marks` と同じ順)。塊を読む時は空。
     pub(crate) pushes: Vec<[f32; 2]>,
+    /// 物理の可視: 触れ合っている組の線(comp の px)。
+    pub(crate) links: Vec<([f32; 2], [f32; 2])>,
+    /// 物理の可視: 場の元と届く距離(0 なら箱じゅう)と、一様な向き。
+    pub(crate) wells: Vec<([f32; 2], f32, [f32; 2])>,
+    /// 物理の可視なら真(中身は描く直前に解き手から取る)。
+    pub(crate) physics: bool,
 }
 
 fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
