@@ -46,12 +46,10 @@ pub(crate) struct BlockState {
     object_layers: Vec<LayerId>,
     /// 場が立っている住む箱の組(そこに居る物は、効果を持たなくても動く物として並べる)。
     field_rooms: std::collections::HashSet<u32>,
-    /// 壁を持つ住む箱の組(`Overflow = Bounce`)。中の物は最後に箱の中へ折り返される。
-    wall_rooms: std::collections::HashSet<u32>,
     /// 場の元(物の番号)と、その効果の順・欄。動く相手は物が揃ってから決める。
     fields: Vec<(usize, String, Vec<f32>, u32)>,
     objects: Vec<BlockItem>,
-    bases: Vec<([f32; 3], [f32; 3])>,
+    bases: Vec<([f32; 3], [f32; 3], [f32; 3])>,
     batches: Vec<BlockBatch>,
 }
 
@@ -68,7 +66,6 @@ impl Engine {
         state.follows.clear();
         state.object_layers.clear();
         state.field_rooms.clear();
-        state.wall_rooms.clear();
         state.fields.clear();
         state.objects.clear();
         state.bases.clear();
@@ -118,17 +115,6 @@ impl Engine {
                 Some(Value::F64(v)) => v.max(0.0) as f32,
                 _ => 1.0,
             };
-            // 壁は箱の持ち物(`Overflow = Bounce`)。GPU はその法の速い解き手で、物ごとの効果は要らない(提案 2026-09-16)。
-            if let Some(parent) = parent {
-                let wall = match view.value_at(parent, &PropertyId::new(crate::doc::store::layout::OVERFLOW).map_err(store)?, t).map_err(store)? {
-                    Some(Value::Enum(v)) => v == 2,
-                    Some(Value::F64(v)) => v.round() as i64 == 2,
-                    _ => false,
-                };
-                if wall {
-                    state.wall_rooms.insert(parent.0 as u32);
-                }
-            }
             let margin = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::MARGIN).map_err(store)?, t).map_err(store)? {
                 Some(Value::F64(v)) => v.max(0.0) as f32,
                 _ => 0.0,
@@ -185,7 +171,7 @@ impl Engine {
         let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
         let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
         // comp の 1px が world でどちら向きか: 素材の辺の world の長さ ÷ 素材の px、を comp → 素材の逆写しに掛ける。
-        let (_, u, v) = crate::render::compositor::projected_placement_corners(comp, built.projection_camera, built.projection, built.placement, glam::Vec2::ZERO, size);
+        let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, built.projection_camera, built.projection, built.placement, glam::Vec2::ZERO, size);
         let (per_x, per_y) = (u / size.x, v / size.y);
         let inverse = if m.matrix2.determinant().abs() > 1e-12 { m.matrix2.inverse() } else { glam::Mat2::IDENTITY };
         let world = |comp_step: glam::Vec2| { let material = inverse * comp_step; (per_x * material.x + per_y * material.y).to_array() };
@@ -202,7 +188,10 @@ impl Engine {
             margin: placed.margin,
             weight: placed.weight,
         });
-        state.bases.push((world(glam::Vec2::X), world(glam::Vec2::Y)));
+        // 回る軸が通る所: 物の箱の真ん中を world で。
+        let middle = glam::Vec2::new((own[0] + own[2]) * 0.5, (own[1] + own[3]) * 0.5);
+        let centre = origin + u * (middle.x / size.x) + v * (middle.y / size.y);
+        state.bases.push((world(glam::Vec2::X), world(glam::Vec2::Y), centre.to_array()));
         state.object_layers.push(layer.id);
         for (stage, (plugin, params, is_field)) in chain.into_iter().enumerate() {
             if is_field {
@@ -235,23 +224,14 @@ impl Engine {
             }
             state.batches.push(BlockBatch { stage, plugin, params, members, source });
         }
-        // 物同士の当たりは既定(利用者 2026-09-16「お互いの箱にぶつかるとかの方がよく使う」)。場の立つ箱では、
-        // 場の後に、重なった物を書類の間合い(Margin)だけ空くまで押し合う。
+        // 箱は既に在る: 場の立つ箱では、間合いを空けて中に留まるのを最後に解く。人は壁を頼まない
+        // (利用者 2026-09-16「そこに壁はなく環境を事前に作るといった思考は生まれません、もう既にあって当たり前だから」)。
         let stage = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
-        let touching: Vec<u32> = state.objects.iter().enumerate()
+        let inside: Vec<u32> = state.objects.iter().enumerate()
             .filter(|(_, it)| state.field_rooms.contains(&it.group))
             .map(|(k, _)| k as u32).collect();
-        if !touching.is_empty() {
-            state.batches.push(BlockBatch { stage, plugin: "motolii.push_apart".into(), params: vec![0.0], members: touching, source: u32::MAX });
-        }
-        // 壁は箱が頼んだ時だけ(`Overflow = Bounce`)。既定ではない。
-        if !state.wall_rooms.is_empty() {
-            let members: Vec<u32> = state.objects.iter().enumerate()
-                .filter(|(_, it)| state.wall_rooms.contains(&it.group))
-                .map(|(k, _)| k as u32).collect();
-            if !members.is_empty() {
-                state.batches.push(BlockBatch { stage: stage + 1, plugin: "motolii.bounce_block".into(), params: vec![1.0], members, source: u32::MAX });
-            }
+        if !inside.is_empty() {
+            state.batches.push(BlockBatch { stage, plugin: "motolii.room".into(), params: Vec::new(), members: inside, source: u32::MAX });
         }
         let ctx = &self.compositor.ctx;
         // 近くの物の升目は、ブロックが宣言した届く距離(`REACH` の欄)の一番大きい値だけ広げる。
@@ -386,7 +366,8 @@ mod tests {
         }
         put(&mut doc, ball, property::POSITION, Value::Vec2([30.0, 15.0]));
         put(&mut doc, field, property::POSITION, Value::Vec2([100.0, 15.0]));
-        // 一様(Spread 1)の場を下(+90°)へ、強さ 40: 1 秒で 0.5 * 40 * 1² = 20px 下がる。
+        // 一様(Spread 1)の場を下(+90°)へ、終端の速さ 40px/秒: 1 秒で 40 * (1 - 0.35 * (1 - e^-2.857)) = 26.8px 下がる
+        // (加速し続けず終端へ収まる、利用者 2026-09-16「ユーザはおさまりを求めます」)。
         doc.apply(Intent::SetEffects { layer: field, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.field".into() }] }).unwrap();
         for (name, value) in [("spread", 1.0), ("turn", 0.0), ("angle", 90.0), ("strength", 40.0), ("reach", 0.0)] {
             doc.apply(Intent::SetConstant { layer: field, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(value) }).unwrap();
@@ -404,7 +385,7 @@ mod tests {
         let (n1, x1, y1) = centre(&engine.render_frame(&doc.view(), RationalTime::try_from_frame(30, fps).unwrap()).unwrap());
         assert!(n0 > 100 && n1 > 100, "白い四角が両方のコマに在る ({n0} / {n1} px)");
         assert!((x1 - x0).abs() < 1.0, "横には動かない ({x0} → {x1})");
-        assert!((y1 - y0 - 20.0).abs() < 1.5, "1 秒で 20px 下がる ({y0} → {y1})");
+        assert!((y1 - y0 - 26.8).abs() < 1.5, "1 秒で 26.8px 下がる ({y0} → {y1})");
     }
 
     /// Push Apart を GPU のブロックにしても、書類の間合いの押し合い(CPU、32 回)と同じだけ押す。

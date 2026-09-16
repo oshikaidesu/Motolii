@@ -398,7 +398,7 @@ pub(crate) struct WorldPass {
 }
 
 const WORLD_PASS: &str = "struct Offset { translate: vec2f, rotate: f32, scale: f32 };\n\
-struct Basis { u: vec4f, v: vec4f };\n\
+struct Basis { u: vec4f, v: vec4f, centre: vec4f };\n\
 @group(0) @binding(0) var<storage, read> bases: array<Basis>;\n\
 @group(0) @binding(1) var<storage, read> state: array<Offset>;\n\
 @group(0) @binding(2) var<storage, read_write> motion: array<vec4f>;\n\
@@ -406,9 +406,16 @@ struct Basis { u: vec4f, v: vec4f };\n\
 @compute @workgroup_size(64)\n\
 fn main(@builtin(global_invocation_id) gid: vec3u) {\n\
     let k = gid.x;\n\
-    if k >= count.x || k >= arrayLength(&motion) { return; }\n\
+    if k >= count.x || (k + 1u) * 3u > arrayLength(&motion) { return; }\n\
     let t = state[k].translate;\n\
-    motion[k] = vec4f(bases[k].u.xyz * t.x + bases[k].v.xyz * t.y, 0.0);\n\
+    let u = bases[k].u.xyz;\n\
+    let v = bases[k].v.xyz;\n\
+    let n = cross(u, v);\n\
+    let axis = select(vec3f(0.0, 0.0, 1.0), n / length(n), length(n) > 1e-12);\n\
+    let base = k * 3u;\n\
+    motion[base] = vec4f(u * t.x + v * t.y, radians(state[k].rotate));\n\
+    motion[base + 1u] = bases[k].centre;\n\
+    motion[base + 2u] = vec4f(axis, 0.0);\n\
 }\n";
 
 impl WorldPass {
@@ -417,13 +424,13 @@ impl WorldPass {
         Self { pipeline, layout }
     }
 
-    /// `bases` は物ごとの (comp の x の 1px の world, y の 1px の world)。
-    pub(crate) fn record(&self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, world: &BlockWorld, bases: &[([f32; 3], [f32; 3])], motion: &wgpu::Buffer) {
+    /// `bases` は物ごとの (comp の x の 1px の world, y の 1px の world, 物の真ん中の world)。真ん中は回る軸が通る所。
+    pub(crate) fn record(&self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, world: &BlockWorld, bases: &[([f32; 3], [f32; 3], [f32; 3])], motion: &wgpu::Buffer) {
         if world.count == 0 {
             return;
         }
-        let basis = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-bases"), size: (bases.len().max(1) * 32) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        queue.write_buffer(&basis, 0, &bases.iter().flat_map(|(u, v)| [u[0], u[1], u[2], 0.0, v[0], v[1], v[2], 0.0]).flat_map(f32::to_le_bytes).collect::<Vec<u8>>());
+        let basis = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-bases"), size: (bases.len().max(1) * 48) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        queue.write_buffer(&basis, 0, &bases.iter().flat_map(|(u, v, c)| [u[0], u[1], u[2], 0.0, v[0], v[1], v[2], 0.0, c[0], c[1], c[2], 0.0]).flat_map(f32::to_le_bytes).collect::<Vec<u8>>());
         let count = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-count"), size: 16, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         queue.write_buffer(&count, 0, &[world.count.to_le_bytes(), [0; 4], [0; 4], [0; 4]].concat());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

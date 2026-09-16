@@ -9,8 +9,9 @@
     { "NAME": "turn", "LABEL": "Turn", "TYPE": "float", "DEFAULT": 0.0, "MIN": -180.0, "MAX": 180.0 },
     { "NAME": "spread", "LABEL": "Spread", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 1.0 },
     { "NAME": "angle", "LABEL": "Angle", "TYPE": "float", "DEFAULT": 90.0, "MIN": -360.0, "MAX": 360.0 },
-    { "NAME": "strength", "LABEL": "Strength", "TYPE": "float", "DEFAULT": 200.0, "MIN": -100000.0, "MAX": 100000.0 },
-    { "NAME": "reach", "LABEL": "Reach", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 100000.0 }
+    { "NAME": "strength", "LABEL": "Strength", "TYPE": "float", "DEFAULT": 400.0, "MIN": -100000.0, "MAX": 100000.0 },
+    { "NAME": "reach", "LABEL": "Reach", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 100000.0 },
+    { "NAME": "tumble", "LABEL": "Tumble", "TYPE": "float", "DEFAULT": 0.35, "MIN": 0.0, "MAX": 4.0 }
   ]
 }*/
 
@@ -19,6 +20,14 @@
 //   Spread 0 元から(点の場)→ 1 一様な向き(重力・風)。元が無限に遠い極限が重力
 // 元は掛かった層(`host.source`)の箱の真ん中。時刻の純関数で解く(積み上げない)ので、
 // 巻き戻しても書き出しても同じ絵になる。重さ(weight)はその場がどれだけ効くか。
+// 物ごとのさいころ(番号から作るので、巻き戻しても書き出しても同じ)。-1 〜 1。
+fn dice(k: u32) -> f32 {
+    var h = k * 2654435761u;
+    h = (h ^ (h >> 15u)) * 2246822519u;
+    h = (h ^ (h >> 13u)) * 3266489917u;
+    return f32(h >> 8u) / 8388608.0 - 1.0;
+}
+
 fn block(k: u32, p: BlockParams) -> Offset {
     let s = objects[host.source];
     let src = (s.lo + s.hi) * 0.5;
@@ -34,21 +43,31 @@ fn block(k: u32, p: BlockParams) -> Offset {
     let force = p.strength * fall * objects[k].weight;
     let t = max(host.time, 0.0);
     let spread = clamp(p.spread, 0.0, 1.0);
+    let turn = radians(p.turn);
+    // 人は収まりを求める(利用者 2026-09-16)。力は加速し続けず、落ち着く:
+    //   一様 = 落ち始めだけ加速して終端の速さへ(EASE 秒)。止まるのは箱の縁と、下に居る物
+    //   元から = 指数で寄る・離れる。回りは決まった角度まで回って止まる
+    let ease = 0.35;
+    let ramp = 1.0 - exp(-t / ease);
 
-    // 一様: 角度の向きへ落ちる・流される(0.5 * g * t²、comp の下は +90°)。
+    // 一様: 角度の向きへ、終端の速さ force px/秒 で落ちる・流される(comp の下は +90°)。
     let a = radians(p.angle);
-    let uniform = vec2f(cos(a), sin(a)) * 0.5 * force * t * t;
+    let uniform = vec2f(cos(a), sin(a)) * force * (t - ease * ramp);
 
-    // 元から: 進んだ長さを、向き(Turn)で内向きと回りに分ける。
+    // 元から: 寄る・離れる長さは指数、回る角は決まった量まで。
     var local = vec2f(0.0);
     if d > 1e-4 {
-        let travel = force * t;
-        let turn = radians(p.turn);
-        let r = max(d - cos(turn) * travel, 0.0);
-        let spin = sin(turn) * travel / max(d, 1.0);
+        let rate = force / 200.0;
+        let r = d * exp(-cos(turn) * rate * t);
+        let spin = sin(turn) * 12.566371 * (1.0 - exp(-abs(rate) * t));
         let dir = away / d;
         let turned = vec2f(dir.x * cos(spin) - dir.y * sin(spin), dir.x * sin(spin) + dir.y * cos(spin));
         local = turned * r - away;
     }
-    return Offset(mix(local, uniform, spread), 0.0, 1.0);
+    // まわり: 進んだ長さを自分の大きさで割った分だけ転がる(落ちれば転がり、止まれば止まる)。
+    // 向きと速さは物ごとのさいころで散らす — 揃って回ると作り物に見える。
+    let moved = mix(local, uniform, spread);
+    let own = max(max(objects[k].hi.x - objects[k].lo.x, objects[k].hi.y - objects[k].lo.y), 1.0);
+    let spin = degrees(length(moved) / (own * 0.5)) * p.tumble * (0.4 + 0.6 * abs(dice(k))) * sign(dice(k + 977u));
+    return Offset(moved, spin, 1.0);
 }
