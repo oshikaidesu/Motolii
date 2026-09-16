@@ -208,7 +208,12 @@ impl Physics {
                 0
             }
         };
+        // 取説(rapier.rs, docs.rs 0.32): 既定は反復 4・CCD の刻み 1。積み上げと壁のめり込みには
+        // 反復を増やし、速い物は CCD で刻む。長さの単位は m(PX で写している)のまま。
         self.params.dt = (1.0 / fps) as f32;
+        self.params.num_solver_iterations = 8;
+        self.params.max_ccd_substeps = 4;
+        self.params.normalized_allowed_linear_error = 0.0005;
         for _ in step_from..=frame.max(0) {
             self.push(rooms, bodies);
             self.pipeline.step(
