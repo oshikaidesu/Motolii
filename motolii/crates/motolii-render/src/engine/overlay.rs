@@ -220,6 +220,59 @@ fn link_shapes(params: &Params, links: &[([f32; 2], [f32; 2])]) -> Vec<ShapeNode
     })).collect()
 }
 
+/// 触れ合っている点と、その法線の短い髭。どこで当たっているかが見えるのが芯。
+fn contact_shapes(params: &Params, contacts: &[([f32; 2], [f32; 2])]) -> Vec<ShapeNode> {
+    let c = color_of(params, "links_color");
+    let point = |p: [f32; 2]| Point { x: p[0] as f64, y: p[1] as f64 };
+    contacts.iter().flat_map(|(at, normal)| {
+        let tick = [at[0] + normal[0] * 14.0, at[1] + normal[1] * 14.0];
+        let side = [-normal[1], normal[0]];
+        let bar = (
+            [at[0] - side[0] * 7.0, at[1] - side[1] * 7.0],
+            [at[0] + side[0] * 7.0, at[1] + side[1] * 7.0],
+        );
+        let line = |a: [f32; 2], b: [f32; 2], width: f64, opacity: f64| ShapeNode::Leaf(Shape {
+            source: PathSource::Bezier(vec![Contour::open([point(a), point(b)])]),
+            ops: Vec::new(),
+            fill: None,
+            stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width, opacity: c[3] * opacity, cap: LineCap::Butt, ..Default::default() }),
+        });
+        [line(bar.0, bar.1, 2.0, 1.0), line(*at, tick, 1.0, 0.55)]
+    }).collect()
+}
+
+/// 物の輪郭(当たりに使っている形そのもの)。
+fn hull_shapes(params: &Params, hulls: &[Vec<[f32; 2]>]) -> Vec<ShapeNode> {
+    let c = color_of(params, "box_stroke_color");
+    hulls.iter().filter(|h| h.len() >= 3).map(|h| ShapeNode::Leaf(Shape {
+        source: PathSource::Bezier(vec![Contour::closed(h.iter().map(|p| Point { x: p[0] as f64, y: p[1] as f64 }))]),
+        ops: Vec::new(),
+        fill: None,
+        stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 1.0, opacity: c[3] * 0.75, cap: LineCap::Butt, ..Default::default() }),
+    })).collect()
+}
+
+/// 今の速さ(向きと大きさ)。止まっている物には出ない。
+fn velocity_shapes(params: &Params, velocities: &[([f32; 2], [f32; 2])]) -> Vec<ShapeNode> {
+    let c = color_of(params, "velocity_color");
+    let point = |p: [f32; 2]| Point { x: p[0] as f64, y: p[1] as f64 };
+    velocities.iter().filter_map(|(at, v)| {
+        let speed = (v[0] * v[0] + v[1] * v[1]).sqrt();
+        if speed < 12.0 {
+            return None;
+        }
+        // 長さは速さに比例させつつ頭打ちに(画面を糸で埋めない)。
+        let scale = (0.09_f32).min(110.0 / speed);
+        let tip = [at[0] + v[0] * scale, at[1] + v[1] * scale];
+        Some(ShapeNode::Leaf(Shape {
+            source: PathSource::Bezier(vec![Contour::open([point(*at), point(tip)])]),
+            ops: Vec::new(),
+            fill: None,
+            stroke: Some(Stroke { brush: Brush::Solid(rgb(c)), width: 1.5, opacity: c[3] * (0.35 + (speed / 900.0).min(0.65) as f64), cap: LineCap::Round, ..Default::default() }),
+        }))
+    }).collect()
+}
+
 /// 場の元: 届く輪(点線)と、一様な向きの矢。
 fn well_shapes(params: &Params, wells: &[([f32; 2], f32, [f32; 2])]) -> Vec<ShapeNode> {
     let c = color_of(params, "well_color");
@@ -250,17 +303,36 @@ fn well_shapes(params: &Params, wells: &[([f32; 2], f32, [f32; 2])]) -> Vec<Shap
 
 /// このコマの塊から、Grid → Box → Push → Marker → Labels の順に形を組む(comp の座標)。`pushes` は Layers の時だけ(塊と同じ順)。
 pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], comp: [f64; 2]) -> Vec<ShapeNode> {
-    overlay_shapes_with(params, marks, pushes, &[], &[], comp)
+    overlay_shapes_with(params, marks, pushes, &PhysicsTrace::default(), comp)
+}
+
+/// 物理の可視が描く物(解き手から取る)。
+#[derive(Default)]
+pub(crate) struct PhysicsTrace<'a> {
+    pub links: &'a [([f32; 2], [f32; 2])],
+    pub contacts: &'a [([f32; 2], [f32; 2])],
+    pub velocities: &'a [([f32; 2], [f32; 2])],
+    pub wells: &'a [([f32; 2], f32, [f32; 2])],
+    pub hulls: &'a [Vec<[f32; 2]>],
 }
 
 /// 物理の可視は、同じ形の上に触れ合いの線と場の輪を足す。
-pub(crate) fn overlay_shapes_with(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], links: &[([f32; 2], [f32; 2])], wells: &[([f32; 2], f32, [f32; 2])], comp: [f64; 2]) -> Vec<ShapeNode> {
+pub(crate) fn overlay_shapes_with(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], physics: &PhysicsTrace<'_>, comp: [f64; 2]) -> Vec<ShapeNode> {
     let mut out = Vec::new();
     if switch_of(params, "well") {
-        out.extend(well_shapes(params, wells));
+        out.extend(well_shapes(params, physics.wells));
+    }
+    if switch_of(params, "hull") {
+        out.extend(hull_shapes(params, physics.hulls));
+    }
+    if switch_of(params, "velocity") {
+        out.extend(velocity_shapes(params, physics.velocities));
     }
     if switch_of(params, "links") {
-        out.extend(link_shapes(params, links));
+        out.extend(link_shapes(params, physics.links));
+    }
+    if switch_of(params, "contacts") {
+        out.extend(contact_shapes(params, physics.contacts));
     }
     if switch_of(params, "grid") {
         out.extend(grid_shapes(params, marks, comp));
@@ -287,11 +359,15 @@ impl Engine {
         if self.overlay_frames.get(&layer).is_some_and(|f| f.physics) {
             self.solve_physics_now();
             let (marks, links, wells) = (self.physics_marks(), self.physics_links(), self.physics_wells());
+            let (contacts, velocities, hulls) = (self.physics_contacts_at(), self.physics_velocities(), self.physics_hulls());
             if let Some(frame) = self.overlay_frames.get_mut(&layer) {
                 frame.pushes = vec![[0.0, 0.0]; marks.len()];
                 frame.marks = marks;
                 frame.links = links;
                 frame.wells = wells;
+                frame.contacts = contacts;
+                frame.velocities = velocities;
+                frame.hulls = hulls;
             }
         }
         let Some(frame) = self.overlay_frames.get(&layer) else { return Ok(None) };
@@ -319,7 +395,8 @@ impl Engine {
                 links: Some(std::sync::Arc::new(links)),
             }, natural)));
         }
-        let shapes = overlay_shapes_with(&frame.params, &frame.marks, &frame.pushes, &frame.links, &frame.wells, [f64::from(comp.width), f64::from(comp.height)]);
+        let trace = PhysicsTrace { links: &frame.links, contacts: &frame.contacts, velocities: &frame.velocities, wells: &frame.wells, hulls: &frame.hulls };
+        let shapes = overlay_shapes_with(&frame.params, &frame.marks, &frame.pushes, &trace, [f64::from(comp.width), f64::from(comp.height)]);
         if shapes.is_empty() {
             return Ok(None);
         }

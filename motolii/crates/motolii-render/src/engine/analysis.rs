@@ -175,7 +175,7 @@ impl Engine {
                         marks = Vec::new();
                         pushes = Vec::new();
                     }
-                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths, pushes, links, wells, physics });
+                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths, pushes, links, wells, contacts: Vec::new(), velocities: Vec::new(), hulls: Vec::new(), physics });
                     continue;
                 }
                 (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
@@ -223,7 +223,7 @@ impl Engine {
             }
             let marks = state.marks.get(&frame).cloned().unwrap_or_default();
             if overlay {
-                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None, pushes: Vec::new(), links: Vec::new(), wells: Vec::new(), physics: false });
+                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None, pushes: Vec::new(), links: Vec::new(), wells: Vec::new(), contacts: Vec::new(), velocities: Vec::new(), hulls: Vec::new(), physics: false });
             } else {
                 for f in (frame - reach).max(meta.timing.start)..frame {
                     if let (Some(past), Ok(at)) = (state.marks.get(&f), RationalTime::try_from_frame(f, composition.fps)) {
@@ -331,6 +331,10 @@ pub(crate) struct OverlayFrame {
     pub(crate) links: Vec<([f32; 2], [f32; 2])>,
     /// 物理の可視: 場の元と届く距離(0 なら箱じゅう)と、一様な向き。
     pub(crate) wells: Vec<([f32; 2], f32, [f32; 2])>,
+    /// 物理の可視: 触れ合っている点と法線、今の速さ、当たりに使っている輪郭。
+    pub(crate) contacts: Vec<([f32; 2], [f32; 2])>,
+    pub(crate) velocities: Vec<([f32; 2], [f32; 2])>,
+    pub(crate) hulls: Vec<Vec<[f32; 2]>>,
     /// 物理の可視なら真(中身は描く直前に解き手から取る)。
     pub(crate) physics: bool,
 }

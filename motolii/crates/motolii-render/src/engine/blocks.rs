@@ -133,6 +133,31 @@ impl Engine {
         self.blocks.physics.wells()
     }
 
+    pub(crate) fn physics_contacts_at(&self) -> Vec<([f32; 2], [f32; 2])> {
+        self.blocks.physics.contact_marks()
+    }
+
+    pub(crate) fn physics_velocities(&self) -> Vec<([f32; 2], [f32; 2])> {
+        self.blocks.physics.velocities()
+    }
+
+    /// 当たりに使っている輪郭(解き手が動かした後の場所へ移したもの)。
+    pub(crate) fn physics_hulls(&self) -> Vec<Vec<[f32; 2]>> {
+        self.blocks.objects.iter().enumerate().filter_map(|(k, _)| {
+            let layer = *self.blocks.object_layers.get(k)?;
+            let outline = self.blocks.outlines.get(k)?.as_ref()?;
+            let (shift, turn) = self.blocks.physics.offset(layer)?;
+            let (sin, cos) = turn.to_radians().sin_cos();
+            let it = self.blocks.objects.get(k)?;
+            let mid = glam::vec2((it.lo[0] + it.hi[0]) * 0.5, (it.lo[1] + it.hi[1]) * 0.5);
+            Some(outline.iter().map(|p| {
+                let d = glam::Vec2::from(*p) - mid;
+                let turned = glam::vec2(d.x * cos - d.y * sin, d.x * sin + d.y * cos);
+                (mid + turned + glam::Vec2::from(shift)).to_array()
+            }).collect())
+        }).collect()
+    }
+
     /// 触れ合っている組の数(測り用)。
     pub fn physics_contacts(&self) -> usize {
         self.blocks.physics.contacts()
