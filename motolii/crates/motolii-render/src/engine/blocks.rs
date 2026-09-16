@@ -238,7 +238,18 @@ impl Engine {
             .filter(|(_, it)| state.field_rooms.contains(&it.group))
             .map(|(k, _)| k as u32).collect();
         if !inside.is_empty() {
-            state.batches.push(BlockBatch { stage, plugin: "motolii.room".into(), params: Vec::new(), members: inside, source: u32::MAX });
+            // 場が向いている先(一様な分だけ)を箱の解き手に渡す。人はそれを「下」と読む。
+            let mut down = [0.0f32, 0.0];
+            for batch in state.batches.iter().filter(|b| b.plugin == "motolii.field") {
+                let (turn, spread, angle, strength) = (batch.params.first().copied().unwrap_or(0.0), batch.params.get(1).copied().unwrap_or(0.0), batch.params.get(2).copied().unwrap_or(90.0), batch.params.get(3).copied().unwrap_or(0.0));
+                let _ = turn;
+                let a = angle.to_radians();
+                down[0] += a.cos() * spread * strength.signum();
+                down[1] += a.sin() * spread * strength.signum();
+            }
+            let len = (down[0] * down[0] + down[1] * down[1]).sqrt();
+            let down = if len > 1e-4 { vec![down[0] / len, down[1] / len] } else { vec![0.0, 0.0] };
+            state.batches.push(BlockBatch { stage, plugin: "motolii.room".into(), params: down, members: inside, source: u32::MAX });
         }
         let ctx = &self.compositor.ctx;
         // 近くの物の升目は、ブロックが宣言した届く距離(`REACH` の欄)の一番大きい値だけ広げる。

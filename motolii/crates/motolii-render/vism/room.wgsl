@@ -2,10 +2,13 @@
   "ID": "motolii.room",
   "LABEL": "Room",
   "STAGE": "block",
-  "ROUNDS": 64,
+  "ROUNDS": 96,
   "EXPOSE": false,
   "DESCRIPTION": "The box things live in, solved: they keep their margins from each other and they stay inside. Nobody asks for this — the world is already there (Motolii's margin law, plus the box's own edges)",
-  "INPUTS": []
+  "INPUTS": [
+    { "NAME": "down_x", "LABEL": "Down X", "TYPE": "float", "DEFAULT": 0.0, "MIN": -1.0, "MAX": 1.0 },
+    { "NAME": "down_y", "LABEL": "Down Y", "TYPE": "float", "DEFAULT": 0.0, "MIN": -1.0, "MAX": 1.0 }
+  ]
 }*/
 
 // 箱そのものの解き手。棚には出ない(`EXPOSE: false`)。人が頼むのは「重力」だけで、
@@ -20,11 +23,15 @@ fn turned_half(k: u32) -> vec2f {
 
 fn block(k: u32, p: BlockParams) -> Offset {
     let a = objects[k];
-    let amid = (now_lo(k) + now_hi(k)) * 0.5;
+    // 下へ詰める: 場が向いている先へ毎回少しずつ寄せる。押し合いと箱が止めるので、積もって収まる
+    // (詰めないと、押し合いで上へ逃げた物がそのまま浮いて見える)。
+    let down = vec2f(p.down_x, p.down_y);
+    let press = down * max(min(a.hi.x - a.lo.x, a.hi.y - a.lo.y), 1.0) * 0.10;
+    let amid = (now_lo(k) + now_hi(k)) * 0.5 + press;
     let ahalf = turned_half(k) + vec2f(a.margin);
     let alo = amid - ahalf;
     let ahi = amid + ahalf;
-    var step = vec2f(0.0);
+    var step = press;
     for (var i = 0u; i < neighbor_count(k); i++) {
         let j = neighbor(k, i);
         let b = objects[j];
