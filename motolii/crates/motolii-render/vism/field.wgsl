@@ -51,16 +51,22 @@ fn block(k: u32, p: BlockParams) -> Offset {
     let ease = 0.35;
     let ramp = 1.0 - exp(-t / ease);
     // 立ち上がりの時刻: 0 から急に動き出さない(利用者 2026-09-16「動きは離散的にならないように」)。
-    let te = t - ease * ramp;
+    // 家に留めてある物(Hold)は、時間で積み上げず距離だけで決める — 積み上げると紐で頭打ちになり、
+    // 元が離れた時に一気に戻ってガタつく。留まる物にとって場は「今どれだけ押されているか」でよい。
+    let held = clamp(p.hold, 0.0, 1.0);
+    let te = mix(t - ease * ramp, min(t, 1.0) * 0.6, held);
 
     // 一様: 角度の向きへ、終端の速さ force px/秒 で落ちる・流される(comp の下は +90°)。
     let a = radians(p.angle);
     let uniform = vec2f(cos(a), sin(a)) * force * te;
 
     // 元から: 寄る・離れる長さは指数、回る角は決まった量まで。
+    // 元のすぐ近くで向きが跳ねないよう、距離に芯を持たせる(N 体計算の softening と同じ)。
     var local = vec2f(0.0);
     if d > 1e-4 {
-        let rate = force / 200.0;
+        let core = max(objects[k].hi.x - objects[k].lo.x, objects[k].hi.y - objects[k].lo.y) * 0.75;
+        let soft = sqrt(d * d + core * core);
+        let rate = force / 200.0 * (d / soft);
         let r = d * exp(-cos(turn) * rate * te);
         let spin = sin(turn) * 12.566371 * (1.0 - exp(-abs(rate) * te));
         let dir = away / d;
@@ -74,14 +80,27 @@ fn block(k: u32, p: BlockParams) -> Offset {
     // Hold: 配置(レイアウト)が家。人は箱を並べた時点で床も余白も決めている(利用者 2026-09-16
     // 「ユーザはもう既にレイアウト構図という形で、壁や地面を無意識下で設定している」)。
     // 0 = 家を離れて箱の底まで行く、1 = 家から離れない(膨らんで戻る)。間は連続。
-    let hold = clamp(p.hold, 0.0, 1.0);
+    let hold = held;
     if hold > 0.0 {
-        let leash = mix(1.0e9, own * 1.2, hold);
+        // 紐の長さは Hold に反比例(1 で自分の大きさの 1.5 倍、0.1 で 15 倍)。混ぜ算だと 0.8 でも
+        // ほぼ無限に伸びてしまい、家に留まらなかった。
+        let leash = own * 1.5 / max(hold, 1.0e-3);
         let far = length(moved);
         if far > 1e-4 {
             moved = moved * (leash / (leash + far));
         }
     }
+    // 箱から出さない: 出た分は場が自分で止める。止めないと、落ち続けた物を箱の解き手が毎コマ
+    // 引き戻す事になり、毎コマ違う並びに落ち着いて画がガタつく(利用者 2026-09-16「すごいガタガタ」)。
+    let room = objects[k].room_size;
+    if room.x > 0.0 && room.y > 0.0 {
+        let size = objects[k].hi - objects[k].lo;
+        let low = objects[k].room_lo;
+        let high = objects[k].room_lo + max(room - size, vec2f(0.0));
+        let want = objects[k].lo + moved;
+        moved += clamp(want, low, high) - want;
+    }
+
     let spin = degrees(length(moved) / (own * 0.5)) * p.tumble * (0.4 + 0.6 * abs(dice(k))) * sign(dice(k + 977u));
     return Offset(moved, spin, 1.0);
 }

@@ -450,9 +450,8 @@ impl WorldPass {
     }
 }
 
-/// 試験の口: state を読み戻す(描く道は読み戻さない)。
-#[cfg(test)]
-pub(crate) fn read_state(device: &wgpu::Device, queue: &wgpu::Queue, world: &BlockWorld, encoder: wgpu::CommandEncoder) -> Vec<BlockOffset> {
+/// 試験と計測の口: state を読み戻す(描く道は読み戻さない)。
+pub fn read_state(device: &wgpu::Device, queue: &wgpu::Queue, world: &BlockWorld, encoder: wgpu::CommandEncoder) -> Vec<BlockOffset> {
     let mut encoder = encoder;
     let bytes = u64::from(world.count) * OFFSET_BYTES;
     let staging = device.create_buffer(&wgpu::BufferDescriptor { label: Some("motolii-block-read"), size: bytes, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });

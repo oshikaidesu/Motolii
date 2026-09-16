@@ -54,6 +54,15 @@ pub(crate) struct BlockState {
 }
 
 impl Engine {
+    /// 今のコマの物ごとのずれ(震えを測る道具のため。読み戻すので描画では使わない)。
+    pub fn block_states(&self) -> Vec<[f32; 3]> {
+        let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
+        let ctx = &self.compositor.ctx;
+        let encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-read") });
+        crate::render::compositor::effects::block_program::read_state(&ctx.device, &ctx.queue, world, encoder)
+            .iter().map(|o| [o.translate[0], o.translate[1], o.rotate]).collect()
+    }
+
     /// ブロックを持つ層の住む箱(書類の親の Group の箱、無ければ comp の枠)と、物の箱・組・譲る比を読む。
     pub(super) fn prepare_blocks(&mut self, view: &StoreView<'_>, comp: CompSpec, t: RationalTime, resolved: &[ResolvedLayer]) -> Result<(), EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
@@ -234,8 +243,14 @@ impl Engine {
         // 箱は既に在る: 場の立つ箱では、間合いを空けて中に留まるのを最後に解く。人は壁を頼まない
         // (利用者 2026-09-16「そこに壁はなく環境を事前に作るといった思考は生まれません、もう既にあって当たり前だから」)。
         let stage = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
+        // 家(レイアウト)に留めてある物は押し合わせない。紐で繋がれた物を押し合わせると、
+        // 密に触れた所で毎コマ別の並びに落ち着いて画がガタつく(利用者 2026-09-16)。
+        let held: std::collections::HashSet<u32> = state.batches.iter()
+            .filter(|b| b.plugin == "motolii.field" && b.params.get(6).copied().unwrap_or(0.0) >= 0.5)
+            .flat_map(|b| b.members.iter().copied())
+            .collect();
         let inside: Vec<u32> = state.objects.iter().enumerate()
-            .filter(|(_, it)| state.field_rooms.contains(&it.group))
+            .filter(|(k, it)| state.field_rooms.contains(&it.group) && !held.contains(&(*k as u32)))
             .map(|(k, _)| k as u32).collect();
         if !inside.is_empty() {
             // 場が向いている先(一様な分だけ)を箱の解き手に渡す。人はそれを「下」と読む。

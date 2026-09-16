@@ -219,6 +219,28 @@
 
 **見つかった穴**: つなぐ線(Connect From / To)は書類側(CPU)で解くので、GPU のブロックで動いた端に付いて来ない。札は FollowPass で付いて行くが、線の端はまだ。当面は糸も同じ `Hang` で吊って合わせている(組み合わせの拍を揃えるため `Beat` の欄を足した)。
 
+## 震えの直し方(2026-09-16、利用者「まだまだガッタガタやぞ。これはコリジョンのめり込みかな」)
+
+当たっていた。先行資料の定石をそのまま外していた。
+
+| 定石 | 出典 | 外していた所 |
+|---|---|---|
+| 重なりを 0 にしようとすると必ず震える。少しめり込ませる(slop) | [Catto, Modeling and Solving Constraints, GDC 2009](https://box2d.org/files/ErinCatto_ModelingAndSolvingConstraints_GDC2009.pdf)、[Onarheim, Understanding Collision Constraint Solvers](https://erikonarheim.com/posts/understanding-collision-constraint-solvers/) | 毎回、深さを全部押し戻していた |
+| 深さの一部だけ直す(Baumgarte の bias) | 同上 | 相手ごとの直しを全部足していた(行き過ぎ) |
+| 回数では買えない、刻みの方が効く | [Macklin ほか, Small Steps in Physics Simulation, SCA 2019](https://mmacklin.com/smallsteps.pdf) | 96 回まで増やしていた(増やすほど暴れる) |
+| 積み上げの安定は warm start(前のコマの力を覚える)で稼ぐ | 同上・Catto | **こちらは持てない**(時刻の純関数)。だから収束の速さではなく、入力に対する滑らかさを選ぶ |
+
+直した形: めり込みは大きさの 3% まで許す、直しは相手の数で割って 0.25 倍、回数は 16。場は元の近くで距離に芯を持たせる(N 体計算の softening)。家に留めてある物(Hold)は時間で積み上げず距離だけの場にする(積み上げると紐で頭打ちになり、元が離れた時に一気に戻る)。
+
+測り方も直した。**画素の平均差では物ごとの震えは見えない**。物ごとの位置をコマ順に読み(`examples/zz_jitter.rs`、`Engine::block_states`)、1 コマの動きとコマ間の差を見る。
+
+| 見本 | 直す前 | 直した後 |
+|---|---|---|
+| pour / pile | 300〜500px/コマ | **0.00px**(完全静止) |
+| magnet | 152px | 2.7px |
+| swirl | 110px | 17px |
+| bulge | 605px | 25px(元が動いているので動くのが正しい) |
+
 ## 物理の 3 つの家族
 
 | 家族 | 行き先 | 置き場 | 例 |
