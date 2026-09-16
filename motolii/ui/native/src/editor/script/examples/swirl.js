@@ -13,4 +13,4 @@ room.set("Display", "Flex").set("Horizontal Sizing", "Fixed").set("Vertical Sizi
   .set("Width", 900).set("Height", 900).set("Background", "#16161C").set("Border Radius", 450).set("Position", [90, 90]);
 things.forEach((t, k) => t.set("Position Type", "Absolute").set("Margin", 5).set("Position", spots[k]));
 eye.set("Position Type", "Absolute").set("Position", [450, 450]);
-eye.effect("Field", { "Spread": 0, "Turn": 80, "Strength": 120, "Tumble": 1.2 });
+eye.effect("Field", { "Spread": 0, "Turn": 80, "Strength": 120 });

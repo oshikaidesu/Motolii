@@ -11,4 +11,4 @@ grid.set("Display", "Grid").set("Grid Columns", 12).set("Grid Rows", 12).set("Ga
 tiles.forEach((t) => t.set("Position", [0, 0]).set("Horizontal Sizing", "Fill").set("Vertical Sizing", "Fill"));
 mover.set("Position Type", "Absolute").set("Scale", [0.09, 0.09])
   .keys("Position", [[0, [140, 140], "Bezier"], [2, [700, 260], "Bezier"], [4, [260, 700], "Bezier"], [6, [140, 140]]]);
-mover.effect("Field", { "Spread": 0, "Turn": 180, "Strength": 260, "Reach": 420, "Hold": 0.8, "Tumble": 0.5 });
+mover.effect("Field", { "Spread": 0, "Turn": 180, "Strength": 260, "Reach": 420, "Hold": 0.8 });

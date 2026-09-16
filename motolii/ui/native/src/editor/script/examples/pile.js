@@ -14,4 +14,4 @@ room.set("Display", "Flex").set("Horizontal Sizing", "Fixed").set("Vertical Sizi
   .set("Width", 1160).set("Height", 800).set("Background", "#17171D").set("Border Radius", 20).set("Position", [140, 180]);
 things.forEach((t, k) => t.set("Position Type", "Absolute").set("Margin", 6).set("Position", spots[k]));
 g.set("Position Type", "Absolute").set("Position", [580, 400]);
-g.effect("Field", { "Spread": 1, "Angle": 90, "Strength": 1100, "Tumble": 0.75 });
+g.effect("Field", { "Spread": 1, "Angle": 90, "Strength": 1100 });
