@@ -50,17 +50,19 @@ fn block(k: u32, p: BlockParams) -> Offset {
     //   元から = 指数で寄る・離れる。回りは決まった角度まで回って止まる
     let ease = 0.35;
     let ramp = 1.0 - exp(-t / ease);
+    // 立ち上がりの時刻: 0 から急に動き出さない(利用者 2026-09-16「動きは離散的にならないように」)。
+    let te = t - ease * ramp;
 
     // 一様: 角度の向きへ、終端の速さ force px/秒 で落ちる・流される(comp の下は +90°)。
     let a = radians(p.angle);
-    let uniform = vec2f(cos(a), sin(a)) * force * (t - ease * ramp);
+    let uniform = vec2f(cos(a), sin(a)) * force * te;
 
     // 元から: 寄る・離れる長さは指数、回る角は決まった量まで。
     var local = vec2f(0.0);
     if d > 1e-4 {
         let rate = force / 200.0;
-        let r = d * exp(-cos(turn) * rate * t);
-        let spin = sin(turn) * 12.566371 * (1.0 - exp(-abs(rate) * t));
+        let r = d * exp(-cos(turn) * rate * te);
+        let spin = sin(turn) * 12.566371 * (1.0 - exp(-abs(rate) * te));
         let dir = away / d;
         let turned = vec2f(dir.x * cos(spin) - dir.y * sin(spin), dir.x * sin(spin) + dir.y * cos(spin));
         local = turned * r - away;

@@ -406,6 +406,63 @@ mod tests {
         assert!((y1 - y0 - 26.8).abs() < 1.5, "1 秒で 26.8px 下がる ({y0} → {y1})");
     }
 
+    /// 場の動きはコマからコマへ飛ばない(利用者 2026-09-16「動きは離散的にならないように」)。
+    /// 同じ画を 30 コマ描いて、真ん中の動いた量の差(加速度)が、動いた量そのものより小さいことを見る。
+    #[test]
+    fn a_field_moves_without_jumping_between_frames() {
+        let fps = Fps::try_new(30, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0; 4] })).unwrap();
+        let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
+        let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
+        let square = |size: f64, fill: Rgb| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(fill), ..Default::default() }) });
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 40) } },
+            Intent::SetAttrs { layer: group, patch: two_d.clone() },
+            Intent::AddLayer(ball),
+            Intent::SetMeta { layer: ball, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 40) } },
+            Intent::SetAttrs { layer: ball, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d.clone() } },
+            Intent::SetShapes { layer: ball, shapes: vec![square(14.0, Rgb { r: 1.0, g: 1.0, b: 1.0 })] },
+            Intent::AddLayer(field),
+            Intent::SetMeta { layer: field, meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(0, None, 40) } },
+            Intent::SetAttrs { layer: field, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d } },
+            Intent::SetShapes { layer: field, shapes: vec![square(3.0, Rgb { r: 1.0, g: 0.0, b: 0.0 })] },
+        ]).unwrap();
+        let put = |doc: &mut Document, layer, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, group, property::POSITION, Value::Vec2([8.0, 8.0]));
+        put(&mut doc, group, layout::DISPLAY, Value::Enum(1));
+        put(&mut doc, group, layout::HORIZONTAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::VERTICAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::WIDTH, Value::F64(140.0));
+        put(&mut doc, group, layout::HEIGHT, Value::F64(84.0));
+        for layer in [ball, field] {
+            put(&mut doc, layer, layout::POSITION_TYPE, Value::Enum(1));
+        }
+        put(&mut doc, ball, property::POSITION, Value::Vec2([20.0, 20.0]));
+        put(&mut doc, field, property::POSITION, Value::Vec2([110.0, 60.0]));
+        doc.apply(Intent::SetEffects { layer: field, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.field".into() }] }).unwrap();
+        // 元へ寄る場(Spread 0、Turn 0)。一番動きが速い所を含む 30 コマを見る。
+        for (name, value) in [("spread", 0.0), ("turn", 0.0), ("strength", 220.0), ("reach", 0.0), ("tumble", 0.0), ("hold", 0.0)] {
+            doc.apply(Intent::SetConstant { layer: field, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(value) }).unwrap();
+        }
+        let mut engine = Engine::new().unwrap();
+        let centre = |pixels: &[u8]| {
+            let hits: Vec<(f32, f32)> = pixels.chunks_exact(4).enumerate()
+                .filter(|(_, c)| c[3] > 128 && c[2] > 128)
+                .map(|(i, _)| ((i as u32 % W) as f32, (i as u32 / W) as f32)).collect();
+            let n = hits.len().max(1) as f32;
+            (hits.iter().map(|p| p.0).sum::<f32>() / n, hits.iter().map(|p| p.1).sum::<f32>() / n)
+        };
+        let path: Vec<(f32, f32)> = (0..30).map(|f| centre(&engine.render_frame(&doc.view(), RationalTime::try_from_frame(f, fps).unwrap()).unwrap())).collect();
+        let step: Vec<f32> = path.windows(2).map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt()).collect();
+        let moved: f32 = step.iter().sum();
+        assert!(moved > 20.0, "場が動かしている ({moved}px)");
+        let jump = step.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+        let fastest = step.iter().copied().fold(0.0f32, f32::max);
+        assert!(jump <= fastest * 0.5, "コマ間の変わり方が跳ばない(最大の差 {jump}px、一番速いコマ {fastest}px)");
+    }
+
     /// Push Apart を GPU のブロックにしても、書類の間合いの押し合い(CPU、32 回)と同じだけ押す。
     #[test]
     fn the_push_apart_block_pushes_like_the_margin_law() {
