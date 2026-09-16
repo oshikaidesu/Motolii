@@ -836,6 +836,8 @@
 
 - [CSS の恩恵の台帳 — Web が軽々と使っている表現を、動画の骨格へ](2026-09-14-css-ledger.md)
 
+- [CSS の恩恵の台帳 2 — 2024〜2026 の追補](2026-09-17-css-ledger-2.md)
+
 - [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
 
 - [ドッグフーディング — 動画ソフト + CSS の例](2026-09-14-dogfooding-video-css.md)
