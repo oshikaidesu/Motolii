@@ -14,6 +14,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while frame <= to {
         // 物理は列なので、飛ばすコマも解くが描かない(描く側の費用だけを削る)。
         let pixels = engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, comp.fps)?)?;
+        for f in engine.layer_failures() {
+            eprintln!("frame {frame}: {f}");
+        }
         let image = image::RgbaImage::from_raw(comp.width, comp.height, pixels).ok_or("pixels")?;
         let saved = if shrink > 1 { image::imageops::resize(&image, comp.width / shrink, comp.height / shrink, image::imageops::FilterType::Triangle) } else { image };
         saved.save(format!("{dir}/{frame:04}.png"))?;

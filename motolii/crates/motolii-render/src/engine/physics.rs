@@ -134,6 +134,8 @@ pub(crate) struct Physics {
     reading: Option<i64>,
     /// 物ごとの時刻(順番の札でずれたコマ)。
     frames: HashMap<LayerId, i64>,
+    /// 組んだ時の輪郭(動く抜きの当たりを差し替える時に比べる)。
+    shapes: HashMap<LayerId, Option<std::sync::Arc<Vec<[f32; 2]>>>>,
 }
 
 impl Default for Physics {
@@ -163,6 +165,7 @@ impl Physics {
             baked: Vec::new(),
             reading: None,
             frames: HashMap::new(),
+            shapes: HashMap::new(),
             lies: Lies::default(),
         }
     }
@@ -243,6 +246,7 @@ impl Physics {
         }
         for body in bodies {
             let soft = body.hardness.clamp(0.0, 1.0);
+            let _ = soft;
             // 重さ 0 は押されない(留め具・引力の元)。周りがそれに当たり、それは押されない。
             // 鍵で動かせるように kinematic(場所は毎歩、書類から渡す)。
             let builder = if body.weight <= 0.0 { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() };
@@ -255,33 +259,57 @@ impl Physics {
                     .angular_damping(0.2 + soft * 2.4)
                     .build(),
             );
-            let margin = body.margin.max(0.0) * PX;
-            // 形そのもので当たる。凹みも効くように凸の塊へ分ける(星の谷に物が乗る)。
-            // 分けられない形は凸包で、輪郭が無い物だけ箱で当たる。
-            let hull = body.outline.as_ref().and_then(|points| {
-                let pts: Vec<Vec2> = points.iter().map(|p| Vec2::new((p[0] - body.centre[0]) * PX, (p[1] - body.centre[1]) * PX)).collect();
-                if pts.len() < 3 {
-                    return None;
-                }
-                let indices: Vec<[u32; 2]> = (0..pts.len() as u32).map(|i| [i, (i + 1) % pts.len() as u32]).collect();
-                Some(ColliderBuilder::convex_decomposition(&pts, &indices)).filter(|_| pts.len() >= 4).or_else(|| ColliderBuilder::convex_hull(&pts))
-            });
-            let collider = match hull {
-                Some(hull) => hull,
-                None if body.round => ColliderBuilder::ball((body.half[0].min(body.half[1]) * PX + margin).max(1e-3)),
-                None => ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3)),
-            };
-            self.colliders.insert_with_parent(
-                collider
-                    .friction(0.15 + soft * 1.05)
-                    .restitution((0.55 * (1.0 - soft * 2.0)).max(0.0))
-                    .density(body.weight.max(0.05))
-                    .collision_groups(Self::lane(rooms, body.group))
-                    .build(),
-                handle,
-                &mut self.bodies,
-            );
+            self.colliders.insert_with_parent(Self::collider_for(body, Self::lane(rooms, body.group)), handle, &mut self.bodies);
+            self.shapes.insert(body.layer, body.outline.clone());
             self.handles.insert(body.layer, (handle, body.centre));
+        }
+    }
+
+    /// 物の当たり: 形そのもの(凹みも効くように凸の塊へ分ける — 星の谷に物が乗る)。分けられない形は凸包、
+    /// 輪郭が無い物だけ箱か丸で当たる。摩擦・反発は硬さから、重さは密度へ。
+    fn collider_for(body: &Body, lane: InteractionGroups) -> Collider {
+        let soft = body.hardness.clamp(0.0, 1.0);
+        let margin = body.margin.max(0.0) * PX;
+        let hull = body.outline.as_ref().and_then(|points| {
+            let pts: Vec<Vec2> = points.iter().map(|p| Vec2::new((p[0] - body.centre[0]) * PX, (p[1] - body.centre[1]) * PX)).collect();
+            if pts.len() < 3 {
+                return None;
+            }
+            let indices: Vec<[u32; 2]> = (0..pts.len() as u32).map(|i| [i, (i + 1) % pts.len() as u32]).collect();
+            Some(ColliderBuilder::convex_decomposition(&pts, &indices)).filter(|_| pts.len() >= 4).or_else(|| ColliderBuilder::convex_hull(&pts))
+        });
+        let collider = match hull {
+            Some(hull) => hull,
+            None if body.round => ColliderBuilder::ball((body.half[0].min(body.half[1]) * PX + margin).max(1e-3)),
+            None => ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3)),
+        };
+        collider
+            .friction(0.15 + soft * 1.05)
+            .restitution((0.55 * (1.0 - soft * 2.0)).max(0.0))
+            .density(body.weight.max(0.05))
+            .collision_groups(lane)
+            .build()
+    }
+
+    /// 動く抜き(重さ 0 の動画・絵)の輪郭がコマで変わったら、当たりをそのコマの形に差し替える。
+    /// 手が動けば当たりも動く — 抜いた後の透過が当たり、はコマごとに真。
+    fn refresh_shapes(&mut self, rooms: &[Room], bodies: &[Body]) {
+        for body in bodies.iter().filter(|b| b.weight <= 0.0) {
+            let same = match (self.shapes.get(&body.layer), &body.outline) {
+                (Some(Some(a)), Some(b)) => std::sync::Arc::ptr_eq(a, b) || **a == **b,
+                (Some(None), None) => true,
+                _ => false,
+            };
+            if same {
+                continue;
+            }
+            let Some(&(handle, _)) = self.handles.get(&body.layer) else { continue };
+            let old: Vec<ColliderHandle> = self.bodies.get(handle).map(|rb| rb.colliders().to_vec()).unwrap_or_default();
+            for c in old {
+                self.colliders.remove(c, &mut self.islands, &mut self.bodies, false);
+            }
+            self.colliders.insert_with_parent(Self::collider_for(body, Self::lane(rooms, body.group)), handle, &mut self.bodies);
+            self.shapes.insert(body.layer, body.outline.clone());
         }
     }
 
@@ -328,6 +356,9 @@ impl Physics {
         let sub = self.lies.substeps.max(1);
         self.params.dt = (1.0 / fps / sub as f64) as f32;
         for step in step_from..=frame.max(0) {
+            if step == frame.max(0) {
+                self.refresh_shapes(rooms, bodies);
+            }
             for i in 1..=sub {
                 // 最後のコマだけ壁を補間する(それより前のコマは既に目的地に着いている)。
                 let k = if step == frame.max(0) { i as f32 / sub as f32 } else { 1.0 };

@@ -936,9 +936,18 @@ impl Engine {
             return Ok((None, natural));
         }
         if let (Some(texture), Some(pts)) = (&texture, fresh_pts) {
+            // 揃ったコマはその場で写し、写しの方を渡す。復号器の texture は 1 本を毎コマ書き換えるので、
+            // それを渡すと効果の焼き(入力 texture の handle が鍵)が「同じ入力」と見て前のコマの絵を返す
+            // (Chroma Key を掛けた動画が 0 コマ目で止まった、2026-09-17)。
             let key = (path.to_owned(), pts);
-            if !self.frame_cache.contains_key(&key) && !self.pending_frame_copies.iter().any(|(p, t, _)| (p, *t) == (&key.0, key.1)) {
-                self.pending_frame_copies.push((key.0, key.1, texture.clone()));
+            if !self.frame_cache.contains_key(&key) {
+                self.remember_video_frame(path, pts, texture);
+            }
+            self.pending_frame_copies.retain(|(p, t, _)| (p, *t) != (&key.0, key.1));
+            let tick = self.frame_cache_tick;
+            if let Some(hit) = self.frame_cache.get_mut(&key) {
+                hit.last_use = tick;
+                return Ok((Some(LayerContent::Texture(hit.texture.clone())), natural));
             }
         }
         Ok((texture.map(LayerContent::Texture), natural))
