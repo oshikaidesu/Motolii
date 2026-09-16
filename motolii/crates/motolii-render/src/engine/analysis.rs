@@ -140,10 +140,26 @@ impl Engine {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         self.keyed_outlines.clear();
         let resolved = view.resolved_layers(t).map_err(store)?;
+        let revision = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            view.revision_key().hash(&mut h);
+            h.finish()
+        };
+        let frame = t.try_to_frame_round(view.composition().map_err(store)?.map_or(crate::doc::store::Fps::try_new(30, 1).unwrap(), |c| c.fps)).unwrap_or(0);
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
             // 絵・動画で、形を変える効果が載っている物だけ(形の層は書類の輪郭の方が正確で軽い)。
-            if !matches!(layer.source, crate::doc::store::LayerSource::File { .. }) || layer.effects.is_empty() {
+            let crate::doc::store::LayerSource::File { path, .. } = &layer.source else { continue };
+            if layer.effects.is_empty() {
                 continue;
+            }
+            // 止まった絵は 1 回だけ読む。動く物は版か コマが変わった時だけ読み直す。
+            let still = crate::render::media::is_still_image_path(path);
+            if let Some((seen_revision, seen_frame, outline)) = self.keyed_cache.get(&layer.id) {
+                if *seen_revision == revision && (still || *seen_frame == frame) {
+                    self.keyed_outlines.insert(layer.id, outline.clone());
+                    continue;
+                }
             }
             let target = ResolvedLayer { matte: None, clip_to_below: false, ..layer.clone() };
             let Some(picture) = self.layer_linear_picture(view, &resolved, &target, t, comp)? else { continue };
@@ -175,7 +191,9 @@ impl Engine {
             let outline: Vec<[f32; 2]> = points.iter()
                 .map(|p| [p[0] * step as f32 / per_logical - pad, p[1] * step as f32 / per_logical - pad])
                 .collect();
-            self.keyed_outlines.insert(layer.id, std::sync::Arc::new(outline));
+            let outline = std::sync::Arc::new(outline);
+            self.keyed_cache.insert(layer.id, (revision, frame, outline.clone()));
+            self.keyed_outlines.insert(layer.id, outline);
         }
         Ok(())
     }
@@ -188,7 +206,7 @@ impl Engine {
         let mut seen = Vec::new();
         self.overlay_frames.clear();
         // 抜いた後の形を先に取る(この間は層を 1 枚ずつ組んで読み戻すので、物理は解かない)。
-        if !self.analysing {
+        if !self.analysing && std::env::var("MOTOLII_NO_ALPHA_SHAPE").is_err() {
             self.analysing = true;
             let outlines = self.alpha_outlines(view, t, composition.spec());
             self.analysing = false;

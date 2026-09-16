@@ -321,7 +321,7 @@ impl Engine {
         if self.feedback_replaying {
             self.prepare_blocks(view, comp, t, resolved)?;
             let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
-            self.run_blocks(t);
+            self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
             return Ok(layers);
         }
         self.compositor.feedback_set_revision(view.revision_key());
@@ -330,7 +330,7 @@ impl Engine {
         let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
         let seen = std::mem::take(&mut self.feedback_keys_seen);
         if !self.replay_feedback(view, comp, camera, projection_camera, t, &seen)? {
-            self.run_blocks(t);
+            self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
             return Ok(layers);
         }
         // 辿り直しで状態が動いた: 焼いた絵は辿り直す前の物なので捨て、t をもう一度組む。
@@ -339,7 +339,7 @@ impl Engine {
         self.stamp_clock(view, t);
         self.prepare_blocks(view, comp, t, resolved)?;
         let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
-        self.run_blocks(t);
+        self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
         self.feedback_keys_seen.clear();
         Ok(layers)
     }
@@ -588,7 +588,8 @@ impl Engine {
                 let screen = (built.content.texture().is_none() || passes.iter().any(|p| p.reads_backdrop || p.reads_composite())).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut passes, layer.id, layer.copy, 0, screen);
                 // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
-                if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
+                // 解き手が動かす物は、書類の位置で間引かない(画面の外から入って来る)。
+                if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && !self.blocks.moves(layer.id) && offscreen(comp, camera, &built, &passes) {
                     continue;
                 }
                 (built, passes)
@@ -1612,8 +1613,10 @@ impl Engine {
         let screen: ScreenRect = [0.0, 0.0, comp.width as f32, comp.height as f32];
         let mut covers: Vec<ScreenRect> = Vec::new();
         for (index, layer) in resolved.iter().enumerate().rev() {
-            // 他の層の入力になる物は消さない。
-            let feeds_others = matte_sources.contains(&layer.id) || layer.matte.is_some() || layer.clip_to_below;
+            // 他の層の入力になる物は消さない。解き手が動かす物も消さない — 画面の外から入って来る
+            // (利用者 2026-09-16 の見本: 上から降ってくる切り抜き)。
+            let feeds_others = matte_sources.contains(&layer.id) || layer.matte.is_some() || layer.clip_to_below
+                || self.blocks.moves(layer.id);
             let Some((rect, axis_aligned)) = self.media_screen_rect(comp, camera, layer) else { continue };
             let plain = layer.effects.is_empty() && layer.after_effects.is_empty() && layer.masks.is_empty();
             let offscreen = rect[2] < 0.0 || rect[3] < 0.0 || rect[0] > screen[2] || rect[1] > screen[3];

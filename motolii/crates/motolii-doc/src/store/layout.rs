@@ -179,8 +179,6 @@ pub const ITEM_ROWS: &[Row] = &[
     (LAYOUT_ROTATION, "Layout Rotation", Value::F64(0.0), None, &[]),
     (LAYOUT_TILT_X, "Layout Tilt X", Value::F64(0.0), None, &[]),
     (LAYOUT_TILT_Y, "Layout Tilt Y", Value::F64(0.0), None, &[]),
-    (HARDNESS, "Hardness", Value::F64(0.5), Some((0.0, 1.0)), &[]),
-    (HEAVINESS, "Heaviness", Value::F64(1.0), Some((0.0, 100.0)), &[]),
 ];
 
 /// Overflow = Bounce(提案 2026-09-15、利用者「物理、これは嘘でできる」): 流れの外の子の箱を、親の箱の内側へ鏡で折り返す。
@@ -219,6 +217,9 @@ const CANVAS_MARGIN: f32 = 1.0;
 /// 間合いの欄(容器の中でも外でも、すべての物)。
 pub const SPACE_ROWS: &[Row] = &[
     (MARGIN, "Margin", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
+    // 手触りは物ごと(容器の中でも外でも)。人は摩擦係数を操作しない(提案 2026-09-16)。
+    (HARDNESS, "Hardness", Value::F64(0.5), Some((0.0, 1.0)), &[]),
+    (HEAVINESS, "Heaviness", Value::F64(1.0), Some((0.0, 100.0)), &[]),
     (FLEX_SHRINK, "Flex Shrink", Value::F64(1.0), Some((0.0, 1000.0)), &[]),
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),

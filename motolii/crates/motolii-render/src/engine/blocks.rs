@@ -108,6 +108,13 @@ pub(crate) struct BlockState {
     batches: Vec<BlockBatch>,
 }
 
+impl BlockState {
+    /// 解き手が動かす物か(描く前に間引かないため)。
+    pub(crate) fn moves(&self, layer: LayerId) -> bool {
+        self.slots.contains_key(&layer)
+    }
+}
+
 impl Engine {
     /// 今のコマの物ごとのずれ(震えを測る道具のため。読み戻すので描画では使わない)。
     /// 可視のモードが読む: 物理の物の箱(comp の px、解き手が動かした後)。

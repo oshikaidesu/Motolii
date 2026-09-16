@@ -132,6 +132,8 @@ pub struct Engine {
     analysing: bool,
     /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
     keyed_outlines: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>>,
+    /// 形の覚え: 書類の版とコマが同じなら読み戻さない。止まった絵は 1 回だけ。
+    keyed_cache: HashMap<LayerId, (u64, i64, std::sync::Arc<Vec<[f32; 2]>>)>,
     /// 今描いている窓(画面の道の feedback は窓ごとに状態を持つ)。読み戻しの道では None = 出力寸法。
     feedback_window: Option<crate::render::compositor::Window>,
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
@@ -219,6 +221,7 @@ impl Engine {
             feedback_replaying: false,
             analysing: false,
             keyed_outlines: HashMap::new(),
+            keyed_cache: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
@@ -290,6 +293,7 @@ impl Engine {
             feedback_replaying: false,
             analysing: false,
             keyed_outlines: HashMap::new(),
+            keyed_cache: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
