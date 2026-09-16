@@ -32,8 +32,15 @@ pub(crate) struct BlobTrackState {
     tracker: BlobTracker,
     previous: Option<(Vec<u8>, u32, u32)>,
     marks: BTreeMap<i64, Vec<BlobMark>>,
-    /// Show Mask の時だけ、コマごとの二値。
+    /// コマごとの二値(キーの形)。直近の数コマだけ残す。物理の当たりと Show Mask が読む。
     masks: BTreeMap<i64, (Vec<u8>, u32, u32)>,
+}
+
+impl BlobTrackState {
+    /// 直近のコマの二値(物理がキーの形を当たりに使う)。
+    pub(crate) fn latest_mask(&self) -> Option<(&[u8], u32, u32)> {
+        self.masks.values().next_back().map(|(bits, w, h)| (bits.as_slice(), *w, *h))
+    }
 }
 
 impl Engine {
@@ -290,9 +297,14 @@ impl Engine {
             ..*settings
         };
         let previous = state.previous.as_ref().filter(|(_, w, h)| *w == width && *h == height).map(|(p, _, _)| p.as_slice());
-        if keep_mask {
-            let bits = mask(&pixels, width, height, previous, &scaled);
-            state.masks.insert(frame, (bits.iter().map(|b| u8::from(*b) * 255).collect(), width, height));
+        // 二値は Show Mask の時だけでなく、いつも残す(物理がキーの形を当たりに使う)。
+        // 覚えるのは直近の数コマだけ。
+        let _ = keep_mask;
+        let bits = mask(&pixels, width, height, previous, &scaled);
+        state.masks.insert(frame, (bits.iter().map(|b| u8::from(*b) * 255).collect(), width, height));
+        while state.masks.len() > 4 {
+            let Some(oldest) = state.masks.keys().next().copied() else { break };
+            state.masks.remove(&oldest);
         }
         let regions = detect(&pixels, width, height, previous, &scaled);
         let blobs = state.tracker.step(regions, &scaled);

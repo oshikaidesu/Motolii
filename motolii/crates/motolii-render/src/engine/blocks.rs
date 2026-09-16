@@ -110,6 +110,21 @@ pub(crate) struct BlockState {
 
 impl Engine {
     /// 今のコマの物ごとのずれ(震えを測る道具のため。読み戻すので描画では使わない)。
+    /// キーの形(クロマキー・動きの差)の輪郭を素材座標で。解析が持っている二値から、
+    /// 3D の網と同じ考え方(方向ごとの最遠点)で取る。
+    fn keyed_outline(&self, layer: LayerId, tracker: LayerId, extent: [f32; 4]) -> Option<Vec<[f32; 2]>> {
+        let _ = layer;
+        let state = self.blob_tracks.get(&tracker)?;
+        let (bits, width, height) = state.latest_mask()?;
+        let points = crate::render::media::silhouette_from_mask(bits, width, height);
+        if points.len() < 3 {
+            return None;
+        }
+        // 二値は縮めた解析の絵なので、素材の寸法へ戻す。
+        let (sx, sy) = ((extent[2] - extent[0]) / width as f32, (extent[3] - extent[1]) / height as f32);
+        Some(points.iter().map(|p| [extent[0] + p[0] * sx, extent[1] + p[1] * sy]).collect())
+    }
+
     /// 可視のモードが読む: 物理の物の箱(comp の px、解き手が動かした後)。
     pub(crate) fn physics_marks(&self) -> Vec<crate::doc::store::analysis::BlobMark> {
         self.blocks.objects.iter().enumerate().filter_map(|(k, it)| {
@@ -191,6 +206,42 @@ impl Engine {
         let field_blocks: Vec<String> = self.compositor.catalog.definitions.iter()
             .filter(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room)
             .map(|d| d.plugin_id().to_owned()).collect();
+        // キーの形(絵・動画)は先に取る。キーを解いているのは「追う層」なので、追われている層へ結び直す。
+        let mut trackers: HashMap<LayerId, LayerId> = HashMap::new();
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            for effect in &layer.effects {
+                if !crate::doc::store::blob::is_blob_track(&effect.plugin_id) {
+                    continue;
+                }
+                let source = effect.params.iter().find(|(n, _)| n == "source").and_then(|(_, v)| match v {
+                    Value::LayerId(id) if *id != 0 => Some(LayerId(*id)),
+                    Value::F64(v) if *v >= 1.0 => Some(LayerId(v.round() as u64)),
+                    _ => None,
+                });
+                if let Some(source) = source {
+                    trackers.insert(source, layer.id);
+                }
+            }
+        }
+        let mut extents: HashMap<LayerId, [f32; 4]> = HashMap::new();
+        let mut keyed: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>> = HashMap::new();
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            if !matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::File { .. })) {
+                continue;
+            }
+            let tracker = trackers.get(&layer.id).copied().unwrap_or(layer.id);
+            let extent = match (view.layer_box(layer.id, t).map_err(store)?, view.meta(layer.id).map_err(store)?.map(|m| m.source)) {
+                (Some(own), _) => Some(own),
+                // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
+                (None, Some(crate::doc::store::LayerSource::File { path, .. })) => self.material_extent(&path, comp).map(|e| [0.0, 0.0, e[0], e[1]]),
+                _ => None,
+            };
+            let Some(extent) = extent else { continue };
+            extents.insert(layer.id, extent);
+            if let Some(points) = self.keyed_outline(layer.id, tracker, extent) {
+                keyed.insert(layer.id, std::sync::Arc::new(points));
+            }
+        }
         let state = &mut self.blocks;
         state.fps = view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64());
         state.now = Some(t);
@@ -257,7 +308,8 @@ impl Engine {
                 },
                 None => frame,
             };
-            let Some(own) = view.layer_box(layer.id, t).map_err(store)? else { continue };
+            // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
+            let Some(own) = view.layer_box(layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()) else { continue };
             // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
             // 当たりが元の形の大きさのままになる。
             let stretch = solved.slots.get(&layer.id).map_or([1.0, 1.0], |slot| slot.stretch);
@@ -266,6 +318,9 @@ impl Engine {
                     let shapes = view.shapes_at(layer.id, t).map_err(store)?;
                     outline_of(&shapes, stretch).map(std::sync::Arc::new)
                 }
+                // 絵・動画は、キー(クロマキー・動きの差)の形をそのまま当たりにする
+                // (利用者 2026-09-16「クロマキーした動画で物理演算ができるかも」)。
+                Some(crate::doc::store::LayerSource::File { .. }) => keyed.get(&layer.id).cloned(),
                 _ => None,
             };
             let own = match solved.slots.get(&layer.id).map(|slot| slot.stretch) {

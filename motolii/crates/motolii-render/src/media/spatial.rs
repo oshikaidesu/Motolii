@@ -132,6 +132,33 @@ pub fn silhouette_points(points: impl IntoIterator<Item = glam::Vec3>) -> Vec<gl
     kept
 }
 
+/// The outline of a keyed picture, the same way as the 3D one: for each of `SILHOUETTE_DIRECTIONS / 4`
+/// directions around the circle, the lit pixel farthest that way. A keyed video (chroma key) therefore
+/// gets the same kind of outline a mesh does (2026-09-16 利用者「クロマキーした動画で物理演算ができるかも」).
+pub fn silhouette_from_mask(bits: &[u8], width: u32, height: u32) -> Vec<[f32; 2]> {
+    if width == 0 || height == 0 || bits.len() < (width * height) as usize {
+        return Vec::new();
+    }
+    let lit: Vec<[f32; 2]> = (0..height).flat_map(|y| (0..width).map(move |x| (x, y)))
+        .filter(|(x, y)| bits[(y * width + x) as usize] > 127)
+        .map(|(x, y)| [x as f32 + 0.5, y as f32 + 0.5])
+        .collect();
+    if lit.len() < 8 {
+        return Vec::new();
+    }
+    let n = SILHOUETTE_DIRECTIONS / 4;
+    let mut kept: Vec<[f32; 2]> = Vec::with_capacity(n);
+    for i in 0..n {
+        let a = std::f32::consts::TAU * i as f32 / n as f32;
+        let (dx, dy) = (a.cos(), a.sin());
+        let farthest = lit.iter().copied().max_by(|p, q| (p[0] * dx + p[1] * dy).total_cmp(&(q[0] * dx + q[1] * dy))).unwrap();
+        if !kept.contains(&farthest) {
+            kept.push(farthest);
+        }
+    }
+    kept
+}
+
 #[cfg(test)]
 mod silhouette_tests {
     use super::*;
