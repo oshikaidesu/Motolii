@@ -63,6 +63,8 @@ pub(crate) struct Body {
     pub layer: LayerId,
     /// どの箱の中か(Room::group)。
     pub group: u32,
+    /// この物の時刻(コマ)。箱の順番の札でずれる。集まる時はここから逆に読む。
+    pub frame: i64,
     /// 箱の真ん中と半分の大きさ(comp の px)。
     pub centre: [f32; 2],
     pub half: [f32; 2],
@@ -128,8 +130,10 @@ pub(crate) struct Physics {
     baked: Vec<HashMap<LayerId, ([f32; 2], f32)>>,
     /// 棚の札から読んだ嘘と欄。
     pub(crate) lies: Lies,
-    /// 集まる時に読むコマ(焼きの番号)。無ければ生の世界を読む。
-    reading: Option<usize>,
+    /// 集まる時の終わりのコマ。あれば物ごとの時刻から逆に焼きを読む。無ければ生の世界を読む。
+    reading: Option<i64>,
+    /// 物ごとの時刻(順番の札でずれたコマ)。
+    frames: HashMap<LayerId, i64>,
 }
 
 impl Default for Physics {
@@ -158,6 +162,7 @@ impl Physics {
             walls: Vec::new(),
             baked: Vec::new(),
             reading: None,
+            frames: HashMap::new(),
             lies: Lies::default(),
         }
     }
@@ -290,7 +295,9 @@ impl Physics {
         if let Some(last) = gather_last {
             self.reading = None;
             self.solve(rooms, bodies, last, fps, None);
-            self.reading = Some((last - frame.clamp(0, last)) as usize);
+            let _ = frame;
+            self.frames = bodies.iter().map(|b| (b.layer, b.frame)).collect();
+            self.reading = Some(last);
             return;
         }
         self.reading = None;
@@ -514,7 +521,10 @@ impl Physics {
     /// 物ごとの、始まりの場所からのずれ(comp の px)と回り(度)。
     pub(crate) fn offset(&self, layer: LayerId) -> Option<([f32; 2], f32)> {
         match self.reading {
-            Some(k) => self.baked.get(k)?.get(&layer).copied(),
+            Some(last) => {
+                let frame = self.frames.get(&layer).copied().unwrap_or(0).clamp(0, last);
+                self.baked.get((last - frame) as usize)?.get(&layer).copied()
+            }
             None => self.live_offset(layer),
         }
     }

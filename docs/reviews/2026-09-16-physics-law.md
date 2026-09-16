@@ -390,3 +390,15 @@
 ### 未決
 - 先読み(予備動作)・粒度(場の強さで行→語→字)・触っている物が手・格子の磁石・ループの周期境界は、法文だけで実装なし
 - Gather 中は鍵で変わる場の値を前向きの各コマに写せない(今は現在の t の値で全コマを解く)
+
+## 順番は箱の札(提案、2026-09-16、Cavalry の Scheduling Group + Stagger の写し)
+
+利用者「Cavalry の定義した粒を利用しやすく意図で組み替えたい」。粒 → 意図 → 置き場の表は同日の会話(Sequence / Overlap / Order / From End → 箱、Level → 文字、Along → Repeater、Path → 場、Asleep / On Touch → 物)。
+
+最初に起こしたのは箱の順番。Motolii には既に CSS 由来の `Stagger`(秒)と `Stagger From`(Start / Center / End / Edges)が移り方の遅れとしてあったので、**同じ札を層の時刻にも効かせる**(欄を増やさない):
+- 親の箱に Stagger があれば、子の**時刻そのもの**(鍵・効果・物理の集まり)が、層の順の位置に応じて最大 Stagger 秒ずれる。位置の取り方は Stagger From と同じ語(移り方の遅れは並んだ場所で、時刻は層の順で測る — 場所で測ると配置と時刻が巡る)
+- 足した札は `From End`(Off / On)だけ: Off = 始まりに揃う(後の子が後から始まる)、On = 終わりに揃う(早い子が先に着く)。Cavalry の「Schedule from End」
+- 入れ子は親のずれの上に積む。hook は value_at の 1 箇所(layout.rs `layer_time`、view.rs)。順番の欄そのものは読む時にずらさない
+- 物理の集まる(Gather)は物ごとの時刻で焼きを読む(1 字ずつ着く)。散る(前向き)は世界が 1 つなので物ごとの時刻は効かない(未決)
+
+代償: 子の値を読む度に親の Stagger を 1 回引く(record cache)。Stagger の無い箱ならそこで終わる。

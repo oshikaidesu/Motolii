@@ -98,6 +98,8 @@ pub(crate) struct BlockState {
     field_rooms: std::collections::HashSet<u32>,
     /// comp の最後のコマ(集まる時の「終わり」)。
     last_frame: i64,
+    /// 物ごとの時刻(順番の札でずれたコマ)。object_layers と同じ並び。
+    object_frames: Vec<i64>,
     /// 場の元(物の番号)と、その効果の順・欄。動く相手は物が揃ってから決める。
     fields: Vec<(usize, String, Vec<f32>, u32)>,
     objects: Vec<BlockItem>,
@@ -254,6 +256,7 @@ impl Engine {
         state.placed.clear();
         state.follows.clear();
         state.object_layers.clear();
+        state.object_frames.clear();
         state.slots.clear();
         state.field_rooms.clear();
         state.fields.clear();
@@ -442,6 +445,7 @@ impl Engine {
             }));
             state.bases.push(([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]));
             state.object_layers.push(layer.id);
+            state.object_frames.push((view.layer_time(layer.id, t).map_err(store)?.as_seconds_f64() * state.fps).round() as i64);
             for (stage, (plugin, params, is_field)) in blocks_here.into_iter().enumerate() {
                 if is_field {
                     state.fields.push((stage, plugin, params, k));
@@ -536,11 +540,13 @@ impl Engine {
                 });
             }
         }
+        let frame = (t.as_seconds_f64() * fps).round() as i64;
         let bodies: Vec<Body> = state.objects.iter().enumerate()
             .filter(|(_, it)| rooms.contains_key(&it.group))
             .map(|(k, it)| Body {
                 layer: state.object_layers[k],
                 group: it.group,
+                frame: state.object_frames.get(k).copied().unwrap_or(frame),
                 centre: [(it.lo[0] + it.hi[0]) * 0.5, (it.lo[1] + it.hi[1]) * 0.5],
                 half: [(it.hi[0] - it.lo[0]) * 0.5, (it.hi[1] - it.lo[1]) * 0.5],
                 round: false,
@@ -553,7 +559,6 @@ impl Engine {
         // 箱の順は毎コマ同じに(当たりの組が箱の順で決まる)。
         let mut rooms: Vec<Room> = rooms.into_values().collect();
         rooms.sort_by_key(|r| r.group);
-        let frame = (t.as_seconds_f64() * fps).round() as i64;
         // 集まる: 終わりは構図。comp の最後まで前向きに解いて焼き、最後から逆に読む。
         let last = state.last_frame;
         state.physics.solve(&rooms, &bodies, frame, fps, gathering.then_some(last));

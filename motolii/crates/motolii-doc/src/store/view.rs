@@ -377,6 +377,11 @@ impl<'a> StoreView<'a> {
         let Some(source) = self.source_at_path(path, property)? else {
             return Ok(None);
         };
+        // 順番の札: 層の時刻は親の箱の Stagger でずれる(鍵も効果もこの時刻で読む)。
+        let t = match layer_id_of(path) {
+            Some(layer) if !super::layout::is_schedule_row(property.name()) => self.layer_time(layer, t)?,
+            _ => t,
+        };
 
         let mut acc: Option<Value> = match source.base {
             Some(PropertyBase::Track(track)) => Some(track.eval(t)),

@@ -19,6 +19,10 @@ pub const FLEX_WRAP: &str = "layout.flex_wrap";
 pub const JUSTIFY_CONTENT: &str = "layout.justify_content";
 pub const ALIGN_ITEMS: &str = "layout.align_items";
 pub const GAP: &str = "layout.gap";
+/// 順番の向き(提案 2026-09-16、Cavalry の Scheduling Group「Schedule from End」の写し)。箱の Stagger は移り方の遅れを
+/// 配るだけでなく、子の**時刻そのもの**(鍵・効果・物理の集まり)を Stagger 秒の幅で層の順にずらす。
+/// From End が On なら終わりに揃う向き(早い子が先に着く)、Off なら始まりに揃う(遅い子が後から始まる)。
+pub const FROM_END: &str = "layout.from_end";
 pub const PADDING: &str = "layout.padding";
 pub const GRID_COLUMNS: &str = "layout.grid_columns";
 pub const GRID_ROWS: &str = "layout.grid_rows";
@@ -157,6 +161,7 @@ pub const GROUP_ROWS: &[Row] = &[
     (SHADOW_SPREAD, "Shadow Spread", Value::F64(0.0), None, &[]),
     (STAGGER, "Stagger", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (STAGGER_FROM, "Stagger From", Value::Enum(0), None, &["Start", "Center", "End", "Edges"]),
+    (FROM_END, "From End", Value::Enum(0), None, &["Off", "On"]),
 ];
 
 /// 並ぶ子の欄(親の Display が Flex / Grid の時)。
@@ -273,6 +278,11 @@ pub fn track_label(property: &str) -> Option<String> {
 
 pub fn row(property: &str) -> Option<&'static Row> {
     GROUP_ROWS.iter().chain(ITEM_ROWS).chain(SPACE_ROWS).chain(CONNECT_ROWS).chain(READOUT_ROWS).find(|row| row.0 == property)
+}
+
+/// 順番の欄そのもの(これを読む時は時刻をずらさない — ずらしの根拠なので)。
+pub fn is_schedule_row(property: &str) -> bool {
+    matches!(property, STAGGER | STAGGER_FROM | FROM_END)
 }
 
 pub fn choices(property: &str) -> &'static [&'static str] {
@@ -694,6 +704,63 @@ impl StoreView<'_> {
             Some(Value::Enum(v)) => v as f64,
             _ => default,
         })
+    }
+
+    /// その層の時刻(順番の札でずれた後)。親の箱に Stagger があれば、層の順の位置(Stagger From: Start / Center /
+    /// End / Edges、移り方の遅れと同じ語)に応じて最大 Stagger 秒ずれる。From End なら進む(早い子が先に着く)、
+    /// でなければ遅れる(後の子が後から始まる)。入れ子は親のずれの上に積む。
+    pub fn layer_time(&self, layer: LayerId, t: RationalTime) -> Result<RationalTime, StoreError> {
+        let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent else { return Ok(t) };
+        let base = self.layer_time(parent, t)?;
+        let stagger = match self.value_at(parent, &PropertyId::new(STAGGER)?, base)? {
+            Some(Value::F64(v)) if v > 1e-9 => v,
+            _ => return Ok(base),
+        };
+        let siblings = self.schedule_children(parent)?;
+        let n = siblings.len();
+        let Some(i) = siblings.iter().position(|&s| s == layer) else { return Ok(base) };
+        let along = if n > 1 { i as f64 / (n - 1) as f64 } else { 0.0 };
+        let from_centre = (along - 0.5).abs() * 2.0;
+        let reach = match self.choice(parent, STAGGER_FROM, base)? {
+            1 => from_centre,
+            2 => 1.0 - along,
+            3 => 1.0 - from_centre,
+            _ => along,
+        };
+        let off = RationalTime::try_new((reach * stagger * 1_000_000.0).round() as i64, 1_000_000)
+            .map_err(|e| StoreError::Property(format!("stagger: {e}")))?;
+        let shifted = if self.choice(parent, FROM_END, base)? == 1 { base.try_add(off) } else { base.try_sub(off) }
+            .map_err(|e| StoreError::Property(format!("stagger: {e}")))?;
+        Ok(if shifted.as_seconds_f64() < 0.0 { RationalTime::ZERO } else { shifted })
+    }
+
+    /// 箱の子を層の順に(順番の札が読む)。書類の版ごとに覚える。
+    fn schedule_children(&self, parent: LayerId) -> Result<std::sync::Arc<Vec<LayerId>>, StoreError> {
+        thread_local! {
+            static KIDS: RefCell<HashMap<(u64, LayerId), std::sync::Arc<Vec<LayerId>>>> = RefCell::new(HashMap::new());
+        }
+        let key = (self.revision_key(), parent);
+        if let Some(hit) = KIDS.with(|k| k.borrow().get(&key).cloned()) {
+            return Ok(hit);
+        }
+        let mut kids: Vec<(i16, LayerId)> = Vec::new();
+        for layer in self.layers() {
+            if self.attrs(layer)?.unwrap_or_default().parent == Some(parent) {
+                if let Some(meta) = self.meta(layer)? {
+                    kids.push((meta.order, layer));
+                }
+            }
+        }
+        kids.sort();
+        let out = std::sync::Arc::new(kids.into_iter().map(|(_, l)| l).collect::<Vec<_>>());
+        KIDS.with(|k| {
+            let mut k = k.borrow_mut();
+            if k.len() > 512 {
+                k.clear();
+            }
+            k.insert(key, out.clone());
+        });
+        Ok(out)
     }
 
     pub(crate) fn choice(&self, layer: LayerId, name: &str, t: RationalTime) -> Result<i64, StoreError> {
