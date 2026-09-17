@@ -29,7 +29,8 @@ re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-2026081
 re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "08bc4bf01770e0440ec74325cea3a385322cfd6f", features = ["setup"] }
 # 物理の解き手は借りる(自作しない): 積み上げの warm start・摩擦・joint・snapshot を持っている。
 # 先例: Cavalry は Box2D。Rapier はその Rust 版で、状態の保存と復元がある(Apache-2.0)。
-rapier2d = "0.32"
+rapier3d = "0.32"
+parry2d = "0.26"
 # 道の平滑化は既製品(曲がりに合わせて点を割る)。先例: vello / re_renderer も lyon の族を使う。
 lyon_geom = "1.0"
 macaw = "0.30"

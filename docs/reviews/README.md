@@ -857,3 +857,4 @@
 - [Tracery 2 を移す — 仕様の写し](2026-09-14-tracery2-port-spec.md)
 
 - [build の置き場所 — 物理の調整と shader の編集で Rust を組み直さない](2026-09-17-build-placement.md)
+- [物理の解き手を 3D に — rapier2d → rapier3d、面の上に錠](2026-09-17-physics-3d.md)

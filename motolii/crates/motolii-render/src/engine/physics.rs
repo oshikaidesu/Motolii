@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use glam::Vec2;
-use rapier2d::prelude::*;
+use glam::{Vec2, Vec3};
+use rapier3d::prelude::*;
 
 use crate::doc::store::LayerId;
 
@@ -17,6 +17,11 @@ const PX: f32 = 0.01;
 /// 壁の厚み・長さ(m)。長い壁は箱が伸び縮みしても位置を追うだけで済む。
 const WALL_THICK: f32 = 0.5;
 const WALL_REACH: f32 = 60.0;
+/// 解き手は 3D(利用者 2026-09-17「3D にしておきます」)。絵は今まで通り面の上: 物は z=0 の板で、
+/// z の移動と x/y の回りは錠(`enabled_translations` / `enabled_rotations`)。板の厚み(m)は全員同じなので
+/// 質量・慣性の比は 2D と同じ(1 m にすると質量の数も 2D と同じ)。箱の奥行き(Depth、2026-09-14 の法 1)が
+/// 付いた時、ここが箱の Depth になり、錠が外れる(まだ欄に結んでいない)。
+const SLAB: f32 = 1.0;
 /// めり込み・抜けの法は解き手の物(取説 rapier 0.32 narrow_phase.rs:943): 速く動く側が壁(kinematic)でも
 /// 速度から予測接触を張る soft-CCD が効く。shape-cast の CCD は dynamic だけなので、壁と留め具はこちら。
 /// 1 コマにこの距離(m)まで動く壁を追う(= 200px/コマ)。
@@ -234,31 +239,33 @@ impl Physics {
                     }
                     let half = r * (std::f32::consts::PI / n as f32).tan() * 1.2;
                     self.colliders.insert(
-                        ColliderBuilder::cuboid(half, thick)
-                            .translation(Vec2::new(cx + (r + thick) * a.cos(), cy + (r + thick) * a.sin()))
-                            .rotation(a + std::f32::consts::FRAC_PI_2)
+                        ColliderBuilder::cuboid(half, thick, WALL_REACH)
+                            .translation(Vec3::new(cx + (r + thick) * a.cos(), cy + (r + thick) * a.sin(), 0.0))
+                            .rotation(Vec3::new(0.0, 0.0, a + std::f32::consts::FRAC_PI_2))
                             .friction(0.6)
                             .restitution(0.0)
                             .collision_groups(lane)
                             .build(),
                     );
                 }
+                Self::faces(&mut self.colliders, (cx, cy), lane, self.lies.soft_ccd + SLAB);
                 continue;
             }
             // 蓋はしない: 物は上から入って来る(注ぐ・落とす)。床と左右だけが壁。
             // 壁は長めに取り、箱が伸び縮みしても位置を追うだけで済ませる(箱ごとに世界が分かれるので隣に届かない)。
-            let _ = (cx, cy, w, h);
+            let _ = (w, h);
             for (which, (x, y)) in Self::wall_places(room).into_iter().enumerate() {
                 let (hx, hy) = if which == 0 { (WALL_REACH, WALL_THICK) } else { (WALL_THICK, WALL_REACH) };
                 let builder = if self.lies.walls_follow { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::fixed() };
-                let wall = self.bodies.insert(builder.translation(Vec2::new(x, y)).soft_ccd_prediction(self.lies.soft_ccd).build());
+                let wall = self.bodies.insert(builder.translation(Vec3::new(x, y, 0.0)).soft_ccd_prediction(self.lies.soft_ccd).build());
                 self.colliders.insert_with_parent(
-                    ColliderBuilder::cuboid(hx, hy).friction(0.6).restitution(0.0).collision_groups(lane).build(),
+                    ColliderBuilder::cuboid(hx, hy, WALL_REACH).friction(0.6).restitution(0.0).collision_groups(lane).build(),
                     wall,
                     &mut self.bodies,
                 );
                 self.walls.push((room.group, which, wall));
             }
+            Self::faces(&mut self.colliders, (cx, cy), lane, self.lies.soft_ccd + SLAB);
         }
         for body in bodies {
             let soft = body.hardness.clamp(0.0, 1.0);
@@ -266,9 +273,12 @@ impl Physics {
             // 重さ 0 は押されない(留め具・引力の元)。周りがそれに当たり、それは押されない。
             // 鍵で動かせるように kinematic(場所は毎歩、書類から渡す)。
             let builder = if body.weight <= 0.0 { RigidBodyBuilder::kinematic_position_based() } else { RigidBodyBuilder::dynamic() };
+            // 面の上だけ動く: z の移動と x/y の回りは錠(箱の Depth が付いたらここが外れる)。
             let handle = self.bodies.insert(
                 builder
-                    .translation(Vec2::new(body.centre[0] * PX, body.centre[1] * PX))
+                    .translation(Vec3::new(body.centre[0] * PX, body.centre[1] * PX, 0.0))
+                    .enabled_translations(true, true, false)
+                    .enabled_rotations(false, false, true)
                     .ccd_enabled(true)
                     .soft_ccd_prediction(self.lies.soft_ccd)
                     .linear_damping(0.1 + soft * 1.6)
@@ -278,6 +288,21 @@ impl Physics {
             self.colliders.insert_with_parent(Self::collider_for(body, Self::lane(rooms, body.group)), handle, &mut self.bodies);
             self.shapes.insert(body.layer, body.outline.clone());
             self.handles.insert(body.layer, (handle, body.centre));
+        }
+    }
+
+    /// 箱の前後の面。箱の 6 面のうちの 2 面(蓋は法の通り無し: 物は上から入って来る)。z は錠なので今は届かない
+    /// 距離に置く — 板に接して置くと擦れて(摩擦)面の上の動きが止まる。箱の Depth が付いたら位置がその奥行きになる。
+    fn faces(colliders: &mut ColliderSet, (cx, cy): (f32, f32), lane: InteractionGroups, clearance: f32) {
+        for sign in [-1.0f32, 1.0] {
+            colliders.insert(
+                ColliderBuilder::cuboid(WALL_REACH, WALL_REACH, WALL_THICK)
+                    .translation(Vec3::new(cx, cy, sign * (SLAB * 0.5 + clearance + WALL_THICK)))
+                    .friction(0.6)
+                    .restitution(0.0)
+                    .collision_groups(lane)
+                    .build(),
+            );
         }
     }
 
@@ -291,13 +316,25 @@ impl Physics {
             if pts.len() < 3 {
                 return None;
             }
-            let indices: Vec<[u32; 2]> = (0..pts.len() as u32).map(|i| [i, (i + 1) % pts.len() as u32]).collect();
-            Some(ColliderBuilder::convex_decomposition(&pts, &indices)).filter(|_| pts.len() >= 4).or_else(|| ColliderBuilder::convex_hull(&pts))
+            // 凸分解は輪郭(2D、parry2d の VHACD — 今までと同じ分け方)で、凸の塊ごとに厚み SLAB の板の凸包にする。
+            // 3D の VHACD は閉じた三角網が要るが、面の物の当たりは輪郭が全てなので、分けるのは面の上で足りる。
+            let pieces: Vec<Vec<Vec2>> = if pts.len() >= 4 {
+                let indices: Vec<[u32; 2]> = (0..pts.len() as u32).map(|i| [i, (i + 1) % pts.len() as u32]).collect();
+                let decomposition = parry2d::transformation::vhacd::VHACD::decompose(&parry2d::transformation::vhacd::VHACDParameters::default(), &pts, &indices, true);
+                decomposition.compute_exact_convex_hulls(&pts, &indices)
+            } else {
+                vec![pts]
+            };
+            let slabs: Vec<(Pose, SharedShape)> = pieces.iter().filter_map(|piece| {
+                let solid: Vec<Vec3> = piece.iter().flat_map(|p| [Vec3::new(p.x, p.y, -SLAB * 0.5), Vec3::new(p.x, p.y, SLAB * 0.5)]).collect();
+                SharedShape::convex_hull(&solid).map(|hull| (Pose::IDENTITY, hull))
+            }).collect();
+            (!slabs.is_empty()).then(|| ColliderBuilder::new(SharedShape::compound(slabs)))
         });
         let collider = match hull {
             Some(hull) => hull,
             None if body.round => ColliderBuilder::ball((body.half[0].min(body.half[1]) * PX + margin).max(1e-3)),
-            None => ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3)),
+            None => ColliderBuilder::cuboid((body.half[0] * PX + margin).max(1e-3), (body.half[1] * PX + margin).max(1e-3), SLAB * 0.5),
         };
         collider
             .friction(0.15 + soft * 1.05)
@@ -371,6 +408,7 @@ impl Physics {
             .collect();
         let sub = self.lies.substeps.max(1);
         self.params.dt = (1.0 / fps / sub as f64) as f32;
+        let started = std::time::Instant::now();
         for step in step_from..=frame.max(0) {
             if step == frame.max(0) {
                 self.refresh_shapes(rooms, bodies);
@@ -380,7 +418,7 @@ impl Physics {
                 let k = if step == frame.max(0) { i as f32 / sub as f32 } else { 1.0 };
                 self.push(rooms, &prev_rooms, &prev_anchors, k, bodies);
                 self.pipeline.step(
-                    Vec2::ZERO,
+                    Vec3::ZERO,
                     &self.params,
                     &mut self.islands,
                     &mut self.broad,
@@ -400,6 +438,10 @@ impl Physics {
             let snapshot: HashMap<LayerId, ([f32; 2], f32)> = bodies.iter().filter_map(|b| Some((b.layer, self.live_offset(b.layer)?))).collect();
             self.baked.truncate(step as usize);
             self.baked.push(snapshot);
+        }
+        // 測り(`MOTOLII_PHYSICS_DEBUG=1`): このコマまでに進めた歩の時間。1 歩ずつなら 1 コマの解く時間。
+        if std::env::var("MOTOLII_PHYSICS_DEBUG").is_ok() {
+            eprintln!("physics solve: frame {frame} steps {}..={} bodies {} in {:.2}ms", step_from, frame.max(0), bodies.len(), started.elapsed().as_secs_f64() * 1e3);
         }
         self.frame = Some(frame.max(0));
     }
@@ -424,7 +466,7 @@ impl Physics {
             }
             let Some(aabb) = aabb else { continue };
             let (lo, hi) = ([room.rect[0] * PX, room.rect[1] * PX], [room.rect[2] * PX, room.rect[3] * PX]);
-            let mut fix = Vec2::ZERO;
+            let mut fix = Vec3::ZERO;
             if room.round {
                 // 丸い箱: 中心からの距離で戻す(外接の半径で見る)。
                 let r = (hi[0] - lo[0]).min(hi[1] - lo[1]) * 0.5;
@@ -434,7 +476,7 @@ impl Physics {
                 let away = mid - centre;
                 let far = away.length();
                 if far + own > r && far > 1e-6 && away.y > -own {
-                    fix = away / far * (r - own - far);
+                    fix = (away / far * (r - own - far)).extend(0.0);
                 }
             } else {
                 if aabb.mins.x < lo[0] { fix.x = lo[0] - aabb.mins.x; }
@@ -464,7 +506,7 @@ impl Physics {
             let (x, y) = Self::wall_places(room)[which];
             let (px, py) = prev_rooms.iter().find(|r| r.group == group).map_or((x, y), |r| Self::wall_places(r)[which]);
             if let Some(rb) = self.bodies.get_mut(wall) {
-                rb.set_next_kinematic_translation(Vec2::new(px + (x - px) * k, py + (y - py) * k));
+                rb.set_next_kinematic_translation(Vec3::new(px + (x - px) * k, py + (y - py) * k, 0.0));
             }
         }
         for body in bodies {
@@ -474,7 +516,7 @@ impl Physics {
                 // 押されない物は書類の場所へ(鍵で動く留め具・元)。ずれは 0 のまま描かれる。
                 let from = prev_anchors.get(&body.layer).copied().unwrap_or(body.centre);
                 let at = [from[0] + (body.centre[0] - from[0]) * k, from[1] + (body.centre[1] - from[1]) * k];
-                rb.set_next_kinematic_translation(Vec2::new(at[0] * PX, at[1] * PX));
+                rb.set_next_kinematic_translation(Vec3::new(at[0] * PX, at[1] * PX, 0.0));
                 if k >= 1.0 {
                     self.handles.insert(body.layer, (handle, body.centre));
                 }
@@ -482,6 +524,7 @@ impl Physics {
             }
             let mass = rb.mass().max(1e-4);
             let at = rb.translation();
+            // 場は面の上の矢(z = 0)。箱の奥行きが付いても場は面の上のまま。
             let mut force = Vec2::ZERO;
             for room in rooms {
                 force += Vec2::new(room.gravity[0] * PX, room.gravity[1] * PX) * mass;
@@ -508,7 +551,7 @@ impl Physics {
             let wake = self.forces.get(&body.layer).is_none_or(|last| (*last - force).length() > 1e-3 * force.length().max(1e-3));
             self.forces.insert(body.layer, force);
             rb.reset_forces(false);
-            rb.add_force(force, wake);
+            rb.add_force(force.extend(0.0), wake);
         }
     }
 
@@ -537,7 +580,7 @@ impl Physics {
                     if point.dist > 0.01 {
                         continue;
                     }
-                    let at = iso * point.local_p1;
+                    let at = iso.transform_point(point.local_p1);
                     out.push(([at.x / PX, at.y / PX], [normal.x, normal.y]));
                 }
             }
@@ -585,6 +628,9 @@ impl Physics {
         let &(handle, home) = self.handles.get(&layer)?;
         let rb = self.bodies.get(handle)?;
         let at = rb.translation();
-        Some(([at.x / PX - home[0], at.y / PX - home[1]], rb.rotation().angle().to_degrees()))
+        // 回りは z の軸だけ(x/y は錠)なので、四元数から z の角だけ読む。
+        let q = rb.rotation();
+        let turn = 2.0 * q.z.atan2(q.w);
+        Some(([at.x / PX - home[0], at.y / PX - home[1]], turn.to_degrees()))
     }
 }
