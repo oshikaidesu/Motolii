@@ -49,7 +49,7 @@ pub use text::{HangingPunctuation, TextAutospace, TextSpacingTrim};
 pub use view::StoreView;
 
 pub use crate::doc::core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};
-pub use crate::doc::eval::{EaseDir, GsapEase, GsapFamily, Interp, Keyframe, KeyframeTrack, Path, PathVertex, SpatialTangent, Value};
+pub use crate::doc::eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, SpatialTangent, Value};
 pub use crate::doc::vector::{
     OpKind, PathSource, Point as VectorPoint, RepeaterTransform, Shape, ShapeGroup, ShapeNode,
     ShapeOp,
@@ -428,8 +428,7 @@ fn accumulate_speed_offset(
             | Interp::Cyclic { .. }
             | Interp::Random { .. }
             | Interp::Steps { .. }
-            | Interp::ElasticSteps { .. }
-            | Interp::Gsap(_)) => {
+            | Interp::ElasticSteps { .. }) => {
                 return Err(StoreError::Property(format!(
                     "{} の {} 補間区間は積算未対応(発注の検収条件は Hold のみ、\
                      黙って近似しない — 対応するなら別発注で判断すること)",

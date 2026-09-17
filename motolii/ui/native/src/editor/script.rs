@@ -182,7 +182,7 @@ mod tests {
         assert!(outcome.unwrap_err().contains("No effect named"));
     }
 
-    /// GSAP の ease は文字列のまま(`power2.out` / `back.out(1.7)`)、鍵に GSAP の式で載る。知らない名前は両方の名前を並べて断る。
+    /// GSAP の ease は文字列で(`power2.out` / `back.out(1.7)`)、既存の型(Bezier / Elastic / Bounce / Steps)に写って鍵に載る。知らない名前は両方の名前を並べて断る。
     #[test]
     fn gsap_ease_strings_become_gsap_keys() {
         let (rt, outcome) = run(r#"
@@ -192,11 +192,11 @@ mod tests {
         let view = rt.doc.view();
         let layer = view.layers()[0];
         let track = view.track(layer, &PropertyId::new(property::OPACITY).unwrap()).unwrap().unwrap();
-        let kinds: Vec<String> = track.keys().iter().map(|k| match k.interp { Interp::Gsap(e) => e.to_string(), other => other.kind().to_owned() }).collect();
-        assert_eq!(kinds, ["power2.out", "back.out(1.7)", "elastic.out(1, 0.3)", "steps(5)", "none", "Linear"]);
+        let kinds: Vec<&str> = track.keys().iter().map(|k| k.interp.kind()).collect();
+        assert_eq!(kinds, ["Bezier", "Bezier", "Elastic", "Steps", "Linear", "Linear"]);
         let fps = view.composition().unwrap().unwrap().fps;
         let at = |f: i64| view.value_at(layer, &PropertyId::new(property::OPACITY).unwrap(), RationalTime::try_from_frame(f, fps).unwrap()).unwrap().unwrap();
-        assert_eq!(at(15), Value::F64(0.875), "power2.out at 0.5 = 1 − (1 − .5)³");
+        assert!(matches!(at(15), Value::F64(v) if (v - 0.875).abs() < 1e-6), "power2.out at 0.5 = 1 − (1 − .5)³ (exact Bezier)");
         let (_, outcome) = run(r#"rectangle().key("Opacity", 0, 0, "swing")"#);
         let message = outcome.unwrap_err();
         assert!(message.contains("Bezier") && message.contains("power1"), "{message}");

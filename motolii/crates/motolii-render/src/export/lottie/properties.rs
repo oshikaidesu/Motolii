@@ -170,8 +170,7 @@ fn interp_easing(
         | Interp::Cyclic { .. }
         | Interp::Random { .. }
         | Interp::Steps { .. }
-        | Interp::ElasticSteps { .. }
-        | Interp::Gsap(_) => {
+        | Interp::ElasticSteps { .. } => {
             return Err(LottieExportError::UnrepresentableEasing(interp.kind()))
         }
     })
