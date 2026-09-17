@@ -844,6 +844,10 @@
 
 - [創作コーディングの台帳(5)— Cavalry の画の構造は for 文と関数](2026-09-17-creative-coding-ledger.md)
 
+- [拡張の面の台帳(6)— AE と AviUtl が拡張に見せる物](2026-09-17-extension-surface-ledger.md)
+
+- [最小の核(提案)— 物の id と時刻だけ、あとは口の上](2026-09-17-minimal-core.md)
+
 - [文字組みの法 — CSS の text-autospace・text-spacing-trim・hanging-punctuation を写す](2026-09-17-cjk-typography-law.md)
 
 - [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
