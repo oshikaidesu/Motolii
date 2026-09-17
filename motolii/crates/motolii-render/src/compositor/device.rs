@@ -28,7 +28,7 @@ impl Compositor {
             .map(|d| (d.plugin_id().to_owned(), effects::EffectProgram::compile(&ctx, d))).collect();
         let builtin = |name: &str| -> Result<effects::EffectProgram, CompositorError> {
             let definition = catalog.definitions.iter().find(|d| d.source.name == name)
-                .ok_or_else(|| CompositorError::Effect(format!("missing validated {name} program")))?;
+                .ok_or_else(|| CompositorError::Effect(format!("missing validated {name} program (catalog: {})", catalog.errors.join("; "))))?;
             Ok(effects::EffectProgram::compile(&ctx, definition))
         };
         let blend_vism = builtin("blend")?;

@@ -187,11 +187,43 @@ pub struct Engine {
     pending_frame_copies: Vec<(String, i64, crate::render::compositor::GpuTexture2D)>,
     /// 再生中は間に合ったコマで描く。止めた時と書き出しは頼んだコマを待つ。
     realtime: bool,
+    /// test では GPU を 1 つずつ使う(cargo test の並走で `a_field_moves_*` が落ちた)。持っている間は他の Engine を待たせる。
+    #[cfg(test)]
+    _gpu: GpuLease,
+}
+
+/// test の GPU の貸し出し: 1 度に 1 本。同じ thread が 2 つ目の Engine を作る時は待たない(自分が持っている)。
+/// `--test-threads=1` に頼らず、Engine を作った時点で構造として直列になる。
+#[cfg(test)]
+pub(crate) struct GpuLease(Option<std::sync::MutexGuard<'static, ()>>);
+
+#[cfg(test)]
+static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
+#[cfg(test)]
+thread_local!(static GPU_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
+
+#[cfg(test)]
+impl GpuLease {
+    fn take() -> Self {
+        let first = GPU_HELD.with(|held| { let n = held.get(); held.set(n + 1); n == 0 });
+        Self(first.then(|| GPU.lock().unwrap_or_else(|poisoned| poisoned.into_inner())))
+    }
+}
+
+#[cfg(test)]
+impl Drop for GpuLease {
+    fn drop(&mut self) {
+        GPU_HELD.with(|held| held.set(held.get() - 1));
+    }
 }
 
 impl Engine {
     pub fn new() -> Result<Self, EngineError> {
+        #[cfg(test)]
+        let _gpu = GpuLease::take();
         Ok(Self {
+            #[cfg(test)]
+            _gpu,
             compositor: Compositor::headless()?,
             materials: HashMap::new(),
             probes: HashMap::new(),
@@ -263,7 +295,11 @@ impl Engine {
     }
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
+        #[cfg(test)]
+        let _gpu = GpuLease::take();
         Ok(Self {
+            #[cfg(test)]
+            _gpu,
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
             materials: HashMap::new(),
             probes: HashMap::new(),

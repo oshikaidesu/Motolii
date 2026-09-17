@@ -104,7 +104,7 @@ pub(crate) struct CatalogSnapshot {
     pub(crate) generation: u64,
     pub(crate) definitions: Arc<[VismDefinition]>,
     pub(crate) descriptors: Arc<[EffectDescriptor]>,
-    errors: Vec<String>,
+    pub(crate) errors: Vec<String>,
 }
 
 #[derive(Default)]
