@@ -842,6 +842,8 @@
 
 - [フレームワークの抽象の台帳(4)— 何を抽象化したか、何が記憶を持つか](2026-09-17-framework-ledger.md)
 
+- [創作コーディングの台帳(5)— Cavalry の画の構造は for 文と関数](2026-09-17-creative-coding-ledger.md)
+
 - [文字組みの法 — CSS の text-autospace・text-spacing-trim・hanging-punctuation を写す](2026-09-17-cjk-typography-law.md)
 
 - [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
