@@ -1,24 +1,20 @@
 // SANKOU! #5 — recruit.toyox.co.jp: text is wiped out of a corner and back. @keyframes textClip-left:
 // 0% polygon collapsed on the right edge → 20% the full box → 80% full → 100% collapsed on the left edge; -right / -top /
-// -bottom are the same law with another edge. One Clip box per word; the pinned edge is the box's own edge, the free
-// edge is the keyed Width (or Height) plus the same key on Position and on the text so the far edge stays put.
+// -bottom are the same law with another edge. One box per word, clip-path: inset(): the near edge closes first
+// (Clip Left W → 0 for -left), then the far edge closes (Clip Right 0 → W). The times are not in the CSS; 2.0 s here.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#091E2D" });
 const SIZE = 150, W = 1000, H = SIZE * 1.2, LEN = 2.0;
+const OPPOSITE = { left: "right", right: "left", top: "bottom", bottom: "top" };
+const edge = (side) => `Clip ${side[0].toUpperCase()}${side.slice(1)}`;
 const wipe = (word, x, y, side, at) => {
   const t = text(word, { name: word }).fill("#FFFFFF").font("Helvetica Neue").set("Size", SIZE);
   const box = group(t).name(`${word} clip`);
-  box.set("Display", "Flex").set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed").set("Width", W).set("Height", H)
-    .set("Overflow", "Clip").set("Position", [x, y]);
+  box.set("Display", "Flex").set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed").set("Width", W).set("Height", H).set("Position", [x, y]);
   t.set("Position", [0, 0]);
-  const axis = side === "left" || side === "right" ? "Width" : "Height", full = axis === "Width" ? W : H;
+  const full = side === "left" || side === "right" ? W : H;
   const [k0, k1, k2, k3] = [at, at + LEN * 0.2, at + LEN * 0.8, at + LEN];
-  // Growing from the far edge (right / bottom): the box and the text are keyed together so that edge stays still.
-  const grow = side === "right" || side === "bottom" ? 1 : 0, shrink = 1 - grow;
-  const shift = (amount) => axis === "Width" ? [x + amount, y] : [x, y + amount];
-  const inner = (amount) => axis === "Width" ? [-amount, 0] : [0, -amount];
-  box.keys(axis, [[k0, 0, "Linear"], [k1, full, "Hold"], [k2, full, "Linear"], [k3, 0]]);
-  box.keys("Position", [[k0, shift(full * shrink), "Linear"], [k1, shift(0), "Hold"], [k2, shift(0), "Linear"], [k3, shift(full * grow)]]);
-  t.keys("Position", [[k0, inner(full * shrink), "Linear"], [k1, inner(0), "Hold"], [k2, inner(0), "Linear"], [k3, inner(full * grow)]]);
+  box.keys(edge(side), [[k0, full, "Linear"], [k1, 0]]);
+  box.keys(edge(OPPOSITE[side]), [[k2, 0, "Linear"], [k3, full]]);
 };
 wipe("LEFT", 160, 140, "left", 0.2);
 wipe("RIGHT", 760, 340, "right", 0.6);

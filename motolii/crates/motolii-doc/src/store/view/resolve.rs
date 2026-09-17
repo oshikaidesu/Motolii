@@ -1266,11 +1266,13 @@ impl<'a> StoreView<'a> {
                 return Ok(masks);
             }
         }
-        let mut seen = HashSet::from([layer]);
-        let mut next = self.attrs(layer)?.unwrap_or_default().parent;
+        let mut seen = HashSet::new();
+        // inset は自分の背景も切る(CSS の clip-path は要素ごと)。Overflow は箱の外の子孫だけ。
+        let mut next = Some(layer);
         let mut own: Option<glam::Affine2> = None;
         while let Some(group) = next.filter(|g| seen.insert(*g) && present.contains(g)) {
-            if let Some((b, radius)) = self.clip_box(group, t)? {
+            let cuts = if group == layer { [None, self.clip_inset(group, t)?] } else { [self.clip_box(group, t)?, self.clip_inset(group, t)?] };
+            for (b, radius) in cuts.into_iter().flatten() {
                 let world = match own {
                     Some(w) => w,
                     None => *own.insert(self.world_affine(layer, t, present, memo, visiting)?),

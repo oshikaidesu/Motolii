@@ -38,6 +38,13 @@ pub const SHADOW_OFFSET: &str = "layout.shadow_offset";
 pub const SHADOW_BLUR: &str = "layout.shadow_blur";
 pub const SHADOW_SPREAD: &str = "layout.shadow_spread";
 pub const OVERFLOW: &str = "layout.overflow";
+/// 箱の 4 辺を内へ削る(CSS の `clip-path: inset(top right bottom left round r)`)。px、辺ごとに鍵が打てる。
+/// Overflow とは別の法: Overflow が Visible でも、どれかの辺が 0 でなければ削った箱で子孫と自分の背景を切る。
+pub const CLIP_TOP: &str = "layout.clip_top";
+pub const CLIP_RIGHT: &str = "layout.clip_right";
+pub const CLIP_BOTTOM: &str = "layout.clip_bottom";
+pub const CLIP_LEFT: &str = "layout.clip_left";
+pub const CLIP_RADIUS: &str = "layout.clip_radius";
 pub const HORIZONTAL_SIZING: &str = "layout.horizontal_sizing";
 pub const VERTICAL_SIZING: &str = "layout.vertical_sizing";
 pub const WIDTH: &str = "layout.width";
@@ -155,6 +162,11 @@ pub const GROUP_ROWS: &[Row] = &[
     (BACKGROUND, "Background", Value::Color([1.0, 1.0, 1.0, 0.0]), None, &[]),
     (BORDER_RADIUS, "Border Radius", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (OVERFLOW, "Overflow", Value::Enum(0), None, &["Visible", "Clip", "Bounce"]),
+    (CLIP_TOP, "Clip Top", Value::F64(0.0), None, &[]),
+    (CLIP_RIGHT, "Clip Right", Value::F64(0.0), None, &[]),
+    (CLIP_BOTTOM, "Clip Bottom", Value::F64(0.0), None, &[]),
+    (CLIP_LEFT, "Clip Left", Value::F64(0.0), None, &[]),
+    (CLIP_RADIUS, "Clip Radius", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (SHADOW_COLOR, "Shadow Color", Value::Color([0.0, 0.0, 0.0, 0.0]), None, &[]),
     (SHADOW_OFFSET, "Shadow Offset", Value::Vec2([0.0, 12.0]), None, &[]),
     (SHADOW_BLUR, "Shadow Blur", Value::F64(24.0), Some((0.0, 10000.0)), &[]),
@@ -1306,6 +1318,26 @@ impl StoreView<'_> {
         Ok(Some((b, self.number(group, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)))
     }
 
+    /// `clip-path: inset()`: 4 辺のどれかが 0 でない並べる Group なら、削った箱(素材座標)と角の丸み(Clip Radius)。
+    /// 辺が向かい合う辺を越えたら空の箱(CSS と同じ、何も見えない)。
+    pub(crate) fn clip_inset(&self, group: LayerId, t: RationalTime) -> Result<Option<([f32; 4], f32)>, StoreError> {
+        if self.display(group, t)? == 0 {
+            return Ok(None);
+        }
+        let mut edges = [0.0f32; 4];
+        for (edge, name) in edges.iter_mut().zip([CLIP_TOP, CLIP_RIGHT, CLIP_BOTTOM, CLIP_LEFT]) {
+            *edge = self.number(group, name, 0.0, t)? as f32;
+        }
+        let [top, right, bottom, left] = edges;
+        if edges.iter().all(|e| e.abs() <= 1e-6) {
+            return Ok(None);
+        }
+        let Some(size) = self.group_size(group, t)? else { return Ok(None) };
+        let (x0, y0) = (CANVAS_MARGIN + left, CANVAS_MARGIN + top);
+        let (x1, y1) = ((CANVAS_MARGIN + size[0] - right).max(x0), (CANVAS_MARGIN + size[1] - bottom).max(y0));
+        Ok(Some(([x0, y0, x1, y1], self.number(group, CLIP_RADIUS, 0.0, t)?.max(0.0) as f32)))
+    }
+
     /// 層の奥行きの範囲(素材座標の z、[手前, 奥])。平らな物は [0, 0]、押し出しは [0, Depth]、網・点群は bounds の
     /// 奥行きを中心に、並べる Group は [-奥行き, 0]。Scale Z(と 3D の Object Fit)を掛ける。
     fn depth_range(&self, layer: LayerId, t: RationalTime, frame: &Frame) -> Result<[f32; 2], StoreError> {
@@ -1955,6 +1987,39 @@ mod tests {
         let world: Vec<glam::Vec2> = layer.masks[0].shape.vertices.iter().map(|v| layer.placement.transform.transform_point2(glam::vec2(v.point[0] as f32, v.point[1] as f32))).collect();
         let (lo, hi) = world.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
         assert_eq!((lo.round(), hi.round()), (glam::vec2(301.0, 201.0), glam::vec2(441.0, 267.0)), "the group's box on screen, whatever the child's offset");
+    }
+
+    /// CSS `clip-path: inset(10% 0 0 0)` の写し: 箱の上から 10% を削った矩形が見える範囲。辺ごとに鍵が打てる(値は px)。
+    #[test]
+    fn clip_inset_cuts_the_box_from_each_edge_like_css_inset() {
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        for (name, value) in [(HORIZONTAL_SIZING, Value::Enum(2)), (VERTICAL_SIZING, Value::Enum(2)), (WIDTH, Value::F64(400.0)), (HEIGHT, Value::F64(300.0))] {
+            put(&mut doc, group, name, value);
+        }
+        put(&mut doc, group, property::POSITION, Value::Vec2([300.0, 200.0]));
+        let a = rect(&mut doc, 2, group, [100.0, 50.0]);
+        let bounds = |doc: &Document, id: LayerId| {
+            let resolved = doc.view().resolved_layers(T).unwrap();
+            let layer = resolved.iter().find(|l| l.id == id).unwrap().clone();
+            let world: Vec<glam::Vec2> = layer.masks.iter().flat_map(|m| m.shape.vertices.iter().map(|v| layer.placement.transform.transform_point2(glam::vec2(v.point[0] as f32, v.point[1] as f32)))).collect();
+            let (lo, hi) = world.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
+            (layer.masks.len(), lo.round(), hi.round())
+        };
+        assert_eq!(bounds(&doc, a).0, 0, "inset(0) cuts nothing, Overflow Visible");
+        put(&mut doc, group, CLIP_TOP, Value::F64(30.0));
+        assert_eq!(bounds(&doc, a), (1, glam::vec2(301.0, 231.0), glam::vec2(701.0, 501.0)), "inset(10% 0 0 0) of a 400 x 300 box: the top 30 px are gone");
+        assert_eq!(bounds(&doc, group), (1, glam::vec2(301.0, 231.0), glam::vec2(701.0, 501.0)), "the group's own background is cut too (clip-path is per element)");
+        put(&mut doc, group, CLIP_RIGHT, Value::F64(100.0));
+        put(&mut doc, group, CLIP_BOTTOM, Value::F64(50.0));
+        put(&mut doc, group, CLIP_LEFT, Value::F64(40.0));
+        assert_eq!(bounds(&doc, a), (1, glam::vec2(341.0, 231.0), glam::vec2(601.0, 451.0)), "inset(top right bottom left) in CSS order");
+        put(&mut doc, group, CLIP_LEFT, Value::F64(1000.0));
+        let (_, lo, hi) = bounds(&doc, a);
+        assert_eq!(hi.x - lo.x, 0.0, "an edge past the opposite edge leaves an empty box");
+        put(&mut doc, group, CLIP_LEFT, Value::F64(40.0));
+        put(&mut doc, group, OVERFLOW, Value::Enum(1));
+        assert_eq!(bounds(&doc, a).0, 2, "Overflow Clip and the inset are two cuts (border-radius and `round` are separate in CSS)");
     }
 
     #[test]

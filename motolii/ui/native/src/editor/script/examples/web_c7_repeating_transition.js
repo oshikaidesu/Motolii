@@ -7,15 +7,14 @@ comp({ width: 1920, height: 1080, fps: 30, seconds: 3, background: "#111114" });
 const PHOTO = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/photo2.png";
 const SIN = { kind: "Bezier", x1: 0.47, y1: 0, x2: 0.745, y2: 0.715 }, SOUT = { kind: "Bezier", x1: 0.39, y1: 0.575, x2: 0.565, y2: 1 }, SIO = { kind: "Bezier", x1: 0.445, y1: 0.05, x2: 0.55, y2: 0.95 };
 const STEPS = 6, DT = 0.05, DUR = 0.35, PAUSE = 0.14, CLICK = 0.3;
-// A picture in a clip box. edge(name, t, state, ease): "bottom" = collapsed on the bottom edge, "full", "top" = collapsed on the top edge —
-// the box's Height + Position and the picture's Position are keyed together so the pinned edge stays put (inset with one edge moving).
+// A picture in a box with clip-path: inset(). edge(t, state, ease): "bottom" = collapsed on the bottom edge (Clip Top = h),
+// "full" (inset 0), "top" = collapsed on the top edge (Clip Bottom = h) — the pinned edge is the box's own edge, nothing else moves.
 const pic = (name, x, y, w, h) => {
   const img = media(PHOTO, { name: `${name} img` }).set("Scale", [Math.max(w / 1920, h / 1080), Math.max(w / 1920, h / 1080)]);
   const box = group(img).name(name).set("Display", "Flex").set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed")
     .set("Width", w).set("Height", h).set("Overflow", "Clip").set("Position", [x, y]);
   img.set("Position", [0, 0]);
-  const edge = (t, state, ease) => { const hh = state === "full" ? h : 0, drop = state === "bottom" ? h : 0;
-    box.key("Height", t, hh, ease).key("Position", t, [x, y + drop], ease); img.key("Position", t, [0, -drop], ease); return o; };
+  const edge = (t, state, ease) => { box.key("Clip Top", t, state === "bottom" ? h : 0, ease).key("Clip Bottom", t, state === "top" ? h : 0, ease); return o; };
   const o = { box, img, edge }; return o;
 };
 const start = [200, 380, 320, 240], end = [900, 140, 880, 800];

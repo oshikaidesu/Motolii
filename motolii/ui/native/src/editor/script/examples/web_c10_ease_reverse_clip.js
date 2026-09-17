@@ -2,8 +2,8 @@
 // eases the other way. Source: menu clip-path polygon(50% 50% ×4) → polygon(0 0, 100% 0, 100% 100%, 0 100%), 0.8 s 'expo',
 // easeReverse 'expo', at start + 0.3; cover items go 600 px out from the viewport centre (getRadialPosition), rotation random(−30, 30),
 // opacity 0, 0.7 s 'expo', delay 0.3 · (1 − distance / maxDistance) (near ones wait), easeReverse 'elastic.out(0.3)' on a full close.
-// The four corners move together from the centre, so the face = a Clip box with Transform Origin Center and keyed Width / Height;
-// the content is pinned by the opposite key on its Position (inset with all four edges). Close: timeline reversed with the reverse eases.
+// The four corners move together from the centre, so the face = a full-screen box with clip-path: inset(50% 50% 50% 50%) → inset(0):
+// the four Clip edges are keyed, the content does not move. Close: timeline reversed with the reverse eases.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#F4F1EA" });
 const EXPO = { kind: "Bezier", x1: 0.19, y1: 1, x2: 0.22, y2: 1 }, ELASTIC = { kind: "Elastic", limit: 1.1, period: 0.3, damp: 0.35 };
 const OPEN = 0.3, CLOSE = 2.3, TL = 1.1, rnd = random(3);
@@ -22,11 +22,10 @@ const items = ["HOME", "PROJECTS", "TEAM", "CONTACT"].map((s) => text(s, { name:
 const content = group(...items).name("Menu content").set("Display", "Flex").set("Flex Direction", "Column").set("Align Items", "Center")
   .set("Justify Content", "Center").set("Gap", 16).set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed").set("Width", 1920).set("Height", 1080);
 items.forEach((i) => i.set("Position", [0, 0]));
-const face = group(content).name("Menu").set("Display", "Flex").set("Overflow", "Clip").set("Background", "#E8442E")
-  .set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed").set("Transform Origin", "Center").set("Position", [960, 540]);
+const face = group(content).name("Menu").set("Display", "Flex").set("Background", "#E8442E")
+  .set("Horizontal Sizing", "Fixed").set("Vertical Sizing", "Fixed").set("Width", 1920).set("Height", 1080).set("Position", [0, 0]);
 const m = OPEN + 0.3, c = CLOSE + (TL - 0.3 - 0.8);
-// polygon from the centre point to the corners = Width / Height 0 → full about the centre; the content's Position keeps it still.
-face.keys("Width", [[m, 0, EXPO], [m + 0.8, 1920, "Hold"], [c, 1920, EXPO], [c + 0.8, 0]]);
-face.keys("Height", [[m, 0, EXPO], [m + 0.8, 1080, "Hold"], [c, 1080, EXPO], [c + 0.8, 0]]);
-content.keys("Position", [[m, [-960, -540], EXPO], [m + 0.8, [0, 0], "Hold"], [c, [0, 0], EXPO], [c + 0.8, [-960, -540]]]);
+// polygon from the centre point to the corners = every edge from half the box to 0, and back.
+for (const [edge, half] of [["Clip Top", 540], ["Clip Bottom", 540], ["Clip Left", 960], ["Clip Right", 960]])
+  face.keys(edge, [[m, half, EXPO], [m + 0.8, 0, "Hold"], [c, 0, EXPO], [c + 0.8, half]]);
 for (const l of [face, content, ...items]) l.projection("2D");
