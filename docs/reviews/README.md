@@ -848,6 +848,8 @@
 
 - [最小の核(提案)— 物の id と時刻だけ、あとは口の上](2026-09-17-minimal-core.md)
 
+- [LLM を最大の力で使う — 一次資料の索引と Fable 5.1 の公式の使い方、今日の実証](2026-09-17-llm-max.md)
+
 - [文字組みの法 — CSS の text-autospace・text-spacing-trim・hanging-punctuation を写す](2026-09-17-cjk-typography-law.md)
 
 - [箱の奥行きの法 — 並べる法を 3D へ(visionOS 26 の spatial layout を写す)](2026-09-14-depth-law.md)
