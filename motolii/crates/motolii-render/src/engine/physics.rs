@@ -148,6 +148,9 @@ pub(crate) struct Physics {
     frames: HashMap<LayerId, i64>,
     /// 組んだ時の輪郭(動く抜きの当たりを差し替える時に比べる)。
     shapes: HashMap<LayerId, Option<std::sync::Arc<Vec<[f32; 2]>>>>,
+    /// 前の歩で物に掛けた力。同じ力なら起こさない — 眠りは解き手の物で、毎歩起こすと積もった物が
+    /// いつまでも這う(Rapier の `add_force(.., wake_up)` は眠りの時計を 0 に戻す)。
+    forces: HashMap<LayerId, Vec2>,
 }
 
 impl Default for Physics {
@@ -178,6 +181,7 @@ impl Physics {
             reading: None,
             frames: HashMap::new(),
             shapes: HashMap::new(),
+            forces: HashMap::new(),
             lies: Lies::default(),
         }
     }
@@ -437,7 +441,9 @@ impl Physics {
                 if aabb.maxs.x > hi[0] { fix.x = hi[0] - aabb.maxs.x; }
                 if aabb.maxs.y > hi[1] { fix.y = hi[1] - aabb.maxs.y; }
             }
-            if fix == Vec2::ZERO {
+            // 解き手が許しているめり込み(allowed linear error)の内側は直さない: 床に載った物を毎歩
+            // 押し上げて起こすと、眠れずに這い続ける。
+            if fix.length() <= self.params.normalized_allowed_linear_error * self.params.length_unit {
                 continue;
             }
             let Some(rb) = self.bodies.get_mut(handle) else { continue };
@@ -498,8 +504,11 @@ impl Physics {
                     }
                 }
             }
-            rb.reset_forces(true);
-            rb.add_force(force, true);
+            // 場が変わった時だけ起こす(鍵で重力が回る・元が動く)。同じ場なら眠ったまま。
+            let wake = self.forces.get(&body.layer).is_none_or(|last| (*last - force).length() > 1e-3 * force.length().max(1e-3));
+            self.forces.insert(body.layer, force);
+            rb.reset_forces(false);
+            rb.add_force(force, wake);
         }
     }
 
