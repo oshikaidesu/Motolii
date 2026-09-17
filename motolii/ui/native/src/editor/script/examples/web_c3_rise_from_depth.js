@@ -7,17 +7,14 @@ const SIZE = 150, EACH = 0.04, RISE = 0.8, INK = "#1c1a22";
 const lines = ["LETTERS RISE", "OUT OF THE DEPTH"];
 lines.forEach((line, row) => {
   const at = 0.3 + row * 0.9;
-  const chars = [...line].map((ch, k) => {
-    if (ch === " ") return rectangle({ name: `Space ${row}.${k}` }).set("Opacity", 0).set("Scale", [50 / 270, 1 / 270]);
-    const t = text(ch, { name: `${ch} ${row}.${k}` }).fill(INK).font("Helvetica Neue").set("Size", SIZE);
-    // opacity 0 → 1, z 300 → 0 (towards the viewer is −Z here), rotationX −45 → 0, all 0.8 s power2.
-    return t.key("Opacity", at, 0, P2).key("Opacity", at + RISE, 1)
-      .key("Position Z", at, -300, P2).key("Position Z", at + RISE, 0)
-      .key("Tilt X", at, -45, P2).key("Tilt X", at + RISE, 0);
-  });
-  const rowBox = group(...chars).name(`Line ${row}`);
-  rowBox.set("Display", "Flex").set("Align Items", "Center").set("Gap", 4).set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug")
-    .set("Stagger", EACH * (chars.length - 1)).set("Position", [960 - line.length * SIZE * 0.36, 400 + row * (SIZE + 90)]);
-  chars.forEach((c) => c.set("Position", [0, 0]));
-  for (const layer of [rowBox, ...chars]) layer.projection("3D");
+  // One text per line, Split: Chars; each char tilts about its own centre (SplitText's char), the line's Stagger hands out 0.04 s per char.
+  const chars = text(line, { name: `Line ${row}` }).fill(INK).font("Helvetica Neue").set("Size", SIZE).set("Split", "Chars").set("Stagger", EACH * (line.replace(/ /g, "").length - 1));
+  // opacity 0 → 1, z 300 → 0 (towards the viewer is −Z here), rotationX −45 → 0, all 0.8 s power2.
+  chars.key("Opacity", at, 0, P2).key("Opacity", at + RISE, 1)
+    .key("Position Z", at, -300, P2).key("Position Z", at + RISE, 0)
+    .key("Tilt X", at, -45, P2).key("Tilt X", at + RISE, 0);
+  const rowBox = group(chars).name(`Row ${row}`);
+  rowBox.set("Display", "Flex").set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug").set("Position", [960 - line.length * SIZE * 0.36, 400 + row * (SIZE + 90)]);
+  chars.set("Position", [0, 0]);
+  for (const layer of [rowBox, chars]) layer.projection("3D");
 });

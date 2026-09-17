@@ -14,15 +14,13 @@ const line = (y, words, at) => {
     const band = rectangle({ name: `${word} band` }).fill(BAND).set("Position", [x + w / 2, y + SIZE * 0.09]);
     band.effect("Rounded Corners", { "Radius": 8 });
     band.key("Scale", at, [0, 0], EXPO).key("Scale", at + 0.8, [w * 1.05 / D, SIZE * 0.975 / D]);
-    // .char — scale 1.3 → 1 and opacity 0 → 1, 0.4 s power1, the row hands out 0.1 + 0.05·pos.
-    const chars = [...word].map((ch, k) => {
-      const t = text(ch, { name: `${word} ${ch}${k}` }).fill(HI).font("Helvetica Neue").set("Size", SIZE);
-      return t.key("Scale", at + 0.1, [1.3, 1.3], P1).key("Scale", at + 0.5, [1, 1]).key("Opacity", at + 0.1, 0, P1).key("Opacity", at + 0.5, 1);
-    });
-    const row = group(...chars).name(`${word} row`);
-    row.set("Display", "Flex").set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug").set("Stagger", 0.05 * (chars.length - 1)).set("Position", [x, y - SIZE * 0.6]);
-    chars.forEach((c) => c.set("Position", [0, 0]));
-    for (const layer of [band, row, ...chars]) layer.projection("2D");
+    // .char — one text with Split: Chars; scale 1.3 → 1 and opacity 0 → 1, 0.4 s power1, its Stagger hands out 0.1 + 0.05·pos.
+    const chars = text(word, { name: `${word} chars` }).fill(HI).font("Helvetica Neue").set("Size", SIZE).set("Split", "Chars").set("Stagger", 0.05 * (word.length - 1))
+      .key("Scale", at + 0.1, [1.3, 1.3], P1).key("Scale", at + 0.5, [1, 1]).key("Opacity", at + 0.1, 0, P1).key("Opacity", at + 0.5, 1);
+    const row = group(chars).name(`${word} row`);
+    row.set("Display", "Flex").set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug").set("Position", [x, y - SIZE * 0.6]);
+    chars.set("Position", [0, 0]);
+    for (const layer of [band, row, chars]) layer.projection("2D");
     x += w + W;
   }
 };

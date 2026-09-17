@@ -6,19 +6,13 @@ const SPEED = 1.2, STAGGER = 0.12, SIZE = 150;
 const lines = ["TOSHIYUKI HASHIMOTO", "DESIGN & DIRECTION", "TOKYO — 2026"];
 lines.forEach((line, row) => {
   const at = 0.3 + row * 0.35;
-  const words = line.split(" ").map((w) => {
-    const t = text(w, { name: `${w} ${row}` }).fill(row === 1 ? "#C8412B" : "#161616").font("Helvetica Neue").set("Size", SIZE);
-    // .a-up: the word's own box is the mask.
-    const mask = group(t).name(`Mask ${w} ${row}`);
-    mask.set("Display", "Flex").set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug").set("Overflow", "Clip");
-    t.set("Position", [0, 0]).set("Opacity", 0)
-      .key("Position", at, [0, SIZE], IO).key("Position", at + SPEED, [0, 0])
-      .key("Opacity", at, 0, IO).key("Opacity", at + SPEED, 1);
-    return mask;
-  });
-  // The line hands out the delay: every word has the same keys, the row shifts each word's clock (data-stagger).
-  const rowBox = group(...words).name(`Line ${row}`);
-  rowBox.set("Display", "Flex").set("Gap", 44).set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug")
-    .set("Stagger", STAGGER * (words.length - 1)).set("Position", [160, 300 + row * (SIZE + 40)]);
-  words.forEach((m) => m.set("Position", [0, 0]));
+  // One text layer per line, Split: Words (SplitText 'words'); the line's own Stagger hands each word its clock (data-stagger).
+  const t = text(line, { name: `Line ${row}` }).fill(row === 1 ? "#C8412B" : "#161616").font("Helvetica Neue").set("Size", SIZE)
+    .set("Split", "Words").set("Stagger", STAGGER * (line.split(" ").length - 1));
+  // .a-up: the line's own box is the mask.
+  const mask = group(t).name(`Mask ${row}`);
+  mask.set("Display", "Flex").set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug").set("Overflow", "Clip").set("Position", [160, 300 + row * (SIZE + 40)]);
+  t.set("Position", [0, 0]).set("Opacity", 0)
+    .key("Position", at, [0, SIZE], IO).key("Position", at + SPEED, [0, 0])
+    .key("Opacity", at, 0, IO).key("Opacity", at + SPEED, 1);
 });

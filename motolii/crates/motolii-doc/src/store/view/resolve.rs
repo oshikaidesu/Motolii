@@ -1233,6 +1233,9 @@ impl<'a> StoreView<'a> {
             if let Some(resolved) =
                 self.resolve_with_solo(layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)?
             {
+                if self.push_split(&resolved, t, any_solo, &present, &mut out)? {
+                    continue;
+                }
                 self.push_placements(resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
             }
         }
@@ -1248,6 +1251,57 @@ impl<'a> StoreView<'a> {
             layer.placement.order = i32::try_from(rank).unwrap_or(i32::MAX);
         }
         Ok(out)
+    }
+
+    /// 文字の Split(GSAP SplitText / CSS `sibling-index()`): 字・語・行の単位を、その文字の層の Stagger でずれた時刻に解いた
+    /// 写しとして積む。書類に子の層は作らない — 写し = 層全体をずれた時刻で解き、単位の箱を Intersect の mask で切り、
+    /// 拡縮・回転の中心を単位の箱の中心へ移す(SplitText の char が自分の中心で回るのと同じ)。時刻の純関数。
+    fn push_split(
+        &self,
+        base: &ResolvedLayer,
+        t: RationalTime,
+        any_solo: bool,
+        present: &HashSet<LayerId>,
+        out: &mut Vec<ResolvedLayer>,
+    ) -> Result<bool, StoreError> {
+        use crate::doc::store::layout::STAGGER;
+        if base.source != crate::doc::store::LayerSource::Text || self.number(base.id, STAGGER, 0.0, t)? <= 0.0 {
+            return Ok(false);
+        }
+        let units = self.text_units(base.id, t)?;
+        if units.len() < 2 {
+            return Ok(false);
+        }
+        let layer = base.id;
+        let n = units.len();
+        let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
+        for (k, b) in units.into_iter().enumerate() {
+            let at = self.schedule_shift(layer, k, n, t)?;
+            let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
+            let worlds = self.world_transform3d_chain(layer, at, present)?;
+            let Some(mut copy) = self.resolve_with_solo(layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
+            // 中心を単位の箱の中心へ: 親の空間で T(c − a) を局所の変換に共役で掛ける(a = 層のアンカー、c = 箱の中心)。
+            let anchor = glam::Vec2::from(self.free_anchor(layer, at)?);
+            let shift = glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5) - anchor;
+            let parent2 = parent.map(|p| self.world_affine(p, at, present, &mut memo, &mut visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+            let shift2 = glam::Affine2::from_translation(shift);
+            copy.placement.transform = parent2 * shift2 * parent2.inverse() * copy.placement.transform * shift2.inverse();
+            if let Some(world) = copy.placement.world_transform {
+                let parent3 = parent.and_then(|p| worlds.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
+                let shift3 = glam::Affine3A::from_translation(shift.extend(0.0));
+                copy.placement.world_transform = Some(parent3 * shift3 * parent3.inverse() * world * shift3.inverse());
+            }
+            copy.copy = k as u32;
+            copy.masks.push(ResolvedMask {
+                mode: crate::doc::store::MaskMode::Intersect,
+                inverted: false,
+                opacity: 1.0,
+                expansion: 0.0,
+                shape: crate::doc::store::layout::rounded_rect_path(b, 0.0, glam::Affine2::IDENTITY),
+            });
+            out.push(copy);
+        }
+        Ok(true)
     }
 
     /// Overflow が Clip の並べる Group の子孫は、その箱で切る: 箱を層の素材座標へ写した角丸の矩形を Intersect で足す。

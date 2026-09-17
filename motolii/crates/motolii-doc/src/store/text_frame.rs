@@ -187,6 +187,51 @@ pub fn shape_document_around(
     Ok(Some(shaped))
 }
 
+/// Split の単位の箱(素材座標、読む順)。1 = 字(空白は単位にならない)、2 = 語(空白で区切る)、3 = 行。
+/// 箱は字の送り幅 × 行の箱の縦(`line_box` と同じ、上に約 1 級・下に約 1/4 級)。隣の字と辺を分け合う(重ねない)。
+pub fn split_boxes(document: &TextDocument, shaped: &ShapedText, canvas: &Canvas, content: &str, split: i64) -> Vec<[f32; 4]> {
+    let (Some(first), Some(last), Some(style)) = (shaped.lines.first(), shaped.lines.last(), document.styles.first()) else { return Vec::new() };
+    let size = shaped.contour_styles.iter().map(|i| document.styles[*i].size).fold(style.size, f32::max);
+    // 縦の寄せは shape_document と同じ式(輪郭には足してあるが、行の物差しには足していない)。
+    let (top, bottom) = (first.baseline_y - size, last.baseline_y + size * 0.25);
+    let dy = (canvas.height as f32 - (bottom - top)) * 0.5 - top;
+    let blank = |byte: usize| content.get(byte..).and_then(|s| s.chars().next()).is_some_and(char::is_whitespace);
+    // (箱, 元の byte) を読む順に。
+    let mut glyphs: Vec<([f32; 4], usize)> = Vec::new();
+    let mut lines: Vec<[f32; 4]> = Vec::new();
+    for line in &shaped.lines {
+        let (y0, y1) = (line.baseline_y + dy - size, line.baseline_y + dy + size * 0.25);
+        let left = line.glyph_xs.first().copied().unwrap_or(0.0);
+        lines.push([left, y0, left + line.width, y1]);
+        for (i, &x0) in line.glyph_xs.iter().enumerate() {
+            let x1 = line.glyph_xs.get(i + 1).copied().unwrap_or(left + line.width).max(x0);
+            glyphs.push(([x0, y0, x1, y1], line.glyph_bytes.get(i).copied().unwrap_or(usize::MAX)));
+        }
+    }
+    let union = |boxes: &mut dyn Iterator<Item = [f32; 4]>| boxes.fold(None, |acc: Option<[f32; 4]>, b| Some(match acc {
+        Some(a) => [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])],
+        None => b,
+    }));
+    match split {
+        1 => glyphs.iter().filter(|(_, byte)| !blank(*byte)).map(|(b, _)| *b).collect(),
+        2 => {
+            let mut words: Vec<(usize, usize)> = Vec::new();
+            let mut start = None;
+            for (i, ch) in content.char_indices() {
+                match (ch.is_whitespace(), start) {
+                    (false, None) => start = Some(i),
+                    (true, Some(s)) => { words.push((s, i)); start = None; }
+                    _ => {}
+                }
+            }
+            if let Some(s) = start { words.push((s, content.len())); }
+            words.iter().filter_map(|&(s, e)| union(&mut glyphs.iter().filter(|(_, byte)| (s..e).contains(byte)).map(|(b, _)| *b))).collect()
+        }
+        3 => lines,
+        _ => Vec::new(),
+    }
+}
+
 /// 組んだ文字の行の箱(素材座標 = 枠の座標)。字形のインクではなく、行の幅と、上に約 1 級・下に約 1/4 級の縦。
 /// 文字を差し替えても縦がぶれない(並べる法の「文字は行の箱」)。
 pub fn line_box(document: &TextDocument, shaped: &ShapedText, canvas: &Canvas) -> Option<[f32; 4]> {

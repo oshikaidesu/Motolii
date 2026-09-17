@@ -32,6 +32,7 @@ pub const FIXED: &[(&str, &str)] = &[
     (TEXT_AUTOSPACE, "Text Autospace"),
     (TEXT_SPACING_TRIM, "Text Spacing Trim"),
     (HANGING_PUNCTUATION, "Hanging Punctuation"),
+    (TEXT_SPLIT, "Split"),
     (TEXT_CONTENT, "Content"),
     (p::SHAPE_POINTS, "Points"),
     (p::SHAPE_OUTER_RADIUS, "Outer Radius"),
@@ -54,6 +55,10 @@ pub const TEXT_JUSTIFY: &str = "text_justify";
 pub const TEXT_AUTOSPACE: &str = "text_autospace";
 pub const TEXT_SPACING_TRIM: &str = "text_spacing_trim";
 pub const HANGING_PUNCTUATION: &str = "hanging_punctuation";
+/// 文字を単位に分ける(GSAP SplitText の `type: "chars" | "words" | "lines"`、CSS `sibling-index()` の読む順)。
+/// 単位は書類の子の層にならない — 文字の層の Stagger が単位ごとの時刻をずらす(時刻の純関数)。
+pub const TEXT_SPLIT: &str = "text_split";
+pub const TEXT_SPLIT_CHOICES: &[&str] = &["None", "Chars", "Words", "Lines"];
 /// 文字の中身。property ではなく text document が持つが、名前は同じ表に置く。
 pub const TEXT_CONTENT: &str = "content";
 

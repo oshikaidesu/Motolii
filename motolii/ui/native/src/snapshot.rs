@@ -391,6 +391,8 @@ impl EditorRuntime{
             }
             if meta.source == LayerSource::Text {
                 for row in layout::READOUT_ROWS { push(&mut properties, id, row)?; }
+                // Split の単位の順番の札(箱の子と同じ 3 欄)。
+                for row in layout::GROUP_ROWS.iter().filter(|r| layout::is_schedule_row(r.0)) { push(&mut properties, id, row)?; }
             }
             if meta.source == LayerSource::Shape {
                 for row in layout::CONNECT_ROWS { push(&mut properties, id, row)?; }
@@ -430,8 +432,10 @@ impl EditorRuntime{
             let resolved=view.resolved_text_document(id,at).map_err(e)?.unwrap_or(t.clone());
             // 段落の欄(選択肢は名前で書ける): 揃えと文字組みの 3 法。
             let laws = resolved.alignment;
-            let paragraph: [(&str, i64, &[&str]); 4] = [
+            let split = match view.value_at(id, &PropertyId::new(names::TEXT_SPLIT).map_err(e)?, at).map_err(e)? { Some(Value::Enum(v)) => v, _ => 0 };
+            let paragraph: [(&str, i64, &[&str]); 5] = [
                 (names::TEXT_JUSTIFY, resolved.justify.to_enum_value(), &["Left","Right","Center"]),
+                (names::TEXT_SPLIT, split, names::TEXT_SPLIT_CHOICES),
                 (names::TEXT_AUTOSPACE, laws.autospace.to_enum_value(), crate::doc::store::TextAutospace::CHOICES),
                 (names::TEXT_SPACING_TRIM, laws.spacing_trim.to_enum_value(), crate::doc::store::TextSpacingTrim::CHOICES),
                 (names::HANGING_PUNCTUATION, laws.hanging.to_enum_value(), crate::doc::store::HangingPunctuation::CHOICES),

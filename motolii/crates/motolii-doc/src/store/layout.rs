@@ -724,16 +724,20 @@ impl StoreView<'_> {
     pub fn layer_time(&self, layer: LayerId, t: RationalTime) -> Result<RationalTime, StoreError> {
         let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent else { return Ok(t) };
         let base = self.layer_time(parent, t)?;
-        let stagger = match self.value_at(parent, &PropertyId::new(STAGGER)?, base)? {
+        let siblings = self.schedule_children(parent)?;
+        let Some(i) = siblings.iter().position(|&s| s == layer) else { return Ok(base) };
+        self.schedule_shift(parent, i, siblings.len(), base)
+    }
+
+    /// 箱 `holder` の順番の札で、n 個のうち i 番目の時刻。箱の子の層にも、文字の Split の単位にも同じ法。
+    pub(crate) fn schedule_shift(&self, holder: LayerId, i: usize, n: usize, base: RationalTime) -> Result<RationalTime, StoreError> {
+        let stagger = match self.value_at(holder, &PropertyId::new(STAGGER)?, base)? {
             Some(Value::F64(v)) if v > 1e-9 => v,
             _ => return Ok(base),
         };
-        let siblings = self.schedule_children(parent)?;
-        let n = siblings.len();
-        let Some(i) = siblings.iter().position(|&s| s == layer) else { return Ok(base) };
         let along = if n > 1 { i as f64 / (n - 1) as f64 } else { 0.0 };
         let from_centre = (along - 0.5).abs() * 2.0;
-        let reach = match self.choice(parent, STAGGER_FROM, base)? {
+        let reach = match self.choice(holder, STAGGER_FROM, base)? {
             1 => from_centre,
             2 => 1.0 - along,
             3 => 1.0 - from_centre,
@@ -741,9 +745,21 @@ impl StoreView<'_> {
         };
         let off = RationalTime::try_new((reach * stagger * 1_000_000.0).round() as i64, 1_000_000)
             .map_err(|e| StoreError::Property(format!("stagger: {e}")))?;
-        let shifted = if self.choice(parent, FROM_END, base)? == 1 { base.try_add(off) } else { base.try_sub(off) }
+        let shifted = if self.choice(holder, FROM_END, base)? == 1 { base.try_add(off) } else { base.try_sub(off) }
             .map_err(|e| StoreError::Property(format!("stagger: {e}")))?;
         Ok(if shifted.as_seconds_f64() < 0.0 { RationalTime::ZERO } else { shifted })
+    }
+
+    /// 文字の Split の単位の箱(素材座標、読む順)。Split が None なら空。
+    pub(crate) fn text_units(&self, layer: LayerId, t: RationalTime) -> Result<Vec<[f32; 4]>, StoreError> {
+        let split = self.choice(layer, crate::doc::store::names::TEXT_SPLIT, t)?;
+        if split == 0 || !self.meta(layer)?.is_some_and(|m| m.source == LayerSource::Text) {
+            return Ok(Vec::new());
+        }
+        let (Some(document), Some(comp)) = (self.resolved_text_document(layer, t)?, self.composition()?) else { return Ok(Vec::new()) };
+        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        let Some(shaped) = crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten() else { return Ok(Vec::new()) };
+        Ok(crate::doc::store::text_frame::split_boxes(&document, &shaped, &canvas, document.content.eval(t), split))
     }
 
     /// 箱の子を層の順に(順番の札が読む)。書類の版ごとに覚える。
@@ -2020,6 +2036,38 @@ mod tests {
         put(&mut doc, group, CLIP_LEFT, Value::F64(40.0));
         put(&mut doc, group, OVERFLOW, Value::Enum(1));
         assert_eq!(bounds(&doc, a).0, 2, "Overflow Clip and the inset are two cuts (border-radius and `round` are separate in CSS)");
+    }
+
+    /// Split Words + Stagger: 語ごとに時刻がずれる(鍵は 1 本、単位は箱の mask、書類に子の層は無い)。
+    /// Stagger は箱の子と同じ法 = 全体の幅(GSAP の `stagger: {amount}`): 3 語で 0.2 なら 2 語目は 0.1、3 語目は 0.2 遅れる。
+    #[test]
+    fn split_words_give_each_word_its_own_time_under_the_texts_stagger() {
+        let mut doc = blank_project();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        let words = add(&mut doc, 2, LayerSource::Text, None);
+        put_text(&mut doc, words, "ONE TWO THREE");
+        let mut track = crate::doc::eval::KeyframeTrack::new();
+        track.insert(crate::doc::eval::Keyframe { t: at(0), value: Value::F64(0.0), interp: crate::doc::eval::Interp::Linear, spatial: Default::default() });
+        track.insert(crate::doc::eval::Keyframe { t: at(30), value: Value::F64(1.0), interp: crate::doc::eval::Interp::Linear, spatial: Default::default() });
+        doc.apply(Intent::SetTrack { layer: words, property: PropertyId::new(property::OPACITY).unwrap(), track }).unwrap();
+        put(&mut doc, words, STAGGER, Value::F64(0.2));
+        let copies = |doc: &Document| -> Vec<(f32, f32)> {
+            let mut out: Vec<_> = doc.view().resolved_layers(at(15)).unwrap().into_iter().filter(|l| l.id == words)
+                .map(|l| (l.placement.opacity, l.masks.first().map_or(f32::NAN, |m| m.shape.vertices[0].point[0] as f32))).collect();
+            out.sort_by(|a, b| b.0.total_cmp(&a.0));
+            out
+        };
+        assert_eq!(copies(&doc).len(), 1, "Split None: one layer, no unit");
+        put(&mut doc, words, crate::doc::store::names::TEXT_SPLIT, Value::Enum(2));
+        let c = copies(&doc);
+        assert_eq!(c.len(), 3, "three words");
+        assert!((c[0].0 - 0.5).abs() < 0.02 && (c[1].0 - 0.4).abs() < 0.02 && (c[2].0 - 0.3).abs() < 0.02, "at 0.5 s the words read their keys at 0.5 / 0.4 / 0.3 s: {c:?}");
+        assert!(c[0].1 < c[1].1 && c[1].1 < c[2].1, "the units are in reading order, each cut to its own box: {c:?}");
+        put(&mut doc, words, crate::doc::store::names::TEXT_SPLIT, Value::Enum(1));
+        assert_eq!(copies(&doc).len(), 11, "Chars: the spaces are not units");
+        put(&mut doc, words, crate::doc::store::names::TEXT_SPLIT, Value::Enum(3));
+        assert_eq!(copies(&doc).len(), 1, "Lines: one line is not split");
     }
 
     #[test]
