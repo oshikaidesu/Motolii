@@ -96,3 +96,50 @@
   9. **gooey(feColorMatrix の alpha の閾値)** — c8(displacement は Turbulent Displace で済、blur は Blur で済)
   - 要らなかった物: easeReverse(c10、往復の鍵)、polygon の頂点補間(s5・c10、留める辺の enum と中心からの Width/Height)、Trim Path(s6、Trim Paths あり)、displacement(c8、Turbulent Displace あり)
 - **描画側の癖(1〜22 を統合)**: (a) **順序**: 鍵の後に set すると曲線ごとずれる(1・11)、Object Fit / Sizing は group() の後(10・16)、重なりは層を作った順(8)、下に置く物を先に作る; (b) **箱の鍵と子**: Absolute の子は箱の Width/Height の鍵の途中で描かれない(2)、重ねた箱に Width の鍵があると沈む → 全層 projection("2D")(3)、同寸で重なる 2 枚の media は鍵の途中の絵が出ない(3)、Transform Origin Center で Position が中心座標に変わり子の原点は左上のまま(7・22)、group の Opacity の鍵は子の media に効かない(17); (c) **座標**: Absolute の Position は中心(4)、Grid/Flex の子は Position [0,0](11)、手前は −Z(12)、perspective はカメラだけ(13)、Grid Rows 固定で Columns を減らすと升が足りない(14); (d) **物理**: 部屋の Absolute の子は全部 物(9)、箱の外から始めた物は描かれない(20); (e) **時間**: 動画の 0 コマ目は黒(6)、1 コマ未満の遷移はコマの位相で抜ける → Hold(19)、Cyclic は鋸に使えない(束 2 #7); (f) **語彙**: 鍵の ease に "Ease In Out" は無い(18)、vism の効果は ID の名で呼べる(15)、Turbulent Displace は文字にも掛かる(21)、watch_shot の MOTOLII_SCRIPT は絶対 path(5)
+
+## 関係で書き直す — 束 1(s1・c2・c3・s2・s6 + 証明の 1 枚、2026-09-17)
+
+上の 20 本は Web の**手**を写した(`.key(` 71 箇所、要素ごとの鍵と選んだ ease)。Motolii の芯は逆 — **関係を 1 つ宣言すると、時刻が画を全部作る**(1 つ触ると全部が揃う)。ここでは同じ 5 つの表現を `rel_<id>.js`(`web_*.js` は基準として残す)で書き直し、行数でなく**触った値の数**で測る。数え方は台本の呼び出し箇所(利用者の「71 箇所」と同じ): `.key(` 1 箇所 = 1、効果の欄 1 つ = 1、`.time(` 1 箇所 = 1、動きを作る `.set(`(Transition・Stagger・Position Anchor/Area・Near Fade・Tilt)1 箇所 = 1。箱の定義(Display・Sizing・Width・Height・Position・Size・Background…)は別に数えて括弧に置く(隠さない。前後とも同じ定規)。絵は `evidence/2026-09-17-relations/`(`.png` = 0 / 1/3 / 2/3 / 終わり、`.mp4` = 全コマ)。
+
+**手順の違い**: `cargo test … watch_shot` は再 compile になった(14:44 の stash `wip GSAP stagger distribute` が store.rs / layout.rs / resolve.rs の mtime を更新)。cargo を起動せず、組んである test binary(`motolii/target/debug/deps/motolii_ui-0ba15e1a42395e31`、14:28)を直接 `watch_shot --ignored` で叩いた(scratchpad の `relations/rel_shot.sh`)。描く側は 13:44 の `zz_watch`。
+
+### 既にある関係の語彙(names.rs・layout.rs・vism の札から。「Arrive は無い」は嘘、ある)
+
+- **箱が場所を決める**(`layout.rs` GROUP/ITEM_ROWS): Display Flex / Grid、Flex Direction(Row・Column・**Depth**)、**Flex Wrap**、Justify Content、Align Items、Gap、Padding、Horizontal / Vertical Sizing(Hug・Fill・Fixed)、Overflow(Visible・**Clip**・Bounce)、Clip Top / Right / Bottom / Left / Radius、Position Type Absolute、Constraints、Snap to Grid、Object Fit、Column / Row Start / Span
+- **箱が時刻を配る**: **Stagger / Stagger From / From End**(子の時計をずらす `schedule_shift`、Split の単位にも)、**`.time(start, duration)`**(居る時刻 = 並びに参加する時刻、`here()`)、Loop Duration / Direction、Time Remap / Speed
+- **並びが変わると滑る**: **Transition Duration / Easing / Delay**(`laid_out` / `group_size` — 子の枠と箱の大きさを過去の標本で混ぜる、親の Stagger が遅れを配る)
+- **付く・避ける・つなぐ**: Position Anchor / Position Area / Margin、Shape Outside / Shape Margin、Flow Around、Connect From / To・From / To Side・Line Path(Straight・Curved・Elbow・Hang)・Slack・Dash・Trace、Readout
+- **物と場**(SPACE_ROWS + `field.wgsl`): Hardness / Heaviness / Flex Shrink、Field(Turn・Spread・Angle・Strength・Reach・Hold・Gather)、PHYSICS の嘘(ROOM ancestor・WALLS follow・KEEP box・TIME gather)、Field Falloff / Scale / Opacity / Push
+- **ブロック**(vism STAGE block、`block_program.rs`): **Arrive**(From・Distance・Arrive・Bounce・Stagger・Spin・Radial — 行き先は箱、届き方だけ)、**Hang**(Length・Swing・Settle・Stagger・Sway・Beat)、Bounce、Push Apart、Wave、Field
+- **文字**: Split(None・Chars・Words・Lines)+ 層の Stagger、Content、Alignment、Text Autospace / Spacing Trim / Hanging Punctuation、Text Range の selector
+- **奥行きとカメラ**: projection 2D / 3D、Tilt X / Y、Position Z、Depth、Depth Alignment、Camera の Near Fade / Framing Size / Target(+ Transition)
+
+### 表
+
+| 表現 | 触った値(前 → 後) | 宣言した関係 | 絵 | 鍵が残った理由 / 足りない関係 |
+|---|---|---|---|---|
+| s1 文字がマスクで立ち上がる | 鍵 4 + 動き 3(Split・Stagger・Opacity 0)= **7 → 3**(鍵 0 + `.time` 1 + Stagger 1 + Transition 1)。箱の定義 7 → 16 | 行 = 1 行分の窓(Fixed・Overflow Clip・**Flex Wrap**)。中は [詰め物, 語…]。詰め物が幅いっぱいなので語は 2 行目(窓の下)に折り返している。詰め物が居なくなる時刻(`.time(0, 0.3 + row·0.35)`)に語は 1 行目へ折り返し直す — **Transition** が 1.2 s で滑らせ、行の **Stagger** が語ごとの遅れを配る(GSAP と同じく起点からの距離) | [png](evidence/2026-09-17-relations/s1.png) [mp4](evidence/2026-09-17-relations/s1.mp4) | 鍵 0。指示の形(Split: Words + Arrive)は**今は書けない**: (1) Split の写し(resolve.rs `push_split`、copy k)は物の表に載らず(blocks.rs は `copy == 0` の層 1 つ = 1 物)、Arrive のずれは行全体に 1 つ — 語ごとにならない。(2) **Overflow Clip が block のずれを切らない**: mask は層の素材座標(`clipped_masks`)で、GPU の block のずれが層と mask を一緒に動かす → 行が箱の外へ回転して飛ぶ [証拠](evidence/2026-09-17-relations/s1-split-arrive-finding.png)。要る関係 = **Split の単位 = 物**、**箱の切り抜きは箱の空間で(block の後に切る)**。代わりの詰め物は箱の定義を 9 増やした |
+| c2 蛍光ペンの帯 | 鍵 6 + 動き 2(Split・Stagger)+ 欄 1(Radius)= **9 → 4**(鍵 0 + `.time` 1 + Transition 1 + Position Anchor 1 + Position Area 1)。箱の定義 9 → 14 | 帯 = 語を抱く箱(Hug・Background・Border Radius・**Transform Origin Center**)で、語に**付いて置かれる**(Position Anchor + Area Center)。抱く写し(帯色の同じ語)が `.time(at)` に来ると箱はその幅へ広がり、**Transition** 0.8 s が真ん中から広げる | [png](evidence/2026-09-17-relations/c2.png) [mp4](evidence/2026-09-17-relations/c2.mp4) | 鍵 0。字の pop(scale 1.3 → 1・opacity、字ごとの stagger)は落とした — Arrive の Offset に scale の動きと opacity が無く(`block_program.rs` PRELUDE: translate・rotate・scale=1)、Split の単位は物にならない(s1 と同じ)。指示の「Fixed → Hug + Transition」は初期 Width 0 の set と Hold 鍵で 4 になるので、来る時刻(`.time`)で箱を広げた |
+| c3 文字が奥から起き上がる | 鍵 6 + 動き 2(Split・Stagger)= **8 → 5**(鍵 0 + Arrive From 1 + Spin 0 1 + Arrive Stagger 1 + Near Fade 1 + Tilt X 1)。箱の定義 7 → 7 | 字 = 行の箱に並ぶ層。行の板は奥へ寝ている(**Tilt X −25**、Transform Origin Center、3D)。**Arrive** が板の「手前の下」から 1 字ずつ届ける(Arrive 自身の Stagger 0.04 = 物の番号 k)= 世界ではカメラの近くから起き上がって紙に着く。近い字はカメラの **Near Fade** が薄くする | [png](evidence/2026-09-17-relations/c3.png) [mp4](evidence/2026-09-17-relations/c3.mp4) | 鍵 0 だが 5 値。**Arrive に奥行きが無い**(Offset は xy・回り・拡縮)ので、rotationX −45 → 0 の「起き上がり」と終わりの平らな行は書けず、板を寝かせたまま(終わりも寝ている、キーストーンの歪み)。要る関係 = **Arrive の From に Z と Tilt**。Spin 0 は既定 25 が字を回すため(既定との不一致 1 値)。Split: Chars は s1 の理由で使えず、字 = 層で書いた |
+| s2 見出しが帯で開く | 鍵 4 箇所(実体 48、ease 付き)= **4 → 4**(鍵 3 箇所 = hover の Hold、実体 9、ease 無し + Transition 1)。箱の定義 8 → 12 | 見出し = 1 行分の窓(Fixed・Overflow Clip・Column)。中は縦に [content, label]。窓がどちらを見せるかは**札 1 つ**(Justify Content: End = label / Start = content)。hover の時刻に札を切り替える(Hold)と **Transition** 0.4 s が滑らせる — label は上へ抜け、content が下から来る(inset の wipe でなく slide、.2em の押しは滑りに含まれる) | [png](evidence/2026-09-17-relations/s2.png) [mp4](evidence/2026-09-17-relations/s2.mp4) | 鍵 3 は **hover = 入力の所作**(元も hover)。値としての鍵(Clip 辺・Position・ease)は 0。Clip 辺は時刻の値をそのまま読む(Transition が掛からない)ので、wipe のまま関係にするには**Clip 辺にも移り方**が要る |
+| s6 線が描かれてから文字が出る | 鍵 4 + 動き 1(Opacity 0)+ 欄 1(Trim)= **6 → 5**(鍵 2 = Trim End + `.time` 1 + Transition 1 + 欄 1)。箱の定義 10 → 17 | 線 = 2 つの端を**つなぐ**(Connect・Curved)、描くのは Trim Paths の End(鍵 2 = 引き終わり)。文字 = 抱く箱(Hug・Overflow Clip)に並ぶ 3 行で、線が引き終わる時刻に来る(`.time(1.6)`)。箱がその時に広がり **Transition** 0.4 s が開く(fade でなく左上からの reveal) | [png](evidence/2026-09-17-relations/s6.png) [mp4](evidence/2026-09-17-relations/s6.mp4) | Trim の鍵 2 が残る: **線が自分を引く時間**(stroke の draw law、1 値)が無い。端を Arrive で届けて線に付いて行かせる道も無い(block のずれは Connect に渡らない — `set_physics_shifts` は物理だけ)。文字の Arrive は使えない: **層の in-point は Arrive の時計を動かさない**(host.time = 親の Stagger でずれた comp 時刻、`layer_time`)ので 1.6 s には着き終わっている |
+| **証明** 歌詞の語が行から落ちて積もる(`rel_proof_words_fall.js`) | — → **4**(鍵 0 + Stagger 1 + Field の欄 3: Spread 0.6・Angle 90・Strength 1500)。箱の定義 15 | 語 = 箱(Display Flex)に並ぶ層。箱に立った **Field**(重力 6 割 + 底の真ん中へ寄る 4 割)で語が行から落ち、壁と互いに当たって底に積もり、眠る。箱の **Stagger** 1.0 が語ごとに落ちる時刻を配る(物ごとの時刻で焼きを読む)。宣言 3 つ(Flex・Field・Stagger)、1920×1080・4 s、Hiragino Sans | [png](evidence/2026-09-17-relations/proof-words-fall.png) [mp4](evidence/2026-09-17-relations/proof-words-fall.mp4) | 鍵 0。指示の **Split: Words は使えない**: Split の行は物にならず落ちもしない(写しは `copy == 0` の物の表に無い) — 語は層で書いた(`split(" ")`)。要る関係 = **Split の単位 = 物**。一様な重力(Spread 1)だと語は真下に落ちて床に一列に並ぶ [絵](evidence/2026-09-17-relations/proof-uniform-gravity.png)、底の真ん中へ寄る分を混ぜると山になる |
+
+触った値 = **34 → 21**(鍵 24 箇所 → 5 箇所。残った 5 = hover の所作 3 + Trim の 2)。3 以下に収まったのは s1 だけ、c2 4・s2 4・c3 5・s6 5・証明 4。指示の形(Split + Arrive)は 5 本中 3 本で使えず、代わりに**箱の並びが変わる → Transition が滑らせる**(s1・c2・s2・s6)と**場 + Stagger**(証明)で書いた。
+
+### 足りない関係(鍵を焼かずに止めた所。file:line は今日の HEAD 6aa3851b2)
+
+1. **Split の単位 = 物**: `resolve.rs` `push_split` の写し(copy k)は `blocks.rs:296` の物の表(`copy == 0` の層 1 つ = 1 物)に載らない。Arrive・Field・物理は行全体に 1 つ(Split の行は落ちもしない)。s1・c2・c3・証明の全部がこれで Split を捨てた
+2. **箱の切り抜きは箱の空間で**: `resolve.rs` `clipped_masks` は mask を層の素材座標に置き、GPU の block のずれ(`attach_block`)が層と mask を一緒に動かす → Overflow Clip が Arrive を切らない(s1 の証拠の絵)
+3. **Arrive の From に Z と Tilt**: `block_program.rs` PRELUDE の Offset は translate xy・rotate・scale。奥から起き上がる(c3)は板を寝かせる嘘でしか書けない
+4. **線が自分を引く時間**(stroke の draw law): Trim Paths(`pathop.rs:42`)は Start / End / Offset の値だけ、時間の欄が無い → s6 の鍵 2
+5. **来た時刻から始まる効果**: `layout.rs:735` `layer_time` は親の Stagger のずれだけで、層の in-point を見ない → Arrive を `.time` で遅らせられない(s6)。あわせて、来た子・去った子自身は過去の枠が無いので滑らない(`laid_out` は居た標本だけ)→ 入り方は「詰め物が去る」(s1)か「箱が広がる」(c2・s6)で書くしかない
+6. **Clip 辺にも移り方**: Clip Top/Bottom は時刻の値をそのまま読む → wipe のまま関係にできず、s2 は slide にした
+
+### 詰まった所(束 1 の関係版。Rust は触っていない)
+
+23. **鍵の前の値は最初の鍵の値**: Justify Content の Hold は 0 秒にも打つ(s2、無いと content が先に見えた)
+24. **Flex Wrap の窓は行より広く**(Width 1700 で HASHIMOTO が 2 行目に残った → 1900)。切るのは Overflow
+25. **Transform Origin Center で Hug の箱は真ん中から広がる**(c2 の帯)。無いと左上から
+26. **Transition の遅れは親の Stagger が起点からの距離で配る**(`transition_delay`、GSAP の distribute)— 詰め物を含む n で数えるので、語の間隔は Stagger ÷ (n−1) でなく距離の比
+27. **行の語が箱より広いと Flex Shrink で潰れて当たりが崩れる**(証明の 6 語 110 px → 5 語 78 px、箱 1820)
