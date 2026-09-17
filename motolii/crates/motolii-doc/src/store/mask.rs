@@ -76,6 +76,16 @@ pub struct Mask {
     pub inverted: bool,
 }
 
+/// mask が付く枠。`Layer` は層の素材と一緒に動く(自分の mask・自分の clip-path・Split の単位)。`Box` は祖先の箱の切り
+/// (Overflow Clip / clip-path inset)で、箱の枠に留まる — ブロックのずれは中身だけを動かす(CSS の overflow: clip /
+/// clip-path は要素の箱に掛かり、中で transform した子孫は箱で切れる)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MaskFrame {
+    #[default]
+    Layer,
+    Box,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedMask {
     pub mode: MaskMode,
@@ -83,6 +93,7 @@ pub struct ResolvedMask {
     pub opacity: f32,
     pub expansion: f64,
     pub shape: crate::doc::eval::Path,
+    pub frame: MaskFrame,
 }
 
 pub(crate) fn validate_unique_ids(masks: &[Mask]) -> Result<(), StoreError> {

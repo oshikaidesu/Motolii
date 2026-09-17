@@ -322,6 +322,9 @@ pub struct LayerWithPasses {
     /// 効果ごとの「別の時刻の絵」(`passes` と同じ並び)。宣言していない効果は空。
     /// 効果が自分で覚えるのではなく**ホストが渡す**ので、評価は純関数のまま。
     pub pass_sources: Vec<Vec<GpuTexture2D>>,
+    /// 祖先の箱の切り(comp の px)。ブロックのずれで動く層は、ずれを書いた後に comp 大へ焼いてからこれで切る —
+    /// 切りは箱の枠に留まり、ずれは中身だけを動かす。空なら何もしない。
+    pub cut: Vec<crate::doc::store::ResolvedMask>,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use crate::doc::core::CompSpec;
-use crate::doc::store::{LayerId, PropertyId, RationalTime, ResolvedLayer, StoreView, Value};
+use crate::doc::store::{LayerId, MaskFrame, PropertyId, RationalTime, ResolvedLayer, ResolvedMask, StoreView, Value};
 use crate::render::compositor::effects::block_program::{BlockItem, BlockProgram, BlockWorld, FollowPass, WorldPass};
 use crate::render::compositor::effects::isf::IsfStage;
 use crate::render::compositor::Layer;
@@ -466,6 +466,38 @@ impl Engine {
         Ok(())
     }
 
+    /// 祖先の箱の切り(`MaskFrame::Box`)を、ブロックのずれの後に箱の枠で掛ける層か: 解き手が動かす、平らに置かれた、
+    /// 本番の組み(辿り直しの中でない)。
+    pub(super) fn cut_after_motion(&self, layer: &ResolvedLayer) -> bool {
+        !self.feedback_replaying
+            && self.blocks.moves(layer.id)
+            && layer.placement.z == 0.0 && layer.placement.rotation_x == 0.0 && layer.placement.rotation_y == 0.0
+            && layer.masks.iter().any(|m| m.frame == MaskFrame::Box)
+    }
+
+    /// 箱の切りを comp の px へ(素材座標 → 置き方)。ずれの後の絵は comp 大なので、そこで掛ける。
+    pub(super) fn box_cut_in_comp(&self, layer: &ResolvedLayer, built: &Layer) -> Vec<ResolvedMask> {
+        if !self.cut_after_motion(layer) {
+            return Vec::new();
+        }
+        let origin = built.frame.as_ref().map_or(glam::Vec2::ZERO, |f| glam::Vec2::from(f.origin));
+        let to = built.placement.transform * glam::Affine2::from_translation(-origin);
+        let scale = (to.matrix2.x_axis.length() + to.matrix2.y_axis.length()) * 0.5;
+        layer.masks.iter().filter(|m| m.frame == MaskFrame::Box).map(|m| {
+            let mut mask = m.clone();
+            for vertex in &mut mask.shape.vertices {
+                let p = to.transform_point2(glam::vec2(vertex.point[0] as f32, vertex.point[1] as f32));
+                vertex.point = [f64::from(p.x), f64::from(p.y)];
+                for tangent in [&mut vertex.in_tangent, &mut vertex.out_tangent] {
+                    let d = to.transform_vector2(glam::vec2(tangent[0] as f32, tangent[1] as f32));
+                    *tangent = [f64::from(d.x), f64::from(d.y)];
+                }
+            }
+            mask.expansion *= f64::from(scale);
+            mask
+        }).collect()
+    }
+
     /// 組んだ 1 枚にブロックが掛かっていれば、描く時と同じ置き方の箱を物として並べ、motion の番号を最後の欄に入れる。
     pub(super) fn attach_block(&mut self, layer: &ResolvedLayer, built: &mut Layer, comp: CompSpec) {
         // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
@@ -658,6 +690,66 @@ mod tests {
             put(&mut doc, group, layout::OVERFLOW, Value::Enum(2));
         }
         doc
+    }
+
+    /// 住む箱(Display の Group、(10,10) から 120×70、`clip` なら Overflow Clip)の底の白い四角(16 px、箱の (30, 50))が、
+    /// `start` コマ目から Arrive で下から来る(From 90・Distance 80・Arrive 0.7・Bounce 0・Stagger 0・Spin 0)。
+    fn arrive_scene(start: i64, clip: bool) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
+        let (group, child) = (LayerId(1), LayerId(2));
+        let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: group, patch: two_d.clone() },
+            Intent::AddLayer(child),
+            Intent::SetMeta { layer: child, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(start, None, 90) } },
+            Intent::SetAttrs { layer: child, patch: LayerAttrsPatch { parent: Some(Some(group)), ..two_d } },
+            Intent::SetShapes { layer: child, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 16.0, y: 16.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }) })] },
+            Intent::SetEffects { layer: child, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.arrive".into() }] },
+        ]).unwrap();
+        let put = |doc: &mut Document, layer, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, group, property::POSITION, Value::Vec2([10.0, 10.0]));
+        put(&mut doc, group, layout::DISPLAY, Value::Enum(1));
+        put(&mut doc, group, layout::HORIZONTAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::VERTICAL_SIZING, Value::Enum(2));
+        put(&mut doc, group, layout::WIDTH, Value::F64(120.0));
+        put(&mut doc, group, layout::HEIGHT, Value::F64(70.0));
+        if clip {
+            put(&mut doc, group, layout::OVERFLOW, Value::Enum(1));
+        }
+        put(&mut doc, child, layout::POSITION_TYPE, Value::Enum(1));
+        put(&mut doc, child, property::POSITION, Value::Vec2([30.0, 50.0]));
+        for (name, value) in [("side", 90.0), ("distance", 80.0), ("arrive", 0.7), ("bounce", 0.0), ("stagger", 0.0), ("spin", 0.0)] {
+            put(&mut doc, child, &format!("{}0.param.{name}", property::EFFECT_PREFIX), Value::F64(value));
+        }
+        doc
+    }
+
+    /// 描かれた行(alpha > 128 の画素の y、重複なし・昇順)。
+    fn lit_rows(pixels: &[u8]) -> Vec<u32> {
+        let mut rows: Vec<u32> = pixels.chunks_exact(4).enumerate().filter(|(_, c)| c[3] > 128).map(|(i, _)| (i as u32) / W).collect();
+        rows.sort_unstable();
+        rows.dedup();
+        rows
+    }
+
+    /// 箱の切りは箱の枠で(CSS の overflow: clip は要素の箱に掛かり、中で transform した子は箱で切れる): Overflow Clip の箱の
+    /// 子が Arrive で下から来る途中、箱の外(下)の画素は透明。着いた後は箱の中に丸ごと見える。
+    #[test]
+    fn the_boxs_clip_cuts_what_arrive_moves_in_the_boxs_frame() {
+        let doc = arrive_scene(0, true);
+        let mut engine = Engine::new().unwrap();
+        let fps = Fps::try_new(30, 1).unwrap();
+        let at = |engine: &mut Engine, frame: i64| lit_rows(&engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, fps).unwrap()).unwrap());
+        let landed = at(&mut engine, 30);
+        let bottom = 10 + 70 + 1;
+        assert!(landed.len() >= 15 && *landed.last().unwrap() < bottom, "landed: the whole square sits inside the box: {landed:?}");
+        // frame 9 = 0.3 s of 0.7: left = (1 − 3/7)^3 ≈ 0.19 → 15 px below its slot → the square straddles the box's bottom.
+        let mid = at(&mut engine, 9);
+        assert!(!mid.is_empty() && mid[0] > landed[0], "mid-arrive: the square is on its way up (rows {mid:?} vs landed {landed:?})");
+        assert!(*mid.last().unwrap() < bottom && mid.len() < landed.len(), "mid-arrive: the box cuts it at its bottom edge, the offset moved only the content: rows {mid:?}");
     }
 
     /// GPU のブロックが描く位置は、書類の CPU の Bounce と同じ(読み戻さずに描く側の頂点で動く)。

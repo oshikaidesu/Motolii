@@ -320,17 +320,19 @@ impl Engine {
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         if self.feedback_replaying {
             self.prepare_blocks(view, comp, t, resolved)?;
-            let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+            let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
             self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
+            self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
             return Ok(layers);
         }
         self.compositor.feedback_set_revision(view.revision_key());
         self.feedback_keys_seen.clear();
         self.prepare_blocks(view, comp, t, resolved)?;
-        let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+        let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
         let seen = std::mem::take(&mut self.feedback_keys_seen);
         if !self.replay_feedback(view, comp, camera, projection_camera, t, &seen)? {
             self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
+            self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
             return Ok(layers);
         }
         // 辿り直しで状態が動いた: 焼いた絵は辿り直す前の物なので捨て、t をもう一度組む。
@@ -338,8 +340,9 @@ impl Engine {
         c.baked_effects.clear(&mut c.effect_scratch);
         self.stamp_clock(view, t);
         self.prepare_blocks(view, comp, t, resolved)?;
-        let layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
+        let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
         self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
+        self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
         self.feedback_keys_seen.clear();
         Ok(layers)
     }
@@ -546,6 +549,7 @@ impl Engine {
 
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
             let mut frozen_padding = 0u32;
+            let mut cut = Vec::new();
             let (built, passes) = if let Some(group) = layer.plate {
                 // Whole の効果を積んだグループ: 同じ板の子孫を全部 1 枚に焼いてから、板の効果を掛ける。
                 // 板の不透明度と混ぜ方はグループの物。効果はどちらの道でも「1 枚に掛かる」だけ(裁定 2026-09-11)。
@@ -561,7 +565,7 @@ impl Engine {
                         let mut passes = translate_effect_passes(&member.effects);
                         let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
                         self.stamp_feedback(&mut passes, member.id, member.copy, 0, screen);
-                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
+                        copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0, cut: Vec::new() });
                     }
                 }
                 if copies.is_empty() {
@@ -584,6 +588,7 @@ impl Engine {
                 let Some(built) = self.build_layer_shared(&mut previous_build, layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? else {
                     continue;
                 };
+                cut = self.box_cut_in_comp(layer, &built);
                 let mut passes = translate_effect_passes(&layer.effects);
                 let screen = (built.content.texture().is_none() || passes.iter().any(|p| p.reads_backdrop || p.reads_composite())).then(|| self.window_size(comp));
                 self.stamp_feedback(&mut passes, layer.id, layer.copy, 0, screen);
@@ -608,7 +613,7 @@ impl Engine {
                             let mut passes = translate_effect_passes(&copy.effects);
                             let screen = built.content.texture().is_none().then_some([comp.width, comp.height]);
                             self.stamp_feedback(&mut passes, copy.id, copy.copy, 0, screen);
-                            copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
+                            copies.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0, cut: Vec::new() });
                         }
                     }
                 }
@@ -648,7 +653,7 @@ impl Engine {
                 let first = indices[0];
                 let (blend, placement) = (layers[first].layer.blend_mode, layers[first].layer.placement);
                 let union = self.bake_isolated_layers(comp, camera, indices.iter().map(|&i| layers[i].clone()).collect(), blend, placement, false)?;
-                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new(), pass_sources: Vec::new(), padding: 0 }, &built, &passes)? {
+                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }, &built, &passes)? {
                     Some(clipped) => {
                         layers[first] = clipped;
                         removed.extend(indices.into_iter().skip(1));
@@ -677,7 +682,7 @@ impl Engine {
                         for copy in copies {
                             if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, CompositeBlendMode::Normal)? {
                                 let passes = translate_effect_passes(&copy.effects);
-                                plate.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0 });
+                                plate.push(LayerWithPasses { layer: built, passes, pass_sources: Vec::new(), padding: 0, cut: Vec::new() });
                             }
                         }
                         self.bake_isolated_layers(comp, camera, plate, CompositeBlendMode::Normal, source.placement, false)?
@@ -712,6 +717,7 @@ impl Engine {
                 layer: final_layer,
                 passes,
                 padding: frozen_padding,
+                cut,
             });
         }
 
@@ -903,6 +909,7 @@ impl Engine {
         let source = LayerWithPasses {
             pass_sources: Vec::new(),
             padding: 0,
+            cut: Vec::new(),
             layer: Layer {
                 placement: baked_placement,
                 ..layer.clone()
@@ -966,7 +973,7 @@ impl Engine {
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
         let (blend, placement) = (layer.blend_mode, layer.placement);
-        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0 }], blend, placement, false)
+        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }], blend, placement, false)
     }
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。`average` なら写しを足す
@@ -1079,8 +1086,16 @@ impl Engine {
             frame,
         };
         let uses_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
+        // 祖先の箱の切りは、ブロックが動かす層には素材の枠で掛けない — ずれの後に箱の枠で掛ける(`cut_moved_in_their_boxes`)。
+        let own: Vec<ResolvedMask>;
+        let masks: &[ResolvedMask] = if self.cut_after_motion(layer) {
+            own = layer.masks.iter().filter(|m| m.frame == crate::doc::store::MaskFrame::Layer).cloned().collect();
+            &own
+        } else {
+            &layer.masks
+        };
         let masks_applied = (uses_material || frame.is_some()) && built.content.texture().is_some();
-        if masks_applied { built = self.apply_masks_to_layer(built, &layer.masks, natural, frame)?; }
+        if masks_applied { built = self.apply_masks_to_layer(built, masks, natural, frame)?; }
         built = self.apply_material_domains(built, layer, natural, frame)?;
         if matches!(built.content, LayerContent::Model(_) | LayerContent::Texture(_) | LayerContent::LinearTexture(_)) {
             built.shading = self.compositor.surface_shading_for(&layer.effects, matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()))
@@ -1092,7 +1107,7 @@ impl Engine {
         // 物の投影範囲 + reach にするのは宿題。
         let picture_of_spatial = matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()) && !translate_effect_passes(&layer.effects).is_empty();
         let built = self.flatten_if_asked(comp, camera, built, layer.flatten || picture_of_spatial)?;
-        Ok(Some(if masks_applied { built } else { self.apply_masks_to_layer(built, &layer.masks, natural, frame)? }))
+        Ok(Some(if masks_applied { built } else { self.apply_masks_to_layer(built, masks, natural, frame)? }))
     }
 
     fn apply_masks_to_layer(
@@ -1155,6 +1170,21 @@ impl Engine {
             .apply_local_alpha_mask(&texture, &mask_texture)?;
         layer.content = LayerContent::Texture(masked);
         Ok(layer)
+    }
+
+    /// ブロックのずれで動く層を祖先の箱で切る(`MaskFrame::Box`): ずれを書いた後に comp 大へ焼き、箱の枠の切りを掛ける。
+    /// 切りは箱に留まり、ずれは中身だけを動かす(CSS の overflow: clip / clip-path は要素の箱に掛かり、中で transform した
+    /// 子孫は箱で切れる)。
+    pub(super) fn cut_moved_in_their_boxes(&mut self, comp: CompSpec, camera: ResolvedCamera, layers: &mut [LayerWithPasses]) -> Result<(), EngineError> {
+        for entry in layers.iter_mut().filter(|entry| !entry.cut.is_empty()) {
+            let cut = std::mem::take(&mut entry.cut);
+            let source = entry.clone();
+            let (blend, placement) = (source.layer.blend_mode, source.layer.placement);
+            let baked = self.bake_isolated_layers(comp, camera, vec![source], blend, placement, false)?;
+            let layer = self.apply_masks_to_layer(baked, &cut, [comp.width as f32, comp.height as f32], None)?;
+            *entry = LayerWithPasses { layer, passes: Vec::new(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() };
+        }
+        Ok(())
     }
 
     pub fn apply_matte(

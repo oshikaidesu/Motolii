@@ -33,7 +33,7 @@ impl Engine {
         Ok(copies.iter().map(|copy| {
             let mut placed = built.clone();
             placed.placement = copy.placement;
-            LayerWithPasses { layer: placed, passes: passes.clone(), pass_sources: Vec::new(), padding: 0 }
+            LayerWithPasses { layer: placed, passes: passes.clone(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }
         }).collect())
     }
 

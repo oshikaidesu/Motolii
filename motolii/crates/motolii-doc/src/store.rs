@@ -36,7 +36,7 @@ pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFin
 pub use marker::Marker;
 mod notebook;
 pub use notebook::{Notebook, NotePage, NoteBlock, NoteContent};
-pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
+pub use mask::{Mask, MaskFrame, MaskId, MaskMode, ResolvedMask};
 pub use persist::AutoSaveConfig;
 pub use slot::{PropertyBase, PropertyLink, PropertySource, Slot, SlotId};
 pub use text::{

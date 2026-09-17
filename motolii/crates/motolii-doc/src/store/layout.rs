@@ -2069,6 +2069,23 @@ mod tests {
         assert_eq!(bounds(&doc, a).0, 2, "Overflow Clip and the inset are two cuts (border-radius and `round` are separate in CSS)");
     }
 
+    /// 箱の切りは箱の枠に付く(CSS の overflow: clip / clip-path は要素の箱に掛かり、中で transform した子孫は箱で切れる):
+    /// Overflow Clip の箱の子が持つ切りは `Box`(ブロックのずれの後に箱で切る)、箱自身の inset は `Layer`(要素ごと、自分と動く)。
+    #[test]
+    fn a_boxs_clip_binds_to_the_box_and_a_layers_own_clip_to_the_layer() {
+        use crate::doc::store::MaskFrame;
+        let mut doc = blank_project();
+        let group = flex_row(&mut doc);
+        put(&mut doc, group, OVERFLOW, Value::Enum(1));
+        put(&mut doc, group, CLIP_TOP, Value::F64(10.0));
+        let a = rect(&mut doc, 2, group, [100.0, 50.0]);
+        let frames = |doc: &Document, id: LayerId| -> Vec<MaskFrame> {
+            doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == id).unwrap().masks.iter().map(|m| m.frame).collect()
+        };
+        assert_eq!(frames(&doc, a), vec![MaskFrame::Box, MaskFrame::Box], "the child is cut by the box's Overflow and inset, both bound to the box");
+        assert_eq!(frames(&doc, group), vec![MaskFrame::Layer], "the box's own inset moves with the box (clip-path is per element)");
+    }
+
     /// Split Words + Stagger: 語ごとに時刻がずれる(鍵は 1 本、単位は箱の mask、書類に子の層は無い)。
     /// Stagger は箱の子と同じ法 = 全体の幅(GSAP の `stagger: {amount}`): 3 語で 0.2 なら 2 語目は 0.1、3 語目は 0.2 遅れる。
     #[test]

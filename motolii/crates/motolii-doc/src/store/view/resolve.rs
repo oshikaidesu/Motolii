@@ -386,6 +386,7 @@ impl<'a> StoreView<'a> {
                 opacity: opacity.clamp(0.0, 1.0),
                 expansion,
                 shape,
+                frame: crate::doc::store::MaskFrame::Layer,
             });
         }
         Ok(out)
@@ -1298,6 +1299,7 @@ impl<'a> StoreView<'a> {
                 opacity: 1.0,
                 expansion: 0.0,
                 shape: crate::doc::store::layout::rounded_rect_path(b, 0.0, glam::Affine2::IDENTITY),
+                frame: crate::doc::store::MaskFrame::Layer,
             });
             out.push(copy);
         }
@@ -1305,6 +1307,7 @@ impl<'a> StoreView<'a> {
     }
 
     /// Overflow が Clip の並べる Group の子孫は、その箱で切る: 箱を層の素材座標へ写した角丸の矩形を Intersect で足す。
+    /// 祖先の箱の切りは箱の枠に付く(`MaskFrame::Box`)、自分の inset は自分の枠(`Layer`)。
     fn clipped_masks(
         &self,
         layer: LayerId,
@@ -1338,6 +1341,7 @@ impl<'a> StoreView<'a> {
                     opacity: 1.0,
                     expansion: 0.0,
                     shape: crate::doc::store::layout::rounded_rect_path(b, radius, to),
+                    frame: if group == layer { crate::doc::store::MaskFrame::Layer } else { crate::doc::store::MaskFrame::Box },
                 });
             }
             next = self.attrs(group)?.unwrap_or_default().parent;

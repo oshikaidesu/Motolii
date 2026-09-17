@@ -50,7 +50,7 @@ impl Engine {
             let (texture, _view) = engine.compositor.render_to_texture(
                 local,
                 flat,
-                &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0 }],
+                &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }],
                 crate::render::compositor::NO_BACKGROUND,
             )?;
             engine.compositor.import_premultiplied(&texture)
@@ -81,6 +81,7 @@ impl Engine {
         Ok(Some(LayerWithPasses {
             pass_sources: Vec::new(),
             padding: 0,
+            cut: Vec::new(),
             layer: Layer {
                 content: LayerContent::Texture(clipped),
                 size: [local.width as f32, local.height as f32],
