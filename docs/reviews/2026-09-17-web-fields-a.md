@@ -21,3 +21,13 @@
 - **絵**: s1・c1・c2・c3 の evidence は差し替え前と同じ絵(s1 の 1/3 コマで「2026」が「TOKYO」より遅れて上がる = 語ごとの時計)。
 - **test**: `split_words_give_each_word_its_own_time_under_the_texts_stagger`(3 語 + Stagger 0.2 で 2 語目は 0.1、3 語目は 0.2 遅れて鍵を読む、単位は読む順で自分の箱、Chars は空白を数えない、1 行の Lines は分けない)。
 - **仕様が開けている所(決めていない)**: (1) **Stagger の意味は既存の「全体の幅」**(GSAP `stagger: {amount}`)のまま — 依頼の test 文「3 語 + Stagger 0.1 で 2 語目が 0.1」は GSAP `stagger: 0.1`(1 つずつ)の読みで、Motolii では 3 語目が 0.1。1 つずつの欄(`Stagger Each`)を足すかは裁定待ち。(2) 単位の箱 = 字の送り幅 × 行の箱の縦 — 送りをはみ出す字形(斜体の f、装飾)は隣の単位の側で切れる(SplitText は overflow visible)。(3) 写しは**層の鍵・効果・変換**をずれた時刻で読むが、**文字の中身と字の style の鍵は描く側がコマの時刻で読む**(単位ごとに違う中身は c9 の scramble の欄)。(4) Split の文字に Repeater・Motion Blur は掛からない(`push_split` が先に積む)。(5) Transition(FLIP)・Arrive は単位を見ない(Arrive は語彙に無い)。(6) 行の Split は折り返しの行(`Lines`)だけで、`\n` の段落も行として数える。
+
+## 3. Loop — `animation-iteration-count: infinite` + `animation-direction`
+
+- **意図**: 流れ続ける帯・漂い続ける札(s7・s10)。今までは周期ごとに鍵を打ち直す(s10 は 1.8 s ごとに反転の鍵、s7 は折り返しの鍵を隣り合う 2 コマの間に置く)。
+- **札**: 全ての層の欄 `Loop Duration`(秒、既定 0 = 繰り返さない)と `Loop Direction`(`Normal | Reverse | Alternate | Alternate Reverse` = CSS `animation-direction` の 4 値、既定 Normal)。層の時刻 t を、順番の札(Stagger)でずらした後に周期で畳んでから鍵・効果を読む: normal = t mod D、reverse = D − (t mod D)、alternate = 奇数回目が逆向き、alternate-reverse はその逆。時刻の純関数。
+- **先例**: CSS Animations `animation-iteration-count: infinite` + `animation-direction`、Remotion `<Loop durationInFrames>`、AE の `loopOut("cycle"|"pingpong")`。
+- **借りた物**: 順番の札の口(`view.rs value_at` が層の時刻をずらす 1 か所)。**足した物**: `layout::looped_time`、`is_loop_row`(Loop の欄自身は畳まずに読む)。
+- **絵**: s7・s10 の evidence は差し替え前と同じ絵。
+- **test**: `loop_folds_the_layers_time_like_css_animation_direction`(鍵 0 → 1 s、D = 1: t = 2.5 → 0.5、Alternate の t = 1.5 → 0.5 / 1.2 → 0.8、Reverse は毎回逆、Loop の欄自身は畳まない)。
+- **仕様が開けている所(決めていない)**: (1) **周期の原点はコンポの 0 秒**(CSS は要素の animation の開始 = delay 後、Remotion は `<Loop>` の置かれた frame)。層の in 点や最初の鍵を原点にするかは裁定待ち。(2) `animation-iteration-count` の**有限回**(3 回で止まる)と `animation-fill-mode` は無い(infinite だけ)。(3) 畳むのは鍵・効果の欄(`value_at` を通る物)で、**文字の中身(ContentTrack)と物理の集まりの時刻(`blocks.rs` の `layer_time`)は畳まない**。(4) 子の層は親の Loop を継がない(CSS も要素ごと)— 箱ごと繰り返すなら箱の鍵に Loop を置く。(5) 依頼の名は `Normal | Alternate` だったが、CSS の enum を丸ごと(Reverse・Alternate Reverse を含めて)写した。

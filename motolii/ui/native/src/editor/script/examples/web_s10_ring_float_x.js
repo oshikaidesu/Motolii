@@ -4,7 +4,7 @@
 // Source (mama): .home-objects__stage{animation:home-objects-spin 360s linear infinite} @keyframes home-objects-spin{to{rotate(360deg)}}
 // — the pictures ride the ring and turn with it (no counter-rotation). Here the period is the comp: 360° over 6 s, linear.
 // Source (toyox): @keyframes floating-y{0%{translateY(-10%)}100%{translateY(10%)}} `1.8s ease-in-out infinite alternate`
-// (= cubic-bezier(.42,0,.58,1)); `--reverse` starts at the other end. Alternate = keys every 1.8 s, flipping.
+// (= cubic-bezier(.42,0,.58,1)); `--reverse` starts at the other end. infinite alternate = Loop Duration 1.8, Loop Direction Alternate.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 6, background: "#F5F1E8" });
 const IO = { kind: "Bezier", x1: 0.42, y1: 0, x2: 0.58, y2: 1 }, D = 270, SEC = 6, R = 360;
 const C = ["#E8442E", "#2B4C8C", "#E9C46A", "#14141A", "#7EBDC2", "#C8412B", "#8E7CC3", "#3A8F5A"];
@@ -27,5 +27,5 @@ for (const layer of [stage, ...orbit, ...things]) layer.projection("2D");
   const pill = group(badge).name(`${word} pill`);
   pill.set("Display", "Flex").set("Padding", [24, 40]).set("Horizontal Sizing", "Hug").set("Vertical Sizing", "Hug").set("Background", "#14141A").set("Border Radius", 60);
   badge.set("Position", [0, 0]);
-  for (let n = 0; n * 1.8 <= SEC + 1.8; n++) pill.key("Position", n * 1.8, [1500, y + (n % 2 ? amp : -amp)], IO);
+  pill.set("Loop Duration", 1.8).set("Loop Direction", "Alternate").key("Position", 0, [1500, y - amp], IO).key("Position", 1.8, [1500, y + amp]);
 });

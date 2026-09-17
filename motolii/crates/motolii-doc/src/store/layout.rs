@@ -93,6 +93,10 @@ pub const HARDNESS: &str = "layout.hardness";
 pub const HEAVINESS: &str = "layout.heaviness";
 pub const STAGGER: &str = "layout.stagger";
 pub const STAGGER_FROM: &str = "layout.stagger_from";
+/// 繰り返し(CSS `animation-iteration-count: infinite` + `animation-direction`、Remotion `<Loop durationInFrames>`):
+/// 層の時刻を Loop Duration 秒の周期で畳んでから鍵・効果を読む(0 = 繰り返さない)。Alternate は往復(三角波)。
+pub const LOOP_DURATION: &str = "layout.loop_duration";
+pub const LOOP_DIRECTION: &str = "layout.loop_direction";
 /// 文字が避けて流れる物の形(CSS `shape-outside`、宣言するのは避けられる物の側)。同じ親の、折り返す文字が避ける。
 /// Margin Box = 箱 + Margin、Content = 形の輪郭(Blob Track の層は塊の箱)。間は `Shape Margin`。
 pub const SHAPE_OUTSIDE: &str = "layout.shape_outside";
@@ -241,6 +245,8 @@ pub const SPACE_ROWS: &[Row] = &[
     (TRANSITION_DURATION, "Transition Duration", Value::F64(0.0), Some((0.0, 60.0)), &[]),
     (TRANSITION_EASING, "Transition Easing", Value::Enum(0), None, &["Ease", "Linear", "Ease In", "Ease Out", "Ease In Out"]),
     (TRANSITION_DELAY, "Transition Delay", Value::F64(0.0), Some((0.0, 60.0)), &[]),
+    (LOOP_DURATION, "Loop Duration", Value::F64(0.0), Some((0.0, 3600.0)), &[]),
+    (LOOP_DIRECTION, "Loop Direction", Value::Enum(0), None, &["Normal", "Reverse", "Alternate", "Alternate Reverse"]),
     (FIELD, "Field", Value::LayerId(0), None, &[]),
     (FIELD_FALLOFF, "Field Falloff", Value::F64(200.0), Some((0.0, 100000.0)), &[]),
     (FIELD_SCALE, "Field Scale", Value::F64(1.0), Some((0.0, 100.0)), &[]),
@@ -295,6 +301,11 @@ pub fn row(property: &str) -> Option<&'static Row> {
 /// 順番の欄そのもの(これを読む時は時刻をずらさない — ずらしの根拠なので)。
 pub fn is_schedule_row(property: &str) -> bool {
     matches!(property, STAGGER | STAGGER_FROM | FROM_END)
+}
+
+/// 繰り返しの欄そのもの(これを読む時は時刻を畳まない — 畳みの根拠なので)。
+pub fn is_loop_row(property: &str) -> bool {
+    matches!(property, LOOP_DURATION | LOOP_DIRECTION)
 }
 
 pub fn choices(property: &str) -> &'static [&'static str] {
@@ -727,6 +738,26 @@ impl StoreView<'_> {
         let siblings = self.schedule_children(parent)?;
         let Some(i) = siblings.iter().position(|&s| s == layer) else { return Ok(base) };
         self.schedule_shift(parent, i, siblings.len(), base)
+    }
+
+    /// 繰り返しで畳んだ時刻(CSS の animation-direction: normal は t mod D、reverse は D − (t mod D)、alternate は
+    /// 奇数回目を逆向きに、alternate-reverse はその逆)。Loop Duration が 0 ならそのまま。
+    pub fn looped_time(&self, layer: LayerId, t: RationalTime) -> Result<RationalTime, StoreError> {
+        let duration = self.number(layer, LOOP_DURATION, 0.0, t)?;
+        if duration <= 1e-9 {
+            return Ok(t);
+        }
+        let seconds = t.as_seconds_f64();
+        let round = (seconds / duration).floor();
+        let along = seconds - round * duration;
+        let odd = round.rem_euclid(2.0) >= 1.0;
+        let local = match self.choice(layer, LOOP_DIRECTION, t)? {
+            1 => duration - along,
+            2 => if odd { duration - along } else { along },
+            3 => if odd { along } else { duration - along },
+            _ => along,
+        };
+        RationalTime::try_new((local * 1_000_000.0).round() as i64, 1_000_000).map_err(|e| StoreError::Property(format!("loop: {e}")))
     }
 
     /// 箱 `holder` の順番の札で、n 個のうち i 番目の時刻。箱の子の層にも、文字の Split の単位にも同じ法。
@@ -2068,6 +2099,34 @@ mod tests {
         assert_eq!(copies(&doc).len(), 11, "Chars: the spaces are not units");
         put(&mut doc, words, crate::doc::store::names::TEXT_SPLIT, Value::Enum(3));
         assert_eq!(copies(&doc).len(), 1, "Lines: one line is not split");
+    }
+
+    /// Loop: 鍵 0 → 1 s、Loop Duration 1 なら t = 2.5 は 0.5 として読む。Alternate は奇数回目が逆向き(t = 1.5 → 0.5、1.2 → 0.8)。
+    #[test]
+    fn loop_folds_the_layers_time_like_css_animation_direction() {
+        let mut doc = blank_project();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        let thing = add(&mut doc, 2, LayerSource::Shape, None);
+        let mut track = crate::doc::eval::KeyframeTrack::new();
+        track.insert(crate::doc::eval::Keyframe { t: at(0), value: Value::F64(0.0), interp: crate::doc::eval::Interp::Linear, spatial: Default::default() });
+        track.insert(crate::doc::eval::Keyframe { t: at(30), value: Value::F64(1.0), interp: crate::doc::eval::Interp::Linear, spatial: Default::default() });
+        doc.apply(Intent::SetTrack { layer: thing, property: PropertyId::new(property::OPACITY).unwrap(), track }).unwrap();
+        let opacity = |doc: &Document, f: i64| match doc.view().value_at(thing, &PropertyId::new(property::OPACITY).unwrap(), at(f)).unwrap() {
+            Some(Value::F64(v)) => v,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(opacity(&doc, 75), 1.0, "no loop: past the last key it holds");
+        put(&mut doc, thing, LOOP_DURATION, Value::F64(1.0));
+        assert!((opacity(&doc, 75) - 0.5).abs() < 1e-6, "Normal: t = 2.5 reads as 0.5");
+        assert!((opacity(&doc, 36) - 0.2).abs() < 1e-6, "Normal: t = 1.2 reads as 0.2");
+        put(&mut doc, thing, LOOP_DIRECTION, Value::Enum(2));
+        assert!((opacity(&doc, 45) - 0.5).abs() < 1e-6, "Alternate: t = 1.5 reads as 0.5");
+        assert!((opacity(&doc, 36) - 0.8).abs() < 1e-6, "Alternate: t = 1.2 is on the way back, 0.8");
+        assert!((opacity(&doc, 15) - 0.5).abs() < 1e-6, "Alternate: the first pass runs forward");
+        put(&mut doc, thing, LOOP_DIRECTION, Value::Enum(1));
+        assert!((opacity(&doc, 15) - 0.5).abs() < 1e-6 && (opacity(&doc, 7) - (1.0 - 7.0 / 30.0)).abs() < 1e-6, "Reverse runs every pass backwards");
+        assert_eq!(doc.view().value_at(thing, &PropertyId::new(LOOP_DURATION).unwrap(), at(75)).unwrap(), Some(Value::F64(1.0)), "the loop rows themselves are read unfolded");
     }
 
     #[test]
