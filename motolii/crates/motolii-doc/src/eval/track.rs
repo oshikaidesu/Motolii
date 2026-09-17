@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::doc::core::RationalTime;
 
 use crate::doc::eval::bezier::{cubic_bezier_ease, sample, solve_curve_x};
+use crate::doc::eval::gsap::GsapEase;
 use crate::doc::eval::value::Value;
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq)]
@@ -57,6 +58,8 @@ pub enum Interp {
     Steps { width: f64, smooth: f64 },
     /// 弾む段。遷移は段時刻から**始まる**(Steps とは逆)。
     ElasticSteps { width: f64, elasticity: f64 },
+    /// GSAP の ease(`power2.out` / `back.out(1.7)` / `elastic.out(1, 0.3)` / `steps(5)` / `slow(...)` / `none`)。式は gsap.rs。
+    Gsap(GsapEase),
 }
 
 impl Interp {
@@ -81,6 +84,7 @@ impl Interp {
             Interp::ElasticSteps { width, elasticity } => {
                 elastic_steps_ease(width, elasticity, u)
             }
+            Interp::Gsap(ease) => ease.ease(u),
         }
     }
 
@@ -95,6 +99,7 @@ impl Interp {
             Interp::Random { .. } => "Random",
             Interp::Steps { .. } => "Steps",
             Interp::ElasticSteps { .. } => "ElasticSteps",
+            Interp::Gsap(_) => "GSAP",
         }
     }
 
@@ -107,6 +112,7 @@ impl Interp {
                 | Interp::Random { .. }
                 | Interp::Steps { .. }
                 | Interp::ElasticSteps { .. }
+                | Interp::Gsap(_)
         ) {
             return Err(TrackError::UnsplittableInterp { kind: self.kind() });
         }
@@ -149,7 +155,8 @@ impl Interp {
             | Interp::Cyclic { .. }
             | Interp::Random { .. }
             | Interp::Steps { .. }
-            | Interp::ElasticSteps { .. } => {
+            | Interp::ElasticSteps { .. }
+            | Interp::Gsap(_) => {
                 Err(TrackError::UnsplittableInterp { kind: self.kind() })
             }
             Interp::Bezier { x1, y1, x2, y2 } => {
@@ -573,6 +580,7 @@ impl KeyframeTrack {
                         )));
                     }
                 }
+                Interp::Gsap(ease) => ease.validate().map_err(TrackError::InvalidInterp)?,
                 Interp::Hold | Interp::Linear => {}
             }
         }

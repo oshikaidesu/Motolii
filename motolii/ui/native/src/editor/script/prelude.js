@@ -41,13 +41,8 @@ const valueFor = (row, value) => {
   if (value instanceof Layer) return value.id;
   return value;
 };
-const EASES = ["Hold", "Linear", "Bezier", "Bounce", "Elastic", "Cyclic", "Random", "Steps", "ElasticSteps"];
-const easeShape = (ease) => {
-  if (ease === undefined) return { kind: "Linear" };
-  const shape = typeof ease === "string" ? { kind: ease } : ease;
-  if (!EASES.includes(shape.kind)) throw new Error(`Unknown ease ${JSON.stringify(shape.kind)}. Eases: ${EASES.join(", ")}`);
-  return shape;
-};
+/** An ease is the window's kind ("Bezier", "Hold", …) or a GSAP ease string ("power2.out", "back.out(1.7)", "elastic.out(1, 0.3)", "steps(5)", "none"). */
+const easeShape = (ease) => (ease === undefined ? { kind: "Linear" } : typeof ease === "string" ? { kind: ease } : ease);
 
 /** One seeded random stream: random(seed)() -> 0..1. The same seed always gives the same numbers. */
 globalThis.random = (seed = 0) => {

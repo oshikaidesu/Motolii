@@ -19,7 +19,7 @@ pub(crate) fn value(value:&Value)->Json{match value{
 }}
 pub(crate) fn interp(i:Interp)->Json{
     let raw=serde_json::to_value(i).unwrap_or(Json::Null);
-    let mut out=if let Some(s)=raw.as_str(){json!({"kind":s})}
+    let mut out=if let Interp::Gsap(ease)=i{json!({"kind":ease.to_string()})}else if let Some(s)=raw.as_str(){json!({"kind":s})}
     else if let Some((kind,params))=raw.as_object().and_then(|o|o.iter().next()){
         let mut out=params.as_object().cloned().unwrap_or_default();out.insert("kind".into(),json!(kind));Json::Object(out)
     }else{json!({"kind":"Unknown"})};

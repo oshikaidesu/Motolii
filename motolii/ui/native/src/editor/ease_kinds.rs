@@ -44,12 +44,15 @@ pub(crate) fn hold_in_range(interp: Interp, free: bool) -> Interp {
 
 /// 型が終点を越えるか。Overshoot の既定はこれで決まる(AM-KG-07)。
 pub(crate) fn overshoots(interp: Interp) -> bool {
-    matches!(interp, Interp::Elastic { .. } | Interp::ElasticSteps { .. })
+    match interp {
+        Interp::Gsap(ease) => ease.overshoots(),
+        other => matches!(other, Interp::Elastic { .. } | Interp::ElasticSteps { .. }),
+    }
 }
 
 pub(crate) fn handles(interp: Interp) -> Vec<Handle> {
     match interp {
-        Interp::Hold | Interp::Linear => Vec::new(),
+        Interp::Hold | Interp::Linear | Interp::Gsap(_) => Vec::new(),
         Interp::Bezier { x1, y1, x2, y2 } => vec![
             Handle {
                 at: (x1, y1),
@@ -264,7 +267,13 @@ pub(crate) fn handles(interp: Interp) -> Vec<Handle> {
 
 pub(crate) fn decode(raw: &serde_json::Value) -> Result<Interp, String> {
     let kind = raw["kind"].as_str().ok_or("Missing easing kind")?;
-    let base = KINDS.iter().copied().find(|i| crate::snapshot::interp(*i)["kind"] == kind).ok_or("Unsupported interpolation")?;
+    let Some(base) = KINDS.iter().copied().find(|i| crate::snapshot::interp(*i)["kind"] == kind) else {
+        // 窓の型に無い名前は GSAP の文字列(`power2.out` / `back.out(1.7)`)。どちらでもなければ両方の名前を並べて断る。
+        return crate::doc::store::GsapEase::parse(kind).map(Interp::Gsap).map_err(|e| {
+            let ours: Vec<_> = KINDS.iter().map(|i| crate::snapshot::interp(*i)["kind"].as_str().unwrap_or_default().to_owned()).collect();
+            format!("Unknown ease {kind:?}. Eases: {}; or a GSAP ease — {e}", ours.join(", "))
+        });
+    };
     let mut params = crate::snapshot::interp(base);
     let out = params.as_object_mut().unwrap();
     for (key, value) in raw.as_object().ok_or("Expected easing shape")? {

@@ -5,7 +5,7 @@
 // opacity 0 → 1, duration 2, ease 'expo', on scroll enter. Here: Blur (Radius) + Turbulent Displace (Amount, Size = 1 / baseFrequency,
 // Direction XY) + Opacity, all expo over 2 s; the three lines enter one after another (scroll = time). The gooey colour matrix is not here.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 5, background: "#F2EFE8" });
-const EXPO = { kind: "Bezier", x1: 0.19, y1: 1, x2: 0.22, y2: 1 }, SIZE = 210, DUR = 2;
+const EXPO = "expo", SIZE = 210, DUR = 2;
 const clip = media("/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/clip3.mp4", { name: "Clip" }).set("Position", [960, 540]).set("Opacity", 0.35);
 clip.effect("Blur", { "Radius": 20 }).key("Radius", 0.2, 20, EXPO).key("Radius", 2.2, 0);
 clip.effect("Turbulent Displace", { "Amount": 100, "Size": 10, "Complexity": 1, "Direction": "XY", "Seed": 2 }).key("Amount", 0.2, 100, EXPO).key("Amount", 2.2, 0);

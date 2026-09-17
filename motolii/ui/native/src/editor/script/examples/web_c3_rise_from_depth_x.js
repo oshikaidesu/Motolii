@@ -4,7 +4,7 @@
 // Source: gsap.set(el, {perspective: 500}); gsap.timeline({defaults:{duration: 0.8, ease: 'power2'}})
 // .fromTo(chars, {opacity: 0, z: 300, rotationX: -45}, {stagger: 0.04, opacity: 1, z: 0, rotationX: 0}, 0). onEnter = the line's moment.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#f2efe9" });
-const P2 = { kind: "Bezier", x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 };
+const P2 = "power2";
 const SIZE = 150, EACH = 0.04, RISE = 0.8, INK = "#1c1a22";
 const lines = ["LETTERS RISE", "OUT OF THE DEPTH"];
 camera({ name: "Camera" }).set("Near Fade", 1000);

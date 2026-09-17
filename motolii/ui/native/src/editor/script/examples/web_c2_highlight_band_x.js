@@ -5,7 +5,7 @@
 // gsap.timeline({defaults:{duration:0.4, ease:'power1'}}).fromTo(chars, {scale:1.3, opacity:0}, {stagger: pos => 0.1+0.05*pos, scale:1, opacity:1})
 // .fromTo(el, {'--after-scale':0}, {duration:0.8, ease:'expo', '--after-scale':1}, 0). onEnter = the moment the line is reached (time).
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#1a1720" });
-const P1 = { kind: "Bezier", x1: 0.25, y1: 0.46, x2: 0.45, y2: 0.94 }, EXPO = { kind: "Bezier", x1: 0.19, y1: 1, x2: 0.22, y2: 1 };
+const P1 = "power1", EXPO = "expo";
 const SIZE = 120, W = SIZE * 0.68, D = 270, BAND = "#6a5ace", HI = "#e1def4", INK = "#7a7580";
 const made = [], page = nullLayer({ name: "Page" }).set("Position", [960, 540]).set("Tilt Y", 24).set("Tilt X", 6);
 const line = (y, words, at) => {

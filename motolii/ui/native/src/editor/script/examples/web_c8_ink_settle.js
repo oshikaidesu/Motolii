@@ -4,7 +4,7 @@
 // opacity 0 → 1, duration 2, ease 'expo', on scroll enter. Here: Blur (Radius) + Turbulent Displace (Amount, Size = 1 / baseFrequency,
 // Direction XY) + Opacity, all expo over 2 s; the three lines enter one after another (scroll = time). The gooey colour matrix is not here.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 5, background: "#F2EFE8" });
-const EXPO = { kind: "Bezier", x1: 0.19, y1: 1, x2: 0.22, y2: 1 }, SIZE = 210, DUR = 2;
+const EXPO = "expo", SIZE = 210, DUR = 2;
 ["INK BLEEDS", "THEN THE", "WORDS SET"].forEach((line, i) => {
   const at = 0.2 + i * 0.7;
   const t = text(line, { name: line }).fill("#14121A").font("Helvetica Neue").set("Size", SIZE).set("Position", [960, 260 + i * 280]);

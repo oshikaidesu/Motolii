@@ -5,7 +5,7 @@
 // The four corners move together from the centre, so the face = a full-screen box with clip-path: inset(50% 50% 50% 50%) → inset(0):
 // the four Clip edges are keyed, the content does not move. Close: timeline reversed with the reverse eases.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#F4F1EA" });
-const EXPO = { kind: "Bezier", x1: 0.19, y1: 1, x2: 0.22, y2: 1 }, ELASTIC = { kind: "Elastic", limit: 1.1, period: 0.3, damp: 0.35 };
+const EXPO = "expo", ELASTIC = "elastic.out(0.3)";
 const OPEN = 0.3, CLOSE = 2.3, TL = 1.1, rnd = random(3);
 // Cover items: labels scattered over the page.
 [["STUDIO", 260, 180], ["WORK", 1500, 220], ["JOURNAL", 380, 880], ["CONTACT", 1560, 860], ["ABOUT", 960, 120], ["2026", 960, 960], ["EN", 140, 540], ["JP", 1780, 540]]
