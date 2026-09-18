@@ -113,6 +113,13 @@ pub(crate) struct BlockState {
     outlines: Vec<Option<std::sync::Arc<Vec<[f32; 2]>>>>,
     /// 層 → 物の番号(層を組む時に motion の番号を配るため)。
     slots: HashMap<LayerId, u32>,
+    /// つなぐ線 → (元の物, 先の物)。物の後ろに並ぶ motion(kind 1)で両端に付いて行く。
+    connectors: Vec<(LayerId, u32, u32)>,
+    /// なぞる形 → 相手の物。相手の motion をそのまま読む。
+    traces: HashMap<LayerId, u32>,
+    /// 紐(Line Path = Rope)のつなぐ線: (connectors の番号, Slack %, 硬さ, 減衰)。
+    ropes: Vec<(u32, f32, f32, f32)>,
+    rope_pass: Option<crate::render::compositor::effects::block_program::RopePass>,
     batches: Vec<BlockBatch>,
 }
 
@@ -206,6 +213,15 @@ impl Engine {
             .iter().map(|o| [o.translate[0], o.translate[1], o.rotate]).collect()
     }
 
+    /// 計測の口: 物ごとの今のずれを全部(位置 2・回転・大きさ・色 3・不透明)。描く道は読み戻さない。
+    pub fn block_offsets(&self) -> Vec<[f32; 8]> {
+        let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
+        let ctx = &self.compositor.ctx;
+        let encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-read") });
+        crate::render::compositor::effects::block_program::read_state(&ctx.device, &ctx.queue, world, encoder)
+            .iter().map(|o| [o.translate[0], o.translate[1], o.rotate, o.scale, o.tint[0], o.tint[1], o.tint[2], o.tint[3]]).collect()
+    }
+
     /// ブロックを持つ層の住む箱(書類の親の Group の箱、無ければ comp の枠)と、物の箱・組・譲る比を読む。
     pub(super) fn prepare_blocks(&mut self, view: &StoreView<'_>, comp: CompSpec, t: RationalTime, resolved: &[ResolvedLayer]) -> Result<(), EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
@@ -258,6 +274,9 @@ impl Engine {
         state.object_layers.clear();
         state.object_frames.clear();
         state.slots.clear();
+        state.connectors.clear();
+        state.traces.clear();
+        state.ropes.clear();
         state.field_rooms.clear();
         state.fields.clear();
         state.objects.clear();
@@ -293,6 +312,17 @@ impl Engine {
         };
         let mut room_ids: HashMap<LayerId, u32> = HashMap::new();
         let mut wanted = Vec::new();
+        // つなぐ線の両端は、ブロックを持たなくても物として並べる(線は両端の motion を読むので、動かない端にも項が要る)。
+        let mut needed: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            if let Some((from, to)) = view.connection(layer.id, t).map_err(store)? {
+                needed.insert(from);
+                needed.insert(to);
+            }
+            if let Some((target, _)) = view.tracing(layer.id, t).map_err(store)? {
+                needed.insert(target);
+            }
+        }
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
             // 見せるための層(可視の重ね、つなぐ線)は物にしない。物理の相手は画の中身だけ。
             if layer.effects.iter().any(|e| crate::doc::store::overlay::is_track_overlay(&e.plugin_id)) {
@@ -303,17 +333,18 @@ impl Engine {
                     Some(Value::LayerId(id)) if id != 0) || matches!(view.value_at(layer.id, &PropertyId::new(name).map_err(store)?, t).map_err(store)?,
                     Some(Value::F64(v)) if v >= 1.0))
             };
-            if connects(crate::doc::store::layout::CONNECT_FROM)? || connects(crate::doc::store::layout::CONNECT_TO)? {
+            let has_block = layer.effects.iter().any(|e| blocks.contains(&e.plugin_id));
+            // つなぐ線となぞる形は相手の motion を読む側。ただし自分がブロックを持つなら物として並ぶ(輪に札を掛ける Concentrick)。
+            if !has_block && (connects(crate::doc::store::layout::CONNECT_FROM)? || connects(crate::doc::store::layout::CONNECT_TO)?) {
                 continue;
             }
-            let has_block = layer.effects.iter().any(|e| blocks.contains(&e.plugin_id));
             let is_group = matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Group));
             match room_of(view, layer.id)? {
                 Some(room) if has_block || !is_group || !room_ancestor => {
                     room_ids.insert(layer.id, room);
                     wanted.push(layer.id);
                 }
-                None if has_block => wanted.push(layer.id),
+                None if has_block || needed.contains(&layer.id) => wanted.push(layer.id),
                 _ => {}
             }
         }
@@ -420,7 +451,7 @@ impl Engine {
                 }).collect();
                 Some((e.plugin_id.clone(), params, d.1))
             }).collect();
-            if blocks_here.is_empty() && !state.follows.contains_key(&layer.id) && !state.field_rooms.contains(&placed.group) {
+            if blocks_here.is_empty() && !state.follows.contains_key(&layer.id) && !state.field_rooms.contains(&placed.group) && !needed.contains(&layer.id) {
                 continue;
             }
             let m = layer.placement.transform;
@@ -457,12 +488,30 @@ impl Engine {
                 }
             }
         }
+        // つなぐ線となぞる形は物にならないが、相手の motion を描く側で読む(利用者 2026-09-18「位置は毎コマ変わるのに
+        // GPU じゃないの変すぎ」)。CPU の道は動く前の箱から引き、動いた分は頂点で足す。
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            if let Some((from, to)) = view.connection(layer.id, t).map_err(store)? {
+                if let (Some(&a), Some(&b)) = (state.slots.get(&from), state.slots.get(&to)) {
+                    let path = view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::LINE_PATH).map_err(store)?, t).map_err(store)?;
+                    if matches!(path, Some(Value::Enum(4))) {
+                        let slack = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::SLACK).map_err(store)?, t).map_err(store)? { Some(Value::F64(v)) => v as f32, _ => 20.0 };
+                        // 硬さと減衰は今は定数(紐らしさの 1 点: 遅れて、揺れて、止まる)。欄にするかは絵を見てから。
+                        state.ropes.push((state.connectors.len() as u32, slack.max(0.0), 60.0, 6.0));
+                    }
+                    state.connectors.push((layer.id, a, b));
+                    continue;
+                }
+            }
+            if let Some((target, _)) = view.tracing(layer.id, t).map_err(store)? {
+                if let Some(&k) = state.slots.get(&target) {
+                    state.traces.insert(layer.id, k);
+                }
+            }
+        }
         self.solve_physics(t);
-        // 解き終わったずれを書類へ渡す: つなぐ線と付いて置く札が、動いた相手に付いて行く。
-        let shifts: HashMap<LayerId, [f32; 2]> = self.blocks.object_layers.iter()
-            .filter_map(|layer| self.blocks.physics.offset(*layer).map(|(shift, _)| (*layer, shift)))
-            .collect();
-        crate::doc::store::layout::set_physics_shifts(shifts);
+        // 解き手のずれも motion に入る(seed)ので、書類の側の CPU のずれは空にする(二重に動かさない)。
+        crate::doc::store::layout::set_physics_shifts(HashMap::new());
         Ok(())
     }
 
@@ -502,7 +551,19 @@ impl Engine {
     pub(super) fn attach_block(&mut self, layer: &ResolvedLayer, built: &mut Layer, comp: CompSpec) {
         // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
         // その物の comp → world の向き(組んだ素材の大きさが要るのでここでしか作れない)。
-        let Some(&k) = self.blocks.slots.get(&layer.id) else { return };
+        let Some(&k) = self.blocks.slots.get(&layer.id) else {
+            // 物でない層: つなぐ線は物の後ろの自分の番号、なぞる形は相手の番号を読む。
+            if let Some(c) = self.blocks.connectors.iter().position(|(id, _, _)| *id == layer.id) {
+                built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (self.blocks.objects.len() + 2 * c + 1) as f32;
+                if self.blocks.ropes.iter().any(|(index, ..)| *index as usize == c) {
+                    // 紐は曲線に沿って頂点が動くので板を刻む。
+                    built.shading.grid_hint = 48;
+                }
+            } else if let Some(&target) = self.blocks.traces.get(&layer.id) {
+                built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (target + 1) as f32;
+            }
+            return;
+        };
         let size = glam::Vec2::from(built.size);
         if size.x <= 0.0 || size.y <= 0.0 {
             return;
@@ -607,7 +668,7 @@ impl Engine {
         let state = &mut self.blocks;
         let seed: Vec<crate::render::compositor::effects::block_program::BlockOffset> = state.object_layers.iter()
             .map(|layer| match state.physics.offset(*layer) {
-                Some((translate, rotate)) => crate::render::compositor::effects::block_program::BlockOffset { translate, rotate, scale: 1.0 },
+                Some((translate, rotate)) => crate::render::compositor::effects::block_program::BlockOffset { translate, rotate, ..Default::default() },
                 None => crate::render::compositor::effects::block_program::BlockOffset::default(),
             })
             .collect();
@@ -639,8 +700,14 @@ impl Engine {
             .filter_map(|(k, id)| state.follows.get(id).and_then(|target| index_of(*target)).map(|target| (k as u32, target)))
             .collect();
         state.follow_pass.get_or_insert_with(|| FollowPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &pairs);
-        let motion = re_renderer::MotionBuffer::new(ctx, state.objects.len() as u64);
-        state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, motion.buffer());
+        let links: Vec<(u32, u32)> = state.connectors.iter().map(|(_, a, b)| (*a, *b)).collect();
+        let motion = re_renderer::MotionBuffer::new(ctx, (state.objects.len() + 2 * links.len()) as u64);
+        let bases_buffer = state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, motion.buffer());
+        if let Some(bases_buffer) = bases_buffer.as_ref() {
+            let frame = (t.as_seconds_f64() * state.fps).round() as i64;
+            state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
+                .record(&ctx.device, &ctx.queue, &mut encoder, world, bases_buffer, &links, &state.ropes, motion.buffer(), frame, state.fps as f32);
+        }
         ctx.queue.submit([encoder.finish()]);
         self.compositor.motion = Some(motion);
     }
@@ -750,6 +817,42 @@ mod tests {
         let mid = at(&mut engine, 9);
         assert!(!mid.is_empty() && mid[0] > landed[0], "mid-arrive: the square is on its way up (rows {mid:?} vs landed {landed:?})");
         assert!(*mid.last().unwrap() < bottom && mid.len() < landed.len(), "mid-arrive: the box cuts it at its bottom edge, the offset moved only the content: rows {mid:?}");
+    }
+
+    /// つなぐ線は、ブロックが動かした相手に付いて行く(線の端が GPU で相手の motion を読む、利用者 2026-09-18
+    /// 「位置は毎コマ変わるのに GPU じゃないの変すぎ」): 静かな白い四角と、Arrive で下から来る白い四角を赤い線で結ぶ。
+    /// 来る途中(frame 9)の線の下端は、着いた後(frame 30)より下にある。
+    #[test]
+    fn a_connector_follows_what_a_block_moved() {
+        let mut doc = arrive_scene(0, false);
+        let (still, line) = (LayerId(3), LayerId(4));
+        let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
+        let white = Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() });
+        doc.apply_all([
+            Intent::AddLayer(still),
+            Intent::SetMeta { layer: still, meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: still, patch: LayerAttrsPatch { parent: Some(Some(LayerId(1))), ..two_d.clone() } },
+            Intent::SetShapes { layer: still, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 16.0, y: 16.0 } }, ops: Vec::new(), stroke: None, fill: white })] },
+            Intent::AddLayer(line),
+            Intent::SetMeta { layer: line, meta: LayerMeta { source: LayerSource::Shape, order: 3, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: line, patch: LayerAttrsPatch { parent: Some(Some(LayerId(1))), ..two_d } },
+            Intent::SetShapes { layer: line, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 4.0, y: 4.0 } }, ops: Vec::new(), fill: None,
+                stroke: Some(crate::doc::vector::Stroke { brush: Brush::Solid(Rgb { r: 1.0, g: 0.0, b: 0.0 }), width: 3.0, ..Default::default() }) })] },
+        ]).unwrap();
+        let put = |doc: &mut Document, layer, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, still, layout::POSITION_TYPE, Value::Enum(1));
+        put(&mut doc, still, property::POSITION, Value::Vec2([90.0, 8.0]));
+        put(&mut doc, line, layout::CONNECT_FROM, Value::LayerId(still.0));
+        put(&mut doc, line, layout::CONNECT_TO, Value::LayerId(LayerId(2).0));
+        let mut engine = Engine::new().unwrap();
+        let fps = Fps::try_new(30, 1).unwrap();
+        let red_bottom = |engine: &mut Engine, frame: i64| -> Option<u32> {
+            let pixels = engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, fps).unwrap()).unwrap();
+            pixels.chunks_exact(4).enumerate().filter(|(_, c)| c[0] > 150 && c[1] < 90 && c[2] < 90 && c[3] > 128).map(|(i, _)| (i as u32) / W).max()
+        };
+        let landed = red_bottom(&mut engine, 30).expect("the line is drawn once the square has landed");
+        let mid = red_bottom(&mut engine, 9).expect("the line is drawn while the square is on its way");
+        assert!(mid > landed + 6, "mid-arrive the line's lower end is with the square below its slot: mid {mid} vs landed {landed}");
     }
 
     /// GPU のブロックが描く位置は、書類の CPU の Bounce と同じ(読み戻さずに描く側の頂点で動く)。

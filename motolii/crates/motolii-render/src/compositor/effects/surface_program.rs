@@ -29,6 +29,8 @@ pub struct SurfaceShading {
     pub reads_backdrop: bool,
     /// backdrop の mip を何段まで読むかを決める粗さ(manifest の `BACKDROP_BLUR`、無ければ 1 = 全段)。
     pub backdrop_roughness: f32,
+    /// 場が無くても板を刻む升の数(紐の線: 頂点が曲線に沿って動く)。0 / 1 = 刻まない。
+    pub grid_hint: u32,
 }
 
 impl SurfaceShading {
@@ -36,7 +38,7 @@ impl SurfaceShading {
     pub fn field_grid(&self) -> u32 {
         match &self.program {
             Some(p) if p.desc().field.is_some() => FIELD_GRID,
-            _ => 1,
+            _ => self.grid_hint.max(1),
         }
     }
 }
@@ -186,7 +188,7 @@ impl crate::render::compositor::Compositor {
             let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
             Some(params[offset + i].clamp(0.0, 1.0))
         }).unwrap_or(1.0);
-        Ok(SurfaceShading { program: Some(program), params, reads_backdrop, backdrop_roughness })
+        Ok(SurfaceShading { program: Some(program), params, reads_backdrop, backdrop_roughness, grid_hint: 0 })
     }
 
 }

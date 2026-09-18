@@ -270,7 +270,7 @@ pub const CONNECT_ROWS: &[Row] = &[
     (CONNECT_TO, "Connect To", Value::LayerId(0), None, &[]),
     (FROM_SIDE, "From Side", Value::Enum(0), None, SIDES),
     (TO_SIDE, "To Side", Value::Enum(0), None, SIDES),
-    (LINE_PATH, "Line Path", Value::Enum(0), None, &["Straight", "Curved", "Elbow", "Hang"]),
+    (LINE_PATH, "Line Path", Value::Enum(0), None, &["Straight", "Curved", "Elbow", "Hang", "Rope"]),
     (SLACK, "Slack", Value::F64(20.0), Some((0.0, 1000.0)), &[]),
     (DASH, "Dash", Value::F64(0.0), Some((0.0, 100000.0)), &[]),
     (DASH_GAP, "Dash Gap", Value::F64(0.0), Some((0.0, 100000.0)), &[]),

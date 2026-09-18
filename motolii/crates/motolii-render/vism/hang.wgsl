@@ -30,5 +30,5 @@ fn block(k: u32, p: BlockParams) -> Offset {
     let pin = mid - vec2f(0.0, length);
     let arm = mid - pin;
     let turned = vec2f(arm.x * cos(angle) - arm.y * sin(angle), arm.x * sin(angle) + arm.y * cos(angle));
-    return Offset(turned - arm, degrees(angle), 1.0);
+    return Offset(turned - arm, degrees(angle), 1.0, vec4f(1.0));
 }

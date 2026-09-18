@@ -37,5 +37,5 @@ fn block(k: u32, p: BlockParams) -> Offset {
         let w = hi - lo;
         shift = vec2f(fold(lo.x, it.room_lo.x, size.x - w.x), fold(lo.y, it.room_lo.y, size.y - w.y)) - lo;
     }
-    return Offset(shift * p.strength, 0.0, 1.0);
+    return Offset(shift * p.strength, 0.0, 1.0, vec4f(1.0));
 }

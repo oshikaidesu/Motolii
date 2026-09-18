@@ -36,5 +36,5 @@ fn block(k: u32, p: BlockParams) -> Offset {
         if depth <= 0.0 || depth >= 1e29 { continue; }
         step -= dir * depth * (a.weight / s) * 0.5;
     }
-    return Offset(step, 0.0, 1.0);
+    return Offset(step, 0.0, 1.0, vec4f(1.0));
 }

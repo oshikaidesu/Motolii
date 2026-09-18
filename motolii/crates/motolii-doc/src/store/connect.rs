@@ -24,7 +24,7 @@ struct Route {
 
 impl StoreView<'_> {
     /// つなぐ線なら、その 2 つの相手。
-    pub(crate) fn connection(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, LayerId)>, StoreError> {
+    pub fn connection(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, LayerId)>, StoreError> {
         let id = |name: &str| -> Result<Option<LayerId>, StoreError> {
             Ok(match self.value_at(layer, &PropertyId::new(name)?, t)? {
                 Some(Value::LayerId(id)) if id != 0 => Some(LayerId(id)),
@@ -40,7 +40,7 @@ impl StoreView<'_> {
     }
 
     /// なぞる形なら、その相手と形の種類(`Connect To` が無く `Trace` が None でない)。
-    pub(crate) fn tracing(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, i64)>, StoreError> {
+    pub fn tracing(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, i64)>, StoreError> {
         let kind = self.choice(layer, TRACE, t)?;
         if kind <= 0 {
             return Ok(None);
@@ -331,10 +331,24 @@ impl StoreView<'_> {
             }
             // Hang: 縄の長さ = 端の距離 × (1 + Slack %)、懸垂線(重力は親の空間の下)。
             3 => hang(p0, p1, distance * (1.0 + self.number(layer, SLACK, 20.0, t)?.max(0.0) as f32 / 100.0)),
+            // Rope: 3 次ベジェ 1 本。腹の 2 点は端の間の少し下(Slack % × 距離)。描く側は同じ 3 次を、腹の 2 点を
+            // ばねで遅らせて動かす(GPU、利用者 2026-09-18「紐が物理の挙動になれば」「ベジェでいけないの?」)。
+            // 端は箱の中心(描く側が読む物の真ん中と同じ点にする。口の位置と Margin は使わない)。
+            4 => {
+                let sag = (cb - ca).length() * self.number(layer, SLACK, 20.0, t)?.max(0.0) as f32 / 100.0;
+                let (c0, c1) = rope_controls(ca, cb, sag);
+                vec![[ca, glam::Vec2::ZERO, c0 - ca], [cb, c1 - cb, glam::Vec2::ZERO]]
+            }
             _ => vec![corner(p0), corner(p1)],
         };
         Ok(Some(Route { points }))
     }
+}
+
+/// Rope の腹の制御点 2 つ(親の空間、下は +y): 端から 1/3 ずつ進んだ所を `sag` だけ下げる。描く側の GPU と同じ式。
+pub fn rope_controls(p0: glam::Vec2, p1: glam::Vec2, sag: f32) -> (glam::Vec2, glam::Vec2) {
+    let d = p1 - p0;
+    (p0 + d / 3.0 + glam::Vec2::Y * sag, p0 + d * (2.0 / 3.0) + glam::Vec2::Y * sag)
 }
 
 /// 箱の端の点と外向き。Auto は相手の中心へ向かう線が箱(+ 間)を出る所(相手が回っても点が跳ばない)。

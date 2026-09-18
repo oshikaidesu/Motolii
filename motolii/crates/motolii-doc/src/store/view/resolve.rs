@@ -1242,6 +1242,7 @@ impl<'a> StoreView<'a> {
         }
         self.put_backgrounds_behind(&mut out, t)?;
         self.put_on_planes(&mut out, t)?;
+        self.put_connectors_in_front(&mut out, t)?;
         self.hand_out_stencils(&mut out)?;
         self.snap_to_grids(&mut out, t)?;
         self.snap_to_found_grids(&mut out, t)?;
@@ -1391,6 +1392,28 @@ impl<'a> StoreView<'a> {
         }
         for layer in out.iter_mut() {
             layer.placement.plane = planes.get(&layer.id).copied().flatten();
+        }
+        Ok(())
+    }
+
+    /// つなぐ線となぞる形は、結ぶ相手の奥行きを継ぐ(関係の線は相手より手前。2.5D では線は面を持たず既定の奥に落ち、
+    /// 部屋の背景の下に隠れていた — 2026-09-16 の穴、利用者の裁定 2026-09-18)。面は相手の面、描き順は相手の 1 つ上。
+    fn put_connectors_in_front(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        let ends: Vec<(usize, LayerId, Option<LayerId>)> = out.iter().enumerate().filter(|(_, l)| l.copy == 0).filter_map(|(i, l)| {
+            match self.connection(l.id, t) {
+                Ok(Some((from, to))) => Some((i, from, Some(to))),
+                _ => match self.tracing(l.id, t) { Ok(Some((target, _))) => Some((i, target, None)), _ => None },
+            }
+        }).collect();
+        for (i, from, to) in ends {
+            let find = |id: LayerId| out.iter().find(|l| l.id == id && l.copy == 0).map(|l| (l.placement.order, l.placement.plane));
+            let (Some(a), b) = (find(from), to.and_then(find)) else { continue };
+            let order = b.map_or(a.0, |b| a.0.max(b.0));
+            let plane = a.1.or(b.and_then(|b| b.1));
+            out[i].placement.order = order + 1;
+            if plane.is_some() {
+                out[i].placement.plane = plane;
+            }
         }
         Ok(())
     }

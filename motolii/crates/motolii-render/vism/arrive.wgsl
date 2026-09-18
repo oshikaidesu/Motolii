@@ -50,5 +50,5 @@ fn block(k: u32, p: BlockParams) -> Offset {
     }
     let away = dir * p.distance * left;
     let turn = p.spin * left * (0.4 + 0.6 * abs(dice(k))) * sign(dice(k + 613u));
-    return Offset(away, turn, 1.0);
+    return Offset(away, turn, 1.0, vec4f(1.0));
 }

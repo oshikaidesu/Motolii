@@ -266,7 +266,12 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
     Ok(format!("{bindings:?}|{entries:?}"))
 }
 
-fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> {
+/// 棚の module(WESL): manifest の頭 `/*{` が無い .wgsl。札ではなく、札が import で引く関数の束。
+fn is_module(source: &VismSource) -> bool {
+    source.extension == "wgsl" && !source.source.trim_start().starts_with("/*{") && !source.source.contains("mainImage")
+}
+
+fn prepare(source: VismSource, prelude: &str, modules: &[(String, String)]) -> Result<VismDefinition, String> {
     // 貼られた物はここで ISF の言い方へ写し、以後は同梱の効果と同じ道を通る。
     let source = match isf::shadertoy::dialect(&source.source) {
         Some(isf::shadertoy::Dialect::Shadertoy) => {
@@ -292,7 +297,7 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
                     return Err(format!("{}: block の欄は float / long / bool だけ", input.name));
                 }
             }
-            let full = super::block_program::module_source(&manifest, &body)?;
+            let full = super::block_program::module_source(&manifest, &body, modules)?;
             super::block_program::validate(&full)?;
             let interface = schema(&manifest);
             let n = manifest.param_inputs().count();
@@ -504,12 +509,15 @@ fn refresh_runtime(runtime: &CatalogRuntime) -> CatalogRefresh {
         name: s.name.into(), extension: s.extension.into(), source: s.source.into(),
     }).collect::<Vec<_>>(), super::VELLO_BLEND_PRELUDE.to_owned());
 
+    // 関数の棚は WESL の module: manifest の頭が無い .wgsl は札でなく module で、札が `import package::<name>::{ ... };` で引く
+    // (引用のルールは WESL の物。関数を直せば引いた札全部に届く — 利用者 2026-09-18)。
+    let modules: Vec<(String, String)> = sources.iter().filter(|s| is_module(s)).map(|s| (s.name.clone(), s.source.to_string())).collect();
     let mut definitions = previous.as_ref().map(|p| p.definitions.iter().map(|d| (d.source.name.clone(), d.clone())).collect::<BTreeMap<_, _>>()).unwrap_or_default();
     let mut changed = previous.is_none();
-    let present = sources.iter().map(|s| s.name.clone()).collect::<std::collections::BTreeSet<_>>();
-    for source in sources {
+    let present = sources.iter().filter(|s| !is_module(s)).map(|s| s.name.clone()).collect::<std::collections::BTreeSet<_>>();
+    for source in sources.into_iter().filter(|s| !is_module(s)) {
         let name = source.name.clone();
-        match prepare(source, &prelude) {
+        match prepare(source, &prelude, &modules) {
             Ok(candidate) => {
                 if let Some(old) = definitions.get(&name) {
                     if old.interface != candidate.interface { errors.push(format!("{name}: incompatible shader interface; last valid program retained")); continue; }
@@ -567,18 +575,29 @@ mod tests {
     use super::*;
 
     fn blur(text: String) -> Result<VismDefinition, String> {
-        prepare(VismSource { name: "blur".into(), extension: "wgsl".into(), source: text.into() }, "")
+        prepare(VismSource { name: "blur".into(), extension: "wgsl".into(), source: text.into() }, "", &[])
     }
 
     /// 貼った Shadertoy が、同梱の効果と同じ道で棚に出る(棚に出る条件 = ここを抜けること)。
+    /// 関数の棚: module の関数を block が WESL の import で呼べる。棚の側で直せば引いた札全部に届く。
+    #[test]
+    fn a_block_can_call_a_library_function() {
+        let modules = vec![("lib".to_owned(), "fn lib_twice(x: f32) -> f32 { return x * 2.0; }".to_owned())];
+        let body = "/*{ \"ID\": \"t.lib\", \"STAGE\": \"block\", \"INPUTS\": [] }*/\nimport package::lib::lib_twice;\nfn block(k: u32, p: BlockParams) -> Offset { return Offset(vec2f(lib_twice(1.0), 0.0), 0.0, 1.0, vec4f(1.0)); }";
+        let ok = prepare(VismSource { name: "lib_user".into(), extension: "wgsl".into(), source: body.into() }, "", &modules);
+        assert!(ok.is_ok(), "{:?}", ok.err());
+        let missing = prepare(VismSource { name: "lib_user".into(), extension: "wgsl".into(), source: body.into() }, "", &[]);
+        assert!(missing.is_err(), "without the module the import has nothing to resolve");
+    }
+
     #[test]
     fn a_pasted_shadertoy_becomes_an_effect() {
         let source = "void mainImage(out vec4 c, in vec2 p) { c = vec4(p / iResolution.xy, sin(iTime), 1.0); }";
-        let definition = prepare(VismSource { name: "city".into(), extension: "frag".into(), source: source.into() }, "").unwrap();
+        let definition = prepare(VismSource { name: "city".into(), extension: "frag".into(), source: source.into() }, "", &[]).unwrap();
         assert_eq!(definition.plugin_id(), "import.city");
         assert!(matches!(definition.manifest.stage, isf::IsfStage::Pass));
         // manifest の無い素の GLSL は、理由を名前つきで断る。
-        let plain = prepare(VismSource { name: "bare".into(), extension: "frag".into(), source: "void main() { gl_FragColor = vec4(1.0); }".into() }, "").err().expect("manifest の無い GLSL は断る");
+        let plain = prepare(VismSource { name: "bare".into(), extension: "frag".into(), source: "void main() { gl_FragColor = vec4(1.0); }".into() }, "", &[]).err().expect("manifest の無い GLSL は断る");
         assert!(plain.contains("bare") && plain.contains("manifest"), "{plain}");
     }
 
@@ -638,7 +657,7 @@ mod tests {
     /// `name` は shader の本文の置き場になる — 並走する test 同士で同じ名前を使うと上書きし合う。
     fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
         let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
-        let definition = prepare(VismSource { name: name.into(), extension: "fs".into(), source: source.into() }, "").unwrap();
+        let definition = prepare(VismSource { name: name.into(), extension: "fs".into(), source: source.into() }, "", &[]).unwrap();
         // shader の本文は棚が書く。ここは棚を通らないので自分で書く(radiance の参照 test と同じ)。
         definition.stage().unwrap();
         let building = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
