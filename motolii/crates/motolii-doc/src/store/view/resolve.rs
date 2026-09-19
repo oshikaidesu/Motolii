@@ -586,7 +586,7 @@ impl<'a> StoreView<'a> {
     fn group_effects(&self, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
         let (mut each, mut whole) = (Vec::new(), Vec::new());
         for effect in self.resolved_effects(group, t)? {
-            if placement::kind(&effect.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&effect.plugin_id) {
+            if self.placement_program(&effect.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&effect.plugin_id) {
                 continue;
             }
             if !whole.is_empty() || effect.scope == crate::doc::store::EffectScope::Whole {
@@ -894,7 +894,7 @@ impl<'a> StoreView<'a> {
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
         let blur = base.effects.iter().position(|e| crate::doc::extensions::motion::is_motion_blur(&e.plugin_id));
-        let places = |e: &ResolvedEffect| placement::kind(&e.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&e.plugin_id);
+        let places = |e: &ResolvedEffect| self.placement_program(&e.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&e.plugin_id);
         let Some(first) = base.effects.iter().position(places) else {
             return match blur {
                 Some(at) => self.push_motion_blur(base, at, t, present, world_transforms, memo, visiting, out),
@@ -905,8 +905,8 @@ impl<'a> StoreView<'a> {
         let layer = base.id;
         // 形の素材は輪郭を伸ばし(線は太らない)、それ以外は置き場所で伸ばす。
         let stretch_outline = base.source == crate::doc::store::LayerSource::Shape;
-        let placements: Vec<(placement::Placement, [f32; 2])> = match placement::kind(&base.effects[first].plugin_id) {
-            Some(kind) => placement::placements(kind, params).into_iter().map(|p| (p, [1.0, 1.0])).collect(),
+        let placements: Vec<(crate::doc::store::Placement, [f32; 2])> = match self.placement_program(&base.effects[first].plugin_id) {
+            Some(program) => (program.evaluate)(params).into_iter().map(|p| (p, [1.0, 1.0])).collect(),
             None => self.blob_placements(layer, t, params, stretch_outline)?,
         };
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
@@ -1123,7 +1123,7 @@ impl<'a> StoreView<'a> {
         let mut hidden = HashSet::new();
         for id in present {
             if self.meta(*id)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group)
-                && self.effects(*id)?.iter().any(|e| placement::kind(&e.plugin_id).is_some())
+                && self.effects(*id)?.iter().any(|e| self.placement_program(&e.plugin_id).is_some())
             {
                 hidden.extend(self.subtree(*id, present)?.into_iter().skip(1));
             }

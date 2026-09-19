@@ -36,6 +36,8 @@ pub struct StoreView<'a> {
     analysis: Option<&'a super::analysis::AnalysisInputs>,
     layout_memo: super::layout::Memo,
     layout_cache: &'a RefCell<super::layout::LayoutCache>,
+    placement_lookup: fn(&str) -> Option<super::kind::PlacementProgram>,
+    placement_programs: Option<&'a [super::kind::PlacementProgram]>,
 }
 
 const MAX_LINK_DEPTH: u32 = 64;
@@ -50,6 +52,7 @@ impl<'a> StoreView<'a> {
         track_cache: &'a RefCell<TrackCache>,
         record_cache: &'a RefCell<RecordCache>,
         layout_cache: &'a RefCell<super::layout::LayoutCache>,
+        placement_lookup: fn(&str) -> Option<super::kind::PlacementProgram>,
     ) -> Self {
         Self {
             db,
@@ -63,6 +66,8 @@ impl<'a> StoreView<'a> {
             analysis: None,
             layout_memo: Default::default(),
             layout_cache,
+            placement_lookup,
+            placement_programs: None,
         }
     }
 
@@ -72,7 +77,21 @@ impl<'a> StoreView<'a> {
 
     /// コマをまたぐ配置の覚えを使ってよい view か(解析・仮の編集・一時の値のどれも読まない)。
     pub(crate) fn shared_layout_cache(&self) -> Option<(&RefCell<super::layout::LayoutCache>, &Revision)> {
-        (self.analysis.is_none() && self.preview_edits.is_empty() && (self.transient.is_empty() || self.ignore_transients)).then_some((self.layout_cache, &self.revision))
+        (self.placement_programs.is_none() && self.analysis.is_none() && self.preview_edits.is_empty() && (self.transient.is_empty() || self.ignore_transients)).then_some((self.layout_cache, &self.revision))
+    }
+
+    /// Supply the complete set of stateless placement programs for this read view.
+    pub fn with_placement_programs(mut self, programs: &'a [super::kind::PlacementProgram]) -> Self {
+        self.placement_programs = Some(programs);
+        self.layout_memo = Default::default();
+        self
+    }
+
+    pub(crate) fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {
+        match self.placement_programs {
+            Some(programs) => programs.iter().find(|program| program.plugin_id == plugin_id).copied(),
+            None => (self.placement_lookup)(plugin_id),
+        }
     }
 
     /// 解析の入力を読む view(resolve が Blob Track の塊を配置にする)。
@@ -116,6 +135,13 @@ impl<'a> StoreView<'a> {
         self.at.hash(&mut hasher);
         format!("{:?}", self.transient).hash(&mut hasher);
         self.preview_edits.generation.hash(&mut hasher);
+        if let Some(programs) = self.placement_programs {
+            programs.len().hash(&mut hasher);
+            for program in programs {
+                program.plugin_id.hash(&mut hasher);
+                (program.evaluate as usize).hash(&mut hasher);
+            }
+        }
         hasher.finish()
     }
 

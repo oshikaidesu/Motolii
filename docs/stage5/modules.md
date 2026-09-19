@@ -18,6 +18,7 @@
 | スクリプトと編集の接続 | `ui/native/src/editor/script.rs` | 操作の検証・Document/Undo・ファイルの再実行。JS VMは所有しない |
 | 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | 受付条件を検証後、呼出し側の一回限りの関数からRecordingを受け取る。作品コピーの作成はnative editorが所有し、jobsはDocument/Intentに依存しない。状態とキャンセルを提供する |
 | 同梱効果の組み立て | `motolii-render/src/extensions/mod.rs` | 共通 `Kind` 宣言を既存の描画catalogへ渡す |
+| 配置計算の差し込み | `store/kind.rs`の`PlacementProgram`、`StoreView::with_placement_programs` | 値→配置列の副作用を持たない関数。Document/Undoを受け取らない。同梱の評価関数も既存のPlacementKind宣言に載せ、別の登録表を持たない |
 | Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
 | WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
 
@@ -34,6 +35,8 @@ jobs入口の追加検収: native editor接続check、jobsの受付拒否・snap
 `owned_budget`は未合格: compute pipeline 2/0、shader module 2/0、bind-group layout 2/0、render pass 4/3、GPU無期限待機18/4、naga parser 4/3(実測/上限)。Recording変更はこれらを追加していない。上限は据え置き、描画側の残件として扱う。
 
 プレビューは編集入力の変更時に一度、値・時刻・属性・形・文字の読み取り用データへ投影する。ViewがIntentの列を毎回走査する経路は持たない。同じ件数のプレビューでも値が変われば表示の版は変わり、取消・失敗時の復元・UndoはDocumentが所有する。
+
+配置programを差し替えたViewは、元のViewのmemoやDocumentの共有layout cacheを流用せず、表示の版も区別する。別crate相当のintegration testから未登録IDの配置関数を渡し、2つの配置が生成されてもDocumentの版・編集位置と元のViewが変わらないことを検査する。これは静的なRust評価関数の口であり、第三者配布物のロード・GUIへの登録・sandboxではない。Blob/Motion/Groupの組み立ては引き続き分離対象。
 
 現行アプリは一つのViewerStateを使い、従来の窓間連動を保つ。独立したViewerStateを複数作っても作品・Undoが変化しない境界を試験するが、窓ごとに独立した選択・閲覧時刻へ接続する製品機能は未実装。Flutter固有のフォーカスと配置はFlutter側が持つ。ドキュメント時間軸は作品の値、現在どの時刻を見るかは閲覧状態である。
 

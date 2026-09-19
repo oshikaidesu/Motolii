@@ -84,6 +84,13 @@ pub struct Kind {
     pub family: Family,
 }
 
+/// A stateless placement evaluator. It receives values, never editing authority.
+#[derive(Clone, Copy)]
+pub struct PlacementProgram {
+    pub plugin_id: &'static str,
+    pub evaluate: fn(&[(String, Value)]) -> Vec<Placement>,
+}
+
 use crate::doc::core::RationalTime;
 
 /// 配置 1 つ。値は層の**親の空間**で、回転と大きさは層の位置を中心にする。

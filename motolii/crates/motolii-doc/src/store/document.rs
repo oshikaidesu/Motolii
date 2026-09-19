@@ -208,6 +208,7 @@ impl Document {
             &self.track_cache,
             &self.record_cache,
             &self.layout_cache,
+            crate::doc::extensions::placement::program,
         )
     }
 
