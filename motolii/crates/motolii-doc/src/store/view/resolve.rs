@@ -393,6 +393,14 @@ impl<'a> StoreView<'a> {
         Ok(out)
     }
 
+    fn effect_enabled(&self, layer: LayerId, effect: crate::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
+        match self.value_at(layer, &crate::store::PropertyId::effect_enabled(effect), t)? {
+            Some(Value::Bool(value)) => Ok(value),
+            Some(other) => Err(StoreError::Property(format!("effect {effect} の enabled に真偽でない値が入っている: {other:?}"))),
+            None => Ok(true),
+        }
+    }
+
     pub fn resolved_effects(
         &self,
         layer: LayerId,
@@ -407,18 +415,7 @@ impl<'a> StoreView<'a> {
 
         let mut out = Vec::with_capacity(effects.len());
         for effect in effects {
-            let enabled_property = crate::doc::store::PropertyId::effect_enabled(effect.id);
-            let enabled = match self.value_at(layer, &enabled_property, t)? {
-                Some(Value::Bool(v)) => v,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "effect {} の enabled に真偽でない値が入っている: {other:?}",
-                        effect.id
-                    )))
-                }
-                None => true,
-            };
-            if !enabled {
+            if !self.effect_enabled(layer, effect.id, t)? {
                 continue;
             }
             let prefix = format!("{}{}.param.", property::EFFECT_PREFIX, effect.id);
@@ -586,7 +583,7 @@ impl<'a> StoreView<'a> {
     fn group_effects(&self, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
         let (mut each, mut whole) = (Vec::new(), Vec::new());
         for effect in self.resolved_effects(group, t)? {
-            if self.placement_program(&effect.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&effect.plugin_id) {
+            if self.placement_program(&effect.plugin_id).is_some() {
                 continue;
             }
             if !whole.is_empty() || effect.scope == crate::doc::store::EffectScope::Whole {
@@ -894,7 +891,7 @@ impl<'a> StoreView<'a> {
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
         let blur = base.effects.iter().position(|e| crate::doc::extensions::motion::is_motion_blur(&e.plugin_id));
-        let places = |e: &ResolvedEffect| self.placement_program(&e.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&e.plugin_id);
+        let places = |e: &ResolvedEffect| self.placement_program(&e.plugin_id).is_some();
         let Some(first) = base.effects.iter().position(places) else {
             return match blur {
                 Some(at) => self.push_motion_blur(base, at, t, present, world_transforms, memo, visiting, out),
@@ -905,10 +902,11 @@ impl<'a> StoreView<'a> {
         let layer = base.id;
         // 形の素材は輪郭を伸ばし(線は太らない)、それ以外は置き場所で伸ばす。
         let stretch_outline = base.source == crate::doc::store::LayerSource::Shape;
-        let placements: Vec<(crate::doc::store::Placement, [f32; 2])> = match self.placement_program(&base.effects[first].plugin_id) {
-            Some(program) => (program.evaluate)(params).into_iter().map(|p| (p, [1.0, 1.0])).collect(),
-            None => self.blob_placements(layer, t, params, stretch_outline)?,
-        };
+        let program = self.placement_program(&base.effects[first].plugin_id).expect("matched placement program");
+        let placements = (program.evaluate)(&crate::store::kind::PlacementInput {
+            params, layer, time: t, stretch_outline, analysis: self.analysis(),
+            position: if program.needs_position { self.resolve_position(layer, t)? } else { [0.0; 2] },
+        });
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
         let is_group = base.source == crate::doc::store::LayerSource::Group;
         let children = if is_group { self.children_in_order(layer, present)? } else { Vec::new() };
@@ -924,13 +922,14 @@ impl<'a> StoreView<'a> {
         } else {
             None
         };
-        for (placement, outline) in placements {
+        for (ordinal, result) in placements.into_iter().enumerate() {
+            let (placement, outline) = (result.placement, result.outline_stretch);
             let Ok(at) = t.try_sub(placement.time_offset) else { continue };
             let shifted = at != t;
             let subjects: Vec<LayerId> = if whole {
                 self.subtree(layer, present)?.into_iter().skip(1).collect()
             } else if is_group {
-                self.subtree(children[picks[placement.index as usize]], present)?
+                self.subtree(children[picks[ordinal]], present)?
             } else {
                 vec![layer]
             };
@@ -998,23 +997,6 @@ impl<'a> StoreView<'a> {
             }
         }
         Ok(())
-    }
-
-    /// Blob Track: host が解いた塊(`AnalysisInputs`)を配置に。素材(この層)の中心を塊の中心へ、Box なら素材を箱の大きさへ伸ばす。
-    /// 解析の入力が無ければ空(描く前・UI の問い合わせ)。鍵の効果の番号は、層の中で何番目の Blob Track か。
-    fn blob_placements(&self, layer: LayerId, t: RationalTime, params: &[(String, crate::doc::store::Value)], stretch_outline: bool) -> Result<Vec<(placement::Placement, [f32; 2])>, StoreError> {
-        use crate::doc::extensions::blob;
-        let Some(marks) = self.analysis().and_then(|a| a.blobs(layer, crate::doc::store::EffectId(0), t)) else { return Ok(Vec::new()) };
-        let position = glam::Vec2::from(self.resolve_position(layer, t)?);
-        let material = blob::vec2_of(params, "material").map(|v| v.max(1e-3) as f32);
-        let fit_box = blob::number_of(params, "fit") >= 0.5;
-        Ok(marks.iter().map(|mark| {
-            let stretch = if fit_box { [mark.size[0] / material[0], mark.size[1] / material[1]] } else { [1.0, 1.0] };
-            let half = glam::vec2(material[0] * stretch[0], material[1] * stretch[1]) * 0.5;
-            let offset = glam::Vec2::from(mark.center) - position - half;
-            let (placed, outline) = if stretch_outline { ([1.0, 1.0], stretch) } else { (stretch, [1.0, 1.0]) };
-            (placement::Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, offset_z: 0.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch: placed }, outline)
-        }).collect())
     }
 
     /// Motion Blur: 1 コマの中のずらした時刻で位置・大きさ・角度だけを取り直した写しを、平均する枚数の印を付けて並べる。
@@ -1119,13 +1101,15 @@ impl<'a> StoreView<'a> {
     }
 
     /// 配置効果を持つグループの子孫。単独では描かず、配置を通してだけ出る。
-    fn handed_out_by_a_group(&self, present: &HashSet<LayerId>) -> Result<HashSet<LayerId>, StoreError> {
+    fn handed_out_by_a_group(&self, present: &HashSet<LayerId>, t: RationalTime) -> Result<HashSet<LayerId>, StoreError> {
         let mut hidden = HashSet::new();
         for id in present {
-            if self.meta(*id)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group)
-                && self.effects(*id)?.iter().any(|e| self.placement_program(&e.plugin_id).is_some())
-            {
-                hidden.extend(self.subtree(*id, present)?.into_iter().skip(1));
+            if !self.meta(*id)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group) { continue; }
+            for effect in self.effects(*id)? {
+                if self.placement_program(&effect.plugin_id).is_some() && self.effect_enabled(*id, effect.id, t)? {
+                    hidden.extend(self.subtree(*id, present)?.into_iter().skip(1));
+                    break;
+                }
             }
         }
         Ok(hidden)
@@ -1225,7 +1209,7 @@ impl<'a> StoreView<'a> {
         let present: HashSet<LayerId> = layers.iter().copied().collect();
         let mut memo = HashMap::new();
         let mut visiting = HashSet::new();
-        let handed_out = self.handed_out_by_a_group(&present)?;
+        let handed_out = self.handed_out_by_a_group(&present, t)?;
         let mut out = Vec::new();
         for layer in layers {
             if handed_out.contains(&layer) {

@@ -54,6 +54,27 @@ pub fn is_blob_track(plugin_id: &str) -> bool {
     plugin_id == BLOB_TRACK
 }
 
+pub fn program(plugin_id: &str) -> Option<crate::store::kind::PlacementProgram> {
+    KINDS.iter().find(|kind| kind.plugin_id == plugin_id).map(|kind| crate::store::kind::PlacementProgram {
+        plugin_id: kind.plugin_id, needs_position: true, evaluate: placements,
+    })
+}
+
+fn placements(input: &crate::store::kind::PlacementInput<'_>) -> Vec<crate::store::kind::PlacementOutput> {
+    use crate::store::{kind::PlacementOutput, EffectId, Placement, RationalTime};
+    let Some(marks) = input.analysis.and_then(|a| a.blobs(input.layer, EffectId(0), input.time)) else { return Vec::new() };
+    let position = glam::Vec2::from(input.position);
+    let material = vec2_of(input.params, "material").map(|v| v.max(1e-3) as f32);
+    let fit_box = number_of(input.params, "fit") >= 0.5;
+    marks.iter().map(|mark| {
+        let stretch = if fit_box { [mark.size[0] / material[0], mark.size[1] / material[1]] } else { [1.0, 1.0] };
+        let half = glam::vec2(material[0] * stretch[0], material[1] * stretch[1]) * 0.5;
+        let offset = glam::Vec2::from(mark.center) - position - half;
+        let (placed, outline_stretch) = if input.stretch_outline { ([1.0, 1.0], stretch) } else { (stretch, [1.0, 1.0]) };
+        PlacementOutput { placement: Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, offset_z: 0.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch: placed }, outline_stretch }
+    }).collect()
+}
+
 /// 取っ手の値。無い欄は宣言の既定。
 pub fn number_of(params: &[(String, Value)], name: &str) -> f64 {
     let default = KINDS[0].params.iter().find(|p| p.name == name).map_or(0.0, |p| p.default[0]);

@@ -43,6 +43,7 @@ For a focused change, start with its owner's tests (use the README's native depe
 | Change | Focused check |
 |---|---|
 | Document edits and preview projection | `cargo test -p motolii-doc --lib --test edit_transactions` |
+| Placement provider inputs, identities and group behavior (no renderer/GPU) | `cargo test -p motolii-doc --test placement_programs` |
 | Read-only recording and renderer build boundary | `scripts/motolii-ui.sh check-read-only` |
 | Viewing-state ownership | `cargo test -p motolii-ui --lib viewer::tests` |
 | Native window attachment lifecycle | `scripts/motolii-ui.sh test-window` |

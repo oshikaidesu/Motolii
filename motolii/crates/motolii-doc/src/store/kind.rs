@@ -88,7 +88,28 @@ pub struct Kind {
 #[derive(Clone, Copy)]
 pub struct PlacementProgram {
     pub plugin_id: &'static str,
-    pub evaluate: fn(&[(String, Value)]) -> Vec<Placement>,
+    pub needs_position: bool,
+    pub evaluate: fn(&PlacementInput<'_>) -> Vec<PlacementOutput>,
+}
+
+pub struct PlacementInput<'a> {
+    pub params: &'a [(String, Value)],
+    pub layer: super::LayerId,
+    pub time: RationalTime,
+    pub position: [f32; 2],
+    pub stretch_outline: bool,
+    pub analysis: Option<&'a super::analysis::AnalysisInputs>,
+}
+
+pub struct PlacementOutput {
+    pub placement: Placement,
+    pub outline_stretch: [f32; 2],
+}
+
+impl From<Placement> for PlacementOutput {
+    fn from(placement: Placement) -> Self {
+        Self { placement, outline_stretch: [1.0; 2] }
+    }
 }
 
 use crate::doc::core::RationalTime;

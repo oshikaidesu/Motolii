@@ -21,7 +21,7 @@ pub struct GridRow {
 
 pub struct PlacementKind {
     pub plugin_id: &'static str,
-    pub evaluate: fn(&[(String, Value)]) -> Vec<Placement>,
+    pub evaluate: fn(&crate::doc::store::kind::PlacementInput<'_>) -> Vec<crate::doc::store::kind::PlacementOutput>,
     pub label: &'static str,
     pub params: &'static [PlacementParam],
     /// 形の行に並ぶ param(形のトグルで出入りする物)。
@@ -76,7 +76,7 @@ const fn vec2(name: &'static str, label: &'static str, section: &'static str, de
 
 /// 欄は使う人が決める順: いくつ → どんな形 → 1 つずつどう変えるか → どう散らすか。
 pub const KINDS: &[PlacementKind] = &[PlacementKind {
-    evaluate: |params| placements(kind(REPEAT).unwrap(), params),
+    evaluate: |input| placements(kind(REPEAT).unwrap(), input.params).into_iter().map(Into::into).collect(),
     plugin_id: REPEAT,
     label: "Repeater",
     params: &[
@@ -114,7 +114,7 @@ pub const KINDS: &[PlacementKind] = &[PlacementKind {
         advanced("Seed", "", None, Some("seed")),
     ],
 }, PlacementKind {
-    evaluate: |params| placements(kind(MIRROR).unwrap(), params),
+    evaluate: |input| placements(kind(MIRROR).unwrap(), input.params).into_iter().map(Into::into).collect(),
     plugin_id: MIRROR,
     label: "Mirror",
     params: &[
@@ -150,7 +150,7 @@ pub fn kind(plugin_id: &str) -> Option<&'static PlacementKind> {
 }
 
 pub fn program(plugin_id: &str) -> Option<crate::doc::store::kind::PlacementProgram> {
-    kind(plugin_id).map(|kind| crate::doc::store::kind::PlacementProgram { plugin_id: kind.plugin_id, evaluate: kind.evaluate })
+    kind(plugin_id).map(|kind| crate::doc::store::kind::PlacementProgram { plugin_id: kind.plugin_id, needs_position: false, evaluate: kind.evaluate })
 }
 
 pub use crate::doc::store::Placement;

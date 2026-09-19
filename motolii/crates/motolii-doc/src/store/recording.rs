@@ -55,7 +55,7 @@ impl Recording {
             &self.tracks,
             &self.records,
             &self.layout,
-            crate::doc::extensions::placement::program,
+            crate::doc::extensions::placement_program,
         )
     }
 }
