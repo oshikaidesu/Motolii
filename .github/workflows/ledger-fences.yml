@@ -8,9 +8,30 @@ on:
 jobs:
   structure:
     runs-on: ubuntu-latest
+    env:
+      JEV_MODE: ${{ vars.MOTOLII_JEV_MODE == 'shadow' && 'shadow' || vars.MOTOLII_JEV_MODE == 'route' && 'route' || 'off' }}
     steps:
       - uses: actions/checkout@v4
       - name: Current workspace and documentation entry points
-        run: python3 scripts/check-stage5.py
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: >-
+          python3 scripts/run-observed-cli.py --cwd "$GITHUB_WORKSPACE"
+          --log-dir "$RUNNER_TEMP/jev-structure" --jev-mode "$JEV_MODE"
+          -- "$(command -v python3)" scripts/check-stage5.py
       - name: Documentation index and link consistency
-        run: bash scripts/check-docs.sh
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: >-
+          python3 scripts/run-observed-cli.py --cwd "$GITHUB_WORKSPACE"
+          --log-dir "$RUNNER_TEMP/jev-docs" --jev-mode "$JEV_MODE"
+          -- "$(command -v bash)" scripts/check-docs.sh
+      - name: Optional Jev decisions (no raw logs)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-decisions
+          path: ${{ runner.temp }}/jev-*/jev.json
+          if-no-files-found: ignore
+          retention-days: 7

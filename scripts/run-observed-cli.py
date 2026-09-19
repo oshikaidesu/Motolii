@@ -83,6 +83,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=float, help="Optional positive wall timeout; omitted means no runtime deadline")
     parser.add_argument("--grace-seconds", type=float, default=5.0, help="Positive TERM-to-KILL grace")
     parser.add_argument("--heartbeat-seconds", type=float, default=10.0, help="Positive lifecycle heartbeat interval")
+    parser.add_argument("--jev-mode", choices=("off", "shadow", "route"), default="off",
+                        help="Optional post-command triage; writes jev.json, never changes command status")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Exact child argv after --")
     args = parser.parse_args(argv)
     if args.command and args.command[0] == "--":
@@ -279,6 +281,13 @@ def main(argv: list[str]) -> int:
         "timeout_seconds": args.timeout_seconds,
     }
     atomic_json(metadata_path, metadata)
+    if args.jev_mode != "off":
+        try:
+            from jev_triage import classify
+            atomic_json(log_dir / "jev.json", classify(metadata, log_dir, args.jev_mode))
+        except Exception:
+            # A failed optional observer must not replace the command's exit status.
+            print("jev: report unavailable; use existing LLM classification", file=sys.stderr)
     if spawn_error is not None:
         print(f"run-observed-cli: {spawn_error}", file=sys.stderr)
         return EX_SOFTWARE

@@ -227,6 +227,8 @@ Details, the test lanes and the current unfinished list are in [`docs/stage5/REA
 
 Contributions are welcome in rendering, document semantics, tests, tooling, UI, plugins, documentation, and prior-art review.
 
+Optional [Jev development-loop triage](docs/jev-poc.md) classifies failed checks into a next action and owner, with an existing-LLM fallback. It is disabled by default and does not replace implementation or review.
+
 Before implementing a task:
 
 1. Read [`docs/README.md`](docs/README.md).
