@@ -3,6 +3,8 @@
 //! ここが層の値を書き換えることはない。
 
 use super::boxes::{footprint, shape_box};
+use taffy::prelude::*;
+
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -82,16 +84,19 @@ impl StoreView<'_> {
                 Ok(if sizing[axis] == Sizing::Fixed { AvailableSpace::Definite(self.number(root, name, 0.0, t)? as f32) } else { AvailableSpace::MaxContent })
             };
             let space = Size { width: available(0, WIDTH)?, height: available(1, HEIGHT)? };
-            tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| match measure {
-                Some(m) => self.measure_text(*m, known, available, t),
+            let measured = |known: Size<Option<f32>>, available: Size<AvailableSpace>, measure: Option<&mut Measure>| match measure {
+                Some(m) => {
+                    // 折り返し幅は、決まった幅か、taffy が使ってよいと言った幅。どちらも無ければ折り返さない。
+                    let width = known.width.or(match available.width { AvailableSpace::Definite(w) => Some(w), _ => None });
+                    let [width, height] = self.measure_text(*m, width, known.height, t);
+                    Size { width, height }
+                }
                 None => Size::ZERO,
-            })
+            };
+            tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| measured(known, available, measure))
             .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
             if self.exclude_blobs(&mut tree, &groups, t)? {
-                tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| match measure {
-                    Some(m) => self.measure_text(*m, known, available, t),
-                    None => Size::ZERO,
-                })
+                tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| measured(known, available, measure))
                 .map_err(|e| StoreError::Property(format!("layout: {e}")))?;
             }
             let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));

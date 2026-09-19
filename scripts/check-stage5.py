@@ -110,6 +110,18 @@ if process_state:
     errors.append(f'{relative}: {held} is process-wide mutable state the contract does not name')
  for name,held in owners.items():
   if not (core/name).is_file():errors.append(f'coreProcessState: missing {name}')
+# One solver, one owner. A layer's box, its time and its text must not learn the flow's
+# solver by name: the day a second file says `taffy`, the responsibility has two homes.
+for solver,owner in modules.get('coreSolvers',{}).get('owners',{}).items():
+ core=root/modules['coreSolvers']['root']
+ if not (core/owner).is_file():errors.append(f'coreSolvers: missing {owner}')
+ for path in sorted(core.rglob('*.rs')):
+  name=str(path.relative_to(core))
+  if name==owner:continue
+  source=path.read_text()
+  body='\n'.join(l for l in source.split('\n') if not l.lstrip().startswith('//'))
+  if re.search(r'\b'+re.escape(solver)+r'\b',body):
+   errors.append(f'{path.relative_to(root)}: only {owner} may name the {solver} solver')
 for relative,allowed in modules.get('isolatedExtensions',{}).items():
  path=root/relative/'Cargo.toml'
  source=path.read_text()

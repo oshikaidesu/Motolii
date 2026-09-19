@@ -25,6 +25,7 @@
     "motolii/ui/extensions/jobs/src"
   ],
   "coreProcessState": {"root": "motolii/crates/motolii-doc/src", "owners": {"vector/text.rs": ["SYSTEM", "KNOWN"]}},
+  "coreSolvers": {"root": "motolii/crates/motolii-doc/src", "owners": {"taffy": "store/layout/flow.rs"}},
   "isolatedExtensions": {
     "motolii/ui/extensions/script": ["rquickjs", "serde_json"]
   },

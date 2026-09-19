@@ -116,15 +116,13 @@ impl StoreView<'_> {
     }
 
     /// 横が Fill の文字: 決まった幅で折り返した高さ(Scale の zoom 込み)。
-    pub(super) fn measure_text(&self, measure: Measure, known: Size<Option<f32>>, available: Size<AvailableSpace>, t: RationalTime) -> Size<f32> {
-        let width = known.width.or(match available.width {
-            AvailableSpace::Definite(w) => Some(w),
-            _ => None,
-        });
+    /// 幅が決まっているならその幅で折り返した時の大きさ、決まっていないなら折り返さない大きさ。
+    /// 高さを渡されたらそれをそのまま返す(並べる側が既に決めている)。
+    pub(super) fn measure_text(&self, measure: Measure, width: Option<f32>, height: Option<f32>, t: RationalTime) -> [f32; 2] {
         let wrap = width.map(|w| w / measure.scale);
         match self.text_box(measure.layer, t, wrap).ok().flatten() {
-            Some(b) => Size { width: width.unwrap_or((b[2] - b[0]) * measure.scale), height: known.height.unwrap_or((b[3] - b[1]) * measure.scale) },
-            None => Size::ZERO,
+            Some(b) => [width.unwrap_or((b[2] - b[0]) * measure.scale), height.unwrap_or((b[3] - b[1]) * measure.scale)],
+            None => [0.0, 0.0],
         }
     }
 }
