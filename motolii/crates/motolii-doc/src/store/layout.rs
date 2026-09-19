@@ -2477,6 +2477,15 @@ mod tests {
         assert!((x(&doc) - (first - 10.0)).abs() < 0.01, "a preview is laid out fresh, not from the cache: {}", x(&doc));
         doc.clear_preview_edits(owner);
         assert!((x(&doc) - first - 40.0).abs() < 0.01, "and after the preview the committed layout is back");
+        doc.set_transient(row, PropertyId::new(GAP).unwrap(), Value::F64(0.0));
+        let shown = doc.view();
+        let transient = shown.layout_frame(T).unwrap();
+        let committed = shown.clone().without_transients().layout_frame(T).unwrap();
+        assert!((committed.slots[&b].position[0] - first - 40.0).abs() < 0.01,
+            "excluding transients must not reuse the shown layout");
+        assert!((transient.slots[&b].position[0] - (first - 10.0)).abs() < 0.01);
+        assert_eq!(shown.layout_frame(T).unwrap(), transient,
+            "the original view keeps its own evaluation inputs");
     }
 
     #[test]

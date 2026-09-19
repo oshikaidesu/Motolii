@@ -88,6 +88,9 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn without_transients(mut self) -> Self {
+        if !self.ignore_transients {
+            self.layout_memo = Default::default();
+        }
         self.ignore_transients = true;
         self
     }
