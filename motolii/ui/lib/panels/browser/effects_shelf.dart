@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-import '../../app/editor_window.dart' show effectsNotice;
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';

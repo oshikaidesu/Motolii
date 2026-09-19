@@ -15,7 +15,7 @@
 
 ## 決定
 
-利用者裁定(2026-08-16): 製品 Timeline を描いているのは **Skia**([`crates/motolii-ui/src/timeline_skia_raster.rs`](../../crates/motolii-ui/src/timeline_skia_raster.rs))であり、これは以前から変わっていない。egui Timeline は**移行が途中で止まった残骸**であり、コードごと畳んだ。
+利用者裁定(2026-08-16): 製品 Timeline を描いているのは **Skia**([`crates/motolii-ui/src/timeline_skia_raster.rs`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-ui/src/timeline_skia_raster.rs))であり、これは以前から変わっていない。egui Timeline は**移行が途中で止まった残骸**であり、コードごと畳んだ。
 
 [2026-08-15 egui Timeline engine 正本](2026-08-15-egui-timeline-engine-authority.md)のうち、**「Timeline engine／皮の正本は `timeline_egui.rs`、描画・hit・pointer を持つ」**を撤回する。同文書の本文は歴史として残す。
 

@@ -11,7 +11,7 @@
 - 「Motoliiの軽量コンポジット路線はwgpuの弱点を避けやすい」という方向性の結論は**維持**できる
 - ただしマルチスレッド・bindless・WGSLの3項目の正しい判定は「問題なし」ではなく「**Motoliiの負荷形状では優先度が低い**」である
 - 初回レビューが挙げた「抜け5点」のうち、**文書と実装の不一致が確認できたのはGPU→CPUリードバック**(バッファ再利用のみでin-flight重畳は未実装)のみ。VRAM予算・プラグイン資源・色管理は既に設計へ入っており、「抜けている」は過大だった。リードバック重畳の**優先度は原因分離ベンチ(§C-2)未実施のため未確定** — 本文書は採用提案でありP0確定ではない
-- 逆に、[memory-model.md](../memory-model.md) P1の「非同期・パイプライン化」記述は実装([motolii-export](../../crates/motolii-export/src/lib.rs))と食い違う過大記述だった(本レビューで訂正済み)
+- 逆に、[memory-model.md](../memory-model.md) P1の「非同期・パイプライン化」記述は実装([motolii-export](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-export/src/lib.rs))と食い違う過大記述だった(本レビューで訂正済み)
 - シェーダー初回コンパイルのヒッチは実在する未解決ギャップ(計測後の優先度比較対象)
 
 ## 判定方法
@@ -40,8 +40,8 @@
 
 **文書と実装が不一致**だった(確認済、2026-07-13リポジトリ実物)。優先度の「P0」確定は§C-2未計測のため行わない。
 
-- [`RgbaDownloader`](../../crates/motolii-gpu/src/transfer.rs)はステージングバッファを再利用するが、copyをsubmitした直後に`map_async`を呼び、**同一関数内で完了までpollする同期実装**
-- [書き出しループ](../../crates/motolii-export/src/lib.rs)は各フレームで `render → download完了待ち → CPUコピー → ffmpeg書き込み` を直列実行
+- [`RgbaDownloader`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-gpu/src/transfer.rs)はステージングバッファを再利用するが、copyをsubmitした直後に`map_async`を呼び、**同一関数内で完了までpollする同期実装**
+- [書き出しループ](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-export/src/lib.rs)は各フレームで `render → download完了待ち → CPUコピー → ffmpeg書き込み` を直列実行
 - `map_async`は呼び出しが即時復帰するだけで、非同期化には**バッファを複数持ちin-flightを重畳させる**必要がある([wgpu Buffer](https://docs.rs/wgpu/29.0.4/wgpu/struct.Buffer.html#method.map_async))
 - 一方[memory-model.md](../memory-model.md) P1は「非同期・パイプライン化を実証済み」と読める記述だった。実証済みなのは**バッファ再利用まで**であり、複数フレームのin-flight化ではない → **本レビューでP1の記述を訂正した(2026-07-13)**
 
@@ -65,7 +65,7 @@ LRU・RAM/ディスク降格・ハード予算は[memory-model.md](../memory-mod
 
 ### B-3. プラグイン境界とGPUリソース — **棄却(現在地には当たらない)。v2スパイクは既存バックログどおり**
 
-v1は静的リンクRust traitで[`TextureRef`が`&wgpu::Texture`を直接渡す](../../crates/motolii-plugin/src/lib.rs)(確認済)。「C ABIを越えられず今すぐハンドル間接化必須」は現在地に当たらない。動的C ABIは[backlog V2-1](../backlog.md)で明示的にv2送り。プロセス隔離では整数ハンドルでは足りず、IOSurface / DXGI shared texture / dma-bufと同期primitiveが要る — これは**v2着手時のスパイク対象**であり、M2へ前倒しすべき穴ではない。
+v1は静的リンクRust traitで[`TextureRef`が`&wgpu::Texture`を直接渡す](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-plugin/src/lib.rs)(確認済)。「C ABIを越えられず今すぐハンドル間接化必須」は現在地に当たらない。動的C ABIは[backlog V2-1](../backlog.md)で明示的にv2送り。プロセス隔離では整数ハンドルでは足りず、IOSurface / DXGI shared texture / dma-bufと同期primitiveが要る — これは**v2着手時のスパイク対象**であり、M2へ前倒しすべき穴ではない。
 
 ### B-4. シェーダー初回コンパイルのヒッチ — **延期**(INF-8ゲート判定待ち。提案優先度: 中)
 
@@ -80,7 +80,7 @@ v1は静的リンクRust traitで[`TextureRef`が`&wgpu::Texture`を直接渡す
 
 ### B-5. カラーマネジメント — **棄却(方向は設計済み)。HDR意味論の前倒しはしない**
 
-色変換一元化・`Rgba16Float`の型予約・Quality/FrameDescのキャッシュキー算入は[M4仕様](../specs/M4-cache-and-analysis.md)に既にある。現在の書き出し・レンダターゲットは実質RGBA8/sRGB([motolii-export](../../crates/motolii-export/src/lib.rs)、確認済)で、M5のリニアFP16は推奨案の段階。ここでHDR意味論まで恒久化するのは「意味が先」に反する。M4 K1では (1)実フォーマットから占有バイト数を計算 (2)PixelFormat・色空間・premul・Qualityをキーへ含める (3)RGBA8/FP16を決め打ちしない、までを保証し、HDR/OCIOの意味論採択([backlog V2-4](../backlog.md))は独立レビューにする。
+色変換一元化・`Rgba16Float`の型予約・Quality/FrameDescのキャッシュキー算入は[M4仕様](../specs/M4-cache-and-analysis.md)に既にある。現在の書き出し・レンダターゲットは実質RGBA8/sRGB([motolii-export](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-export/src/lib.rs)、確認済)で、M5のリニアFP16は推奨案の段階。ここでHDR意味論まで恒久化するのは「意味が先」に反する。M4 K1では (1)実フォーマットから占有バイト数を計算 (2)PixelFormat・色空間・premul・Qualityをキーへ含める (3)RGBA8/FP16を決め打ちしない、までを保証し、HDR/OCIOの意味論採択([backlog V2-4](../backlog.md))は独立レビューにする。
 
 ## C. 失敗露呈タイムラインと「wgpu採用失敗」の判定基準(2026-07-13追記)
 

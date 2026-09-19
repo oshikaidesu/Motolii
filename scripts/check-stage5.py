@@ -5,7 +5,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 contract=json.loads((root/'docs/stage5/workspace.json').read_text())
 errors=[]
-for key in ['entry','ui','native','document','renderer','legacy_ui']:
+for key in ['entry','ui','native','document','renderer','history']:
  if not (root/contract[key]).exists():errors.append(f'{key}: missing {contract[key]}')
 manifest=(root/contract['native']/'Cargo.toml').read_text()
 for name,key in [('motolii-doc','document'),('motolii-render','renderer')]:
@@ -27,7 +27,7 @@ if not match or re.findall(r'"([^"]+)"',match.group(1)) != [contract['cargoDefau
 members_match=re.search(r'^members\s*=\s*\[([^\]]+)\]',cargo,re.M)
 if members_match and 'motolii' in re.findall(r'"([^"]+)"',members_match.group(1)):
  errors.append('Legacy Dioxus host must not rejoin the active workspace')
-if '[workspace]' in (root/'motolii/Cargo.toml').read_text():errors.append('Duplicate current Cargo workspace')
+if (root/'motolii/Cargo.toml').exists():errors.append('Legacy host manifest must stay in Git history')
 workflow=(root/'.github/workflows/ledger-fences.yml').read_text()
 if 'app/Cargo.toml' in workflow or 'workspaces: next' in workflow:errors.append('Active CI invokes a historical workspace')
 if 'scripts/check-stage5.py' not in workflow:errors.append('Active CI omits Stage 5 entry validation')

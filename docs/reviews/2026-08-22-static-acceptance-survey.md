@@ -2,7 +2,7 @@
 
 日付: 2026-08-22 / 状態: **調査**(read-only・書き込みは本ファイルのみ) / 起点: [転写文法セッション引き継ぎ](2026-08-22-session-handoff-transcription-hierarchy.md)新queue「検収の静的化(利用者提起)」
 
-対象: `next/`(正本 workspace、22 member — [Cargo.toml](../../next/Cargo.toml))。旧 `crates/`・`plugins/`・`ui/` workspace(main Cargo.toml)は対象外(2026-08-20裁定で正本を`next/`へ移し、旧workspaceへの新規投資は凍結済み)。実測は本 worktree(`next/target` は本セッション開始時点で空 = cold state)で実施、コード変更ゼロ。
+対象: `next/`(正本 workspace、22 member — [Cargo.toml](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/Cargo.toml))。旧 `crates/`・`plugins/`・`ui/` workspace(main Cargo.toml)は対象外(2026-08-20裁定で正本を`next/`へ移し、旧workspaceへの新規投資は凍結済み)。実測は本 worktree(`next/target` は本セッション開始時点で空 = cold state)で実施、コード変更ゼロ。
 
 ## 0. 結論(先出し)
 

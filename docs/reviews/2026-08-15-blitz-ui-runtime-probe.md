@@ -4,7 +4,7 @@
 **この結論をそのまま設計根拠にしない**。反対側レビュー未実施、egui側の同条件測定も未実施。
 
 - 実測日: 2026-08-15（開発主機 macOS / Metal）
-- プローブ: [`spikes/blitz-probe/`](../../spikes/blitz-probe/)
+- プローブ: [`spikes/blitz-probe/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/blitz-probe)
 - 対象: `dioxus-native 0.8.0-alpha.1` / `blitz-* 0.3.0-beta.1` / `vello_hybrid 0.0.9` / `wgpu 29.0.4`
 
 ## なぜ測ったか
@@ -21,7 +21,7 @@ Rerunに乗っている部分は `rerun_stage/` **1,600行のみ**で、`crates/
 
 | # | 検証 | 結果 |
 |---|---|---|
-| P2 | 日本語IME 4項目（[`spikes/ime-acceptance`](../../spikes/ime-acceptance/)の基準を流用） | **合格**（利用者審判） |
+| P2 | 日本語IME 4項目（[`spikes/ime-acceptance`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/ime-acceptance)の基準を流用） | **合格**（利用者審判） |
 | P3 | Timeline形状DOMの毎フレーム更新 | 天井 約1,500〜3,000ノード |
 | P4 | **自前wgpu29デバイスのテクスチャへ描画** | **PASS（ピクセル完全一致）** |
 | P5 | clip/trim/key/playhead の掴み | **合格**（利用者審判） |

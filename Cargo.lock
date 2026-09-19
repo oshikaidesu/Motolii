@@ -3205,14 +3205,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "motolii-road"
-version = "0.0.0"
-dependencies = [
- "motolii-doc",
- "motolii-render",
-]
-
-[[package]]
 name = "motolii-ui"
 version = "0.1.0"
 dependencies = [
@@ -7681,7 +7673,3 @@ checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
 ]
-
-[[patch.unused]]
-name = "blitz-dom"
-version = "0.3.0-beta.2"

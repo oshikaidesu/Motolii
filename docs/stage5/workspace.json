@@ -6,7 +6,7 @@
   "native": "motolii/ui/native",
   "document": "motolii/crates/motolii-doc",
   "renderer": "motolii/crates/motolii-render",
-  "legacy_ui": "motolii/src/ui",
+  "history": "docs/stage5/history/retired-source.md",
   "checkpoint": {
     "id": "20260906T083405",
     "statePath": "motolii-stage5/checkpoints/20260906T083405",

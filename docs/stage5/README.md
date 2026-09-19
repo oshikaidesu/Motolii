@@ -73,11 +73,11 @@ ffprobe -version
 
 ## 旧資料との関係
 
-`motolii/src/ui`と`motolii-dx.sh`は旧UIの比較・回帰参照用。`app/`、`next/`、ルート`crates/`等の過去世代も現在の開発入口ではない。検証版は外部に保存したまま、本体へ逆流させない。技術選定の現行判断ではStage 5と利用者の最新指示を優先し、古いdecision行の履歴そのものは消さない。
+旧Dioxus UI、`app/`、`next/`、ルート`crates/`・`ui/`・`spikes/`は[公開Git履歴](history/retired-source.md)へ退役した。通常のcheckoutと検索には現役の実装だけを置く。技術選定はStage 5と利用者の最新指示を優先し、古いdecision行は履歴として残す。
 
 ## 最終入口監査での修正
 
-ルートCargoをStage 5 workspaceへ統合し、旧ルートmanifest/lockをhistoryへ保全した。旧Dioxus hostはCargo workspace対象から除外した。`motolii/Cargo.toml`と旧ソースは履歴参照で、実行が必要なら保存した旧環境から扱う。CIは現行構成と文書だけを検証し、旧appの個人checkoutを実行しない。macOS実機／GPU／Flutter操作の検収はCIの緑から推定しない。required checkやbranch protectionは変更していない。
+ルートCargoをStage 5 workspaceへ統合した。旧ホストと未使用のdynamic-link用crateは通常ツリーから退役し、回復先は[固定コミット](history/retired-source.md)に一本化した。macOS実機／GPU／Flutter操作の検収は文書・構造CIの緑から推定しない。required checkやbranch protectionは変更していない。
 
 ## 本格採用の確認
 

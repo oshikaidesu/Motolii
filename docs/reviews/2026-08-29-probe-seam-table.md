@@ -5,7 +5,7 @@
 
 各レーンの発注書はこの表の1行を引用し、**繋ぐ先の室名を1行+「出たか」の検査**で渡す
 (全読みさせない)。「委託可否」が既に裁定済みの項目は
-[rerun-technical-delegation.tsv](../../next/reference/generated/rerun-technical-delegation.tsv) が正本。
+[rerun-technical-delegation.tsv](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/generated/rerun-technical-delegation.tsv) が正本。
 
 ## 縫い目表
 

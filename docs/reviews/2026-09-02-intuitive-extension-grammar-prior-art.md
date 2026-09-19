@@ -119,7 +119,7 @@ VFXの検査可能性には強い一方、「ロゴを少し跳ねさせる」�
 
 [窓の説明](../wiki/window.md)は、素材=`Media`、効果=`Effects`、新しい層=`Create`、
 作品内の色=`Colors`と役割を既に分けている。現行
-[`ui/browser.rs`](../../motolii/src/ui/browser.rs)も、これらを同じ`tcard`／`tgrid`文法で描く。
+[`ui/browser.rs`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs)も、これらを同じ`tcard`／`tgrid`文法で描く。
 
 このため、新しいVism、素材、生成物、将来の駆動に専用のUI体系は要らない。
 

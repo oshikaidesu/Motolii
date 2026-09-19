@@ -86,7 +86,7 @@ railには操作の舞台だけが残る — という分業が§2である。
 ## 5. fixtureの所在
 
 `~/Documents/Codex/2026-08-06/motolii-ui-hybrid-research-handoff/work/skia-timeline-probe/src/bin/`
-(2026-08-10移管: 現在の正本は[`spikes/skia-timeline-probe/src/bin/`](../../spikes/skia-timeline-probe/README.md))
+(2026-08-10移管: 現在の正本は[`spikes/skia-timeline-probe/src/bin/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/skia-timeline-probe/README.md))
 
 | bin | 内容 |
 |---|---|

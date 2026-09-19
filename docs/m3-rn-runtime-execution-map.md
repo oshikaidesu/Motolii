@@ -146,9 +146,9 @@ R0はcurrent main上で受入済みである。同じfileに隣接するR1 GPU�
 
 ## 4. Wave R1 — VS-1再閉鎖
 
-> **current product source(2026-08-11再訂正)**: RN製品UI接続probeは[`ui/motolii-rn/`](../ui/motolii-rn/README.md)
+> **current product source(2026-08-11再訂正)**: RN製品UI接続probeは[`ui/motolii-rn/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/ui/motolii-rn/README.md)
 > (App.tsx 660行: Browser 3タブ、Extensions、panel registry、Timeline 3モード、Fabric spec)、
-> rust-skia実証は[`spikes/skia-timeline-probe/`](../spikes/skia-timeline-probe/README.md)にリポ内正本がある。
+> rust-skia実証は[`spikes/skia-timeline-probe/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/skia-timeline-probe/README.md)にリポ内正本がある。
 > R1/R2はこのartifact内で接続し、成功時に状態を`PRODUCT_SOURCE`へ繰り上げる。別targetへのimport／copyを製品化と呼ばない。
 
 R1の利用者出口は、RN BrowserのRectangleから既存D2へ一度だけPlaceし、Stage、Timeline、Inspectorが同じ`LayerId`／revisionを表示し、Undoで三面から消え、Redoで戻ること。

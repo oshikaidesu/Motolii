@@ -1,7 +1,3 @@
-#[cfg(test)]
-#[path = "../../../../tests/testkit/mod.rs"]
-mod testkit;
-
 use std::io::Write;
 use std::path::Path;
 use std::process::{Child, ChildStdin, Stdio};

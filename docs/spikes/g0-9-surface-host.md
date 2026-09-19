@@ -3,7 +3,7 @@
 状態: **macOS部分合格／製品統合は継続停止**。
 
 公開API、Document、plugin契約、永続layoutへ触れないisolated harnessとして
-[`spikes/g0-9-surface-host/`](../../spikes/g0-9-surface-host/)を作り、決定済みtopologyを製品と同じ
+[`spikes/g0-9-surface-host/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/g0-9-surface-host)を作り、決定済みtopologyを製品と同じ
 wgpu majorで確認した。これはrenderer採用やG0-9完了を意味しない。
 
 ## 構成と審判

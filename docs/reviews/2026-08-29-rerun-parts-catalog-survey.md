@@ -129,7 +129,7 @@ rustdoc JSON を読むだけの機械生成。`cargo metadata`で毎回チェッ
    (棚卸し済みなので優先度は下がった。実装フェーズで実際に使う物だけ追加すればよい)
 5. **完了**: `app/reference/lottie-coverage.tsv` の採用済み項目のうち `layers`/`effects`/
    `effect-values`/`composition`(39行)から、Rerun側への技術委託を横断的に洗う台帳
-   [`next/reference/generated/rerun-technical-delegation.tsv`](../../next/reference/generated/rerun-technical-delegation.tsv)
+   [`next/reference/generated/rerun-technical-delegation.tsv`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/generated/rerun-technical-delegation.tsv)
    を作成した。39行中34行は純粋なDocumentデータ項目/AE編集体系そのもの(Rerunに対応概念なし)で
    対象外。技術判断が要った5行(`ks`/`parent`/`bm`/`effect.ty`/`masksProperties`/`ao`/`text-layer.t`、
    実際は7行)は**全て監査完了**——`ks`/`parent`(`re_tf`)・`bm`(blend.rs)・`masksProperties`

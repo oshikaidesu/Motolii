@@ -36,7 +36,7 @@ native実装方式の比較とFable向け反証点は
 
 ## スパイク実装
 
-[spikes/g0-9-web-ui](../../spikes/g0-9-web-ui/)は製品workspace外の隔離ハーネスである。
+[spikes/g0-9-web-ui](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/g0-9-web-ui)は製品workspace外の隔離ハーネスである。
 
 - React 19.0.0 / Vite 6.4.3 / Playwright 1.61.1 / PixiJS 8.19.0 / Konva 10.3.0 / Three.js 0.185.1
 - `g0-9-dense-ui-v1`: Browser 10,000 item、Timeline 1,000 clip / 100,000 key / 32 track

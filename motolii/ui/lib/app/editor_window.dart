@@ -35,15 +35,6 @@ String? freezeNotice(Map<String, dynamic> status) {
   return 'Freezing $name ${job['done']}/${job['total']}';
 }
 
-/// 棚(vism/)で断った効果の理由。空なら ''。status の `catalogErrors` をそのまま 1 行に。
-String effectsNotice(Map<String, dynamic> status) {
-  final errors = (status['catalogErrors'] as List? ?? const [])
-      .map((e) => '$e')
-      .where((e) => e.isNotEmpty)
-      .toList();
-  return errors.isEmpty ? '' : 'Effects: ${errors.join('; ')}';
-}
-
 class EditorWindow extends StatefulWidget {
   const EditorWindow({super.key});
   @override
@@ -75,6 +66,9 @@ class _EditorWindowState extends State<EditorWindow> {
   @override
   void initState() {
     super.initState();
+    c
+        .slice('animationAppearance', const ['animate'])
+        .addListener(_syncAnimationAppearance);
     c.deskDefault.addListener(persist);
     c.confirmClose = confirmReplacement;
     c.panelPlacementRequested = _placePanel;
@@ -152,11 +146,16 @@ class _EditorWindowState extends State<EditorWindow> {
 
   @override
   void dispose() {
+    c
+        .slice('animationAppearance', const ['animate'])
+        .removeListener(_syncAnimationAppearance);
     workspace.dispose();
     saveTimer?.cancel();
     c.dispose();
     super.dispose();
   }
+
+  void _syncAnimationAppearance() => EditorTheme.animating.value = c.animating;
 
   void persist() {
     if (c.windowInfo['main'] == false) return;

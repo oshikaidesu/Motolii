@@ -27,7 +27,7 @@ docs上で一意に分類し、**互いに競合しない別役割**として固
 - F2. [`docs/reviews/2026-07-21-m3-u0e-2-reference-fixture-contract.md`](2026-07-21-m3-u0e-2-reference-fixture-contract.md):35-36 は
   「U0e-2の比較元は`origin/codex/m3-mock-components`の固定commit
   `eb16d06f980b6f9bea3901b6f10cbcc21dbfb3d0`」と定めている。
-- F3. [`ui/motolii-web/source-provenance.json`](../../ui/motolii-web/source-provenance.json) の
+- F3. [`ui/motolii-web/source-provenance.json`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/ui/motolii-web/source-provenance.json) の
   `fixedSourceCommit` は `56c318edcddab7cf95d263cc2f7dd2b4e6791134`、`authority` は
   `docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md`、
   `sourceOwnership.product` は `@motolii/motolii-web`、owner は

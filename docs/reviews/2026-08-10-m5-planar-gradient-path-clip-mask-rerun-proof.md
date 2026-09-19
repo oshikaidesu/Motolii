@@ -37,7 +37,7 @@ start／endと2色をpayloadへ渡す。fragment shaderは各fragment位置をgr
 Pathのtriangle外ではfragmentが生成されず、MSAA coverageが境界maskになる。色はGPUへ渡す前にpremultiplyし、
 既存Rerun transparent phaseのsource-overを変えない。
 
-![円Pathでclipした平面グラデーション](../../spikes/rerun-path2d-probe/rerun-planar-gradient-clipped-circle.png)
+![円Pathでclipした平面グラデーション](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/rerun-path2d-probe/rerun-planar-gradient-clipped-circle.png)
 
 自動oracleは、mask coverage 0で`[0, 0, 0, 0]`、gradient中央かつcoverage 1で両端色のpremultiplied中間値、
 payload roundtrip、既存source-over、Path閉路を固定する。

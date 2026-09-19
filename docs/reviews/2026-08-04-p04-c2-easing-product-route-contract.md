@@ -50,7 +50,7 @@ basic preset provenance is the React source authority
 [`docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx:16-41`](../mocks-ui/src/candidates/EasingGraphCandidate.jsx):
 `Linear -> Interp::Linear`; `Smooth -> Bezier { .4, .0, .2, 1.0 }`; `Ease In -> Bezier { .42, .0,
 1.0, 1.0 }`; `Ease Out -> Bezier { .0, .0, .58, 1.0 }`. Custom is `Interp::Bezier`, admitted by the
-existing [`validate_interp`](../../crates/motolii-doc/src/doc_keyframe.rs) boundary. `Hold` is not in
+existing [`validate_interp`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-doc/src/doc_keyframe.rs) boundary. `Hold` is not in
 that product source and is not part of this boundary. Bounce, Elastic and other advanced visual cards
 emit no intent and are disabled until their semantic authority is separately closed; their presence in
 an oracle does not authorize a durable mapping.

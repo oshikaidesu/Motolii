@@ -11,7 +11,7 @@ case "${1:-dev}" in
   check) exec python3 "$repo/scripts/check-stage5.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
   test)
-    cd "$repo"; cargo test -p motolii-doc --test edit_transactions; cargo test -p motolii-doc --lib; cargo test -p motolii-ui --lib; cargo test -p motolii-road --test owned_budget
+    cd "$repo"; cargo test -p motolii-doc; cargo test -p motolii-ui --lib; cargo test -p motolii-render --lib
     dart_bin="$(dirname "$flutter_bin")/dart"
     (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
     cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;

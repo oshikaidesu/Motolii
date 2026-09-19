@@ -10,6 +10,6 @@
     "bridge": {"dependsOn": [], "owns": "Native transport and typed operation protocol"}
   },
   "nativeEditor": "motolii/ui/native/src/editor",
-  "legacyEditor": "motolii/src/ui",
-  "legacyPolicy": "historical reference only; changes target nativeEditor, no dual maintenance"
+  "history": "docs/stage5/history/retired-source.md",
+  "legacyPolicy": "retired to pinned Git history; changes target nativeEditor"
 }

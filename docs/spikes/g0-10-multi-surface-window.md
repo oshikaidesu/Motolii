@@ -3,7 +3,7 @@
 状態: **同一画面・macOS自動fixture合格／異DPI・第二monitor・HDRは未証明**。
 
 公開API、Document、D2、永続window layoutを変更せず、Editorとdetached Previewを別top-level
-window / wgpu Surfaceとして動かせるかを[`spikes/g0-10-multi-surface-window/`](../../spikes/g0-10-multi-surface-window/)
+window / wgpu Surfaceとして動かせるかを[`spikes/g0-10-multi-surface-window/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/g0-10-multi-surface-window)
 で検証した。両Surfaceは1つのwgpu device / queueを共有し、window固有のSurface、config、render pipelineを持つ。
 Host stateはwindow mapの外に置き、Preview windowの破棄対象へ含めない。
 

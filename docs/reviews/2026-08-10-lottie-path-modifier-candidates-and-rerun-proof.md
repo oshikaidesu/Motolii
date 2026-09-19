@@ -58,7 +58,7 @@ cubic curveだけ曲率がずれるため、M2正本、実装、意味論golden�
 Source Circle、Pucker / Bloat、Zig Zag burstをRerun標準`LineStrips2D`で表示する。
 concave fillを未対応のconvex triangle fanへ偽装せず、Path変形そのものをoutlineで審判する。
 
-![Rerun上のPucker／BloatとZig Zag burst](../../spikes/rerun-path2d-probe/rerun-pathfx-pucker-zigzag.png)
+![Rerun上のPucker／BloatとZig Zag burst](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/rerun-path2d-probe/rerun-pathfx-pucker-zigzag.png)
 
 ## 5. Oracleと限界
 

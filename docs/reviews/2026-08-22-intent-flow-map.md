@@ -2,7 +2,7 @@
 
 日付: 2026-08-22 / 状態: 写像(判断なし — 正本の事実を図にしただけ) / 上位原則: 裁定177(1意図=1つの家)
 
-正本: [`next/reference/intent-bundles.tsv`](../../next/reference/intent-bundles.tsv)(束の定数)+ `next/reference/normal-map.tsv` の `bundle` 列(全1,285対象行の割り付け)。束の起案経緯は [2026-08-22-intent-bundles-draft.md](2026-08-22-intent-bundles-draft.md)。**束名は仮名のまま**(命名は利用者の直観が最上流)。
+正本: [`next/reference/intent-bundles.tsv`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/intent-bundles.tsv)(束の定数)+ `next/reference/normal-map.tsv` の `bundle` 列(全1,285対象行の割り付け)。束の起案経緯は [2026-08-22-intent-bundles-draft.md](2026-08-22-intent-bundles-draft.md)。**束名は仮名のまま**(命名は利用者の直観が最上流)。
 
 ## 1. 家の地図 — どの家にどの束が住むか
 

@@ -30,7 +30,7 @@ Rerun store、Blob、Blueprintを第二Documentまたは公開Vism schemaにし�
 
 ## 3. 成立したproof
 
-[private probe](../../spikes/rerun-path2d-probe/README.md)は次を実行する。
+[private probe](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/rerun-path2d-probe/README.md)は次を実行する。
 
 - Rectと4-cubic Circleを既存`pathgeom::Path`へlowerする
 - probe内だけのBlob payloadをcustom archetypeからvisualizerへ渡す
@@ -38,7 +38,7 @@ Rerun store、Blob、Blueprintを第二Documentまたは公開Vism schemaにし�
 - Circleの`draw_order=1`をRectの`draw_order=0`より後にsource-over合成する
 - picking layerとoutline maskのRerun draw phaseを保持する
 
-実画面は[rerun-path2d-z0-overlap.png](../../spikes/rerun-path2d-probe/rerun-path2d-z0-overlap.png)。
+実画面は[rerun-path2d-z0-overlap.png](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/rerun-path2d-probe/rerun-path2d-z0-overlap.png)。
 これはRerun上の可視proofであり、RN製品Stage、Document、Vism公開SDK、Preview／Export接続の完成ではない。
 
 既知の限界は次の通り。

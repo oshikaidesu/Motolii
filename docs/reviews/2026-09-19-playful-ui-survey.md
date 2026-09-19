@@ -16,28 +16,28 @@
 
 | 道具 | 年 | 何が遊びか | UI の仕掛け 3 つ | 出典 |
 |---|---|---|---|---|
-| Mario Paint(SNES) | 1992 | 描く・作曲・アニメ・ハエ叩きが 1 本、マウス同梱 | ① Undo がキャラ(Undodog、Art と Music 両モードの道具箱) ② 楽器がアイコン(マリオ=ピアノ、キノコ=バスドラ、犬・猫・豚の声) ③ タイトル画面の文字を押すと全部が反応(O が爆発、A が落ちてマリオを弾く、T が虹クレヨン) | Wikipedia [S1]、Super Mario Wiki [S2](二次。一次インタビューは未到達) |
-| Mario Artist(64DD) | 1999–2000 | 描く→顔を貼る→3D→踊らせる、の連結 | ① 自分の顔を取り込み(Capture Cassette)キャラに貼る ② Paint Studio に Pokémon Snap 風のミニゲーム ③ Polygon Studio の「Sound Bomber」が後の WarioWare の種 | Wikipedia [S3](二次) |
-| うごくメモ帳 / Flipnote Studio(DSi) | 2008 | 紙のメモの延長でパラパラ漫画、投稿して拍手 | ① 色は黒白+赤青の 2 色に絞る ② 音は 2 秒×3 本を本体マイクで ③ 共有先(Hatena)を最初から本体に | Wikipedia [S4](二次)、社長が訊く 要旨 [S5][S6]: "a place where people share their creations… and offer each other applause" |
-| WarioWare D.I.Y.(DS) | 2009 | 5 秒のゲームを毎日 1 本、作るのが「仕事でも楽しかった」 | ① 制約が箱(マイクロゲーム 5 秒「so it's all very practicable」) ② 絵が苦手でもスタンプ ③ 同梱ゲームは全部中身が見える("everything about how that microgame was made is available… as reference") | 社長が訊く [S7][S8](一次) |
-| Rhythm 天国(GBA) | 2006 | 見ないで叩く、ドラムを自由に叩く Studio | ① 視覚でなく音で合図(つんく♂「視覚に頼らないリズムゲーム」) ② ボタン=ドラムの各パーツを自由に叩く技術デモが原型 ③ 譜面なし | Wikipedia [S9](二次) |
-| Otocky(FC ディスク) | 1987 | 撃つと拍に合わせて音階が鳴る | ① 方向=音程、発射=発音 ② 発音が拍に量子化 ③ 進むと作曲モードが解錠 | Wikipedia [S10](二次) |
-| Electroplankton(DS) | 2005 | 目的なし、触ると光と音 | ① 10 種の「生き物」= 10 の触り方 ② 保存なし(「道具」になってメニューが要るのを嫌った) ③ 作者名がパッケージに | Wikipedia [S11](二次)、Iwai インタビュー [S12] "creative software played on the game platforms other than game software" |
-| Tenori-on(Yamaha) | 2007 | 16×16 の光る格子が楽器 | ① 音=光(押した所が光り、再生が走査する) ② 形の美しさを楽器の条件に("an electronic instrument of beauty") ③ モード切替で同じ格子が別の楽器 | Wikipedia [S13](二次、Iwai 発言を引用) |
-| Kid Pix(Mac) | 1989 | 描く過程が絵より大事、消すのも楽しい | ① Undo が男(「Oh no!」と声) ② 消しゴムがダイナマイト(画面が同心円で爆発) ③ 変な筆(垂れる絵具・葉のない木) | Hickman 原則の転記 [S14]、Wikipedia [S15](二次。Hickman 本人の essay は未到達 [S16]) |
+| Mario Paint(SNES) | 1992 | 描く・作曲・アニメ・ハエ叩きが 1 本、マウス同梱 | ① Undo がキャラ(Undodog、Art と Music 両モードの道具箱) ② 楽器がアイコン(マリオ=ピアノ、キノコ=バスドラ、犬・猫・豚の声) ③ タイトル画面の文字を押すと全部が反応(O が爆発、A が落ちてマリオを弾く、T が虹クレヨン) | Wikipedia [S1]、Super Mario Wiki [S2]（二次。一次インタビューは未到達） |
+| Mario Artist(64DD) | 1999–2000 | 描く→顔を貼る→3D→踊らせる、の連結 | ① 自分の顔を取り込み(Capture Cassette)キャラに貼る ② Paint Studio に Pokémon Snap 風のミニゲーム ③ Polygon Studio の「Sound Bomber」が後の WarioWare の種 | Wikipedia [S3]（二次） |
+| うごくメモ帳 / Flipnote Studio(DSi) | 2008 | 紙のメモの延長でパラパラ漫画、投稿して拍手 | ① 色は黒白+赤青の 2 色に絞る ② 音は 2 秒×3 本を本体マイクで ③ 共有先(Hatena)を最初から本体に | Wikipedia [S4]（二次）、社長が訊く 要旨 [S5][S6]: "a place where people share their creations… and offer each other applause" |
+| WarioWare D.I.Y.(DS) | 2009 | 5 秒のゲームを毎日 1 本、作るのが「仕事でも楽しかった」 | ① 制約が箱(マイクロゲーム 5 秒「so it's all very practicable」) ② 絵が苦手でもスタンプ ③ 同梱ゲームは全部中身が見える("everything about how that microgame was made is available… as reference") | 社長が訊く [S7][S8]（一次） |
+| Rhythm 天国(GBA) | 2006 | 見ないで叩く、ドラムを自由に叩く Studio | ① 視覚でなく音で合図(つんく♂「視覚に頼らないリズムゲーム」) ② ボタン=ドラムの各パーツを自由に叩く技術デモが原型 ③ 譜面なし | Wikipedia [S9]（二次） |
+| Otocky(FC ディスク) | 1987 | 撃つと拍に合わせて音階が鳴る | ① 方向=音程、発射=発音 ② 発音が拍に量子化 ③ 進むと作曲モードが解錠 | Wikipedia [S10]（二次） |
+| Electroplankton(DS) | 2005 | 目的なし、触ると光と音 | ① 10 種の「生き物」= 10 の触り方 ② 保存なし(「道具」になってメニューが要るのを嫌った) ③ 作者名がパッケージに | Wikipedia [S11]（二次）、Iwai インタビュー [S12] "creative software played on the game platforms other than game software" |
+| Tenori-on(Yamaha) | 2007 | 16×16 の光る格子が楽器 | ① 音=光(押した所が光り、再生が走査する) ② 形の美しさを楽器の条件に("an electronic instrument of beauty") ③ モード切替で同じ格子が別の楽器 | Wikipedia [S13]（二次、Iwai 発言を引用） |
+| Kid Pix(Mac) | 1989 | 描く過程が絵より大事、消すのも楽しい | ① Undo が男(「Oh no!」と声) ② 消しゴムがダイナマイト(画面が同心円で爆発) ③ 変な筆(垂れる絵具・葉のない木) | Hickman 原則の転記 [S14]、Wikipedia [S15]（二次。Hickman 本人の essay は未到達 [S16]） |
 | Dreams(PS4, Media Molecule) | 2020 | 彫る・動かす・論理が 1 空間、imp がカーソル兼分身 | ① imp が物を「憑依」して動かす ② メニューとスライダーを避けジェスチャ(両手を離すとズーム) ③ Stealth Create = 小さな課題で自信を積む | Game Developer(GDC 講演要約) [S17] "The things that make traditional tools intimidating are endless menus, and endless sliders."、Wikipedia [S18] |
-| LittleBigPlanet(PS3) | 2008 | 遊ぶ世界の中で作る(Play, Create, Share) | ① Popit(ポップアップの道具箱を遊びの画面の上に) ② ステッカー・表情=自己表現がそのまま道具 ③ 作品が即遊ばれ評価される | Wikipedia [S19](二次) |
+| LittleBigPlanet(PS3) | 2008 | 遊ぶ世界の中で作る(Play, Create, Share) | ① Popit(ポップアップの道具箱を遊びの画面の上に) ② ステッカー・表情=自己表現がそのまま道具 ③ 作品が即遊ばれ評価される | Wikipedia [S19]（二次） |
 | Teenage Engineering OP-1 | 2011 | 制約が最大の機能、絵が効果を説明 | ① 効果の画面が図解でなく絵(Punch=ボクサー) ② 4 色のエンコーダ=画面の色に対応(製品ガイド) ③ 4 トラックの「テープ」の見立て | Wikipedia [S20] "limitations are OP-1's biggest feature"、SFMOMA インタビュー [S21] "A product can be entertaining and be a tool"、公式ガイド [S22] |
 | KORG volca / Electribe | 2013– | ソファで落書き、スピーカー内蔵 | ① 16 ステップのボタン列 ② Motion Sequence(つまみの動きを記録) ③ 電池・スピーカーで「場所の形式」を外す | KORG 公式 [S23]、Takahashi(WBGO) [S24] "Toyish, I actually find, is quite a compliment" |
 | Roland TR-8S | 2018 | 16 ボタンと色のフェーダーで演奏する | ① TR-REC の 16 ボタン ② 楽器ごとの RGB フェーダー ③ "immediate and effortless" を製品の言葉に | Roland 公式 [S25] |
 | Ableton Live Session View | 2001– | 順番を決めずに鳴らす、格子を演奏する | ① クリップの格子(列=トラック、行=シーン) ② 発火が拍に量子化 ③ Arrangement(時間軸)と Session(格子)を同居 | 公式マニュアル [S26] "played at any time and in any order"、Hein [S27] "like inventing a new musical instrument, every time"(二次) |
 | Ableton Push | 2013– | 画面を見ずに 64 パッドで叩く | ① Lego に釘打ちの試作から ② パッドの色が音階と形の地図 ③ 「マウスとノートPC では演奏にならない」 | 公式ブログ [S28] "Using a mouse and looking at a laptop didn't cut it"、公式 [S29] |
 | Ableton Note(iOS) | 2022 | 演奏で発想、1 画面 | ① 25 パッド+16 パッド ② Capture MIDI(弾いた後に「録っておいた」) ③ "A playable iOS app for forming musical ideas" | 公式 [S30] |
-| Scratch | 2007 | 積み木を嵌める、低い床・広い壁・高い天井 | ① ブロックは形が合う所にしか嵌まらない ② 「wide walls」= 多様な作品への道 ③ tinkerability(少しずつ試す) | Resnick [S31](本人 Medium 転載、原典未到達) |
+| Scratch | 2007 | 積み木を嵌める、低い床・広い壁・高い天井 | ① ブロックは形が合う所にしか嵌まらない ② 「wide walls」= 多様な作品への道 ③ tinkerability(少しずつ試す) | Resnick [S31]（本人 Medium 転載、原典未到達） |
 | PICO-8 | 2015 | 128×128・16 色・カート、制約が「楽しいように選ばれた」 | ① コード・スプライト・マップ・SFX・音楽の編集器が 1 本の中 ② カートが PNG で中身も見える ③ "harsh limitations… carefully chosen to be fun to work with" | 公式 [S32] |
 | Bitsy | 2017 | 小さな世界の小さな編集器 | ① 部屋ごと 3 色 ② 8×8 タイル ③ 「歩く・話す・そこに居る」だけ | itch.io [S33] "a little engine for little games, worlds, and stories" |
 | Figma / FigJam | 2016– | 他人のカーソルが見える、/ で叫ぶ | ① Cursor chat(/ キー、5 秒で消える、52 字) ② 他人が打っている途中が見える ③ 期間限定の懐古カーソル(April Fun Day) | 公式ヘルプ [S34]、公式ブログ [S35] "cursors… also chat, emote, and high five" |
-| Rive | 2020– | 状態機械を絵で繋ぐ | ① アニメ=状態、遷移を線で ② 実行結果がその場で動く ③ (編集器自体の遊び要素は出典なし) | 公式 [S36](二次的、UI の遊びは未確認) |
+| Rive | 2020– | 状態機械を絵で繋ぐ | ① アニメ=状態、遷移を線で ② 実行結果がその場で動く ③ (編集器自体の遊び要素は出典なし) | 公式 [S36]（二次的、UI の遊びは未確認） |
 
 ## 共通する原理(出典が言っている物)
 

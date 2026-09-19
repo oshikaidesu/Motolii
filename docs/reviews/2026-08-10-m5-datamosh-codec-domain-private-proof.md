@@ -31,7 +31,7 @@ containerを壊さずpacket内容を損傷またはpacket dropするfilterとし
 
 ## 3. 自動oracle
 
-[`probe.sh`](../../spikes/m5-known-implementation/M5-DATAMOSH-P0/probe.sh)は次を一回で確認する。
+[`probe.sh`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/spikes/m5-known-implementation/M5-DATAMOSH-P0/probe.sh)は次を一回で確認する。
 
 1. 入力は20 packet、key packetはindex 0と10だけである。
 2. transform後も元assetはbyte不変である。

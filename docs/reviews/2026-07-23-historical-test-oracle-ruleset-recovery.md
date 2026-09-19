@@ -4,7 +4,7 @@
 
 対象: `docs/reviews/2026-07-12-M2E-2-ruleset-activation.md`のcutoff全1版。
 
-関連: [M2E-2有効化ログ](2026-07-12-M2E-2-ruleset-activation.md)、[M2入場条件](2026-07-11-M2-entry-gate.md)、[golden policy](../../crates/motolii-testkit/golden_policy/README.md)、[coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)
+関連: [M2E-2有効化ログ](2026-07-12-M2E-2-ruleset-activation.md)、[M2入場条件](2026-07-11-M2-entry-gate.md)、[golden policy](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-testkit/golden_policy/README.md)、[coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)
 
 ## 1. 結論
 

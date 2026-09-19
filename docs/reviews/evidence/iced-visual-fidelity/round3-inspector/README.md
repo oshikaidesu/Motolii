@@ -67,7 +67,7 @@ Timeline の3分割)の既定値でこのレーンの都合だけで動かす理
 
 ### 変更
 
-- [`transform_rows`](../../../../../crates/motolii-shell-iced/src/inspector_pane.rs)
+- [`transform_rows`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-shell-iced/src/inspector_pane.rs)
   を全面書き直し。Vec2(Position/Scale)も scalar(Rotation/Opacity)も
   **1 param = 1 行**にし、`row![name, spacer, values, key]` の構成にした。
   Vec2 は `value_cell("X", ...)` / `value_cell("Y", ...)` を横に並べる
@@ -89,7 +89,7 @@ button.keyButton             →  26×25px(grid 解決後の実物)
 ```
 `dims::VALUE_COL_W`(64px)は既存どおり css 実測と一致。Key 列は css だと
 26px だが、iced 実物の `key_button` widget は
-[`crate::widgets::key_button::KEY_BUTTON_SIZE`](../../../../../crates/motolii-shell-iced/src/widgets/key_button.rs)
+[`crate::widgets::key_button::KEY_BUTTON_SIZE`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-shell-iced/src/widgets/key_button.rs)
 = **18px**(既存の意味 — この round では触っていない)なので、見出し側の
 Key 列幅もその実物に揃えた(26px にすると見出しと実物のボタンがずれる)。
 

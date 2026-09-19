@@ -164,7 +164,7 @@ P05の検証梯子はCAS crate比較でなく、次のfilesystem artifact fixtur
 - [`casq_core 0.12.0`](https://docs.rs/casq_core/0.12.0/casq_core/)
 - [`cassadilia 0.4.7`](https://docs.rs/cassadilia/0.4.7/cassadilia/)
 - [`object_store 0.14.1`](https://docs.rs/object_store/0.14.1/object_store/)
-- [Motolii D1 atomic persist](../../crates/motolii-doc/src/persist.rs)
+- [Motolii D1 atomic persist](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-doc/src/persist.rs)
 - [Blender VSE performance／disk cache](https://docs.blender.org/manual/en/4.5/editors/video_sequencer/introduction.html)、
   [VSE disk cache導入記録](https://www.mail-archive.com/bf-blender-cvs%40blender.org/msg123543.html)
 - [After Effects memory and storage](https://helpx.adobe.com/after-effects/desktop/memory-storage-performance/memory-and-storage/memory-storage1.html)

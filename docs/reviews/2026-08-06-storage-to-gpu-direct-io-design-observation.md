@@ -140,5 +140,5 @@ frameworkを作らない。
 - [NVIDIA GPUDirect Storage Design Guide](https://docs.nvidia.com/gpudirect-storage/design-guide/index.html)
 - [NVIDIA GPUDirect Storage Overview Guide](https://docs.nvidia.com/gpudirect-storage/overview-guide/index.html)
 - [NVIDIA GPUDirect Storage Troubleshooting Guide](https://docs.nvidia.com/gpudirect-storage/troubleshooting-guide/index.html)
-- [現行decode path](../../crates/motolii-media/src/decode.rs)
-- [現行YUV upload path](../../crates/motolii-gpu/src/yuv.rs)
+- [現行decode path](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-media/src/decode.rs)
+- [現行YUV upload path](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/crates/motolii-gpu/src/yuv.rs)

@@ -671,7 +671,7 @@
 | [2026-08-20-timeline-pane-semantics.md](2026-08-20-timeline-pane-semantics.md) | **Timeline パネルの意味論(第2波の仕様源)**。レイアウト不変量4つ(pane 総高は層数不変・行は独立 viewport)、置き場3分類(scroll/zoom/fold は Session と裁定)、切片割り6つ。実機の崩れ(スクロール viewport 不在)の反対仕様 | **決定**(2026-08-20) |
 | [2026-08-20-session-handoff-day2.md](2026-08-20-session-handoff-day2.md) | **リセット2日目の引き継ぎ**(セッションID記載)。地図557クローズ・camera/R3/Timeline第1波/音声意味核・調達調査DONE・KNOWN/CANON新設。疑うべきこと6(採番バックログ11件・チラつきは緩和策・音はまだ出ない)+supervisor の誤り5件 | **引き継ぎ**(2026-08-20) |
 | [2026-08-21-session-handoff-day2-final.md](2026-08-21-session-handoff-day2-final.md) | **2日目最終引き継ぎ**。地図クローズ後の UI 手触り戦役(Inspector v2・±1px柵・drag・設定パネル・候補B palette・ui_scale)、alpha 解禁、transient overlay、ビルド速度の決着(裁定138)。未回収1件(市松レーン)と shell キュー4件の順序、supervisor の誤り4件 | **引き継ぎ**(2026-08-21) |
-| [2026-08-21-timeline-grammar-surveys/](2026-08-21-timeline-grammar-surveys/r1-egui-extraction.md) | **Timeline 操作文法の採集一次資料+逆算監査、計8本**(裁定144/149): R1=egui版9,059行からの意味抽出(操作30件+文法定数+既決照合5点)/ R3=商用公式(AE修飾キー表ほぼ完全・AM/Premiere/Resolve/CapCut)/ R4=NeoUtl(操作20種・AviUtl ExEdit 慣習の忠実再現を確認、AGPLにつき意味のみ)/ R5=Lottie圏・現代エディタ7本(AEから捨てられた要素の共通パターン8点)/ R6=AEショートカット逆算監査(抜け21)/ R7=Godot・Blender(モーダル対比・スナップ多層)/ R8=Unity・Unreal・Spine(blendは理由つき対象外)。R2(Ravel)はリポ未特定の RESEARCH_RETURN(裁定145で全面除外)。**正典は [next/reference/timeline-grammar.md](../../next/reference/timeline-grammar.md)** | **調査**(2026-08-21) |
+| [2026-08-21-timeline-grammar-surveys/](2026-08-21-timeline-grammar-surveys/r1-egui-extraction.md) | **Timeline 操作文法の採集一次資料+逆算監査、計8本**(裁定144/149): R1=egui版9,059行からの意味抽出(操作30件+文法定数+既決照合5点)/ R3=商用公式(AE修飾キー表ほぼ完全・AM/Premiere/Resolve/CapCut)/ R4=NeoUtl(操作20種・AviUtl ExEdit 慣習の忠実再現を確認、AGPLにつき意味のみ)/ R5=Lottie圏・現代エディタ7本(AEから捨てられた要素の共通パターン8点)/ R6=AEショートカット逆算監査(抜け21)/ R7=Godot・Blender(モーダル対比・スナップ多層)/ R8=Unity・Unreal・Spine(blendは理由つき対象外)。R2(Ravel)はリポ未特定の RESEARCH_RETURN(裁定145で全面除外)。**正典は [next/reference/timeline-grammar.md](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/timeline-grammar.md)** | **調査**(2026-08-21) |
 | [2026-08-21-lane-board.md](2026-08-21-lane-board.md) | **レーンボード**(このセッションの走行状態の正本): 走行中/完了/待機キュー/利用者の目待ち/次の議題(カメラレイヤー・ギズモ拡張)。TaskList はセッション死で消えるため文書側が正本 | **運転中**(2026-08-21) |
 | [2026-08-21-effect-seam-survey.md](2026-08-21-effect-seam-survey.md) | **effect 消費の縫い目調査**(vism 第1号の前段): store の effect stack は完全だが `StoreView::resolve` が読んでおらず縫い目は不在。挿入点3案の比較と推し(compositor 内 layer 単位オフスクリーン+BlendMode 同型の語彙変換)、重み均等の5切片割り(S1∥S2→S3→S4→S5、write-set 互いに素)、Glow proof 移植元の file:line 一覧 | **調査**(2026-08-21) |
 | [2026-08-21-camera-seam-survey.md](2026-08-21-camera-seam-survey.md) | **カメラ縫い目調査**(裁定156の前段): レンダリングカメラは実装済み・export は2引数固定の唯一経路で構造的に保護。観測カメラは不在 — 置き場の推し= Shell 直下(市松と同格の view 専用 precedent)。4切片割り(S0 engine 第二エントリ ∥ S1→S2→S3 shell 直列)。Unity/Blender/AE 先例対応表つき | **調査**(2026-08-21) |
@@ -868,3 +868,56 @@
 - [物理の解き手を 3D に — rapier2d → rapier3d、面の上に錠](2026-09-17-physics-3d.md)
 - [GSAP の動きの法 — ease・stagger・位置の文法・repeat](2026-09-17-gsap-law.md)
 - [UI の手触りの台帳 — プロ道具が気持ちいい理由を数と挙動で(Ableton/Figma/Vital/FabFilter/HIG/M3/WCAG、DESIGN.md Do/Don't 草案)](2026-09-19-design-craft-ledger.md)
+
+## Index reconciliation — 2026-09-19
+
+- [再生負荷の調査 — 2026-09-11](2026-09-11-frame-cost.md)
+- [効果の広がり・溢れ・下を読む — 合成の 3 つの法](2026-09-12-effect-extent-and-spill.md)
+- [2D / 2.5D / 3D の法 — 意図で選ぶ 3 つの札](2026-09-12-projection-law.md)
+- [RadianceのGPU負荷削減 — 2026-09-12](2026-09-12-radiance-performance.md)
+- [UI の重さの法 — 導出は build の外、選択は信号、押下は arena の下](2026-09-12-ui-derive-outside-build.md)
+- [箱のブロックの口 — 外のブロックで机上の試し](2026-09-15-box-block-interface.md)
+- [箱から得られる物 — 自走の記録(提案)](2026-09-15-box-derived.md)
+- [Cavalry をなぞってささくれを取る](2026-09-15-cavalry-trace.md)
+- [天井の棚卸し — 物の数で CPU が伸びる所](2026-09-15-ceiling-inventory.md)
+- [箱と箱をつなぐ線 — 第一級の機能](2026-09-15-connectors.md)
+- [花の PV の中の仕組み — クローンを作るための分解](2026-09-15-lilium-clone-anatomy.md)
+- [物理は身振りに畳む(未決の考え)](2026-09-15-physics-gesture.md)
+- [格子へ吸い付く / 偶然から格子を見つける — 無作為に「意図」を与える](2026-09-15-snap-to-grid.md)
+- [Stage の吸い付き(スマートガイド) — 宿題](2026-09-15-stage-snapping-homework.md)
+- [「Sync」の分解 — 軸は箱](2026-09-15-sync-anatomy.md)
+- [Cavalry への文句 = Motolii の要件(2026-09-16)](2026-09-16-cavalry-complaints.md)
+- [夜の自走の報告(2026-09-15 夜 → 09-16 朝)](2026-09-16-overnight-report.md)
+- [物理の日の報告(2026-09-16)](2026-09-16-physics-day-report.md)
+- [物理の法(提案)— 住む箱・投げる・場・留め具](2026-09-16-physics-law.md)
+- [Web の写し — 台帳の表現を Motolii の台本で全部クローンし、いかに簡単に書けるかを測る](2026-09-17-web-clone-gallery.md)
+- [Web の欄 a — Clip 辺・Split・Loop(2026-09-17)](2026-09-17-web-fields-a.md)
+- [ブロックの出力の配管の地図(2026-09-18、読み取り専用の調査)](2026-09-18-block-output-map.md)
+- [Cavalry の「いい例」を棚の札に写す索引 — Example Scenes・Behaviour/Utility・代表の画 10・純関数だけで写せる 10(2026-09-18 取得)](2026-09-18-cavalry-examples-to-package.md)
+- [Cavalry の売り文句 — 作り手は何を売り、「関係」をどう言っているか(2026-09-18)](2026-09-18-cavalry-pitch.md)
+- [2026-09-18 — 段差・正本・口(日報)](2026-09-18-daily.md)
+- [今の映像表現の語彙 — ジャンル・場・作家・褒め言葉の索引(2026-09-18 取得)](2026-09-18-expression-vocabulary.md)
+- [Flash の散り先 — 作り手を人の単位で辿る(2026-09-18 取得)](2026-09-18-flash-diaspora.md)
+- [Flash 時代(2000〜2008)の「Web のモーショングラフィック」— 一次資料の裏取り(2026-09-18 取得)](2026-09-18-flash-era-primary.md)
+- [技法の表(遅れて届いた子調査の版、URL を curl で実在確認した物)— 2026-09-18-generative-vocabulary.md の付録](2026-09-18-generative-vocabulary-techniques.md)
+- [ジェネラティブアートの語彙 — 見た目の名前・作家・場・Examples の索引(2026-09-18 取得)](2026-09-18-generative-vocabulary.md)
+- [GPU 先行のモーショングラフィックス道具の一覧 — 「鍵と層の中で、物ごとの法を text で書き、GPU で走るか」(2026-09-18 取得)](2026-09-18-gpu-mograph-survey.md)
+- [kkmfd の画の分解 — 「過剰」はどう出来ているか(2026-09-18)](2026-09-18-kkmfd-decomposition.md)
+- [kkmfd の輪郭 — 一次資料からの調べ(2026-09-18)](2026-09-18-kkmfd-profile.md)
+- [Cavalry 製 29 秒の書体モーション動画 — 出自と「動きの遺伝子」の系譜(2026-09-18 取得)](2026-09-18-lineage-cjk-type-motion.md)
+- [LLM にアニメーションを「見せる・測る・教える」— Web 分野の到達点の索引(2026-09-18 取得)](2026-09-18-llm-animation-web.md)
+- [2020 年代の「過剰な」映像 20 本の要素分解(2026-09-18 取得)](2026-09-18-maximalist-decomposition.md)
+- [動きのシェーダコード調査 — compute.toys / Shadertoy / easing ライブラリ(2026-09-18)](2026-09-18-motion-code-survey.md)
+- [「番号 k と時刻 t の純関数が、物ごとの属性を書く口」— 先例 8 本の定規(2026-09-18 取得)](2026-09-18-per-object-attributes-precedents.md)
+- [語彙の仕分け — 今日の棚で作れる / 解き手が要る / まだ口が無い(2026-09-18 夜)](2026-09-18-vocabulary-sorting.md)
+- [2026-09-19 の日報 — GUI を先に(利用者「良い GUI は良い速度を生む」)、viewport の橋を作り直す、関係の口](2026-09-19-daily.md)
+- [Flutter UI の組み方 監査(2026-09-19)](2026-09-19-flutter-audit.md)
+- [Flutter desktop の widget kit — Motolii が借りられる物と縫い目(2026-09-19)](2026-09-19-flutter-desktop-kits.md)
+- [GPU completion off the UI thread — verification](2026-09-19-gpu-wait-verification.md)
+- [現行 GUI の装置の棚卸し(2026-09-19)](2026-09-19-gui-existing-devices.md)
+- [引き継ぎ: GPU の待ちを UI thread から外す(2026-09-19)](2026-09-19-handoff-gpu-wait.md)
+- [Layout の欄を「道具」の形にする — 先例の調査と Motolii の案(2026-09-19)](2026-09-19-layout-panel-survey.md)
+- [速さの的 — 引き継ぎ用の 1 枚(2026-09-19)](2026-09-19-perf-targets.md)
+- [遊びの道具の UI 調査 — 「映像制作は楽しくあるべき」の出典集(2026-09-19)](2026-09-19-playful-ui-survey.md)
+- [本気の道具を共同体にした物 — 道具の中に何を仕込んだか(2026-09-19)](2026-09-19-pro-tool-to-community.md)
+- [ソフト音源・エフェクト(VST/AU)の UI 言語はどう育ったか — timeline + layers + shader 棚の道具へ何が写せるか](2026-09-19-vst-ui-evolution.md)

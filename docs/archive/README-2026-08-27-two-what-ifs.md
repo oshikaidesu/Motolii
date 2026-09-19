@@ -1,6 +1,6 @@
 # Motolii
 
-**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](VISION.ja.md)。
+**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/VISION.ja.md)。
 
 <p align="center">
   <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
@@ -13,9 +13,9 @@ Motolii is built on two *what ifs* that were both nearly real:
 
 **What if a compositor never flattened meaning?** Motolii's stage is [Rerun](https://rerun.io) — a semantic data engine built for robotics and computer vision, where a point cloud stays a point cloud, a path stays a path, a time series stays a time series. Compositing on top of that store means you combine *meanings*, not rasters: the same scene can hold video, procedural shapes, spatial data, and audio-driven motion while every piece remains inspectable, animatable, and re-interpretable. That is a playground for expression nobody has planned yet — the interesting work happens in the combinations.
 
-**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That crossing simply never happened — the freedom grew on one island, while AE's depth stayed sealed behind a vendor SDK, and no bridge was built between them. Motolii is the bridge that was never built: the AE-family editing grammar your hands already know (reverse-derived into a [machine-checked operation canon](next/reference/timeline-grammar.md) from AE, Godot, Blender, Unity, Unreal, and the Lottie-era editors), with extension freedom as a constitution — every stage of the pipeline is a deliberate seam, proven by running a datamosh effect through the same contract as a blur.
+**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That crossing simply never happened — the freedom grew on one island, while AE's depth stayed sealed behind a vendor SDK, and no bridge was built between them. Motolii is the bridge that was never built: the AE-family editing grammar your hands already know (reverse-derived into a [machine-checked operation canon](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/timeline-grammar.md) from AE, Godot, Blender, Unity, Unreal, and the Lottie-era editors), with extension freedom as a constitution — every stage of the pipeline is a deliberate seam, proven by running a datamosh effect through the same contract as a blur.
 
-Both futures were plausible. Neither happened. Motolii is being built so they can — and the whole build is public: every design decision is a numbered ruling, every capability a row in a [ledger you can count](next/reference/normal-map.tsv).
+Both futures were plausible. Neither happened. Motolii is being built so they can — and the whole build is public: every design decision is a numbered ruling, every capability a row in a [ledger you can count](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/normal-map.tsv).
 
 **And yes: native Rust, GPU-resident rendering, direct tools instead of setup rituals, typed plugins, local projects, one deterministic path from preview to export.**
 
@@ -33,9 +33,9 @@ After Effects established much of the language of modern motion graphics. Cavalr
 
 Motolii does not treat proprietary software as a failed choice. It chooses open source because it favors a future that does not have to converge on one universal host. Code, project semantics, tests, and design decisions remain inspectable and forkable, so different communities can continue the work, disagree with it, or build compatible hosts without asking one owner to define the future for everyone.
 
-That choice does not make [Vism](docs/vism-package-concept.md) a universal plugin format. A Vism cannot currently be loaded into unrelated products such as After Effects or AviUtl. Motolii is its first host; the defined portability target is compatible hosts and forks that adopt the public contract. Adapters to other products may emerge later, but a universal cross-application standard is not a completion condition.
+That choice does not make [Vism](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/vism-package-concept.md) a universal plugin format. A Vism cannot currently be loaded into unrelated products such as After Effects or AviUtl. Motolii is its first host; the defined portability target is compatible hosts and forks that adopt the public contract. Adapters to other products may emerge later, but a universal cross-application standard is not a completion condition.
 
-Motolii's practical answer is a permissively licensed, local, forkable core that collects proven ideas, turns recurring workflows into explicit capabilities, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in [`docs/ae-pain-points.md`](docs/ae-pain-points.md) and the [prior-art reviews](docs/reviews/); the README stays focused on the resulting tool.
+Motolii's practical answer is a permissively licensed, local, forkable core that collects proven ideas, turns recurring workflows into explicit capabilities, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in [`docs/ae-pain-points.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/ae-pain-points.md) and the [prior-art reviews](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/reviews/); the README stays focused on the resulting tool.
 
 ## Simple is not the same as beginner-only
 
@@ -188,7 +188,7 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 
 The M1 demo above is generated through the real export path and protected by automated tests. Current product work lives in the `next/` workspace (a 2026-08-20 reset around a Lottie-derived semantic map): `next/shell/motolii-shell` is the iced product host and new-feature target, backed by a single-writer Document store with transient-overlay previews, a design-token system enforced by mechanical fences, and an operation-grammar canon (`next/reference/timeline-grammar.md`) reverse-derived from AE/Godot/Blender/Unity/Unreal and the Lottie-era editors. Everything under `crates/` (including `motolii-shell-iced` and the egui `motolii-blitz-shell`) is legacy/reference; `ui/motolii-rn/src` remains only as a migration reference. This is not proof of product completeness: the capability ledger (`next/reference/normal-map.tsv`) currently counts 92 capabilities landed, 1,195 planned, and 264 rejected with recorded reasons.
 
-Current milestone truth and task dependencies live in the [`implementation ledger`](docs/implementation-ledger.md) and under [`docs/specs/`](docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
+Current milestone truth and task dependencies live in the [`implementation ledger`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/implementation-ledger.md) and under [`docs/specs/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
 
 ## Architecture and technology
 
@@ -203,7 +203,7 @@ Current milestone truth and task dependencies live in the [`implementation ledge
 | Verification | Rust tests, property tests, semantic and image goldens |
 | Structure | Cargo workspace (`crates/motolii-*`) |
 
-See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
+See [`docs/performance-model.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
 
 ## Design and development model
 
@@ -217,11 +217,11 @@ Motolii is specification-driven and verification-heavy so that both human and AI
 
 Start here:
 
-- [`docs/README.md`](docs/README.md) — reading order and glossary
-- [`docs/concept.md`](docs/concept.md) — project definition and decision ledger
-- [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
-- [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
-- [`docs/specs/`](docs/specs/) — milestone specifications and task contracts
+- [`docs/README.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/README.md) — reading order and glossary
+- [`docs/concept.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/concept.md) — project definition and decision ledger
+- [`docs/interaction-simplicity-model.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
+- [`docs/pitfalls-and-roadmap.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
+- [`docs/specs/`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/specs/) — milestone specifications and task contracts
 
 ## Build and run
 
@@ -254,7 +254,7 @@ Contributions are welcome in rendering, document semantics, tests, tooling, UI, 
 
 Before implementing a task:
 
-1. Read [`docs/README.md`](docs/README.md).
+1. Read [`docs/README.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/README.md).
 2. Read the relevant milestone specification, including its implementation-guard section.
 3. Preserve the protected tests and existing user changes.
 
@@ -268,11 +268,11 @@ Issues and design discussions belong in GitHub Issues. Small, independently veri
 
 Licensed under either:
 
-- Apache License 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)); or
-- MIT ([`LICENSE-MIT`](LICENSE-MIT)),
+- Apache License 2.0 ([`LICENSE-APACHE`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/LICENSE-APACHE)); or
+- MIT ([`LICENSE-MIT`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/LICENSE-MIT)),
 
 at your option.
 
 Unless explicitly stated otherwise, contributions submitted for inclusion are dual-licensed under the same terms.
 
-Third-party dependencies retain their own licenses. egui and ffmpeg have separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.
+Third-party dependencies retain their own licenses. egui and ffmpeg have separate distribution considerations; see [`docs/references.md`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/docs/references.md) and verify applicable terms before release.

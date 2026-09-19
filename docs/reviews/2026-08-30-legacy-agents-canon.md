@@ -332,7 +332,7 @@ screencapture -x -l <窓ID> /tmp/window.png
 2. **nextest**: リンク律速には効かず却下(裁定138)だが、**別問題**(tier 分割を1回のビルドから filterset で切る・既知 flake 名指し retries)には適合(調査 §3)。0.9.143 導入済み。採否は利用者裁定待ち
 3. (完了済みの参考)shell test バイナリ統合 10本→2本はレーン A で着地済み(フルリンク 45.5s→18〜26s、[レーンボード](2026-08-21-lane-board.md))。`depth_offset` 極端値による外周1px縮みはレーン B と BL3 で**2度**出た同型バグ — 極端値を使わない(`background_rect` doc)
 
-正本: [ビルド速度の調査](2026-08-19-build-speed-investigation.md)・[静的検収調査](2026-08-22-static-acceptance-survey.md)・[next/DECISIONS.md](../../next/DECISIONS.md) 裁定138。レーン運用の実測則は [next/reference/KNOWN.md](../../next/reference/KNOWN.md) の「レーン運用」節。**ビルド/検収の知見はこのファイルと上記正本にだけ追記する(新文書を増やさない)。ビルド系の調査・発注をする前に必ずこの節を読ませる。**
+正本: [ビルド速度の調査](2026-08-19-build-speed-investigation.md)・[静的検収調査](2026-08-22-static-acceptance-survey.md)・[next/DECISIONS.md](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/DECISIONS.md) 裁定138。レーン運用の実測則は [next/reference/KNOWN.md](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/next/reference/KNOWN.md) の「レーン運用」節。**ビルド/検収の知見はこのファイルと上記正本にだけ追記する(新文書を増やさない)。ビルド系の調査・発注をする前に必ずこの節を読ませる。**
 
 ### glam の `inverse()` は自己アサートする — 呼ぶ前に `determinant()` を見る(2026-08-22 実測)
 

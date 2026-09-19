@@ -8,7 +8,14 @@ import 'package:flutter/services.dart';
 import '../bridge/native_bridge.dart';
 import '../bridge/native_frames.dart';
 import '../bridge/protocol.dart';
-import '../foundation/theme.dart';
+
+String effectsNotice(Map<String, dynamic> status) {
+  final errors = (status['catalogErrors'] as List? ?? const [])
+      .map((e) => '$e')
+      .where((e) => e.isNotEmpty)
+      .toList();
+  return errors.isEmpty ? '' : 'Effects: ${errors.join('; ')}';
+}
 
 /// A slice of the status. Panels listen to the keys they read, so a drag that
 /// moves `layers` leaves Fonts, History and the Browser alone. `derived` names
@@ -479,7 +486,6 @@ class EditorSession {
       playing.value = next['playing'] as bool;
       if (!playing.value && _ticker != null) _cancelCadence();
     }
-    if (next['animate'] is bool) EditorTheme.animating.value = next['animate'];
     if (notify || next['layers'] is List) absorb(next);
   }
 
@@ -654,7 +660,11 @@ class EditorSession {
     return reply;
   }
 
-  void _broadcast(String status, {bool frameReady = false, bool frameOnly = false}) {
+  void _broadcast(
+    String status, {
+    bool frameReady = false,
+    bool frameOnly = false,
+  }) {
     if (_panelWindows <= 0 || _disposed) return;
     _bridge
         .invoke('broadcast', {
@@ -688,7 +698,9 @@ class EditorSession {
     bool playback = false,
   }) {
     if (playback) {
-      final tick = map(jsonDecode(frames.request('{"op":"tick","quiet":true}')));
+      final tick = map(
+        jsonDecode(frames.request('{"op":"tick","quiet":true}')),
+      );
       // The clock lands on whole frames, so most display frames ask for the
       // picture that is already on screen. Nothing to draw: give the thread back.
       if (tick['needsRender'] == false) return true;

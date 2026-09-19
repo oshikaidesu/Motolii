@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/app/editor_window.dart';
+import '../lib/session/editor_session.dart';
 
 void main() {
   test('the reasons the shelf refused an effect become one line', () {

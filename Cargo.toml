@@ -1,28 +1,14 @@
 # Stage 5 workspace. Default build target is the Flutter native bridge.
 [workspace]
 resolver = "2"
-members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/crates/motolii-road", "motolii/ui/native"]
-exclude = ["motolii", "app", "next", "crates/*", "spikes/*", "ui/*"]
+members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/ui/native"]
 default-members = ["motolii/ui/native"]
 
 [workspace.dependencies]
-# 識別子では使わないが、custom-widget の feature を立てるために要る(Stage・Timeline の object 描画)。
-blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
-dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload", "net", "accessibility"] }
-dioxus-devtools = "0.7.10"
-dioxus-asset-resolver = { version = "=0.7.10", features = ["native"] }
-dioxus-workbench = "0.1.0"
-dioxus-dnd = { version = "3.1.0", default-features = false }
-blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
-blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
-blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget", "clipboard"] }
-keyboard-types = "0.7"
-anyrender = "0.13"
 tobj = "4"
 gltf = "1.4"
 stl_io = "0.11.0"
 smallvec = "1"
-wgpu_context = "0.9"
 wgpu = "29"
 peniko = "0.6"
 re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
@@ -40,7 +26,6 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
-rfd = "0.17"
 re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["lavc"] }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
@@ -107,6 +92,3 @@ debug-assertions = true
 [patch.crates-io]
 # re_mp4 0.5.1 は edit list 付き mp4(ffmpeg の VFR 出力)で最後のコマの長さが桁溢れする。fork の 1 行修正。
 re_mp4 = { git = "file:///Users/member_ottoto/rust_ae/re_mp4", rev = "21d5de2a6f5a7c96970b8462d46213eed809a712" }
-
-[patch."https://github.com/DioxusLabs/blitz"]
-blitz-dom = { path = "motolii/vendor/blitz-dom" }

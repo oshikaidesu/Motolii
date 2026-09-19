@@ -53,7 +53,7 @@ Browser、Inspector、TimelineはRerun UIへ置き換えない。これらは同
 
 ## コード根拠
 
-- 現行画面とfixture: [`ui/motolii-rn/App.tsx`](../ui/motolii-rn/App.tsx)
+- 現行画面とfixture: [`ui/motolii-rn/App.tsx`](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/ui/motolii-rn/App.tsx)
 - Stage／Timeline native ABI: `ui/motolii-rn/native-renderer/src/lib.rs`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)
 - Stage surface／lifecycleの所有: `renderer_core.rs`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)
 - Rerun Spatial ViewerのEgui adapter: `rerun_stage.rs`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)

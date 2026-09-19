@@ -45,13 +45,13 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| COL-01 | P2・仕上げ・コード | 色グリッドが固定48px列で、幅変更時に端数余白が残る。正方形と密度を保ちつつ端を揃えたい。列数固定・伸縮・余白配分のどれにするかは比較して決める。[styles.css:474](../../motolii/src/ui/styles.css#L474) |
-| COL-02 | P1・意図・コード | 色輪とスウォッチの複数選択時の適用範囲が異なる。色輪は明示Slotまたは先頭対象、スウォッチは明示Slotがなければ選択群。何を変えるかを分かるようにしたい。範囲を勝手に統一しない。[color.rs:16](../../motolii/src/ui/color.rs#L16) [browser.rs:1230](../../motolii/src/ui/browser.rs#L1230) |
-| COL-03 | P1・追加・コード | 無選択でも色輪は使えるがHexは読取専用になる。無選択でのHex入力・コピーが欲しいか。次に作るオブジェクトの色にするかは別の意図確認。[color.rs:829](../../motolii/src/ui/color.rs#L829) |
-| COL-04 | P2・仕上げ・実画面＋コード | 不透明度バーに数値が見えず、正確な%を指定しにくい。値表示／直接入力の候補。Shape Fillでバーを出さないことはモデルの意味も関わるため別判断。[color.rs:871](../../motolii/src/ui/color.rs#L871) |
-| COL-05 | P1・不備・コード | 検索0件なのに「No colors yet…」になり得る。色が存在しないのか検索不一致なのか区別したい。[browser.rs:2059](../../motolii/src/ui/browser.rs#L2059) |
-| COL-06 | P3・追加・コード | 使用色＋固定色以外に、最近使った色／固定／名前付きパレットのどれが欲しいか。まとめて追加するのではなく必要なものを選ぶ。[browser.rs:1897](../../motolii/src/ui/browser.rs#L1897) |
-| COL-07 | P2・意図・コード | スウォッチは単クリック選択、Enter／ダブルクリック適用。即適用にしたいか、選択と適用を分けたままにしたいか。現行方式をバグ扱いしない。[browser.rs:1948](../../motolii/src/ui/browser.rs#L1948) |
+| COL-01 | P2・仕上げ・コード | 色グリッドが固定48px列で、幅変更時に端数余白が残る。正方形と密度を保ちつつ端を揃えたい。列数固定・伸縮・余白配分のどれにするかは比較して決める。[styles.css:474](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/styles.css#L474) |
+| COL-02 | P1・意図・コード | 色輪とスウォッチの複数選択時の適用範囲が異なる。色輪は明示Slotまたは先頭対象、スウォッチは明示Slotがなければ選択群。何を変えるかを分かるようにしたい。範囲を勝手に統一しない。[color.rs:16](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/color.rs#L16) [browser.rs:1230](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1230) |
+| COL-03 | P1・追加・コード | 無選択でも色輪は使えるがHexは読取専用になる。無選択でのHex入力・コピーが欲しいか。次に作るオブジェクトの色にするかは別の意図確認。[color.rs:829](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/color.rs#L829) |
+| COL-04 | P2・仕上げ・実画面＋コード | 不透明度バーに数値が見えず、正確な%を指定しにくい。値表示／直接入力の候補。Shape Fillでバーを出さないことはモデルの意味も関わるため別判断。[color.rs:871](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/color.rs#L871) |
+| COL-05 | P1・不備・コード | 検索0件なのに「No colors yet…」になり得る。色が存在しないのか検索不一致なのか区別したい。[browser.rs:2059](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2059) |
+| COL-06 | P3・追加・コード | 使用色＋固定色以外に、最近使った色／固定／名前付きパレットのどれが欲しいか。まとめて追加するのではなく必要なものを選ぶ。[browser.rs:1897](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1897) |
+| COL-07 | P2・意図・コード | スウォッチは単クリック選択、Enter／ダブルクリック適用。即適用にしたいか、選択と適用を分けたままにしたいか。現行方式をバグ扱いしない。[browser.rs:1948](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1948) |
 | COL-08 | P2・意図・実画面 | 左の「Used here - then starter」だけの欄が幅を使う。将来のパレット分類に必要か、今から分類を活かすか、色の面へ幅を戻すか。欄の撤去は未提案確定。 |
 
 ## 2. Browser — Media
@@ -60,12 +60,12 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| MED-01 | P2・仕上げ・コード | サムネは高さ40px・coverで、幅により比率と切れ方が変わる。利用者の16:9枠という方向を確認し、素材を全体表示するかトリミングするかを別に決めたい。今回は素材0件のため実画像は未確認。[styles.css:509](../../motolii/src/ui/styles.css#L509) |
-| MED-02 | P1・不備・コード | 検索で0件でもカテゴリ未登録の説明になることがある。検索不一致／素材なし／カテゴリなしを分けたい。[browser.rs:1786](../../motolii/src/ui/browser.rs#L1786) |
-| MED-03 | P1・不備・コード | 欠落素材の案内にrelinkがあるが、MediaメニューはPlace／Replace／Finder／Remove。案内と可能な操作を一致させ、必要なら再接続の入口を置きたい。[browser.rs:1650](../../motolii/src/ui/browser.rs#L1650) [context_menu.rs:95](../../motolii/src/ui/context_menu.rs#L95) |
-| MED-04 | P1・追加・実画面＋コード | 0件の棚が空白に近く、棚内にImport入口がない。「ここへドロップ」や取り込みボタンなど、その場から始められる入口が欲しい。既存取り込み処理を活かす。[browser.rs:1799](../../motolii/src/ui/browser.rs#L1799) |
-| MED-05 | P2・追加・コード | 素材の尺・解像度など、選ぶ判断材料を必要なときに見たい。常時カードに文字を増やすか、選択時に表示するかは密度との相談。[browser.rs:1718](../../motolii/src/ui/browser.rs#L1718) |
-| MED-06 | P3・追加・コード | 音声や3Dも見分けるため、波形／試聴／代表画像の候補。現行サムネ生成の対象差を補う案で、全て必須ではない。[fixture.rs:619](../../motolii/src/ui/fixture.rs#L619) |
+| MED-01 | P2・仕上げ・コード | サムネは高さ40px・coverで、幅により比率と切れ方が変わる。利用者の16:9枠という方向を確認し、素材を全体表示するかトリミングするかを別に決めたい。今回は素材0件のため実画像は未確認。[styles.css:509](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/styles.css#L509) |
+| MED-02 | P1・不備・コード | 検索で0件でもカテゴリ未登録の説明になることがある。検索不一致／素材なし／カテゴリなしを分けたい。[browser.rs:1786](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1786) |
+| MED-03 | P1・不備・コード | 欠落素材の案内にrelinkがあるが、MediaメニューはPlace／Replace／Finder／Remove。案内と可能な操作を一致させ、必要なら再接続の入口を置きたい。[browser.rs:1650](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1650) [context_menu.rs:95](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/context_menu.rs#L95) |
+| MED-04 | P1・追加・実画面＋コード | 0件の棚が空白に近く、棚内にImport入口がない。「ここへドロップ」や取り込みボタンなど、その場から始められる入口が欲しい。既存取り込み処理を活かす。[browser.rs:1799](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1799) |
+| MED-05 | P2・追加・コード | 素材の尺・解像度など、選ぶ判断材料を必要なときに見たい。常時カードに文字を増やすか、選択時に表示するかは密度との相談。[browser.rs:1718](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1718) |
+| MED-06 | P3・追加・コード | 音声や3Dも見分けるため、波形／試聴／代表画像の候補。現行サムネ生成の対象差を補う案で、全て必須ではない。[fixture.rs:619](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/fixture.rs#L619) |
 
 ## 3. Browser — Create
 
@@ -73,10 +73,10 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| CRE-01 | P1・仕上げ・コード | 作成後に一覧更新はあるが、新規レイヤーの選択がこの経路にない。作った対象をそのまま編集したい。自動選択までか、Text入力開始までかを確認する。[browser.rs:990](../../motolii/src/ui/browser.rs#L990) |
-| CRE-02 | P1・仕上げ・コード | Maskは対象なしでも作成案内が出て、実行後に対象選択を求める。実行前に対象の有無が分かるようにしたい。Maskをレイヤーと同じ棚に置くかは別判断。[browser.rs:2314](../../motolii/src/ui/browser.rs#L2314) |
-| CRE-03 | P2・意図・実画面＋コード | 少数カードにAll欄・見出し・説明と大きなカードがあり、同時に見渡せる数が少ない。カードの考え方を保ちながら密度を調整したいか。[browser.rs:2268](../../motolii/src/ui/browser.rs#L2268) |
-| CRE-04 | P3・追加・コード | 現在の入口はText／Rectangle／Bezier／Mask。円・楕円やグループ等、よく作る対象の入口が欲しいか。他所にある機能を重ねず、既存の意味を呼び出す候補。[browser.rs:2268](../../motolii/src/ui/browser.rs#L2268) |
+| CRE-01 | P1・仕上げ・コード | 作成後に一覧更新はあるが、新規レイヤーの選択がこの経路にない。作った対象をそのまま編集したい。自動選択までか、Text入力開始までかを確認する。[browser.rs:990](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L990) |
+| CRE-02 | P1・仕上げ・コード | Maskは対象なしでも作成案内が出て、実行後に対象選択を求める。実行前に対象の有無が分かるようにしたい。Maskをレイヤーと同じ棚に置くかは別判断。[browser.rs:2314](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2314) |
+| CRE-03 | P2・意図・実画面＋コード | 少数カードにAll欄・見出し・説明と大きなカードがあり、同時に見渡せる数が少ない。カードの考え方を保ちながら密度を調整したいか。[browser.rs:2268](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2268) |
+| CRE-04 | P3・追加・コード | 現在の入口はText／Rectangle／Bezier／Mask。円・楕円やグループ等、よく作る対象の入口が欲しいか。他所にある機能を重ねず、既存の意味を呼び出す候補。[browser.rs:2268](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2268) |
 
 ## 4. Browser — Effects
 
@@ -84,10 +84,10 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| FX-01 | P2・仕上げ・実画面＋コード | 大きなカードの絵が同じƒで、表示名もplugin_id中心。人に読める名称や小さな効果見本で違いを選びたい。全てを動画プレビューにする必要はない。[browser.rs:2084](../../motolii/src/ui/browser.rs#L2084) |
-| FX-02 | P2・追加・コード | 検索はplugin_id中心。名称・用途・分類から探せるとよいか。分類やお気に入りは実際の効果数に合わせて選ぶ。[browser.rs:2084](../../motolii/src/ui/browser.rs#L2084) |
-| FX-03 | P1・仕上げ・コード | Attachedは代表レイヤーを見る一方、適用は選択群。一部適用／全対象適用が分かる状態表示が欲しい。[browser.rs:2070](../../motolii/src/ui/browser.rs#L2070) |
-| FX-04 | P2・不備・コード | 検索結果0件の専用表示がない。何もない理由と検索解除が分かるようにしたい。[browser.rs:2224](../../motolii/src/ui/browser.rs#L2224) |
+| FX-01 | P2・仕上げ・実画面＋コード | 大きなカードの絵が同じƒで、表示名もplugin_id中心。人に読める名称や小さな効果見本で違いを選びたい。全てを動画プレビューにする必要はない。[browser.rs:2084](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2084) |
+| FX-02 | P2・追加・コード | 検索はplugin_id中心。名称・用途・分類から探せるとよいか。分類やお気に入りは実際の効果数に合わせて選ぶ。[browser.rs:2084](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2084) |
+| FX-03 | P1・仕上げ・コード | Attachedは代表レイヤーを見る一方、適用は選択群。一部適用／全対象適用が分かる状態表示が欲しい。[browser.rs:2070](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2070) |
+| FX-04 | P2・不備・コード | 検索結果0件の専用表示がない。何もない理由と検索解除が分かるようにしたい。[browser.rs:2224](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L2224) |
 
 ## 5. Inspector
 
@@ -95,16 +95,16 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| INS-01 | P1・不備・コード | 小数2桁の表示文字列が編集開始時のdraftになる。入力を開いて確定しただけで精度が落ちないよう、編集値は実値を保ちたい。実操作での変更結果は今回未検証。[read.rs:57](../../motolii/src/ui/functions/read.rs#L57) [inspector.rs:692](../../motolii/src/ui/inspector.rs#L692) |
-| INS-02 | P1・仕上げ・コード | 数値3列は38px固定。大きな座標や長いプロパティ名が収まるか確認し、表示／編集時の幅を整えたい。固定Transform配置は保つ。[styles.css:1157](../../motolii/src/ui/styles.css#L1157) |
-| INS-03 | P1・意図・コード | 複数選択でTransformはMixed対応だがText／Color／Effectsは消える。何が一括で変わるか分かるようにしたい。一括編集の追加は別の採否。[inspector.rs:1413](../../motolii/src/ui/inspector.rs#L1413) |
-| INS-04 | P2・意図・コード | 無選択時も列見出し・Transform・Effectsが残る。位置を保つ安心感と空表示の簡潔さのどちらを重視するか。空だから削るとは決めない。[inspector.rs:1395](../../motolii/src/ui/inspector.rs#L1395) |
-| INS-05 | P2・仕上げ・コード | 効果なし行の空セルが無効な入力欄に見えないか。空状態を行全体で表す案。[inspector.rs:1935](../../motolii/src/ui/inspector.rs#L1935) |
-| INS-06 | P2・追加・コード | 効果欄に、一時バイパス／順序変更／複製／初期値復帰のどれが欲しいか。現行の見える入口はパラメータと削除中心。モデル側対応を確認してから範囲を選ぶ。[inspector.rs:1945](../../motolii/src/ui/inspector.rs#L1945) |
-| INS-07 | P2・追加・コード | Textのフォント・ウェイト・段落揃えをその場で選びたいか。本文・サイズ・行間・字間は既にある。[read.rs:160](../../motolii/src/ui/functions/read.rs#L160) |
-| INS-08 | P1・意図・コード | Textのスタイル編集が最初のスタイルへ接続している。複数スタイル時に「どの部分を編集しているか」を明確にしたい。全文編集と部分編集を勝手に統一しない。[read.rs:161](../../motolii/src/ui/functions/read.rs#L161) |
-| INS-09 | P2・意図・実画面＋コード | Text本文へ行く前にTransform等を縦に辿る。固定位置は保ち、折畳み・ジャンプ・高さ調整など、到達を助ける方法が欲しいか。自動並べ替えは含めない。[inspector.rs:1809](../../motolii/src/ui/inspector.rs#L1809) |
-| INS-10 | P2・仕上げ・実画面＋コード | 常設の操作説明が小さな領域を使う。hover・focus・drag時の表示で編集可能性を伝えられるか。説明を消すこと自体を目的にしない。[inspector.rs:1967](../../motolii/src/ui/inspector.rs#L1967) |
+| INS-01 | P1・不備・コード | 小数2桁の表示文字列が編集開始時のdraftになる。入力を開いて確定しただけで精度が落ちないよう、編集値は実値を保ちたい。実操作での変更結果は今回未検証。[read.rs:57](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/functions/read.rs#L57) [inspector.rs:692](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L692) |
+| INS-02 | P1・仕上げ・コード | 数値3列は38px固定。大きな座標や長いプロパティ名が収まるか確認し、表示／編集時の幅を整えたい。固定Transform配置は保つ。[styles.css:1157](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/styles.css#L1157) |
+| INS-03 | P1・意図・コード | 複数選択でTransformはMixed対応だがText／Color／Effectsは消える。何が一括で変わるか分かるようにしたい。一括編集の追加は別の採否。[inspector.rs:1413](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L1413) |
+| INS-04 | P2・意図・コード | 無選択時も列見出し・Transform・Effectsが残る。位置を保つ安心感と空表示の簡潔さのどちらを重視するか。空だから削るとは決めない。[inspector.rs:1395](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L1395) |
+| INS-05 | P2・仕上げ・コード | 効果なし行の空セルが無効な入力欄に見えないか。空状態を行全体で表す案。[inspector.rs:1935](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L1935) |
+| INS-06 | P2・追加・コード | 効果欄に、一時バイパス／順序変更／複製／初期値復帰のどれが欲しいか。現行の見える入口はパラメータと削除中心。モデル側対応を確認してから範囲を選ぶ。[inspector.rs:1945](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L1945) |
+| INS-07 | P2・追加・コード | Textのフォント・ウェイト・段落揃えをその場で選びたいか。本文・サイズ・行間・字間は既にある。[read.rs:160](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/functions/read.rs#L160) |
+| INS-08 | P1・意図・コード | Textのスタイル編集が最初のスタイルへ接続している。複数スタイル時に「どの部分を編集しているか」を明確にしたい。全文編集と部分編集を勝手に統一しない。[read.rs:161](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/functions/read.rs#L161) |
+| INS-09 | P2・意図・実画面＋コード | Text本文へ行く前にTransform等を縦に辿る。固定位置は保ち、折畳み・ジャンプ・高さ調整など、到達を助ける方法が欲しいか。自動並べ替えは含めない。[inspector.rs:1809](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L1809) |
+| INS-10 | P2・仕上げ・実画面＋コード | 常設の操作説明が小さな領域を使う。hover・focus・drag時の表示で編集可能性を伝えられるか。説明を消すこと自体を目的にしない。[inspector.rs:1967](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/inspector.rs#L1967) |
 
 ## 6. Timeline
 
@@ -112,18 +112,18 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| TIM-01 | P1・仕上げ・実画面＋コード | 時間定規に数字がなく、任意時刻や区間長を読みにくい。ズームに応じた秒／フレーム表示が欲しい。左の再生時刻は既にある。[timeline_widget.rs:1712](../../motolii/src/ui/timeline_widget.rs#L1712) |
-| TIM-02 | P1・不備・コード | 再生中の意味はPauseだが記号は■。位置保持するPauseとStopを取り違えない表示にしたい。再生操作は今回行っていない。[timeline_shell.rs:33](../../motolii/src/ui/timeline_shell.rs#L33) |
-| TIM-03 | P1・意図・実画面＋コード | Mが音声Muteに見えるが、操作はHide。目の形等で示すか、現在の記号に意図があるか確認したい。[timeline_shell.rs:118](../../motolii/src/ui/timeline_shell.rs#L118) |
-| TIM-04 | P2・追加・コード | 時刻表示から直接フレーム／時刻を指定して移動したい。既存seekを使う入口の候補。[timeline_shell.rs:45](../../motolii/src/ui/timeline_shell.rs#L45) |
-| TIM-05 | P1・仕上げ・コード | スナップ自体はあるが、どこへ吸着したかを示す結果表示が乏しい。吸着線や対象の強調が欲しい。[timeline_widget.rs:939](../../motolii/src/ui/timeline_widget.rs#L939) |
-| TIM-06 | P2・追加・コード | スナップの現在状態を見て切り替えたいか。修飾キーの一時解除を残して入口を補う案。[timeline_widget.rs:1309](../../motolii/src/ui/timeline_widget.rs#L1309) |
-| TIM-07 | P2・追加・コード | 横ズームに全体表示／選択範囲表示の入口が欲しい。既存の定規ホイール拡大は保つ。[timeline_widget.rs:1244](../../motolii/src/ui/timeline_widget.rs#L1244) |
-| TIM-08 | P2・仕上げ・コード | Uによるキー付き項目への絞り込みが現在ONか分かるようにしたい。既存ショートカットを活かす。[table.rs:209](../../motolii/src/ui/functions/table.rs#L209) |
-| TIM-09 | P2・仕上げ・コード | マーカーが短い棒と線だけでは見分けにくい。名前をhover／選択時などに見たい。Documentの名前・本文を活かす。[timeline_widget.rs:1736](../../motolii/src/ui/timeline_widget.rs#L1736) |
-| TIM-10 | P2・仕上げ・コード | Move／Trim／Slipの操作中に、モードと開始・終了・長さが分かる小さな反応が欲しい。道具を増やす必要があるかは別問題。[timeline_widget.rs:1540](../../motolii/src/ui/timeline_widget.rs#L1540) |
-| TIM-11 | P2・追加・コード | レイヤー順序変更の既存コマンドに、挿入位置を見ながらドラッグする入口が欲しいか。[commands.rs:415](../../motolii/src/ui/commands.rs#L415) |
-| TIM-12 | P3・追加・コード | 短い区間を繰り返して動きを詰めるLoop／再生範囲が欲しいか。区間指定の意味を先に決める。[playback.rs:379](../../motolii/src/ui/playback.rs#L379) |
+| TIM-01 | P1・仕上げ・実画面＋コード | 時間定規に数字がなく、任意時刻や区間長を読みにくい。ズームに応じた秒／フレーム表示が欲しい。左の再生時刻は既にある。[timeline_widget.rs:1712](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_widget.rs#L1712) |
+| TIM-02 | P1・不備・コード | 再生中の意味はPauseだが記号は■。位置保持するPauseとStopを取り違えない表示にしたい。再生操作は今回行っていない。[timeline_shell.rs:33](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_shell.rs#L33) |
+| TIM-03 | P1・意図・実画面＋コード | Mが音声Muteに見えるが、操作はHide。目の形等で示すか、現在の記号に意図があるか確認したい。[timeline_shell.rs:118](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_shell.rs#L118) |
+| TIM-04 | P2・追加・コード | 時刻表示から直接フレーム／時刻を指定して移動したい。既存seekを使う入口の候補。[timeline_shell.rs:45](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_shell.rs#L45) |
+| TIM-05 | P1・仕上げ・コード | スナップ自体はあるが、どこへ吸着したかを示す結果表示が乏しい。吸着線や対象の強調が欲しい。[timeline_widget.rs:939](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_widget.rs#L939) |
+| TIM-06 | P2・追加・コード | スナップの現在状態を見て切り替えたいか。修飾キーの一時解除を残して入口を補う案。[timeline_widget.rs:1309](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_widget.rs#L1309) |
+| TIM-07 | P2・追加・コード | 横ズームに全体表示／選択範囲表示の入口が欲しい。既存の定規ホイール拡大は保つ。[timeline_widget.rs:1244](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_widget.rs#L1244) |
+| TIM-08 | P2・仕上げ・コード | Uによるキー付き項目への絞り込みが現在ONか分かるようにしたい。既存ショートカットを活かす。[table.rs:209](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/functions/table.rs#L209) |
+| TIM-09 | P2・仕上げ・コード | マーカーが短い棒と線だけでは見分けにくい。名前をhover／選択時などに見たい。Documentの名前・本文を活かす。[timeline_widget.rs:1736](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_widget.rs#L1736) |
+| TIM-10 | P2・仕上げ・コード | Move／Trim／Slipの操作中に、モードと開始・終了・長さが分かる小さな反応が欲しい。道具を増やす必要があるかは別問題。[timeline_widget.rs:1540](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/timeline_widget.rs#L1540) |
+| TIM-11 | P2・追加・コード | レイヤー順序変更の既存コマンドに、挿入位置を見ながらドラッグする入口が欲しいか。[commands.rs:415](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/commands.rs#L415) |
+| TIM-12 | P3・追加・コード | 短い区間を繰り返して動きを詰めるLoop／再生範囲が欲しいか。区間指定の意味を先に決める。[playback.rs:379](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/playback.rs#L379) |
 | TIM-13 | P1・不備・実画面 | TextとRectangleの2作品レイヤーが見えるのに、ヘッダーは「1 layer」。何を数えているかをコード・操作で追い、表示対象と一致させたい。原因は今回未確定。 |
 
 ## 7. Stage
@@ -132,12 +132,12 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| STG-01 | P2・追加・コード | 倍率表示を押す操作はFit。倍率入力／100%／Fitを選ぶ入口が欲しいか。現在のショートカットを保つ。[panels.rs:241](../../motolii/src/ui/panels.rs#L241) |
-| STG-02 | P1・追加・コード | 重なった対象を候補から選びたい。現行hitは手前の1件を返す。修飾クリックや候補表示のどちらが望ましいか。[stage_widget.rs:702](../../motolii/src/ui/stage_widget.rs#L702) |
-| STG-03 | P2・意図・実画面＋コード | 「3D」ボタンの意味は3Dハンドル表示。3DシーンON/OFFと誤解しない見せ方にしたい。3D機能を削る案ではない。[panels.rs:226](../../motolii/src/ui/panels.rs#L226) |
-| STG-04 | P1・仕上げ・要確認 | 小さい対象で移動・拡縮・回転を狙い分けられるか。小さいMove領域への配慮は既にあるため、縮小状態を触って不足だけ判断する。[stage_widget.rs:985](../../motolii/src/ui/stage_widget.rs#L985) |
-| STG-05 | P1・意図・要確認 | 複数選択を全体中心で拡縮／回転したいか、個別中心か。集合中心を勝手に正解にせず、期待する操作例を先に確かめたい。[stage_widget.rs:1170](../../motolii/src/ui/stage_widget.rs#L1170) |
-| STG-06 | P1・不備・要確認 | 親子同時選択や異なる親の下の対象が、ドラッグに同じ量で追従するか。今回戻した実装の確認候補で、不具合を実演したわけではない。[stage_widget.rs:1103](../../motolii/src/ui/stage_widget.rs#L1103) |
+| STG-01 | P2・追加・コード | 倍率表示を押す操作はFit。倍率入力／100%／Fitを選ぶ入口が欲しいか。現在のショートカットを保つ。[panels.rs:241](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/panels.rs#L241) |
+| STG-02 | P1・追加・コード | 重なった対象を候補から選びたい。現行hitは手前の1件を返す。修飾クリックや候補表示のどちらが望ましいか。[stage_widget.rs:702](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/stage_widget.rs#L702) |
+| STG-03 | P2・意図・実画面＋コード | 「3D」ボタンの意味は3Dハンドル表示。3DシーンON/OFFと誤解しない見せ方にしたい。3D機能を削る案ではない。[panels.rs:226](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/panels.rs#L226) |
+| STG-04 | P1・仕上げ・要確認 | 小さい対象で移動・拡縮・回転を狙い分けられるか。小さいMove領域への配慮は既にあるため、縮小状態を触って不足だけ判断する。[stage_widget.rs:985](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/stage_widget.rs#L985) |
+| STG-05 | P1・意図・要確認 | 複数選択を全体中心で拡縮／回転したいか、個別中心か。集合中心を勝手に正解にせず、期待する操作例を先に確かめたい。[stage_widget.rs:1170](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/stage_widget.rs#L1170) |
+| STG-06 | P1・不備・要確認 | 親子同時選択や異なる親の下の対象が、ドラッグに同じ量で追従するか。今回戻した実装の確認候補で、不具合を実演したわけではない。[stage_widget.rs:1103](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/stage_widget.rs#L1103) |
 
 ## 8. Desk — Ease
 
@@ -145,9 +145,9 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| EAS-01 | P1・仕上げ・コード | 複数対象でも表示は先頭対象中心。1キー時の時刻表示も実際の次キーまでの区間を伝えにくい。対象数と編集区間を正確に示したい。[ease.rs:286](../../motolii/src/ui/ease.rs#L286) |
+| EAS-01 | P1・仕上げ・コード | 複数対象でも表示は先頭対象中心。1キー時の時刻表示も実際の次キーまでの区間を伝えにくい。対象数と編集区間を正確に示したい。[ease.rs:286](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/ease.rs#L286) |
 | EAS-02 | P2・仕上げ・実画面 | キー未選択で「Pick a key…」と曲線が出る。対象なしと編集可能状態の違いを、形や有効状態から分かるようにしたい。今回は曲線操作は未実施。 |
-| EAS-03 | P3・追加・候補 | よく使う曲線のコピー／貼付、ユーザープリセットが欲しいか。既存F9・曲線編集を置き換えない。[ease.rs:286](../../motolii/src/ui/ease.rs#L286) |
+| EAS-03 | P3・追加・候補 | よく使う曲線のコピー／貼付、ユーザープリセットが欲しいか。既存F9・曲線編集を置き換えない。[ease.rs:286](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/ease.rs#L286) |
 | EAS-04 | P2・追加・候補 | 複数対象のカーブが違うときにMixedを見たい。どれか1本が全体の状態に見えないようにする候補。 |
 
 ## 9. Desk — Blend
@@ -156,8 +156,8 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| BLD-01 | P1・仕上げ・コード | Focus::Blendがあればそれ、なければ主選択1件が対象。複数選択中や固定対象時も、どこに適用するか分かる最小の表示が欲しい。[desk.rs:262](../../motolii/src/ui/desk.rs#L262) |
-| BLD-02 | P2・意図・コード | hover下見とキーボードfocusの体験を揃えたいか。focusだけで作品がプレビュー変化することを好むか確認する。[desk.rs:588](../../motolii/src/ui/desk.rs#L588) |
+| BLD-01 | P1・仕上げ・コード | Focus::Blendがあればそれ、なければ主選択1件が対象。複数選択中や固定対象時も、どこに適用するか分かる最小の表示が欲しい。[desk.rs:262](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/desk.rs#L262) |
+| BLD-02 | P2・意図・コード | hover下見とキーボードfocusの体験を揃えたいか。focusだけで作品がプレビュー変化することを好むか確認する。[desk.rs:588](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/desk.rs#L588) |
 | BLD-03 | P2・仕上げ・実画面 | 引き出し下端で見本名が切れ、スクロールで続くことを把握しにくい。端・スクロール・選択表示の仕上げ候補。見本自体は保つ。 |
 
 ## 10. Desk — Text／ノート
@@ -166,8 +166,8 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| NOT-01 | P1・意図・実画面＋コード | Textレイヤーを選んでDeskのTextを開いても「No marker yet」。Text本文エディターと取り違えない名前／対象の見せ方にしたい。ノートの独自設計は消さない。[desk.rs:324](../../motolii/src/ui/desk.rs#L324) |
-| NOT-02 | P1・追加・実画面＋コード | マーカーなしではこの場所から先へ進みにくい。現在時刻にノート用マーカーを作る入口が欲しいか。[desk.rs:388](../../motolii/src/ui/desk.rs#L388) |
+| NOT-01 | P1・意図・実画面＋コード | Textレイヤーを選んでDeskのTextを開いても「No marker yet」。Text本文エディターと取り違えない名前／対象の見せ方にしたい。ノートの独自設計は消さない。[desk.rs:324](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/desk.rs#L324) |
+| NOT-02 | P1・追加・実画面＋コード | マーカーなしではこの場所から先へ進みにくい。現在時刻にノート用マーカーを作る入口が欲しいか。[desk.rs:388](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/desk.rs#L388) |
 | NOT-03 | P2・仕上げ・実画面 | 引き出し内とDesk下部の両方に「No marker yet」が出る。異なる場所の役割が分かるか、重複した空表示を整理するか。 |
 
 ## 11. Desk — History
@@ -176,7 +176,7 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| HIS-01 | P2・仕上げ・コード | 戻り先が段数だけで、何を戻すか分からない。操作名・対象・保存位置のどれを見たいか選びたい。[desk.rs:649](../../motolii/src/ui/desk.rs#L649) |
+| HIS-01 | P2・仕上げ・コード | 戻り先が段数だけで、何を戻すか分からない。操作名・対象・保存位置のどれを見たいか選びたい。[desk.rs:649](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/desk.rs#L649) |
 | HIS-02 | P2・仕上げ・実画面 | 履歴のない状態は広い面に点1個。現在位置の表示であることや、まだ戻れる編集がないことを読み取りやすくしたい。長い説明文は不要。 |
 
 ## 12. Composition
@@ -185,10 +185,10 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| CMP-01 | P1・不備・実画面 | Frame rateの候補ボタンがメニュー背景の右外へ出る。操作対象を背景の内側に収めたい。メニューを開くだけで再現。[composition.rs:66](../../motolii/src/ui/composition.rs#L66) |
-| CMP-02 | P1・不備・コード | 不正な寸法／尺の入力が黙って無視される経路がある。入力が通ったか、その場で分かるようにしたい。[composition.rs:48](../../motolii/src/ui/composition.rs#L48) |
-| CMP-03 | P2・意図・コード | 16:9は1920×1080、4Kは3840×2160というプリセット。比率だけ変える操作と解像度選択を分けたいか。縦横交換・比率固定も候補。[composition.rs:12](../../motolii/src/ui/composition.rs#L12) |
-| CMP-04 | P3・追加・コード | 既定の7種以外のfps入力が必要か。必要な制作例がある場合に対応範囲を決める。[composition.rs:66](../../motolii/src/ui/composition.rs#L66) |
+| CMP-01 | P1・不備・実画面 | Frame rateの候補ボタンがメニュー背景の右外へ出る。操作対象を背景の内側に収めたい。メニューを開くだけで再現。[composition.rs:66](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/composition.rs#L66) |
+| CMP-02 | P1・不備・コード | 不正な寸法／尺の入力が黙って無視される経路がある。入力が通ったか、その場で分かるようにしたい。[composition.rs:48](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/composition.rs#L48) |
+| CMP-03 | P2・意図・コード | 16:9は1920×1080、4Kは3840×2160というプリセット。比率だけ変える操作と解像度選択を分けたいか。縦横交換・比率固定も候補。[composition.rs:12](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/composition.rs#L12) |
+| CMP-04 | P3・追加・コード | 既定の7種以外のfps入力が必要か。必要な制作例がある場合に対応範囲を決める。[composition.rs:66](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/composition.rs#L66) |
 
 ## 13. Export
 
@@ -196,10 +196,10 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| EXP-01 | P1・不備・実画面＋コード | 寸法・fps・区間・形式を連結したOutputが狭い数値セルへ入り、全文を読めない。出力前に確認できるまとまりへ整えたい。[export_sheet.rs:60](../../motolii/src/ui/export_sheet.rs#L60) |
-| EXP-02 | P1・不備・コード | 表示時と開始ボタン時で範囲を再計算する。マーカー範囲で再生位置が動いたとき、表示と実行が一致するか確認したい。[export_sheet.rs:98](../../motolii/src/ui/export_sheet.rs#L98) |
-| EXP-03 | P1・不備・要確認 | 末尾マーカーでtotal..total+1になり得る境界が見える。空範囲／終端の扱いを確認したい。書き出して異常を確認したわけではない。[export_sheet.rs:38](../../motolii/src/ui/export_sheet.rs#L38) |
-| EXP-04 | P3・追加・候補 | All／マーカー間に加えて、In/Out指定・静止フレーム・透過出力のどれが欲しいか。形式や実現性は既存基盤の対応を見てから決める。[export_sheet.rs:65](../../motolii/src/ui/export_sheet.rs#L65) |
+| EXP-01 | P1・不備・実画面＋コード | 寸法・fps・区間・形式を連結したOutputが狭い数値セルへ入り、全文を読めない。出力前に確認できるまとまりへ整えたい。[export_sheet.rs:60](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/export_sheet.rs#L60) |
+| EXP-02 | P1・不備・コード | 表示時と開始ボタン時で範囲を再計算する。マーカー範囲で再生位置が動いたとき、表示と実行が一致するか確認したい。[export_sheet.rs:98](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/export_sheet.rs#L98) |
+| EXP-03 | P1・不備・要確認 | 末尾マーカーでtotal..total+1になり得る境界が見える。空範囲／終端の扱いを確認したい。書き出して異常を確認したわけではない。[export_sheet.rs:38](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/export_sheet.rs#L38) |
+| EXP-04 | P3・追加・候補 | All／マーカー間に加えて、In/Out指定・静止フレーム・透過出力のどれが欲しいか。形式や実現性は既存基盤の対応を見てから決める。[export_sheet.rs:65](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/export_sheet.rs#L65) |
 
 ## 14. Settings
 
@@ -207,15 +207,15 @@
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| SET-01 | P2・追加・実画面＋コード | Outside dim／Scaleは±の5%刻み。大きく変えると連打になるので直接入力またはスライダーが欲しいか。[settings.rs:12](../../motolii/src/ui/settings.rs#L12) |
+| SET-01 | P2・追加・実画面＋コード | Outside dim／Scaleは±の5%刻み。大きく変えると連打になるので直接入力またはスライダーが欲しいか。[settings.rs:12](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/settings.rs#L12) |
 | SET-02 | P2・追加・候補 | 値を試した後、既定値へすぐ戻す入口が欲しい。作品全体のリセットと混同しない。 |
 
 ## 15. パネル共通・パネル間
 
 | ID | 優先・種類・根拠 | 違和感／欲しい状態 |
 |---|---|---|
-| ALL-01 | P2・仕上げ・コード | 長いカード名は省略され、tooltipは操作案内中心。hover／focusで全文を確認したい。常時折返しにすると密度も変わるので別判断。[styles.css:515](../../motolii/src/ui/styles.css#L515) |
-| ALL-02 | P2・仕上げ・コード | 検索解除の明示ボタンがない。マウスだけで一動作で解除したい。既存Escape／Cmd+F／文字検索は保つ。Blitzのネイティブ装飾は入力状態で追加確認する。[browser.rs:1802](../../motolii/src/ui/browser.rs#L1802) |
+| ALL-01 | P2・仕上げ・コード | 長いカード名は省略され、tooltipは操作案内中心。hover／focusで全文を確認したい。常時折返しにすると密度も変わるので別判断。[styles.css:515](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/styles.css#L515) |
+| ALL-02 | P2・仕上げ・コード | 検索解除の明示ボタンがない。マウスだけで一動作で解除したい。既存Escape／Cmd+F／文字検索は保つ。Blitzのネイティブ装飾は入力状態で追加確認する。[browser.rs:1802](https://github.com/oshikaidesu/Motolii/blob/fb8818db514c8de028e757109f5751870a1f3447/motolii/src/ui/browser.rs#L1802) |
 | ALL-03 | P1・意図・実画面 | Deskを開くとInspectorが小さくなり、編集中の項目が下へ隠れやすい。引き出し連動を保ちつつ、必要な項目を見失わない高さ・スクロールの扱いを決めたい。 |
 | ALL-04 | P2・仕上げ・実画面 | 1280×768・Scale100%で説明文・ラベルがかなり小さく見える。高密度は保ち、まず重要値／補足／状態の視認性を揃える候補。全ての文字を一律拡大する提案ではない。 |
 | ALL-05 | P1・不備・要確認 | 入力中に別パネルへ移動した場合、確定・取消・不正入力・focusが一貫するか。UIごとに別ルールを足さず、既存共通処理の動作を点検する。今回は入力を変更していない。 |
