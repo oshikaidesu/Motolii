@@ -1213,8 +1213,7 @@ pub(super) fn collect_text_documents(
     let mut documents = HashMap::new();
     for layer in resolved {
         if layer.source == LayerSource::Text {
-            if let Some(document) = view
-                .resolved_text_document(layer.id, t)
+            if let Some(document) = crate::doc::store::view::resolve::text::resolved_text_document(view, layer.id, t)
                 .map_err(|e| EngineError::Store(e.to_string()))?
             {
                 documents.insert(layer.id, document);
@@ -1223,7 +1222,7 @@ pub(super) fn collect_text_documents(
             let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
             if let Some((target, _)) = crate::extensions::text::morph(&effects) {
                 if !documents.contains_key(&target) {
-                    if let Some(document) = view.resolved_text_document(target, t).map_err(|e| EngineError::Store(e.to_string()))? {
+                    if let Some(document) = crate::doc::store::view::resolve::text::resolved_text_document(view, target, t).map_err(|e| EngineError::Store(e.to_string()))? {
                         documents.insert(target, document);
                     }
                 }

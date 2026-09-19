@@ -7,7 +7,7 @@ pub(crate) fn edits(doc:&Document, layer:LayerId, time:RationalTime, j:&J) -> Re
     if view.attrs(layer).map_err(|e|e.to_string())?.ok_or("Layer not found")?.locked { return Err("Layer is locked".into()); }
     let mut document=view.text_document(layer).map_err(|e|e.to_string())?.ok_or("Select a Text layer")?;
     let original_document=document.clone();
-    let resolved=view.resolved_text_document(layer,time).map_err(|e|e.to_string())?;
+    let resolved=motolii_doc::store::view::resolve::text::resolved_text_document(&view, layer,time).map_err(|e|e.to_string())?;
     let text=document.content.eval(time).to_owned();
     if j["text"].as_str().is_some_and(|t|t!=text) { return Err("Text changed; select the characters again".into()); }
     let scope=j["scope"].as_str().unwrap_or("all");
@@ -97,7 +97,7 @@ mod tests {
         assert!(serde_json::from_value::<crate::viewer::ColorSlot>(
             json!({"TextStroke":{"layer":1,"style":0}})
         ).is_err());
-        let resolved = view.resolved_text_document(layer, time).unwrap().unwrap();
+        let resolved = motolii_doc::store::view::resolve::text::resolved_text_document(&view, layer, time).unwrap().unwrap();
         let canvas = crate::doc::vector::Canvas { width: 800, height: 240, origin_x: 0, origin_y: 0 };
         let shapes = crate::render::engine::text::text_shapes(&resolved, time, &canvas).unwrap().unwrap();
         let mut visible = 0;
@@ -120,7 +120,7 @@ mod tests {
         let mut doc=project();let layer=LayerId(1);let before=doc.view().text_document(layer).unwrap().unwrap();
         let changes=edits(&doc,layer,RationalTime::ZERO,&json!({"scope":"hiragana","size":80.0})).unwrap();
         doc.apply_all(changes).unwrap();
-        let formatted=doc.view().resolved_text_document(layer,RationalTime::ZERO).unwrap().unwrap();
+        let formatted=motolii_doc::store::view::resolve::text::resolved_text_document(&doc.view(), layer,RationalTime::ZERO).unwrap().unwrap();
         let ids=text_edit::style_ids(&formatted,formatted.content.eval(RationalTime::ZERO));
         let sizes:Vec<_>=ids.iter().map(|id|formatted.styles.iter().find(|s|s.id==*id).unwrap().size).collect();
         assert_eq!(sizes,vec![80.0,40.0,40.0,80.0,40.0,40.0,40.0]);
@@ -132,12 +132,12 @@ mod tests {
     #[test]
     fn partial_font_and_size_reach_raster_and_replacement_keeps_runs() {
         let mut doc=project();let layer=LayerId(1);let time=RationalTime::ZERO;
-        let before=doc.view().resolved_text_document(layer,time).unwrap().unwrap();
+        let before=motolii_doc::store::view::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();
         let canvas=crate::doc::vector::Canvas{width:800,height:240,origin_x:0,origin_y:0};
         let a=crate::render::engine::text::text_shapes(&before,time,&canvas).unwrap().unwrap();
         let family=crate::doc::vector::text::font_families().iter().find(|f|f.as_str()=="Georgia").unwrap();
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"selection","start":7,"end":8,"size":120.0,"family":family})).unwrap()).unwrap();
-        let after=doc.view().resolved_text_document(layer,time).unwrap().unwrap();
+        let after=motolii_doc::store::view::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();
         let ids=text_edit::style_ids(&after,after.content.eval(time));
         let selected=after.styles.iter().find(|s|s.id==ids[5]).unwrap();assert_eq!(selected.size,120.0);assert_eq!(&selected.font.family,family);
         let b=crate::render::engine::text::text_shapes(&after,time,&canvas).unwrap().unwrap();assert_ne!(a,b,"級数と書体の変更が輪郭に届く");
@@ -150,10 +150,10 @@ mod tests {
     fn kana_mark_is_one_selection_and_empty_text_can_choose_size() {
         let mut doc=project();let layer=LayerId(1);let time=RationalTime::ZERO;
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"selection","start":4,"end":5,"size":90})).unwrap()).unwrap();
-        let d=doc.view().resolved_text_document(layer,time).unwrap().unwrap();let ids=text_edit::style_ids(&d,d.content.eval(time));
+        let d=motolii_doc::store::view::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();let ids=text_edit::style_ids(&d,d.content.eval(time));
         assert_eq!(d.styles.iter().find(|s|s.id==ids[3]).unwrap().size,90.0);
         crate::editor::text::write_content(&mut doc,layer,time,String::new()).unwrap();
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"all","size":55})).unwrap()).unwrap();
-        assert_eq!(doc.view().resolved_text_document(layer,time).unwrap().unwrap().styles[0].size,55.0);
+        assert_eq!(motolii_doc::store::view::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap().styles[0].size,55.0);
     }
 }

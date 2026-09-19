@@ -4,105 +4,102 @@
 
 use super::*;
 
-impl<'a> StoreView<'a> {
-    pub(super) fn effect_enabled(&self, layer: LayerId, effect: crate::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
-        match self.value_at(layer, &crate::store::PropertyId::effect_enabled(effect), t)? {
-            Some(Value::Bool(value)) => Ok(value),
-            Some(other) => Err(StoreError::Property(format!("effect {effect} の enabled に真偽でない値が入っている: {other:?}"))),
-            None => Ok(true),
-        }
+pub(super) fn effect_enabled(view: &StoreView<'_>, layer: LayerId, effect: crate::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
+    match view.value_at(layer, &crate::store::PropertyId::effect_enabled(effect), t)? {
+        Some(Value::Bool(value)) => Ok(value),
+        Some(other) => Err(StoreError::Property(format!("effect {effect} の enabled に真偽でない値が入っている: {other:?}"))),
+        None => Ok(true),
+    }
+}
+
+pub fn resolved_effects(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    t: RationalTime,
+) -> Result<Vec<ResolvedEffect>, StoreError> {
+    let effects = view.effects(layer)?;
+    if effects.is_empty() {
+        return Ok(Vec::new());
     }
 
-    pub fn resolved_effects(
-        &self,
-        layer: LayerId,
-        t: RationalTime,
-    ) -> Result<Vec<ResolvedEffect>, StoreError> {
-        let effects = self.effects(layer)?;
-        if effects.is_empty() {
-            return Ok(Vec::new());
+    let properties = view.properties(layer);
+
+    let mut out = Vec::with_capacity(effects.len());
+    for effect in effects {
+        if !effect_enabled(view, layer, effect.id, t)? {
+            continue;
         }
-
-        let properties = self.properties(layer);
-
-        let mut out = Vec::with_capacity(effects.len());
-        for effect in effects {
-            if !self.effect_enabled(layer, effect.id, t)? {
+        let prefix = format!("{}{}.param.", property::EFFECT_PREFIX, effect.id);
+        let mut params = Vec::new();
+        for candidate in &properties {
+            let Some(param_name) = candidate.name().strip_prefix(prefix.as_str()) else {
                 continue;
-            }
-            let prefix = format!("{}{}.param.", property::EFFECT_PREFIX, effect.id);
-            let mut params = Vec::new();
-            for candidate in &properties {
-                let Some(param_name) = candidate.name().strip_prefix(prefix.as_str()) else {
-                    continue;
-                };
-                if let Some(value) = self.value_at(layer, candidate, t)? {
-                    params.push((param_name.to_owned(), value));
-                }
-            }
-            let scope = match self.value_at(layer, &crate::doc::store::PropertyId::effect_scope(effect.id), t)? {
-                Some(Value::Enum(v)) => crate::doc::store::EffectScope::from_enum_value(v).ok_or_else(|| {
-                    StoreError::Property(format!("effect {} の scope に未知の値が入っている: {v}", effect.id))
-                })?,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "effect {} の scope に enum でない値が入っている: {other:?}",
-                        effect.id
-                    )))
-                }
-                None => crate::doc::store::EffectScope::default(),
             };
-            out.push(ResolvedEffect {
-                plugin_id: effect.plugin_id,
-                params,
-                scope,
-            });
-        }
-        Ok(out)
-    }
-
-    /// グループが子へ配る効果と、子を 1 枚にしてから掛ける効果。配置効果は数える側なので入らない。
-    /// Whole が 1 つ現れた所から下は、もう子が無い(板)ので全部 Whole 扱い。
-    fn group_effects(&self, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
-        let (mut each, mut whole) = (Vec::new(), Vec::new());
-        for effect in self.resolved_effects(group, t)? {
-            if self.placement_program(&effect.plugin_id).is_some() {
-                continue;
-            }
-            if !whole.is_empty() || effect.scope == crate::doc::store::EffectScope::Whole {
-                whole.push(effect);
-            } else {
-                each.push(effect);
+            if let Some(value) = view.value_at(layer, candidate, t)? {
+                params.push((param_name.to_owned(), value));
             }
         }
-        Ok((each, whole))
+        let scope = match view.value_at(layer, &crate::doc::store::PropertyId::effect_scope(effect.id), t)? {
+            Some(Value::Enum(v)) => crate::doc::store::EffectScope::from_enum_value(v).ok_or_else(|| {
+                StoreError::Property(format!("effect {} の scope に未知の値が入っている: {v}", effect.id))
+            })?,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "effect {} の scope に enum でない値が入っている: {other:?}",
+                    effect.id
+                )))
+            }
+            None => crate::doc::store::EffectScope::default(),
+        };
+        out.push(ResolvedEffect {
+            plugin_id: effect.plugin_id,
+            params,
+            scope,
+        });
     }
+    Ok(out)
+}
 
-    /// 親のグループから降りてくる効果。効果は 1 枚に掛かるとしか書かれていないので、子/全体は
-    /// ここで解く(裁定 2026-09-11)。返すのは (自分に足す効果, 板になる最寄りのグループとその効果)。
-
-    /// 板のグループへ祖先から配られた効果は、板の絵に掛かる。
-    pub(super) fn handed_down(&self, layer: LayerId, t: RationalTime, present: &HashSet<LayerId>) -> Result<(Vec<ResolvedEffect>, Option<(LayerId, Vec<ResolvedEffect>)>), StoreError> {
-        let mut each = Vec::new();
-        let mut seen = HashSet::from([layer]);
-        let mut next = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
-        while let Some(group) = next {
-            if !seen.insert(group) || !self.meta(group)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group) {
-                break;
-            }
-            let (own_each, own_whole) = self.group_effects(group, t)?;
-            each.extend(own_each);
-            if !own_whole.is_empty() {
-                let (above, _) = self.handed_down(group, t, present)?;
-                let mut plate = own_whole;
-                plate.extend(above);
-                return Ok((each, Some((group, plate))));
-            }
-            next = self.attrs(group)?.unwrap_or_default().parent.filter(|p| present.contains(p));
+/// グループが子へ配る効果と、子を 1 枚にしてから掛ける効果。配置効果は数える側なので入らない。
+/// Whole が 1 つ現れた所から下は、もう子が無い(板)ので全部 Whole 扱い。
+pub(crate) fn group_effects(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
+    let (mut each, mut whole) = (Vec::new(), Vec::new());
+    for effect in resolved_effects(view, group, t)? {
+        if view.placement_program(&effect.plugin_id).is_some() {
+            continue;
         }
-        Ok((each, None))
+        if !whole.is_empty() || effect.scope == crate::doc::store::EffectScope::Whole {
+            whole.push(effect);
+        } else {
+            each.push(effect);
+        }
     }
+    Ok((each, whole))
+}
 
+/// 親のグループから降りてくる効果。効果は 1 枚に掛かるとしか書かれていないので、子/全体は
+/// ここで解く(裁定 2026-09-11)。返すのは (自分に足す効果, 板になる最寄りのグループとその効果)。
+
+/// 板のグループへ祖先から配られた効果は、板の絵に掛かる。
+pub(super) fn handed_down(view: &StoreView<'_>, layer: LayerId, t: RationalTime, present: &HashSet<LayerId>) -> Result<(Vec<ResolvedEffect>, Option<(LayerId, Vec<ResolvedEffect>)>), StoreError> {
+    let mut each = Vec::new();
+    let mut seen = HashSet::from([layer]);
+    let mut next = view.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
+    while let Some(group) = next {
+        if !seen.insert(group) || !view.meta(group)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group) {
+            break;
+        }
+        let (own_each, own_whole) = group_effects(view, group, t)?;
+        each.extend(own_each);
+        if !own_whole.is_empty() {
+            let (above, _) = handed_down(view, group, t, present)?;
+            let mut plate = own_whole;
+            plate.extend(above);
+            return Ok((each, Some((group, plate))));
+        }
+        next = view.attrs(group)?.unwrap_or_default().parent.filter(|p| present.contains(p));
+    }
+    Ok((each, None))
 }
 
 #[cfg(test)]

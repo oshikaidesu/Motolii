@@ -1142,7 +1142,7 @@ mod tests {
         let items: Vec<BlockItem> = (1..=6).map(|i| {
             let id = LayerId(i);
             let b = view.layer_box(id, t).unwrap().unwrap();
-            let m = view.local_transform(id, t).unwrap();
+            let m = crate::doc::store::view::resolve::transform::local_transform(&view, id, t).unwrap();
             let (lo, hi) = (m.transform_point2(glam::vec2(b[0], b[1])), m.transform_point2(glam::vec2(b[2], b[3])));
             BlockItem { lo: lo.to_array(), hi: hi.to_array(), room_lo: [0.0; 2], room_size: [W as f32, H as f32], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }
         }).collect();

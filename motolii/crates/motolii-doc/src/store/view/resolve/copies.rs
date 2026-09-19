@@ -55,7 +55,7 @@ impl<'a> StoreView<'a> {
         let program = self.placement_program(&base.effects[first].plugin_id).expect("matched placement program");
         let placements = (program.evaluate)(&crate::store::kind::PlacementInput {
             params, layer, time: t, stretch_outline, analysis: self.analysis(),
-            position: if program.needs_position { self.resolve_position(layer, t)? } else { [0.0; 2] },
+            position: if program.needs_position { crate::doc::store::view::resolve::transform::resolve_position(self, layer, t)? } else { [0.0; 2] },
         });
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
         let is_group = base.source == crate::doc::store::LayerSource::Group;
@@ -87,21 +87,21 @@ impl<'a> StoreView<'a> {
             let (mut memo_at, mut visiting_at) = (HashMap::new(), HashSet::new());
             if shifted {
                 for subject in &subjects {
-                    worlds_at.extend(self.world_transform3d_chain(*subject, at, present)?);
+                    worlds_at.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(self, *subject, at, present)?);
                 }
                 if let Some(p) = parent {
-                    worlds_at.extend(self.world_transform3d_chain(p, at, present)?);
+                    worlds_at.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(self, p, at, present)?);
                 }
                 if whole_transform {
-                    worlds_at.extend(self.world_transform3d_chain(layer, at, present)?);
+                    worlds_at.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(self, layer, at, present)?);
                 }
             }
             let worlds = if shifted { &worlds_at } else { world_transforms };
             let memo = if shifted { &mut memo_at } else { &mut *memo };
             let visiting = if shifted { &mut visiting_at } else { &mut *visiting };
-            let parent2 = parent.map(|p| self.world_affine(p, at, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+            let parent2 = parent.map(|p| crate::doc::store::view::resolve::transform::world_affine(self, p, at, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
             let parent3 = parent.and_then(|p| worlds.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
-            let pivot = glam::Vec2::from(self.resolve_position(layer, at)?);
+            let pivot = glam::Vec2::from(crate::doc::store::view::resolve::transform::resolve_position(self, layer, at)?);
             // Each: ずれは親の空間、回転と大きさは層の位置が中心(複製 1 つずつ)。
             // Whole: ずれは層自身の空間、中心は層のアンカー — 層を回すと並びごと回る。
             let (frame2, frame3, around) = if whole_transform {
@@ -109,7 +109,7 @@ impl<'a> StoreView<'a> {
                     Some(crate::doc::store::Value::Vec2(v)) => glam::Vec2::new(v[0] as f32, v[1] as f32),
                     _ => glam::Vec2::ZERO,
                 };
-                (self.world_affine(layer, at, present, memo, visiting)?, worlds.get(&layer).copied().unwrap_or(glam::Affine3A::IDENTITY), anchor)
+                (crate::doc::store::view::resolve::transform::world_affine(self, layer, at, present, memo, visiting)?, worlds.get(&layer).copied().unwrap_or(glam::Affine3A::IDENTITY), anchor)
             } else {
                 (parent2, parent3, pivot)
             };
@@ -176,11 +176,11 @@ impl<'a> StoreView<'a> {
         };
         let layer = base.id;
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
-        let parent2 = parent.map(|p| self.world_affine(p, t, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+        let parent2 = parent.map(|p| crate::doc::store::view::resolve::transform::world_affine(self, p, t, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
         let parent3 = parent.and_then(|p| world_transforms.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
-        let now_inverse = self.local_placement_transform(layer, t)?.inverse();
+        let now_inverse = crate::doc::store::view::resolve::transform::local_placement_transform(self, layer, t)?.inverse();
         let local_delta = |at: RationalTime| -> Result<glam::Affine2, StoreError> {
-            Ok(self.local_placement_transform_sampled(layer, t, Some((at, shutter.channels)))? * now_inverse)
+            Ok(crate::doc::store::view::resolve::transform::local_placement_transform_sampled(self, layer, t, Some((at, shutter.channels)))? * now_inverse)
         };
         let samples = shutter.deltas(t, frame_seconds, base.declared_size, base.placement.transform, parent2, local_delta)?;
         let count = samples.len() as u32;
@@ -229,12 +229,12 @@ impl<'a> StoreView<'a> {
         for (k, b) in units.into_iter().enumerate() {
             let at = self.schedule_shift(layer, k, n, t)?;
             let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
-            let worlds = self.world_transform3d_chain(layer, at, present)?;
+            let worlds = crate::doc::store::view::resolve::transform::world_transform3d_chain(self, layer, at, present)?;
             let Some(mut copy) = self.resolve_with_solo(layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
             // 中心を単位の箱の中心へ: 親の空間で T(c − a) を局所の変換に共役で掛ける(a = 層のアンカー、c = 箱の中心)。
             let anchor = glam::Vec2::from(self.free_anchor(layer, at)?);
             let shift = glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5) - anchor;
-            let parent2 = parent.map(|p| self.world_affine(p, at, present, &mut memo, &mut visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+            let parent2 = parent.map(|p| crate::doc::store::view::resolve::transform::world_affine(self, p, at, present, &mut memo, &mut visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
             let shift2 = glam::Affine2::from_translation(shift);
             copy.placement.transform = parent2 * shift2 * parent2.inverse() * copy.placement.transform * shift2.inverse();
             if let Some(world) = copy.placement.world_transform {
@@ -275,9 +275,9 @@ impl<'a> StoreView<'a> {
             let Ok(shift) = RationalTime::try_from_frame(delay.abs(), fps) else { continue };
             let at = if delay >= 0 { t.try_sub(shift) } else { t.try_add(shift) };
             let Ok(at) = at else { continue };
-            let mut worlds = self.world_transform3d_chain(layer, at, present)?;
+            let mut worlds = crate::doc::store::view::resolve::transform::world_transform3d_chain(self, layer, at, present)?;
             if let Some(parent) = parent {
-                worlds.extend(self.world_transform3d_chain(parent, at, present)?);
+                worlds.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(self, parent, at, present)?);
             }
             let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
             let Some(resolved) = self.resolve_with_solo(layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {

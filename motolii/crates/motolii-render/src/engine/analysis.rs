@@ -114,7 +114,7 @@ impl Engine {
                 }
             }
             if layer.source == crate::doc::store::LayerSource::Text {
-                if let Some(document) = view.resolved_text_document(layer.id, t).map_err(store)? {
+                if let Some(document) = crate::doc::store::view::resolve::text::resolved_text_document(&view, layer.id, t).map_err(store)? {
                     let content = document.content.eval(t).to_owned();
                     if let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document_around(&document, t, &canvas, layer.flow_around.as_deref().map_or(&[], Vec::as_slice)) {
                         let mut n = 0;
@@ -229,7 +229,7 @@ impl Engine {
                     inputs.set_extent(path, extent);
                 }
             }
-            let effects = view.resolved_effects(layer, t).map_err(store)?;
+            let effects = crate::doc::store::view::resolve::effects::resolved_effects(view, layer, t).map_err(store)?;
             // Blob Track は指した層を、Track Overlay は下の合成を読む。
             let (params, source, settings, detail, show_mask, overlay) = if let Some(effect) = effects.iter().find(|e| blob::is_blob_track(&e.plugin_id)) {
                 let source = LayerId(blob::number_of(&effect.params, "source").round().max(0.0) as u64);

@@ -238,7 +238,7 @@ impl StoreView<'_> {
     pub(super) fn authored_local(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
         Ok(crate::doc::core::LayerPlacement::from_transform(
             self.free_anchor(layer, t)?,
-            self.resolve_position(layer, t)?,
+            crate::doc::store::view::resolve::transform::resolve_position(self, layer, t)?,
             self.pair(layer, property::SCALE, [1.0, 1.0], t)?,
             self.number(layer, property::ROTATION, 0.0, t)? as f32 + super::path::offset_rotation(self, layer, t)?,
             self.number(layer, property::SKEW, 0.0, t)? as f32,
@@ -260,7 +260,7 @@ impl StoreView<'_> {
         let design = if t == RationalTime::ZERO { size } else { self.layout_frame(RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
         let Some(b) = self.layer_box(child, t)? else { return Ok(None) };
         let scale = self.pair(child, property::SCALE, [1.0, 1.0], t)?;
-        let position = self.resolve_position(child, t)?;
+        let position = crate::doc::store::view::resolve::transform::resolve_position(self, child, t)?;
         let anchor = self.free_anchor(child, t)?;
         let mut out_position = position;
         let mut out_scale = scale;
@@ -456,7 +456,7 @@ impl StoreView<'_> {
     /// 置かれた枠へ、層の箱を合わせる Position と Scale(と形の輪郭の伸び)。Position の値はずれとして足す。
     fn slot(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4], sizing: [Sizing; 2], fit: i64, placed: taffy::Layout) -> Result<Slot, StoreError> {
         let scale = self.pair(layer, property::SCALE, [1.0, 1.0], t)?;
-        let offset = self.resolve_position(layer, t)?;
+        let offset = crate::doc::store::view::resolve::transform::resolve_position(self, layer, t)?;
         let cell = [placed.size.width, placed.size.height];
         let natural = [(bounds[2] - bounds[0]) * scale[0].abs(), (bounds[3] - bounds[1]) * scale[1].abs()];
         let mut factor = [1.0f32; 2];

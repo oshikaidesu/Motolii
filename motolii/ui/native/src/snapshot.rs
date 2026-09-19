@@ -91,7 +91,7 @@ impl EditorRuntime{
         let target=seen.target(comp);
         let camera_layer=motolii_doc::store::view::resolve::camera::active_camera_layer(&view, time).map_err(e)?;
         let target_layer=camera_layer.map(|id|motolii_doc::store::view::resolve::camera::camera_target_layer(&view, id,time)).transpose().map_err(e)?.flatten();
-        let worlds=view.world_transforms3d(time).map_err(e)?;
+        let worlds=motolii_doc::store::view::resolve::transform::world_transforms3d(&view, time).map_err(e)?;
         let mut items=Vec::new();
         for layer in resolved {
             // 配置効果の複製は層として 1 つ(元の姿)だけ並べる
@@ -115,7 +115,7 @@ impl EditorRuntime{
     pub(crate) fn focus_sphere(&self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
         let view=self.doc.view();let time=self.time()?;
         let resolved=view.resolved_layers(time).map_err(e)?;
-        let Some(world)=view.world_transforms3d(time).map_err(e)?.get(&id).copied() else{return Ok(None)};
+        let Some(world)=motolii_doc::store::view::resolve::transform::world_transforms3d(&view, time).map_err(e)?.get(&id).copied() else{return Ok(None)};
         let Some(b)=self.engine.selected_layer_bounds_in(&view,&resolved,id,time) else{return Ok(None)};
         let centre=world.transform_point3(glam::Vec3::from(b.center()));
         let radius=(0..8).map(|i|world.transform_point3(glam::vec3(if i&1==0{b.min[0]}else{b.max[0]},if i&2==0{b.min[1]}else{b.max[1]},if i&4==0{b.min[2]}else{b.max[2]})).distance(centre)).fold(0.0,f32::max);
@@ -432,7 +432,7 @@ impl EditorRuntime{
                 json!({"id":names::TEXT_CONTENT,"label":names::label_or_id(names::TEXT_CONTENT),"kind":"text","value":t.content.eval(at),"min":null,"max":null,"keyedNow":keyed,"keys":keys?})
             };
             properties.insert(0,content);
-            let resolved=view.resolved_text_document(id,at).map_err(e)?.unwrap_or(t.clone());
+            let resolved=motolii_doc::store::view::resolve::text::resolved_text_document(view, id,at).map_err(e)?.unwrap_or(t.clone());
             // 段落の欄(選択肢は名前で書ける): 揃えと文字組みの 3 法。
             let laws = resolved.alignment;
             let split = match view.value_at(id, &PropertyId::new(names::TEXT_SPLIT).map_err(e)?, at).map_err(e)? { Some(Value::Enum(v)) => v, _ => 0 };
@@ -874,7 +874,7 @@ mod camera_view_cage_tests {
             if projection!="3D" { continue; }
             // 3 軸ギズモは層の anchor(観測者で写した点)に立ち、描いた層の上に乗る。
             let view=rt.doc.view();
-            let world=view.world_transform3d(mesh,time).unwrap();
+            let world=motolii_doc::store::view::resolve::transform::world_transform3d(&view, mesh,time).unwrap();
             let anchor=match view.value_at(mesh,&PropertyId::new(property::ANCHOR).unwrap(),time).unwrap(){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
             let projection=crate::doc::core::camera_projection(comp,rt.view_camera(View::Camera).unwrap());
             let c=projection.projection_matrix()*projection.view_matrix()*world.transform_point3(glam::vec3(anchor[0]as f32,anchor[1]as f32,0.0)).extend(1.0);

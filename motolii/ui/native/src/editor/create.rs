@@ -452,7 +452,7 @@ mod camera_tests {
             let layer = LayerId(1);
             doc.apply_all(new_layer_intents(layer, 0, 0, 90, fps, comp, kind, None)).unwrap();
             doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(73.0) }).unwrap();
-            let world = doc.view().world_transform3d(layer, RationalTime::ZERO).unwrap();
+            let world = motolii_doc::store::view::resolve::transform::world_transform3d(&doc.view(), layer, RationalTime::ZERO).unwrap();
             let actual = world.transform_point3(centre.extend(0.0));
             assert!((actual - glam::vec3(960.0, 540.0, 0.0)).length() < 0.001, "{actual:?}");
         }

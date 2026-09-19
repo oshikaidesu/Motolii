@@ -47,7 +47,7 @@ fn projection_compensation(
         .ok_or_else(|| StoreError::Property("No composition".into()))?
         .spec();
     let camera = crate::doc::store::view::resolve::camera::resolve_camera(view, at)?;
-    let worlds = view.world_transforms3d(at)?;
+    let worlds = crate::doc::store::view::resolve::transform::world_transforms3d(view, at)?;
     let world = *worlds.get(&layer).ok_or_else(|| {
         StoreError::Property(format!("Layer {} is not present", layer.0))
     })?;
@@ -118,7 +118,7 @@ mod projection_switch_tests {
         let comp = view.composition().unwrap().unwrap().spec();
         let camera = crate::doc::store::view::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
         let attrs = view.attrs(layer).unwrap().unwrap_or_default();
-        let world = view.world_transform3d(layer, RationalTime::ZERO).unwrap();
+        let world = crate::doc::store::view::resolve::transform::world_transform3d(&view, layer, RationalTime::ZERO).unwrap();
         projected_screen_corners(comp, camera, camera, attrs.projection, world, MIN, MAX)
     }
     /// 中心が画面のどこに映るか(法: 札を変えても中心は動かない。面の向きは札の意味に従う)。
@@ -127,7 +127,7 @@ mod projection_switch_tests {
         let comp = view.composition().unwrap().unwrap().spec();
         let camera = crate::doc::store::view::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
         let attrs = view.attrs(layer).unwrap().unwrap_or_default();
-        let world = view.world_transform3d(layer, RationalTime::ZERO).unwrap();
+        let world = crate::doc::store::view::resolve::transform::world_transform3d(&view, layer, RationalTime::ZERO).unwrap();
         projected_screen_corners(comp, camera, camera, attrs.projection, world, center(), center())[0]
     }
     fn switch(doc: &mut Document, layer: LayerId, to: LayerProjection) {

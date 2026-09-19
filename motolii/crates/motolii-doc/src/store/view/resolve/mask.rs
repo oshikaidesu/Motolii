@@ -3,156 +3,154 @@
 
 use super::*;
 
-impl<'a> StoreView<'a> {
-    /// この層に掛かる切りを全部: 自分の書いたマスク・行列の Matte に、祖先の箱の切りを足したもの。
-    /// 解く側はこの一口だけ使う(順番を間違えると、祖先の箱が自分のマスクの前に掛かる)。
-    pub(super) fn masks_of(
-        &self,
-        layer: LayerId,
-        t: RationalTime,
-        present: &HashSet<LayerId>,
-        memo: &mut HashMap<LayerId, glam::Affine2>,
-        visiting: &mut HashSet<LayerId>,
-    ) -> Result<Vec<ResolvedMask>, StoreError> {
-        let masks = self.resolved_masks(layer, t)?;
-        self.clipped_masks(layer, t, masks, present, memo, visiting)
+/// この層に掛かる切りを全部: 自分の書いたマスク・行列の Matte に、祖先の箱の切りを足したもの。
+/// 解く側はこの一口だけ使う(順番を間違えると、祖先の箱が自分のマスクの前に掛かる)。
+pub(super) fn masks_of(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    t: RationalTime,
+    present: &HashSet<LayerId>,
+    memo: &mut HashMap<LayerId, glam::Affine2>,
+    visiting: &mut HashSet<LayerId>,
+) -> Result<Vec<ResolvedMask>, StoreError> {
+    let masks = resolved_masks(view, layer, t)?;
+    clipped_masks(view, layer, t, masks, present, memo, visiting)
+}
+
+pub(crate) fn resolved_masks(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    t: RationalTime,
+) -> Result<Vec<ResolvedMask>, StoreError> {
+    let mut out = Vec::new();
+    for mask in view.masks(layer)? {
+        let mode = match view.value_at(layer, &PropertyId::mask_mode(mask.id), t)? {
+            Some(Value::Enum(v)) => crate::doc::store::MaskMode::from_enum_value(v).ok_or_else(|| {
+                StoreError::Property(format!(
+                    "マスク {} の mode track に未知の enum 値が入っている: {v}",
+                    mask.id
+                ))
+            })?,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} の mode に enum でない値が入っている(track が壊れている): {other:?}",
+                    mask.id
+                )))
+            }
+            None => mask.mode,
+        };
+
+        let inverted = match view.value_at(layer, &PropertyId::mask_inverted(mask.id), t)? {
+            Some(Value::Bool(v)) => v,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} の inverted に真偽でない値が入っている(track が壊れている): {other:?}",
+                    mask.id
+                )))
+            }
+            None => mask.inverted,
+        };
+
+        let shape_property = PropertyId::mask_shape(mask.id);
+        let shape = match view.value_at(layer, &shape_property, t)? {
+            Some(Value::Path(path)) => path,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} の形状にパスでない値が入っている: {other:?}",
+                    mask.id
+                )))
+            }
+            None => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} に形状が無い(`mask.{}.shape` が未設定)",
+                    mask.id, mask.id
+                )))
+            }
+        };
+
+        let opacity_property = PropertyId::mask_opacity(mask.id);
+        let opacity = match view.value_at(layer, &opacity_property, t)? {
+            Some(Value::F64(v)) => v as f32,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} の不透明度に数値でない値が入っている: {other:?}",
+                    mask.id
+                )))
+            }
+            None => 1.0,
+        };
+
+        let expansion_property = PropertyId::mask_expansion(mask.id);
+        let expansion = match view.value_at(layer, &expansion_property, t)? {
+            Some(Value::F64(v)) if v.is_finite() => v,
+            Some(Value::F64(v)) => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} の膨張に有限でない値が入っている: {v}",
+                    mask.id
+                )))
+            }
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "マスク {} の膨張に数値でない値が入っている: {other:?}",
+                    mask.id
+                )))
+            }
+            None => 0.0,
+        };
+
+        out.push(ResolvedMask {
+            mode,
+            inverted,
+            opacity: opacity.clamp(0.0, 1.0),
+            expansion,
+            shape,
+            frame: crate::doc::store::MaskFrame::Layer,
+        });
     }
+    Ok(out)
+}
 
-    fn resolved_masks(
-        &self,
-        layer: LayerId,
-        t: RationalTime,
-    ) -> Result<Vec<ResolvedMask>, StoreError> {
-        let mut out = Vec::new();
-        for mask in self.masks(layer)? {
-            let mode = match self.value_at(layer, &PropertyId::mask_mode(mask.id), t)? {
-                Some(Value::Enum(v)) => crate::doc::store::MaskMode::from_enum_value(v).ok_or_else(|| {
-                    StoreError::Property(format!(
-                        "マスク {} の mode track に未知の enum 値が入っている: {v}",
-                        mask.id
-                    ))
-                })?,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の mode に enum でない値が入っている(track が壊れている): {other:?}",
-                        mask.id
-                    )))
-                }
-                None => mask.mode,
+/// Overflow が Clip の並べる Group の子孫は、その箱で切る: 箱を層の素材座標へ写した角丸の矩形を Intersect で足す。
+/// 祖先の箱の切りは箱の枠に付く(`MaskFrame::Box`)、自分の inset は自分の枠(`Layer`)。
+pub(crate) fn clipped_masks(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    t: RationalTime,
+    mut masks: Vec<ResolvedMask>,
+    present: &HashSet<LayerId>,
+    memo: &mut HashMap<LayerId, glam::Affine2>,
+    visiting: &mut HashSet<LayerId>,
+) -> Result<Vec<ResolvedMask>, StoreError> {
+    // 奥行きを持つ網・点群は 2D の mask で切れない(切り口は面の法の宿題)。
+    if let Some(crate::doc::store::LayerMeta { source: crate::doc::store::LayerSource::File { path, .. }, .. }) = view.meta(layer)? {
+        if view.analysis().and_then(|a| a.extent(&path)).is_some_and(|e| e[2] > 0.0) {
+            return Ok(masks);
+        }
+    }
+    let mut seen = HashSet::new();
+    // inset は自分の背景も切る(CSS の clip-path は要素ごと)。Overflow は箱の外の子孫だけ。
+    let mut next = Some(layer);
+    let mut own: Option<glam::Affine2> = None;
+    while let Some(group) = next.filter(|g| seen.insert(*g) && present.contains(g)) {
+        let cuts = if group == layer { [None, view.clip_inset(group, t)?] } else { [view.clip_box(group, t)?, view.clip_inset(group, t)?] };
+        for (b, radius) in cuts.into_iter().flatten() {
+            let world = match own {
+                Some(w) => w,
+                None => *own.insert(crate::doc::store::view::resolve::transform::world_affine(view, layer, t, present, memo, visiting)?),
             };
-
-            let inverted = match self.value_at(layer, &PropertyId::mask_inverted(mask.id), t)? {
-                Some(Value::Bool(v)) => v,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の inverted に真偽でない値が入っている(track が壊れている): {other:?}",
-                        mask.id
-                    )))
-                }
-                None => mask.inverted,
-            };
-
-            let shape_property = PropertyId::mask_shape(mask.id);
-            let shape = match self.value_at(layer, &shape_property, t)? {
-                Some(Value::Path(path)) => path,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の形状にパスでない値が入っている: {other:?}",
-                        mask.id
-                    )))
-                }
-                None => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} に形状が無い(`mask.{}.shape` が未設定)",
-                        mask.id, mask.id
-                    )))
-                }
-            };
-
-            let opacity_property = PropertyId::mask_opacity(mask.id);
-            let opacity = match self.value_at(layer, &opacity_property, t)? {
-                Some(Value::F64(v)) => v as f32,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の不透明度に数値でない値が入っている: {other:?}",
-                        mask.id
-                    )))
-                }
-                None => 1.0,
-            };
-
-            let expansion_property = PropertyId::mask_expansion(mask.id);
-            let expansion = match self.value_at(layer, &expansion_property, t)? {
-                Some(Value::F64(v)) if v.is_finite() => v,
-                Some(Value::F64(v)) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の膨張に有限でない値が入っている: {v}",
-                        mask.id
-                    )))
-                }
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の膨張に数値でない値が入っている: {other:?}",
-                        mask.id
-                    )))
-                }
-                None => 0.0,
-            };
-
-            out.push(ResolvedMask {
-                mode,
-                inverted,
-                opacity: opacity.clamp(0.0, 1.0),
-                expansion,
-                shape,
-                frame: crate::doc::store::MaskFrame::Layer,
+            let to = world.inverse() * crate::doc::store::view::resolve::transform::world_affine(view, group, t, present, memo, visiting)?;
+            masks.push(ResolvedMask {
+                mode: crate::doc::store::MaskMode::Intersect,
+                inverted: false,
+                opacity: 1.0,
+                expansion: 0.0,
+                shape: crate::doc::store::layout::rounded_rect_path(b, radius, to),
+                frame: if group == layer { crate::doc::store::MaskFrame::Layer } else { crate::doc::store::MaskFrame::Box },
             });
         }
-        Ok(out)
+        next = view.attrs(group)?.unwrap_or_default().parent;
     }
-
-    /// Overflow が Clip の並べる Group の子孫は、その箱で切る: 箱を層の素材座標へ写した角丸の矩形を Intersect で足す。
-    /// 祖先の箱の切りは箱の枠に付く(`MaskFrame::Box`)、自分の inset は自分の枠(`Layer`)。
-    fn clipped_masks(
-        &self,
-        layer: LayerId,
-        t: RationalTime,
-        mut masks: Vec<ResolvedMask>,
-        present: &HashSet<LayerId>,
-        memo: &mut HashMap<LayerId, glam::Affine2>,
-        visiting: &mut HashSet<LayerId>,
-    ) -> Result<Vec<ResolvedMask>, StoreError> {
-        // 奥行きを持つ網・点群は 2D の mask で切れない(切り口は面の法の宿題)。
-        if let Some(crate::doc::store::LayerMeta { source: crate::doc::store::LayerSource::File { path, .. }, .. }) = self.meta(layer)? {
-            if self.analysis().and_then(|a| a.extent(&path)).is_some_and(|e| e[2] > 0.0) {
-                return Ok(masks);
-            }
-        }
-        let mut seen = HashSet::new();
-        // inset は自分の背景も切る(CSS の clip-path は要素ごと)。Overflow は箱の外の子孫だけ。
-        let mut next = Some(layer);
-        let mut own: Option<glam::Affine2> = None;
-        while let Some(group) = next.filter(|g| seen.insert(*g) && present.contains(g)) {
-            let cuts = if group == layer { [None, self.clip_inset(group, t)?] } else { [self.clip_box(group, t)?, self.clip_inset(group, t)?] };
-            for (b, radius) in cuts.into_iter().flatten() {
-                let world = match own {
-                    Some(w) => w,
-                    None => *own.insert(self.world_affine(layer, t, present, memo, visiting)?),
-                };
-                let to = world.inverse() * self.world_affine(group, t, present, memo, visiting)?;
-                masks.push(ResolvedMask {
-                    mode: crate::doc::store::MaskMode::Intersect,
-                    inverted: false,
-                    opacity: 1.0,
-                    expansion: 0.0,
-                    shape: crate::doc::store::layout::rounded_rect_path(b, radius, to),
-                    frame: if group == layer { crate::doc::store::MaskFrame::Layer } else { crate::doc::store::MaskFrame::Box },
-                });
-            }
-            next = self.attrs(group)?.unwrap_or_default().parent;
-        }
-        Ok(masks)
-    }
+    Ok(masks)
 }
 
 #[cfg(test)]

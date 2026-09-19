@@ -640,7 +640,7 @@ impl CageDrag {
         if mode == GizmoMode::Move {
             for (id, g) in std::iter::once((layer, &geom)).chain(drag.others.iter().map(|(id, g)| (*id, g))) {
                 let parent = match view.attrs(id).map_err(|e| e.to_string())?.and_then(|a| a.parent) {
-                    Some(id) => view.world_transform3d(id, at).map_err(|e| e.to_string())?,
+                    Some(id) => motolii_doc::store::view::resolve::transform::world_transform3d(&view, id, at).map_err(|e| e.to_string())?,
                     None => glam::Affine3A::IDENTITY,
                 };
                 let mapping = translation_map(&fit, g, parent, start);

@@ -70,7 +70,7 @@ impl EditorRuntime {
             if let Some(parent) = attrs.as_ref().and_then(|a| a.parent) { children.entry(parent).or_default().push(id); }
             let text = view.text_document(id).map_err(|x| e(&x))?;
             keyed |= text.as_ref().is_some_and(|t| !t.content.keys().is_empty());
-            let resolved_text = match &text { Some(_) => view.resolved_text_document(id, at).map_err(|x| e(&x))?, None => None };
+            let resolved_text = match &text { Some(_) => motolii_doc::store::view::resolve::text::resolved_text_document(view, id, at).map_err(|x| e(&x))?, None => None };
             let row = json!([
                 id.0, attrs, view.meta(id).map_err(|x| e(&x))?, properties,
                 text.as_ref().map(|t| t.content.eval(at)), text, resolved_text,

@@ -51,7 +51,7 @@ pub fn camera_of_layer(view: &StoreView<'_>, id: LayerId, t: RationalTime) -> Re
         if let Some(comp) = view.composition()? {
             let comp = comp.spec();
             let present = view.layers().into_iter().collect();
-            if let Some(world) = view.world_transform3d_chain(target, t, &present)?.get(&target) {
+            if let Some(world) = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target) {
                 let point = world.transform_point3(glam::Vec3::ZERO);
                 camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
                 camera.target_z = point.z;
@@ -92,7 +92,7 @@ pub(crate) fn frame_of(view: &StoreView<'_>, id: LayerId, t: RationalTime, frami
     let Some(target) = camera_target_layer(view, id, t)? else { return Ok(None) };
     let Some(comp) = view.composition()? else { return Ok(None) };
     let present = view.layers().into_iter().collect();
-    let Some(world) = view.world_transform3d_chain(target, t, &present)?.get(&target).copied() else { return Ok(None) };
+    let Some(world) = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target).copied() else { return Ok(None) };
     let Some(b) = view.layer_box(target, t)? else { return Ok(None) };
     let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point3(glam::vec3(c[0], c[1], 0.0)));
     let lo = corners.iter().fold(glam::Vec3::MAX, |a, p| a.min(*p));
@@ -237,7 +237,7 @@ mod camera_target_contract {
             let resolved = crate::doc::store::view::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
             let projection = camera_projection(comp, resolved);
             let matrix = projection.projection_matrix() * projection.view_matrix();
-            let world = view.world_transform3d(card, RationalTime::ZERO).unwrap();
+            let world = crate::doc::store::view::resolve::transform::world_transform3d(&view, card, RationalTime::ZERO).unwrap();
             let b = view.layer_box(card, RationalTime::ZERO).unwrap().unwrap();
             let ndc: Vec<glam::Vec2> = [[b[0], b[1]], [b[2], b[3]]].iter().map(|c| {
                 let clip = matrix * world.transform_point3(glam::vec3(c[0], c[1], 0.0)).extend(1.0);

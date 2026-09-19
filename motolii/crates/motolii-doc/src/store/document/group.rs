@@ -87,7 +87,7 @@ impl Document {
             }
             reject_animated_transform(&view, group, "group")?;
             let new_parent = view.attrs(group)?.and_then(|attrs| attrs.parent);
-            let group_local = view.local_transform(group, t)?;
+            let group_local = crate::doc::store::view::resolve::transform::local_transform(&view, group, t)?;
             let identity = affine2_is_identity(group_local);
 
             for &child in &present {
@@ -117,7 +117,7 @@ impl Document {
                         [0.0, 0.0],
                         t,
                     )?;
-                    let child_local = view.local_transform(child, t)?;
+                    let child_local = crate::doc::store::view::resolve::transform::local_transform(&view, child, t)?;
                     let baked = bake_child_local(group_local, child_local, anchor);
                     intents.extend(baked.into_intents(child)?);
                 }
@@ -669,7 +669,7 @@ fn move_parent_compensation(
     at: RationalTime,
 ) -> Result<Vec<Intent>, StoreError> {
     let world = |parent: Option<LayerId>| match parent {
-        Some(parent) => view.world_transform3d(parent, at),
+        Some(parent) => crate::doc::store::view::resolve::transform::world_transform3d(view, parent, at),
         None => Ok(glam::Affine3A::IDENTITY),
     };
     let old_world = world(old_parent)?;
@@ -707,7 +707,7 @@ fn move_parent_compensation(
     move_static_transform(view, layer)?;
     refuse_split_position(view, layer)?;
     let correction = move_planar(correction)?;
-    let local = move_planar(view.local_transform3d(layer, at)?)?;
+    let local = move_planar(crate::doc::store::view::resolve::transform::local_transform3d(view, layer, at)?)?;
     let anchor = read_vec2(
         view,
         layer,
@@ -960,11 +960,11 @@ mod move_layer_tests {
         })
         .unwrap();
         let at = RationalTime::try_new(15, 30).unwrap();
-        let before = doc.view().world_transform3d(child, at).unwrap();
+        let before = crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, at).unwrap();
         let history = doc.history_depth().0;
         doc.move_layers(&[child], Some(target), "inside", at)
             .unwrap();
-        close(before, doc.view().world_transform3d(child, at).unwrap());
+        close(before, crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, at).unwrap());
         assert_eq!(doc.history_depth().0, history + 1);
         let keys = doc
             .view()
@@ -980,7 +980,7 @@ mod move_layer_tests {
             .is_none());
         assert!(doc.undo());
         assert_eq!(doc.view().attrs(child).unwrap().unwrap().parent, None);
-        close(before, doc.view().world_transform3d(child, at).unwrap());
+        close(before, crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, at).unwrap());
     }
 
     #[test]
@@ -1081,27 +1081,26 @@ mod move_layer_tests {
             Value::Vec2([200.0, 70.0]),
         );
         let at = RationalTime::try_new(1, 2).unwrap();
-        let before = doc.view().world_transform3d(child, at).unwrap();
+        let before = crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, at).unwrap();
         let history = doc.history_depth().0;
         doc.move_layers(&[child], Some(parent), "inside", at)
             .unwrap();
-        close(before, doc.view().world_transform3d(child, at).unwrap());
+        close(before, crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, at).unwrap());
         assert_eq!(doc.history_depth().0, history + 1);
         assert!(doc
             .view()
             .track(child, &PropertyId::new(property::POSITION).unwrap())
             .unwrap()
             .is_none());
-        let future = doc
-            .view()
-            .world_transform3d(child, RationalTime::from_seconds(1))
+        let future = crate::doc::store::view::resolve::transform::world_transform3d(&doc
+            .view(), child, RationalTime::from_seconds(1))
             .unwrap()
             .transform_point3(glam::Vec3::ZERO);
         assert!((future.x - 250.0).abs() < 0.001);
         assert!((future.y - 70.0).abs() < 0.001);
         assert!(doc.undo());
         assert_eq!(doc.view().attrs(child).unwrap().unwrap().parent, None);
-        close(before, doc.view().world_transform3d(child, at).unwrap());
+        close(before, crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, at).unwrap());
     }
 
     #[test]
@@ -1148,7 +1147,7 @@ mod move_layer_tests {
             RationalTime::try_new(7, 10).unwrap(),
             RationalTime::from_seconds(1),
         ];
-        let before = times.map(|t| doc.view().world_transform3d(child, t).unwrap());
+        let before = times.map(|t| crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, t).unwrap());
         let history = doc.history_depth().0;
         doc.move_layers(
             &[child],
@@ -1169,7 +1168,7 @@ mod move_layer_tests {
             assert_eq!(*new, [old[0] - 100.0, old[1] - 200.0]);
         }
         for (t, before) in times.into_iter().zip(before) {
-            close(before, doc.view().world_transform3d(child, t).unwrap());
+            close(before, crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, t).unwrap());
         }
         assert!(doc.undo());
         assert_eq!(doc.view().track(child, &property).unwrap().unwrap(), track);
@@ -1223,7 +1222,7 @@ mod move_layer_tests {
             RationalTime::try_new(1, 2).unwrap(),
             RationalTime::from_seconds(1),
         ];
-        let before = times.map(|t| doc.view().world_transform3d(child, t).unwrap());
+        let before = times.map(|t| crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, t).unwrap());
         doc.move_layers(&[child], Some(parent), "inside", times[1])
             .unwrap();
         assert!(doc
@@ -1237,7 +1236,7 @@ mod move_layer_tests {
             .unwrap()
             .is_none());
         for (t, before) in times.into_iter().zip(before) {
-            close(before, doc.view().world_transform3d(child, t).unwrap());
+            close(before, crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, t).unwrap());
         }
         let moved = doc.view().track(child, &x).unwrap().unwrap();
         assert_eq!(moved.keys()[0].value, Value::F64(-49.0));

@@ -163,7 +163,7 @@ impl<'a> StoreView<'a> {
             let adjust = glam::Affine2::from_translation(at) * glam::Affine2::from_scale(scale) * glam::Affine2::from_translation(-lo);
             layer.placement.transform = group * adjust * group.inverse() * layer.placement.transform;
             if let Some(world) = layer.placement.world_transform {
-                let group3 = self.world_transform3d(parent, t).unwrap_or(glam::Affine3A::IDENTITY);
+                let group3 = crate::doc::store::view::resolve::transform::world_transform3d(self, parent, t).unwrap_or(glam::Affine3A::IDENTITY);
                 let adjust3 = glam::Affine3A::from_translation(at.extend(0.0)) * glam::Affine3A::from_scale(scale.extend(1.0)) * glam::Affine3A::from_translation((-lo).extend(0.0));
                 layer.placement.world_transform = Some(group3 * adjust3 * group3.inverse() * world);
             }

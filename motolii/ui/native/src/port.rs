@@ -770,7 +770,7 @@ mod path_effect_tests {
         assert_eq!(rt.doc.view().effects(rect).unwrap().iter().map(|e|e.plugin_id.as_str()).collect::<Vec<_>>(),vec![crate::render::extensions::pathop::ROUNDED_CORNERS]);
         rt.request(json!({"op":"applyEffect","pluginId":crate::render::extensions::pathop::PUCKER_BLOAT})).unwrap();
         let view=rt.doc.view();
-        let effects=view.resolved_effects(rect,crate::doc::core::RationalTime::ZERO).unwrap();
+        let effects=crate::doc::store::view::resolve::effects::resolved_effects(&view, rect,crate::doc::core::RationalTime::ZERO).unwrap();
         let shown=crate::render::extensions::pathop::with_effects(&view.shapes(rect).unwrap(),&effects);
         let crate::doc::store::ShapeNode::Leaf(leaf)=&shown[0] else { panic!("葉") };
         assert_eq!(leaf.ops.iter().map(|o|std::mem::discriminant(&o.kind)).collect::<Vec<_>>().len(),2);

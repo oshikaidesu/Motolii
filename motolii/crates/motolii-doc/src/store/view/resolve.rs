@@ -31,7 +31,7 @@ impl<'a> StoreView<'a> {
         t: RationalTime,
     ) -> Result<Option<ResolvedLayer>, StoreError> {
         let any_solo = self.any_solo(t)?;
-        let world_transforms = self.world_transforms3d(t)?;
+        let world_transforms = crate::doc::store::view::resolve::transform::world_transforms3d(self, t)?;
         let present: HashSet<LayerId> = self.layers().into_iter().collect();
         let mut memo = HashMap::new();
         let mut visiting = HashSet::new();
@@ -104,9 +104,9 @@ impl<'a> StoreView<'a> {
             }
         };
 
-        let transform = self.world_affine(layer, t, present, memo, visiting)?;
-        let mut effects = self.resolved_effects(layer, t)?;
-        let (handed, plate) = self.handed_down(layer, t, present)?;
+        let transform = crate::doc::store::view::resolve::transform::world_affine(self, layer, t, present, memo, visiting)?;
+        let mut effects = crate::doc::store::view::resolve::effects::resolved_effects(self, layer, t)?;
+        let (handed, plate) = crate::doc::store::view::resolve::effects::handed_down(self, layer, t, present)?;
         effects.extend(handed);
 
         Ok(Some(ResolvedLayer {
@@ -126,7 +126,7 @@ impl<'a> StoreView<'a> {
             source_frame,
             source_time: RationalTime::try_from_frame(source_frame, composition.fps)
                 .map_err(|e| StoreError::Property(e.to_string()))?,
-            masks: self.masks_of(layer, t, present, memo, visiting)?,
+            masks: crate::doc::store::view::resolve::mask::masks_of(self, layer, t, present, memo, visiting)?,
             effects,
             blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,
             matte: if attrs.clip_to_below {
@@ -223,7 +223,7 @@ impl<'a> StoreView<'a> {
         for id in present {
             if !self.meta(*id)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group) { continue; }
             for effect in self.effects(*id)? {
-                if self.placement_program(&effect.plugin_id).is_some() && self.effect_enabled(*id, effect.id, t)? {
+                if self.placement_program(&effect.plugin_id).is_some() && crate::doc::store::view::resolve::effects::effect_enabled(self, *id, effect.id, t)? {
                     hidden.extend(self.subtree(*id, present)?.into_iter().skip(1));
                     break;
                 }
@@ -321,7 +321,7 @@ impl<'a> StoreView<'a> {
 
     pub fn resolved_layers(&self, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
         let any_solo = self.any_solo(t)?;
-        let world_transforms = self.world_transforms3d(t)?;
+        let world_transforms = crate::doc::store::view::resolve::transform::world_transforms3d(self, t)?;
         let layers = self.layers();
         let present: HashSet<LayerId> = layers.iter().copied().collect();
         let mut memo = HashMap::new();

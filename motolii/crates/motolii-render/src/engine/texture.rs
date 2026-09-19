@@ -176,7 +176,7 @@ impl Engine {
         let Some(target) = crate::doc::store::view::resolve::camera::camera_target_layer(view, id, t).map_err(store)? else { return Ok(camera) };
         let (Some(bounds), Some(comp)) = (self.selected_layer_bounds_in(view, resolved, target, t), view.composition().map_err(store)?) else { return Ok(camera) };
         let comp = comp.spec();
-        let point = view.world_transform3d(target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
+        let point = crate::doc::store::view::resolve::transform::world_transform3d(view, target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
         camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
         camera.target_z = point.z;
         Ok(camera)
@@ -279,9 +279,9 @@ impl Engine {
         };
         match &layer.source {
             LayerSource::Text => {
-                let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
+                let document = crate::doc::store::view::resolve::text::resolved_text_document(view, layer_id, t).ok().flatten()?;
                 let partner = crate::extensions::text::morph(&layer.effects)
-                    .and_then(|(target, amount)| view.resolved_text_document(target, t).ok().flatten().map(|d| (d, amount)));
+                    .and_then(|(target, amount)| crate::doc::store::view::resolve::text::resolved_text_document(view, target, t).ok().flatten().map(|d| (d, amount)));
                 let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height).moving(text::Flow::of(layer));
                 let cached = self.text_textures.get(&key)?;
                 planar(cached.bounds?, [comp.width as f32, comp.height as f32])

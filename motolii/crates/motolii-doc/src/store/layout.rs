@@ -720,13 +720,13 @@ mod tests {
         let one_line = shown(&doc, below, T)[1];
         put(&mut doc, words, HORIZONTAL_SIZING, Value::Enum(1));
         let view = doc.view();
-        let wrap = view.resolved_text_document(words, T).unwrap().unwrap().wrap_size.expect("wraps");
+        let wrap = crate::doc::store::view::resolve::text::resolved_text_document(&view, words, T).unwrap().unwrap().wrap_size.expect("wraps");
         assert_eq!(wrap[0], 300.0, "at the cell width");
         drop(view);
         assert!(shown(&doc, below, T)[1] > one_line + 40.0, "the wrapped lines push the next item down: {one_line} → {}", shown(&doc, below, T)[1]);
 
         put(&mut doc, words, property::SCALE, Value::Vec2([2.0, 2.0]));
-        assert_eq!(doc.view().resolved_text_document(words, T).unwrap().unwrap().wrap_size.unwrap()[0], 150.0, "Scale is zoom: the words wrap at half the width, then double");
+        assert_eq!(crate::doc::store::view::resolve::text::resolved_text_document(&doc.view(), words, T).unwrap().unwrap().wrap_size.unwrap()[0], 150.0, "Scale is zoom: the words wrap at half the width, then double");
     }
 
     #[test]
@@ -1118,7 +1118,7 @@ mod tests {
         } }).unwrap();
         put(&mut doc, reader, READOUT, Value::Enum(1));
         put(&mut doc, reader, READOUT_OF, Value::LayerId(b.0));
-        let text = doc.view().resolved_text_document(reader, T).unwrap().unwrap();
+        let text = crate::doc::store::view::resolve::text::resolved_text_document(&doc.view(), reader, T).unwrap().unwrap();
         assert_eq!(text.content.eval(T), format!("{} px", pushed.length().round() as i64), "the # becomes the push in px");
     }
 
@@ -1424,7 +1424,7 @@ mod tests {
             let resolved = view.resolved_layers(T).unwrap();
             let around = resolved.iter().find(|l| l.id == words).unwrap().flow_around.clone().expect("the object is declared");
             let (lo, hi) = around.iter().flat_map(|o| o.points.iter()).fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(glam::Vec2::from(*p)), hi.max(glam::Vec2::from(*p))));
-            let document = view.resolved_text_document(words, T).unwrap().unwrap();
+            let document = crate::doc::store::view::resolve::text::resolved_text_document(&view, words, T).unwrap().unwrap();
             let count = |shaped: &crate::doc::vector::text::ShapedText| shaped.contours.iter().filter(|c| {
                 let (a, b) = c.vertices.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), v| (a.min(glam::vec2(v.point.x as f32, v.point.y as f32)), b.max(glam::vec2(v.point.x as f32, v.point.y as f32))));
                 a.x < hi.x && b.x > lo.x && a.y < hi.y && b.y > lo.y

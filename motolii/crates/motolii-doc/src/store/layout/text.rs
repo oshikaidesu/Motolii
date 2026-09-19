@@ -18,7 +18,7 @@ pub(crate) fn glyph_offsets(view: &StoreView<'_>, layer: LayerId, t: RationalTim
     let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     // 字は元の文字の byte で対にする(組み直しで行頭の空白が落ちても、隣の字と取り違えない)。
     let glyphs = |at: RationalTime| -> Result<Vec<(usize, [f32; 2])>, StoreError> {
-        let Some(document) = view.resolved_text_document(layer, at)? else { return Ok(Vec::new()) };
+        let Some(document) = crate::doc::store::view::resolve::text::resolved_text_document(view, layer, at)? else { return Ok(Vec::new()) };
         let around = flow_around(view, layer, at)?;
         let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document_around(&document, at, &canvas, around.as_deref().map_or(&[], Vec::as_slice)) else { return Ok(Vec::new()) };
         Ok(shaped.lines.iter().flat_map(|line| line.glyph_bytes.iter().zip(&line.glyph_xs).map(move |(b, x)| (*b, [*x, line.baseline_y]))).collect())
@@ -46,7 +46,7 @@ pub(crate) fn text_units(view: &StoreView<'_>, layer: LayerId, t: RationalTime) 
     if split == 0 || !view.meta(layer)?.is_some_and(|m| m.source == LayerSource::Text) {
         return Ok(Vec::new());
     }
-    let (Some(document), Some(comp)) = (view.resolved_text_document(layer, t)?, view.composition()?) else { return Ok(Vec::new()) };
+    let (Some(document), Some(comp)) = (crate::doc::store::view::resolve::text::resolved_text_document(view, layer, t)?, view.composition()?) else { return Ok(Vec::new()) };
     let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     let Some(shaped) = crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten() else { return Ok(Vec::new()) };
     Ok(crate::doc::store::text_frame::split_boxes(&document, &shaped, &canvas, document.content.eval(t), split))
@@ -70,7 +70,7 @@ pub(crate) fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) 
             continue;
         }
         if to_text.is_none() {
-            if view.resolved_text_document(text, t)?.and_then(|d| d.wrap_size).is_none() {
+            if crate::doc::store::view::resolve::text::resolved_text_document(view, text, t)?.and_then(|d| d.wrap_size).is_none() {
                 return Ok(None);
             }
             to_text = Some(view.world_2d(text, t)?.inverse());
@@ -96,13 +96,13 @@ pub(crate) fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) 
 /// 文字の層の字形の輪郭(`text_box` と同じ座標)。文字はベクターなので、当たりは絵の透過ではなく
 /// 形の層と同じ輪郭の道で取る(利用者 2026-09-16「文字の透過は svg ルートなんだから普通にできそう」)。
 pub fn text_outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Vec<crate::doc::vector::Contour>>, StoreError> {
-    let (Some(document), Some(comp)) = (view.authored_text_document(layer, t)?, view.composition()?) else { return Ok(None) };
+    let (Some(document), Some(comp)) = (crate::doc::store::view::resolve::text::authored_text_document(view, layer, t)?, view.composition()?) else { return Ok(None) };
     let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     Ok(crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten().map(|shaped| shaped.contours))
 }
 
 pub(super) fn text_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime, wrap: Option<f32>) -> Result<Option<[f32; 4]>, StoreError> {
-    let (Some(mut document), Some(comp)) = (view.authored_text_document(layer, t)?, view.composition()?) else { return Ok(None) };
+    let (Some(mut document), Some(comp)) = (crate::doc::store::view::resolve::text::authored_text_document(view, layer, t)?, view.composition()?) else { return Ok(None) };
     let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     if let Some(width) = wrap {
         document.wrap_size = Some([width.max(1.0), comp.height as f32]);

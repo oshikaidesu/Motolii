@@ -146,7 +146,7 @@ impl StoreView<'_> {
         }
         // 自分の箱の、位置からの広がり(親の空間)。
         let Some(b) = self.layer_box(layer, t)? else { return Ok(None) };
-        let authored = self.resolve_position(layer, t)?;
+        let authored = crate::doc::store::view::resolve::transform::resolve_position(self, layer, t)?;
         let local = self.authored_local(layer, t)?;
         let (o_lo, o_hi) = bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)) - glam::Vec2::from(authored)));
         let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
@@ -217,7 +217,7 @@ impl StoreView<'_> {
                         continue;
                     }
                     let Some(b) = self.layer_box(child, t)? else { continue };
-                    let local = self.local_transform(child, t)?;
+                    let local = crate::doc::store::view::resolve::transform::local_transform(self, child, t)?;
                     for corner in [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]] {
                         let p = local.transform_point2(glam::Vec2::from(corner));
                         acc = Some(match acc {
@@ -354,11 +354,11 @@ impl StoreView<'_> {
 
     /// 層の 2D の world(親を辿る)。塊を Group の素材座標へ戻す時。
     pub(crate) fn world_2d(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
-        let mut world = self.local_transform(layer, t)?;
+        let mut world = crate::doc::store::view::resolve::transform::local_transform(self, layer, t)?;
         let mut seen = std::collections::HashSet::from([layer]);
         let mut next = self.attrs(layer)?.unwrap_or_default().parent;
         while let Some(parent) = next.filter(|p| seen.insert(*p)) {
-            world = self.local_transform(parent, t)? * world;
+            world = crate::doc::store::view::resolve::transform::local_transform(self, parent, t)? * world;
             next = self.attrs(parent)?.unwrap_or_default().parent;
         }
         Ok(world)
