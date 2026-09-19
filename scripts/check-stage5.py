@@ -56,7 +56,7 @@ modules=json.loads((root/'docs/stage5/modules.json').read_text())
 for relative in [modules['readOnlyPlayback'],*modules.get('readOnlyModels',[])]:
  source=(root/relative).read_text().split('#[cfg(test)]\nmod tests')[0]
  imports=' '.join(re.findall(r'\buse\s+([^;]+);',source))
- if re.search(r'\b(?:Document|Intent|EditorRuntime)\b',imports) or re.search(r'\b(?:Document|Intent|EditorRuntime)::|::document::',source):
+ if re.search(r'\b(?:Document|Intent|EditorRuntime)\b',imports) or re.search(r'\b(?:Document|Intent|EditorRuntime)::|::(?:Document|Intent|EditorRuntime)\b|::document::',source):
   errors.append(f'{relative}: read-side code must not depend on editing authority')
 for relative,allowed in modules.get('isolatedExtensions',{}).items():
  path=root/relative/'Cargo.toml'

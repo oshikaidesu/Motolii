@@ -1,5 +1,5 @@
 use crate::doc::store::{Intent, Interp, KeyframeTrack, PropertyId};
-use crate::editor::session::KeySel;
+use crate::viewer::KeySel;
 /// 選んだキーから作る区間。同じ層・同じ属性で時刻が隣り合う2つが1区間。
 /// 1つしか選んでいない時は「そのキーから次まで」を区間とみなす。
 /// 区間の形は**始まりのキー**が持つ(評価がそう読む)。

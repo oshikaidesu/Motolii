@@ -76,7 +76,7 @@ impl EditorRuntime {
                 text.as_ref().map(|t| t.content.eval(at)), text, resolved_text,
                 view.shapes(id).map_err(|x| e(&x))?, view.effects(id).map_err(|x| e(&x))?, view.masks(id).map_err(|x| e(&x))?,
                 clipping.get(&id).copied().flatten().map(|b| b.0), crate::editor::timeline_edit::ghostable(view, id),
-                keyed.then_some(self.frame),
+                keyed.then_some(self.viewer.frame),
             ]);
             own.insert(id, digest((global, row.to_string())));
         }
@@ -91,10 +91,10 @@ impl EditorRuntime {
 impl EditorRuntime {
     fn content_key(&self) -> String {
         // 棚の世代も絵の鍵。効果の本文が変われば、同じ document でも絵は別物。
-        format!("{}:{:?}:{:?}:{:?}:{}", self.doc.identity(), self.doc.display_revision(), self.stage_window, self.user_camera, crate::render::engine::catalog_generation())
+        format!("{}:{:?}:{:?}:{:?}:{}", self.doc.identity(), self.doc.display_revision(), self.viewer.stage_window, self.viewer.user_camera, crate::render::engine::catalog_generation())
     }
 
-    pub(crate) fn image_key(&self) -> String { format!("{}:{}:{:?}", self.content_key(), self.frame, self.selected_ids) }
+    pub(crate) fn image_key(&self) -> String { format!("{}:{}:{:?}", self.content_key(), self.viewer.frame, self.viewer.selected_ids) }
 
     pub(crate) fn is_dirty(&self) -> Result<bool, String> {
         let revision = self.doc.revision();
@@ -114,8 +114,8 @@ impl EditorRuntime {
         // 描画後は読み戻した選択範囲でgeometryを更新する。文書の行と参照データは再利用する。
         // 音の健康と波形は Document 版と無関係に動くので、鍵に入れて古い body を残さない。
         // 棚で断った理由は世代を動かさずに変わる(壊れた保存)。鍵に指紋を入れて古い body を残さない。
-        let key = format!("{}:{:?}:{}:{}", self.image_key(), self.clock.health(), self.clock.waveform_tracks().len(), digest(crate::render::engine::catalog_errors()));
-        let playing = self.clock.playing();
+        let key = format!("{}:{:?}:{}:{}", self.image_key(), self.viewer.clock.health(), self.viewer.clock.waveform_tracks().len(), digest(crate::render::engine::catalog_errors()));
+        let playing = self.viewer.clock.playing();
         if playing && known.is_some() && known != Some(self.snapshot_cache.borrow().id) {
             *self.full_status_revision.borrow_mut() = None;
         }
@@ -147,7 +147,7 @@ impl EditorRuntime {
         if known_references != Some(cache.reference_id) {
             reply.as_object_mut().unwrap().extend(cache.references.as_object().cloned().unwrap_or_default());
         }
-        let selected = cache.body["layers"].as_array().and_then(|layers| layers.iter().find(|l| l["id"].as_u64() == self.selected.map(|id|id.0)));
+        let selected = cache.body["layers"].as_array().and_then(|layers| layers.iter().find(|l| l["id"].as_u64() == self.viewer.selected().map(|id|id.0)));
         reply["selectedBounds"] = selected.map(|l| l["bounds"].clone()).unwrap_or(Value::Null);
         reply["selectedStageBounds"] = selected.map(|l| l["stageBounds"].clone()).unwrap_or(Value::Null);
         for axis in ["x", "y"] { reply[axis] = selected.map(|l|l[axis].clone()).unwrap_or(json!(0.0)); }
@@ -157,18 +157,18 @@ impl EditorRuntime {
         reply["referenceId"] = json!(cache.reference_id);
         drop(cache);
         let (undo, redo) = self.doc.history_depth();
-        reply["selectedId"] = json!(self.selected.map(|id|id.0));
-        reply["selectedIds"] = json!(self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>());
+        reply["selectedId"] = json!(self.viewer.selected().map(|id|id.0));
+        reply["selectedIds"] = json!(self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>());
         let fps = self.doc.view().composition().map_err(|e|e.to_string())?.ok_or("No composition")?.fps.as_f64();
-        reply["selectedKeys"] = json!(self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*fps).round()as i64})).collect::<Vec<_>>());
-        reply["colorTarget"] = self.color_target.as_ref().and_then(|slot| crate::editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":crate::editor::color::has_alpha(slot)}))).unwrap_or(Value::Null);
+        reply["selectedKeys"] = json!(self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*fps).round()as i64})).collect::<Vec<_>>());
+        reply["colorTarget"] = self.viewer.color_target.as_ref().and_then(|slot| crate::editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":crate::editor::color::has_alpha(slot)}))).unwrap_or(Value::Null);
         reply["undo"] = json!(undo); reply["redo"] = json!(redo);
         reply["path"] = json!(self.path); reply["dirty"] = json!(self.is_dirty()?);
-        reply["frame"] = json!(self.frame); reply["playing"] = json!(playing);
-        reply["animate"] = json!(self.animate != Animate::Off); reply["error"] = json!(self.error);
+        reply["frame"] = json!(self.viewer.frame); reply["playing"] = json!(playing);
+        reply["animate"] = json!(self.viewer.animate != Animate::Off); reply["error"] = json!(self.error);
         reply["preview"] = json!(self.preview.is_some()); reply["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         reply["renderCount"] = json!(self.render_count); reply["renderMs"] = json!(self.render_ms);
-        reply["pickedColor"] = json!(self.picked_color); reply["pickSerial"] = json!(self.pick_serial);
+        reply["pickedColor"] = json!(self.viewer.picked_color); reply["pickSerial"] = json!(self.viewer.pick_serial);
         reply["export"] = self.exporter.status();
         Ok(reply)
     }
@@ -193,9 +193,9 @@ mod tests {
     fn drawing_refreshes_bootstrap_bounds_and_selection_requests_a_new_mask() {
         let mut rt = EditorRuntime::open("").unwrap();
         request(&mut rt, json!({"op":"create","kind":"text"}));
-        let text = rt.selected.unwrap();
+        let text = rt.viewer.selected().unwrap();
         request(&mut rt, json!({"op":"create","kind":"rectangle"}));
-        let shape = rt.selected.unwrap();
+        let shape = rt.viewer.selected().unwrap();
         request(&mut rt, json!({"op":"select","ids":[text.0]}));
         let boot = request(&mut rt, json!({"op":"status","bootstrap":true}));
         assert!(boot["selectedBounds"].is_null(), "the text has not been drawn yet");
@@ -210,13 +210,13 @@ mod tests {
         });
         let mut previous = boot;
         for selected in [text, shape, text] {
-            if rt.selected != Some(selected) {
+            if rt.viewer.selected() != Some(selected) {
                 let reply = request(&mut rt, json!({"op":"select","ids":[selected.0],"deferSnapshot":true}));
                 assert_eq!(reply, json!({"needsRender":true}), "a new selection needs its own mask");
             }
-            rt.render_into(&texture, crate::snapshot::View::Camera, crate::render::engine::Window::output(rt.doc.view().composition().unwrap().unwrap().spec())).unwrap();
+            rt.render_into(&texture, crate::viewer::View::Camera, crate::render::engine::Window::output(rt.doc.view().composition().unwrap().unwrap().spec())).unwrap();
             let after = request(&mut rt, json!({"op":"status","knownSnapshotId":previous["snapshotId"],"knownReferenceId":previous["referenceId"]}));
-            let b = rt.selection_bounds[&crate::snapshot::View::Camera].get(&selected).expect("selected layer reached the mask");
+            let b = rt.viewer.selection_bounds[&crate::viewer::View::Camera].get(&selected).expect("selected layer reached the mask");
             assert_eq!(after["selectedBounds"]["corners"], json!([[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]));
             assert_ne!(after["snapshotId"], previous["snapshotId"], "post-render geometry must reach the host");
             assert_eq!(after["referenceId"], previous["referenceId"], "rendering does not change the catalog");
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(moved(&before, &keys(&rt)), vec![100], "キーを持つ層だけが時刻で動く");
         // 観測者は行に入らない —— 枠は毎回載せ直すので、回しても組み直しは起きない。
         let before = keys(&rt);
-        rt.user_camera.orbit_degrees = [30.0, 12.0];
+        rt.viewer.user_camera.orbit_degrees = [30.0, 12.0];
         assert_eq!(moved(&before, &keys(&rt)), Vec::<u64>::new(), "台を回しても行は組み直さない");
     }
 
@@ -322,9 +322,9 @@ mod tests {
         step(&mut rt, "reorder now", json!({"op":"reorder","delta":1}));
         step(&mut rt, "composition", json!({"op":"composition","width":960,"height":540}));
         step(&mut rt, "delete", json!({"op":"delete"}));
-        rt.stage_window = Some(crate::render::engine::Window { width: 800, height: 500, roi: [-100.0, -50.0, 1600.0, 1000.0], projection_camera: Some(Default::default()) });
+        rt.viewer.stage_window = Some(crate::render::engine::Window { width: 800, height: 500, roi: [-100.0, -50.0, 1600.0, 1000.0], projection_camera: Some(Default::default()) });
         step(&mut rt, "stage window", Value::Null);
-        rt.user_camera.orbit_degrees = [22.0, 8.0];
+        rt.viewer.user_camera.orbit_degrees = [22.0, 8.0];
         step(&mut rt, "orbited stage", Value::Null);
     }
 
@@ -342,7 +342,7 @@ mod tests {
         assert!(full["backgrounds"].is_array());
         let delta = request(&mut rt, json!({"op":"select","ids":[101],"knownSnapshotId":known,"knownReferenceId":references,"deferSnapshot":true}));
         assert_eq!(delta,json!({"needsRender":true}));
-        assert_eq!(rt.selected,Some(layer));
+        assert_eq!(rt.viewer.selected(),Some(layer));
         assert_eq!(rt.render_count,full["renderCount"].as_u64().unwrap());
         let invalid = request(&mut rt, json!({"op":"status","knownSnapshotId":0,"knownReferenceId":0}));
         assert!(invalid["layers"].is_array()); assert!(invalid["backgrounds"].is_array());

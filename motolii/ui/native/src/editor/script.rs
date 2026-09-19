@@ -7,7 +7,7 @@ use motolii_script::{Host, Query, DEFAULT_BUDGET};
 impl Host for EditorRuntime {
     fn command(&mut self, request: serde_json::Value) -> Result<serde_json::Value, String> {
         self.request(request)?;
-        Ok(json!({ "selected": self.selected.map(|id| id.0) }))
+        Ok(json!({ "selected": self.viewer.selected().map(|id| id.0) }))
     }
 
     fn query(&self, query: Query) -> Result<serde_json::Value, String> {
@@ -35,7 +35,7 @@ impl EditorRuntime {
         if outcome.is_err() {
             // 途中で断られたスクリプトは何も残さない。直して走らせ直す時、前の半端な層が混ざらない。
             while self.doc.edit_head() > head && self.doc.undo() {}
-            self.selected_keys.clear();
+            self.viewer.selected_keys.clear();
         }
         outcome
     }
@@ -63,7 +63,7 @@ impl EditorRuntime {
             return Err("The document changed after the script ran. Undo those edits or use Run Script…".into());
         }
         while self.doc.edit_head() > before && self.doc.undo() {}
-        self.selected_keys.clear();
+        self.viewer.selected_keys.clear();
         self.run_script_file(&path)
     }
 

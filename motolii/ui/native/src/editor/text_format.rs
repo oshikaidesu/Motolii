@@ -94,7 +94,7 @@ mod tests {
         let view = doc.view();
         let data = crate::editor::functions::read::inspector_data_from_doc(&view, layer, time, &[]);
         assert_eq!(data.text.iter().filter(|r| matches!(r.value, Value::Color(_))).map(|r| r.label.as_str()).collect::<Vec<_>>(), vec!["Fill"]);
-        assert!(serde_json::from_value::<crate::editor::session::ColorSlot>(
+        assert!(serde_json::from_value::<crate::viewer::ColorSlot>(
             json!({"TextStroke":{"layer":1,"style":0}})
         ).is_err());
         let resolved = view.resolved_text_document(layer, time).unwrap().unwrap();

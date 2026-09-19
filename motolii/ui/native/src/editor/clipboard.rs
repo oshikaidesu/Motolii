@@ -4,7 +4,7 @@ use crate::doc::store::{
     ContentKeyframe, Document, Intent, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime,
     StoreError, TextDocument,
 };
-use crate::editor::session::KeySel;
+use crate::viewer::KeySel;
 use crate::editor::timeline_edit::{copy_layers, paste_layers, LayerClipboard};
 
 /// Typed, process-local editor clipboard. The payload owns a layer snapshot, so

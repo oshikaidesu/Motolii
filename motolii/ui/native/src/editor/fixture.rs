@@ -1,5 +1,5 @@
 use crate::doc::store::{Document,LayerId,PropertyId,ShapeNode,StoreView,Value};
-use crate::editor::session::ColorSlot;
+use crate::viewer::ColorSlot;
 use crate::editor::functions::read::{hex_of,asset_family};
 pub(crate) const LABEL_PALETTE: [&str; 12] = [
     "#d96b6b", "#d9985a", "#d9c95a", "#a3d95a", "#5ad98c", "#5ac6c6", "#5a96d9", "#7d7dd9",

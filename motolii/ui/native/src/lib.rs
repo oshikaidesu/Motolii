@@ -2,6 +2,7 @@
 pub use motolii_doc as doc;
 pub use motolii_render as render;
 mod editor;
+mod viewer;
 mod port;
 mod snapshot;
 mod snapshot_cache;
@@ -10,9 +11,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use motolii_doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, Value};
+use motolii_doc::store::{property, Document, Intent, LayerId, PropertyId, RationalTime, Value};
 use motolii_render::engine::{Engine, Window};
-use snapshot::View;
+use viewer::View;
 use objc2_io_surface::IOSurfaceRef;
 use objc2_metal::{MTLDevice, MTLPixelFormat, MTLStorageMode, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
 use serde_json::json;
@@ -20,57 +21,26 @@ use serde_json::json;
 pub struct EditorRuntime {
     doc: Document,
     engine: Engine,
-    selected: Option<LayerId>,
-    selected_ids: Vec<LayerId>,
-    /// 直前の Stage 描画で選ばれた層が描かれた画面上の範囲(絵そのものの籠)。
-    /// view ごと、描いた画素から届いた選択の広がり(comp 画像の px)。
-    selection_bounds: std::collections::HashMap<View, std::collections::HashMap<LayerId, [f32; 4]>>,
-    selected_keys: Vec<editor::session::KeySel>,
+    viewer: viewer::ViewerState,
     clipboard: editor::clipboard::Clipboard,
     path: Option<String>,
     saved_signature: String,
-    color_target: Option<editor::session::ColorSlot>,
     exporter: motolii_jobs::export::ExportController,
-    /// Freeze の裏仕事(層のコマを焼く)。
     freezer: motolii_jobs::freeze::FreezeController,
-    clock: crate::render::playback::Clock,
-    clock_revision: doc::store::Revision,
-    frame: i64,
     device_id: u64,
     render_count: u64,
     render_ms: f64,
-    picked_color: Option<[f64; 4]>,
-    pick_serial: u64,
     reply: CString,
     error: Option<String>,
     preview: Option<(u64, Vec<Intent>)>,
     preview_tag: Option<String>,
     stage_drag: Option<editor::stage::DragSession>,
-    /// Cmd の吸い付きで合った線(comp 座標の x と y)。Stage が細い線で出す。
-    stage_snap: [Option<f64>; 2],
-    /// Stage の上の pointer(comp 座標)と、画面 px / comp px。3D ギズモの見た目と掴みやすさに使う。
-    stage_pointer: Option<[f64;2]>,
-    stage_view_scale: f64,
-    /// 押している P / R / S。3D ギズモをその 1 種に絞る。
-    stage_held: Option<String>,
-    /// Stage タブの窓(タブの画素寸法と関心域)。無ければ Stage は隠れていて描かない。
-    stage_window: Option<Window>,
-    /// 最後に pointer が乗った view。3D ギズモの hover はその view にだけ出る。
-    stage_view: View,
-    pub(crate) animate: Animate,
-    /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
     pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
-    user_camera: crate::doc::core::ResolvedCamera,
-    /// 設定「New layers」: 新しく作る素材の投影。
     pub(crate) flat_projection: crate::doc::store::LayerProjection,
     snapshot_cache: std::cell::RefCell<snapshot_cache::SnapshotCache>,
-    /// 履歴の一本線。編集の段と保存・異常の記録を同じ列に持つ。
     pub(crate) history: editor::history::Ledger,
-    /// vism/ の見張り。file が変わると Swift の起こし口を叩き、窓が reloadEffects を送ってくる。
     effects_watch: Option<motolii_render::engine::CatalogWatcher>,
-    /// 直前に走らせたスクリプト: (file, 走る前の履歴の位置, 走った後の位置)。Rerun はここへ戻して走らせ直す。
     last_script: Option<(String, i64, i64)>,
-    /// GPU completion callback registration. Unregistering also cancels queued signals.
     frame_ready: Arc<Mutex<Option<FrameTarget>>>,
 }
 
@@ -102,19 +72,24 @@ impl EditorRuntime {
         if doc.view().composition().map_err(|e| e.to_string())?.is_none() {
             return Err("Saved document has no composition".into());
         }
-        let selected = doc.view().layers().first().copied();
         let mut engine = Engine::new().map_err(|e| e.to_string())?;
         engine.set_cache_root(Self::cache_root_for(if path.is_empty() { None } else { Some(path) }));
         let device_id = unsafe { engine.gpu_device().as_hal::<wgpu::hal::api::Metal>() }
             .ok_or("Engine did not create a Metal device")?.raw_device().registryID();
         let saved_signature = snapshot::authored_signature(&doc)?;
-        let clock = crate::render::playback::Clock::from_view(&doc.view(), 60.0);
-        clock.sync_view(&doc.view());
-        let clock_revision = doc.revision();
+        let viewer = viewer::ViewerState::new(&doc.view(), doc.revision());
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
-        Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), freezer: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_snap: [None, None], stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None, last_script: None, frame_ready: Default::default() })
+        Ok(Self {
+            doc, engine, viewer, clipboard: Default::default(),
+            path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature,
+            exporter: Default::default(), freezer: Default::default(), device_id,
+            render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), error: None,
+            preview: None, preview_tag: None, stage_drag: None,
+            snapshot_cache: Default::default(), full_status_revision: Default::default(),
+            flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
+            history, effects_watch: None, last_script: None, frame_ready: Default::default(),
+        })
     }
 
     /// Freeze の cache の置き場: 書類の隣。未保存の書類は temp(保存した時に引っ越さない — Freeze し直す)。
@@ -127,7 +102,7 @@ impl EditorRuntime {
 
     fn time(&self) -> Result<RationalTime, String> {
         let comp = self.doc.view().composition().map_err(|e| e.to_string())?.ok_or("No composition")?;
-        RationalTime::try_from_frame(self.frame, comp.fps).map_err(|e| e.to_string())
+        RationalTime::try_from_frame(self.viewer.frame, comp.fps).map_err(|e| e.to_string())
     }
 
     fn position(&self, layer: LayerId) -> Result<[f64; 2], String> {
@@ -154,7 +129,7 @@ impl EditorRuntime {
 
     fn x_edit(&self, value: f64) -> Result<Vec<Intent>, String> {
         if !value.is_finite() { return Err("X must be finite".into()); }
-        let layer = self.selected.ok_or("Select a layer")?;
+        let layer = self.viewer.selected().ok_or("Select a layer")?;
         let x_property = PropertyId::new(property::POSITION_X).map_err(|e| e.to_string())?;
         let split = self.doc.view().property_source(layer, &x_property).map_err(|e| e.to_string())?.is_some();
         let (property, value) = if split {
@@ -164,7 +139,7 @@ impl EditorRuntime {
             point[0] = value;
             (PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, Value::Vec2(point))
         };
-        self.doc.place_checked(layer, &property, value, self.time()?, self.animate)
+        self.doc.place_checked(layer, &property, value, self.time()?, self.viewer.animate)
             .map(|edit| edit.into_iter().collect()).map_err(|e| e.to_string())
     }
 
@@ -219,11 +194,11 @@ impl EditorRuntime {
         let started = Instant::now();
         let time = self.time()?;
         let view_camera = self.view_camera(view)?;
-        self.engine.set_realtime(self.clock.playing());
+        self.engine.set_realtime(self.viewer.clock.playing());
         // 再生中はギズモを出さないので、選択の mask も焼かない。
-        let outline: &[LayerId] = if self.clock.playing() { &[] } else { &self.selected_ids };
+        let outline: &[LayerId] = if self.viewer.clock.playing() { &[] } else { &self.viewer.selected_ids };
         self.engine.render_frame_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window).map_err(|e|e.to_string())?;
-        if self.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
+        if self.viewer.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
         let signal = Signal {
             target: Arc::clone(&self.frame_ready), surface: surface_id,
             view: CString::new(view.name()).unwrap_or_default(),
@@ -279,7 +254,7 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
                 let c = comp.ok_or("No composition")?;
                 // 描く窓の一覧。Camera は出力そのもの、Stage はタブが窓を置いている間だけ。
                 let mut views = vec![json!({"view":View::Camera.name(),"width":c.width,"height":c.height})];
-                if let Some(w) = probe.stage_window { views.push(json!({"view":View::User.name(),"width":w.width,"height":w.height})); }
+                if let Some(w) = probe.viewer.stage_window { views.push(json!({"view":View::User.name(),"width":w.width,"height":w.height})); }
                 Ok(json!({"width":c.width,"height":c.height,"views":views}))
             }));
             return Ok(());
@@ -306,7 +281,7 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         let hover = value["op"] == "stageGesture" && value["phase"] == "hover";
         probe.request(value)?;
         if hover {
-            let seen = probe.stage_view;
+            let seen = probe.viewer.stage_view;
             model_reply = Some(probe.spatial_gizmo(seen).map(|gizmo| json!({(if seen == View::User { "stageSpatialGizmo" } else { "spatialGizmo" }): gizmo, "needsRender": false})));
         }
         Ok(())

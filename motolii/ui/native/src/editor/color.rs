@@ -2,7 +2,7 @@ use crate::doc::eval::Value;
 use crate::doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, ShapeNode, StoreError, TextStyleId};
 use crate::editor::functions::read;
 use crate::doc::vector::{Brush,Fill,Gradient,GradientStop,GradientType,PathSource,Point,Rgb};
-use crate::editor::session::ColorSlot;
+use crate::viewer::ColorSlot;
 pub(super) fn leaf_mut<'a>(
     nodes: &'a mut [ShapeNode],
     path: &[usize],

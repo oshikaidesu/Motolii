@@ -5,11 +5,11 @@ Current development is **Stage 5**, in `motolii/`. Flutter UI work belongs in `m
 ## Find the owner before editing
 
 1. Read [the concept](docs/concept.md) and [adopted UI behavior](docs/stage5/product-contract.md).
-2. Use the [Stage 5 responsibility table](docs/stage5/README.md) to find the code that owns your change.
+2. Use the [module responsibility table](docs/stage5/modules.md) to find the code that owns your change.
 3. Search [decision-index](docs/decision-index.md) for relevant prior decisions. Historical entries are evidence, not a reason to override newer user decisions.
 4. Agent instructions are in [motolii/AGENTS.md](motolii/AGENTS.md).
 
-Document/Intent owns authored changes and Undo. Flutter owns presentation and transient interaction state. Reuse the canonical doc/render crates rather than copying them into UI. The current Rust editor layer is `motolii/ui/native/src/editor`; old Dioxus helpers are historical references, not a second maintenance target. [Module boundaries](docs/stage5/modules.md) and [provenance](docs/stage5/imported-edit-helpers.json) identify the owners.
+Document/Intent owns authored changes and Undo. Native ViewerState owns selection, viewing time and observer state; Flutter owns widget presentation, focus and layout. Neither is a second owner of the work. Reuse the canonical doc/render crates rather than copying them into UI. The current Rust editor layer is `motolii/ui/native/src/editor`; old Dioxus helpers are historical references, not a second maintenance target. [Module boundaries](docs/stage5/modules.md) and [provenance](docs/stage5/imported-edit-helpers.json) identify the owners.
 
 ## Development loop
 
@@ -37,6 +37,16 @@ scripts/motolii-ui.sh test
 ```
 
 Individual Rust targets run from the repository root with an explicit `-p` package; Flutter tests run from `motolii/ui/`. The [technical evidence](docs/stage5/technical-boundaries.md) separates component tests, comparison-port observations, and real-window acceptance. Report commands and results honestly; a skipped test is not a pass, and a test pass is not a visual review.
+
+For a focused change, start with its owner's tests (use the README's native dependency environment for Cargo):
+
+| Change | Focused check |
+|---|---|
+| Document edits and preview projection | `cargo test -p motolii-doc --lib --test edit_transactions` |
+| Viewing-state ownership | `cargo test -p motolii-ui --lib viewer::tests` |
+| Script execution without the editor or GPU | `cargo test -p motolii-script` |
+
+Add regression cases at the owning boundary. Do not require a full application or unrelated services to test a pure contract; use actual-window acceptance when behavior depends on window interaction.
 
 `scripts/check-docs.sh` remains the wider historical documentation audit. Its old inventories and historical links are distinct from the Stage 5 entry check; do not use a successful local check to claim the entire historical tree has been audited.
 

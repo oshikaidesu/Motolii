@@ -1,7 +1,7 @@
 use crate::doc::store::{names, property, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreError, StoreView, Value};
 use crate::render::engine::EffectDescriptor;
 use crate::editor::fixture::{AssetFamily, EffectBlock, InspectorData, PropRow, LABEL_PALETTE};
-use crate::editor::session::ColorSlot;
+use crate::viewer::ColorSlot;
 
 pub(crate) fn property_value(
     view: &StoreView<'_>,

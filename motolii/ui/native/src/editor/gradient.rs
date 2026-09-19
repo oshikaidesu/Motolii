@@ -1,6 +1,7 @@
 use crate::doc::store::{Document, Intent};
 use crate::doc::vector::{Brush, Fill, Gradient, GradientBlend, GradientStop, GradientType, Point, Rgb};
-use super::{color::{leaf_mut, shape_location, gradient_axis}, session::ColorSlot};
+use super::color::{leaf_mut, shape_location, gradient_axis};
+use crate::viewer::ColorSlot;
 use serde_json::{Value as J, json};
 
 pub(crate) fn stops(j: &J) -> Result<Vec<GradientStop>, String> {
