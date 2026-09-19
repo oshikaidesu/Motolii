@@ -180,6 +180,17 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 - 同梱の振る舞いを見ていた結合 test 5 件(Repeater の Transform、Group の子の引き、Motion のサンプル、Blob の飛び番)は `motolii-render/tests/bundled_effects.rs` へ移した。効果の検査は効果の家に置く。
 - コアに残った 1 件(写しの重なり順)は、必要な配置効果を**その test 自身が定義する**形にした。何を試しているかが test に書いてある。
 
+### 渡し忘れは黙って効果を消す(構造で塞いだ)
+
+コアの既定が効果ゼロになったので、`with_programs` を通さずに作った作品は**効果が黙って効かない**。実際に踏んだ:
+
+- `File ▸ New` と空起動が効果ゼロの作品を開く状態を作ってしまった(`b1b6eb34a` で修正)。
+- render の contract 24 件と examples が同様に倒れた(Repeater が 3 枚ではなく 1 枚)。効果を実装する家が自分で登録する形にした(`78f5a15e8`)。
+
+編集機が作品を作る口を `motolii/ui/native/src/lib.rs` の `work()` 1 つに絞り、**他の file が作品を作れば検査が FAIL** するようにした(`effectRegistration`)。偽の違反で FAIL することを確認済み。
+
+保存形式は変えていない。今夜の `store.rs` の差分は註釈 1 行だけで、**以前の作品はそのまま開く**。
+
 ### 次の境界: 層の種類(未着手、朝の相談待ち)
 
 効果の次に大きい結合は**層の種類**。コアは `LayerSource::{Shape, Text, Group, File, Camera, Stage, Null, Particles}` で **44 箇所**分岐している(test を除く)。
