@@ -36,9 +36,7 @@ pub struct StoreView<'a> {
     analysis: Option<&'a super::analysis::AnalysisInputs>,
     layout_memo: super::layout::Memo,
     layout_cache: &'a RefCell<super::layout::LayoutCache>,
-    placement_lookup: fn(&str) -> Option<super::kind::PlacementProgram>,
-    sampling_lookup: fn(&str) -> Option<super::kind::SamplingProgram>,
-    snap_lookup: fn(&str) -> Option<super::kind::SnapProgram>,
+    programs: super::kind::Programs,
     placement_programs: Option<&'a [super::kind::PlacementProgram]>,
 }
 
@@ -54,9 +52,7 @@ impl<'a> StoreView<'a> {
         track_cache: &'a RefCell<TrackCache>,
         record_cache: &'a RefCell<RecordCache>,
         layout_cache: &'a RefCell<super::layout::LayoutCache>,
-        placement_lookup: fn(&str) -> Option<super::kind::PlacementProgram>,
-        sampling_lookup: fn(&str) -> Option<super::kind::SamplingProgram>,
-        snap_lookup: fn(&str) -> Option<super::kind::SnapProgram>,
+        programs: super::kind::Programs,
     ) -> Self {
         Self {
             db,
@@ -70,9 +66,7 @@ impl<'a> StoreView<'a> {
             analysis: None,
             layout_memo: Default::default(),
             layout_cache,
-            placement_lookup,
-            sampling_lookup,
-            snap_lookup,
+            programs,
             placement_programs: None,
         }
     }
@@ -95,23 +89,23 @@ impl<'a> StoreView<'a> {
 
     /// 1 コマの中で層を取り直す効果の取っ手。無ければその効果はぼかさない。
     pub(crate) fn shutter_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Shutter> {
-        ((self.sampling_lookup)(plugin_id)?.shutter)(params)
+        ((self.programs.sampling)(plugin_id)?.shutter)(params)
     }
 
     /// 見つけた格子へ寄せる効果の取っ手。寄せない効果なら None。
     pub(crate) fn snapping_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Snapping> {
-        let program = (self.snap_lookup)(plugin_id)?;
+        let program = (self.programs.snap)(plugin_id)?;
         (program.snapping)(program.plugin_id, params)
     }
 
     pub(crate) fn is_sampling_effect(&self, plugin_id: &str) -> bool {
-        (self.sampling_lookup)(plugin_id).is_some()
+        (self.programs.sampling)(plugin_id).is_some()
     }
 
     pub(crate) fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {
         match self.placement_programs {
             Some(programs) => programs.iter().find(|program| program.plugin_id == plugin_id).copied(),
-            None => (self.placement_lookup)(plugin_id),
+            None => (self.programs.placement)(plugin_id),
         }
     }
 

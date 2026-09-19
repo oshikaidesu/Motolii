@@ -17,3 +17,8 @@ pub fn sampling_program(plugin_id: &str) -> Option<crate::store::kind::SamplingP
 pub fn snap_program(plugin_id: &str) -> Option<crate::store::kind::SnapProgram> {
     overlay::program(plugin_id)
 }
+
+/// 同梱の効果一式。コアの外から書類へ渡す(コアはこの関数を知らない)。
+pub fn bundled() -> crate::store::kind::Programs {
+    crate::store::kind::Programs { placement: placement_program, sampling: sampling_program, snap: snap_program }
+}

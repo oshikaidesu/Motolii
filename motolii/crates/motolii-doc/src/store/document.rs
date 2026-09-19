@@ -208,9 +208,9 @@ impl Document {
             &self.track_cache,
             &self.record_cache,
             &self.layout_cache,
-            crate::doc::extensions::placement_program,
-            crate::doc::extensions::sampling_program,
-            crate::doc::extensions::snap_program,
+            // 最後の紐: 同梱の効果一式をコアが名指ししている。外から渡す形にすれば extensions/ は
+            // この crate を離れられる(Document を作る 75 箇所を通す必要があるので、そこは別の一手)。
+            crate::doc::extensions::bundled(),
         )
     }
 

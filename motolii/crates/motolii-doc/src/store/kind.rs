@@ -97,6 +97,20 @@ pub struct PlacementProgram {
     pub moves_whole: fn(&[(String, Value)]) -> bool,
 }
 
+/// この書類で使える効果の一式。コアはこの 3 つの口しか知らず、中身が誰かは知らない。
+/// 拡張を足すとは、この表に 1 行足すこと。
+#[derive(Clone, Copy)]
+pub struct Programs {
+    pub placement: fn(&str) -> Option<PlacementProgram>,
+    pub sampling: fn(&str) -> Option<SamplingProgram>,
+    pub snap: fn(&str) -> Option<SnapProgram>,
+}
+
+impl Programs {
+    /// 効果が 1 つも登録されていない書類。読むだけ・並べるだけなら足りる。
+    pub const NONE: Self = Self { placement: |_| None, sampling: |_| None, snap: |_| None };
+}
+
 /// 子を引かない効果の既定: `k` 番目の写しは `k` 番目の子。
 pub fn pick_in_turn(_params: &[(String, Value)], children: &[u64], count: usize) -> Vec<usize> {
     if children.is_empty() { return Vec::new() }
