@@ -14,10 +14,10 @@ use crate::doc::store::components::{
     descriptor_notebook, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
     descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
-use crate::doc::store::document::{TrackCache, TransientKey};
+use super::read::{composition_path, ReadOverlay, RecordCache, TrackCache, TransientKey};
 use crate::doc::store::slot::{PropertyBase, PropertySource};
 use crate::doc::store::{
-    Asset, AssetId, AssetTable, Composition, Document, EffectInstance, LayerAttrs, LayerId,
+    Asset, AssetId, AssetTable, Composition, EffectInstance, LayerAttrs, LayerId,
     LayerMeta, LayerSource, Marker, Mask, PropertyId, Revision, ShapeNode, Slot, SlotId,
     StoreError, TextDocument, EDIT_TIMELINE,
 };
@@ -27,11 +27,11 @@ pub struct StoreView<'a> {
     db: &'a EntityDb,
     at: i64,
     transient: &'a HashMap<TransientKey, Value>,
-    preview_edits: &'a [crate::doc::store::Intent],
+    preview_edits: &'a ReadOverlay,
     ignore_transients: bool,
     revision: Revision,
     track_cache: &'a RefCell<TrackCache>,
-    record_cache: &'a RefCell<super::document::RecordCache>,
+    record_cache: &'a RefCell<RecordCache>,
     /// host が描いた絵から解いた値(Blob の塊など)。無ければ解析を読む配置は空。
     analysis: Option<&'a super::analysis::AnalysisInputs>,
     layout_memo: super::layout::Memo,
@@ -45,10 +45,10 @@ impl<'a> StoreView<'a> {
         db: &'a EntityDb,
         at: i64,
         transient: &'a HashMap<TransientKey, Value>,
-        preview_edits: &'a [crate::doc::store::Intent],
+        preview_edits: &'a ReadOverlay,
         revision: Revision,
         track_cache: &'a RefCell<TrackCache>,
-        record_cache: &'a RefCell<super::document::RecordCache>,
+        record_cache: &'a RefCell<RecordCache>,
         layout_cache: &'a RefCell<super::layout::LayoutCache>,
     ) -> Self {
         Self {
@@ -93,7 +93,7 @@ impl<'a> StoreView<'a> {
     }
 
     fn cache_key(path: &EntityPath, property: &PropertyId) -> Option<TransientKey> {
-        if *path == Document::composition_path() {
+        if *path == composition_path() {
             Some(TransientKey::Camera(property.clone()))
         } else {
             Some(TransientKey::Layer(layer_id_of(path)?, property.clone()))
@@ -112,7 +112,7 @@ impl<'a> StoreView<'a> {
         format!("{:?}", self.db.generation()).hash(&mut hasher);
         self.at.hash(&mut hasher);
         format!("{:?}", self.transient).hash(&mut hasher);
-        self.preview_edits.len().hash(&mut hasher);
+        self.preview_edits.generation.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -214,50 +214,13 @@ impl<'a> StoreView<'a> {
         path: &EntityPath,
         property: &PropertyId,
     ) -> Result<Option<PropertySource>, StoreError> {
+        let key = Self::cache_key(path, property);
         if !self.ignore_transients {
-            if *path == Document::composition_path() {
-                for edit in self.preview_edits.iter().rev() {
-                    match edit {
-                        crate::doc::store::Intent::SetCameraTrack {
-                            property: prop,
-                            track,
-                        } if prop == property => {
-                            return Ok(Some(PropertySource::track(track.clone())))
-                        }
-                        crate::doc::store::Intent::SetCameraConstant {
-                            property: prop,
-                            value,
-                        } if prop == property => {
-                            return Ok(Some(PropertySource::constant(value.clone())))
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            if let Some(layer) = layer_id_of(path) {
-                for edit in self.preview_edits.iter().rev() {
-                    use crate::doc::store::Intent;
-                    match edit {
-                        Intent::SetTrack {
-                            layer: target,
-                            property: prop,
-                            track,
-                        } if *target == layer && prop == property => {
-                            return Ok(Some(PropertySource::track(track.clone())));
-                        }
-                        Intent::SetConstant {
-                            layer: target,
-                            property: prop,
-                            value,
-                        } if *target == layer && prop == property => {
-                            return Ok(Some(PropertySource::constant(value.clone())));
-                        }
-                        _ => {}
-                    }
-                }
+            if let Some(source) = key.as_ref().and_then(|key| self.preview_edits.sources.get(key)) {
+                return Ok(Some(source.clone()));
             }
         }
-        let Some(key) = Self::cache_key(path, property) else {
+        let Some(key) = key else {
             return self.parse_source_at_path(path, property);
         };
         self.track_cache
@@ -310,7 +273,7 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn camera_track(&self, property: &PropertyId) -> Result<Option<KeyframeTrack>, StoreError> {
-        self.track_at_path(&Document::composition_path(), property)
+        self.track_at_path(&composition_path(), property)
     }
 
     pub fn property_source(
@@ -325,14 +288,14 @@ impl<'a> StoreView<'a> {
         &self,
         property: &PropertyId,
     ) -> Result<Option<PropertySource>, StoreError> {
-        self.source_at_path(&Document::composition_path(), property)
+        self.source_at_path(&composition_path(), property)
     }
 
     pub fn slots(&self) -> Result<Vec<Slot>, StoreError> {
         let descriptor = descriptor_slots();
         let results = self.db.latest_at(
             &self.query(),
-            &Document::composition_path(),
+            &composition_path(),
             [descriptor.component],
         );
         let Some(json) = results
@@ -431,7 +394,7 @@ impl<'a> StoreView<'a> {
     }
 
     fn transient_value_at(&self, path: &EntityPath, property: &PropertyId) -> Option<Value> {
-        let key = if *path == Document::composition_path() {
+        let key = if *path == composition_path() {
             TransientKey::Camera(property.clone())
         } else {
             TransientKey::Layer(layer_id_of(path)?, property.clone())
@@ -453,12 +416,12 @@ impl<'a> StoreView<'a> {
         property: &PropertyId,
         t: RationalTime,
     ) -> Result<Option<Value>, StoreError> {
-        self.value_at_path(&Document::composition_path(), property, t)
+        self.value_at_path(&composition_path(), property, t)
     }
 
     pub fn composition(&self) -> Result<Option<Composition>, StoreError> {
         let descriptor = descriptor_composition();
-        let path = Document::composition_path();
+        let path = composition_path();
         let results = self
             .db
             .latest_at(&self.query(), &path, [descriptor.component]);
@@ -475,14 +438,14 @@ impl<'a> StoreView<'a> {
 
     pub fn notebook(&self) -> Result<crate::doc::store::Notebook, StoreError> {
         let descriptor = descriptor_notebook();
-        let results = self.db.latest_at(&self.query(), &Document::composition_path(), [descriptor.component]);
+        let results = self.db.latest_at(&self.query(), &composition_path(), [descriptor.component]);
         let Some(json) = results.component_batch::<TrackJson>(descriptor.component).and_then(|batch|batch.into_iter().next()) else { return Ok(Default::default()); };
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
     pub fn markers(&self) -> Result<Vec<Marker>, StoreError> {
         let descriptor = descriptor_markers();
-        let path = Document::composition_path();
+        let path = composition_path();
         let results = self
             .db
             .latest_at(&self.query(), &path, [descriptor.component]);
@@ -497,7 +460,7 @@ impl<'a> StoreView<'a> {
 
     pub(crate) fn assets_table(&self) -> Result<AssetTable, StoreError> {
         let descriptor = descriptor_assets();
-        let path = Document::composition_path();
+        let path = composition_path();
         let results = self
             .db
             .latest_at(&self.query(), &path, [descriptor.component]);
@@ -521,19 +484,8 @@ impl<'a> StoreView<'a> {
     pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
         let mut value = self.persistent_meta(layer)?;
         if !self.ignore_transients {
-            if let Some(meta) = value.as_mut() {
-                for edit in self.preview_edits.iter().rev() {
-                    if let crate::doc::store::Intent::SetTiming {
-                        layer: target,
-                        timing,
-                    } = edit
-                    {
-                        if *target == layer {
-                            meta.timing = *timing;
-                            break;
-                        }
-                    }
-                }
+            if let (Some(meta), Some(timing)) = (value.as_mut(), self.preview_edits.timings.get(&layer)) {
+                meta.timing = *timing;
             }
         }
         Ok(value)
@@ -588,19 +540,12 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn attrs(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
-        let mut value = self.persistent_attrs(layer)?;
         if !self.ignore_transients {
-            let previews = self.preview_edits.iter().filter_map(|edit| match edit {
-                crate::doc::store::Intent::SetAttrs { layer: target, patch } if *target == layer => Some(patch),
-                _ => None,
-            });
-            for patch in previews {
-                // 属性の record がまだ無い層(既定のまま)にも下書きは乗る。
-                let base = value.take().unwrap_or_default();
-                value = Some(patch.clone().apply_to(base));
+            if let Some(attrs) = self.preview_edits.attrs.get(&layer) {
+                return Ok(Some(attrs.clone()));
             }
         }
-        Ok(value)
+        self.persistent_attrs(layer)
     }
 
     fn persistent_attrs(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
@@ -716,11 +661,7 @@ impl<'a> StoreView<'a> {
 
     pub fn shapes(&self, layer: LayerId) -> Result<Vec<ShapeNode>, StoreError> {
         if !self.ignore_transients {
-            for edit in self.preview_edits.iter().rev() {
-                if let crate::doc::store::Intent::SetShapes { layer: target, shapes } = edit {
-                    if *target == layer { return Ok(shapes.clone()); }
-                }
-            }
+            if let Some(shapes) = self.preview_edits.shapes.get(&layer) { return Ok(shapes.clone()); }
         }
         let descriptor = descriptor_shapes();
         let path = layer.entity_path();
@@ -738,17 +679,7 @@ impl<'a> StoreView<'a> {
 
     pub fn text_document(&self, layer: LayerId) -> Result<Option<TextDocument>, StoreError> {
         if !self.ignore_transients {
-            for edit in self.preview_edits.iter().rev() {
-                if let crate::doc::store::Intent::SetTextDocument {
-                    layer: target,
-                    document,
-                } = edit
-                {
-                    if *target == layer {
-                        return Ok(Some(document.clone()));
-                    }
-                }
-            }
+            if let Some(document) = self.preview_edits.texts.get(&layer) { return Ok(Some(document.clone())); }
         }
         let descriptor = descriptor_text();
         let path = layer.entity_path();

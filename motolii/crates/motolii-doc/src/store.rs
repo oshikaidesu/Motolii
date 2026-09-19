@@ -19,10 +19,14 @@ pub mod names;
 mod slot;
 mod text;
 mod view;
+mod read;
+mod ids;
 
 pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
-pub use document::{Animate, DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
+pub use document::{Animate, Document, Intent};
+pub use ids::{LayerId, PropertyId};
+pub use read::{DisplayRevision, Revision};
 pub use effect::{EffectId, EffectInstance, EffectScope, ResolvedEffect};
 pub use kind::Placement;
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};

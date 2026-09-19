@@ -2,13 +2,14 @@ mod apply;
 mod edit;
 mod group;
 mod projection;
-mod ids;
 mod validate;
 
 pub use edit::Animate;
-pub use ids::{LayerId, PropertyId};
+use super::ids::{LayerId, PropertyId};
+use super::read::{DisplayRevision, Revision};
 
 use std::cell::RefCell;
+use super::read::{ReadOverlay, RecordCache, TrackCache, TransientKey};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -22,7 +23,7 @@ use re_types_core::{Component, SerializedComponentBatch};
 use crate::doc::eval::Value;
 
 use crate::doc::store::components::TrackJson;
-use crate::doc::store::slot::{PropertyLink, PropertySource};
+use crate::doc::store::slot::PropertyLink;
 use crate::doc::store::view::StoreView;
 use crate::doc::store::{LayerAttrsPatch, Mask, Slot, SlotId, StoreError, EDIT_TIMELINE};
 
@@ -143,75 +144,6 @@ pub enum Intent {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Revision {
-    store: re_chunk_store::ChunkStoreGeneration,
-    head: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DisplayRevision {
-    revision: Revision,
-    transient_generation: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum TransientKey {
-    Layer(LayerId, PropertyId),
-    Camera(PropertyId),
-}
-
-/// 層の attrs / meta の cache。毎回 latest_at + serde_json では、行を組む度に層²回の parse になる。
-/// revision が動けば丸ごと捨てる(TrackCache と同じ流儀)。
-#[derive(Default)]
-pub(crate) struct RecordCache {
-    revision: Option<Revision>,
-    pub(crate) attrs: HashMap<LayerId, Option<super::LayerAttrs>>,
-    pub(crate) meta: HashMap<LayerId, Option<super::LayerMeta>>,
-    pub(crate) clipping: Option<HashMap<LayerId, Option<LayerId>>>,
-}
-
-impl RecordCache {
-    pub(crate) fn sync(&mut self, current: &Revision) {
-        if self.revision.as_ref() != Some(current) {
-            self.attrs.clear();
-            self.meta.clear();
-            self.clipping = None;
-            self.revision = Some(current.clone());
-        }
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct TrackCache {
-    revision: Option<Revision>,
-    entries: HashMap<TransientKey, Option<PropertySource>>,
-}
-
-impl TrackCache {
-    fn sync(&mut self, current: &Revision) {
-        if self.revision.as_ref() != Some(current) {
-            self.entries.clear();
-            self.revision = Some(current.clone());
-        }
-    }
-
-    pub(crate) fn get_or_try_insert_with(
-        &mut self,
-        current: &Revision,
-        key: TransientKey,
-        miss: impl FnOnce() -> Result<Option<PropertySource>, StoreError>,
-    ) -> Result<Option<PropertySource>, StoreError> {
-        self.sync(current);
-        if let Some(cached) = self.entries.get(&key) {
-            return Ok(cached.clone());
-        }
-        let value = miss()?;
-        self.entries.insert(key, value.clone());
-        Ok(value)
-    }
-}
-
 pub struct Document {
     pub(crate) db: EntityDb,
     head: i64,
@@ -219,7 +151,7 @@ pub struct Document {
     floor: i64,
     transient: HashMap<TransientKey, Value>,
     transient_generation: u64,
-    preview_edits: Vec<Intent>,
+    preview_edits: ReadOverlay,
     preview_owner: u64,
     track_cache: RefCell<TrackCache>,
     record_cache: RefCell<RecordCache>,
@@ -246,7 +178,7 @@ impl Document {
             floor: 0,
             transient: HashMap::new(),
             transient_generation: 0,
-            preview_edits: Vec::new(),
+            preview_edits: ReadOverlay::default(),
             preview_owner: 0,
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
@@ -255,7 +187,7 @@ impl Document {
     }
 
     pub(crate) fn composition_path() -> EntityPath {
-        EntityPath::from("/composition")
+        super::read::composition_path()
     }
 
     fn timeline() -> Timeline {

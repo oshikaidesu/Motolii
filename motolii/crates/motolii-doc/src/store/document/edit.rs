@@ -191,8 +191,32 @@ impl Document {
             validate::check_not_locked(&view, layer)?;
             validate::check_not_frozen(&view, layer)?;
         }
-        self.preview_edits = edits.to_vec();
+        let mut projected = super::ReadOverlay::default();
+        for edit in edits {
+            use super::TransientKey;
+            use crate::doc::store::PropertySource;
+            match edit {
+                Intent::SetTrack { layer, property, track } => { projected.sources.insert(TransientKey::Layer(*layer, property.clone()), PropertySource::track(track.clone())); }
+                Intent::SetConstant { layer, property, value } => { projected.sources.insert(TransientKey::Layer(*layer, property.clone()), PropertySource::constant(value.clone())); }
+                Intent::SetCameraTrack { property, track } => { projected.sources.insert(TransientKey::Camera(property.clone()), PropertySource::track(track.clone())); }
+                Intent::SetCameraConstant { property, value } => { projected.sources.insert(TransientKey::Camera(property.clone()), PropertySource::constant(value.clone())); }
+                Intent::SetTiming { layer, timing } => { projected.timings.insert(*layer, *timing); }
+                Intent::SetAttrs { layer, patch } => {
+                    let base = match projected.attrs.remove(layer) {
+                        Some(attrs) => attrs,
+                        None => view.attrs(*layer)?.unwrap_or_default(),
+                    };
+                    projected.attrs.insert(*layer, patch.clone().apply_to(base));
+                }
+                Intent::SetShapes { layer, shapes } => { projected.shapes.insert(*layer, shapes.clone()); }
+                Intent::SetTextDocument { layer, document } => { projected.texts.insert(*layer, document.clone()); }
+                _ => unreachable!("preview edits were validated above"),
+            }
+        }
         self.bump_transient_generation();
+        projected.count = edits.len();
+        projected.generation = self.transient_generation;
+        self.preview_edits = projected;
         Ok(())
     }
 

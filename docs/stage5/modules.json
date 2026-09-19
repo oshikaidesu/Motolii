@@ -11,6 +11,11 @@
   },
   "nativeEditor": "motolii/ui/native/src/editor",
   "readOnlyPlayback": "motolii/crates/motolii-render/src/playback.rs",
+  "readOnlyModels": [
+    "motolii/crates/motolii-doc/src/store/view.rs",
+    "motolii/crates/motolii-doc/src/store/read.rs",
+    "motolii/crates/motolii-doc/src/store/ids.rs"
+  ],
   "isolatedExtensions": {
     "motolii/ui/extensions/script": ["rquickjs", "serde_json"]
   },

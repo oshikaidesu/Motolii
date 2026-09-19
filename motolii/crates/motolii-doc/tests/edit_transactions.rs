@@ -178,6 +178,79 @@ fn a_superseded_owner_cannot_cancel_or_overwrite_the_new_preview() {
 }
 
 #[test]
+fn preview_projection_changes_identity_and_survives_rejected_edits() {
+    let mut doc = document();
+    let layer = layer(&mut doc, 1, LayerSource::Shape);
+    put(&mut doc, layer, [0.0, 0.0]);
+    let history = doc.history_depth();
+    let owner = doc.begin_preview();
+    let edit = |x| Intent::SetConstant { layer, property: position(), value: Value::Vec2([x, 0.0]) };
+    doc.preview_edits(owner, &[edit(10.0)]).unwrap();
+    let first = doc.view().revision_key();
+    doc.preview_edits(owner, &[edit(20.0)]).unwrap();
+    let second = doc.view().revision_key();
+    assert_ne!(first, second, "equal-sized previews still change the displayed content");
+    assert_eq!(value(&doc, layer, 60), Value::Vec2([20.0, 0.0]));
+    assert!(doc.preview_edits(owner, &[edit(30.0), Intent::RemoveLayer(layer)]).is_err());
+    assert_eq!(doc.view().revision_key(), second);
+    assert_eq!(value(&doc, layer, 60), Value::Vec2([20.0, 0.0]));
+    let existing_meta = doc.view().meta(layer).unwrap().unwrap();
+    assert!(doc.apply_all([edit(40.0), Intent::SetMeta { layer, meta: existing_meta }]).is_err());
+    assert_eq!(value(&doc, layer, 60), Value::Vec2([20.0, 0.0]));
+    assert_eq!(doc.history_depth(), history);
+    doc.clear_preview_edits(owner);
+    assert_eq!(value(&doc, layer, 60), Value::Vec2([0.0, 0.0]));
+}
+
+#[test]
+fn preview_projection_matches_ordered_writes_and_does_not_own_history() {
+    use motolii::doc::store::{LayerAttrsPatch, rect_shape};
+    let mut doc = document();
+    let layer = layer(&mut doc, 1, LayerSource::Shape);
+    let edits = vec![
+        Intent::SetTrack { layer, property: position(), track: track([(0, [10.0, 0.0]), (60, [20.0, 0.0])]) },
+        Intent::SetConstant { layer, property: position(), value: Value::Vec2([33.0, 44.0]) },
+        Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("First".into()), hidden: Some(true), ..Default::default() } },
+        Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Last".into()), ..Default::default() } },
+        Intent::SetTiming { layer, timing: LayerTiming::place(10, Some(60), 300) },
+        Intent::SetTiming { layer, timing: LayerTiming::place(20, Some(80), 300) },
+        Intent::SetShapes { layer, shapes: vec![rect_shape([255, 0, 0, 255], [10.0, 20.0])] },
+        Intent::SetShapes { layer, shapes: vec![rect_shape([0, 255, 0, 255], [30.0, 40.0])] },
+    ];
+    let owner = doc.begin_preview();
+    let history = doc.history_depth();
+    doc.preview_edits(owner, &edits).unwrap();
+    let shown = (value(&doc, layer, 60), doc.view().attrs(layer).unwrap(), doc.view().meta(layer).unwrap(), doc.view().shapes(layer).unwrap());
+    assert_eq!(doc.history_depth(), history);
+    assert_eq!(shown.0, Value::Vec2([33.0, 44.0]));
+    assert_eq!(shown.1.as_ref().unwrap().name, "Last");
+    assert!(shown.1.as_ref().unwrap().hidden);
+    assert!(doc.view().without_transients().shapes(layer).unwrap().is_empty());
+    doc.apply_all(edits).unwrap();
+    assert_eq!((value(&doc, layer, 60), doc.view().attrs(layer).unwrap(), doc.view().meta(layer).unwrap(), doc.view().shapes(layer).unwrap()), shown);
+}
+
+#[test]
+fn camera_preview_projects_track_and_constant_without_editing_the_record() {
+    let mut doc = document();
+    let camera = PropertyId::camera(property::CAMERA_CENTER).unwrap();
+    doc.apply(Intent::SetCameraConstant { property: camera.clone(), value: Value::Vec2([1.0, 2.0]) }).unwrap();
+    let owner = doc.begin_preview();
+    let history = doc.history_depth();
+    doc.preview_edits(owner, &[Intent::SetCameraTrack { property: camera.clone(), track: track([(0, [0.0, 0.0]), (60, [60.0, 30.0])]) }]).unwrap();
+    assert_eq!(doc.view().camera_value_at(&camera, at(30)).unwrap(), Some(Value::Vec2([30.0, 15.0])));
+    doc.preview_edits(owner, &[
+        Intent::SetCameraTrack { property: camera.clone(), track: track([(0, [0.0, 0.0]), (60, [60.0, 30.0])]) },
+        Intent::SetCameraConstant { property: camera.clone(), value: Value::Vec2([7.0, 8.0]) },
+    ]).unwrap();
+    assert_eq!(doc.view().camera_value_at(&camera, at(30)).unwrap(), Some(Value::Vec2([7.0, 8.0])));
+    assert_eq!(doc.view().without_transients().camera_value_at(&camera, at(30)).unwrap(), Some(Value::Vec2([1.0, 2.0])));
+    assert_eq!(doc.history_depth(), history);
+    doc.clear_preview_edits(owner);
+    assert_eq!(doc.view().camera_value_at(&camera, at(30)).unwrap(), Some(Value::Vec2([1.0, 2.0])));
+}
+
+#[test]
 fn undo_and_redo_retire_the_preview_that_started_on_the_old_history_head() {
     let mut doc = document();
     let layer = layer(&mut doc, 1, LayerSource::Shape);
@@ -361,7 +434,8 @@ fn ungroup_reparents_children_before_removing_the_container() {
 
 #[test]
 fn a_placement_effect_multiplies_the_layer_and_delays_later_copies() {
-    use motolii::doc::store::{placement, EffectId, EffectInstance};
+    use motolii::doc::extensions::placement;
+    use motolii::doc::store::{EffectId, EffectInstance};
     let mut doc = document();
     let paper = layer(&mut doc, 1, LayerSource::Shape);
     put(&mut doc, paper, [100.0, 50.0]);
@@ -400,7 +474,8 @@ fn a_placement_effect_multiplies_the_layer_and_delays_later_copies() {
 /// Whole は並びごと層のアンカーを中心に回る(AE のシェイプ層の Repeater・Cavalry Duplicator・C4D Cloner)。
 #[test]
 fn a_repeaters_transform_turns_each_copy_or_the_whole_arrangement() {
-    use motolii::doc::store::{placement, property, EffectId, EffectInstance};
+    use motolii::doc::extensions::placement;
+    use motolii::doc::store::{property, EffectId, EffectInstance};
     let origins = |choice: f64| {
         let mut doc = document();
         let paper = layer(&mut doc, 1, LayerSource::Shape);
@@ -472,7 +547,8 @@ fn animate_from_keys_the_untouched_value_where_animate_was_turned_on() {
 
 #[test]
 fn a_repeater_on_a_group_hands_out_the_children_instead_of_the_group() {
-    use motolii::doc::store::{placement, EffectId, EffectInstance, LayerAttrsPatch};
+    use motolii::doc::extensions::placement;
+    use motolii::doc::store::{EffectId, EffectInstance, LayerAttrsPatch};
     let mut doc = document();
     let group = layer(&mut doc, 1, LayerSource::Group);
     let circle = layer(&mut doc, 2, LayerSource::Shape);
