@@ -95,9 +95,45 @@
 - Motion Blur のサンプルは移動方向の前後両側へ伸びる。中心合わせの方針（[motion.rs:49](../../motolii/crates/motolii-doc/src/extensions/motion.rs:49) の `sample_times` が `-0.5 → +0.5`）どおりで、先例の Alight Motion・AE の既定と一致する。
 - 保留していた Cmd+Z は**実装の問題ではなかった**。手では undo・redo・cut・copy・paste・select all すべて動く。反応しなかったのは自動操作側の事情。`MainMenu.xib` の First Responder 宛て key equivalent は無効時に鍵を消費しないため、衝突していない。
 
+## core内の評価組み立てを切った(残件1の一部)
+
+`store/layout.rs` は2,837行の1塊で、`impl StoreView` 1,400行に5つの責任が同居し、`thread_local!` が5つ隠れていた。隠れた大域を外してから、責任ごとに切った。
+
+### 隠れた大域(5つとも撤去)
+
+| 大域 | 正体 | 始末 |
+|---|---|---|
+| `PHYSICS_SHIFTS` | 物理がGPUのblockへ移った時(`4bcf5bb22`)に、書き手が空のmapしか置かなくなった。読みは常に0 | 削除 |
+| `DEPTH` | 配置を解く入れ子の深さ | viewの`Scratch`へ |
+| `ANCHORING`・`ROUTING` | 付き合い・線の輪の巡り止め | viewの`Scratch`へ |
+| `KIDS` | 箱の子の順のcache。捨てる口が無く版ごとに溜まる | viewの`Scratch`へ(viewと共に死ぬ) |
+
+止め具とcacheがthread_localだったため、同じthreadの**別のview同士が共有**していた。片方の巡り止めが他方の巡りを止め得る形で、これは版でも時刻でも区別されない。
+
+### 責任ごとの分割
+
+| 責任 | 実装 | 行 | 外への口 |
+|---|---|---|---|
+| 時刻(順番の札・Loop・移り方) | `store/layout/time.rs` | 185 | 0 |
+| 道(Offset Path・角丸の閉じた道) | `store/layout/path.rs` | 87 | 0 |
+| 文字(落ちる場所・折り返し・回り込み) | `store/layout/text.rs` | 128 | 2 |
+| 並べる(flex・grid、解き手はtaffy) | `store/layout/flow.rs` | 557 | 5 |
+| 箱と座標(素材の箱・奥行き・切り・付いて置くずれ) | `store/layout/boxes.rs` | 484 | 4(+text宛て1) |
+| 入口と契約(`layout_frame`・`Frame`/`Slot`/`Scratch`・欄の表) | `store/layout.rs` | 562 | — |
+
+分割の良し悪しは**file数ではなく継ぎ目の口の数**で測る。timeとpathは0口で閉じた(元から独立していた責任)。flow→boxesは最初8口で、これは線が本当の境目の手前にあった印。奥行き・回し方・アンカーを部品で訊いていたのを`Extent`1つに畳んで4口にした。
+
+### 構造で守る(検査)
+
+- coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/stage5/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
+- taffyの名を`store/layout/flow.rs`以外が口にすればFAIL(`coreSolvers`)。文字のmeasureはtaffyの`Size`・`AvailableSpace`で話していたので、平の数へ直した。
+- どちらも偽の違反を入れてFAILすることを確認済み。
+
+**まだ物理的なcrate分割ではない。** 5つのmoduleは同じcrateの中で、`impl StoreView` を分け合っている。
+
 ## 残件・注意点
 
-1. **最小コアの完成は未証明**：layout・評価・効果列／Group／Motionの組み立てがdoc内に残る。ファイル分割やfeature分離を、完全な物理分離と呼ばない。
+1. **最小コアの完成は未証明**：評価・効果列／Group／Motionの組み立てがdoc内に残る(`store/view/resolve.rs` 1,850行が次の塊)。ファイル分割やfeature分離を、完全な物理分離と呼ばない。
 2. 独立した選択・閲覧時刻を窓ごとに持つ製品接続は未実装。別窓からの再生開始は実窓未検収。
 3. ~~直近のBlob／Motion分離の実窓検収~~ **完了**（後述）。
 4. Flutterのlayout上限超過3件。上限は据え置き。
@@ -147,3 +183,7 @@ Rustの依存環境は[CONTRIBUTING](../../CONTRIBUTING.md)と開発スクリプ
 | `e78290e09` | Motionのサンプル方針を分離 |
 | `4b1ba7a87` | 読み取り専用依存の明示feature抜け道を検査 |
 | `524de0ea7` | scrub中のヘッドをtimeline全体の再構築から外す |
+| `0b9886c91` | 物理の死んだ大域を撤去 |
+| `f3055fb62` | 止め具・cacheをviewの`Scratch`へ、隠れた大域を検査で禁止 |
+| `851a14b97` | layoutを時刻・文字・並べる・道・箱へ分割、解き手の名は1箇所 |
+| `4e55c0377` | flow→boxesの継ぎ目を`Extent`1つへ(8口→4口) |
