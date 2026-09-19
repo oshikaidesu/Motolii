@@ -237,7 +237,7 @@ mod tests {
         let at = rt.time().unwrap();
         let keys = |rt: &EditorRuntime| {
             let view = rt.doc.view();
-            let resolved = view.resolved_layers(at).unwrap();
+            let resolved = crate::doc::store::view::resolve::resolved_layers(&view, at).unwrap();
             let clipping = view.clipping_bases().unwrap();
             rt.layer_keys(&view, at, &resolved, &clipping, false).unwrap()
         };

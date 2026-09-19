@@ -77,7 +77,7 @@ impl Engine {
     /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
         let inputs = self.analysis_inputs(view, t)?;
-        let resolve = |view: StoreView<'_>| view.resolved_layers(t).map_err(|e| EngineError::Store(e.to_string()));
+        let resolve = |view: StoreView<'_>| crate::doc::store::view::resolve::resolved_layers(&view, t).map_err(|e| EngineError::Store(e.to_string()));
         if inputs.is_empty() { resolve(view.clone()) } else { resolve(view.clone().with_analysis(&inputs)) }
     }
 
@@ -94,7 +94,7 @@ impl Engine {
         let camera = crate::doc::store::view::resolve::camera::resolve_camera(&view, t).map_err(store)?;
         out.push(("camera.center".to_owned(), camera.center));
         out.push(("camera.distance".to_owned(), [camera.distance_scale.max(1e-3).ln() * 300.0, camera.target_z]));
-        for layer in view.resolved_layers(t).map_err(store)? {
+        for layer in crate::doc::store::view::resolve::resolved_layers(&view, t).map_err(store)? {
             // 見えない層(Opacity 0 の解析係など)の箱は動きとして読まない。
             if layer.ghost || layer.copy != 0 || layer.placement.opacity <= 0.0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {
                 continue;
@@ -144,7 +144,7 @@ impl Engine {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         self.keyed_outlines.clear();
         if !Self::has_file_layers(view)? { return Ok(()); }
-        let resolved = view.resolved_layers(t).map_err(store)?;
+        let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).map_err(store)?;
         let revision = {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -239,8 +239,8 @@ impl Engine {
                 let effect = &crate::doc::store::ResolvedEffect { plugin_id: found.plugin_id.clone(), params: overlay::with_defaults(&found.plugin_id, &found.params), scope: found.scope };
                 // Layers: 絵を読まず、下の層の箱をそのまま塊にする(同じ親で自分より下。Repeater の写しは 1 枚ずつ)。
                 if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
-                    let resolved = view.resolved_layers(t).map_err(store)?;
-                    let scope = view.overlay_scope(layer, &resolved, t).map_err(store)?;
+                    let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).map_err(store)?;
+                    let scope = crate::doc::store::view::resolve::overlay_scope(view, layer, &resolved, t).map_err(store)?;
                     let marks: Vec<BlobMark> = scope.iter().enumerate().map(|(k, (_, b))| BlobMark {
                         id: k as u32,
                         center: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5],
@@ -328,7 +328,7 @@ impl Engine {
 
     /// 下の合成(自分より下の層たち、背景込み)を、効果の出口と同じ乗算済み線形で読み戻す。
     fn below_picture(&mut self, view: &StoreView<'_>, layer: LayerId, at: RationalTime, comp: CompSpec) -> Result<Option<LinearPicture>, EngineError> {
-        let resolved = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = crate::doc::store::view::resolve::resolved_layers(view, at).map_err(|e| EngineError::Store(e.to_string()))?;
         let texts = collect_text_documents(view, &resolved, at)?;
         let shapes = collect_shape_documents(view, &resolved, at)?;
         let Some(composite) = self.composite_at(view, at, &resolved, &texts, &shapes, comp, layer, crate::render::compositor::TimeSource::Below) else { return Ok(None) };
@@ -348,7 +348,7 @@ impl Engine {
         let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Time(e.to_string()))?;
         let (picture, transform) = match source {
             Source::Layer(id) => {
-                let resolved = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
+                let resolved = crate::doc::store::view::resolve::resolved_layers(view, at).map_err(|e| EngineError::Store(e.to_string()))?;
                 let Some(target) = resolved.iter().find(|l| l.id == id && l.copy == 0 && !l.ghost).cloned() else {
                     // 元の層が居ないコマ: 塊は無いまま 1 歩進める(見失いの数え)。
                     state.previous = None;

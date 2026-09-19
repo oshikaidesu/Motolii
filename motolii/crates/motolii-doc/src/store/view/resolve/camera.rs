@@ -13,7 +13,7 @@ pub(crate) fn active_guide(view: &StoreView<'_>, source: crate::doc::store::Laye
         if let Some(meta) = view.meta(id)? {
             if meta.source == source && meta.timing.covers(frame) {
                 let attrs = view.attrs(id)?.unwrap_or_default();
-                if !view.resolved_hidden(id, t, attrs.hidden)? { guides.push((view.resolved_solo(id, t, attrs.solo)?, meta.order, id)); }
+                if !crate::doc::store::view::resolve::resolved_hidden(view, id, t, attrs.hidden)? { guides.push((crate::doc::store::view::resolve::resolved_solo(view, id, t, attrs.solo)?, meta.order, id)); }
             }
         }
     }

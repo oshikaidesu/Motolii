@@ -298,12 +298,12 @@ mod spatial_tests {
         set(&mut doc, child, property::POSITION, Value::Vec2([10.0, 0.0]));
         let view = doc.view();
         let poses = crate::doc::store::view::resolve::transform::world_transforms3d(&view, RationalTime::ZERO).unwrap();
-        let layers = view.resolved_layers(RationalTime::ZERO).unwrap();
+        let layers = crate::doc::store::view::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap();
         let resolved = layers.iter().find(|layer| layer.id == child).unwrap();
         let world = resolved.placement.world_transform.unwrap();
         assert_eq!(world, poses[&child]);
         close(world.transform_point3(Vec3::ZERO), Vec3::new(0.0, 0.0, 15.0));
-        assert_eq!(view.resolve(child, RationalTime::ZERO).unwrap().unwrap().placement.world_transform, Some(world));
+        assert_eq!(crate::doc::store::view::resolve::resolve(&view, child, RationalTime::ZERO).unwrap().unwrap().placement.world_transform, Some(world));
     }
 
     #[test]

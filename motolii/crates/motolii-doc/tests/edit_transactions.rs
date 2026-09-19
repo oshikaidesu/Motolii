@@ -302,7 +302,7 @@ fn projected(view: StoreView<'_>, layer: LayerId, frame: i64) -> (LayerTiming, V
     let value = view.value_at(layer, &position(), at(frame)).unwrap().unwrap();
     let content = view.text_document(layer).unwrap().unwrap().content.eval(at(frame)).to_owned();
     let source_frame =
-        view.resolved_layers(at(frame)).unwrap().into_iter().find(|resolved| resolved.id == layer).unwrap().source_frame;
+        motolii_doc::store::view::resolve::resolved_layers(&view, at(frame)).unwrap().into_iter().find(|resolved| resolved.id == layer).unwrap().source_frame;
     (timing, value, content, source_frame)
 }
 

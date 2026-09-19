@@ -90,7 +90,7 @@ pub(crate) fn snap_to_found_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer
         Some((l.id, view.snapping_of(&effect.plugin_id, &effect.params)?))
     }).collect();
     for (overlay_layer, snap) in snappers {
-        let scope = view.overlay_scope(overlay_layer, out, t)?;
+        let scope = crate::doc::store::view::resolve::overlay_scope(view, overlay_layer, out, t)?;
         if scope.is_empty() {
             continue;
         }

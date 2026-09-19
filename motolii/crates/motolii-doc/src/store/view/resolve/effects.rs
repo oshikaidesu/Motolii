@@ -141,7 +141,7 @@ mod group_scope_contract {
         effect(&mut doc, leaf, 0, "leaf.own", false);
         effect(&mut doc, inner, 0, "inner.each", false);
         effect(&mut doc, outer, 0, "outer.each", false);
-        let out = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
+        let out = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         let plugins = |l: &ResolvedLayer| l.effects.iter().map(|e| e.plugin_id.clone()).collect::<Vec<_>>();
         assert_eq!(plugins(find(&out, leaf)), ["leaf.own", "inner.each", "outer.each"], "own first, then nearest group, then the one above");
         assert_eq!(plugins(find(&out, sibling)), ["outer.each"]);
@@ -150,7 +150,7 @@ mod group_scope_contract {
         // inner に Whole を積む: leaf は inner の板の一部。板には inner の Whole と、outer から inner へ配られた効果が掛かる。
         effect(&mut doc, inner, 1, "inner.whole", true);
         effect(&mut doc, inner, 2, "inner.after", false);
-        let out = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
+        let out = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         let leaf_r = find(&out, leaf);
         assert_eq!(plugins(leaf_r), ["leaf.own", "inner.each"], "the outer group's Each now lands on the plate, not the leaf");
         assert_eq!(leaf_r.plate, Some(inner));
@@ -159,7 +159,7 @@ mod group_scope_contract {
 
         // 単層の scope は無意味: 値を書いても板にはならない。
         doc.apply(Intent::SetConstant { layer: sibling, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(1) }).unwrap();
-        let out = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
+        let out = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         assert!(find(&out, sibling).plate.is_none());
     }
 }

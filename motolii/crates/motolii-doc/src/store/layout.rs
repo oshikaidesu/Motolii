@@ -595,7 +595,7 @@ mod tests {
     /// 画面の上の箱(world): 解いた変換を、輪郭を伸ばした後の箱に掛ける。
     fn shown(doc: &Document, layer: LayerId, t: RationalTime) -> [f32; 4] {
         let view = doc.view();
-        let resolved = view.resolved_layers(t).unwrap();
+        let resolved = crate::doc::store::view::resolve::resolved_layers(&view, t).unwrap();
         let r = resolved.iter().find(|l| l.id == layer).unwrap();
         let b = if r.source == LayerSource::Shape {
             stretched_shape_box(&view.shapes_at(layer, t).unwrap(), r.shape_stretch).unwrap()
@@ -734,11 +734,11 @@ mod tests {
         let mut doc = blank_project();
         let group = flex_row(&mut doc);
         let a = rect(&mut doc, 2, group, [100.0, 50.0]);
-        assert!(doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == a).unwrap().masks.is_empty(), "Visible cuts nothing");
+        assert!(crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap().iter().find(|l| l.id == a).unwrap().masks.is_empty(), "Visible cuts nothing");
         put(&mut doc, group, OVERFLOW, Value::Enum(1));
         put(&mut doc, group, property::POSITION, Value::Vec2([300.0, 200.0]));
         put(&mut doc, a, property::POSITION, Value::Vec2([0.0, 30.0]));
-        let resolved = doc.view().resolved_layers(T).unwrap();
+        let resolved = crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap();
         let layer = resolved.iter().find(|l| l.id == a).unwrap();
         assert_eq!(layer.masks.len(), 1);
         assert_eq!(layer.masks[0].mode, crate::doc::store::MaskMode::Intersect);
@@ -758,7 +758,7 @@ mod tests {
         put(&mut doc, group, property::POSITION, Value::Vec2([300.0, 200.0]));
         let a = rect(&mut doc, 2, group, [100.0, 50.0]);
         let bounds = |doc: &Document, id: LayerId| {
-            let resolved = doc.view().resolved_layers(T).unwrap();
+            let resolved = crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap();
             let layer = resolved.iter().find(|l| l.id == id).unwrap().clone();
             let world: Vec<glam::Vec2> = layer.masks.iter().flat_map(|m| m.shape.vertices.iter().map(|v| layer.placement.transform.transform_point2(glam::vec2(v.point[0] as f32, v.point[1] as f32)))).collect();
             let (lo, hi) = world.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
@@ -791,7 +791,7 @@ mod tests {
         put(&mut doc, group, CLIP_TOP, Value::F64(10.0));
         let a = rect(&mut doc, 2, group, [100.0, 50.0]);
         let frames = |doc: &Document, id: LayerId| -> Vec<MaskFrame> {
-            doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == id).unwrap().masks.iter().map(|m| m.frame).collect()
+            crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap().iter().find(|l| l.id == id).unwrap().masks.iter().map(|m| m.frame).collect()
         };
         assert_eq!(frames(&doc, a), vec![MaskFrame::Box, MaskFrame::Box], "the child is cut by the box's Overflow and inset, both bound to the box");
         assert_eq!(frames(&doc, group), vec![MaskFrame::Layer], "the box's own inset moves with the box (clip-path is per element)");
@@ -812,7 +812,7 @@ mod tests {
         doc.apply(Intent::SetTrack { layer: words, property: PropertyId::new(property::OPACITY).unwrap(), track }).unwrap();
         put(&mut doc, words, STAGGER, Value::F64(0.2));
         let copies = |doc: &Document| -> Vec<(f32, f32)> {
-            let mut out: Vec<_> = doc.view().resolved_layers(at(15)).unwrap().into_iter().filter(|l| l.id == words)
+            let mut out: Vec<_> = crate::doc::store::view::resolve::resolved_layers(&doc.view(), at(15)).unwrap().into_iter().filter(|l| l.id == words)
                 .map(|l| (l.placement.opacity, l.masks.first().map_or(f32::NAN, |m| m.shape.vertices[0].point[0] as f32))).collect();
             out.sort_by(|a, b| b.0.total_cmp(&a.0));
             out
@@ -866,7 +866,7 @@ mod tests {
         let flat = rect(&mut doc, 2, group, [100.0, 50.0]);
         let lifted = rect(&mut doc, 3, group, [60.0, 50.0]);
         put(&mut doc, lifted, property::POSITION_Z, Value::F64(-40.0));
-        let resolved = doc.view().resolved_layers(T).unwrap();
+        let resolved = crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap();
         let plane = |id| resolved.iter().find(|l| l.id == id).unwrap().placement.plane;
         let world = resolved.iter().find(|l| l.id == group).unwrap().placement.world_transform.unwrap();
         let b = crate::doc::store::layout::boxes::layer_box(&doc.view(), group, T).unwrap().unwrap();
@@ -890,7 +890,7 @@ mod tests {
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -50.0), "Center: the card floats at the slab's middle");
         put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(2));
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -100.0), "Front: fronts together");
-        let resolved = doc.view().resolved_layers(T).unwrap();
+        let resolved = crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap();
         assert_eq!(resolved.iter().find(|l| l.id == card).unwrap().placement.z, -100.0, "the z reaches the resolved layer");
     }
 
@@ -945,7 +945,7 @@ mod tests {
         // 真ん中の枠(comp の 101..201)に人の群れが 1 つ。
         inputs.set_blobs(LayerId(20), crate::doc::store::EffectId(0), T, vec![crate::doc::store::analysis::BlobMark { id: 1, center: [151.0, 151.0], size: [30.0, 30.0], age: 0 }]);
         let view = doc.view().with_analysis(&inputs);
-        let resolved = view.resolved_layers(T).unwrap();
+        let resolved = crate::doc::store::view::resolve::resolved_layers(&view, T).unwrap();
         let centre = |id: LayerId| {
             let r = resolved.iter().find(|l| l.id == id).unwrap();
             let b = stretched_shape_box(&view.shapes_at(id, T).unwrap(), r.shape_stretch).unwrap();
@@ -1421,7 +1421,7 @@ mod tests {
         // 物の占める範囲(文字の枠の座標)と重なる字の数。
         let overlapping = |doc: &Document| {
             let view = doc.view();
-            let resolved = view.resolved_layers(T).unwrap();
+            let resolved = crate::doc::store::view::resolve::resolved_layers(&view, T).unwrap();
             let around = resolved.iter().find(|l| l.id == words).unwrap().flow_around.clone().expect("the object is declared");
             let (lo, hi) = around.iter().flat_map(|o| o.points.iter()).fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(glam::Vec2::from(*p)), hi.max(glam::Vec2::from(*p))));
             let document = crate::doc::store::view::resolve::text::resolved_text_document(&view, words, T).unwrap().unwrap();
@@ -1435,7 +1435,7 @@ mod tests {
             (count(&plain), count(&flowed), plain.contours.len() == flowed.contours.len(), right_of)
         };
         put(&mut doc, object, SHAPE_OUTSIDE, Value::Enum(2));
-        assert!(doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == words).unwrap().flow_around.is_some());
+        assert!(crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap().iter().find(|l| l.id == words).unwrap().flow_around.is_some());
         let (before, after, all_glyphs, both_sides) = overlapping(&doc);
         assert!(before > 0, "without flowing, the words run under the object");
         assert_eq!(after, 0, "the words flow around it");
@@ -1443,7 +1443,7 @@ mod tests {
         assert!(both_sides, "lines continue on the other side of the object (wrap-flow: both)");
 
         put(&mut doc, object, SHAPE_OUTSIDE, Value::Enum(0));
-        assert!(doc.view().resolved_layers(T).unwrap().iter().find(|l| l.id == words).unwrap().flow_around.is_none(), "None declares nothing");
+        assert!(crate::doc::store::view::resolve::resolved_layers(&doc.view(), T).unwrap().iter().find(|l| l.id == words).unwrap().flow_around.is_none(), "None declares nothing");
     }
 
     #[test]

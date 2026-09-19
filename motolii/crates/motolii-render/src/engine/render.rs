@@ -259,7 +259,7 @@ impl Engine {
         let composition = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
         let t = RationalTime::try_from_frame(comp_frame, composition.fps).map_err(|e| EngineError::Time(e.to_string()))?;
-        let resolved = view.resolved_layers(t).map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).map_err(|e| EngineError::Store(e.to_string()))?;
         let Some(target) = resolved.iter().find(|l| l.id == layer_id && l.copy == 0 && !l.ghost).cloned() else { return Ok(false) };
         self.freezing = Some(layer_id);
         let picture = self.layer_linear_picture(view, &resolved, &target, t, comp);
@@ -390,7 +390,7 @@ impl Engine {
                 // (全部の歩の写しが最後の絵になる)。本番の t の写しは組み直しがもう一度登録する。
                 self.pending_frame_copies.clear();
                 let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Store(e.to_string()))?;
-                let mut then = view.resolved_layers(at).map_err(|e| EngineError::Store(e.to_string()))?;
+                let mut then = crate::doc::store::view::resolve::resolved_layers(view, at).map_err(|e| EngineError::Store(e.to_string()))?;
                 if !whole_frames {
                     then.retain(|l| ids.contains(&l.id) || l.plate.is_some_and(|g| ids.contains(&g)));
                 }
@@ -465,7 +465,7 @@ impl Engine {
                             TimeBase::At => shifted_by_seconds(in_point, *offset),
                             TimeBase::Frames => super::motion::shifted_by_frames(view, t, *offset),
                         };
-                        let Ok(then) = view.resolved_layers(at) else { continue };
+                        let Ok(then) = crate::doc::store::view::resolve::resolved_layers(view, at) else { continue };
                         let (Ok(texts), Ok(shapes)) = (collect_text_documents(view, &then, at), collect_shape_documents(view, &then, at)) else { continue };
                         other_times.insert(key, (at, then, texts, shapes));
                     }
@@ -1689,14 +1689,12 @@ impl Engine {
         let now_frame = t.try_to_frame_floor(fps).map_err(|e| EngineError::Time(e.to_string()))?;
         let ahead = RationalTime::try_from_frame(now_frame + WARM_AHEAD_FRAMES, fps)
             .map_err(|e| EngineError::Time(e.to_string()))?;
-        let now_ids: HashSet<LayerId> = view
-            .resolved_layers(t)
+        let now_ids: HashSet<LayerId> = crate::doc::store::view::resolve::resolved_layers(view, t)
             .map_err(|e| EngineError::Store(e.to_string()))?
             .iter()
             .map(|layer| layer.id)
             .collect();
-        let upcoming = view
-            .resolved_layers(ahead)
+        let upcoming = crate::doc::store::view::resolve::resolved_layers(view, ahead)
             .map_err(|e| EngineError::Store(e.to_string()))?;
 
         let failures = std::mem::take(&mut self.layer_failures);

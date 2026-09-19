@@ -121,9 +121,9 @@ fn an_external_placement_program_changes_only_the_read_projection() {
         moves_whole: motolii_doc::store::kind::never_moves_whole,
     }];
     let view = doc.view();
-    let ordinary = view.resolved_layers(RationalTime::ZERO).unwrap();
+    let ordinary = motolii_doc::store::view::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap();
     let supplied = view.clone().with_placement_programs(&programs);
-    let placed = supplied.resolved_layers(RationalTime::ZERO).unwrap();
+    let placed = motolii_doc::store::view::resolve::resolved_layers(&supplied, RationalTime::ZERO).unwrap();
     assert_eq!(ordinary.len(), 1);
     assert_eq!(placed.len(), 2);
     assert_eq!(placed[0].id, layer);
@@ -140,11 +140,11 @@ fn an_external_placement_program_changes_only_the_read_projection() {
         needs_position: true,
         ..programs[0]
     }];
-    let positioned = view
-        .clone()
-        .with_placement_programs(&position_programs)
-        .resolved_layers(RationalTime::ZERO)
-        .unwrap();
+    let positioned = motolii_doc::store::view::resolve::resolved_layers(
+        &view.clone().with_placement_programs(&position_programs),
+        RationalTime::ZERO,
+    )
+    .unwrap();
     assert!(
         (positioned[0].placement.transform.translation.x
             - placed[0].placement.transform.translation.x
@@ -163,7 +163,7 @@ fn an_external_placement_program_changes_only_the_read_projection() {
         view.revision_key(),
         view.clone().with_placement_programs(&[]).revision_key()
     );
-    assert_eq!(view.resolved_layers(RationalTime::ZERO).unwrap().len(), 1);
+    assert_eq!(motolii_doc::store::view::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap().len(), 1);
     assert_eq!(doc.revision(), revision);
     assert_eq!(doc.edit_head(), head);
 }
@@ -194,7 +194,7 @@ fn a_work_keeps_its_effects_when_it_is_flattened_and_made_read_only() {
     ])
     .unwrap();
 
-    let copies = |view: &motolii_doc::store::StoreView<'_>| view.resolved_layers(RationalTime::ZERO).unwrap().len();
+    let copies = |view: &motolii_doc::store::StoreView<'_>| motolii_doc::store::view::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap().len();
     assert_eq!(copies(&doc.view()), 2, "the work itself places two copies");
 
     let flat = doc.flattened().unwrap();

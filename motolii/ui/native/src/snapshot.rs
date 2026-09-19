@@ -114,7 +114,7 @@ impl EditorRuntime{
     /// 注視の球: 層の world 中心と、局所 bounds の 8 角を包む半径(rerun `focus_entity` の bounding sphere)。
     pub(crate) fn focus_sphere(&self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
         let view=self.doc.view();let time=self.time()?;
-        let resolved=view.resolved_layers(time).map_err(e)?;
+        let resolved=crate::doc::store::view::resolve::resolved_layers(&view, time).map_err(e)?;
         let Some(world)=motolii_doc::store::view::resolve::transform::world_transforms3d(&view, time).map_err(e)?.get(&id).copied() else{return Ok(None)};
         let Some(b)=self.engine.selected_layer_bounds_in(&view,&resolved,id,time) else{return Ok(None)};
         let centre=world.transform_point3(glam::Vec3::from(b.center()));
@@ -152,7 +152,7 @@ impl EditorRuntime{
     fn camera_gizmos(&self)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
-        let resolved=view.resolved_layers(time).map_err(e)?;
+        let resolved=crate::doc::store::view::resolve::resolved_layers(&view, time).map_err(e)?;
         let mut gizmos=Vec::new();
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
@@ -193,7 +193,7 @@ impl EditorRuntime{
     /// 出力(Camera)で見た枠。anchor など view を問わない用途。
     pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{ self.bounds_seen(layer,View::Camera) }
     pub(crate) fn bounds_seen(&self,layer:LayerId,seen:View)->Option<Json>{
-        let resolved=self.doc.view().resolved_layers(self.time().ok()?).ok()?;
+        let resolved=crate::doc::store::view::resolve::resolved_layers(&self.doc.view(), self.time().ok()?).ok()?;
         self.bounds_from(&self.eye(seen)?,resolved.as_slice(),layer,seen)
     }
     /// 見ている姿勢 —— comp・作中カメラ・その view の観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
@@ -244,7 +244,7 @@ impl EditorRuntime{
     pub(crate) fn build_status(&self)->Result<Json,String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;let at=self.time()?;
         let catalog=crate::render::engine::known_effects();
-        let resolved=view.resolved_layers(at).map_err(e)?;
+        let resolved=crate::doc::store::view::resolve::resolved_layers(&view, at).map_err(e)?;
         let clipping=view.clipping_bases().map_err(e)?;
         let eyes=(self.eye(View::Camera).ok_or("No composition")?,self.eye(View::User).ok_or("No composition")?);
         // 再生中で Document が変わっていなければ、時刻で変わる物(値・枠)だけの軽い status にする。
@@ -581,7 +581,7 @@ mod frame_cost_probe {
             let mut rt = runtime(layers, copies);
             let t = RationalTime::ZERO;
             let time = |f: &mut dyn FnMut()| { let s = std::time::Instant::now(); for _ in 0..5 { f(); } s.elapsed() / 5 };
-            let resolve = time(&mut || { rt.doc.view().resolved_layers(t).unwrap(); });
+            let resolve = time(&mut || { crate::doc::store::view::resolve::resolved_layers(&rt.doc.view(), t).unwrap(); });
             let status = time(&mut || { rt.status().unwrap(); });
             let status_bytes = rt.status().unwrap().to_string().len();
             *rt.full_status_revision.borrow_mut() = Some(format!("{:?}", rt.doc.revision()));
@@ -591,7 +591,7 @@ mod frame_cost_probe {
             rt.viewer.clock.toggle();
             eprintln!("  live status={live:?} ({live_bytes} bytes)");
             let sig = time(&mut || { crate::snapshot::authored_signature(&rt.doc).unwrap(); });
-            let depth = time(&mut || { let r = rt.doc.view().resolved_layers(t).unwrap(); rt.depth_layout(&r).unwrap(); });
+            let depth = time(&mut || { let r = crate::doc::store::view::resolve::resolved_layers(&rt.doc.view(), t).unwrap(); rt.depth_layout(&r).unwrap(); });
             let catalog = crate::render::engine::known_effects();
             let inspector = time(&mut || { for id in rt.doc.view().layers() { crate::editor::functions::read::inspector_data_from_doc(&rt.doc.view(), id, t, &catalog); } });
             eprintln!("  signature={sig:?} depth={depth:?} inspector={inspector:?}");
@@ -910,7 +910,7 @@ mod camera_view_cage_tests {
             assert!((c[0][1]-c[1][1]).abs()<1e-3&&(c[1][0]-c[2][0]).abs()<1e-3&&(c[2][1]-c[3][1]).abs()<1e-3&&(c[3][0]-c[0][0]).abs()<1e-3,"{projection}: the frame faces the observer: {c:?}");
             assert!(c[0][0]<c[1][0]&&c[0][1]<c[3][1],"{projection}: nw, ne, se, sw: {c:?}");
             let view=rt.doc.view();
-            let resolved=view.resolved_layers(time).unwrap();
+            let resolved=crate::doc::store::view::resolve::resolved_layers(&view, time).unwrap();
             let r=resolved.iter().find(|r|r.id==layer).unwrap();
             let b=rt.engine.selected_layer_bounds_in(&view,&resolved,layer,time).unwrap();
             let projected=crate::doc::core::projected_screen_corners(comp,rt.engine.resolve_camera(&view,time).unwrap(),observer,r.projection,crate::doc::core::depth_scaled(r.placement.world_transform.unwrap()),b.min,b.max);

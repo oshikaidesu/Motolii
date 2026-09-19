@@ -213,7 +213,7 @@ mod clipping_contract {
         let ink = add(&mut doc, 2, 1, Some(group), false);
         let paper = add(&mut doc, 3, 2, Some(group), false);
         doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: FOUR_COPIES.to_owned() }] }).unwrap();
-        let resolved = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
+        let resolved = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         let drawn: Vec<(LayerId, u32)> = resolved.iter().filter(|l| l.id != group).map(|l| (l.id, l.copy)).collect();
         assert_eq!(drawn, vec![(ink, 0), (paper, 1), (ink, 2), (paper, 3)], "ink, paper, ink, paper from the bottom up");
         let orders: Vec<i32> = resolved.iter().map(|l| l.placement.order).collect();
@@ -231,7 +231,7 @@ mod clipping_contract {
         let stencil = add(&mut doc, 6, 4, Some(group), false);
         let above = add(&mut doc, 7, 8, Some(group), false);
         doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { blend_mode: Some(BlendMode::StencilAlpha), ..Default::default() } }).unwrap();
-        let matte_of = |doc: &Document, id: LayerId| doc.view().resolved_layers(RationalTime::ZERO).unwrap().into_iter().find(|l| l.id == id).and_then(|l| l.matte);
+        let matte_of = |doc: &Document, id: LayerId| crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap().into_iter().find(|l| l.id == id).and_then(|l| l.matte);
         let cut = Some(Matte { layer: stencil, mode: MatteMode::Alpha });
         assert_eq!((matte_of(&doc, low), matte_of(&doc, photo)), (cut, cut), "without clip: everything below it in the group");
         assert_eq!((matte_of(&doc, above), matte_of(&doc, background)), (None, None), "not what is above, not outside the group");
@@ -275,13 +275,13 @@ mod clipping_contract {
         assert_eq!(doc.view().clipping_base(child).unwrap(), Some(child_base));
         assert_eq!(doc.view().clipping_base(child_base).unwrap(), None);
         assert_eq!(doc.view().clipping_base(LayerId(999)).unwrap(), None);
-        let resolved = doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap();
+        let resolved = crate::doc::store::view::resolve::resolve(&doc.view(), second, RationalTime::ZERO).unwrap().unwrap();
         assert!(resolved.clip_to_below);
         assert_eq!(resolved.matte, Some(Matte { layer: base, mode: MatteMode::Alpha }));
 
         doc.apply(Intent::SetOrder { layer: base, order: 25 }).unwrap();
         assert_eq!(doc.view().clipping_base(second).unwrap(), None);
-        let orphan = doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap();
+        let orphan = crate::doc::store::view::resolve::resolve(&doc.view(), second, RationalTime::ZERO).unwrap().unwrap();
         assert!(orphan.clip_to_below && orphan.matte.is_none());
         assert!(doc.undo());
         assert_eq!(doc.view().clipping_base(second).unwrap(), Some(base));
@@ -292,8 +292,8 @@ mod clipping_contract {
         doc.apply(Intent::SetAttrs { layer: inserted, patch: LayerAttrsPatch {
             hidden: Some(true), ..Default::default()
         }}).unwrap();
-        assert!(doc.view().resolve(inserted, RationalTime::ZERO).unwrap().is_none());
-        assert_eq!(doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap().matte,
+        assert!(crate::doc::store::view::resolve::resolve(&doc.view(), inserted, RationalTime::ZERO).unwrap().is_none());
+        assert_eq!(crate::doc::store::view::resolve::resolve(&doc.view(), second, RationalTime::ZERO).unwrap().unwrap().matte,
             Some(Matte { layer: inserted, mode: MatteMode::Alpha }));
     }
 
@@ -310,10 +310,10 @@ mod clipping_contract {
             clip_to_below: Some(true), ..Default::default()
         }}).unwrap();
         assert_eq!(doc.view().attrs(layer).unwrap().unwrap().matte, Some(explicit));
-        assert_eq!(doc.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
+        assert_eq!(crate::doc::store::view::resolve::resolve(&doc.view(), layer, RationalTime::ZERO).unwrap().unwrap().matte,
             Some(Matte { layer: base, mode: MatteMode::Alpha }));
         assert!(doc.undo());
-        let previous = doc.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap();
+        let previous = crate::doc::store::view::resolve::resolve(&doc.view(), layer, RationalTime::ZERO).unwrap().unwrap();
         assert!(!previous.clip_to_below);
         assert_eq!(previous.matte, Some(explicit));
         assert!(doc.redo());
@@ -335,7 +335,7 @@ mod clipping_contract {
         assert!(loaded.view().attrs(layer).unwrap().unwrap().clip_to_below);
         assert_eq!(loaded.view().attrs(layer).unwrap().unwrap().matte, Some(explicit));
         assert_eq!(loaded.view().clipping_base(layer).unwrap(), Some(base));
-        assert_eq!(loaded.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
+        assert_eq!(crate::doc::store::view::resolve::resolve(&loaded.view(), layer, RationalTime::ZERO).unwrap().unwrap().matte,
             Some(Matte { layer: base, mode: MatteMode::Alpha }));
     }
 }

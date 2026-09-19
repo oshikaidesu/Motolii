@@ -58,7 +58,7 @@ pub(crate) fn push_placements(
     });
     let parent = view.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
     let is_group = base.source == crate::doc::store::LayerSource::Group;
-    let children = if is_group { view.children_in_order(layer, present)? } else { Vec::new() };
+    let children = if is_group { crate::doc::store::view::resolve::children_in_order(view, layer, present)? } else { Vec::new() };
     if is_group && children.is_empty() {
         return Ok(());
     }
@@ -76,9 +76,9 @@ pub(crate) fn push_placements(
         let Ok(at) = t.try_sub(placement.time_offset) else { continue };
         let shifted = at != t;
         let subjects: Vec<LayerId> = if whole {
-            view.subtree(layer, present)?.into_iter().skip(1).collect()
+            crate::doc::store::view::resolve::subtree(view, layer, present)?.into_iter().skip(1).collect()
         } else if is_group {
-            view.subtree(children[picks[ordinal]], present)?
+            crate::doc::store::view::resolve::subtree(view, children[picks[ordinal]], present)?
         } else {
             vec![layer]
         };
@@ -116,7 +116,7 @@ pub(crate) fn push_placements(
             let mut copy = if !is_group && !shifted {
                 base.clone()
             } else {
-                let Some(copy) = view.resolve_with_solo(subject, at, any_solo, present, worlds, memo, visiting)? else { continue };
+                let Some(copy) = crate::doc::store::view::resolve::resolve_with_solo(view, subject, at, any_solo, present, worlds, memo, visiting)? else { continue };
                 copy
             };
             if !is_group {
@@ -229,7 +229,7 @@ pub(crate) fn push_split(
         let at = view.schedule_shift(layer, k, n, t)?;
         let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
         let worlds = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, layer, at, present)?;
-        let Some(mut copy) = view.resolve_with_solo(layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
+        let Some(mut copy) = crate::doc::store::view::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
         // 中心を単位の箱の中心へ: 親の空間で T(c − a) を局所の変換に共役で掛ける(a = 層のアンカー、c = 箱の中心)。
         let anchor = glam::Vec2::from(crate::doc::store::layout::boxes::free_anchor(view, layer, at)?);
         let shift = glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5) - anchor;
@@ -279,7 +279,7 @@ pub(super) fn push_ghosts(
             worlds.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(view, parent, at, present)?);
         }
         let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
-        let Some(resolved) = view.resolve_with_solo(layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {
+        let Some(resolved) = crate::doc::store::view::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {
             continue;
         };
         let mut placed = Vec::new();
@@ -305,7 +305,7 @@ mod ghost_contract {
 
     fn xs(doc: &Document, id: LayerId, frame: i64, fps: Fps) -> Vec<(bool, f32)> {
         let t = RationalTime::try_from_frame(frame, fps).unwrap();
-        doc.view().resolved_layers(t).unwrap().into_iter().filter(|l| l.id == id).map(|l| (l.ghost, l.placement.transform.translation.x)).collect()
+        crate::doc::store::view::resolve::resolved_layers(&doc.view(), t).unwrap().into_iter().filter(|l| l.id == id).map(|l| (l.ghost, l.placement.transform.translation.x)).collect()
     }
 
     /// ゴーストは同じ層を d だけ遅れて見た姿が 1 枚。行は増えず同じ id で、元より先に積まれ(奥)、元は ghost = false。

@@ -148,7 +148,7 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
-        let resolved = view.resolved_layers(t).ok()?;
+        let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).ok()?;
         self.selected_layer_size_in(view, &resolved, layer_id, t)
     }
 
@@ -205,7 +205,7 @@ impl Engine {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
         let Some(id) = crate::doc::store::view::resolve::camera::active_camera_layer(view, t).map_err(store)? else { return crate::doc::store::view::resolve::camera::resolve_camera(view, t).map_err(store) };
         if crate::doc::store::view::resolve::camera::camera_target_layer(view, id, t).map_err(store)?.is_none() { return crate::doc::store::view::resolve::camera::camera_of_layer(view, id, t).map_err(store) }
-        let resolved = view.resolved_layers(t).map_err(store)?;
+        let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).map_err(store)?;
         self.camera_of_layer_in(view, &resolved, id, t)
     }
 

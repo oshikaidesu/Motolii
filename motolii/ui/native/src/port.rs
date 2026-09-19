@@ -179,7 +179,7 @@ impl EditorRuntime{
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
                 if patch.projection.is_some(){
                     let at=self.time()?;
-                    let centers:Vec<_>={let view=self.doc.view();let resolved=view.resolved_layers(at).map_err(e)?;
+                    let centers:Vec<_>={let view=self.doc.view();let resolved=crate::doc::store::view::resolve::resolved_layers(&view, at).map_err(e)?;
                         layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
@@ -883,7 +883,7 @@ mod poster_probe {
             let i=((y*comp.width+x)*4) as usize;
             eprintln!("({x},{y}) = {:?}",&pixels[i..i+4]);
         }
-        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&view.resolved_layers(time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
+        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&crate::doc::store::view::resolve::resolved_layers(&view, time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
     }
 }
 
