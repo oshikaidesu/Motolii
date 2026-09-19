@@ -53,6 +53,9 @@ for role,relative in document_entries:
 if set(contract.get('documents',{})) != {'concept','interaction','migration','recovery','technical'}:
  errors.append('Stage 5 must expose concept, interaction, migration, recovery and technical documents')
 modules=json.loads((root/'docs/stage5/modules.json').read_text())
+renderer_manifest=(root/contract['renderer']/'Cargo.toml').read_text().split('[dev-dependencies]')[0]
+if not re.search(r'^motolii-doc\s*=\s*\{[^\n]*default-features\s*=\s*false',renderer_manifest,re.M):
+ errors.append('renderer production dependency must not enable document editing')
 read_paths=[]
 for relative in [modules['readOnlyPlayback'],*modules.get('readOnlyModels',[])]:
  path=root/relative

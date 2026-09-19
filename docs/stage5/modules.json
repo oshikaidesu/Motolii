@@ -17,6 +17,7 @@
     "motolii/crates/motolii-doc/src/store/layout.rs",
     "motolii/crates/motolii-doc/src/store/read.rs",
     "motolii/crates/motolii-doc/src/store/recording.rs",
+    "motolii/crates/motolii-doc/src/store/text_read.rs",
     "motolii/crates/motolii-doc/src/store/ids.rs",
     "motolii/ui/native/src/viewer.rs"
   ],

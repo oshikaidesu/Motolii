@@ -3,11 +3,14 @@
 pub mod core;
 pub mod eval;
 pub mod extensions;
+#[cfg(feature = "editing")]
 pub mod fixture;
 pub mod store;
 pub mod vector;
 
 /// 家の中の道は `crate::doc::…` のまま。crate が割れても文は変えない。
 pub mod doc {
-    pub use crate::{core, eval, extensions, fixture, store, vector};
+    pub use crate::{core, eval, extensions, store, vector};
+    #[cfg(feature = "editing")]
+    pub use crate::fixture;
 }

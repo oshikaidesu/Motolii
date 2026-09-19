@@ -4,7 +4,7 @@
 
 ## コアと拡張
 
-再生側は作品の読み取りと時刻を受け、編集UIを知らずに描く。編集側はDocument/Intentを通して書き込みとUndoを所有する。拡張は操作要求または共通の入出力型を使い、Documentの第二の所有者にならない。Documentの読み取り・保存・編集はまだ同じcrate内で、再生だけの最小コアへの分離は未完。現行の分離は静的リンクであり、任意のネイティブプラグインを安全に実行する仕組みではない。
+再生側は作品の読み取りと時刻を受け、編集UIを知らずに描く。編集側はDocument/Intentを通して書き込みとUndoを所有する。拡張は操作要求または共通の入出力型を使い、Documentの第二の所有者にならない。読み取り・保存・編集は同じcrate内だが、`editing` featureを外すとDocument/Intent・Undo・保存・編集fixtureをコンパイルしない。描画の通常依存はこの読み取り専用構成で、編集用fixtureはdev-dependencyだけが有効にする。評価・組み込み効果の分離は未完。現行の分離は静的リンクであり、任意のネイティブプラグインを安全に実行する仕組みではない。
 
 | 所有者 | 実装 | 接続する口 |
 |---|---|---|
@@ -24,6 +24,8 @@
 **残る分離**: 配置・パス・解析などの組み込み効果は `motolii-doc/src/extensions` に分離したが、レイアウトと効果評価の組み立てはまだdoc内にある。`motolii-doc`全体が最小コアになったとは扱わない。保存形式の変更や、9月17日の未決定の「idと時刻だけ」案の採用は、この移動に含めない。
 
 Recordingの検収: doc単体128件、編集transaction19件、Undoを呼べないcompile-fail testが成功し、jobsを含むbuild checkが成功。RRDからの同値読み込み、Undo後の確定位置、一時値を除く変換、workerへ移せるSendを確認した。新しい型を使った実窓でのexport/Freeze完走は未検収。型の権限分離であり、編集実装をビルド依存から外すcrate分離ではない。
+
+ビルド境界の追加検収: `cargo check -p motolii-doc --no-default-features`と`cargo check -p motolii-render --lib`が成功。文字描画で使う書記素・style IDの読み取りは`text_read`へ分け、編集helperは同じ関数を再公開する。Cargo featureは加算されるため、編集アプリ全体ではeditingを含む。物理的なcrate分割・ビルド時間短縮の実証とは区別する。専用入口は`scripts/motolii-ui.sh check-read-only`。
 
 `owned_budget`は未合格: compute pipeline 2/0、shader module 2/0、bind-group layout 2/0、render pass 4/3、GPU無期限待機18/4、naga parser 4/3(実測/上限)。Recording変更はこれらを追加していない。上限は据え置き、描画側の残件として扱う。
 

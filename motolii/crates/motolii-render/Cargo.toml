@@ -12,7 +12,7 @@ path = "src/lib.rs"
 rapier3d = { workspace = true }
 parry2d = { workspace = true }
 lyon_geom = { workspace = true }
-motolii-doc = { path = "../motolii-doc" }
+motolii-doc = { path = "../motolii-doc", default-features = false }
 tobj = { workspace = true }
 gltf = { workspace = true }
 stl_io = { workspace = true }
@@ -48,6 +48,7 @@ wesl = { version = "=0.4.2", default-features = false }
 re_build_tools = { workspace = true }
 
 [dev-dependencies]
+motolii-doc = { path = "../motolii-doc", features = ["editing"] }
 tempfile = { workspace = true }
 
 [lints]

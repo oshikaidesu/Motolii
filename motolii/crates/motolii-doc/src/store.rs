@@ -2,11 +2,13 @@
 mod asset;
 mod attrs;
 mod components;
+#[cfg(feature = "editing")]
 mod document;
 mod effect;
 mod fingerprint;
 mod marker;
 mod mask;
+#[cfg(feature = "editing")]
 mod persist;
 mod recording;
 pub use recording::Recording;
@@ -14,6 +16,7 @@ pub mod kind;
 pub mod analysis;
 pub mod particles;
 pub mod text_frame;
+pub mod text_read;
 pub mod layout;
 pub mod connect;
 pub mod shape_props;
@@ -26,6 +29,7 @@ mod ids;
 
 pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
+#[cfg(feature = "editing")]
 pub use document::{Animate, Document, Intent};
 pub use ids::{LayerId, PropertyId};
 pub use read::{DisplayRevision, Revision};
@@ -36,6 +40,7 @@ pub use marker::Marker;
 mod notebook;
 pub use notebook::{Notebook, NotePage, NoteBlock, NoteContent};
 pub use mask::{Mask, MaskFrame, MaskId, MaskMode, ResolvedMask};
+#[cfg(feature = "editing")]
 pub use persist::AutoSaveConfig;
 pub use slot::{PropertyBase, PropertyLink, PropertySource, Slot, SlotId};
 pub use text::{
@@ -530,6 +535,7 @@ pub struct ResolvedLayer {
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
 /// 大きさは既定の 1920x1080 30fps 60秒。
+#[cfg(feature = "editing")]
 pub fn blank_project() -> Document {
     use crate::doc::store::{Composition, Document, Fps, Intent};
     let mut doc = Document::new();
@@ -544,4 +550,5 @@ pub fn blank_project() -> Document {
     doc
 }
 
+#[cfg(feature = "editing")]
 pub mod text_edit;

@@ -8,7 +8,7 @@ flutter_bin="${FLUTTER_BIN:-$repo/.tools/flutter/bin/flutter}"
 if [[ ! -x "$flutter_bin" ]]; then flutter_bin=$(command -v flutter || true); fi
 mkdir -p "$state"
 case "${1:-dev}" in
-  native|test|profile)
+  native|test|profile|check-read-only)
     if [[ -z "${FFMPEG_DIR:-}" ]] && command -v brew >/dev/null; then
       FFMPEG_DIR=$(brew --prefix ffmpeg)
       export FFMPEG_DIR
@@ -22,6 +22,11 @@ esac
 case "${1:-dev}" in
   check) exec python3 "$repo/scripts/check-stage5.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
+  check-read-only)
+    cd "$repo"
+    cargo check -p motolii-doc --no-default-features
+    exec cargo check -p motolii-render --lib
+    ;;
   test-window)
     window_check_dir=$(mktemp -d /tmp/motolii-window-check.XXXXXX)
     trap 'rm -f -- "$window_check_dir/check"; rmdir -- "$window_check_dir"' EXIT
@@ -59,5 +64,5 @@ case "${1:-dev}" in
     fi
     exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|native|test|test-window|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
 esac

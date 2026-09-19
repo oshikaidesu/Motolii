@@ -43,6 +43,7 @@ For a focused change, start with its owner's tests (use the README's native depe
 | Change | Focused check |
 |---|---|
 | Document edits and preview projection | `cargo test -p motolii-doc --lib --test edit_transactions` |
+| Read-only recording and renderer build boundary | `scripts/motolii-ui.sh check-read-only` |
 | Viewing-state ownership | `cargo test -p motolii-ui --lib viewer::tests` |
 | Native window attachment lifecycle | `scripts/motolii-ui.sh test-window` |
 | Script execution without the editor or GPU | `cargo test -p motolii-script` |
@@ -50,6 +51,8 @@ For a focused change, start with its owner's tests (use the README's native depe
 From `motolii/ui`, `flutter test test/window_attachment_test.dart test/session_reconnect_test.dart test/workspace_host_contract_test.dart` checks UI detach/reconnect and the dock's actual WidgetsApp host contract.
 
 Add regression cases at the owning boundary. Do not require a full application or unrelated services to test a pure contract; use actual-window acceptance when behavior depends on window interaction.
+
+`motolii-doc` enables `editing` by default for editor compatibility. Read-only consumers use `default-features = false` and `Recording::load().view()`; production `motolii-render` uses this configuration. Its test fixtures opt into editing only as a dev-dependency. Cargo features are additive, so an editor workspace build still includes editing; this is a dependency boundary, not a sandbox. Keep UI-only work on hot reload, and use focused checks instead of rebuilding every feature configuration after every change. Build-time improvement has not yet been measured.
 
 `scripts/check-docs.sh` remains the wider historical documentation audit. Its old inventories and historical links are distinct from the Stage 5 entry check; do not use a successful local check to claim the entire historical tree has been audited.
 

@@ -7,6 +7,10 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = ["editing"]
+editing = []
+
 [dependencies]
 glam = { workspace = true }
 re_types_core = { workspace = true }
