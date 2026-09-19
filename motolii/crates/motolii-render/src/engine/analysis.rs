@@ -91,7 +91,7 @@ impl Engine {
         let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let mut out = Vec::new();
         // カメラの動き(注視点と、距離の対数を px 相当に)。
-        let camera = view.resolve_camera(t).map_err(store)?;
+        let camera = crate::doc::store::view::resolve::camera::resolve_camera(&view, t).map_err(store)?;
         out.push(("camera.center".to_owned(), camera.center));
         out.push(("camera.distance".to_owned(), [camera.distance_scale.max(1e-3).ln() * 300.0, camera.target_z]));
         for layer in view.resolved_layers(t).map_err(store)? {

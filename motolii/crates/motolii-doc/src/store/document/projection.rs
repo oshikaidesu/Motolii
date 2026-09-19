@@ -46,7 +46,7 @@ fn projection_compensation(
         .composition()?
         .ok_or_else(|| StoreError::Property("No composition".into()))?
         .spec();
-    let camera = view.resolve_camera(at)?;
+    let camera = crate::doc::store::view::resolve::camera::resolve_camera(view, at)?;
     let worlds = view.world_transforms3d(at)?;
     let world = *worlds.get(&layer).ok_or_else(|| {
         StoreError::Property(format!("Layer {} is not present", layer.0))
@@ -108,7 +108,7 @@ mod projection_switch_tests {
         ] {
             doc.apply(Intent::SetCameraConstant { property: PropertyId::camera(name).unwrap(), value }).unwrap();
         }
-        doc.view().resolve_camera(RationalTime::ZERO).unwrap()
+        crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap()
     }
     fn center() -> [f32; 3] {
         std::array::from_fn(|i| (MIN[i] + MAX[i]) * 0.5)
@@ -116,7 +116,7 @@ mod projection_switch_tests {
     fn corners(doc: &Document, layer: LayerId) -> [glam::Vec2; 8] {
         let view = doc.view();
         let comp = view.composition().unwrap().unwrap().spec();
-        let camera = view.resolve_camera(RationalTime::ZERO).unwrap();
+        let camera = crate::doc::store::view::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
         let attrs = view.attrs(layer).unwrap().unwrap_or_default();
         let world = view.world_transform3d(layer, RationalTime::ZERO).unwrap();
         projected_screen_corners(comp, camera, camera, attrs.projection, world, MIN, MAX)
@@ -125,7 +125,7 @@ mod projection_switch_tests {
     fn center_on_screen(doc: &Document, layer: LayerId) -> glam::Vec2 {
         let view = doc.view();
         let comp = view.composition().unwrap().unwrap().spec();
-        let camera = view.resolve_camera(RationalTime::ZERO).unwrap();
+        let camera = crate::doc::store::view::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
         let attrs = view.attrs(layer).unwrap().unwrap_or_default();
         let world = view.world_transform3d(layer, RationalTime::ZERO).unwrap();
         projected_screen_corners(comp, camera, camera, attrs.projection, world, center(), center())[0]

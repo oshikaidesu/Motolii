@@ -430,7 +430,7 @@ impl Engine {
                     outline_of(&shapes, stretch).map(std::sync::Arc::new)
                 }
                 // 文字はベクター: 字形の輪郭を形の層と同じ道で(絵の透過は読まない)。
-                Some(crate::doc::store::LayerSource::Text) => view.text_outline(layer.id, t).map_err(store)?.and_then(|contours| {
+                Some(crate::doc::store::LayerSource::Text) => crate::doc::store::layout::text::text_outline(view, layer.id, t).map_err(store)?.and_then(|contours| {
                     let mut points = Vec::new();
                     flatten_contours(&contours, [0.0, 0.0], &mut points);
                     (points.len() >= 3).then(|| std::sync::Arc::new(points))

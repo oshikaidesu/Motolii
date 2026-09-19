@@ -89,8 +89,8 @@ impl EditorRuntime{
         let seen=self.engine.resolve_camera_in(&view,resolved,time).map_err(e)?;
         let camera=crate::doc::core::camera_projection(comp,seen);
         let target=seen.target(comp);
-        let camera_layer=view.active_camera_layer(time).map_err(e)?;
-        let target_layer=camera_layer.map(|id|view.camera_target_layer(id,time)).transpose().map_err(e)?.flatten();
+        let camera_layer=motolii_doc::store::view::resolve::camera::active_camera_layer(&view, time).map_err(e)?;
+        let target_layer=camera_layer.map(|id|motolii_doc::store::view::resolve::camera::camera_target_layer(&view, id,time)).transpose().map_err(e)?.flatten();
         let worlds=view.world_transforms3d(time).map_err(e)?;
         let mut items=Vec::new();
         for layer in resolved {
@@ -134,7 +134,7 @@ impl EditorRuntime{
         let screen=self.observer_screen()?;
         let (w,h)=(comp.width as f32,comp.height as f32);
         let quad=|[x,y,w,h]:[f32;4]|{let q:Vec<_>=[glam::vec3(x,y,0.0),glam::vec3(x+w,y,0.0),glam::vec3(x+w,y+h,0.0),glam::vec3(x,y+h,0.0)].into_iter().map(&screen).collect();if q.iter().all(Option::is_some){json!(q)}else{Json::Null}};
-        let extent=self.doc.view().resolve_stage_extent(self.time()?).map_err(e)?;
+        let extent=motolii_doc::store::view::resolve::camera::resolve_stage_extent(&self.doc.view(), self.time()?).map_err(e)?;
         Ok(json!({"snapGuides":self.viewer.stage_snap,"front":self.viewer.user_camera.orbit_degrees==[0.0;2],"home":self.viewer.user_camera==Default::default(),"scale":self.viewer.user_camera.distance_scale,"orbit":self.viewer.user_camera.orbit_degrees,"target":screen(self.viewer.user_camera.target(comp)),"frame":quad([0.0,0.0,w,h]),
             "extent":extent.layer.map(|id|json!({"layer":id.0,"margins":extent.margins,"rect":extent.rect(comp),"points":quad(extent.rect(comp))}))}))
     }
@@ -181,7 +181,7 @@ impl EditorRuntime{
             let frustum:Vec<_>=[(-fw,-fh),(fw,-fh),(fw,fh),(-fw,fh)].into_iter().map(|(x,y)|screen(eye+rotation*glam::vec3(x,y,-display))).collect();
             let up=screen(eye+rotation*glam::vec3(0.0,-fh*1.7,-display));
             let eye=screen(eye);
-            let authorable=camera.orbit_degrees==[0.0;2] && view.camera_target_layer(id,time).map_err(e)?.is_none();
+            let authorable=camera.orbit_degrees==[0.0;2] && motolii_doc::store::view::resolve::camera::camera_target_layer(&view, id,time).map_err(e)?.is_none();
             // 届かない角は null。2 角以上写れば箱を出し、Flutter は写った角だけ結ぶ。author できるのは 4 角揃った時だけ。
             let seen=corners.iter().filter(|c|c.is_some()).count();
             let pyramid=eye.is_some()&&frustum.iter().all(Option::is_some);
@@ -665,7 +665,7 @@ mod camera_target_tests {
         assert_eq!(depth["camera"]["target"],json!(shape.0));
         let view=rt.doc.view();
         let seen=rt.engine.resolve_camera(&view,time).unwrap();
-        let authored=view.resolve_camera(time).unwrap();
+        let authored=motolii_doc::store::view::resolve::camera::resolve_camera(&view, time).unwrap();
         assert!((seen.center[0]-authored.center[0]).abs()>100.0,"Document alone looks at the anchor; the engine looks at the shape");
     }
 }

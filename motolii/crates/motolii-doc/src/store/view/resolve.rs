@@ -1,11 +1,11 @@
 
-mod camera;
-mod copies;
-mod settle;
-mod effects;
-mod mask;
-mod text;
-mod transform;
+pub mod camera;
+pub mod copies;
+pub mod settle;
+pub mod effects;
+pub mod mask;
+pub mod text;
+pub mod transform;
 
 use std::collections::{HashMap, HashSet};
 

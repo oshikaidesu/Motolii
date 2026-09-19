@@ -138,7 +138,7 @@ impl EditorRuntime{
             if j["reset"].as_bool()==Some(true) { self.viewer.user_camera=Default::default(); }
             if j["fit"].as_bool()==Some(true) {
                 let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
-                let [x,y,w,h]=view.resolve_stage_extent(self.time()?).map_err(e)?.rect(comp);
+                let [x,y,w,h]=motolii_doc::store::view::resolve::camera::resolve_stage_extent(&view, self.time()?).map_err(e)?.rect(comp);
                 self.viewer.user_camera=crate::doc::core::ResolvedCamera { center:[x+w*0.5-comp.width as f32*0.5,y+h*0.5-comp.height as f32*0.5], distance_scale:(w/comp.width as f32).max(h/comp.height as f32), ..Default::default() };
             }
             return Ok(());

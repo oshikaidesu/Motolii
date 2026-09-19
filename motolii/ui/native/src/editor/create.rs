@@ -502,12 +502,12 @@ mod camera_tests {
         doc.apply_all(new_layer_intents(layer,0,0,60,fps,(1920.0,1080.0),NewKind::Camera,None)).unwrap();
         let property = PropertyId::new(property::CAMERA_ZOOM).unwrap();
         doc.apply(Intent::SetConstant { layer, property:property.clone(), value:Value::F64(2.0) }).unwrap();
-        assert_eq!(doc.view().resolve_camera(RationalTime::ZERO).unwrap().zoom,2.0);
-        assert_eq!(doc.view().resolve_camera(RationalTime::from_seconds(3)).unwrap().zoom,1.0);
+        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,2.0);
+        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::from_seconds(3)).unwrap().zoom,1.0);
         doc.apply(Intent::RemoveLayer(layer)).unwrap();
-        assert_eq!(doc.view().resolve_camera(RationalTime::ZERO).unwrap().zoom,1.0);
+        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,1.0);
         assert!(doc.undo());
-        assert_eq!(doc.view().resolve_camera(RationalTime::ZERO).unwrap().zoom,2.0);
+        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,2.0);
     }
 }
 

@@ -366,7 +366,7 @@ fn filtered_surfaces_refresh_on_edit_undo_camera_and_cache_eviction() {
     );
     let camera = crate::doc::core::ResolvedCamera {
         orbit_degrees: [15.0, 20.0],
-        ..doc.view().resolve_camera(RationalTime::ZERO).unwrap()
+        ..crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap()
     };
     engine
         .render_with_camera_override(&doc.view(), RationalTime::ZERO, true, Some(camera))

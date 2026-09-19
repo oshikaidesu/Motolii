@@ -172,8 +172,8 @@ impl Engine {
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        let mut camera = view.camera_of_layer(id, t).map_err(store)?;
-        let Some(target) = view.camera_target_layer(id, t).map_err(store)? else { return Ok(camera) };
+        let mut camera = crate::doc::store::view::resolve::camera::camera_of_layer(view, id, t).map_err(store)?;
+        let Some(target) = crate::doc::store::view::resolve::camera::camera_target_layer(view, id, t).map_err(store)? else { return Ok(camera) };
         let (Some(bounds), Some(comp)) = (self.selected_layer_bounds_in(view, resolved, target, t), view.composition().map_err(store)?) else { return Ok(camera) };
         let comp = comp.spec();
         let point = view.world_transform3d(target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
@@ -190,9 +190,9 @@ impl Engine {
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        match view.active_camera_layer(t).map_err(store)? {
+        match crate::doc::store::view::resolve::camera::active_camera_layer(view, t).map_err(store)? {
             Some(id) => self.camera_of_layer_in(view, resolved, id, t),
-            None => view.resolve_camera(t).map_err(store),
+            None => crate::doc::store::view::resolve::camera::resolve_camera(view, t).map_err(store),
         }
     }
 
@@ -203,8 +203,8 @@ impl Engine {
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        let Some(id) = view.active_camera_layer(t).map_err(store)? else { return view.resolve_camera(t).map_err(store) };
-        if view.camera_target_layer(id, t).map_err(store)?.is_none() { return view.camera_of_layer(id, t).map_err(store) }
+        let Some(id) = crate::doc::store::view::resolve::camera::active_camera_layer(view, t).map_err(store)? else { return crate::doc::store::view::resolve::camera::resolve_camera(view, t).map_err(store) };
+        if crate::doc::store::view::resolve::camera::camera_target_layer(view, id, t).map_err(store)?.is_none() { return crate::doc::store::view::resolve::camera::camera_of_layer(view, id, t).map_err(store) }
         let resolved = view.resolved_layers(t).map_err(store)?;
         self.camera_of_layer_in(view, &resolved, id, t)
     }

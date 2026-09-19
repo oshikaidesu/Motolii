@@ -1,4 +1,4 @@
-mod resolve;
+pub mod resolve;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
