@@ -53,8 +53,13 @@ for role,relative in document_entries:
 if set(contract.get('documents',{})) != {'concept','interaction','migration','recovery','technical'}:
  errors.append('Stage 5 must expose concept, interaction, migration, recovery and technical documents')
 modules=json.loads((root/'docs/stage5/modules.json').read_text())
+read_paths=[]
 for relative in [modules['readOnlyPlayback'],*modules.get('readOnlyModels',[])]:
- source=(root/relative).read_text().split('#[cfg(test)]\nmod tests')[0]
+ path=root/relative
+ read_paths.extend(sorted(path.rglob('*.rs')) if path.is_dir() else [path])
+for path in read_paths:
+ relative=path.relative_to(root)
+ source=re.sub(r'^#\[cfg\(test\)\]\s*mod\s+\w+\s*\{.*?^\}', '', path.read_text(), flags=re.M|re.S)
  imports=' '.join(re.findall(r'\buse\s+([^;]+);',source))
  if re.search(r'\b(?:Document|Intent|EditorRuntime)\b',imports) or re.search(r'\b(?:Document|Intent|EditorRuntime)::|::(?:Document|Intent|EditorRuntime)\b|::document::',source):
   errors.append(f'{relative}: read-side code must not depend on editing authority')

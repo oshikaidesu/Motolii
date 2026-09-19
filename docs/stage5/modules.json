@@ -13,6 +13,8 @@
   "readOnlyPlayback": "motolii/crates/motolii-render/src/playback.rs",
   "readOnlyModels": [
     "motolii/crates/motolii-doc/src/store/view.rs",
+    "motolii/crates/motolii-doc/src/store/view",
+    "motolii/crates/motolii-doc/src/store/layout.rs",
     "motolii/crates/motolii-doc/src/store/read.rs",
     "motolii/crates/motolii-doc/src/store/ids.rs",
     "motolii/ui/native/src/viewer.rs"
