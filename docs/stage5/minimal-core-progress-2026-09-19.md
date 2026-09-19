@@ -84,13 +84,22 @@
 - 修正後のShape Freeze：**300画像＋300metadata**を生成。別フレームの表示、解除後の表示保持とcache削除を確認。
 - 検証後に元の保全作品を開き直し、保全ファイルのハッシュ不変を確認。
 
-これらは全素材・全効果・全操作の検収ではない。**直近の配置／Blob／Motion分離後のnativeは、実窓へ再反映・検収していない。**
+これらは全素材・全効果・全操作の検収ではない。
+
+### 配置／Blob／Motion分離後の実窓検収（完了）
+
+`5d5c08e42` のnativeを実窓へ反映して確認した。検証作品は[minimal_core_read_views.js](../../motolii/ui/native/src/editor/script/examples/minimal_core_read_views.js)。
+
+- Blobは Frame 15 でも白い素材へ追従。効果を無効化すると元の子が戻る。
+- Edit メニューの Undo で追従配置が復元。
+- Motion Blur のサンプルは移動方向の前後両側へ伸びる。中心合わせの方針（[motion.rs:49](../../motolii/crates/motolii-doc/src/extensions/motion.rs:49) の `sample_times` が `-0.5 → +0.5`）どおりで、先例の Alight Motion・AE の既定と一致する。
+- 保留していた Cmd+Z は**実装の問題ではなかった**。手では undo・redo・cut・copy・paste・select all すべて動く。反応しなかったのは自動操作側の事情。`MainMenu.xib` の First Responder 宛て key equivalent は無効時に鍵を消費しないため、衝突していない。
 
 ## 残件・注意点
 
 1. **最小コアの完成は未証明**：layout・評価・効果列／Group／Motionの組み立てがdoc内に残る。ファイル分割やfeature分離を、完全な物理分離と呼ばない。
 2. 独立した選択・閲覧時刻を窓ごとに持つ製品接続は未実装。別窓からの再生開始は実窓未検収。
-3. 直近のBlob／Motion分離の実窓検収が残る。グループ・効果無効化・Undoも見る。
+3. ~~直近のBlob／Motion分離の実窓検収~~ **完了**（後述）。
 4. Flutterのlayout上限超過3件。上限は据え置き。
 5. Track Overlayの枠線位置の既存失敗。今回のFreeze修正を外しても再現した。
 6. debug用shader監視のFSEvents開始待ち。devを閉じた単独テストでも再現。スタックは`FileServer::watch → notify → FSEventStreamStart`で、GPU競合と断定しない。
@@ -101,10 +110,9 @@
 ## 再開時の順序
 
 1. `motolii/AGENTS.md`、この文書、modules.json、Git状態を確認。未コミット変更を保護する。
-2. 直近の配置／Blob／Motion変更をまとめてnative buildし、保全後の実窓で検収する。GPU testとdevを同時に動かさない。
-3. 残るcore内の評価組み立てを依存単位で切る。新しい汎用registryやsandboxを先回りして作らない。
-4. layout 3件、Track Overlay、監視待ち、実装量上限を、対象と根拠を分けて処理する。
-5. 完了時は目的ごとの証拠を確認し、未検証を未完として残す。ビルド速度は再ビルド範囲を確認してから必要な測定を行う。
+2. 残るcore内の評価組み立てを依存単位で切る。新しい汎用registryやsandboxを先回りして作らない。
+3. layout 3件、Track Overlay、監視待ち、実装量上限を、対象と根拠を分けて処理する。
+4. 完了時は目的ごとの証拠を確認し、未検証を未完として残す。ビルド速度は再ビルド範囲を確認してから必要な測定を行う。
 
 軽い検査・対象別の入口：
 
@@ -138,3 +146,4 @@ Rustの依存環境は[CONTRIBUTING](../../CONTRIBUTING.md)と開発スクリプ
 | `de7c0372d`・`7132f8aa4` | 配置programとBlobの分離 |
 | `e78290e09` | Motionのサンプル方針を分離 |
 | `4b1ba7a87` | 読み取り専用依存の明示feature抜け道を検査 |
+| `524de0ea7` | scrub中のヘッドをtimeline全体の再構築から外す |
