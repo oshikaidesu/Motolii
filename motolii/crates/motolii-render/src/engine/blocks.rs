@@ -340,11 +340,11 @@ impl Engine {
         // つなぐ線の両端は、ブロックを持たなくても物として並べる(線は両端の motion を読むので、動かない端にも項が要る)。
         let mut needed: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if let Some((from, to)) = view.connection(layer.id, t).map_err(store)? {
+            if let Some((from, to)) = crate::doc::store::connect::connection(view, layer.id, t).map_err(store)? {
                 needed.insert(from);
                 needed.insert(to);
             }
-            if let Some((target, _)) = view.tracing(layer.id, t).map_err(store)? {
+            if let Some((target, _)) = crate::doc::store::connect::tracing(view, layer.id, t).map_err(store)? {
                 needed.insert(target);
             }
         }
@@ -555,7 +555,7 @@ impl Engine {
         // つなぐ線となぞる形は物にならないが、相手の motion を描く側で読む(利用者 2026-09-18「位置は毎コマ変わるのに
         // GPU じゃないの変すぎ」)。CPU の道は動く前の箱から引き、動いた分は頂点で足す。
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if let Some((from, to)) = view.connection(layer.id, t).map_err(store)? {
+            if let Some((from, to)) = crate::doc::store::connect::connection(view, layer.id, t).map_err(store)? {
                 if let (Some(&a), Some(&b)) = (state.slots.get(&from), state.slots.get(&to)) {
                     let path = view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::LINE_PATH).map_err(store)?, t).map_err(store)?;
                     if matches!(path, Some(Value::Enum(4))) {
@@ -567,7 +567,7 @@ impl Engine {
                     continue;
                 }
             }
-            if let Some((target, _)) = view.tracing(layer.id, t).map_err(store)? {
+            if let Some((target, _)) = crate::doc::store::connect::tracing(view, layer.id, t).map_err(store)? {
                 if let Some(&k) = state.slots.get(&target) {
                     state.traces.insert(layer.id, k);
                 }

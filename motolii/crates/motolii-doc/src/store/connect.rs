@@ -21,326 +21,324 @@ struct Route {
     points: Vec<[glam::Vec2; 3]>,
 }
 
-impl StoreView<'_> {
-    /// つなぐ線なら、その 2 つの相手。
-    pub fn connection(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, LayerId)>, StoreError> {
-        let id = |name: &str| -> Result<Option<LayerId>, StoreError> {
-            Ok(match self.value_at(layer, &PropertyId::new(name)?, t)? {
-                Some(Value::LayerId(id)) if id != 0 => Some(LayerId(id)),
-                Some(Value::F64(v)) if v >= 1.0 => Some(LayerId(v.round() as u64)),
-                _ => None,
-            })
-        };
-        let (Some(from), Some(to)) = (id(CONNECT_FROM)?, id(CONNECT_TO)?) else { return Ok(None) };
-        if from == layer || to == layer || !self.here(from, t)? || !self.here(to, t)? {
-            return Ok(None);
-        }
-        Ok(Some((from, to)))
+/// つなぐ線なら、その 2 つの相手。
+pub fn connection(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, LayerId)>, StoreError> {
+    let id = |name: &str| -> Result<Option<LayerId>, StoreError> {
+        Ok(match view.value_at(layer, &PropertyId::new(name)?, t)? {
+            Some(Value::LayerId(id)) if id != 0 => Some(LayerId(id)),
+            Some(Value::F64(v)) if v >= 1.0 => Some(LayerId(v.round() as u64)),
+            _ => None,
+        })
+    };
+    let (Some(from), Some(to)) = (id(CONNECT_FROM)?, id(CONNECT_TO)?) else { return Ok(None) };
+    if from == layer || to == layer || !view.here(from, t)? || !view.here(to, t)? {
+        return Ok(None);
     }
+    Ok(Some((from, to)))
+}
 
-    /// なぞる形なら、その相手と形の種類(`Connect To` が無く `Trace` が None でない)。
-    pub fn tracing(&self, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, i64)>, StoreError> {
-        let kind = self.choice(layer, TRACE, t)?;
-        if kind <= 0 {
-            return Ok(None);
-        }
-        let target = match self.value_at(layer, &PropertyId::new(CONNECT_FROM)?, t)? {
-            Some(Value::LayerId(id)) if id != 0 => LayerId(id),
-            Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
-            _ => return Ok(None),
-        };
-        if target == layer || !self.here(target, t)? {
-            return Ok(None);
-        }
-        Ok(Some((target, kind)))
+/// なぞる形なら、その相手と形の種類(`Connect To` が無く `Trace` が None でない)。
+pub fn tracing(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<(LayerId, i64)>, StoreError> {
+    let kind = view.choice(layer, TRACE, t)?;
+    if kind <= 0 {
+        return Ok(None);
     }
+    let target = match view.value_at(layer, &PropertyId::new(CONNECT_FROM)?, t)? {
+        Some(Value::LayerId(id)) if id != 0 => LayerId(id),
+        Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
+        _ => return Ok(None),
+    };
+    if target == layer || !view.here(target, t)? {
+        return Ok(None);
+    }
+    Ok(Some((target, kind)))
+}
 
-    /// 形の層の姿を、つなぐ線なら解いた道に、なぞる形ならその輪郭に差し替える(色・太さ・効果の積みは形のまま、破線は Dash の欄)。
-    pub(crate) fn connect_shapes(&self, layer: LayerId, t: RationalTime, shapes: Vec<ShapeNode>) -> Result<Vec<ShapeNode>, StoreError> {
-        let path = if let Some(route) = self.route(layer, t)? {
-            vec![Contour {
-                closed: false,
-                vertices: route.points.iter().map(|[p, i, o]| Vertex {
-                    point: Point { x: f64::from(p.x), y: f64::from(p.y) },
-                    in_tangent: Point { x: f64::from(i.x), y: f64::from(i.y) },
-                    out_tangent: Point { x: f64::from(o.x), y: f64::from(o.y) },
-                }).collect(),
-            }]
-        } else if let Some(path) = self.trace_path(layer, t)? {
-            path
-        } else {
-            return Ok(shapes);
-        };
-        let dash = self.number(layer, DASH, 0.0, t)?.max(0.0);
-        let gap = self.number(layer, DASH_GAP, dash, t)?.max(0.0);
-        let offset = self.number(layer, DASH_OFFSET, 0.0, t)?;
-        fn replace(nodes: Vec<ShapeNode>, path: &crate::doc::vector::Path, dash: Option<&Dash>) -> Vec<ShapeNode> {
-            nodes.into_iter().map(|node| match node {
-                ShapeNode::Leaf(mut shape) => {
-                    shape.source = PathSource::Bezier(path.clone());
-                    // 塗りは閉じた形(掴み・外枠・円)だけ。
-                    if !path.iter().any(|c| c.closed) {
-                        shape.fill = None;
-                    }
-                    if let (Some(stroke), Some(dash)) = (shape.stroke.as_mut(), dash) {
-                        stroke.dash = Some(dash.clone());
-                    }
-                    ShapeNode::Leaf(shape)
+/// 形の層の姿を、つなぐ線なら解いた道に、なぞる形ならその輪郭に差し替える(色・太さ・効果の積みは形のまま、破線は Dash の欄)。
+pub(crate) fn connect_shapes(view: &StoreView<'_>, layer: LayerId, t: RationalTime, shapes: Vec<ShapeNode>) -> Result<Vec<ShapeNode>, StoreError> {
+    let path = if let Some(route) = route(view, layer, t)? {
+        vec![Contour {
+            closed: false,
+            vertices: route.points.iter().map(|[p, i, o]| Vertex {
+                point: Point { x: f64::from(p.x), y: f64::from(p.y) },
+                in_tangent: Point { x: f64::from(i.x), y: f64::from(i.y) },
+                out_tangent: Point { x: f64::from(o.x), y: f64::from(o.y) },
+            }).collect(),
+        }]
+    } else if let Some(path) = trace_path(view, layer, t)? {
+        path
+    } else {
+        return Ok(shapes);
+    };
+    let dash = view.number(layer, DASH, 0.0, t)?.max(0.0);
+    let gap = view.number(layer, DASH_GAP, dash, t)?.max(0.0);
+    let offset = view.number(layer, DASH_OFFSET, 0.0, t)?;
+pub(crate) fn replace(nodes: Vec<ShapeNode>, path: &crate::doc::vector::Path, dash: Option<&Dash>) -> Vec<ShapeNode> {
+        nodes.into_iter().map(|node| match node {
+            ShapeNode::Leaf(mut shape) => {
+                shape.source = PathSource::Bezier(path.clone());
+                // 塗りは閉じた形(掴み・外枠・円)だけ。
+                if !path.iter().any(|c| c.closed) {
+                    shape.fill = None;
                 }
-                ShapeNode::Group(mut group) => {
-                    group.transform = crate::doc::vector::RepeaterTransform::IDENTITY;
-                    group.children = replace(group.children, path, dash);
-                    ShapeNode::Group(group)
+                if let (Some(stroke), Some(dash)) = (shape.stroke.as_mut(), dash) {
+                    stroke.dash = Some(dash.clone());
                 }
-            }).collect()
-        }
-        let dash = (dash > 0.0).then(|| Dash { pattern: vec![dash, gap.max(1e-3)], offset });
-        Ok(replace(shapes, &path, dash.as_ref()))
-    }
-
-    /// つなぐ線の置き場所(親の空間での Position)。道は親の空間で解いてあるので、素材座標の原点のずれだけ戻す。
-    pub(crate) fn connector_position(&self, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
-        if self.connection(layer, t)?.is_none() && self.tracing(layer, t)?.is_none() {
-            return Ok(None);
-        }
-        let shapes = self.shapes_at(layer, t)?;
-        let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(None) };
-        Ok(Some([-(canvas.origin_x as f32), -(canvas.origin_y as f32)]))
-    }
-
-    /// なぞる形の輪郭(線の層の親の空間)。
-    pub(crate) fn trace_path(&self, layer: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
-        let Some((target, kind)) = self.tracing(layer, t)? else { return Ok(None) };
-        if kind == 6 {
-            return self.trace_grid(layer, target, t);
-        }
-        if kind == 7 {
-            return self.trace_push(layer, target, t);
-        }
-        let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(self, target, layer, t)? else { return Ok(None) };
-        let m = self.number(layer, MARGIN, 0.0, t)? as f32;
-        let (lo, hi) = (lo - glam::Vec2::splat(m), hi + glam::Vec2::splat(m));
-        let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
-        let rect = |lo: glam::Vec2, hi: glam::Vec2| Contour::closed([p(lo), p(glam::vec2(hi.x, lo.y)), p(hi), p(glam::vec2(lo.x, hi.y))]);
-        Ok(Some(match kind {
-            2 => {
-                let h = self.number(layer, HANDLE_SIZE, 10.0, t)?.max(0.0) as f32 * 0.5;
-                [lo, glam::vec2(hi.x, lo.y), hi, glam::vec2(lo.x, hi.y)].into_iter().map(|c| rect(c - glam::Vec2::splat(h), c + glam::Vec2::splat(h))).collect()
+                ShapeNode::Leaf(shape)
             }
-            3 => vec![Contour::open([p(lo), p(hi)]), Contour::open([p(glam::vec2(hi.x, lo.y)), p(glam::vec2(lo.x, hi.y))])],
-            4 => {
-                // 箱に内接する楕円(4 つの 3 次で円弧を近似)。
-                let (c, r) = ((lo + hi) * 0.5, (hi - lo) * 0.5);
-                let k = 0.552_284_8;
-                let v = |q: glam::Vec2, i: glam::Vec2, o: glam::Vec2| Vertex { point: p(q), in_tangent: p(i), out_tangent: p(o) };
-                vec![Contour { closed: true, vertices: vec![
-                    v(c + glam::vec2(r.x, 0.0), glam::vec2(0.0, -r.y * k), glam::vec2(0.0, r.y * k)),
-                    v(c + glam::vec2(0.0, r.y), glam::vec2(r.x * k, 0.0), glam::vec2(-r.x * k, 0.0)),
-                    v(c - glam::vec2(r.x, 0.0), glam::vec2(0.0, r.y * k), glam::vec2(0.0, -r.y * k)),
-                    v(c - glam::vec2(0.0, r.y), glam::vec2(-r.x * k, 0.0), glam::vec2(r.x * k, 0.0)),
-                ] }]
+            ShapeNode::Group(mut group) => {
+                group.transform = crate::doc::vector::RepeaterTransform::IDENTITY;
+                group.children = replace(group.children, path, dash);
+                ShapeNode::Group(group)
             }
-            5 => {
-                // 箱の 4 辺を、画面(comp)の端から端まで伸ばす。
-                let Some(comp) = self.composition()? else { return Ok(None) };
-                let screen = [glam::Vec2::ZERO, glam::vec2(comp.width as f32, comp.height as f32)];
-                let (s_lo, s_hi) = match self.attrs(layer)?.unwrap_or_default().parent {
-                    Some(parent) => {
-                        let inverse = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.inverse();
-                        let corners = [screen[0], glam::vec2(screen[1].x, 0.0), screen[1], glam::vec2(0.0, screen[1].y)].map(|q| inverse.transform_point2(q));
-                        corners.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), q| (a.min(*q), b.max(*q)))
-                    }
-                    None => (screen[0], screen[1]),
-                };
-                vec![
-                    Contour::open([p(glam::vec2(s_lo.x, lo.y)), p(glam::vec2(s_hi.x, lo.y))]),
-                    Contour::open([p(glam::vec2(s_lo.x, hi.y)), p(glam::vec2(s_hi.x, hi.y))]),
-                    Contour::open([p(glam::vec2(lo.x, s_lo.y)), p(glam::vec2(lo.x, s_hi.y))]),
-                    Contour::open([p(glam::vec2(hi.x, s_lo.y)), p(glam::vec2(hi.x, s_hi.y))]),
-                ]
-            }
-            _ => vec![rect(lo, hi)],
-        }))
+        }).collect()
     }
+    let dash = (dash > 0.0).then(|| Dash { pattern: vec![dash, gap.max(1e-3)], offset });
+    Ok(replace(shapes, &path, dash.as_ref()))
+}
 
-    /// 押された跡(提案 2026-09-15、利用者「tracy が人気な理由は、簡単に関係性が可視化されているように見えるから」):
-    /// 間合いの法で押された物の、書いた場所の箱(押される前にいたかった所)と、そこから今の箱の中心への矢印。
-    /// 押されていなければ跡の箱は今の箱に重なり、矢印は長さと一緒に 0 へ縮む(出たり消えたりしない)。
-    fn trace_push(&self, layer: LayerId, target: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
-        let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(self, target, layer, t)? else { return Ok(None) };
-        let shift = self.push_seen_from(target, layer, t)?;
-        let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
-        let (was_lo, was_hi) = (lo - shift, hi - shift);
-        let mut path = vec![Contour::closed([p(was_lo), p(glam::vec2(was_hi.x, was_lo.y)), p(was_hi), p(glam::vec2(was_lo.x, was_hi.y))])];
-        let (from, to) = ((was_lo + was_hi) * 0.5, (lo + hi) * 0.5);
-        let length = shift.length();
-        if length > 1e-3 {
-            let dir = shift / length;
-            let head = (self.number(layer, HANDLE_SIZE, 10.0, t)? as f32).min(length * 0.5);
-            let side = glam::vec2(-dir.y, dir.x);
-            path.push(Contour::open([p(from), p(to)]));
-            path.push(Contour::open([p(to - dir * head + side * head * 0.6), p(to), p(to - dir * head - side * head * 0.6)]));
-        }
-        Ok(Some(path))
+/// つなぐ線の置き場所(親の空間での Position)。道は親の空間で解いてあるので、素材座標の原点のずれだけ戻す。
+pub(crate) fn connector_position(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+    if connection(view, layer, t)?.is_none() && tracing(view, layer, t)?.is_none() {
+        return Ok(None);
     }
+    let shapes = view.shapes_at(layer, t)?;
+    let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(None) };
+    Ok(Some([-(canvas.origin_x as f32), -(canvas.origin_y as f32)]))
+}
 
-    /// 物が押されたずれ(移り方を混ぜた後)を、comp の向きで(Push Trace が画面の箱と並べて読む)。
-    pub fn pushed_on_screen(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
-        let mut shift = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(self, layer, t)?);
-        if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent {
-            shift = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.transform_vector2(shift);
-        }
-        Ok(shift.to_array())
+/// なぞる形の輪郭(線の層の親の空間)。
+pub(crate) fn trace_path(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+    let Some((target, kind)) = tracing(view, layer, t)? else { return Ok(None) };
+    if kind == 6 {
+        return trace_grid(view, layer, target, t);
     }
-
-    /// 物が押されたずれ(移り方を混ぜた後)を、`from` の親の空間の向きで。
-    pub(crate) fn push_seen_from(&self, target: LayerId, from: LayerId, t: RationalTime) -> Result<glam::Vec2, StoreError> {
-        let mut shift = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(self, target, t)?);
-        if let Some(parent) = self.attrs(target)?.unwrap_or_default().parent {
-            shift = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.transform_vector2(shift);
-        }
-        if let Some(parent) = self.attrs(from)?.unwrap_or_default().parent {
-            shift = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.inverse().transform_vector2(shift);
-        }
-        Ok(shift)
+    if kind == 7 {
+        return trace_push(view, layer, target, t);
     }
-
-    /// 文字が読む関係の値(`Readout`)。読まなければ None。
-    pub(crate) fn readout(&self, layer: LayerId, t: RationalTime) -> Result<Option<String>, StoreError> {
-        let kind = self.choice(layer, READOUT, t)?;
-        if kind <= 0 {
-            return Ok(None);
+    let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(view, target, layer, t)? else { return Ok(None) };
+    let m = view.number(layer, MARGIN, 0.0, t)? as f32;
+    let (lo, hi) = (lo - glam::Vec2::splat(m), hi + glam::Vec2::splat(m));
+    let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
+    let rect = |lo: glam::Vec2, hi: glam::Vec2| Contour::closed([p(lo), p(glam::vec2(hi.x, lo.y)), p(hi), p(glam::vec2(lo.x, hi.y))]);
+    Ok(Some(match kind {
+        2 => {
+            let h = view.number(layer, HANDLE_SIZE, 10.0, t)?.max(0.0) as f32 * 0.5;
+            [lo, glam::vec2(hi.x, lo.y), hi, glam::vec2(lo.x, hi.y)].into_iter().map(|c| rect(c - glam::Vec2::splat(h), c + glam::Vec2::splat(h))).collect()
         }
-        let target = match self.value_at(layer, &PropertyId::new(READOUT_OF)?, t)? {
-            Some(Value::LayerId(id)) if id != 0 && id != layer.0 => LayerId(id),
-            Some(Value::F64(v)) if v >= 1.0 && v.round() as u64 != layer.0 => LayerId(v.round() as u64),
-            _ => return Ok(None),
-        };
-        if !self.layers().contains(&target) {
-            return Ok(None);
+        3 => vec![Contour::open([p(lo), p(hi)]), Contour::open([p(glam::vec2(hi.x, lo.y)), p(glam::vec2(lo.x, hi.y))])],
+        4 => {
+            // 箱に内接する楕円(4 つの 3 次で円弧を近似)。
+            let (c, r) = ((lo + hi) * 0.5, (hi - lo) * 0.5);
+            let k = 0.552_284_8;
+            let v = |q: glam::Vec2, i: glam::Vec2, o: glam::Vec2| Vertex { point: p(q), in_tangent: p(i), out_tangent: p(o) };
+            vec![Contour { closed: true, vertices: vec![
+                v(c + glam::vec2(r.x, 0.0), glam::vec2(0.0, -r.y * k), glam::vec2(0.0, r.y * k)),
+                v(c + glam::vec2(0.0, r.y), glam::vec2(r.x * k, 0.0), glam::vec2(-r.x * k, 0.0)),
+                v(c - glam::vec2(r.x, 0.0), glam::vec2(0.0, r.y * k), glam::vec2(0.0, -r.y * k)),
+                v(c - glam::vec2(0.0, r.y), glam::vec2(-r.x * k, 0.0), glam::vec2(r.x * k, 0.0)),
+            ] }]
         }
-        let value = match kind {
-            1 => self.push_seen_from(target, target, t)?.length(),
-            _ => {
-                let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(self, target, target, t)? else { return Ok(None) };
-                if kind == 2 { hi.x - lo.x } else { hi.y - lo.y }
-            }
-        };
-        Ok(Some(format!("{}", value.round() as i64)))
-    }
-
-    /// Grid の Group の升目の線(列と行の始まりと終わり、升目の端から端まで)。Grid でなければ何も描かない。
-    fn trace_grid(&self, layer: LayerId, group: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
-        let frame = self.layout_frame(t)?;
-        let Some((columns, rows)) = frame.fields.get(&group) else { return Ok(None) };
-        let (Some(first_c), Some(last_c), Some(first_r), Some(last_r)) = (columns.first(), columns.last(), rows.first(), rows.last()) else { return Ok(None) };
-        let mut to_here = crate::doc::store::layout::boxes::world_2d(self, group, t)?;
-        if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent {
-            to_here = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.inverse() * to_here;
-        }
-        let p = |x: f32, y: f32| { let q = to_here.transform_point2(glam::vec2(x, y)); Point { x: f64::from(q.x), y: f64::from(q.y) } };
-        let mut path = Vec::new();
-        for &(a, b) in columns.iter() {
-            for x in [a, b] {
-                path.push(Contour::open([p(x, first_r.0), p(x, last_r.1)]));
-            }
-        }
-        for &(a, b) in rows.iter() {
-            for y in [a, b] {
-                path.push(Contour::open([p(first_c.0, y), p(last_c.1, y)]));
-            }
-        }
-        Ok(Some(path))
-    }
-
-    /// 道: 今の端に、移り方で遅れた腹(弦からのずれ)を足す。
-    fn route(&self, layer: LayerId, t: RationalTime) -> Result<Option<Route>, StoreError> {
-        // 線が線につながって輪になれば、2 度目は解かない。
-        let key = (layer.0, t.num(), t.den());
-        if !self.layout_memo().borrow_mut().begin_route(key) {
-            return Ok(None);
-        }
-        let result = (|| {
-            let Some(now) = self.route_at(layer, t)? else { return Ok(None) };
-            let samples = self.transition_samples(layer, t)?;
-            if samples.is_empty() {
-                return Ok(Some(now));
-            }
-            let n = now.points.len();
-            let chord = |route: &Route, i: usize| {
-                let u = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 };
-                route.points[0][0].lerp(route.points[n - 1][0], u)
+        5 => {
+            // 箱の 4 辺を、画面(comp)の端から端まで伸ばす。
+            let Some(comp) = view.composition()? else { return Ok(None) };
+            let screen = [glam::Vec2::ZERO, glam::vec2(comp.width as f32, comp.height as f32)];
+            let (s_lo, s_hi) = match view.attrs(layer)?.unwrap_or_default().parent {
+                Some(parent) => {
+                    let inverse = crate::doc::store::layout::boxes::world_2d(view, parent, t)?.inverse();
+                    let corners = [screen[0], glam::vec2(screen[1].x, 0.0), screen[1], glam::vec2(0.0, screen[1].y)].map(|q| inverse.transform_point2(q));
+                    corners.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), q| (a.min(*q), b.max(*q)))
+                }
+                None => (screen[0], screen[1]),
             };
-            let mut belly = vec![[glam::Vec2::ZERO; 3]; n];
-            let mut total = 0.0f32;
-            for (at, w) in samples {
-                let Some(past) = self.route_at(layer, at)? else { continue };
-                if past.points.len() != n {
-                    continue;
-                }
-                for i in 0..n {
-                    belly[i][0] += (past.points[i][0] - chord(&past, i)) * w;
-                    belly[i][1] += past.points[i][1] * w;
-                    belly[i][2] += past.points[i][2] * w;
-                }
-                total += w;
-            }
-            if total <= 1e-6 {
-                return Ok(Some(now));
-            }
-            let points = (0..n).map(|i| {
-                // 端は今の箱に付けたまま。
-                if i == 0 || i == n - 1 {
-                    return [now.points[i][0], belly[i][1] / total, belly[i][2] / total];
-                }
-                [chord(&now, i) + belly[i][0] / total, belly[i][1] / total, belly[i][2] / total]
-            }).collect();
-            Ok(Some(Route { points }))
-        })();
-        self.layout_memo().borrow_mut().end_route(key);
-        result
-    }
+            vec![
+                Contour::open([p(glam::vec2(s_lo.x, lo.y)), p(glam::vec2(s_hi.x, lo.y))]),
+                Contour::open([p(glam::vec2(s_lo.x, hi.y)), p(glam::vec2(s_hi.x, hi.y))]),
+                Contour::open([p(glam::vec2(lo.x, s_lo.y)), p(glam::vec2(lo.x, s_hi.y))]),
+                Contour::open([p(glam::vec2(hi.x, s_lo.y)), p(glam::vec2(hi.x, s_hi.y))]),
+            ]
+        }
+        _ => vec![rect(lo, hi)],
+    }))
+}
 
-    /// その時刻の箱だけから解いた道(線の層の親の空間)。
-    fn route_at(&self, layer: LayerId, t: RationalTime) -> Result<Option<Route>, StoreError> {
-        let Some((from, to)) = self.connection(layer, t)? else { return Ok(None) };
-        let (Some(a), Some(b)) = (crate::doc::store::layout::boxes::box_seen_from(self, from, layer, t)?, crate::doc::store::layout::boxes::box_seen_from(self, to, layer, t)?) else { return Ok(None) };
-        let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
-        let (ca, cb) = ((a.0 + a.1) * 0.5, (b.0 + b.1) * 0.5);
-        let (p0, n0) = socket(a, cb, self.choice(layer, FROM_SIDE, t)?, margin);
-        let (p1, n1) = socket(b, ca, self.choice(layer, TO_SIDE, t)?, margin);
-        let corner = |p: glam::Vec2| [p, glam::Vec2::ZERO, glam::Vec2::ZERO];
-        let distance = (p1 - p0).length();
-        let points = match self.choice(layer, LINE_PATH, t)? {
-            // Curved: 端の向きに伸ばした 3 次(leader-line の fluid、FigJam の曲線)。
-            1 => {
-                let k = distance * 0.4;
-                vec![[p0, glam::Vec2::ZERO, n0 * k], [p1, n1 * k, glam::Vec2::ZERO]]
-            }
-            // Elbow: 軸に沿って折る(leader-line の grid、FigJam の折れ線)。
-            2 => {
-                if n0.x.abs() >= n0.y.abs() {
-                    let mx = (p0.x + p1.x) * 0.5;
-                    vec![corner(p0), corner(glam::vec2(mx, p0.y)), corner(glam::vec2(mx, p1.y)), corner(p1)]
-                } else {
-                    let my = (p0.y + p1.y) * 0.5;
-                    vec![corner(p0), corner(glam::vec2(p0.x, my)), corner(glam::vec2(p1.x, my)), corner(p1)]
-                }
-            }
-            // Hang: 縄の長さ = 端の距離 × (1 + Slack %)、懸垂線(重力は親の空間の下)。
-            3 => hang(p0, p1, distance * (1.0 + self.number(layer, SLACK, 20.0, t)?.max(0.0) as f32 / 100.0)),
-            // Rope: 3 次ベジェ 1 本。腹の 2 点は端の間の少し下(Slack % × 距離)。描く側は同じ 3 次を、腹の 2 点を
-            // ばねで遅らせて動かす(GPU、利用者 2026-09-18「紐が物理の挙動になれば」「ベジェでいけないの?」)。
-            // 端は箱の中心(描く側が読む物の真ん中と同じ点にする。口の位置と Margin は使わない)。
-            4 => {
-                let sag = (cb - ca).length() * self.number(layer, SLACK, 20.0, t)?.max(0.0) as f32 / 100.0;
-                let (c0, c1) = rope_controls(ca, cb, sag);
-                vec![[ca, glam::Vec2::ZERO, c0 - ca], [cb, c1 - cb, glam::Vec2::ZERO]]
-            }
-            _ => vec![corner(p0), corner(p1)],
-        };
-        Ok(Some(Route { points }))
+/// 押された跡(提案 2026-09-15、利用者「tracy が人気な理由は、簡単に関係性が可視化されているように見えるから」):
+/// 間合いの法で押された物の、書いた場所の箱(押される前にいたかった所)と、そこから今の箱の中心への矢印。
+/// 押されていなければ跡の箱は今の箱に重なり、矢印は長さと一緒に 0 へ縮む(出たり消えたりしない)。
+pub(crate) fn trace_push(view: &StoreView<'_>, layer: LayerId, target: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+    let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(view, target, layer, t)? else { return Ok(None) };
+    let shift = push_seen_from(view, target, layer, t)?;
+    let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
+    let (was_lo, was_hi) = (lo - shift, hi - shift);
+    let mut path = vec![Contour::closed([p(was_lo), p(glam::vec2(was_hi.x, was_lo.y)), p(was_hi), p(glam::vec2(was_lo.x, was_hi.y))])];
+    let (from, to) = ((was_lo + was_hi) * 0.5, (lo + hi) * 0.5);
+    let length = shift.length();
+    if length > 1e-3 {
+        let dir = shift / length;
+        let head = (view.number(layer, HANDLE_SIZE, 10.0, t)? as f32).min(length * 0.5);
+        let side = glam::vec2(-dir.y, dir.x);
+        path.push(Contour::open([p(from), p(to)]));
+        path.push(Contour::open([p(to - dir * head + side * head * 0.6), p(to), p(to - dir * head - side * head * 0.6)]));
     }
+    Ok(Some(path))
+}
+
+/// 物が押されたずれ(移り方を混ぜた後)を、comp の向きで(Push Trace が画面の箱と並べて読む)。
+pub fn pushed_on_screen(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+    let mut shift = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(view, layer, t)?);
+    if let Some(parent) = view.attrs(layer)?.unwrap_or_default().parent {
+        shift = crate::doc::store::layout::boxes::world_2d(view, parent, t)?.transform_vector2(shift);
+    }
+    Ok(shift.to_array())
+}
+
+/// 物が押されたずれ(移り方を混ぜた後)を、`from` の親の空間の向きで。
+pub(crate) fn push_seen_from(view: &StoreView<'_>, target: LayerId, from: LayerId, t: RationalTime) -> Result<glam::Vec2, StoreError> {
+    let mut shift = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(view, target, t)?);
+    if let Some(parent) = view.attrs(target)?.unwrap_or_default().parent {
+        shift = crate::doc::store::layout::boxes::world_2d(view, parent, t)?.transform_vector2(shift);
+    }
+    if let Some(parent) = view.attrs(from)?.unwrap_or_default().parent {
+        shift = crate::doc::store::layout::boxes::world_2d(view, parent, t)?.inverse().transform_vector2(shift);
+    }
+    Ok(shift)
+}
+
+/// 文字が読む関係の値(`Readout`)。読まなければ None。
+pub(crate) fn readout(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<String>, StoreError> {
+    let kind = view.choice(layer, READOUT, t)?;
+    if kind <= 0 {
+        return Ok(None);
+    }
+    let target = match view.value_at(layer, &PropertyId::new(READOUT_OF)?, t)? {
+        Some(Value::LayerId(id)) if id != 0 && id != layer.0 => LayerId(id),
+        Some(Value::F64(v)) if v >= 1.0 && v.round() as u64 != layer.0 => LayerId(v.round() as u64),
+        _ => return Ok(None),
+    };
+    if !view.layers().contains(&target) {
+        return Ok(None);
+    }
+    let value = match kind {
+        1 => push_seen_from(view, target, target, t)?.length(),
+        _ => {
+            let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(view, target, target, t)? else { return Ok(None) };
+            if kind == 2 { hi.x - lo.x } else { hi.y - lo.y }
+        }
+    };
+    Ok(Some(format!("{}", value.round() as i64)))
+}
+
+/// Grid の Group の升目の線(列と行の始まりと終わり、升目の端から端まで)。Grid でなければ何も描かない。
+pub(crate) fn trace_grid(view: &StoreView<'_>, layer: LayerId, group: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
+    let frame = view.layout_frame(t)?;
+    let Some((columns, rows)) = frame.fields.get(&group) else { return Ok(None) };
+    let (Some(first_c), Some(last_c), Some(first_r), Some(last_r)) = (columns.first(), columns.last(), rows.first(), rows.last()) else { return Ok(None) };
+    let mut to_here = crate::doc::store::layout::boxes::world_2d(view, group, t)?;
+    if let Some(parent) = view.attrs(layer)?.unwrap_or_default().parent {
+        to_here = crate::doc::store::layout::boxes::world_2d(view, parent, t)?.inverse() * to_here;
+    }
+    let p = |x: f32, y: f32| { let q = to_here.transform_point2(glam::vec2(x, y)); Point { x: f64::from(q.x), y: f64::from(q.y) } };
+    let mut path = Vec::new();
+    for &(a, b) in columns.iter() {
+        for x in [a, b] {
+            path.push(Contour::open([p(x, first_r.0), p(x, last_r.1)]));
+        }
+    }
+    for &(a, b) in rows.iter() {
+        for y in [a, b] {
+            path.push(Contour::open([p(first_c.0, y), p(last_c.1, y)]));
+        }
+    }
+    Ok(Some(path))
+}
+
+/// 道: 今の端に、移り方で遅れた腹(弦からのずれ)を足す。
+pub(crate) fn route(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Route>, StoreError> {
+    // 線が線につながって輪になれば、2 度目は解かない。
+    let key = (layer.0, t.num(), t.den());
+    if !view.layout_memo().borrow_mut().begin_route(key) {
+        return Ok(None);
+    }
+    let result = (|| {
+        let Some(now) = route_at(view, layer, t)? else { return Ok(None) };
+        let samples = view.transition_samples(layer, t)?;
+        if samples.is_empty() {
+            return Ok(Some(now));
+        }
+        let n = now.points.len();
+        let chord = |route: &Route, i: usize| {
+            let u = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 };
+            route.points[0][0].lerp(route.points[n - 1][0], u)
+        };
+        let mut belly = vec![[glam::Vec2::ZERO; 3]; n];
+        let mut total = 0.0f32;
+        for (at, w) in samples {
+            let Some(past) = route_at(view, layer, at)? else { continue };
+            if past.points.len() != n {
+                continue;
+            }
+            for i in 0..n {
+                belly[i][0] += (past.points[i][0] - chord(&past, i)) * w;
+                belly[i][1] += past.points[i][1] * w;
+                belly[i][2] += past.points[i][2] * w;
+            }
+            total += w;
+        }
+        if total <= 1e-6 {
+            return Ok(Some(now));
+        }
+        let points = (0..n).map(|i| {
+            // 端は今の箱に付けたまま。
+            if i == 0 || i == n - 1 {
+                return [now.points[i][0], belly[i][1] / total, belly[i][2] / total];
+            }
+            [chord(&now, i) + belly[i][0] / total, belly[i][1] / total, belly[i][2] / total]
+        }).collect();
+        Ok(Some(Route { points }))
+    })();
+    view.layout_memo().borrow_mut().end_route(key);
+    result
+}
+
+/// その時刻の箱だけから解いた道(線の層の親の空間)。
+pub(crate) fn route_at(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Route>, StoreError> {
+    let Some((from, to)) = connection(view, layer, t)? else { return Ok(None) };
+    let (Some(a), Some(b)) = (crate::doc::store::layout::boxes::box_seen_from(view, from, layer, t)?, crate::doc::store::layout::boxes::box_seen_from(view, to, layer, t)?) else { return Ok(None) };
+    let margin = view.number(layer, MARGIN, 0.0, t)? as f32;
+    let (ca, cb) = ((a.0 + a.1) * 0.5, (b.0 + b.1) * 0.5);
+    let (p0, n0) = socket(a, cb, view.choice(layer, FROM_SIDE, t)?, margin);
+    let (p1, n1) = socket(b, ca, view.choice(layer, TO_SIDE, t)?, margin);
+    let corner = |p: glam::Vec2| [p, glam::Vec2::ZERO, glam::Vec2::ZERO];
+    let distance = (p1 - p0).length();
+    let points = match view.choice(layer, LINE_PATH, t)? {
+        // Curved: 端の向きに伸ばした 3 次(leader-line の fluid、FigJam の曲線)。
+        1 => {
+            let k = distance * 0.4;
+            vec![[p0, glam::Vec2::ZERO, n0 * k], [p1, n1 * k, glam::Vec2::ZERO]]
+        }
+        // Elbow: 軸に沿って折る(leader-line の grid、FigJam の折れ線)。
+        2 => {
+            if n0.x.abs() >= n0.y.abs() {
+                let mx = (p0.x + p1.x) * 0.5;
+                vec![corner(p0), corner(glam::vec2(mx, p0.y)), corner(glam::vec2(mx, p1.y)), corner(p1)]
+            } else {
+                let my = (p0.y + p1.y) * 0.5;
+                vec![corner(p0), corner(glam::vec2(p0.x, my)), corner(glam::vec2(p1.x, my)), corner(p1)]
+            }
+        }
+        // Hang: 縄の長さ = 端の距離 × (1 + Slack %)、懸垂線(重力は親の空間の下)。
+        3 => hang(p0, p1, distance * (1.0 + view.number(layer, SLACK, 20.0, t)?.max(0.0) as f32 / 100.0)),
+        // Rope: 3 次ベジェ 1 本。腹の 2 点は端の間の少し下(Slack % × 距離)。描く側は同じ 3 次を、腹の 2 点を
+        // ばねで遅らせて動かす(GPU、利用者 2026-09-18「紐が物理の挙動になれば」「ベジェでいけないの?」)。
+        // 端は箱の中心(描く側が読む物の真ん中と同じ点にする。口の位置と Margin は使わない)。
+        4 => {
+            let sag = (cb - ca).length() * view.number(layer, SLACK, 20.0, t)?.max(0.0) as f32 / 100.0;
+            let (c0, c1) = rope_controls(ca, cb, sag);
+            vec![[ca, glam::Vec2::ZERO, c0 - ca], [cb, c1 - cb, glam::Vec2::ZERO]]
+        }
+        _ => vec![corner(p0), corner(p1)],
+    };
+    Ok(Some(Route { points }))
 }
 
 /// Rope の腹の制御点 2 つ(親の空間、下は +y): 端から 1/3 ずつ進んだ所を `sag` だけ下げる。描く側の GPU と同じ式。

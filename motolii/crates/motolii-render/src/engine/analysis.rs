@@ -252,7 +252,7 @@ impl Engine {
                     let depths = own.filter(|l| l.projection == crate::doc::store::LayerProjection::ThreeD).and_then(|l| l.placement.world_transform).map(|w| {
                         scope.iter().map(|(i, _)| resolved[*i].placement.world_transform.map_or(0.0, |o| o.translation.z) - w.translation.z).collect()
                     });
-                    let mut pushes = scope.iter().map(|(i, _)| view.pushed_on_screen(resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
+                    let mut pushes = scope.iter().map(|(i, _)| crate::doc::store::connect::pushed_on_screen(view, resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
                     // 物理の可視は、下の層ではなく解き手が持っている物そのものから拾う
                     // (箱の中の子は「下の層」に出て来ないため)。
                     let physics = effect.plugin_id == crate::extensions::overlay::PHYSICS_TRACE;

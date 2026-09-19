@@ -295,9 +295,9 @@ pub(crate) fn put_on_planes(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
 /// 部屋の背景の下に隠れていた — 2026-09-16 の穴、利用者の裁定 2026-09-18)。面は相手の面、描き順は相手の 1 つ上。
 pub(crate) fn put_connectors_in_front(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     let ends: Vec<(usize, LayerId, Option<LayerId>)> = out.iter().enumerate().filter(|(_, l)| l.copy == 0).filter_map(|(i, l)| {
-        match view.connection(l.id, t) {
+        match crate::doc::store::connect::connection(view, l.id, t) {
             Ok(Some((from, to))) => Some((i, from, Some(to))),
-            _ => match view.tracing(l.id, t) { Ok(Some((target, _))) => Some((i, target, None)), _ => None },
+            _ => match crate::doc::store::connect::tracing(view, l.id, t) { Ok(Some((target, _))) => Some((i, target, None)), _ => None },
         }
     }).collect();
     for (i, from, to) in ends {

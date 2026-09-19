@@ -26,7 +26,7 @@ pub(crate) fn authored_text_document(
         return Ok(None);
     };
     // Readout: 文字の `#` を関係の値に(`#` が無ければ全部)。1 つの書体の文字として組み直す。
-    if let Some(value) = view.readout(layer, t)? {
+    if let Some(value) = crate::doc::store::connect::readout(view, layer, t)? {
         let written = document.content.eval(t);
         let content = if written.contains('#') { written.replace('#', &value) } else { value };
         let mut track = crate::doc::store::text::ContentTrack::new();

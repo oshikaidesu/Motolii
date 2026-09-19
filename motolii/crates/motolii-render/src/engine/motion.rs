@@ -44,7 +44,7 @@ impl Engine {
             if self.particle_frames.contains_key(&layer.id) {
                 continue;
             }
-            match view.particles_at(layer.id, t) {
+            match crate::doc::store::particles::particles_at(view, layer.id, t) {
                 Ok((particles, turbulence, links)) => { self.particle_frames.insert(layer.id, super::ParticleFrame::from_particles(&particles, turbulence, links)); }
                 Err(e) => self.layer_failures.push(format!("粒子の層 {} を解けない: {e}", layer.id.0)),
             }

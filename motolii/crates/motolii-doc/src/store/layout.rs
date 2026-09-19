@@ -429,7 +429,7 @@ impl StoreView<'_> {
         self.layout_memo().borrow_mut().frames.insert(t, std::sync::Arc::new(Frame::default()));
         // 解いている途中の内側の時刻は、巡り止めの空の結果を読んでいるかもしれない。コマをまたいで覚えるのは一番外側だけ。
         let outermost = self.layout_memo().borrow_mut().enter();
-        let computed = self.compute_layout(t);
+        let computed = crate::doc::store::layout::flow::compute_layout(self, t);
         self.layout_memo().borrow_mut().leave();
         let frame = std::sync::Arc::new(computed?);
         self.layout_memo().borrow_mut().frames.insert(t, frame.clone());
@@ -1097,7 +1097,7 @@ mod tests {
         let pushed = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(&view, b, T).unwrap());
         assert!(pushed.x > 10.0, "b is pushed right, away from a: {pushed:?}");
         let (lo, hi) = crate::doc::store::layout::boxes::box_seen_from(&view, b, trace, T).unwrap().unwrap();
-        let path = view.trace_path(trace, T).unwrap().unwrap();
+        let path = crate::doc::store::connect::trace_path(&view, trace, T).unwrap().unwrap();
         assert_eq!(path.len(), 3, "the wanted box, the shaft and the head");
         let ghost: Vec<glam::Vec2> = path[0].vertices.iter().map(|v| glam::vec2(v.point.x as f32, v.point.y as f32)).collect();
         assert!((ghost[0] - (lo - pushed)).length() < 0.01, "the wanted box is the box moved back by the push: {ghost:?} {lo:?}");

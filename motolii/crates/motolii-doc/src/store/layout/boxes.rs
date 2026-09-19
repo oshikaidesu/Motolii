@@ -146,7 +146,7 @@ pub(crate) fn anchored_inner(view: &StoreView<'_>, layer: LayerId, anchor: Layer
     // 自分の箱の、位置からの広がり(親の空間)。
     let Some(b) = layer_box(view, layer, t)? else { return Ok(None) };
     let authored = crate::doc::store::view::resolve::transform::resolve_position(view, layer, t)?;
-    let local = view.authored_local(layer, t)?;
+    let local = crate::doc::store::layout::flow::authored_local(view, layer, t)?;
     let (o_lo, o_hi) = bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)) - glam::Vec2::from(authored)));
     let margin = view.number(layer, MARGIN, 0.0, t)? as f32;
     let (col, row) = ((area - 1) % 3, (area - 1) / 3);

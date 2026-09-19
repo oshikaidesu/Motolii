@@ -45,7 +45,7 @@ pub(super) fn local_placement_transform_sampled(
         }
     };
     // つなぐ線は道を親の空間で解いてある: 回さず伸ばさず、素材座標の原点のずれだけ戻して置く。
-    if let Some(position) = view.connector_position(layer, t)? {
+    if let Some(position) = crate::doc::store::connect::connector_position(view, layer, t)? {
         return Ok(LayerPlacement::from_transform([0.0, 0.0], position, [1.0, 1.0], 0.0, 0.0, 0.0));
     }
     let slot = view.laid_out(layer, when(0))?;
@@ -77,7 +77,7 @@ pub fn local_transform3d(
 ) -> Result<glam::Affine3A, StoreError> {
     let xy = local_placement_transform(view, layer, t)?;
     let slot = view.laid_out(layer, t)?;
-    let connector = view.connector_position(layer, t)?;
+    let connector = crate::doc::store::connect::connector_position(view, layer, t)?;
     let position = match slot {
         _ if connector.is_some() => connector.unwrap_or_default(),
         Some(slot) => slot.position,
