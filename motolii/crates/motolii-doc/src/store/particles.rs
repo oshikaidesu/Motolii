@@ -5,7 +5,7 @@
 
 use crate::doc::core::{Fps, RationalTime};
 use crate::doc::eval::Value;
-use crate::doc::extensions::placement::noise;
+use crate::doc::core::noise;
 use crate::doc::store::{LayerId, PropertyId, StoreError, StoreView};
 
 pub const RATE: &str = "particles.rate";

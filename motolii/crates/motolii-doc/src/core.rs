@@ -1,6 +1,7 @@
 
 mod camera;
 mod frame;
+mod noise;
 mod time;
 mod wide_div;
 
@@ -13,4 +14,5 @@ pub use frame::{depth_scale, depth_scaled, CompSpec, LayerPlacement,
     premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, FrameDescError,
     PixelFormat,
 };
+pub use noise::noise;
 pub use time::{format_ffmpeg_seek_before_frame, Fps, FpsError, RationalTime, RationalTimeError};

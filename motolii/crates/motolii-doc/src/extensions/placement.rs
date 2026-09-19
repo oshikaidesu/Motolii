@@ -2,7 +2,7 @@
 //! Repeater は 1 枚で、形はトグル(裁定 2026-09-06、reviews/2026-09-06-placement-effect.md)。
 //! 配置は `(params, seed)` の純関数。
 
-use crate::doc::core::RationalTime;
+use crate::doc::core::{noise, RationalTime};
 use crate::doc::eval::Value;
 /// 欄は棚の共通契約(`kind.rs`)。配置効果は section(Shape / Each / Random)と modes を使う。
 pub use crate::doc::store::kind::{Param as PlacementParam, ParamKind};
@@ -289,17 +289,6 @@ pub fn picks(params: &[(String, Value)], children: &[u64], count: usize) -> Vec<
 }
 
 /// `[-1, 1]` の一様乱数。同じ (seed, index, channel) は同じ値。
-pub(crate) fn noise(seed: u64, index: u32, channel: u64) -> f64 {
-    let mut z = seed
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        .wrapping_add(u64::from(index).wrapping_mul(0xBF58_476D_1CE4_E5B9))
-        .wrapping_add(channel.wrapping_mul(0x94D0_49BB_1331_11EB))
-        .wrapping_add(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^= z >> 31;
-    (z >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
-}
 
 #[cfg(test)]
 mod pure_function_contract {
