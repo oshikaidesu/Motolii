@@ -21,6 +21,14 @@ for folder in ['lib','native/src','macos/Runner']:
   if path.is_file() and path.suffix in {'.dart','.rs','.swift'}:
    if '/Users/' in path.read_text():errors.append(f'developer path in {path.relative_to(root)}')
 cargo=(root/contract['cargoWorkspace']).read_text()
+build_inputs=[root/'Cargo.toml',root/'Cargo.lock',root/'.cargo/config.toml']
+build_inputs += [root/contract[key]/'Cargo.toml' for key in ['native','document','renderer']]
+for path in build_inputs:
+ source=path.read_text()
+ if re.search(r'file://|/Users/|/home/|/opt/homebrew/|/Library/Developer/',source):
+  errors.append(f'machine-specific dependency/configuration in {path.relative_to(root)}')
+ if path.name=='Cargo.toml' and re.search(r'\bpath\s*=\s*"(?:/|[A-Za-z]:[\\/])',source):
+  errors.append(f'absolute dependency path in {path.relative_to(root)}')
 match=re.search(r'^default-members\s*=\s*\[([^\]]+)\]',cargo,re.M)
 if not match or re.findall(r'"([^"]+)"',match.group(1)) != [contract['cargoDefaultMember']]:
  errors.append('Root Cargo default must be the current Flutter native bridge')

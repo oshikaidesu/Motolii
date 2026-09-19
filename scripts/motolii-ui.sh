@@ -8,6 +8,18 @@ flutter_bin="${FLUTTER_BIN:-$repo/.tools/flutter/bin/flutter}"
 if [[ ! -x "$flutter_bin" ]]; then flutter_bin=$(command -v flutter || true); fi
 mkdir -p "$state"
 case "${1:-dev}" in
+  native|test|profile)
+    if [[ -z "${FFMPEG_DIR:-}" ]] && command -v brew >/dev/null; then
+      FFMPEG_DIR=$(brew --prefix ffmpeg)
+      export FFMPEG_DIR
+    fi
+    if [[ -z "${LIBCLANG_PATH:-}" ]] && command -v xcrun >/dev/null; then
+      clang_bin=$(xcrun --find clang)
+      export LIBCLANG_PATH="$(dirname "$(dirname "$clang_bin")")/lib"
+    fi
+    ;;
+esac
+case "${1:-dev}" in
   check) exec python3 "$repo/scripts/check-stage5.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
   test)

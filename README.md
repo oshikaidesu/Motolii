@@ -221,6 +221,8 @@ scripts/motolii-ui.sh native       # first run, or after Rust changes
 scripts/motolii-ui.sh dev          # start an empty project
 ```
 
+Rust dependencies are pinned to public GitHub commits; no sibling checkouts are required. The development script discovers Homebrew FFmpeg and the active Xcode toolchain, while respecting explicit `FFMPEG_DIR` and `LIBCLANG_PATH` overrides. For direct Cargo commands, provide those variables yourself (or use the dependencies' standard pkg-config/libclang discovery). FFmpeg must include development headers and libraries, not just the executable.
+
 Details, the test lanes and the current unfinished list are in [`docs/stage5/README.md`](docs/stage5/README.md). Effects live in `motolii/crates/motolii-render/vism/` and reload on save; how to write one is in [the field model](docs/vism-field-model.md), [Shadertoy import](docs/vism-shadertoy-import.md) and [the laws of time](docs/plugin-resources.md).
 
 ## Contributing

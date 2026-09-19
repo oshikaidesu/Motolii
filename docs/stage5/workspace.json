@@ -22,7 +22,7 @@
     "Full feature and actual-window acceptance",
     "Rendered-frame cache per layer: reverse playback, backward scrubbing and post-edit redisplay of feedback effects should return pictures, not replays (docs/plugin-resources.md §6-5 has the measured cost)",
     "Discard feedback state only for layers the edit touched (today: all)",
-    "Build on another machine: the Rerun fork pin is file://, the FFmpeg path is hard-coded in .cargo/config.toml",
+    "Build on another machine: public dependency pins and toolchain discovery are configured; a second-machine build remains unverified",
     "scripts/motolii-ui.sh test should pass --test-threads=2 to the GPU suites (fully parallel runs flake)",
     "Retire the unused Warp effect stage (turbulent_warp.wgsl is kept only as its contract); decide whether the import.ceil_* evidence effects stay on the shelf",
     "Verify the timeline speed field accepts negative values (the document's Speed already allows them)",

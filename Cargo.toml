@@ -11,8 +11,8 @@ stl_io = "0.11.0"
 smallvec = "1"
 wgpu = "29"
 peniko = "0.6"
-re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["setup"] }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
+re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["setup"] }
 # 物理の解き手は借りる(自作しない): 積み上げの warm start・摩擦・joint・snapshot を持っている。
 # 先例: Cavalry は Box2D。Rapier はその Rust 版で、状態の保存と復元がある(Apache-2.0)。
 rapier3d = "0.32"
@@ -26,24 +26,24 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
-re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["lavc"] }
+re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["lavc"] }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
-re_importer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
-re_sdk_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
-re_types_core = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
 serde = { version = "1", features = ["derive"] }
 arrow = { version = "58.3", default-features = false }
 sha2 = "0.10"
 proptest = "1"
-re_byte_size = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_chunk = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_chunk_store = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_build_info = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_entity_db = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_log_encoding = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["encoder", "decoder"] }
-re_log_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_query = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["encoder", "decoder"] }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 cosmic-text = "0.19"
 taffy = "0.13"
@@ -58,7 +58,7 @@ thiserror = "2"
 quick_cache = "0.7.0"
 tempfile = "3"
 memmap2 = "0.9"
-re_build_tools = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"
@@ -91,4 +91,4 @@ debug-assertions = true
 
 [patch.crates-io]
 # re_mp4 0.5.1 は edit list 付き mp4(ffmpeg の VFR 出力)で最後のコマの長さが桁溢れする。fork の 1 行修正。
-re_mp4 = { git = "file:///Users/member_ottoto/rust_ae/re_mp4", rev = "21d5de2a6f5a7c96970b8462d46213eed809a712" }
+re_mp4 = { git = "https://github.com/oshikaidesu/re_mp4", rev = "21d5de2a6f5a7c96970b8462d46213eed809a712" }
