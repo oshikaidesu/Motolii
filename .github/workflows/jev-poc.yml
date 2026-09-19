@@ -1,0 +1,33 @@
+name: jev-poc
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/*jev*'
+      - 'scripts/run-observed-cli.py'
+      - 'scripts/test_run_observed_cli.py'
+      - '.github/workflows/jev-poc.yml'
+      - '.github/workflows/ledger-fences.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/*jev*'
+      - 'scripts/run-observed-cli.py'
+      - '.github/workflows/jev-poc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Jev contract and fallback tests (no secrets or API calls)
+        run: python3 -m unittest discover -s scripts -p 'test_jev*.py' -v
+      - name: Existing observed CLI regression tests
+        run: python3 -m unittest discover -s scripts -p test_run_observed_cli.py -v
