@@ -67,7 +67,7 @@ impl ExportController {
         if start < 0 || end <= start || end > comp.duration_frames {
             return Err("Export range must be inside the composition and nonempty".into());
         }
-        let snapshot = document.flattened().map_err(|e| e.to_string())?;
+        let snapshot = document.flattened().map_err(|e| e.to_string())?.into_recording();
         let cancel = Cancel::new();
         self.cancel = Some(cancel.clone());
         {

@@ -8,6 +8,8 @@ mod fingerprint;
 mod marker;
 mod mask;
 mod persist;
+mod recording;
+pub use recording::Recording;
 pub mod kind;
 pub mod analysis;
 pub mod particles;

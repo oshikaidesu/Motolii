@@ -215,12 +215,13 @@ impl Document {
         self.head
     }
 
+    /// Consume editing authority, retaining the committed edit head without previews.
+    pub fn into_recording(self) -> super::Recording {
+        super::Recording::new(self.db, self.head)
+    }
+
     pub(crate) fn rebuild_head_from_store(&mut self) {
-        let head = self
-            .db
-            .time_range_for(&Self::timeline_name())
-            .map(|range| range.max().as_i64())
-            .unwrap_or(0);
+        let head = super::recording::edit_head(&self.db);
         self.head = head;
         self.tip = head;
         self.floor = head;

@@ -10,17 +10,22 @@
 |---|---|---|
 | 再生時計・音声transport | `motolii-render/src/playback.rs` | `StoreView`の読み取りだけ。編集Document/Intent、Flutter、パネルを受け取らない |
 | 作品の保存・編集 | `motolii-doc/src/store/document.rs`、`Intent`、`persist.rs` | Document/Intent、共通の値・効果宣言型 |
+| 保存作品・処理用の読み取り所有 | `motolii-doc/src/store/recording.rs` | `Recording::load`と`view`。編集・Undoを公開せず、RRD decoderはDocumentと共有。Documentからの変換は確定した編集位置を保持し、一時編集を含めない |
 | 作品の読み取り・読取cache | `motolii-doc/src/store/view.rs`、`read.rs` | 編集命令を解釈せず、記録と読み取り用のプレビュー値を参照する。命令から値への変換・検証は編集側の責任 |
 | 共通ID・版情報 | `motolii-doc/src/store/ids.rs`、`read.rs` | 読む側と書く側が共有する値の型。編集実装の子モジュールには置かない |
 | 閲覧状態 | `ui/native/src/viewer.rs` | 選択・閲覧時刻・再生時計・観測カメラ・表示範囲・ポインタなど。作品を所有せず、読み取りViewから初期化する。主選択は一覧の末尾から導出し二重保存しない |
 | JS実行器・作者用関数 | `motolii/ui/extensions/script` (`motolii-script`) | `Host::command` と読み取り専用 `Host::query`。doc/render/Flutterへの依存なし |
 | スクリプトと編集の接続 | `ui/native/src/editor/script.rs` | 操作の検証・Document/Undo・ファイルの再実行。JS VMは所有しない |
-| 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | Documentスナップショットを受けて処理し、状態とキャンセルを提供。ライブのEditorRuntimeを知らない |
+| 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | 受付でDocumentの確定スナップショットを作り、ワーカーへ読み取り専用Recordingを渡す。状態とキャンセルを提供し、ライブのEditorRuntimeを知らない |
 | 同梱効果の組み立て | `motolii-render/src/extensions/mod.rs` | 共通 `Kind` 宣言を既存の描画catalogへ渡す |
 | Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
 | WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
 
 **残る分離**: 配置・パス・解析などの組み込み効果は `motolii-doc/src/extensions` に分離したが、レイアウトと効果評価の組み立てはまだdoc内にある。`motolii-doc`全体が最小コアになったとは扱わない。保存形式の変更や、9月17日の未決定の「idと時刻だけ」案の採用は、この移動に含めない。
+
+Recordingの検収: doc単体128件、編集transaction19件、Undoを呼べないcompile-fail testが成功し、jobsを含むbuild checkが成功。RRDからの同値読み込み、Undo後の確定位置、一時値を除く変換、workerへ移せるSendを確認した。新しい型を使った実窓でのexport/Freeze完走は未検収。型の権限分離であり、編集実装をビルド依存から外すcrate分離ではない。
+
+`owned_budget`は未合格: compute pipeline 2/0、shader module 2/0、bind-group layout 2/0、render pass 4/3、GPU無期限待機18/4、naga parser 4/3(実測/上限)。Recording変更はこれらを追加していない。上限は据え置き、描画側の残件として扱う。
 
 プレビューは編集入力の変更時に一度、値・時刻・属性・形・文字の読み取り用データへ投影する。ViewがIntentの列を毎回走査する経路は持たない。同じ件数のプレビューでも値が変われば表示の版は変わり、取消・失敗時の復元・UndoはDocumentが所有する。
 

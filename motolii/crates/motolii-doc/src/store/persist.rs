@@ -73,26 +73,9 @@ impl Document {
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        let file = std::fs::File::open(path.as_ref()).map_err(|e| StoreError::Io(e.to_string()))?;
-        let decoder = re_log_encoding::rrd::DecoderApp::decode_eager(std::io::BufReader::new(file))
-            .map_err(|e| StoreError::Io(e.to_string()))?;
-
-        let mut out: Option<Self> = None;
-        for message in decoder {
-            let message = message.map_err(|e| StoreError::Io(e.to_string()))?;
-            let doc = match &mut out {
-                Some(doc) => doc,
-                None => {
-                    out = Some(Self::with_store_id(message.store_id().clone()));
-                    out.as_mut().expect("直前に入れた")
-                }
-            };
-            doc.db
-                .add_log_msg(&message)
-                .map_err(|e| StoreError::Ingest(e.to_string()))?;
-        }
-
-        let mut out = out.ok_or_else(|| StoreError::Io("空の file(メッセージが1つも無い)".into()))?;
+        let db = super::recording::load_db(path.as_ref())?;
+        let mut out = Self::with_store_id(db.store_id().clone());
+        out.db = db;
         out.rebuild_head_from_store();
         out.mark_undo_floor();
         Ok(out)
