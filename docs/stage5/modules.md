@@ -19,6 +19,7 @@
 | 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | 受付条件を検証後、呼出し側の一回限りの関数からRecordingを受け取る。作品コピーの作成はnative editorが所有し、jobsはDocument/Intentに依存しない。状態とキャンセルを提供する |
 | 同梱効果の組み立て | `motolii-render/src/extensions/mod.rs` | 共通 `Kind` 宣言を既存の描画catalogへ渡す |
 | 配置計算の差し込み | `store/kind.rs`の`PlacementProgram`、`StoreView::with_placement_programs` | 値・時刻・読み取り専用の解析入力→配置と輪郭の伸び。Document/Undoを受け取らない。位置を必要とするprogramだけが位置の解決を要求し、同梱の評価関数は拡張側で組み立てる |
+| Motion Blurのサンプル方針 | `extensions/motion.rs`の`Sampling` | 変換を読む関数だけを受け、端点・移動量・枚数・時刻を決める。Document/StoreView/GPUを所有しない。読み取りと平均合成への適用はcoreに残す |
 | Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
 | WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
 

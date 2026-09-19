@@ -1014,50 +1014,32 @@ impl<'a> StoreView<'a> {
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
         use crate::doc::extensions::motion;
-        let (tune, mask) = motion::settings(&base.effects[at_index].params);
+        let frame_seconds = self.composition()?.map_or(0.0, |c| c.fps.den() as f64 / c.fps.num() as f64);
+        let sampling = if base.source == crate::doc::store::LayerSource::Group { None }
+            else { motion::sampling(&base.effects[at_index].params, t, frame_seconds) };
         let below = base.effects.split_off(at_index + 1);
         base.effects.pop();
         base.after_effects.splice(0..0, below);
-        let frame_seconds = self.composition()?.map_or(0.0, |c| c.fps.den() as f64 / c.fps.num() as f64);
-        if tune <= 0.0 || frame_seconds <= 0.0 || !mask.contains(&true) || base.source == crate::doc::store::LayerSource::Group {
+        let Some(sampling) = sampling else {
             out.push(base);
             return Ok(());
-        }
+        };
         let layer = base.id;
         let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
         let parent2 = parent.map(|p| self.world_affine(p, t, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
         let parent3 = parent.and_then(|p| world_transforms.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
         let now_inverse = self.local_placement_transform(layer, t)?.inverse();
         let local_delta = |at: RationalTime| -> Result<glam::Affine2, StoreError> {
-            Ok(self.local_placement_transform_sampled(layer, t, Some((at, mask)))? * now_inverse)
+            Ok(self.local_placement_transform_sampled(layer, t, Some((at, sampling.channels)))? * now_inverse)
         };
-        // 枚数は 1 コマの両端で、層の四隅がどれだけ動くかから。
-        let edges = [-0.5, 0.5].map(|s| {
-            RationalTime::try_new((s * tune * frame_seconds * 1_000_000.0).round() as i64, 1_000_000).ok().and_then(|o| t.try_add(o).ok())
-        });
-        let [Some(early), Some(late)] = edges else {
-            out.push(base);
-            return Ok(());
-        };
-        let (early, late) = (parent2 * local_delta(early)? * parent2.inverse(), parent2 * local_delta(late)? * parent2.inverse());
-        // 形・文字は宣言の大きさを持たない(描くまで分からない)。その時は層の原点のまわり 200 px 四方で数える
-        // (1 点に潰れると回転の道のりが 0 になり、写しが足りずに段が出る)。
-        let [w, h] = base.declared_size;
-        let (lo, hi) = if w > 0.0 && h > 0.0 { ([0.0, 0.0], [w, h]) } else { ([-100.0, -100.0], [100.0, 100.0]) };
-        let travel = [[lo[0], lo[1]], [hi[0], lo[1]], [lo[0], hi[1]], [hi[0], hi[1]]]
-            .map(|corner| {
-                let p = base.placement.transform.transform_point2(glam::Vec2::from(corner));
-                early.transform_point2(p).distance(late.transform_point2(p))
-            })
-            .into_iter()
-            .fold(0.0f32, f32::max);
-        let count = motion::sample_count(travel);
+        let samples = sampling.deltas(base.declared_size, base.placement.transform, parent2, local_delta)?;
+        let count = samples.len() as u32;
         if count <= 1 {
             out.push(base);
             return Ok(());
         }
-        for (k, at) in motion::sample_times(t, frame_seconds, tune, count).into_iter().enumerate() {
-            let local = local_delta(at)?;
+        for (k, local) in samples.into_iter().enumerate() {
+            let local = local?;
             let mut copy = base.clone();
             copy.copy = k as u32;
             copy.averaged = count;

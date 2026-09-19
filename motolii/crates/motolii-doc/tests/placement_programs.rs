@@ -4,6 +4,93 @@ use motolii_doc::store::{
     Placement, RationalTime,
 };
 
+#[test]
+fn motion_sampling_preserves_read_authority_and_effect_order() {
+    use motolii_doc::store::{property, Interp, Keyframe, KeyframeTrack, PropertyId, Value};
+    let mut doc = blank_project();
+    let layer = LayerId(1);
+    let track = KeyframeTrack::try_from_keys(vec![
+        Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Vec2([0.0, 0.0]),
+            interp: Interp::Linear,
+            spatial: None,
+        },
+        Keyframe {
+            t: RationalTime::try_new(1, 1).unwrap(),
+            value: Value::Vec2([300.0, 0.0]),
+            interp: Interp::Linear,
+            spatial: None,
+        },
+    ])
+    .unwrap();
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: LayerSource::Shape,
+                order: 0,
+                timing: LayerTiming::place(0, None, 60),
+            },
+        },
+        Intent::SetShapes {
+            layer,
+            shapes: vec![motolii_doc::store::rect_shape([255; 4], [10.0; 2])],
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::POSITION).unwrap(),
+            track,
+        },
+        Intent::SetEffects {
+            layer,
+            effects: vec![
+                EffectInstance {
+                    id: EffectId(1),
+                    plugin_id: motolii_doc::extensions::motion::MOTION_BLUR.into(),
+                },
+                EffectInstance {
+                    id: EffectId(2),
+                    plugin_id: "motolii.gain".into(),
+                },
+            ],
+        },
+    ])
+    .unwrap();
+    let revision = doc.revision();
+    let history = doc.history_depth();
+    let time = RationalTime::try_new(1, 2).unwrap();
+    let samples = doc.view().resolved_layers(time).unwrap();
+    assert_eq!(samples.len(), 7);
+    assert!(samples
+        .iter()
+        .all(|sample| sample.averaged == 7 && sample.effects.is_empty()));
+    assert!(samples.iter().all(|sample| sample.after_effects.len() == 1
+        && sample.after_effects[0].plugin_id == "motolii.gain"));
+    assert!(
+        (samples
+            .iter()
+            .map(|sample| sample.placement.opacity)
+            .sum::<f32>()
+            - 1.0)
+            .abs()
+            < 0.00001
+    );
+    assert_eq!(doc.revision(), revision);
+    assert_eq!(doc.history_depth(), history);
+    doc.apply(Intent::SetConstant {
+        layer,
+        property: PropertyId::effect_param(EffectId(1), "tune").unwrap(),
+        value: Value::F64(0.0),
+    })
+    .unwrap();
+    let still = doc.view().resolved_layers(time).unwrap();
+    assert_eq!(still.len(), 1);
+    assert_eq!(still[0].averaged, 0);
+    assert_eq!(still[0].placement.opacity, 1.0);
+}
+
 fn two_copies(_: &PlacementInput<'_>) -> Vec<PlacementOutput> {
     (0..2)
         .map(|index| Placement {
@@ -169,8 +256,13 @@ fn blob_group_uses_sparse_identity_without_drawing_unplaced_children() {
         layer: group,
         property: motolii_doc::store::PropertyId::effect_enabled(EffectId(1)),
         value: motolii_doc::store::Value::Bool(false),
-    }).unwrap();
-    let disabled = doc.view().with_analysis(&analysis).resolved_layers(RationalTime::ZERO).unwrap();
+    })
+    .unwrap();
+    let disabled = doc
+        .view()
+        .with_analysis(&analysis)
+        .resolved_layers(RationalTime::ZERO)
+        .unwrap();
     let children: Vec<_> = disabled.iter().filter(|copy| copy.id == child).collect();
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].copy, 0);

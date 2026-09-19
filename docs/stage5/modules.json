@@ -19,6 +19,7 @@
     "motolii/crates/motolii-doc/src/store/read.rs",
     "motolii/crates/motolii-doc/src/store/recording.rs",
     "motolii/crates/motolii-doc/src/store/text_read.rs",
+    "motolii/crates/motolii-doc/src/extensions",
     "motolii/crates/motolii-doc/src/store/ids.rs",
     "motolii/ui/native/src/viewer.rs",
     "motolii/ui/extensions/jobs/src"
