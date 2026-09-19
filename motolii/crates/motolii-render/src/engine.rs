@@ -146,6 +146,7 @@ pub struct Engine {
     pub(crate) frozen: frozen::FrozenStore,
     /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
     freezing: Option<LayerId>,
+    material_picture: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
@@ -260,6 +261,7 @@ impl Engine {
             feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
+            material_picture: None,
             feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
             clip_bases: Default::default(),
@@ -336,6 +338,7 @@ impl Engine {
             feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
+            material_picture: None,
             feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
             clip_bases: Default::default(),
@@ -1155,4 +1158,3 @@ impl ParticleFrame {
         }
     }
 }
-

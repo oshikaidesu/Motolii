@@ -6,9 +6,38 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+fn bake_frames(
+    frames: std::ops::Range<i64>,
+    cancel: &Cancel,
+    mut bake: impl FnMut(i64) -> Result<bool, String>,
+    mut progress: impl FnMut(i64),
+) -> Result<bool, String> {
+    let start = frames.start;
+    let mut baked = 0;
+    for frame in frames {
+        if cancel.is_cancelled() { return Ok(false); }
+        if bake(frame)? { baked += 1; }
+        progress(frame - start + 1);
+    }
+    if baked == 0 { return Err("No frames could be frozen for this layer".into()); }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_bake_is_not_a_success_and_cancellation_stays_distinct() {
+        let cancel = Cancel::new();
+        assert!(bake_frames(0..3, &cancel, |_| Ok(false), |_| {}).is_err());
+        let mut done = 0;
+        assert_eq!(bake_frames(0..3, &cancel, |frame| Ok(frame == 1), |n| done = n), Ok(true));
+        assert_eq!(done, 3);
+        assert_eq!(bake_frames(0..3, &cancel, |_| Err("render failed".into()), |_| {}), Err("render failed".into()));
+        cancel.cancel();
+        assert_eq!(bake_frames(0..3, &cancel, |_| panic!("cancelled work rendered"), |_| {}), Ok(false));
+    }
 
     #[test]
     fn rejected_freeze_does_not_copy_the_document() {
@@ -107,17 +136,12 @@ impl FreezeController {
                     || -> Result<bool, String> {
                         let mut engine = Engine::new().map_err(|e| e.to_string())?;
                         engine.set_cache_root(root);
-                        for frame in start..end {
-                            if cancel.is_cancelled() {
-                                return Ok(false);
-                            }
-                            engine
+                        bake_frames(start..end, &cancel, |frame| engine
                                 .freeze_bake_frame(&snapshot.view(), layer, frame)
-                                .map_err(|e| e.to_string())?;
+                                .map_err(|e| e.to_string()), |done| {
                             let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-                            s.done = frame - start + 1;
-                        }
-                        Ok(true)
+                            s.done = done;
+                        })
                     },
                 ));
                 let mut s = state.lock().unwrap_or_else(|e| e.into_inner());

@@ -2239,6 +2239,29 @@ mod freeze_keeps_the_picture {
     }
 
     #[test]
+    fn a_plain_shape_freezes_to_material_space_without_changing_its_picture() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut doc = Document::new();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] }),
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetShapes { layer, shapes: vec![crate::doc::store::rect_shape([255; 4], [16.0, 16.0])] },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([16.0, 16.0]) },
+        ]).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let live = engine.render_frame(&doc.view(), at(0)).unwrap();
+        doc.apply(Intent::Freeze { group: layer }).unwrap();
+        let recording = doc.flattened().unwrap().into_recording();
+        engine.set_cache_root(Some(dir.path().to_owned()));
+        assert!(engine.freeze_bake_frame(&recording.view(), layer, 0).unwrap(), "a planar shape must produce a cached frame");
+        assert_eq!(engine.frozen_frames_on_disk(layer), 1);
+        let frozen = engine.render_frame(&doc.view(), at(0)).unwrap();
+        assert!(close(&live, &frozen) < 30);
+    }
+
+    #[test]
     fn a_frozen_layer_draws_the_same_picture_from_its_cache_and_thaws_back() {
         let dir = tempfile::tempdir().unwrap();
         let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };

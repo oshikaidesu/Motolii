@@ -29,6 +29,8 @@ Recordingの検収: doc単体128件、編集transaction19件、Undoを呼べな�
 
 jobs入口の追加検収: native editor接続check、jobsの受付拒否・snapshot失敗4テスト、`check-read-only`での描画/jobsビルドが成功。jobs内にDocument依存を仮挿入すると構成検査が拒否した。compiler dep-infoでも読み取り専用docの入力からdocument/persist/text_editが外れ、編集構成には含まれることを確認。実窓でのexport/Freeze完走と時間短縮の実測は未検収。
 
+実窓の追加検収: Recording経由のexportは640×360・30fps・300フレームのH.264を生成し、出力画像の白い矩形を確認。平面ShapeのFreezeは画像を持たない描画用meshを受けて保存ゼロでも完了していたため、素材画像取得の共通口で画像化を要求し、jobsは保存ゼロを失敗にする。jobs5テスト、埋め込みshader構成のFreeze2テストが成功し、画像化変更を外す対照ではShapeの保存失敗を再現。通常の開発構成の実窓でも300画像＋300metadataの生成、Frame 1での表示、解除後の表示保持とcache削除を確認し、元の保全作品へ戻した。解析5テスト中Track Overlayの枠線位置1件は失敗し、画像化変更を外した対照でも同じ失敗を確認。debug shader監視はdev停止後の単独テストでもFSEvents開始待ちを再現したため、実窓の成功とは別の未解消事項として扱う。全素材・全効果のFreeze対応を証明したものではない。
+
 `owned_budget`は未合格: compute pipeline 2/0、shader module 2/0、bind-group layout 2/0、render pass 4/3、GPU無期限待機18/4、naga parser 4/3(実測/上限)。Recording変更はこれらを追加していない。上限は据え置き、描画側の残件として扱う。
 
 プレビューは編集入力の変更時に一度、値・時刻・属性・形・文字の読み取り用データへ投影する。ViewがIntentの列を毎回走査する経路は持たない。同じ件数のプレビューでも値が変われば表示の版は変わり、取消・失敗時の復元・UndoはDocumentが所有する。

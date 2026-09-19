@@ -50,7 +50,10 @@ impl Engine {
         let texts = collect_text_documents(view, std::slice::from_ref(target), t)?;
         let shapes = collect_shape_documents(view, std::slice::from_ref(target), t)?;
         let camera = self.resolve_camera_in(view, resolved, t)?;
-        let Some(lwp) = self.layers_from_resolved(view, comp, camera, camera, t, std::slice::from_ref(target), &texts, &shapes)?.into_iter().next() else { return Ok(None) };
+        let previous = self.material_picture.replace(target.id);
+        let layers = self.layers_from_resolved(view, comp, camera, camera, t, std::slice::from_ref(target), &texts, &shapes);
+        self.material_picture = previous;
+        let Some(lwp) = layers?.into_iter().next() else { return Ok(None) };
         let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(&lwp))?;
         let Some(texture) = textures.first().and_then(|c| c.texture()).cloned() else { return Ok(None) };
         let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| EngineError::Store(e.to_string()))?.texture.clone();
