@@ -203,7 +203,9 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 | 4 | `store/view/resolve/copies.rs` |
 | 18 | その他 11 file |
 
-ここを効果と同じ形(種類が自分の箱と輪郭を申告する)にすれば、`vector/`(3,814行)がコアを離れられる。ただし `LayerSource` は保存形式に載る enum なので、**開いた種類(plugin id)にするかは意味の決定**であり、勝手に決めない。AviUtl 型の拡張を本気でやるならここが分かれ目。
+ここを効果と同じ形(種類が自分の箱と輪郭を申告する)にすれば、`vector/`(3,814行)がコアを離れられる。`vector::` への参照はコアの 8 file に 43 箇所で、偏りは `layout/boxes.rs` 13・`store/shape_props.rs` 10・`store/connect.rs` 7 — 形と文字と線に集中している(＝種類ごとに固まっている)。
+
+**ただし `LayerSource` は保存形式に載る enum。** 振る舞いだけを表へ移すなら形式は変わらないが、AviUtl のように**外の人が種類を足せる**ようにするなら plugin id の文字列へ開くことになり、これは意味の決定なので勝手にやらない。今夜はここで止める。
 
 ### 構造で守る(検査)
 
