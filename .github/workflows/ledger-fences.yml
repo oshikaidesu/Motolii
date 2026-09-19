@@ -11,6 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Current workspace and documentation entry points
-        run: python3 scripts/check-stage5.py
+        run: |
+          python3 scripts/check-stage5.py --self-test
+          python3 scripts/check-stage5.py
       - name: Documentation index and link consistency
         run: bash scripts/check-docs.sh

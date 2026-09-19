@@ -2,6 +2,32 @@
 """Read the workspace contract; detect a second core or developer-specific source path."""
 import json,sys,re
 from pathlib import Path
+
+def read_only_document_dependency(source):
+ source=source.split('[dev-dependencies]')[0]
+ dependency=re.search(r'^motolii-doc\s*=\s*\{([^}]+)\}',source,re.M)
+ fields=dependency.group(1) if dependency else ''
+ requested=re.search(r'(?<![-\w])features\s*=\s*\[([^]]*)\]',fields,re.S)
+ return bool(re.search(r'\bdefault-features\s*=\s*false\b',fields)) and not (requested and re.search(r'["\x27][^"\x27]+["\x27]',requested.group(1)))
+
+if '--self-test' in sys.argv:
+ cases=[
+  ('motolii-doc = { path = "doc", default-features = false }',True),
+  ('motolii-doc = { path = "doc" }',False),
+  ('motolii-doc = { default-features = true }',False),
+  ('motolii-doc = { default-features = false, features = ["editing"] }',False),
+  ('motolii-doc = { default-features = false, features = ["default"] }',False),
+  ('motolii-doc = { default-features = false, features = [\n "editing",\n] }',False),
+  ('motolii-doc = { default-features = false, features = [] }',True),
+  ('motolii-doc = { default-features = false }\n[dev-dependencies]\nmotolii-doc = { features = ["editing"] }',True),
+  ('[dev-dependencies]\nmotolii-doc = { default-features = false }',False),
+ ]
+ for source,expected in cases:
+  if bool(read_only_document_dependency(source)) != expected:
+   raise SystemExit(f'Read-only dependency self-test failed: {source}')
+ print(f'Stage 5 dependency rules: {len(cases)} passed')
+ sys.exit(0)
+
 root=Path(__file__).resolve().parents[1]
 contract=json.loads((root/'docs/stage5/workspace.json').read_text())
 errors=[]
@@ -54,8 +80,7 @@ if set(contract.get('documents',{})) != {'concept','interaction','migration','re
  errors.append('Stage 5 must expose concept, interaction, migration, recovery and technical documents')
 modules=json.loads((root/'docs/stage5/modules.json').read_text())
 for consumer in modules['readOnlyDocumentConsumers']:
- consumer_manifest=(root/consumer/'Cargo.toml').read_text().split('[dev-dependencies]')[0]
- if not re.search(r'^motolii-doc\s*=\s*\{[^\n]*default-features\s*=\s*false',consumer_manifest,re.M):
+ if not read_only_document_dependency((root/consumer/'Cargo.toml').read_text()):
   errors.append(f'{consumer}: production dependency must not enable document editing')
 read_paths=[]
 for relative in [modules['readOnlyPlayback'],*modules.get('readOnlyModels',[])]:
