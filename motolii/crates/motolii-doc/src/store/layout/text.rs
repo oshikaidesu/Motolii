@@ -1,6 +1,7 @@
 //! 文字の箱と流れ — 何文字がどこに落ちるか、行がどこで折れるか、
 //! 回り込む相手の箱をどう避けるか。字面そのものは vector/text.rs、ここは置き場の話。
 
+use super::flow::Measure;
 use super::*;
 
 impl StoreView<'_> {
