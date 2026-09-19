@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
@@ -18,6 +18,8 @@ import 'browser/media_shelf.dart';
 import 'browser/parts.dart';
 import 'browser/shelf.dart';
 import 'browser/tile.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 export 'browser/colors_shelf.dart' show paletteOf;
 
@@ -527,80 +529,19 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                       ],
                     ),
                   ),
-                Container(
-                  height: EditorMetrics.tall,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _inset,
-                    vertical: EditorMetrics.s4,
-                  ),
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: EditorTheme.line)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: EditorFieldFrame(
-                          focus: searchFocus,
-                          padding: EdgeInsets.zero,
-                          child: TextField(
-                            controller: search,
-                            focusNode: searchFocus,
-                            style: const TextStyle(
-                              fontSize: EditorMetrics.font,
-                              color: EditorTheme.ink,
-                            ),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              prefixIcon: const Icon(
-                                Icons.search,
-                                size: EditorMetrics.s14,
-                                color: EditorTheme.muted,
-                              ),
-                              prefixIconConstraints: const BoxConstraints(
-                                minWidth: EditorMetrics.control,
-                                minHeight: EditorMetrics.row,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: EditorMetrics.s4,
-                                vertical: EditorMetrics.s4,
-                              ),
-                              hintText: 'Search $tab',
-                            ),
-                            onChanged: (_) => setState(_derive),
-                          ),
-                        ),
-                      ),
-                      for (final tool in tools) ...[
-                        const SizedBox(width: EditorMetrics.s6),
-                        tool,
-                      ],
-                      if (groups.isNotEmpty) ...[
-                        const SizedBox(width: EditorMetrics.s6),
-                        EditorTooltip(
-                          message: 'Show filters',
-                          child: InkWell(
-                            key: const ValueKey('browser:filters-toggle'),
-                            onTap: () => setState(
-                              () => filtersShown[tab] =
-                                  !(filtersShown[tab] ?? false),
-                            ),
-                            child: Icon(
-                              Icons.filter_list,
-                              size: EditorMetrics.s14,
-                              color:
-                                  (filtersShown[tab] ?? false) ||
-                                      !filter.isEmpty
-                                  ? EditorTheme.accent
-                                  : EditorTheme.muted,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (shelf.showViews) ...[
-                        const SizedBox(width: EditorMetrics.s6),
-                        shelfViews(widget.controller, viewMode),
-                      ],
-                    ],
+                _BrowserSearchBar(
+                  tab: tab,
+                  search: search,
+                  searchFocus: searchFocus,
+                  tools: tools,
+                  filterable: groups.isNotEmpty,
+                  filtering: (filtersShown[tab] ?? false) || !filter.isEmpty,
+                  views: shelf.showViews
+                      ? shelfViews(widget.controller, viewMode)
+                      : null,
+                  onChanged: () => setState(_derive),
+                  onToggleFilters: () => setState(
+                    () => filtersShown[tab] = !(filtersShown[tab] ?? false),
                   ),
                 ),
                 if (header != null) header,
@@ -609,105 +550,43 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (rail >= railMin)
-                        Container(
+                        _BrowserRail(
                           width: rail,
-                          clipBehavior: Clip.hardEdge,
-                          decoration: const BoxDecoration(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  _inset,
-                                  EditorMetrics.s8,
-                                  EditorMetrics.s4,
-                                  EditorMetrics.s4,
-                                ),
-                                child: Text(
-                                  tab.toUpperCase(),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  style: const TextStyle(
-                                    fontSize: EditorMetrics.micro,
-                                    letterSpacing: 1,
-                                    color: EditorTheme.muted,
-                                  ),
-                                ),
-                              ),
-                              for (final entry in rails)
-                                shelfButton(
-                                  entry,
-                                  () => shelf.rail(this, entry),
-                                  selected: chosen == entry,
-                                ),
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  child: RailCollections(
-                                    chosen: filter.collection,
-                                    labels: library.labelsOn(tab),
-                                    onCollection: (i) => setState(() {
-                                      filter.collection = filter.collection == i
-                                          ? null
-                                          : i;
-                                      _derive();
-                                    }),
-                                    onLabel: _restoreLabel,
-                                    onDropLabel: (name) =>
-                                        library.dropLabel(tab, name),
-                                    onDrop: (which, ids) =>
-                                        library.collect(tab, ids, which),
-                                    names: [
-                                      for (
-                                        var i = 1;
-                                        i <= BrowserLibrary.collectionCount;
-                                        i++
-                                      )
-                                        library.collectionName(i),
-                                    ],
-                                    onRename: library.renameCollection,
-                                  ),
-                                ),
-                              ),
+                          tab: tab,
+                          rails: rails,
+                          chosen: chosen,
+                          onRail: (entry) => shelf.rail(this, entry),
+                          collections: RailCollections(
+                            chosen: filter.collection,
+                            labels: library.labelsOn(tab),
+                            onCollection: (i) => setState(() {
+                              filter.collection = filter.collection == i
+                                  ? null
+                                  : i;
+                              _derive();
+                            }),
+                            onLabel: _restoreLabel,
+                            onDropLabel: (name) => library.dropLabel(tab, name),
+                            onDrop: (which, ids) =>
+                                library.collect(tab, ids, which),
+                            names: [
+                              for (
+                                var i = 1;
+                                i <= BrowserLibrary.collectionCount;
+                                i++
+                              )
+                                library.collectionName(i),
                             ],
+                            onRename: library.renameCollection,
                           ),
                         ),
                       if (rail < railMin)
-                        EditorTooltip(
-                          message: 'Show ${tab.toLowerCase()} categories',
-                          child: InkWell(
-                            key: const ValueKey('browser:rail-tab'),
-                            onTap: () => widget.controller.storeDesk(
-                              'browserRail',
-                              EditorMetrics.s96,
-                            ),
-                            child: SizedBox(
-                              width: EditorMetrics.row,
-                              child: Column(
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.only(
-                                      top: EditorMetrics.s4,
-                                    ),
-                                    child: Icon(
-                                      Icons.chevron_right,
-                                      size: EditorMetrics.s14,
-                                      color: EditorTheme.muted,
-                                    ),
-                                  ),
-                                  RotatedBox(
-                                    quarterTurns: 1,
-                                    child: Text(
-                                      chosen == rails.first ? tab : chosen,
-                                      maxLines: 1,
-                                      style: const TextStyle(
-                                        fontSize: EditorMetrics.micro,
-                                        color: EditorTheme.accent,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        _BrowserRailTab(
+                          tab: tab,
+                          label: chosen == rails.first ? tab : chosen,
+                          onTap: () => widget.controller.storeDesk(
+                            'browserRail',
+                            EditorMetrics.s96,
                           ),
                         ),
                       shelfGrip(
@@ -816,18 +695,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                 if (editor != null) editor,
                                 Expanded(
                                   child: visible.isEmpty
-                                      ? const Padding(
-                                          padding: EdgeInsets.all(
-                                            EditorMetrics.s8,
-                                          ),
-                                          child: Text(
-                                            'No matches',
-                                            style: TextStyle(
-                                              color: EditorTheme.muted,
-                                              fontSize: EditorMetrics.dense,
-                                            ),
-                                          ),
-                                        )
+                                      ? const _NoMatches()
                                       : ColoredBox(
                                           color:
                                               custom?.ground ??
@@ -1115,4 +983,203 @@ abstract final class BrowserSize {
     if (stored == null || stored < min) return _BrowserPanelState.tileDefault;
     return stored.clamp(min, max);
   }
+}
+
+/// Search field, the shelf's tools, the filter toggle and the view switch.
+class _BrowserSearchBar extends StatelessWidget {
+  const _BrowserSearchBar({
+    required this.tab,
+    required this.search,
+    required this.searchFocus,
+    required this.tools,
+    required this.filterable,
+    required this.filtering,
+    required this.views,
+    required this.onChanged,
+    required this.onToggleFilters,
+  });
+  final String tab;
+  final TextEditingController search;
+  final FocusNode searchFocus;
+  final List<Widget> tools;
+  final bool filterable, filtering;
+  final Widget? views;
+  final VoidCallback onChanged, onToggleFilters;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: EditorMetrics.tall,
+    padding: const EdgeInsets.symmetric(
+      horizontal: _BrowserPanelState._inset,
+      vertical: EditorMetrics.s4,
+    ),
+    decoration: const BoxDecoration(
+      border: Border(bottom: BorderSide(color: EditorTheme.line)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: EditorFieldFrame(
+            focus: searchFocus,
+            padding: EdgeInsets.zero,
+            child: EditorTextField(
+              controller: search,
+              focusNode: searchFocus,
+              style: const TextStyle(
+                fontSize: EditorMetrics.font,
+                color: EditorTheme.ink,
+              ),
+              prefix: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: EditorMetrics.control,
+                  minHeight: EditorMetrics.row,
+                ),
+                child: const Icon(
+                  Glyph.search,
+                  size: EditorMetrics.s14,
+                  color: EditorTheme.muted,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: EditorMetrics.s4,
+                vertical: EditorMetrics.s4,
+              ),
+              hint: 'Search $tab',
+              onChanged: (_) => onChanged(),
+            ),
+          ),
+        ),
+        for (final tool in tools) ...[
+          const SizedBox(width: EditorMetrics.s6),
+          tool,
+        ],
+        if (filterable) ...[
+          const SizedBox(width: EditorMetrics.s6),
+          EditorTooltip(
+            message: 'Show filters',
+            child: EditorPress(
+              key: const ValueKey('browser:filters-toggle'),
+              onTap: onToggleFilters,
+              child: Icon(
+                Glyph.filter_list,
+                size: EditorMetrics.s14,
+                color: filtering ? EditorTheme.accent : EditorTheme.muted,
+              ),
+            ),
+          ),
+        ],
+        if (views != null) ...[const SizedBox(width: EditorMetrics.s6), views!],
+      ],
+    ),
+  );
+}
+
+/// The category rail: the tab's name, its entries, then the collections.
+class _BrowserRail extends StatelessWidget {
+  const _BrowserRail({
+    required this.width,
+    required this.tab,
+    required this.rails,
+    required this.chosen,
+    required this.onRail,
+    required this.collections,
+  });
+  final double width;
+  final String tab, chosen;
+  final List<String> rails;
+  final ValueChanged<String> onRail;
+  final Widget collections;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: width,
+    clipBehavior: Clip.hardEdge,
+    decoration: const BoxDecoration(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            _BrowserPanelState._inset,
+            EditorMetrics.s8,
+            EditorMetrics.s4,
+            EditorMetrics.s4,
+          ),
+          child: Text(
+            tab.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+            style: const TextStyle(
+              fontSize: EditorMetrics.micro,
+              letterSpacing: 1,
+              color: EditorTheme.muted,
+            ),
+          ),
+        ),
+        for (final entry in rails)
+          shelfButton(entry, () => onRail(entry), selected: chosen == entry),
+        Expanded(child: SingleChildScrollView(child: collections)),
+      ],
+    ),
+  );
+}
+
+/// The folded rail: one turned label that opens it again.
+class _BrowserRailTab extends StatelessWidget {
+  const _BrowserRailTab({
+    required this.tab,
+    required this.label,
+    required this.onTap,
+  });
+  final String tab, label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: 'Show ${tab.toLowerCase()} categories',
+    child: EditorPress(
+      key: const ValueKey('browser:rail-tab'),
+      onTap: onTap,
+      child: SizedBox(
+        width: EditorMetrics.row,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: EditorMetrics.s4),
+              child: Icon(
+                Glyph.chevron_right,
+                size: EditorMetrics.s14,
+                color: EditorTheme.muted,
+              ),
+            ),
+            RotatedBox(
+              quarterTurns: 1,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: EditorMetrics.micro,
+                  color: EditorTheme.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The grid's empty state.
+class _NoMatches extends StatelessWidget {
+  const _NoMatches();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.all(EditorMetrics.s8),
+    child: Text(
+      'No matches',
+      style: TextStyle(color: EditorTheme.muted, fontSize: EditorMetrics.dense),
+    ),
+  );
 }

@@ -3223,6 +3223,7 @@ dependencies = [
  "motolii-doc",
  "motolii-render",
  "objc2",
+ "objc2-core-foundation",
  "objc2-io-surface",
  "objc2-metal",
  "peniko",

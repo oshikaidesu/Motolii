@@ -139,6 +139,7 @@ impl Engine {
     fn alpha_outlines(&mut self, view: &StoreView<'_>, t: RationalTime, comp: CompSpec) -> Result<(), EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
         self.keyed_outlines.clear();
+        if !Self::has_file_layers(view)? { return Ok(()); }
         let resolved = view.resolved_layers(t).map_err(store)?;
         let revision = {
             use std::hash::{Hash, Hasher};

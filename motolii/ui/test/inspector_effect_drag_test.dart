@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/inspector.dart';
+import 'support/editor_test_theme.dart';
 
 void main() {
   testWidgets('Dragging an effect head reorders the pipeline as moveEffect', (
@@ -52,7 +52,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );

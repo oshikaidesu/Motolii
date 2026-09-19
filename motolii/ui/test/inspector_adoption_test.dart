@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/foundation/color_field.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/layout.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/leaves.dart';
 
 void main() {
   test('saved Test tabs become one Inspector', () {
@@ -60,7 +62,7 @@ void main() {
       };
       await tester.pumpWidget(
         MaterialApp(
-          theme: EditorTheme.data,
+          theme: editorTestTheme,
           home: Scaffold(body: InspectorPanel(controller: c)),
         ),
       );
@@ -70,7 +72,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
         await tester.tap(field);
         await tester.pumpAndSettle();
-        await tester.enterText(find.byType(TextField), value);
+        await tester.enterText(find.byType(EditorTextField), value);
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await tester.pumpAndSettle();
       }
@@ -162,14 +164,14 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
     for (final entry in {'caption': 'Changed'}.entries) {
       final field = find.descendant(
         of: find.byKey(ValueKey('1:${entry.key}')),
-        matching: find.byType(TextField),
+        matching: find.byType(EditorTextField),
       );
       await tester.ensureVisible(field);
       await tester.enterText(field, entry.value);
@@ -187,7 +189,11 @@ void main() {
       find.byType(EditorColorField),
     );
     expect(color.value.a, closeTo(0.5, 0.01));
-    expect(find.byType(TextField), findsNWidgets(1), reason: 'caption only');
+    expect(
+      find.byType(EditorTextField),
+      findsNWidgets(1),
+      reason: 'caption only',
+    );
     await tester.tap(find.byType(EditorColorField));
     await tester.pumpAndSettle();
     final focus = commands.lastWhere((m) => m['op'] == 'focusColor');

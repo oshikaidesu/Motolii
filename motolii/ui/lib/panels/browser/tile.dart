@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kPrimaryButton;
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import 'parts.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
 
 /// One tile of the grid: the shelf's preview in the frame's caption, badge,
 /// marks and selection, laid out for the view in force.
@@ -63,7 +64,7 @@ class ShelfTile extends StatelessWidget {
             top: EditorMetrics.s4,
             child: missing
                 ? const Icon(
-                    Icons.error_outline,
+                    Glyph.error_outline,
                     size: EditorMetrics.dense,
                     color: EditorTheme.accent,
                   )
@@ -164,7 +165,7 @@ class ShelfTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: EditorTheme.panel,
               border: Border.all(
-                color: isSelected ? EditorTheme.spatial : Colors.transparent,
+                color: isSelected ? EditorTheme.spatial : EditorTheme.clear,
               ),
             ),
             child: Stack(
@@ -290,8 +291,8 @@ class BrowserDrag {
   final Set<String> ids;
 }
 
-Widget dragFeedback(String label) => Material(
-  color: Colors.transparent,
+Widget dragFeedback(String label) => DefaultTextStyle(
+  style: EditorTheme.text,
   child: Container(
     height: EditorMetrics.row,
     padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),

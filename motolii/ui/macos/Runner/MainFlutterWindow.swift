@@ -78,8 +78,14 @@ private final class ProbeRuntime {
   typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
   typealias Wake = @convention(c) (UnsafeMutableRawPointer?) -> Void
   typealias Watch = @convention(c) (UnsafeMutableRawPointer, Wake, UnsafeMutableRawPointer?) -> Int32
+  typealias FrameReady = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt32) -> Void
+  typealias SetFrameReady = @convention(c) (UnsafeMutableRawPointer, FrameReady?, UnsafeMutableRawPointer?) -> Int32
   private var library: UnsafeMutableRawPointer?
-  private var context: UnsafeMutableRawPointer?
+  /// Dart holds the same context and drives every per-frame call through it; the
+  /// host hands it over in each envelope. Both run on the main thread (Flutter 3.35+
+  /// merges the UI and platform threads on macOS), so the runtime is never shared.
+  fileprivate private(set) var context: UnsafeMutableRawPointer?
+  fileprivate private(set) var location: String?
   private var requestFunction: Request?
   private var renderFunction: Render?
   private var closeFunction: Close?
@@ -92,6 +98,7 @@ private final class ProbeRuntime {
       throw ProbeFailure.message(dlerror().map { String(cString: $0) } ?? "dlopen failed")
     }
     self.library = library
+    self.location = location
     context = nil
     requestFunction = nil
     renderFunction = nil
@@ -106,10 +113,15 @@ private final class ProbeRuntime {
       renderFunction = try symbol("motolii_probe_render", Render.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
       let watch = try symbol("motolii_probe_watch_effects", Watch.self)
+      let setFrameReady = try symbol("motolii_probe_set_frame_ready", SetFrameReady.self)
       context = path.withCString { start($0) }
       guard let context else { throw ProbeFailure.message("Rust could not open the document") }
       // vism/ の見張り。Rust は別 thread から起こすので、main へ戻してから棚を読み直す。
       _ = watch(context, { _ in DispatchQueue.main.async { ProbeSession.shared.effectsChanged() } }, nil)
+      // 絵が出来た合図: 描いた thread のまま来る(= Dart の呼び出しの中)。texture へ「新しいコマ」を立てる。
+      _ = setFrameReady(context, { _, view, surface in
+        ProbeSession.shared.frameReady(view.map { String(cString: $0) } ?? "", surface)
+      }, nil)
       rendered = 0
       let reply = try status()
       if let old = previous.context { previous.close?(old) }
@@ -158,24 +170,10 @@ private final class ProbeRuntime {
             width > 0, height > 0, width <= 16384, height <= 16384 else {
         throw ProbeFailure.message("View dimensions missing or outside probe allocation limit")
       }
-      let properties: [String: Any] = [
-        kIOSurfaceWidth as String: width,
-        kIOSurfaceHeight as String: height,
-        kIOSurfaceBytesPerElement as String: 4,
-        kIOSurfacePixelFormat as String: kCVPixelFormatType_32BGRA,
-      ]
-      guard let surface = IOSurfaceCreate(properties as CFDictionary) else {
-        throw ProbeFailure.message("IOSurface allocation failed")
-      }
-      let attributes = [kCVPixelBufferMetalCompatibilityKey as String: true] as CFDictionary
-      var unmanaged: Unmanaged<CVPixelBuffer>?
-      let outcome = CVPixelBufferCreateWithIOSurface(kCFAllocatorDefault, surface, attributes, &unmanaged)
-      guard outcome == kCVReturnSuccess, let unmanaged else {
-        throw ProbeFailure.message("CVPixelBuffer wrapping failed: \(outcome)")
-      }
-      let code = view.withCString { renderFunction(context, IOSurfaceGetID(surface), $0) }
+      let made = try ProbeRuntime.makeSurface(width: width, height: height)
+      let code = view.withCString { renderFunction(context, made.id, $0) }
       guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(view): \(code)") }
-      buffers[view] = unmanaged.takeRetainedValue()
+      buffers[view] = made.buffer
     }
     rendered += 1
     var query: [String: Any] = ["op": "status"]
@@ -183,6 +181,25 @@ private final class ProbeRuntime {
     if let references { query["knownReferenceId"] = references }
     let data = try JSONSerialization.data(withJSONObject: query)
     return (buffers, try request(String(decoding: data, as: UTF8.self)), rendered)
+  }
+
+  static func makeSurface(width: Int, height: Int) throws -> (id: UInt32, buffer: CVPixelBuffer) {
+    let properties: [String: Any] = [
+      kIOSurfaceWidth as String: width,
+      kIOSurfaceHeight as String: height,
+      kIOSurfaceBytesPerElement as String: 4,
+      kIOSurfacePixelFormat as String: kCVPixelFormatType_32BGRA,
+    ]
+    guard let surface = IOSurfaceCreate(properties as CFDictionary) else {
+      throw ProbeFailure.message("IOSurface allocation failed")
+    }
+    let attributes = [kCVPixelBufferMetalCompatibilityKey as String: true] as CFDictionary
+    var unmanaged: Unmanaged<CVPixelBuffer>?
+    let outcome = CVPixelBufferCreateWithIOSurface(kCFAllocatorDefault, surface, attributes, &unmanaged)
+    guard outcome == kCVReturnSuccess, let unmanaged else {
+      throw ProbeFailure.message("CVPixelBuffer wrapping failed: \(outcome)")
+    }
+    return (IOSurfaceGetID(surface), unmanaged.takeRetainedValue())
   }
 
   func close() {
@@ -237,43 +254,85 @@ private final class ProbeTexture: NSObject, FlutterTexture {
 
 final class ProbeSession {
   static let shared = ProbeSession()
-  fileprivate let worker = DispatchQueue(label: "motolii.port.shared-document")
+  fileprivate let worker = DispatchQueue(label: "motolii.settings-file")
   fileprivate let runtime = ProbeRuntime()
   fileprivate let hosts = NSHashTable<ProbeHost>.weakObjects()
   fileprivate var paneState: [String: Any] = [:]
   fileprivate var epoch: UInt64 = 0
   fileprivate var latest: [String: CVPixelBuffer] = [:]
+  /// The surfaces Dart draws each view into: two per view, taken in turn, made
+  /// once per size. The Rust callback names the one it just filled.
+  fileprivate var surfaces: [String: (width: Int, height: Int, entries: [(id: UInt32, buffer: CVPixelBuffer)])] = [:]
   fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
   private var confirming = false
   var terminationApproved = false
 
-  /// 効果の file が変わった。棚を読み直し、全部の窓へ知らせる(絵は main の窓が描き直す)。
+  /// 効果の file が変わった。棚を読み直すのは main の窓(Dart が reloadEffects を送り、絵を描き直し、他の窓へ配る)。
   fileprivate func effectsChanged() {
     precondition(Thread.isMainThread)
-    let epoch = self.epoch
-    worker.async {
-      guard let status = try? self.runtime.request("{\"op\":\"reloadEffects\"}") else { return }
-      DispatchQueue.main.async {
-        guard epoch == self.epoch else { return }
-        self.broadcast(status, effectsReloaded: true)
-      }
+    guard let main = hosts.allObjects.first(where: { $0.isMain && !$0.closed }) else { return }
+    main.channel.invokeMethod("effectsChanged", arguments: nil)
+  }
+
+  /// Rust drew `view` into the surface `id`, on this thread, inside Dart's render
+  /// call. The main window's texture learns it now; the other windows learn it with
+  /// the status Dart broadcasts next, so their picture and its size travel as one step.
+  fileprivate func frameReady(_ view: String, _ id: UInt32) {
+    precondition(Thread.isMainThread)
+    guard let buffer = surfaces[view]?.entries.first(where: { $0.id == id })?.buffer else { return }
+    latest[view] = buffer
+    for host in hosts.allObjects where !host.closed && host.isMain {
+      try? host.ensureTexture(view)
+      host.publish(view, buffer)
     }
   }
 
-  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameOnly: Bool = false, effectsReloaded: Bool = false) {
+  /// Surfaces for the views Dart lists, at their sizes; kept when the size holds,
+  /// remade when it moves, dropped when a view is no longer listed.
+  fileprivate func ensureSurfaces(_ views: [[String: Any]]) throws -> [String: Any] {
+    precondition(Thread.isMainThread)
+    var next: [String: (width: Int, height: Int, entries: [(id: UInt32, buffer: CVPixelBuffer)])] = [:]
+    var reply: [String: Any] = [:]
+    for entry in views {
+      guard let view = entry["view"] as? String,
+            let width = (entry["width"] as? NSNumber)?.intValue,
+            let height = (entry["height"] as? NSNumber)?.intValue,
+            width > 0, height > 0, width <= 16384, height <= 16384 else {
+        throw ProbeFailure.message("View dimensions missing or outside probe allocation limit")
+      }
+      if let held = surfaces[view], held.width == width, held.height == height {
+        next[view] = held
+      } else {
+        next[view] = (width, height, try (0..<2).map { _ in try ProbeRuntime.makeSurface(width: width, height: height) })
+      }
+      reply[view] = ["width": width, "height": height, "ids": next[view]!.entries.map { Int($0.id) }]
+    }
+    surfaces = next
+    return ["surfaces": reply]
+  }
+
+  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameReady: Bool = false, frameOnly: Bool = false, effectsReloaded: Bool = false) {
     precondition(Thread.isMainThread)
     self.state.merge(state) { _, next in next }
     latest.merge(buffers) { _, next in next }
+    let fresh = frameReady ? latest : buffers
     for host in hosts.allObjects where !host.closed {
       do {
         try host.ensureTexture(ProbeHost.outputView)
-        for (view, buffer) in buffers { host.publish(view, buffer) }
         if host !== origin {
-          var event = host.envelope(state, frameReady: !buffers.isEmpty)
+          var event = host.envelope(state, frameReady: !fresh.isEmpty)
           event["frameOnly"] = frameOnly
           event["effectsReloaded"] = effectsReloaded
-          host.channel.invokeMethod("documentChanged", arguments: event)
+          // The picture and its size travel as one step: Dart learns the size
+          // (envelope) first, and only then is the frame made available to the
+          // raster thread. A resized Stage never paints an old frame stretched.
+          host.channel.invokeMethod("documentChanged", arguments: event) { [weak host] _ in
+            guard let host, !host.closed else { return }
+            for (view, buffer) in fresh { host.publish(view, buffer) }
+          }
+        } else {
+          for (view, buffer) in buffers { host.publish(view, buffer) }
         }
       } catch {
         host.channel.invokeMethod("nativeError", arguments: String(describing: error))
@@ -283,6 +342,7 @@ final class ProbeSession {
 
   fileprivate func clearFrames() {
     latest = [:]
+    surfaces = [:]
     for host in hosts.allObjects { host.detachTexture() }
   }
 
@@ -294,26 +354,21 @@ final class ProbeSession {
     let group = DispatchGroup()
     for host in hosts.allObjects where !host.closed { group.enter(); host.channel.invokeMethod("flushEditors", arguments: nil) { _ in group.leave() } }
     group.notify(queue: .main) {
-    self.worker.async {
-      let status = try? self.runtime.status()
-      DispatchQueue.main.async {
-        if let status { self.state = status }
-        guard self.state["dirty"] as? Bool == true else {
-          self.confirming = false; completion(true); return
-        }
-        guard let main = self.hosts.allObjects.first(where: { $0.isMain && !$0.closed }) else {
-          self.confirming = false; completion(false); return
-        }
-        main.window?.deminiaturize(nil)
-        main.window?.makeKeyAndOrderFront(nil)
-        main.channel.invokeMethod("documentChanged", arguments: main.envelope(self.state))
-        main.channel.invokeMethod("confirmClose", arguments: nil) { reply in
-          self.confirming = false
-          completion((reply as? Bool) == true)
-        }
+      if let status = try? self.runtime.status() { self.state = status }
+      guard self.state["dirty"] as? Bool == true else {
+        self.confirming = false; completion(true); return
+      }
+      guard let main = self.hosts.allObjects.first(where: { $0.isMain && !$0.closed }) else {
+        self.confirming = false; completion(false); return
+      }
+      main.window?.deminiaturize(nil)
+      main.window?.makeKeyAndOrderFront(nil)
+      main.channel.invokeMethod("documentChanged", arguments: main.envelope(self.state))
+      main.channel.invokeMethod("confirmClose", arguments: nil) { reply in
+        self.confirming = false
+        completion((reply as? Bool) == true)
       }
     }
-  }
   }
 
   func shutdown(_ completion: @escaping () -> Void) {
@@ -322,13 +377,9 @@ final class ProbeSession {
     epoch &+= 1
     clearFrames()
     state = [:]
-    worker.async {
-      self.runtime.close()
-      DispatchQueue.main.async {
-        for window in Array(self.windows.values) { window.close() }
-        completion()
-      }
-    }
+    runtime.close()
+    for window in Array(windows.values) { window.close() }
+    completion()
   }
 
   fileprivate func openPanelWindow(_ panels: [String]) -> [String: Any] {
@@ -396,6 +447,10 @@ final class ProbeHost: NSObject {
 
   fileprivate func envelope(_ status: [String: Any], frameReady: Bool = false) -> [String: Any] {
     var reply: [String: Any] = ["status": status, "windowId": id, "frameReady": frameReady]
+    if let context = session.runtime.context, let library = session.runtime.location {
+      reply["context"] = Int(bitPattern: context)
+      reply["library"] = library
+    }
     if let textureID = textureIDs[ProbeHost.outputView] { reply["textureId"] = textureID }
     reply["textureIds"] = textureIDs
     if let width = status["width"] { reply["width"] = width }
@@ -485,7 +540,22 @@ final class ProbeHost: NSObject {
       for host in session.hosts.allObjects where !host.closed { host.channel.invokeMethod("paneState", arguments: args) }
       result(true)
     case "windowInfo":
-      result(["id": id, "panels": panels, "main": isMain, "paneState": session.paneState])
+      result(["id": id, "panels": panels, "main": isMain, "paneState": session.paneState, "panelWindows": session.windows.count])
+    case "ensureSurfaces":
+      guard let views = args["views"] as? [[String: Any]] else { fail(result, "ensureSurfaces requires views"); return }
+      do {
+        for view in views { if let name = view["view"] as? String { try ensureTexture(name) } }
+        var reply = try session.ensureSurfaces(views)
+        reply["textureIds"] = textureIDs
+        if let textureID = textureIDs[ProbeHost.outputView] { reply["textureId"] = textureID }
+        result(reply)
+      } catch { fail(result, String(describing: error)) }
+    case "broadcast":
+      // The main window drove the runtime itself; the other windows learn the outcome here.
+      guard let text = args["status"] as? String, let data = text.data(using: .utf8),
+            let status = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { fail(result, "broadcast requires a status JSON string"); return }
+      session.broadcast(status, origin: self, frameReady: args["frameReady"] as? Bool == true, frameOnly: args["frameOnly"] as? Bool == true)
+      result(true)
     case "focusWindow", "closeWindow":
       guard let requestedID = args["id"] as? String,
             let host = session.hosts.allObjects.first(where: { $0.id == requestedID && !$0.closed }),
@@ -616,20 +686,14 @@ final class ProbeHost: NSObject {
     }
   }
 
-  private func perform<T>(_ result: @escaping FlutterResult, isRender: Bool = false,
-                          work: @escaping () throws -> T, finish: @escaping (T) throws -> Any) {
-    let epoch = session.epoch
-    session.worker.async {
-      let outcome = Result { try work() }
-      DispatchQueue.main.async {
-        guard !self.closed, epoch == self.session.epoch else {
-          result(FlutterError(code: "superseded", message: "Document or window changed", details: nil)); return
-        }
-        if isRender { self.rendering = false }
-        do { result(try finish(outcome.get())) }
-        catch { self.fail(result, String(describing: error)) }
-      }
-    }
+  /// Runtime work runs here, on the main thread, where Dart's own calls run too.
+  private func perform<T>(_ result: FlutterResult, isRender: Bool = false,
+                          work: () throws -> T, finish: (T) throws -> Any) {
+    precondition(Thread.isMainThread)
+    let outcome = Result { try work() }
+    if isRender { rendering = false }
+    do { result(try finish(outcome.get())) }
+    catch { fail(result, String(describing: error)) }
   }
 
   private func fail(_ result: FlutterResult, _ message: String) {

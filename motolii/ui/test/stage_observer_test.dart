@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/stage.dart';
-import '../lib/foundation/theme.dart';
+import 'support/editor_test_theme.dart';
 
 /// rerun 3D view の取説: object をダブルクリックで Focus、背景をダブルクリックで Reset view。
 class ObserverSession extends EditorSession {
@@ -61,7 +61,7 @@ void main() {
       };
       await tester.pumpWidget(
         MaterialApp(
-          theme: EditorTheme.data,
+          theme: editorTestTheme,
           home: Scaffold(
             body: SizedBox(
               width: 464,
@@ -110,7 +110,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: SizedBox(
             width: 464,
@@ -196,7 +196,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: SizedBox(
             width: 464,
@@ -238,7 +238,7 @@ void main() {
       late StateSetter show;
       await tester.pumpWidget(
         MaterialApp(
-          theme: EditorTheme.data,
+          theme: editorTestTheme,
           home: Scaffold(
             body: SizedBox(
               width: 464,

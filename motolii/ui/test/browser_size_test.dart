@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/browser.dart';
 
+import '../lib/foundation/theme.dart';
+
 void main() {
   Future<EditorSession> mount(WidgetTester tester) async {
     tester.view.physicalSize = const Size(400, 600);
@@ -38,7 +40,10 @@ void main() {
   double cardWidth(WidgetTester tester) => tester
       .getSize(
         find
-            .ancestor(of: find.text('clip0'), matching: find.byType(Tooltip))
+            .ancestor(
+              of: find.text('clip0'),
+              matching: find.byType(EditorTooltip),
+            )
             .first,
       )
       .width;

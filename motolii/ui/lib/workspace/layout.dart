@@ -151,10 +151,18 @@ DockNode initialDock() => DockNode.split(
   DockNode.leaf('timeline', ['Timeline']),
 );
 
-class WorkspaceLayout {
+/// Notifies when a pane is shown, closed or moved; the window listens with
+/// the dock alone, so a panel that opens does not rebuild the menu and the
+/// status line around it.
+class WorkspaceLayout extends ChangeNotifier {
   DockNode root = initialDock();
   void show(String name) {
     if (!paneNames.contains(name)) return;
+    _show(name);
+    notifyListeners();
+  }
+
+  void _show(String name) {
     for (final node in root.leaves) {
       if (node.tabs.contains(name)) {
         node.active = name;
@@ -167,6 +175,11 @@ class WorkspaceLayout {
   }
 
   void close(String name) {
+    _close(name);
+    notifyListeners();
+  }
+
+  void _close(String name) {
     for (final node in root.leaves) {
       node.tabs.remove(name);
       if (node.active == name)
@@ -176,7 +189,12 @@ class WorkspaceLayout {
 
   void move(String name, DockNode target, String edge) {
     if (!paneNames.contains(name)) return;
-    close(name);
+    _move(name, target, edge);
+    notifyListeners();
+  }
+
+  void _move(String name, DockNode target, String edge) {
+    _close(name);
     if (edge == 'center' || target.tabs.isEmpty) {
       target.tabs.add(name);
       target.active = name;

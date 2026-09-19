@@ -227,3 +227,4 @@
 - **UI配置保留**: 操作意味とtyped routeが閉じ、最終surfaceだけが未決のcontrolは[Host-owned staging surface](reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)へ一時配置して並列接続を進められる。値／保存ownerを移さず、final assignmentで退役する。空間interaction、未決意味、公開UI frameworkの逃げ道にはしない
 
 </details>
+- [拡張性の棚](shelf-sources.md) — 外の code の池(GLSL / WGSL / Slang / HLSL / SkSL / Processing / Cavalry JS)と Motolii へ入る道、状態(✅ ◻ ✎)

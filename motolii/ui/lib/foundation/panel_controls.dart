@@ -2,13 +2,17 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
-import 'theme.dart';
+import 'glyphs.dart';
+import 'leaves.dart';
 import 'metrics.dart';
+import 'theme.dart';
+
+export 'leaves.dart' show EditorChoice;
 
 /// One item's view of a selection signal: rebuilds only when [test] flips for
 /// this item, so a pick in a shelf of hundreds redraws the two it touches.
@@ -119,75 +123,6 @@ class EditorBar extends StatelessWidget {
   );
 }
 
-/// One value out of a short list. The sheet is the app's menu (menuTheme), so
-/// rows are EditorMetrics.row high; DropdownButton cannot go under 48 and is
-/// not used.
-class EditorChoice<T> extends StatelessWidget {
-  const EditorChoice({
-    super.key,
-    required this.value,
-    required this.choices,
-    required this.onChanged,
-  });
-  final T? value;
-  final List<MapEntry<T, String>> choices;
-  final ValueChanged<T>? onChanged;
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onChanged != null;
-    final label = choices
-        .where((e) => e.key == value)
-        .map((e) => e.value)
-        .firstOrNull;
-    return MenuAnchor(
-      animated: false,
-      crossAxisUnconstrained: false,
-      style: EditorTheme.menuSheet,
-      menuChildren: [
-        for (final e in choices)
-          MenuItemButton(
-            style: EditorTheme.menuRow,
-            onPressed: enabled ? () => onChanged!(e.key) : null,
-            child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      builder: (context, menu, _) => GestureDetector(
-        onTap: enabled ? (menu.isOpen ? menu.close : menu.open) : null,
-        child: Container(
-          height: EditorMetrics.row,
-          padding: const EdgeInsets.only(left: EditorMetrics.s4),
-          decoration: BoxDecoration(
-            color: EditorTheme.app,
-            border: Border.all(
-              color: enabled ? EditorTheme.border : EditorTheme.line,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: EditorMetrics.font,
-                    color: enabled ? EditorTheme.ink : EditorTheme.muted,
-                  ),
-                ),
-              ),
-              const Icon(
-                Icons.arrow_drop_down,
-                size: EditorMetrics.s16,
-                color: EditorTheme.muted,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The one box a field sits in, at rest and while typing. The theme draws no
 /// frame around a TextField, so a field has this border and no other: line at
 /// rest, accent while it owns the keys, error while it refuses a draft. A tap
@@ -261,7 +196,7 @@ class EditorFold extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            open ? Icons.expand_more : Icons.chevron_right,
+            open ? Glyph.expand_more : Glyph.chevron_right,
             size: EditorMetrics.s14,
             color: EditorTheme.muted,
           ),
@@ -274,7 +209,7 @@ class EditorFold extends StatelessWidget {
             ),
           ),
           const SizedBox(width: EditorMetrics.s6),
-          const Expanded(child: Divider(height: 1)),
+          const Expanded(child: EditorRule(height: 1)),
         ],
       ),
     ),
@@ -360,7 +295,7 @@ class _EditorDraftFieldState extends State<EditorDraftField> {
       error: _error != null,
       height: widget.multiline ? null : EditorMetrics.row,
       minHeight: widget.multiline ? EditorMetrics.row : null,
-      child: TextField(
+      child: EditorTextField(
         controller: _text,
         focusNode: _focus,
         enabled: widget.enabled,
@@ -370,7 +305,7 @@ class _EditorDraftFieldState extends State<EditorDraftField> {
           fontSize: EditorMetrics.font,
           color: EditorTheme.ink,
         ),
-        decoration: InputDecoration(hintText: widget.label),
+        hint: widget.label,
         onSubmitted: (_) => _commit(),
         onChanged: (_) {
           if (_error != null) setState(() => _error = null);
@@ -399,6 +334,7 @@ class EditorNumericField extends StatefulWidget {
     this.fill = false,
     this.unit,
     this.decimals = 2,
+    this.zeroWord,
     this.defaultValue,
     this.tint,
     this.track = TrackStyle.fill,
@@ -413,9 +349,20 @@ class EditorNumericField extends StatefulWidget {
   /// a bounded amount reads before the digits do.
   final bool fill;
 
-  /// A small rider after the number: px, %, °.
+  /// A small rider after the number: px, %, °, or a short plain word the
+  /// field names itself by (cols, rows, s) — Figma's way of labelling a
+  /// number inside its own box instead of in a column beside it.
   final String? unit;
+
+  /// How many digits after the point the number reads at; 0 for a count,
+  /// which must read as a whole number (2, not 2.00).
   final int decimals;
+
+  /// The word this number reads as at zero, when zero has a meaning of its
+  /// own rather than a size: grid rows at 0 are `auto`. The word replaces
+  /// the digits for reading only — the field still scrubs and types as the
+  /// number it is.
+  final String? zeroWord;
 
   /// Where the value rests when untouched: a tick on the track, and the
   /// point a centre-zero track fills from.
@@ -440,16 +387,47 @@ class EditorNumericField extends StatefulWidget {
   State<EditorNumericField> createState() => _EditorNumericFieldState();
 }
 
-class _EditorNumericFieldState extends State<EditorNumericField> {
+class _EditorNumericFieldState extends State<EditorNumericField>
+    with WidgetsBindingObserver, EditorDragSession<double, EditorNumericField> {
   final _text = TextEditingController();
   final _focus = FocusNode();
   final _ownIdle = FocusNode();
   FocusNode get _idle => widget.idleFocus ?? _ownIdle;
-  bool _editing = false, _dragging = false, _ending = false;
+  bool _editing = false;
   int? _pointer;
   double _start = 0, _startGlobalX = 0, _startGlobalY = 0;
   double? _shown;
-  late final _queue = EditorPreviewQueue<double>((v) => widget.onPreview(v));
+
+  /// The ladder's pill hangs over the well while a scrub is off the ×1 rung.
+  final _well = LayerLink();
+  final _pill = OverlayPortalController();
+  void _showRung() {
+    final wanted = dragging && _rung != 1;
+    if (wanted && !_pill.isShowing) _pill.show();
+    if (!wanted && _pill.isShowing) _pill.hide();
+  }
+
+  // The field is the one control a lost window does not cancel: a two-finger
+  // scrub settles on its own timer.
+  @override
+  bool get watchesWindow => false;
+  @override
+  Future<void> sendPreview(double value) => widget.onPreview(value);
+  @override
+  Future<void> commitDrag() => widget.onFinish();
+  @override
+  Future<void> cancelDrag() => widget.onCancel();
+  @override
+  void dragStopped(bool cancel) {
+    _settle?.cancel();
+    _settle = null;
+    _pointer = null;
+    setState(() {});
+    _showRung();
+  }
+
+  @override
+  void dragSettled() => setState(() => _shown = null);
   String? _error;
   @override
   void initState() {
@@ -498,8 +476,16 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   String get _reading =>
       (_shown ?? widget.value).toStringAsFixed(widget.decimals);
 
+  /// What the well shows when it is not being typed into: the digits, or
+  /// the word zero stands for on this row.
+  String get _shownText {
+    final word = widget.zeroWord;
+    if (word != null && (_shown ?? widget.value).abs() < .0005) return word;
+    return _reading;
+  }
+
   void _open() {
-    if (!widget.enabled || _ending) return;
+    if (!widget.enabled || ending) return;
     setState(() {
       _editing = true;
       _text.text = widget.mixed ? '' : _reading;
@@ -529,10 +515,10 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     widget.onCommit(_bounded(n));
   }
 
-  void _tick(double n) => _queue.add(n);
+  void _tick(double n) => queue.add(n);
 
   void _pointerDown(PointerDownEvent event) {
-    if (!widget.enabled || _ending || _pointer != null || event.buttons != 1)
+    if (!widget.enabled || ending || _pointer != null || event.buttons != 1)
       return;
     _pointer = event.pointer;
     _start = widget.value;
@@ -540,7 +526,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     _startGlobalY = event.position.dy;
     // A press lands on a two-finger scrub still settling: the press takes
     // the session over, and the release will finish it.
-    if (_dragging) {
+    if (dragging) {
       _settle?.cancel();
       _settle = null;
       _rungBase = _shown ?? widget.value;
@@ -558,7 +544,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   /// so sideways is the number's and up-and-down stays the list's.
   Timer? _settle;
   void _panUpdate(DragUpdateDetails details) {
-    if (!widget.enabled || _editing || _ending || _pointer != null) return;
+    if (!widget.enabled || _editing || ending || _pointer != null) return;
     final by = HardwareKeyboard.instance.isShiftPressed ? 10 : 1;
     // The pan is reported as the content's motion (natural scrolling), the
     // mirror of the fingers; fingers moving right raise the number.
@@ -570,12 +556,12 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   }
 
   void _panEnd() {
-    if (_pointer == null) _end(false);
+    if (_pointer == null) endDrag(false);
   }
 
   void _pointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    if (!widget.enabled || _editing || _ending) return;
+    if (!widget.enabled || _editing || ending) return;
     final held = _pointer != null;
     final delta = event.scrollDelta;
     final horizontal = delta.dx.abs() > delta.dy.abs();
@@ -590,10 +576,10 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   }
 
   void _nudge(double step, double x, {required bool settle}) {
-    if (!_dragging) {
+    if (!dragging) {
       widget.onBegin?.call();
       _rung = 1;
-      setState(() => _dragging = true);
+      setState(() => dragging = true);
     }
     final n = _bounded((_shown ?? widget.value) + step);
     _rungBase = n;
@@ -602,7 +588,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     _tick(n);
     _settle?.cancel();
     _settle = settle
-        ? Timer(const Duration(milliseconds: 300), () => _end(false))
+        ? Timer(const Duration(milliseconds: 300), () => endDrag(false))
         : null;
   }
 
@@ -622,19 +608,20 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   void _pointerMove(PointerMoveEvent event) {
     if (event.pointer != _pointer || event.buttons != 1) return;
     final displacement = event.position.dx - _startGlobalX;
-    if (!_dragging) {
+    if (!dragging) {
       if (displacement.abs() < 3) return;
       widget.onBegin?.call();
       _rung = 1;
       _rungBase = _start;
       _rungStartX = _startGlobalX;
-      setState(() => _dragging = true);
+      setState(() => dragging = true);
     }
     final rung = _rungFor(event.position.dy - _startGlobalY);
     if (rung != _rung) {
       _rungBase = _shown ?? widget.value;
       _rungStartX = event.position.dx;
       _rung = rung;
+      _showRung();
     }
     final n = _bounded(
       _rungBase + (event.position.dx - _rungStartX) * widget.speed * _rung,
@@ -645,34 +632,16 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
 
   void _pointerUp(PointerEvent event, {bool cancel = false}) {
     if (event.pointer != _pointer) return;
-    if (_dragging) {
-      _end(cancel);
+    if (dragging) {
+      endDrag(cancel);
     } else {
       _pointer = null;
-    }
-  }
-
-  Future<void> _end(bool cancel) async {
-    if (!_dragging) return;
-    _settle?.cancel();
-    _settle = null;
-    _pointer = null;
-    setState(() => _dragging = false);
-    _ending = true;
-    try {
-      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
-    } finally {
-      _ending = false;
-      if (mounted) setState(() => _shown = null);
     }
   }
 
   @override
   void dispose() {
     _settle?.cancel();
-    if (_dragging) {
-      _queue.finish(true, widget.onCancel);
-    }
     _focus.removeListener(_lost);
     _focus.dispose();
     _ownIdle.dispose();
@@ -686,8 +655,8 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     onKeyEvent: (_, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.escape) {
-        if (_dragging) {
-          _end(true);
+        if (dragging) {
+          endDrag(true);
           return KeyEventResult.handled;
         }
         if (_editing) {
@@ -698,7 +667,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
           return KeyEventResult.handled;
         }
       }
-      if (!_editing && !_dragging && !_ending && widget.enabled) {
+      if (!_editing && !dragging && !ending && widget.enabled) {
         if (event.logicalKey == LogicalKeyboardKey.enter) {
           _open();
           return KeyEventResult.handled;
@@ -730,7 +699,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: EditorTextField(
                       controller: _text,
                       focusNode: _focus,
                       autofocus: true,
@@ -747,8 +716,10 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                   ),
                   if (widget.unit != null) ...[
                     const SizedBox(width: EditorMetrics.s2),
-                    SizedBox(
-                      width: EditorMetrics.s12,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: EditorMetrics.s12,
+                      ),
                       child: Text(
                         widget.unit!,
                         style: const TextStyle(
@@ -781,99 +752,121 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                   onPointerCancel: (event) => _pointerUp(event, cancel: true),
                   onPointerSignal: _pointerSignal,
                   child: EditorTooltip(
-                    message: _dragging && _rung != 1
+                    message: dragging && _rung != 1
                         ? '${widget.label} ×$_rung'
                         : widget.enabled
                         ? '${widget.label} · drag to adjust · double-click or Enter to type'
                         : widget.label,
-                    child: Container(
-                      height: EditorMetrics.row,
-                      decoration: BoxDecoration(
-                        color: _dragging ? EditorTheme.hover : EditorTheme.app,
-                        border: Border.all(color: EditorTheme.line),
+                    child: OverlayPortal(
+                      controller: _pill,
+                      overlayChildBuilder: (_) => CompositedTransformFollower(
+                        link: _well,
+                        targetAnchor: Alignment.topCenter,
+                        followerAnchor: Alignment.bottomCenter,
+                        offset: const Offset(0, -EditorMetrics.s4),
+                        child: IgnorePointer(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: _RungPill(rung: _rung),
+                          ),
+                        ),
                       ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (widget.fill &&
-                              widget.min != null &&
-                              widget.max != null)
-                            CustomPaint(
-                              painter: _TrackPainter(
-                                value: _shown ?? widget.value,
-                                min: widget.min!,
-                                max: widget.max!,
-                                rest: widget.defaultValue,
-                                tint: widget.tint ?? EditorTheme.raised,
-                                style: widget.track,
-                              ),
-                            ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: EditorMetrics.s2,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    widget.mixed && _shown == null
-                                        ? '—'
-                                        : _reading,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.clip,
-                                    style: TextStyle(
-                                      fontSize: EditorMetrics.font,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                      // Resting at its default the number is
-                                      // quiet; moved, it is ink.
-                                      color: !widget.enabled
-                                          ? EditorTheme.muted
-                                          : widget.defaultValue != null &&
-                                                (widget.value -
-                                                            widget
-                                                                .defaultValue!)
-                                                        .abs() <
-                                                    .0005
-                                          ? EditorTheme.tab
-                                          : EditorTheme.ink,
-                                      // A number you can drag wears a dotted
-                                      // underline, unless a track already says
-                                      // so; a read-only one never does.
-                                      decoration:
-                                          widget.enabled &&
-                                              !(widget.fill &&
-                                                  widget.min != null &&
-                                                  widget.max != null)
-                                          ? TextDecoration.underline
-                                          : TextDecoration.none,
-                                      decorationStyle:
-                                          TextDecorationStyle.dotted,
-                                      decorationColor: EditorTheme.muted,
-                                    ),
+                      child: CompositedTransformTarget(
+                        link: _well,
+                        child: Container(
+                          height: EditorMetrics.row,
+                          decoration: BoxDecoration(
+                            color: dragging
+                                ? EditorTheme.hover
+                                : EditorTheme.app,
+                            border: Border.all(color: EditorTheme.line),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (widget.fill &&
+                                  widget.min != null &&
+                                  widget.max != null)
+                                CustomPaint(
+                                  painter: _TrackPainter(
+                                    value: _shown ?? widget.value,
+                                    min: widget.min!,
+                                    max: widget.max!,
+                                    rest: widget.defaultValue,
+                                    tint: widget.tint ?? EditorTheme.raised,
+                                    style: widget.track,
                                   ),
                                 ),
-                                // The rider keeps its slot even when empty, so
-                                // digits line up down a column of wells.
-                                if (widget.unit != null) ...[
-                                  const SizedBox(width: EditorMetrics.s2),
-                                  SizedBox(
-                                    width: EditorMetrics.s12,
-                                    child: Text(
-                                      widget.unit!,
-                                      style: const TextStyle(
-                                        fontSize: EditorMetrics.micro,
-                                        color: EditorTheme.muted,
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: EditorMetrics.s2,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        widget.mixed && _shown == null
+                                            ? '—'
+                                            : _shownText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.clip,
+                                        style: TextStyle(
+                                          fontSize: EditorMetrics.font,
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                          // Resting at its default the number is
+                                          // quiet; moved, it is ink.
+                                          color: !widget.enabled
+                                              ? EditorTheme.muted
+                                              : widget.defaultValue != null &&
+                                                    (widget.value -
+                                                                widget
+                                                                    .defaultValue!)
+                                                            .abs() <
+                                                        .0005
+                                              ? EditorTheme.tab
+                                              : EditorTheme.ink,
+                                          // A number you can drag wears a dotted
+                                          // underline, unless a track already says
+                                          // so; a read-only one never does.
+                                          decoration:
+                                              widget.enabled &&
+                                                  !(widget.fill &&
+                                                      widget.min != null &&
+                                                      widget.max != null)
+                                              ? TextDecoration.underline
+                                              : TextDecoration.none,
+                                          decorationStyle:
+                                              TextDecorationStyle.dotted,
+                                          decorationColor: EditorTheme.muted,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ],
-                            ),
+                                    // The rider keeps its slot even when empty, so
+                                    // digits line up down a column of wells.
+                                    if (widget.unit != null) ...[
+                                      const SizedBox(width: EditorMetrics.s2),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          minWidth: EditorMetrics.s12,
+                                        ),
+                                        child: Text(
+                                          widget.unit!,
+                                          style: const TextStyle(
+                                            fontSize: EditorMetrics.micro,
+                                            color: EditorTheme.muted,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -881,6 +874,53 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
               ),
             ),
           ),
+  );
+}
+
+/// The ladder while a scrub is on it: the four rungs, the one the pointer
+/// is on in ink, the rest faint (Lumit's value field shows the same four).
+class _RungPill extends StatelessWidget {
+  const _RungPill({required this.rung});
+  final double rung;
+  static const _rungs = [10.0, 1.0, .1, .01];
+  static String _name(double r) => r == 10
+      ? '×10'
+      : r == 1
+      ? '×1'
+      : r == .1
+      ? '×0.1'
+      : '×0.01';
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minHeight: EditorMetrics.control),
+    padding: const EdgeInsets.symmetric(
+      horizontal: EditorMetrics.s8,
+      vertical: EditorMetrics.s4,
+    ),
+    decoration: const BoxDecoration(
+      color: EditorTheme.tooltip,
+      borderRadius: BorderRadius.all(Radius.circular(EditorMetrics.s4)),
+    ),
+    child: Text.rich(
+      TextSpan(
+        children: [
+          for (final r in _rungs) ...[
+            if (r != _rungs.first) const TextSpan(text: '  '),
+            TextSpan(
+              text: _name(r),
+              style: TextStyle(
+                color: r == rung ? EditorTheme.black : EditorTheme.disabledInk,
+                fontWeight: r == rung ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ],
+      ),
+      style: const TextStyle(
+        fontSize: EditorMetrics.s12,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
+    ),
   );
 }
 
@@ -1087,6 +1127,79 @@ class EditorDial extends StatefulWidget {
 }
 
 // Uses the numeric field's latest-pending-value rule for continuous controls.
+/// drag → preview → commit, once, for every continuous control. The field,
+/// the dial, the pad and the gradient stops mix this in and keep only their
+/// own value shape: what a preview sends, what a commit and a cancel run, and
+/// what to clear once the drag has settled. The window losing focus, or the
+/// app leaving the foreground, cancels the drag in flight.
+mixin EditorDragSession<T, W extends StatefulWidget>
+    on State<W>, WidgetsBindingObserver {
+  late final queue = EditorPreviewQueue<T>(sendPreview);
+
+  /// True from [beginDrag] until [endDrag] takes the drag over.
+  bool dragging = false;
+
+  /// True while the commit or cancel of the last drag is in flight; a new
+  /// drag waits for it.
+  bool ending = false;
+
+  Future<void> sendPreview(T value);
+  Future<void> commitDrag();
+  Future<void> cancelDrag();
+
+  /// Whether the window's focus and the app's lifecycle end the drag.
+  bool get watchesWindow => true;
+
+  /// A commit that throws away what is still queued and runs [cancelDrag]
+  /// instead (a stop pulled off its bar).
+  bool get discardsPreview => false;
+
+  /// Right after the drag stops, before the commit or cancel goes out.
+  void dragStopped(bool cancel) {}
+
+  /// Once the commit or cancel has settled and the control is still mounted.
+  void dragSettled() {}
+
+  void beginDrag() => dragging = true;
+
+  Future<void> endDrag(bool cancel) async {
+    if (!dragging) return;
+    dragging = false;
+    dragStopped(cancel);
+    ending = true;
+    final discard = cancel || discardsPreview;
+    try {
+      await queue.finish(discard, discard ? cancelDrag : commitDrag);
+    } finally {
+      ending = false;
+      if (mounted) dragSettled();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (watchesWindow) WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    if (dragging) queue.finish(true, cancelDrag);
+    if (watchesWindow) WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) endDrag(true);
+  }
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (event.state == ViewFocusState.unfocused) endDrag(true);
+  }
+}
+
 class EditorPreviewQueue<T> {
   EditorPreviewQueue(this.send);
   final Future<void> Function(T) send;
@@ -1120,44 +1233,22 @@ class EditorPreviewQueue<T> {
   }
 }
 
-class _EditorDialState extends State<EditorDial> with WidgetsBindingObserver {
+class _EditorDialState extends State<EditorDial>
+    with WidgetsBindingObserver, EditorDragSession<double, EditorDial> {
   double? _shown;
   double _lastAngle = 0;
-  bool _dragging = false, _ending = false;
-  late final _queue = EditorPreviewQueue<double>((v) => widget.onPreview(v));
   final _gestureFocus = FocusNode();
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
+  Future<void> sendPreview(double value) => widget.onPreview(value);
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _end(true);
-  }
-
+  Future<void> commitDrag() => widget.onFinish();
   @override
-  void didChangeViewFocus(ViewFocusEvent event) {
-    if (event.state == ViewFocusState.unfocused) _end(true);
-  }
-
-  Future<void> _end(bool cancel) async {
-    if (!_dragging) return;
-    _dragging = false;
-    _ending = true;
-    try {
-      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
-    } finally {
-      _ending = false;
-      if (mounted) setState(() => _shown = null);
-    }
-  }
+  Future<void> cancelDrag() => widget.onCancel();
+  @override
+  void dragSettled() => setState(() => _shown = null);
 
   @override
   void dispose() {
-    if (_dragging) _queue.finish(true, widget.onCancel);
-    WidgetsBinding.instance.removeObserver(this);
     _gestureFocus.dispose();
     super.dispose();
   }
@@ -1174,21 +1265,21 @@ class _EditorDialState extends State<EditorDial> with WidgetsBindingObserver {
     onKeyEvent: (_, event) {
       if (event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.escape &&
-          _dragging) {
-        _end(true);
+          dragging) {
+        endDrag(true);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     },
     child: Listener(
-      onPointerCancel: (_) => _end(true),
+      onPointerCancel: (_) => endDrag(true),
       child: EditorTooltip(
         message: 'Rotation',
         child: GestureDetector(
           onPanStart: widget.enabled
               ? (e) {
-                  if (_ending) return;
-                  _dragging = true;
+                  if (ending) return;
+                  dragging = true;
                   _gestureFocus.requestFocus();
                   _lastAngle = _angleOf(e.localPosition);
                   _shown = widget.degrees;
@@ -1197,18 +1288,18 @@ class _EditorDialState extends State<EditorDial> with WidgetsBindingObserver {
               : null,
           onPanUpdate: widget.enabled
               ? (e) {
-                  if (!_dragging) return;
+                  if (!dragging) return;
                   final a = _angleOf(e.localPosition);
                   var delta = a - _lastAngle;
                   if (delta > 180) delta -= 360;
                   if (delta < -180) delta += 360;
                   _lastAngle = a;
                   setState(() => _shown = (_shown ?? widget.degrees) + delta);
-                  _queue.add(_shown!);
+                  queue.add(_shown!);
                 }
               : null,
-          onPanEnd: widget.enabled ? (_) => _end(false) : null,
-          onPanCancel: widget.enabled ? () => _end(true) : null,
+          onPanEnd: widget.enabled ? (_) => endDrag(false) : null,
+          onPanCancel: widget.enabled ? () => endDrag(true) : null,
           child: CustomPaint(
             size: Size.square(widget.size),
             painter: _DialPainter(
@@ -1341,8 +1432,8 @@ class EditorCard extends StatelessWidget {
   /// The card's contents faded: what it holds is not applied right now.
   final bool dim;
   @override
-  Widget build(BuildContext context) => Material(
-    color: EditorTheme.panel,
+  Widget build(BuildContext context) => DefaultTextStyle(
+    style: EditorTheme.text,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
       decoration: const BoxDecoration(
@@ -1352,46 +1443,12 @@ class EditorCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: EditorMetrics.row,
-            child: Row(
-              children: [
-                if (leading != null) leading!,
-                Expanded(
-                  child: Semantics(
-                    expanded: expanded,
-                    child: InkWell(
-                      onTap: onToggle,
-                      child: Row(
-                        children: [
-                          if (onToggle != null)
-                            Icon(
-                              expanded
-                                  ? Icons.expand_more
-                                  : Icons.chevron_right,
-                              size: EditorMetrics.s14,
-                              color: EditorTheme.muted,
-                            ),
-                          Expanded(
-                            child: Text(
-                              title.toUpperCase(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: EditorMetrics.micro,
-                                letterSpacing: 1,
-                                color: EditorTheme.muted,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (trailing != null) trailing!,
-              ],
-            ),
+          _SectionHead(
+            title: title,
+            leading: leading,
+            trailing: trailing,
+            expanded: expanded,
+            onToggle: onToggle,
           ),
           if (expanded) ...[
             const SizedBox(height: EditorMetrics.s2),
@@ -1413,9 +1470,71 @@ class EditorCard extends StatelessWidget {
   );
 }
 
+/// A section's head row: its name, the fold mark when it folds, and what the
+/// caller puts at either end.
+class _SectionHead extends StatelessWidget {
+  const _SectionHead({
+    required this.title,
+    required this.leading,
+    required this.trailing,
+    required this.expanded,
+    required this.onToggle,
+  });
+  final String title;
+  final Widget? leading, trailing;
+  final bool expanded;
+  final VoidCallback? onToggle;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: EditorMetrics.row,
+    child: Row(
+      children: [
+        if (leading != null) leading!,
+        Expanded(
+          child: Semantics(
+            expanded: expanded,
+            child: EditorPress(
+              onTap: onToggle,
+              child: Row(
+                children: [
+                  if (onToggle != null)
+                    Icon(
+                      expanded ? Glyph.expand_more : Glyph.chevron_right,
+                      size: EditorMetrics.s14,
+                      color: EditorTheme.muted,
+                    ),
+                  Expanded(
+                    child: Text(
+                      title.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: EditorMetrics.micro,
+                        letterSpacing: 1,
+                        color: EditorTheme.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    ),
+  );
+}
+
 /// Two values as one point on a square. Dragging moves the point by the
 /// pointer's own distance (no range needed); the dot shows where the pair
 /// stands within [span] of the centre.
+///
+/// With [unit] the pair is a fraction of the square (0..1 each way, top-left
+/// at the origin) and [snaps] are the places the pair may land: the sent
+/// value is always the nearest snap, the dot follows the pointer until it is
+/// let go (Shift holds the dot on the snaps too). [bars] paints the snaps of
+/// one axis as columns — the alignment box in its "auto gap" mode.
 class EditorPad extends StatefulWidget {
   const EditorPad({
     super.key,
@@ -1430,10 +1549,28 @@ class EditorPad extends StatefulWidget {
     this.span = EditorMetrics.s200,
     this.speed = 1,
     this.tint,
+    this.unit = false,
+    this.snaps,
+    this.bars,
   });
   final double x, y, size, span, speed;
-  final bool enabled;
+  final bool enabled, unit;
+  final List<Offset>? snaps;
+  final Axis? bars;
   final Color? tint;
+
+  /// The snap nearest to [at]; [at] itself when there are none.
+  Offset snapped(Offset at) {
+    final snaps = this.snaps;
+    if (snaps == null || snaps.isEmpty) return at;
+    var best = snaps.first;
+    for (final s in snaps) {
+      if ((s - at).distanceSquared < (best - at).distanceSquared) best = s;
+    }
+    return best;
+  }
+
+  double get _inner => size - EditorMetrics.s4 * 2;
   final VoidCallback onBegin;
   final Future<void> Function(double x, double y) onPreview;
   final Future<void> Function() onFinish, onCancel;
@@ -1441,45 +1578,22 @@ class EditorPad extends StatefulWidget {
   State<EditorPad> createState() => _EditorPadState();
 }
 
-class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
+class _EditorPadState extends State<EditorPad>
+    with WidgetsBindingObserver, EditorDragSession<Offset, EditorPad> {
   Offset? _shown;
-  bool _dragging = false, _ending = false;
-  late final _queue = EditorPreviewQueue<Offset>(
-    (v) => widget.onPreview(v.dx, v.dy),
-  );
   final _gestureFocus = FocusNode();
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
+  Future<void> sendPreview(Offset value) =>
+      widget.onPreview(value.dx, value.dy);
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _end(true);
-  }
-
+  Future<void> commitDrag() => widget.onFinish();
   @override
-  void didChangeViewFocus(ViewFocusEvent event) {
-    if (event.state == ViewFocusState.unfocused) _end(true);
-  }
-
-  Future<void> _end(bool cancel) async {
-    if (!_dragging) return;
-    _dragging = false;
-    _ending = true;
-    try {
-      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
-    } finally {
-      _ending = false;
-      if (mounted) setState(() => _shown = null);
-    }
-  }
+  Future<void> cancelDrag() => widget.onCancel();
+  @override
+  void dragSettled() => setState(() => _shown = null);
 
   @override
   void dispose() {
-    if (_dragging) _queue.finish(true, widget.onCancel);
-    WidgetsBinding.instance.removeObserver(this);
     _gestureFocus.dispose();
     super.dispose();
   }
@@ -1490,14 +1604,14 @@ class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
     onKeyEvent: (_, event) {
       if (event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.escape &&
-          _dragging) {
-        _end(true);
+          dragging) {
+        endDrag(true);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     },
     child: Listener(
-      onPointerCancel: (_) => _end(true),
+      onPointerCancel: (_) => endDrag(true),
       child: EditorTooltip(
         message: 'Drag the point',
         child: MouseRegion(
@@ -1507,8 +1621,8 @@ class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
           child: GestureDetector(
             onPanStart: widget.enabled
                 ? (_) {
-                    if (_ending) return;
-                    _dragging = true;
+                    if (ending) return;
+                    dragging = true;
                     _gestureFocus.requestFocus();
                     _shown = Offset(widget.x, widget.y);
                     widget.onBegin();
@@ -1516,16 +1630,32 @@ class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
                 : null,
             onPanUpdate: widget.enabled
                 ? (e) {
-                    if (!_dragging) return;
-                    final next =
+                    if (!dragging) return;
+                    var next =
                         (_shown ?? Offset(widget.x, widget.y)) +
-                        e.delta * widget.speed;
-                    setState(() => _shown = next);
-                    _queue.add(next);
+                        e.delta *
+                            (widget.unit
+                                ? widget.speed / widget._inner
+                                : widget.speed);
+                    if (widget.unit) {
+                      next = Offset(
+                        next.dx.clamp(0.0, 1.0),
+                        next.dy.clamp(0.0, 1.0),
+                      );
+                    }
+                    final sent = widget.snapped(next);
+                    setState(
+                      () => _shown =
+                          HardwareKeyboard.instance.isShiftPressed &&
+                              widget.snaps != null
+                          ? sent
+                          : next,
+                    );
+                    queue.add(sent);
                   }
                 : null,
-            onPanEnd: widget.enabled ? (_) => _end(false) : null,
-            onPanCancel: widget.enabled ? () => _end(true) : null,
+            onPanEnd: widget.enabled ? (_) => endDrag(false) : null,
+            onPanCancel: widget.enabled ? () => endDrag(true) : null,
             child: CustomPaint(
               size: Size.square(widget.size),
               painter: _PadPainter(
@@ -1534,6 +1664,9 @@ class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
                 !widget.enabled
                     ? EditorTheme.muted
                     : widget.tint ?? EditorTheme.accent,
+                unit: widget.unit,
+                snaps: widget.snaps,
+                bars: widget.bars,
               ),
             ),
           ),
@@ -1544,10 +1677,20 @@ class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
 }
 
 class _PadPainter extends CustomPainter {
-  const _PadPainter(this.at, this.span, this.dot);
+  const _PadPainter(
+    this.at,
+    this.span,
+    this.dot, {
+    this.unit = false,
+    this.snaps,
+    this.bars,
+  });
   final Offset at;
   final double span;
   final Color dot;
+  final bool unit;
+  final List<Offset>? snaps;
+  final Axis? bars;
   @override
   void paint(Canvas canvas, Size size) {
     final r = RRect.fromRectAndRadius(
@@ -1559,14 +1702,55 @@ class _PadPainter extends CustomPainter {
     final hair = Paint()
       ..color = EditorTheme.line
       ..strokeWidth = 1;
-    canvas.drawLine(Offset(c.dx, 0), Offset(c.dx, size.height), hair);
-    canvas.drawLine(Offset(0, c.dy), Offset(size.width, c.dy), hair);
     final half = size.width / 2 - EditorMetrics.s4;
-    final p = Offset(
-      c.dx + (at.dx / span * half).clamp(-half, half),
-      c.dy + (at.dy / span * half).clamp(-half, half),
-    );
-    canvas.drawLine(c, p, Paint()..color = EditorTheme.border);
+    // A unit pad maps 0..1 onto the inner square; the snaps are its marks.
+    Offset place(Offset v) => unit
+        ? Offset(
+            EditorMetrics.s4 + v.dx.clamp(0.0, 1.0) * half * 2,
+            EditorMetrics.s4 + v.dy.clamp(0.0, 1.0) * half * 2,
+          )
+        : Offset(
+            c.dx + (v.dx / span * half).clamp(-half, half),
+            c.dy + (v.dy / span * half).clamp(-half, half),
+          );
+    if (snaps case final marks?) {
+      final mark = Paint()..color = EditorTheme.border;
+      for (final s in marks) {
+        final q = place(s);
+        if (bars == Axis.horizontal) {
+          canvas.drawRect(
+            Rect.fromCenter(center: q, width: EditorMetrics.s2, height: half),
+            mark,
+          );
+        } else if (bars == Axis.vertical) {
+          canvas.drawRect(
+            Rect.fromCenter(center: q, width: half, height: EditorMetrics.s2),
+            mark,
+          );
+        } else {
+          // A cross, not a dot: nine of them have to read as places to land
+          // at this size, and a one-pixel dot does not.
+          final pen = Paint()
+            ..color = EditorTheme.muted
+            ..strokeWidth = 1;
+          canvas.drawLine(
+            q - const Offset(EditorMetrics.s3, 0),
+            q + const Offset(EditorMetrics.s3, 0),
+            pen,
+          );
+          canvas.drawLine(
+            q - const Offset(0, EditorMetrics.s3),
+            q + const Offset(0, EditorMetrics.s3),
+            pen,
+          );
+        }
+      }
+    } else {
+      canvas.drawLine(Offset(c.dx, 0), Offset(c.dx, size.height), hair);
+      canvas.drawLine(Offset(0, c.dy), Offset(size.width, c.dy), hair);
+    }
+    final p = place(at);
+    if (!unit) canvas.drawLine(c, p, Paint()..color = EditorTheme.border);
     canvas.drawCircle(p, EditorMetrics.s4, Paint()..color = dot);
     canvas.drawRRect(
       r,
@@ -1578,7 +1762,12 @@ class _PadPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PadPainter old) =>
-      old.at != at || old.span != span || old.dot != dot;
+      old.at != at ||
+      old.span != span ||
+      old.dot != dot ||
+      old.unit != unit ||
+      old.bars != bars ||
+      !listEquals(old.snaps, snaps);
 }
 
 /// How a track tells its amount, by what the number is for.
@@ -1798,7 +1987,7 @@ class EditorZoomBar extends StatelessWidget {
     final percent = value / base * 100;
     void change(double n) =>
         onChanged(n.roundToDouble().clamp(low, high) * base / 100);
-    Widget step(IconData icon, int delta, String suffix) => InkWell(
+    Widget step(IconData icon, int delta, String suffix) => EditorPress(
       key: ValueKey('$keyPrefix-$suffix'),
       onTap: () => change(percent.roundToDouble() + delta),
       child: SizedBox(
@@ -1823,10 +2012,10 @@ class EditorZoomBar extends StatelessWidget {
           );
           return Row(
             children: [
-              step(Icons.remove, -this.step, 'smaller'),
+              step(Glyph.remove, -this.step, 'smaller'),
               if (box.maxWidth >= EditorMetrics.cell) ...[
                 Expanded(
-                  child: Slider(
+                  child: EditorSlider(
                     min: low,
                     max: high,
                     divisions: (high - low).round(),
@@ -1837,7 +2026,7 @@ class EditorZoomBar extends StatelessWidget {
                 field,
               ] else
                 Expanded(child: field),
-              step(Icons.add, this.step, 'larger'),
+              step(Glyph.add, this.step, 'larger'),
             ],
           );
         },
@@ -1848,13 +2037,13 @@ class EditorZoomBar extends StatelessWidget {
 
 /// The transparency grid: the picture editors' two greys, 8 px squares.
 class CheckerPainter extends CustomPainter {
-  const CheckerPainter({this.cell = 8});
+  const CheckerPainter({this.cell = 8, this.ink = EditorInk.dark});
   final double cell;
-  static const light = Color(0xff8c8c8c), dark = Color(0xff666666);
+  final EditorInk ink;
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = light);
-    final paint = Paint()..color = dark;
+    canvas.drawRect(Offset.zero & size, Paint()..color = ink.checkerLight);
+    final paint = Paint()..color = ink.checkerDark;
     for (var y = 0; y * cell < size.height; y++) {
       for (var x = (y % 2); x * cell < size.width; x += 2) {
         canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, cell, cell), paint);
@@ -1863,5 +2052,5 @@ class CheckerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CheckerPainter old) => old.cell != cell;
+  bool shouldRepaint(CheckerPainter old) => old.cell != cell || old.ink != ink;
 }

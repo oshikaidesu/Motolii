@@ -1,12 +1,14 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import 'media_shelf.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
+import '../../foundation/leaves.dart';
 
 /// Files: a window onto real folders, the way AEViewer sits beside AE.
 /// Nothing here touches the document; a double-click on a file admits it to
@@ -81,7 +83,7 @@ class FilesShelf extends BrowserShelf {
       item['folder'] == true
       ? Center(
           child: Icon(
-            Icons.folder,
+            Glyph.folder,
             size: EditorMetrics.s32 * host.tileScale,
             color: EditorTheme.tab,
           ),
@@ -168,7 +170,7 @@ class FilesShelf extends BrowserShelf {
     Widget step(IconData icon, String label, VoidCallback? press) =>
         EditorTooltip(
           message: label,
-          child: IconButton(
+          child: EditorIconButton(
             iconSize: EditorMetrics.s14,
             color: press == null ? EditorTheme.disabledInk : EditorTheme.muted,
             onPressed: press,
@@ -185,16 +187,16 @@ class FilesShelf extends BrowserShelf {
       child: Row(
         children: [
           step(
-            Icons.arrow_back,
+            Glyph.arrow_back,
             'Back',
             folderBack.isEmpty ? null : () => _back(host),
           ),
           step(
-            Icons.arrow_forward,
+            Glyph.arrow_forward,
             'Forward',
             folderForward.isEmpty ? null : () => _forward(host),
           ),
-          step(Icons.arrow_upward, 'Up', () => _up(host)),
+          step(Glyph.arrow_upward, 'Up', () => _up(host)),
           const SizedBox(width: EditorMetrics.s4),
           Expanded(
             child: SingleChildScrollView(
@@ -208,7 +210,7 @@ class FilesShelf extends BrowserShelf {
                         '›',
                         style: TextStyle(color: EditorTheme.muted),
                       ),
-                    InkWell(
+                    EditorPress(
                       onTap: i == crumbs.length - 1
                           ? null
                           : () => _go(host, pathTo(i)),

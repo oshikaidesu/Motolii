@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/inspector.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/theme.dart';
 
 void main() {
   testWidgets('A placement effect row offers Expand next to remove', (
@@ -150,7 +152,7 @@ void main() {
     show(layer('motolii.repeat', true));
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
@@ -168,7 +170,7 @@ void main() {
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
     final animate = find.byWidgetPredicate(
-      (w) => w is Tooltip && w.message!.startsWith('Animate (A):'),
+      (w) => w is EditorTooltip && w.message.startsWith('Animate (A):'),
     );
     await tester.tap(animate);
     await tester.pump();

@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import 'leaves.dart';
 import 'metrics.dart';
 import 'theme.dart';
 import 'panel_controls.dart';
@@ -28,7 +29,7 @@ class EditorColorField extends StatelessWidget {
     if (onFocus == null || !enabled) return swatch;
     return EditorTooltip(
       message: 'Pick $label in the Browser',
-      child: InkWell(onTap: onFocus, child: swatch),
+      child: EditorPress(onTap: onFocus, child: swatch),
     );
   }
 }

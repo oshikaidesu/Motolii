@@ -2,15 +2,18 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show listEquals, mapEquals;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, kDebugMode, listEquals, mapEquals;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
+import '../foundation/glyphs.dart';
 
 /// One tab per view: `Stage` looks through the observer, `Camera` through the
 /// document camera. The tab that is showing tells native which one to draw.
@@ -78,7 +81,10 @@ class _StagePanelState extends State<StagePanel> {
     _shown = shown;
     if (shown) {
       c.attachView(widget.view);
-    } else if (_userStage) {
+      return;
+    }
+    c.detachView(widget.view);
+    if (_userStage) {
       _sentWindow = null;
       if (c.supports('stageWindow'))
         c.command('stageWindow', {'width': 0, 'height': 0});
@@ -88,25 +94,122 @@ class _StagePanelState extends State<StagePanel> {
   /// What the Stage tab asks native to draw: its own pixel size and the part of
   /// the composition image its zoom and pan put on screen. Sent only on change.
   Map<String, dynamic>? _sentWindow;
+
+  /// Everything [_syncWindow] reads; a build that leaves these alone schedules nothing.
+  (Offset, double, Size, bool, bool)? _windowKey;
+  void _queueWindowSync() {
+    final key = (_origin, _scale, _viewport, _shown, c.supports('stageWindow'));
+    if (key == _windowKey) return;
+    _windowKey = key;
+    // Same frame when the runtime answers in it; the channel path waits for
+    // the frame to end, as a reply cannot land inside a build.
+    if (c.sameFrame) {
+      _syncWindow();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncWindow());
+    }
+  }
+
+  /// The window the texture was drawn for in this very frame (same-frame
+  /// path); null once the rendered status has caught up with it.
+  Map<String, dynamic>? _drawnWindow;
+
+  /// Frames between a window request and the first status that carries it
+  /// (kDebugMode). 0 = the picture built in the frame that asked.
+  static int _frameCount = 0;
+  static bool _counting = false;
+  int? _askedAt;
+  Map<String, dynamic>? _askedWindow;
+  void _countFrames() {
+    if (_counting) return;
+    _counting = true;
+    SchedulerBinding.instance.addPersistentFrameCallback((_) => _frameCount++);
+  }
+
+  /// The Stage picture is always the comp's shape (Lumit / AE: the viewer's
+  /// texture never changes aspect), sized to cover the tab and centred on it.
+  /// A resize only changes how much of it the tab shows, so a frame that
+  /// arrives late is scaled uniformly, never squashed.
+  Rect _coverBox() {
+    final vw = _viewport.width, vh = _viewport.height;
+    final aspect = _width / _height;
+    final (bw, bh) = vw / vh > aspect ? (vw, vw / aspect) : (vh * aspect, vh);
+    return Rect.fromLTWH((vw - bw) / 2, (vh - bh) / 2, bw, bh);
+  }
+
+  /// Screen rectangle of a rendered Stage window (`stageWindow` in the frame's
+  /// status: the comp-space roi it was drawn for) under the current view.
+  Rect? _frameRect(Object? window) {
+    if (window is! Map) return null;
+    final roi = window['roi'];
+    if (roi is! List || roi.length != 4 || !roi.every((v) => v is num)) {
+      return null;
+    }
+    final origin = _origin, scale = _scale;
+    return Rect.fromLTWH(
+      origin.dx + (roi[0] as num) * scale,
+      origin.dy + (roi[1] as num) * scale,
+      (roi[2] as num) * scale,
+      (roi[3] as num) * scale,
+    );
+  }
+
   void _syncWindow() {
     if (!_userStage || !_shown || !mounted || !c.supports('stageWindow'))
       return;
     if (_viewport.isEmpty) return;
     final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
     final origin = _origin, scale = _scale;
+    final box = _coverBox();
     final window = {
-      'width': (_viewport.width * ratio).round(),
-      'height': (_viewport.height * ratio).round(),
+      'width': (box.width * ratio).round(),
+      'height': (box.height * ratio).round(),
       'roi': [
-        -origin.dx / scale,
-        -origin.dy / scale,
-        _viewport.width / scale,
-        _viewport.height / scale,
+        (box.left - origin.dx) / scale,
+        (box.top - origin.dy) / scale,
+        box.width / scale,
+        box.height / scale,
       ],
     };
-    if (sameValue(window, _sentWindow)) return;
+    if (sameValue(window, _sentWindow) && c.state['stageWindow'] != null)
+      return;
     _sentWindow = window;
-    c.command('stageWindow', window);
+    if (kDebugMode) {
+      _countFrames();
+      _askedAt = _frameCount;
+      _askedWindow = window;
+    }
+    _drawnWindow = c.commandNow('stageWindow', window) ? window : null;
+  }
+
+  /// The window Rust reports comes back through f32, so the roi is compared
+  /// within a hundredth of a pixel.
+  static bool _sameWindow(Object? a, Object? b) {
+    if (a is! Map || b is! Map) return false;
+    if (a['width'] != b['width'] || a['height'] != b['height']) return false;
+    final ra = a['roi'], rb = b['roi'];
+    if (ra is! List || rb is! List || ra.length != rb.length) return false;
+    for (var i = 0; i < ra.length; i++) {
+      if (((ra[i] as num) - (rb[i] as num)).abs() >= 0.01) return false;
+    }
+    return true;
+  }
+
+  void _noteWindowLag(Object? rendered) {
+    if (!kDebugMode) return;
+    final asked = _askedWindow;
+    if (asked == null || _askedAt == null) return;
+    final matched = _drawnWindow != null
+        ? identical(_drawnWindow, asked)
+        : _sameWindow(asked, rendered);
+    if (!matched) return;
+    debugPrint(
+      'PROBE room=stage-window verdict=matched lag=${_frameCount - _askedAt!} '
+      'frames path=${_drawnWindow != null ? 'ffi-same-frame' : 'status'} '
+      'window=${asked['width']}x${asked['height']} roi=${asked['roi']}',
+    );
+    _askedWindow = null;
+    _askedAt = null;
   }
 
   void _viewCommand() {
@@ -366,6 +469,14 @@ class _StagePanelState extends State<StagePanel> {
     return false;
   }
 
+  /// Pointer is over this tab (Camera tab: the only time it shows gizmos).
+  bool _inside = false;
+  void _setInside(bool value) {
+    if (_inside == value || !mounted) return;
+    setState(() => _inside = value);
+    if (!value) _touch(null);
+  }
+
   Map<String, dynamic>? _cameraDrag, _extentDrag;
   String _cameraHandle = 'center';
   int _extentSide = 0;
@@ -546,17 +657,22 @@ class _StagePanelState extends State<StagePanel> {
       _hull(_rawCorners(layer));
   List<Map<String, dynamic>> get _visible =>
       _layers.where((l) => l['hidden'] != true).toList();
+
+  /// What the picture lets a hand take: a Group is reached from the layer
+  /// lists alone (Timeline, Inspector), never by touching its children's
+  /// place on the Stage (2026-09-19, user).
+  static bool _grabbable(Map<String, dynamic> layer) =>
+      layer['locked'] != true && layer['kind'] != 'Group';
   Map<String, dynamic>? _hit(Offset comp) {
     for (final layer in _visible) {
-      if (layer['locked'] != true && _contains(_corners(layer), comp))
-        return layer;
+      if (_grabbable(layer) && _contains(_corners(layer), comp)) return layer;
     }
     return null;
   }
 
   Map<String, Offset> _handles() {
     final layer = _active;
-    if (layer == null || layer['locked'] == true || !c.supports('stageGesture'))
+    if (layer == null || !_grabbable(layer) || !c.supports('stageGesture'))
       return {};
     final raw = _rawCorners(layer);
     final face = raw.length == 8 ? [raw[0], raw[1], raw[3], raw[2]] : raw;
@@ -812,8 +928,20 @@ class _StagePanelState extends State<StagePanel> {
   Map<String, dynamic>? _hoverPending;
   bool _hoverSending = false;
   Offset? _hoverScreen;
+
+  /// The layer the pointer is over: the only one whose cage and handles are
+  /// drawn (2026-09-19, user: gizmos answer the intent to touch a thing,
+  /// in both tabs; a selection alone shows nothing on the picture).
+  int? _touched;
+  void _touch(int? id) {
+    if (_touched == id || !mounted) return;
+    setState(() => _touched = id);
+  }
+
   void _hover(PointerHoverEvent event) {
     _hoverScreen = event.localPosition;
+    if (_pointer == null)
+      _touch(_hit(_toComp(event.localPosition))?['id'] as int?);
     if (_pointer != null || !c.supports('stageGesture')) return;
     final on = _spatialHit(event.localPosition);
     if (!on && !_onMesh) return;
@@ -968,6 +1096,7 @@ class _StagePanelState extends State<StagePanel> {
       _drained.whenComplete(() => c.command('stageGesture', args));
     }
     c.viewCommand.removeListener(_viewCommand);
+    c.detachView(widget.view);
     if (_userStage && _sentWindow != null && c.supports('stageWindow'))
       c.command('stageWindow', {'width': 0, 'height': 0});
     _focus.dispose();
@@ -1070,73 +1199,39 @@ class _StagePanelState extends State<StagePanel> {
               ),
             ),
             Expanded(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  _slice,
-                  c.rendered,
-                  c.textureIds,
-                  c.playing,
-                  c.anchorPreview,
-                ]),
-                builder: (context, _) => LayoutBuilder(
-                  builder: (context, box) {
-                    final resized = _viewport != box.biggest;
-                    _viewport = box.biggest;
-                    if (!_initialFrameRequested || resized) {
-                      final needsFrame = !_initialFrameRequested;
-                      _initialFrameRequested = true;
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted) return;
-                        setState(() {});
-                        if (needsFrame) c.refreshPreview();
-                      });
-                    }
-                    WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _syncWindow(),
-                    );
-                    final origin = _origin;
-                    final scale = _scale;
-                    // The Stage is drawn at the tab's own size, the frame
-                    // inside it; the Camera is the output picture itself.
-                    final picture = _userStage
-                        ? Offset.zero & _viewport
-                        : Rect.fromLTWH(
-                            origin.dx,
-                            origin.dy,
-                            _width * scale,
-                            _height * scale,
-                          );
-                    final gizmos = !c.playing.value;
-                    final outlines = <List<Offset>>[];
-                    Offset? anchorPreview;
-                    for (final layer in _visible.where(
-                      (l) => gizmos && c.selectedIds.contains(l['id']),
-                    )) {
-                      final points = _corners(layer);
-                      if (points.isNotEmpty)
-                        outlines.add(points.map(_toScreen).toList());
-                      // Where a hovered anchor would sit: bilinear in the corners.
-                      final f = c.anchorPreview.value;
-                      if (f != null &&
-                          points.length >= 4 &&
-                          anchorPreview == null) {
-                        final u = f[0], v = f[1];
-                        final top = points[0] + (points[1] - points[0]) * u;
-                        final bottom = points[3] + (points[2] - points[3]) * u;
-                        anchorPreview = _toScreen(top + (bottom - top) * v);
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final resized = _viewport != box.biggest;
+                  _viewport = box.biggest;
+                  // The new size goes to native now, in the same frame the
+                  // tab was measured; the post-frame path below is the fallback.
+                  if (resized) _syncWindow();
+                  if (!_initialFrameRequested || resized) {
+                    final needsFrame = !_initialFrameRequested;
+                    _initialFrameRequested = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      setState(() {});
+                      if (needsFrame) c.refreshPreview();
+                    });
+                  }
+                  return Focus(
+                    focusNode: _focus,
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.escape &&
+                          (_pointer != null || _dragging)) {
+                        _finish(true);
+                        return KeyEventResult.handled;
                       }
-                    }
-                    return Focus(
-                      focusNode: _focus,
-                      onKeyEvent: (_, event) {
-                        if (event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.escape &&
-                            (_pointer != null || _dragging)) {
-                          _finish(true);
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
+                      return KeyEventResult.ignored;
+                    },
+                    child: MouseRegion(
+                      // The Camera tab is the picture: cages and handles show
+                      // only while the pointer is in it (2026-09-19, user).
+                      // The Stage tab is the workbench and always shows them.
+                      onEnter: (_) => _setInside(true),
+                      onExit: (_) => _setInside(false),
                       child: Listener(
                         behavior: HitTestBehavior.opaque,
                         onPointerDown: _down,
@@ -1162,129 +1257,25 @@ class _StagePanelState extends State<StagePanel> {
                         child: ClipRect(
                           child: ColoredBox(
                             color: EditorTheme.app,
-                            child: Stack(
-                              children: [
-                                // 地が無い枠は市松で見せる。枠そのものの見え方なので、
-                                // 描いた絵の有無に関わらず枠いっぱいに敷く(書き出しには乗らない)。
-                                if (_transparentGround)
-                                  Positioned.fromRect(
-                                    rect: Rect.fromLTWH(
-                                      origin.dx,
-                                      origin.dy,
-                                      _width * scale,
-                                      _height * scale,
-                                    ),
-                                    child: const CustomPaint(
-                                      painter: CheckerPainter(),
-                                    ),
-                                  ),
-                                Positioned.fromRect(
-                                  rect: picture,
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      ValueListenableBuilder<Map<String, int>>(
-                                        valueListenable: c.textureIds,
-                                        builder: (context, ids, _) =>
-                                            switch (ids[widget.view]) {
-                                              null => const Center(
-                                                child: Text(
-                                                  'No rendered texture',
-                                                  style: TextStyle(
-                                                    fontSize:
-                                                        EditorMetrics.font,
-                                                    color: EditorTheme.muted,
-                                                  ),
-                                                ),
-                                              ),
-                                              final id => Texture(
-                                                textureId: id,
-                                                filterQuality:
-                                                    FilterQuality.low,
-                                              ),
-                                            },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: CustomPaint(
-                                      painter: _StageOverlay(
-                                        dimOutside: _userStage,
-                                        anchorPreview: anchorPreview,
-                                        cameras: gizmos
-                                            ? _cameras
-                                                  .map(_cameraCorners)
-                                                  .toList()
-                                            : const [],
-                                        cameraEyes: gizmos
-                                            ? _cameras.map(_cameraEye).toList()
-                                            : const [],
-                                        cameraFrustums: gizmos
-                                            ? _cameras
-                                                  .map(_cameraFrustum)
-                                                  .toList()
-                                            : const [],
-                                        cameraUps: gizmos
-                                            ? _cameras.map(_cameraUp).toList()
-                                            : const [],
-                                        cameraTargets: [
-                                          if (gizmos)
-                                            for (final camera in _cameras)
-                                              ?_point(camera['target']),
-                                        ],
-                                        cameraHandles:
-                                            gizmos &&
-                                                _front &&
-                                                _selectedCamera != null
-                                            ? _cameraHandles(_selectedCamera!)
-                                            : const {},
-                                        front: _front,
-                                        extent: _extentPoints(),
-                                        extendable: _front && _extend,
-                                        observerTarget: _front
-                                            ? null
-                                            : _point(_observer['target']),
-                                        outlines: _outlinesCopy(outlines),
-                                        handles: gizmos ? _handles() : const {},
-                                        spatialMesh: gizmos && _spatialActive
-                                            ? _screenMesh()
-                                            : null,
-                                        snapGuides: _snapGuides(),
-                                        marquee: _marquee == null
-                                            ? null
-                                            : Rect.fromPoints(
-                                                _toScreen(_marquee!.topLeft),
-                                                _toScreen(
-                                                  _marquee!.bottomRight,
-                                                ),
-                                              ),
-                                        frame: [
-                                          for (final p
-                                              in (_observer['frame']
-                                                      as List?) ??
-                                                  [])
-                                            ?_point(p),
-                                        ],
-                                        viewport: Rect.fromLTWH(
-                                          origin.dx,
-                                          origin.dy,
-                                          _width * scale,
-                                          _height * scale,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            // What moves with the frame, the selection and the
+                            // zoom is built here; the chrome above is built once
+                            // per layout.
+                            child: AnimatedBuilder(
+                              animation: Listenable.merge([
+                                _slice,
+                                c.rendered,
+                                c.textureIds,
+                                c.playing,
+                                c.anchorPreview,
+                              ]),
+                              builder: (context, _) => _picture(),
                             ),
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
             ),
             AnimatedBuilder(
@@ -1307,7 +1298,7 @@ class _StagePanelState extends State<StagePanel> {
                       key: const ValueKey('stage:transparentGround'),
                       on: _transparentGround,
                       compact: true,
-                      glyph: Icons.grid_on,
+                      glyph: Glyph.grid_on,
                       label: _transparentGround
                           ? 'The frame has no ground; the export carries alpha'
                           : 'Drop the ground so the export carries alpha',
@@ -1354,8 +1345,174 @@ class _StagePanelState extends State<StagePanel> {
             ),
           ],
         );
+
+  /// The picture and what is drawn over it: the part of the Stage that moves
+  /// with the frame, the selection and the zoom. Built inside the frame's
+  /// listenable; the chrome around it is built once per layout.
+  Widget _picture() {
+    _queueWindowSync();
+    final origin = _origin;
+    final scale = _scale;
+    // The Stage is drawn at the tab's own size, the frame
+    // inside it; the Camera is the output picture itself.
+    // The Stage shows the latest frame where *that frame's* window sits under
+    // the current zoom and pan: a Fit or a resize moves the old picture at
+    // once, and the re-rendered one lands on the same spot (= the cover box).
+    final renderedWindow = c.rendered.value['stageWindow'];
+    if (_drawnWindow != null && _sameWindow(_drawnWindow, renderedWindow))
+      _drawnWindow = null;
+    _noteWindowLag(renderedWindow);
+    final picture = _userStage
+        ? _frameRect(_drawnWindow ?? renderedWindow) ?? _coverBox()
+        : Rect.fromLTWH(origin.dx, origin.dy, _width * scale, _height * scale);
+    final gizmos = !c.playing.value;
+    // While dragging, the selection is what is being touched; otherwise only
+    // the layer under the pointer gets a cage.
+    final touching = _pointer != null
+        ? c.selectedIds
+        : {if (_touched != null) _touched!};
+    final selectedTouched =
+        gizmos && c.selectedIds.any((id) => touching.contains(id));
+    final outlines = <List<Offset>>[];
+    Offset? anchorPreview;
+    for (final layer in _visible.where(
+      (l) => gizmos && _grabbable(l) && c.selectedIds.contains(l['id']),
+    )) {
+      final points = _corners(layer);
+      if (points.isNotEmpty && touching.contains(layer['id']))
+        outlines.add(points.map(_toScreen).toList());
+      // Where a hovered anchor would sit: bilinear in the corners. The
+      // Inspector's anchor pad is itself the intent, so the mark shows on
+      // the selection whether or not the pointer is on it.
+      final f = c.anchorPreview.value;
+      if (f != null && points.length >= 4 && anchorPreview == null) {
+        final u = f[0], v = f[1];
+        final top = points[0] + (points[1] - points[0]) * u;
+        final bottom = points[3] + (points[2] - points[3]) * u;
+        anchorPreview = _toScreen(top + (bottom - top) * v);
+      }
+    }
+    return Stack(
+      children: [
+        // 地が無い枠は市松で見せる。枠そのものの見え方なので、
+        // 描いた絵の有無に関わらず枠いっぱいに敷く(書き出しには乗らない)。
+        if (_transparentGround)
+          Positioned.fromRect(
+            rect: Rect.fromLTWH(
+              origin.dx,
+              origin.dy,
+              _width * scale,
+              _height * scale,
+            ),
+            child: const RepaintBoundary(
+              child: CustomPaint(painter: CheckerPainter()),
+            ),
+          ),
+        Positioned.fromRect(
+          rect: picture,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _StageTexture(textureIds: c.textureIds, view: widget.view),
+            ],
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: _StageOverlay(
+                  ink: EditorInk.of(context),
+                  dimOutside: _userStage,
+                  anchorPreview: anchorPreview,
+                  cameras: gizmos
+                      ? _cameras.map(_cameraCorners).toList()
+                      : const [],
+                  cameraEyes: gizmos
+                      ? _cameras.map(_cameraEye).toList()
+                      : const [],
+                  cameraFrustums: gizmos
+                      ? _cameras.map(_cameraFrustum).toList()
+                      : const [],
+                  cameraUps: gizmos
+                      ? _cameras.map(_cameraUp).toList()
+                      : const [],
+                  cameraTargets: [
+                    if (gizmos)
+                      for (final camera in _cameras) ?_point(camera['target']),
+                  ],
+                  cameraHandles: gizmos && _front && _selectedCamera != null
+                      ? _cameraHandles(_selectedCamera!)
+                      : const {},
+                  front: _front,
+                  extent: _extentPoints(),
+                  extendable: _front && _extend,
+                  observerTarget: _front ? null : _point(_observer['target']),
+                  outlines: _outlinesCopy(outlines),
+                  handles: selectedTouched ? _handles() : const {},
+                  spatialMesh: gizmos && _spatialActive ? _screenMesh() : null,
+                  snapGuides: _snapGuides(),
+                  marquee: _marquee == null
+                      ? null
+                      : Rect.fromPoints(
+                          _toScreen(_marquee!.topLeft),
+                          _toScreen(_marquee!.bottomRight),
+                        ),
+                  // Front-on, the frame is the comp rectangle under the
+                  // current zoom and pan (the painter's `viewport`), known
+                  // here and now. The observer's projected frame is only
+                  // needed once the Stage is orbited, and it arrives with
+                  // the next frame from native.
+                  frame: _front
+                      ? const []
+                      : [
+                          for (final p in (_observer['frame'] as List?) ?? [])
+                            ?_point(p),
+                        ],
+                  viewport: Rect.fromLTWH(
+                    origin.dx,
+                    origin.dy,
+                    _width * scale,
+                    _height * scale,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   List<List<Offset>> _outlinesCopy(List<List<Offset>> p) =>
       p.map((v) => List<Offset>.of(v)).toList();
+}
+
+/// The rendered picture for one view. Listens to the texture table alone:
+/// a frame, a selection or a zoom leaves it standing.
+class _StageTexture extends StatelessWidget {
+  const _StageTexture({required this.textureIds, required this.view});
+  final ValueListenable<Map<String, int>> textureIds;
+  final String view;
+  @override
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<Map<String, int>>(
+        valueListenable: textureIds,
+        builder: (context, ids, _) => switch (ids[view]) {
+          null => const Center(
+            child: Text(
+              'No rendered texture',
+              style: TextStyle(
+                fontSize: EditorMetrics.font,
+                color: EditorTheme.muted,
+              ),
+            ),
+          ),
+          final id => RepaintBoundary(
+            child: Texture(textureId: id, filterQuality: FilterQuality.low),
+          ),
+        },
+      );
 }
 
 class _StageOverlay extends CustomPainter {
@@ -1379,7 +1536,9 @@ class _StageOverlay extends CustomPainter {
     this.spatialMesh,
     this.marquee,
     this.snapGuides = const [],
+    this.ink = EditorInk.dark,
   });
+  final EditorInk ink;
   final List<List<Offset>> outlines;
   final List<List<Offset?>> cameras, cameraFrustums;
   final List<Offset?> cameraEyes, cameraUps;
@@ -1445,7 +1604,7 @@ class _StageOverlay extends CustomPainter {
       );
     }
     final cameraLine = Paint()
-      ..color = const Color(0xff8ed9e6)
+      ..color = ink.camera
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
     for (final at in cameraTargets) {
@@ -1538,6 +1697,7 @@ class _StageOverlay extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _StageOverlay old) =>
+      old.ink != ink ||
       !_samePolylines(old.cameras, cameras) ||
       !_samePolylines(old.cameraFrustums, cameraFrustums) ||
       !listEquals(old.cameraEyes, cameraEyes) ||
@@ -1611,7 +1771,7 @@ class _SpatialMesh {
       for (var k = 0; k < vertices.length; k++)
         k < c.length && c[k] is List && (c[k] as List).length >= 4
             ? tone(c[k] as List)
-            : const Color(0x00000000),
+            : EditorTheme.clear,
     ];
     final indices = <int>[];
     for (var t = 0; t + 2 < i.length; t += 3) {

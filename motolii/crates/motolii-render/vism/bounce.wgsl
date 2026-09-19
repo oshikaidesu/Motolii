@@ -1,12 +1,8 @@
-/*{
-  "ID": "motolii.bounce_block",
-  "LABEL": "Bounce",
-  "STAGE": "block",
-  "DESCRIPTION": "Folds each box back inside the box it lives in, like a ball between walls (a lie of physics: straight motion mirrored at the walls)",
-  "INPUTS": [
-    { "NAME": "strength", "LABEL": "Strength", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 1.0 }
-  ]
-}*/
+@id("motolii.bounce_block")
+@description("Folds each box back inside the box it lives in, like a ball between walls (a lie of physics: straight motion mirrored at the walls)")
+
+@label("Strength") @range(0.0, 1.0)
+override strength: f32 = 1.0;
 
 // x を [a, a + room] の中へ鏡で折り返す(周期 2 room の三角波)。
 fn fold(x: f32, a: f32, room: f32) -> f32 {
@@ -16,7 +12,7 @@ fn fold(x: f32, a: f32, room: f32) -> f32 {
     return a + select(period - m, m, m <= room);
 }
 
-fn block(k: u32, p: BlockParams) -> Offset {
+fn block(k: u32) -> Offset {
     let it = objects[k];
     let lo = now_lo(k);
     let hi = now_hi(k);
@@ -37,5 +33,5 @@ fn block(k: u32, p: BlockParams) -> Offset {
         let w = hi - lo;
         shift = vec2f(fold(lo.x, it.room_lo.x, size.x - w.x), fold(lo.y, it.room_lo.y, size.y - w.y)) - lo;
     }
-    return Offset(shift * p.strength, 0.0, 1.0, vec4f(1.0));
+    return Offset(shift * strength, 0.0, 1.0, vec4f(1.0));
 }

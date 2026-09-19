@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../../foundation/metrics.dart';
@@ -8,6 +8,8 @@ import '../../session/editor_session.dart';
 import 'parts.dart';
 import 'shelf.dart';
 import 'tile.dart';
+import '../../foundation/glyphs.dart';
+import '../../foundation/leaves.dart';
 
 /// Tags and collections the way Live 12's browser keeps them (manual 4.4,
 /// 4.5): the item itself carries default tags in filter groups; the user adds
@@ -31,15 +33,7 @@ class BrowserLibrary {
     'Purple',
     'Gray',
   ];
-  static const collectionColors = [
-    Color(0xffe05252),
-    Color(0xffe0a052),
-    Color(0xffe0d452),
-    Color(0xff6fd06f),
-    Color(0xff52b9e0),
-    Color(0xff8f7ae0),
-    Color(0xff8a8a8a),
-  ];
+  static List<Color> get collectionColors => EditorInk.dark.collectionColors;
 
   Map<String, dynamic> get _tags =>
       EditorSession.map(controller.deskWork.value['tags']);
@@ -296,7 +290,7 @@ class FilterView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      InkWell(
+                      EditorPress(
                         key: ValueKey('browser:filter-group:${group.name}'),
                         onTap: () => onFold(group.name),
                         child: SizedBox(
@@ -313,8 +307,8 @@ class FilterView extends StatelessWidget {
                               const SizedBox(width: EditorMetrics.s4),
                               Icon(
                                 folded.contains(group.name)
-                                    ? Icons.arrow_right
-                                    : Icons.arrow_drop_down,
+                                    ? Glyph.arrow_right
+                                    : Glyph.arrow_drop_down,
                                 size: EditorMetrics.s12,
                                 color: EditorTheme.muted,
                               ),
@@ -375,7 +369,7 @@ class FilterView extends StatelessWidget {
       Container(
         height: EditorMetrics.row,
         padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-        color: filter.isEmpty ? Colors.transparent : EditorTheme.raised,
+        color: filter.isEmpty ? EditorTheme.clear : EditorTheme.raised,
         child: Row(
           children: [
             Text(
@@ -396,7 +390,7 @@ class FilterView extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            InkWell(
+            EditorPress(
               onTap: filter.isEmpty ? null : onClear,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -415,11 +409,11 @@ class FilterView extends StatelessWidget {
             ),
             EditorTooltip(
               message: 'Add label · keep this filter in the rail',
-              child: InkWell(
+              child: EditorPress(
                 key: const ValueKey('browser:label:add'),
                 onTap: filter.isEmpty ? null : onSaveLabel,
                 child: Icon(
-                  Icons.playlist_add,
+                  Glyph.playlist_add,
                   size: EditorMetrics.s12,
                   color: filter.isEmpty
                       ? EditorTheme.disabledInk
@@ -447,7 +441,7 @@ class _TagChip extends StatelessWidget {
   final ValueChanged<bool> onTap;
   final VoidCallback? onRemove;
   @override
-  Widget build(BuildContext context) => InkWell(
+  Widget build(BuildContext context) => EditorPress(
     onTap: () => onTap(
       HardwareKeyboard.instance.isMetaPressed ||
           HardwareKeyboard.instance.isControlPressed,
@@ -479,7 +473,7 @@ class _TagChip extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.only(left: EditorMetrics.s3),
                 child: Icon(
-                  Icons.close,
+                  Glyph.close,
                   size: EditorMetrics.micro,
                   color: chosen ? EditorTheme.app : EditorTheme.muted,
                 ),
@@ -522,7 +516,7 @@ class _RangeAdderState extends State<_RangeAdder> {
   Widget _field(TextEditingController c, String hint, Key key) => SizedBox(
     width: EditorMetrics.s36,
     height: EditorMetrics.s16,
-    child: TextField(
+    child: EditorTextField(
       key: key,
       controller: c,
       autofocus: c == lo,
@@ -530,13 +524,8 @@ class _RangeAdderState extends State<_RangeAdder> {
         fontSize: EditorMetrics.micro,
         color: EditorTheme.ink,
       ),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: hint,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: EditorMetrics.s3,
-        ),
-      ),
+      hint: hint,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
       onSubmitted: (_) => _submit(),
     ),
   );
@@ -559,7 +548,7 @@ class _RangeAdderState extends State<_RangeAdder> {
               ),
           ],
         )
-      : InkWell(
+      : EditorPress(
           onTap: () => setState(() => open = true),
           child: Container(
             height: EditorMetrics.s16,
@@ -569,7 +558,7 @@ class _RangeAdderState extends State<_RangeAdder> {
               borderRadius: BorderRadius.circular(EditorMetrics.s2),
             ),
             child: const Icon(
-              Icons.add,
+              Glyph.add,
               size: EditorMetrics.micro,
               color: EditorTheme.muted,
             ),
@@ -642,7 +631,7 @@ class _RailCollectionsState extends State<RailCollections> {
         height: EditorMetrics.control,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-          child: TextField(
+          child: EditorTextField(
             key: const ValueKey('browser:collection:rename'),
             controller: field,
             focusNode: focus,
@@ -651,12 +640,9 @@ class _RailCollectionsState extends State<RailCollections> {
               fontSize: EditorMetrics.font,
               color: EditorTheme.ink,
             ),
-            decoration: const InputDecoration(
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: EditorMetrics.s4,
-                vertical: EditorMetrics.s3,
-              ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: EditorMetrics.s4,
+              vertical: EditorMetrics.s3,
             ),
             onSubmitted: (_) => _keep(),
           ),
@@ -675,7 +661,7 @@ class _RailCollectionsState extends State<RailCollections> {
       builder: (context, hovering, _) => EditorTooltip(
         message:
             '${widget.names[i - 1]} · drop rows here, or press $i on picked rows · double-click to rename',
-        child: InkWell(
+        child: EditorPress(
           key: ValueKey('browser:collection:$i'),
           onTap: () => widget.onCollection(i),
           onDoubleTap: () => setState(() {
@@ -693,7 +679,7 @@ class _RailCollectionsState extends State<RailCollections> {
                 ? EditorTheme.spatial.withValues(alpha: .3)
                 : chosen == i
                 ? EditorTheme.raised
-                : Colors.transparent,
+                : EditorTheme.clear,
             child: Row(
               children: [
                 Container(
@@ -742,13 +728,13 @@ class _RailCollectionsState extends State<RailCollections> {
             ),
             EditorTooltip(
               message: 'Forget this label',
-              child: InkWell(
+              child: EditorPress(
                 key: ValueKey('browser:label:drop:${label['name']}'),
                 onTap: () => widget.onDropLabel('${label['name']}'),
                 child: const Padding(
                   padding: EdgeInsets.all(EditorMetrics.s4),
                   child: Icon(
-                    Icons.close,
+                    Glyph.close,
                     size: EditorMetrics.s12,
                     color: EditorTheme.muted,
                   ),
@@ -847,7 +833,7 @@ class QuickTags extends StatelessWidget {
           child: EditorFieldFrame(
             focus: addFocus,
             padding: EdgeInsets.zero,
-            child: TextField(
+            child: EditorTextField(
               key: const ValueKey('browser:quicktags:add'),
               controller: addController,
               focusNode: addFocus,
@@ -855,13 +841,10 @@ class QuickTags extends StatelessWidget {
                 fontSize: EditorMetrics.font,
                 color: EditorTheme.ink,
               ),
-              decoration: const InputDecoration(
-                isDense: true,
-                hintText: 'Add…',
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: EditorMetrics.s6,
-                  vertical: EditorMetrics.s4,
-                ),
+              hint: 'Add…',
+              padding: const EdgeInsets.symmetric(
+                horizontal: EditorMetrics.s6,
+                vertical: EditorMetrics.s4,
               ),
               onSubmitted: (value) {
                 final tag = value.trim();
@@ -900,12 +883,12 @@ class _Chip extends StatelessWidget {
           ),
         ),
         if (onRemove != null)
-          InkWell(
+          EditorPress(
             onTap: onRemove,
             child: const Padding(
               padding: EdgeInsets.all(EditorMetrics.s3),
               child: Icon(
-                Icons.close,
+                Glyph.close,
                 size: EditorMetrics.s12,
                 color: EditorTheme.muted,
               ),

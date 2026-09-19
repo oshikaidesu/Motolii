@@ -9,6 +9,8 @@ import '../lib/panels/browser.dart';
 import '../lib/panels/gradient_inspector.dart';
 import '../lib/foundation/panel_controls.dart';
 
+import '../lib/foundation/leaves.dart';
+
 void main() {
   testWidgets('HEX owns navigation and Enter instead of the palette', (
     tester,
@@ -63,14 +65,14 @@ void main() {
       of: find.byWidgetPredicate(
         (w) => w is EditorDraftField && w.label == 'hex',
       ),
-      matching: find.byType(TextField),
+      matching: find.byType(EditorTextField),
     );
     await tester.tap(hex);
     await tester.enterText(hex, '#00ff00');
     await tester.sendKeyEvent(LogicalKeyboardKey.home);
     await tester.sendKeyEvent(LogicalKeyboardKey.end);
     await tester.pump();
-    expect(tester.widget<TextField>(hex).focusNode!.hasFocus, isTrue);
+    expect(tester.widget<EditorTextField>(hex).focusNode!.hasFocus, isTrue);
     expect(find.text('HEX · 3 OR 6 DIGITS'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.testTextInput.receiveAction(TextInputAction.done);

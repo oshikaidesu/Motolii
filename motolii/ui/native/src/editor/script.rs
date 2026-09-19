@@ -202,6 +202,55 @@ mod tests {
         assert!(message.contains("Bezier") && message.contains("power1"), "{message}");
     }
 
+    /// 拍の表で層を背中合わせに並べる。1 つの層は 1 つの枠にだけ。
+    #[test]
+    fn cuts_lay_layers_back_to_back_on_the_beat() {
+        let (rt, outcome) = run(r#"
+            comp({ fps: 30, seconds: 4 });
+            const a = rectangle({ name: "a" }), b = ellipse({ name: "b" }), c = star({ name: "c" });
+            const total = cuts(120, [[a, 1], [[b, c], 2]]);
+            if (total !== 1.5) throw new Error("total " + total);
+            let refused = "";
+            try { cuts(120, [[a, 1], [a, 1]]); } catch (e) { refused = e.message; }
+            if (!refused.includes("two cuts")) throw new Error(refused);
+        "#);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let timing = |name: &str| {
+            let id = *view.layers().iter().find(|l| view.attrs(**l).unwrap().unwrap().name == name).unwrap();
+            let t = view.meta(id).unwrap().unwrap().timing;
+            (t.start, t.duration)
+        };
+        assert_eq!(timing("a"), (0, 15), "one beat at 120 bpm is half a second");
+        assert_eq!(timing("b"), (15, 30));
+        assert_eq!(timing("c"), (15, 30));
+    }
+
+    /// 文字の入れ替わりは本文の鍵で、種が同じなら同じ並び、最後は元の文字に落ち着く。
+    #[test]
+    fn shuffle_writes_seeded_content_keys_that_settle_on_the_text() {
+        let script = r#"
+            comp({ fps: 30 });
+            shuffle(text("HELLO"), { seconds: 1, rate: 10, seed: 3, settle: 0.5 });
+        "#;
+        let keys = |rt: &crate::EditorRuntime| {
+            let view = rt.doc.view();
+            let doc = view.text_document(view.layers()[0]).unwrap().unwrap();
+            doc.content.keys().iter().map(|k| (k.t.try_to_frame_round(view.composition().unwrap().unwrap().fps).unwrap(), k.content.clone())).collect::<Vec<_>>()
+        };
+        let (rt, outcome) = run(script);
+        outcome.unwrap();
+        let first = keys(&rt);
+        assert_eq!(first.iter().map(|k| k.0).collect::<Vec<_>>(), (0..=10).map(|i| i * 3).collect::<Vec<_>>(), "a key every 1/rate seconds, then the final one");
+        assert_eq!(first.last().unwrap().1, "HELLO");
+        assert_ne!(first[0].1, "HELLO");
+        assert!(first.iter().all(|k| k.1.chars().count() == 5));
+        assert!(first[9].1.starts_with("HELL"), "settling left to right: {}", first[9].1);
+        let (again, outcome) = run(script);
+        outcome.unwrap();
+        assert_eq!(first, keys(&again), "the same seed gives the same run");
+    }
+
     #[test]
     fn rerun_replaces_the_last_run_and_keeps_later_edits_safe() {
         let dir = std::env::temp_dir().join(format!("motolii-rerun-{}", std::process::id()));

@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         engine.render_frame(&view, t)?;
         let states = engine.block_states();
         let line: Vec<String> = states.iter().map(|o| format!("{:.2},{:.2},{:.2}", o[0], o[1], o[2])).collect();
-        println!("{frame} {}", line.join(" "));
+        println!("{frame} contacts={} {}", engine.physics_contacts(), line.join(" "));
     }
     Ok(())
 }

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/stage.dart';
-import '../lib/foundation/theme.dart';
+import 'support/editor_test_theme.dart';
 
 class StageSession extends EditorSession {
   int refreshes = 0;
@@ -29,7 +29,7 @@ void main() {
       c.frame.value = 27;
       final document = c.document.value;
       Widget app(double width) => MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: Align(
             alignment: Alignment.topLeft,

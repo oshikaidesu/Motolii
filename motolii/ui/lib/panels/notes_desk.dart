@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
@@ -10,6 +10,8 @@ import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/metrics.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 class NotesPanel extends StatefulWidget {
   const NotesPanel({super.key, required this.controller});
@@ -245,7 +247,7 @@ class _NotesPanelState extends State<NotesPanel> {
                       scrollDirection: Axis.horizontal,
                       children: [
                         for (final p in _pages)
-                          TextButton(
+                          EditorTextButton(
                             onPressed: () async {
                               await c.flushEditors();
                               if (mounted)
@@ -255,11 +257,9 @@ class _NotesPanelState extends State<NotesPanel> {
                                   _transform.value = Matrix4.identity();
                                 });
                             },
-                            style: TextButton.styleFrom(
-                              foregroundColor: p['id'] == page?['id']
-                                  ? EditorTheme.accent
-                                  : EditorTheme.muted,
-                            ),
+                            foreground: p['id'] == page?['id']
+                                ? EditorTheme.accent
+                                : EditorTheme.muted,
                             child: Text(
                               '${p['title']}',
                               style: const TextStyle(
@@ -272,10 +272,10 @@ class _NotesPanelState extends State<NotesPanel> {
                   ),
                   EditorTooltip(
                     message: 'New page',
-                    child: IconButton(
+                    child: EditorIconButton(
                       iconSize: EditorMetrics.s16,
                       onPressed: _newPage,
-                      icon: const Icon(Icons.add),
+                      icon: const Icon(Glyph.add),
                     ),
                   ),
                 ],
@@ -302,15 +302,15 @@ class _NotesPanelState extends State<NotesPanel> {
                 children: [
                   EditorTooltip(
                     message: 'Paste',
-                    child: IconButton(
+                    child: EditorIconButton(
                       iconSize: EditorMetrics.s16,
                       onPressed: _paste,
-                      icon: const Icon(Icons.content_paste),
+                      icon: const Icon(Glyph.content_paste),
                     ),
                   ),
                   EditorTooltip(
                     message: 'Insert image',
-                    child: IconButton(
+                    child: EditorIconButton(
                       iconSize: EditorMetrics.s16,
                       onPressed: () async {
                         final paths = await c.native('pickImport');
@@ -322,30 +322,30 @@ class _NotesPanelState extends State<NotesPanel> {
                             );
                           }
                       },
-                      icon: const Icon(Icons.image_outlined),
+                      icon: const Icon(Glyph.image_outlined),
                     ),
                   ),
                   EditorTooltip(
                     message: 'Link selection',
-                    child: IconButton(
+                    child: EditorIconButton(
                       iconSize: EditorMetrics.s16,
                       onPressed: _reference,
-                      icon: const Icon(Icons.link),
+                      icon: const Icon(Glyph.link),
                     ),
                   ),
                   EditorTooltip(
                     message: 'Reset view',
-                    child: IconButton(
+                    child: EditorIconButton(
                       iconSize: EditorMetrics.s16,
                       onPressed: () =>
                           setState(() => _transform.value = Matrix4.identity()),
-                      icon: const Icon(Icons.center_focus_strong),
+                      icon: const Icon(Glyph.center_focus_strong),
                     ),
                   ),
                   if (page != null)
                     EditorTooltip(
                       message: 'Delete page',
-                      child: IconButton(
+                      child: EditorIconButton(
                         iconSize: EditorMetrics.s16,
                         onPressed: () async {
                           await c.flushEditors();
@@ -355,7 +355,7 @@ class _NotesPanelState extends State<NotesPanel> {
                             page: '${page['id']}',
                           );
                         },
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(Glyph.delete_outline),
                       ),
                     ),
                 ],
@@ -377,7 +377,7 @@ class _NotesPanelState extends State<NotesPanel> {
                         c.deskWork.value['notes'] != null ||
                         EditorSession.maps(c.state['assets'])
                             .any((a) => a['role'] == 'reference'))
-                      TextButton(
+                      EditorTextButton(
                         onPressed: _legacy,
                         child: const Text('Import previous text / references'),
                       ),
@@ -576,7 +576,7 @@ class _NoteCardState extends State<_NoteCard> {
           height: ((b['height'] as num) + (_resizing ? delta.dy : 0))
               .clamp(60, 5000)
               .toDouble(),
-          child: Material(
+          child: ColoredBox(
             color: EditorTheme.raised,
             child: Container(
               decoration: BoxDecoration(
@@ -603,7 +603,7 @@ class _NoteCardState extends State<_NoteCard> {
                             onTap: widget.onSelect,
                             child: const Center(
                               child: Icon(
-                                Icons.drag_handle,
+                                Glyph.drag_handle,
                                 size: EditorMetrics.s14,
                                 color: EditorTheme.muted,
                               ),
@@ -612,7 +612,7 @@ class _NoteCardState extends State<_NoteCard> {
                         ),
                         EditorTooltip(
                           message: 'Delete note',
-                          child: IconButton(
+                          child: EditorIconButton(
                             iconSize: EditorMetrics.s12,
                             onPressed: () async {
                               await _flush();
@@ -622,7 +622,7 @@ class _NoteCardState extends State<_NoteCard> {
                                 'id': b['id'],
                               });
                             },
-                            icon: const Icon(Icons.close),
+                            icon: const Icon(Glyph.close),
                           ),
                         ),
                       ],
@@ -643,7 +643,7 @@ class _NoteCardState extends State<_NoteCard> {
                                   errorBuilder: (_, __, ___) =>
                                       const Text('Image unavailable'),
                                 ),
-                        'reference' => TextButton(
+                        'reference' => EditorTextButton(
                           onPressed: () async {
                             if (b['layer'] != null)
                               await widget.controller.command('select', {
@@ -658,7 +658,7 @@ class _NoteCardState extends State<_NoteCard> {
                             ),
                           ),
                         ),
-                        _ => TextField(
+                        _ => EditorTextField(
                           controller: _text,
                           focusNode: _focus,
                           maxLines: null,
@@ -667,9 +667,7 @@ class _NoteCardState extends State<_NoteCard> {
                             fontSize: EditorMetrics.title,
                             color: EditorTheme.ink,
                           ),
-                          decoration: const InputDecoration(
-                            hintText: 'Write a note',
-                          ),
+                          hint: 'Write a note',
                           onTap: widget.onSelect,
                           onChanged: (_) {
                             _dirty = true;
@@ -695,7 +693,7 @@ class _NoteCardState extends State<_NoteCard> {
                         width: EditorMetrics.s18,
                         height: EditorMetrics.s16,
                         child: Icon(
-                          Icons.south_east,
+                          Glyph.south_east,
                           size: EditorMetrics.s12,
                           color: EditorTheme.muted,
                         ),

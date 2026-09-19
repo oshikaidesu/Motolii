@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
 
+import '../lib/foundation/leaves.dart';
+
 void main() {
   testWidgets('scaled viewport fills its bounds and hit tests the far corner', (
     tester,
@@ -74,7 +76,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(field);
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '137');
+      await tester.enterText(find.byType(EditorTextField), '137');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(size, closeTo(120.56, .0001));

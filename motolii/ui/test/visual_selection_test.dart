@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/foundation/theme.dart';
 import '../lib/panels/gradient_inspector.dart';
 import '../lib/panels/browser.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 void main() {
   testWidgets(
@@ -53,7 +53,7 @@ void main() {
       };
       await tester.pumpWidget(
         MaterialApp(
-          theme: EditorTheme.data,
+          theme: editorTestTheme,
           home: Scaffold(
             body: SizedBox(
               width: 300,
@@ -153,7 +153,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: SizedBox(
             width: 400,

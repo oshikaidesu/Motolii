@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/notes_desk.dart';
 
+import '../lib/foundation/leaves.dart';
+
 void main() {
   testWidgets(
     'freeform text, move, page switching and references use document commands',
@@ -76,7 +78,7 @@ void main() {
       expect(pages.length, 1);
       expect((pages.first['blocks'] as List).length, 1);
       final input = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.hintText == 'Write a note',
+        (w) => w is EditorTextField && w.hint == 'Write a note',
       );
       await tester.enterText(input, 'Lighting and texture references');
       await tester.tap(find.byTooltip('New page'));
@@ -86,7 +88,9 @@ void main() {
         pages.first['blocks'][0]['text'],
         'Lighting and texture references',
       );
-      await tester.tap(find.widgetWithText(TextButton, 'Untitled page').first);
+      await tester.tap(
+        find.widgetWithText(EditorTextButton, 'Untitled page').first,
+      );
       await tester.pumpAndSettle();
       expect(find.text('Lighting and texture references'), findsOneWidget);
       await tester.drag(find.byIcon(Icons.drag_handle), const Offset(70, 90));

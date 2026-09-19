@@ -1,8 +1,9 @@
 // 関数の棚(WESL の module `package::cavalry`): Cavalry のノードを関数として引用する。下の段は processing.wgsl(map・norm・random・noise)。
-// manifest の頭が無い .wgsl は札でなく module。札は `import package::cavalry::{ cv_ease };` で引く。
+// 頭の JSON も `fn block(` も無い .wgsl は札でなく module。札は `import package::cavalry::{ cv_ease };` で引く。
 // 名前と欄は Cavalry の語のまま(docs.cavalry.scenegroup.co)。記憶を持つノード(Lerp・Trails・Dynamics)は無い — 解き手側。
 // 引用のルール: 札はここの関数を import して呼ぶだけ。ここを直せば引いた札全部に届く(利用者 2026-09-18)。
 import package::processing::{ random, noise };
+import package::easing::{ quadraticIn, quadraticOut, quadraticInOut, backOut, elasticOut };
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
@@ -29,14 +30,15 @@ fn cv_oscillator(time: f32, frequency: f32, phase: f32, waveform: u32) -> f32 {
 }
 
 /// Ease(Cavalry の Interpolation の型、GSAP/CSS の名前): 0 = linear, 1 = in, 2 = out, 3 = inOut(power 2), 4 = back out, 5 = elastic out。
+/// 式は easing module(Penner)の 1 箇所だけ。ここは Cavalry の番号を名前に写す表。
 fn cv_ease(u: f32, kind: u32) -> f32 {
     let t = clamp(u, 0.0, 1.0);
     switch kind {
-        case 1u: { return t * t; }
-        case 2u: { return 1.0 - (1.0 - t) * (1.0 - t); }
-        case 3u: { return select(2.0 * t * t, 1.0 - 2.0 * (1.0 - t) * (1.0 - t), t >= 0.5); }
-        case 4u: { let s = 1.70158; let v = t - 1.0; return 1.0 + v * v * ((s + 1.0) * v + s); }
-        case 5u: { return select(1.0 - pow(2.0, -10.0 * t) * cos(t * 10.0 * 6.2831853 / 3.0), 1.0, t >= 1.0); }
+        case 1u: { return quadraticIn(t); }
+        case 2u: { return quadraticOut(t); }
+        case 3u: { return quadraticInOut(t); }
+        case 4u: { return backOut(t); }
+        case 5u: { return elasticOut(t); }
         default: { return t; }
     }
 }

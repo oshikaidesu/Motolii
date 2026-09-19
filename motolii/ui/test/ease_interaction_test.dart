@@ -10,20 +10,34 @@ import '../lib/panels/ease_desk.dart';
 import '../lib/session/editor_session.dart';
 
 void main() {
-  testWidgets('Space passes through focused Ease presets to playback', (tester) async {
+  testWidgets('Space passes through focused Ease presets to playback', (
+    tester,
+  ) async {
     final c = EditorSession();
-    c.document.value = {'easeKinds': [{'kind': 'Linear'}, {'kind': 'Hold'}]};
+    c.document.value = {
+      'easeKinds': [
+        {'kind': 'Linear'},
+        {'kind': 'Hold'},
+      ],
+    };
     var playbackKeys = 0;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Focus(
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
-          playbackKeys++;
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: EaseDesk(controller: c),
-    ))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Focus(
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.space) {
+                playbackKeys++;
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: EaseDesk(controller: c),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('ease-preset:0')));
     await tester.pumpAndSettle();
@@ -457,7 +471,9 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(240, 240));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: EaseDesk(controller: c))),
+      MaterialApp(
+        home: Scaffold(body: EaseDesk(controller: c)),
+      ),
     );
     await tester.pumpAndSettle();
     final rail = find.byKey(const ValueKey('ease-interval-rail'));

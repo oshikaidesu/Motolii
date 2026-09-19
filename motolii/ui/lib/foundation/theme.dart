@@ -1,9 +1,170 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import 'leaves.dart';
 import 'metrics.dart';
+
+/// Colours of what is drawn rather than laid out — lanes, grids, ticks,
+/// gizmos, the transparency grid, the ease desk's paper — carried by
+/// [EditorLook] above the window so a painter's colours come from the theme
+/// the way a widget's do. A widget passes [of] into the painter it builds;
+/// code with no context reads [dark], the one look the window has today.
+@immutable
+class EditorInk {
+  const EditorInk({
+    required this.laneGround,
+    required this.lane,
+    required this.laneAlt,
+    required this.grid,
+    required this.gridMinor,
+    required this.tick,
+    required this.tickMinor,
+    required this.headerInk,
+    required this.camera,
+    required this.focusRing,
+    required this.easePaper,
+    required this.easeInk,
+    required this.easeTime,
+    required this.checkerLight,
+    required this.checkerDark,
+    required this.collectionColors,
+  });
+
+  /// The timeline: the ground under the lanes, the two lane greys, the grid
+  /// lines and the ruler's ticks, and the ink on an identity-coloured row.
+  final Color laneGround, lane, laneAlt, grid, gridMinor, tick, tickMinor;
+  final Color headerInk;
+
+  /// A camera's line on the Stage and in the Depth desk.
+  final Color camera;
+
+  /// The ring on the pane that holds keyboard focus.
+  final Color focusRing;
+
+  /// The ease desk: its paper, the ink on it, and the time axis.
+  final Color easePaper, easeInk, easeTime;
+
+  /// The transparency grid: the picture editors' two greys.
+  final Color checkerLight, checkerDark;
+
+  /// The Browser's collections, one hue each.
+  final List<Color> collectionColors;
+
+  static const dark = EditorInk(
+    laneGround: Color(0xff3c3c3c),
+    lane: Color(0xff383838),
+    laneAlt: Color(0xff3d3d3d),
+    grid: Color(0xff262626),
+    gridMinor: Color(0xff303030),
+    tick: Color(0xff9b9b9b),
+    tickMinor: Color(0xff929292),
+    headerInk: Color(0xff202020),
+    camera: Color(0xff8ed9e6),
+    focusRing: Color(0xffacacac),
+    easePaper: Color(0xffb7d8d1),
+    easeInk: Color(0xff203f39),
+    easeTime: Color(0xff854515),
+    checkerLight: Color(0xff8c8c8c),
+    checkerDark: Color(0xff666666),
+    collectionColors: [
+      Color(0xffe05252),
+      Color(0xffe0a052),
+      Color(0xffe0d452),
+      Color(0xff6fd06f),
+      Color(0xff52b9e0),
+      Color(0xff8f7ae0),
+      Color(0xff8a8a8a),
+    ],
+  );
+
+  static EditorInk of(BuildContext context) => EditorLook.of(context).ink;
+
+  EditorInk copyWith({
+    Color? laneGround,
+    Color? lane,
+    Color? laneAlt,
+    Color? grid,
+    Color? gridMinor,
+    Color? tick,
+    Color? tickMinor,
+    Color? headerInk,
+    Color? camera,
+    Color? focusRing,
+    Color? easePaper,
+    Color? easeInk,
+    Color? easeTime,
+    Color? checkerLight,
+    Color? checkerDark,
+    List<Color>? collectionColors,
+  }) => EditorInk(
+    laneGround: laneGround ?? this.laneGround,
+    lane: lane ?? this.lane,
+    laneAlt: laneAlt ?? this.laneAlt,
+    grid: grid ?? this.grid,
+    gridMinor: gridMinor ?? this.gridMinor,
+    tick: tick ?? this.tick,
+    tickMinor: tickMinor ?? this.tickMinor,
+    headerInk: headerInk ?? this.headerInk,
+    camera: camera ?? this.camera,
+    focusRing: focusRing ?? this.focusRing,
+    easePaper: easePaper ?? this.easePaper,
+    easeInk: easeInk ?? this.easeInk,
+    easeTime: easeTime ?? this.easeTime,
+    checkerLight: checkerLight ?? this.checkerLight,
+    checkerDark: checkerDark ?? this.checkerDark,
+    collectionColors: collectionColors ?? this.collectionColors,
+  );
+
+  EditorInk lerp(EditorInk? other, double t) {
+    if (other == null) return this;
+    Color mix(Color a, Color b) => Color.lerp(a, b, t)!;
+    return EditorInk(
+      laneGround: mix(laneGround, other.laneGround),
+      lane: mix(lane, other.lane),
+      laneAlt: mix(laneAlt, other.laneAlt),
+      grid: mix(grid, other.grid),
+      gridMinor: mix(gridMinor, other.gridMinor),
+      tick: mix(tick, other.tick),
+      tickMinor: mix(tickMinor, other.tickMinor),
+      headerInk: mix(headerInk, other.headerInk),
+      camera: mix(camera, other.camera),
+      focusRing: mix(focusRing, other.focusRing),
+      easePaper: mix(easePaper, other.easePaper),
+      easeInk: mix(easeInk, other.easeInk),
+      easeTime: mix(easeTime, other.easeTime),
+      checkerLight: mix(checkerLight, other.checkerLight),
+      checkerDark: mix(checkerDark, other.checkerDark),
+      collectionColors: [
+        for (var i = 0; i < collectionColors.length; i++)
+          i < other.collectionColors.length
+              ? mix(collectionColors[i], other.collectionColors[i])
+              : collectionColors[i],
+      ],
+    );
+  }
+}
+
+/// What the window looks like, set once above it: the painters' ink and
+/// whether tooltips show. Panels read it through [EditorInk.of] and
+/// [EditorTooltip]; where nothing is set (a test that mounts one control) the
+/// window's one look applies and tooltips are on.
+class EditorLook extends InheritedWidget {
+  const EditorLook({
+    super.key,
+    this.ink = EditorInk.dark,
+    this.tooltips = true,
+    required super.child,
+  });
+  final EditorInk ink;
+  final bool tooltips;
+  static const _none = EditorLook(child: SizedBox.shrink());
+  static EditorLook of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<EditorLook>() ?? _none;
+  @override
+  bool updateShouldNotify(EditorLook old) =>
+      old.ink != ink || old.tooltips != tooltips;
+}
 
 abstract final class EditorTheme {
   // Lifts are Material 3 state layers: white over the surface at the M3
@@ -76,185 +237,83 @@ abstract final class EditorTheme {
     _ => const Color(0xffc18bd3),
   };
 
-  /// The menu sheet and its rows, for the ThemeData and for EditorChoice
-  /// (a MenuAnchor sets them itself, so a stray Theme cannot lose them).
-  static const menuSheet = MenuStyle(
-    backgroundColor: WidgetStatePropertyAll(menu),
-    surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
-    shadowColor: WidgetStatePropertyAll(Colors.transparent),
-    elevation: WidgetStatePropertyAll(0),
-    padding: WidgetStatePropertyAll(
-      EdgeInsets.symmetric(vertical: EditorMetrics.s2),
-    ),
-    shape: WidgetStatePropertyAll(
-      RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: BorderSide(color: menuEdge),
-      ),
-    ),
-    visualDensity: VisualDensity.compact,
+  /// The two ends of the scale and no colour at all: named so a painter's
+  /// white wash or a clear drag feedback reads as a token, not a literal.
+  static const white = Color(0xffffffff),
+      black = Color(0xff000000),
+      clear = Color(0x00000000);
+
+  /// Black at the two opacities the picture editors' scrims use: under a
+  /// dialog, and around the colour wheel's cursor.
+  static const scrim = Color(0x8a000000), scrimLight = Color(0x73000000);
+
+  /// Lifts Material drew under a hovered, pressed or keyboard-focused
+  /// surface: white at the M3 state-layer opacities (hover 4%, focus 12%),
+  /// and the pressed lift at [hover].
+  static const hoverWash = Color(0x0affffff), focusWash = Color(0x1fffffff);
+
+  /// What cannot be pressed: ink at the M3 disabled 38%, a filled ground at
+  /// 12%.
+  static const inkDisabled = Color(0x61ffffff),
+      washDisabled = Color(0x1fffffff);
+
+  /// The scrollbar's thumb: white at 30%, 65% under the pointer, 75% while
+  /// dragged (the dark theme's desktop scrollbar).
+  static const scrollThumb = Color(0x4dffffff),
+      scrollThumbHovered = Color(0xa6ffffff),
+      scrollThumbDragged = Color(0xbfffffff);
+
+  /// A slider's division marks: black and white at 38%.
+  static const tickActive = Color(0x61000000), tickInactive = Color(0x61ffffff);
+
+  /// The tooltip's sheet: white at 90%.
+  static const tooltip = Color(0xe6ffffff);
+
+  /// Where the text is read and written: the caret and the selection.
+  static const caret = accent;
+  static const selection = Color(0x66ffaa61);
+
+  /// What the window's text is when nothing says otherwise: the body size
+  /// in ink, without a font family (the platform's UI face).
+  static const text = TextStyle(
+    inherit: false,
+    fontSize: EditorMetrics.font,
+    fontWeight: FontWeight.w400,
+    color: ink,
+    textBaseline: TextBaseline.alphabetic,
   );
-  static final menuRow = ButtonStyle(
-    minimumSize: const WidgetStatePropertyAll(Size(0, EditorMetrics.row)),
-    maximumSize: const WidgetStatePropertyAll(
-      Size(double.infinity, EditorMetrics.row),
-    ),
-    padding: const WidgetStatePropertyAll(
-      EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-    ),
-    textStyle: const WidgetStatePropertyAll(
-      TextStyle(fontSize: EditorMetrics.font),
-    ),
-    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    // The app-wide compact density would take 8 off the row.
-    visualDensity: VisualDensity.standard,
-    shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-    backgroundColor: WidgetStateProperty.resolveWith(
-      (s) => s.contains(WidgetState.hovered) ? select : Colors.transparent,
-    ),
-    foregroundColor: WidgetStateProperty.resolveWith(
-      (s) => s.contains(WidgetState.disabled)
-          ? disabledInk
-          : s.contains(WidgetState.hovered)
-          ? selectInk
-          : ink,
-    ),
-  );
-  static ThemeData get data => ThemeData.dark(useMaterial3: true).copyWith(
-    scaffoldBackgroundColor: app,
-    canvasColor: panel,
-    dividerColor: line,
-    splashFactory: NoSplash.splashFactory,
-    highlightColor: hover,
-    // MenuAnchor menus (choices, context menus) share one sheet.
-    menuTheme: const MenuThemeData(style: menuSheet),
-    menuButtonTheme: MenuButtonThemeData(style: menuRow),
-    // The icon is the button: no minimum square, no padding, no stadium ink.
-    // Every IconButton therefore measures exactly its own `iconSize`.
-    iconButtonTheme: IconButtonThemeData(
-      style: ButtonStyle(
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        minimumSize: const WidgetStatePropertyAll(Size.zero),
-        maximumSize: const WidgetStatePropertyAll(Size.infinite),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.standard,
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
-        overlayColor: WidgetStateProperty.resolveWith(
-          (s) =>
-              s.contains(WidgetState.hovered) || s.contains(WidgetState.pressed)
-              ? hover
-              : Colors.transparent,
-        ),
-        iconColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.disabled) ? disabledInk : ink,
-        ),
-      ),
-    ),
-    sliderTheme: SliderThemeData(
-      trackHeight: EditorMetrics.s2,
-      // M3's own track draws a gap and a stop indicator; the flat rectangle is
-      // the one this editor has always shown.
-      trackShape: const RoundedRectSliderTrackShape(),
-      thumbShape: const RoundSliderThumbShape(
-        enabledThumbRadius: EditorMetrics.s5,
-      ),
-      overlayShape: SliderComponentShape.noOverlay,
-      padding: EdgeInsets.zero,
-      activeTrackColor: muted,
-      inactiveTrackColor: line,
-      thumbColor: ink,
-    ),
-    // M3 forces a padded 40dp tap target on these two regardless of the
-    // app-wide `materialTapTargetSize`, so they say it again here.
-    checkboxTheme: CheckboxThemeData(
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(1)),
-    ),
-    switchTheme: const SwitchThemeData(
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      trackOutlineColor: WidgetStatePropertyAll(Colors.transparent),
-      thumbIcon: WidgetStatePropertyAll(null),
-    ),
-    dividerTheme: const DividerThemeData(
-      color: line,
-      thickness: 0,
-      space: EditorMetrics.s16,
-    ),
-    dialogTheme: const DialogThemeData(
-      backgroundColor: panel,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: BorderSide(color: border),
-      ),
-      titleTextStyle: TextStyle(fontSize: EditorMetrics.title, color: ink),
-      contentTextStyle: TextStyle(fontSize: EditorMetrics.font, color: ink),
-    ),
-    colorScheme: const ColorScheme.dark(
-      primary: accent,
-      secondary: accent,
-      surface: panel,
-    ),
-    textTheme: const TextTheme(
-      bodyLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
-      bodyMedium: TextStyle(fontSize: EditorMetrics.font, color: ink),
-      bodySmall: TextStyle(fontSize: EditorMetrics.dense, color: muted),
-      titleMedium: TextStyle(fontSize: EditorMetrics.font, color: ink),
-      labelLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
-    ),
-    visualDensity: VisualDensity.compact,
-    // M3's 2021 geometry puts a 1.5 line height on body text, which grows
-    // every field and label. The 2014 geometry is the one these sizes were
-    // tuned against; only the shapes below move to M3.
-    typography: Typography.material2014(platform: defaultTargetPlatform),
-    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    // A field is text and a caret, nothing more: the box it sits in is
-    // EditorFieldFrame, drawn once, at rest and while typing. A frame here
-    // would be a second one around every field.
-    inputDecorationTheme: const InputDecorationTheme(
-      isDense: true,
-      isCollapsed: true,
-      filled: false,
-      contentPadding: EdgeInsets.zero,
-      border: InputBorder.none,
-      enabledBorder: InputBorder.none,
-      focusedBorder: InputBorder.none,
-      disabledBorder: InputBorder.none,
-      errorBorder: InputBorder.none,
-      focusedErrorBorder: InputBorder.none,
-      hintStyle: TextStyle(fontSize: EditorMetrics.font, color: muted),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        minimumSize: const Size(18, 20),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: line),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: const TextStyle(fontSize: EditorMetrics.font),
-      ),
-    ),
-    iconTheme: const IconThemeData(size: 14, color: ink),
+  static const icon = IconThemeData(size: 14, color: ink);
+
+  /// The menu sheet: a darker ground, a pale edge, rows [EditorMetrics.row]
+  /// high, a pale hover row with dark ink. Both the choice and the context
+  /// menu draw from these.
+  static const menuPadding = EdgeInsets.symmetric(vertical: EditorMetrics.s2);
+  static const menuMinWidth = 112.0;
+  static const menuRowPadding = EdgeInsets.symmetric(
+    horizontal: EditorMetrics.s8,
   );
 }
 
 /// A tooltip where tooltips are shown, and nothing at all where they are not.
-/// [TooltipVisibility] turns the panel off but leaves the widget standing, and
-/// each one that stands costs a hover region, a long-press detector and a
+/// [EditorLook.tooltips] turns the window off but leaves the widget standing,
+/// and each one that stands costs a hover region, a long-press detector and a
 /// semantics node in every layout of the window.
 class EditorTooltip extends StatelessWidget {
   const EditorTooltip({super.key, required this.message, required this.child});
   final String message;
   final Widget child;
   @override
-  Widget build(BuildContext context) => TooltipVisibility.of(context)
-      ? Tooltip(message: message, child: child)
+  Widget build(BuildContext context) => EditorLook.of(context).tooltips
+      ? RawTooltip(
+          semanticsTooltip: message,
+          ignorePointer: true,
+          touchDelay: const Duration(milliseconds: 1500),
+          tooltipBuilder: (context, animation) => FadeTransition(
+            opacity: animation,
+            child: EditorTooltipSheet(message: message),
+          ),
+          child: child,
+        )
       : child;
 }
 
@@ -276,12 +335,10 @@ class EditorButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
       child: SizedBox(
         height: EditorMetrics.row - 2,
-        child: TextButton(
+        child: EditorTextButton(
           onPressed: onPressed,
-          style: TextButton.styleFrom(
-            backgroundColor: selected ? EditorTheme.accent : EditorTheme.panel,
-            foregroundColor: selected ? EditorTheme.tabInk : EditorTheme.ink,
-          ),
+          background: selected ? EditorTheme.accent : EditorTheme.panel,
+          foreground: selected ? EditorTheme.tabInk : EditorTheme.ink,
           child: Text(label, maxLines: 1),
         ),
       ),
@@ -325,10 +382,10 @@ class EditorSection extends StatelessWidget {
 }
 
 /// A context menu at a pointer's screen position. Needs nothing set up
-/// ahead of it — it drops itself into the nearest [Overlay] (every
-/// [MaterialApp] already has one) and removes itself when it closes, the
-/// way [showMenu] does. No animation; as wide as its widest row. The rows
-/// are [EditorMenuItem]s and [EditorMenuDivider]s.
+/// ahead of it — it drops itself into the nearest [Overlay] (the app's
+/// Navigator has one) and removes itself when it closes. No animation; as
+/// wide as its widest row. The rows are [EditorMenuItem]s and
+/// [EditorMenuDivider]s.
 Future<T?> showEditorMenu<T>(
   BuildContext context,
   Offset at,
@@ -339,64 +396,26 @@ Future<T?> showEditorMenu<T>(
   final position = overlayBox.globalToLocal(at);
   final completer = Completer<T?>();
   late final OverlayEntry entry;
-  var picked = false;
   void settle(Object? value) {
-    if (!completer.isCompleted) completer.complete(value as T?);
+    if (completer.isCompleted) return;
+    completer.complete(value as T?);
     entry.remove();
   }
 
-  final controller = MenuController();
   entry = OverlayEntry(
-    builder: (context) => Positioned(
-      left: position.dx,
-      top: position.dy,
-      child: _EditorMenuHost(
-        controller: controller,
-        items: items,
-        onPick: (v) {
-          picked = true;
-          settle(v);
-        },
-        onClose: () {
-          if (!picked) settle(null);
-        },
+    builder: (context) => EditorMenuSheet(
+      anchor: Rect.fromLTWH(position.dx, position.dy, 0, 0),
+      minWidth: 0,
+      consumeOutsideTap: true,
+      onClose: () => settle(null),
+      child: _EditorMenuScope(
+        pick: settle,
+        child: Column(mainAxisSize: MainAxisSize.min, children: items),
       ),
     ),
   );
   overlay.insert(entry);
-  WidgetsBinding.instance.addPostFrameCallback((_) => controller.open());
   return completer.future;
-}
-
-/// The MenuAnchor a [showEditorMenu] call briefly owns: it opens itself once
-/// mounted and reports back however it closed (a pick, or an outside tap).
-class _EditorMenuHost extends StatelessWidget {
-  const _EditorMenuHost({
-    required this.controller,
-    required this.items,
-    required this.onPick,
-    required this.onClose,
-  });
-  final MenuController controller;
-  final List<Widget> items;
-  final ValueChanged<Object?> onPick;
-  final VoidCallback onClose;
-  @override
-  Widget build(BuildContext context) => _EditorMenuScope(
-    pick: onPick,
-    child: MenuAnchor(
-      controller: controller,
-      animated: false,
-      consumeOutsideTap: true,
-      crossAxisUnconstrained: false,
-      style: EditorTheme.menuSheet.copyWith(
-        minimumSize: const WidgetStatePropertyAll(Size.zero),
-      ),
-      onClose: onClose,
-      menuChildren: items,
-      child: const SizedBox.shrink(),
-    ),
-  );
 }
 
 /// Threads a row's pick back out to the [showEditorMenu] call that opened it.
@@ -421,9 +440,7 @@ class EditorMenuItem<T> extends StatelessWidget {
   final bool enabled;
   final Widget child;
   @override
-  Widget build(BuildContext context) => MenuItemButton(
-    style: EditorTheme.menuRow,
-    closeOnActivate: false,
+  Widget build(BuildContext context) => EditorMenuRow(
     onPressed: enabled ? () => _EditorMenuScope.pickFrom(context, value) : null,
     child: child,
   );
@@ -433,5 +450,5 @@ class EditorMenuDivider extends StatelessWidget {
   const EditorMenuDivider({super.key});
   @override
   Widget build(BuildContext context) =>
-      const Divider(height: EditorMetrics.s8, thickness: 1);
+      const EditorRule(height: EditorMetrics.s8, thickness: 1);
 }

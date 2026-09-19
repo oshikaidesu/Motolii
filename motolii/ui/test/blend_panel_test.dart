@@ -4,9 +4,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/foundation/theme.dart';
 import '../lib/panels/blend_panel.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 void main() {
   testWidgets('the desk shows samples, previews on hover and commits once', (
@@ -63,7 +63,7 @@ void main() {
     c.document.value = snapshot();
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: Align(
             alignment: Alignment.topLeft,

@@ -1680,6 +1680,7 @@ impl Engine {
     /// 再生位置の少し先で現れる動画層の復号器を、今のうちに開く。timeline は未来を知っている。
     /// 待たず、失敗も記録しない(本番の描画で改めて分かる)。
     pub fn warm_upcoming(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<(), EngineError> {
+        if !Self::has_file_layers(view)? { return Ok(()); }
         let composition = view
             .composition()
             .map_err(|e| EngineError::Store(e.to_string()))?
@@ -1715,6 +1716,16 @@ impl Engine {
         self.realtime = was_realtime;
         self.layer_failures = failures;
         Ok(())
+    }
+
+    pub(super) fn has_file_layers(view: &StoreView<'_>) -> Result<bool, EngineError> {
+        for id in view.layers() {
+            if view.meta(id).map_err(|e| EngineError::Store(e.to_string()))?
+                .is_some_and(|meta| matches!(meta.source, LayerSource::File { .. })) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 

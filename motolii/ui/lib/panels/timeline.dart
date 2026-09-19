@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -11,6 +11,7 @@ import '../foundation/theme.dart';
 import '../input/viewport_motion.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/leaves.dart';
 
 part 'timeline_layout.dart';
 
@@ -169,7 +170,9 @@ class _TimelinePanelState extends State<TimelinePanel> {
 
   /// 縮図のうち、今のコマと遊びを除いた「物がある所」の端。
 
-  int get overviewExtentWithoutFrame {
+  int? _extentCache;
+  int get overviewExtentWithoutFrame => _extentCache ??= _measureExtent();
+  int _measureExtent() {
     var extent = duration;
     for (final l in widget.controller.layers) {
       final int end =
@@ -875,7 +878,8 @@ class _TimelinePanelState extends State<TimelinePanel> {
       'ungroup': 'Ungroup',
       'split': 'Split',
     };
-    final frozen = row >= 0 && row < tracks.length && tracks[row].layer['frozen'] == true;
+    final frozen =
+        row >= 0 && row < tracks.length && tracks[row].layer['frozen'] == true;
     final chosen = await showEditorMenu<String>(
       context,
       details.globalPosition,
@@ -939,7 +943,9 @@ class _TimelinePanelState extends State<TimelinePanel> {
         }
         _relane();
       });
-    } else if (chosen != null && chosen.startsWith('freeze:') && target != null) {
+    } else if (chosen != null &&
+        chosen.startsWith('freeze:') &&
+        target != null) {
       widget.controller.command('freeze', {
         'layer': target,
         'enabled': chosen == 'freeze:on',
@@ -966,6 +972,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
   /// 帯の並びは書類が動いた時に一度だけ組む。板の骨格はこれを読むだけで、
   /// 書類を購読するのは目盛り・レーン・横帯・掴み手の四つに限る。
   void _relane() {
+    _extentCache = null;
     final liveIds = widget.controller.layers
         .map((layer) => (layer['id'] as num).toInt())
         .toSet();
@@ -1011,52 +1018,57 @@ class _TimelinePanelState extends State<TimelinePanel> {
               child: Column(
                 children: [
                   _bar(bounds),
-                  ListenableBuilder(
-                    listenable: Listenable.merge([
-                      widget.controller.frame,
-                      _timeline,
-                      scrolled,
-                    ]),
-                    builder: (context, _) => GestureDetector(
-                      supportedDevices: const {
-                        PointerDeviceKind.mouse,
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.stylus,
-                      },
-                      onTapDown: (e) {
-                        if (e.localPosition.dx >= labelWidth)
-                          requestSeek(frameAt(e.localPosition.dx));
-                      },
-                      onHorizontalDragUpdate: (e) {
-                        if (e.localPosition.dx >= labelWidth)
-                          requestSeek(frameAt(e.localPosition.dx));
-                      },
-                      child: SizedBox(
-                        height: rulerHeight,
-                        width: double.infinity,
-                        child: CustomPaint(
-                          painter: _TimelinePainter(
-                            labelWidth: labelWidth,
-                            rows: const [],
-                            selected: const [],
-                            keys: const [],
-                            frame: scrubFrame ?? widget.controller.frame.value,
-                            scale: pixelsPerFrame,
-                            offset: offset,
-                            duration: duration,
-                            fps: (widget.controller.state['fps'] as num? ?? 30)
-                                .toDouble(),
-                            markers: EditorSession.maps(
-                              widget.controller.state['markers'],
+                  GestureDetector(
+                    supportedDevices: const {
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.stylus,
+                    },
+                    onTapDown: (e) {
+                      if (e.localPosition.dx >= labelWidth)
+                        requestSeek(frameAt(e.localPosition.dx));
+                    },
+                    onHorizontalDragUpdate: (e) {
+                      if (e.localPosition.dx >= labelWidth)
+                        requestSeek(frameAt(e.localPosition.dx));
+                    },
+                    child: SizedBox(
+                      height: rulerHeight,
+                      width: double.infinity,
+                      child: RepaintBoundary(
+                        child: ListenableBuilder(
+                          listenable: Listenable.merge([
+                            widget.controller.frame,
+                            _timeline,
+                            scrolled,
+                          ]),
+                          builder: (context, _) => CustomPaint(
+                            painter: _TimelinePainter(
+                              ink: EditorInk.of(context),
+                              labelWidth: labelWidth,
+                              rows: const [],
+                              selected: const [],
+                              keys: const [],
+                              frame:
+                                  scrubFrame ?? widget.controller.frame.value,
+                              scale: pixelsPerFrame,
+                              offset: offset,
+                              duration: duration,
+                              fps:
+                                  (widget.controller.state['fps'] as num? ?? 30)
+                                      .toDouble(),
+                              markers: EditorSession.maps(
+                                widget.controller.state['markers'],
+                              ),
+                              ruler: true,
                             ),
-                            ruler: true,
                           ),
                         ),
                       ),
                     ),
                   ),
                   Expanded(
-                    child: Scrollbar(
+                    child: EditorScrollbar(
                       controller: vertical,
                       child: SingleChildScrollView(
                         controller: vertical,
@@ -1093,61 +1105,64 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                     layout.height,
                                     bounds.maxHeight - 66,
                                   ),
-                                  child: CustomPaint(
-                                    key: const ValueKey('timeline-lanes'),
-                                    painter: _TimelinePainter(
-                                      labelWidth: labelWidth,
-                                      rows: tracks,
-                                      rowDropGuide: rowDropGuide,
-                                      rowDropInside: rowDropInside,
-                                      containers: layout.roots,
-                                      activeLane: activeLane,
-                                      selected: widget.controller.selectedIds,
-                                      keys: selectedKeys,
-                                      frame:
-                                          scrubFrame ??
-                                          widget.controller.frame.value,
-                                      scale: pixelsPerFrame,
-                                      offset: offset,
-                                      duration: duration,
-                                      fps:
-                                          (widget.controller.state['fps']
-                                                      as num? ??
-                                                  30)
-                                              .toDouble(),
-                                      markers: EditorSession.maps(
-                                        widget.controller.state['markers'],
+                                  child: RepaintBoundary(
+                                    child: CustomPaint(
+                                      key: const ValueKey('timeline-lanes'),
+                                      painter: _TimelinePainter(
+                                        ink: EditorInk.of(context),
+                                        labelWidth: labelWidth,
+                                        rows: tracks,
+                                        rowDropGuide: rowDropGuide,
+                                        rowDropInside: rowDropInside,
+                                        containers: layout.roots,
+                                        activeLane: activeLane,
+                                        selected: widget.controller.selectedIds,
+                                        keys: selectedKeys,
+                                        frame:
+                                            scrubFrame ??
+                                            widget.controller.frame.value,
+                                        scale: pixelsPerFrame,
+                                        offset: offset,
+                                        duration: duration,
+                                        fps:
+                                            (widget.controller.state['fps']
+                                                        as num? ??
+                                                    30)
+                                                .toDouble(),
+                                        markers: EditorSession.maps(
+                                          widget.controller.state['markers'],
+                                        ),
+                                        marquee:
+                                            gesture == 'marquee' &&
+                                                start != null &&
+                                                current != null
+                                            ? Rect.fromPoints(start!, current!)
+                                            : null,
+                                        dragKeys: gesture == 'keys'
+                                            ? initialKeys
+                                            : settlingKeys,
+                                        delta: gesture == 'keys'
+                                            ? deltaFrames
+                                            : settlingDelta,
+                                        // Every bar in the grip is drawn from
+                                        // its press-time timing plus the delta:
+                                        // the document's rows only catch up
+                                        // when the preview reply lands, and a
+                                        // bar that waits for that trails the
+                                        // one under the pointer.
+                                        dragLayers:
+                                            [
+                                              'move',
+                                              'trimIn',
+                                              'trimOut',
+                                              'slip',
+                                            ].contains(gesture)
+                                            ? {
+                                                for (final r in timingRows)
+                                                  r.id: timing(r),
+                                              }
+                                            : const {},
                                       ),
-                                      marquee:
-                                          gesture == 'marquee' &&
-                                              start != null &&
-                                              current != null
-                                          ? Rect.fromPoints(start!, current!)
-                                          : null,
-                                      dragKeys: gesture == 'keys'
-                                          ? initialKeys
-                                          : settlingKeys,
-                                      delta: gesture == 'keys'
-                                          ? deltaFrames
-                                          : settlingDelta,
-                                      // Every bar in the grip is drawn from
-                                      // its press-time timing plus the delta:
-                                      // the document's rows only catch up
-                                      // when the preview reply lands, and a
-                                      // bar that waits for that trails the
-                                      // one under the pointer.
-                                      dragLayers:
-                                          [
-                                            'move',
-                                            'trimIn',
-                                            'trimOut',
-                                            'slip',
-                                          ].contains(gesture)
-                                          ? {
-                                              for (final r in timingRows)
-                                                r.id: timing(r),
-                                            }
-                                          : const {},
                                     ),
                                   ),
                                 ),
@@ -1158,75 +1173,36 @@ class _TimelinePanelState extends State<TimelinePanel> {
                       ),
                     ),
                   ),
-                  ListenableBuilder(
-                    listenable: _timeline,
-                    builder: (context, _) => Padding(
-                      padding: EdgeInsets.only(left: labelWidth),
-                      child: SizedBox(
-                        height: EditorMetrics.s12,
-                        child: Scrollbar(
-                          controller: horizontal,
-                          thumbVisibility: true,
-                          child: SingleChildScrollView(
-                            controller: horizontal,
-                            physics: const ClampingScrollPhysics(
-                              parent: NeverScrollableScrollPhysics(),
-                            ),
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: math.max(
-                                bounds.maxWidth - labelWidth,
-                                contentWidth,
-                              ),
-                              height: EditorMetrics.s12,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  _TimelineScrollStrip(
+                    timeline: _timeline,
+                    horizontal: horizontal,
+                    viewportWidth: bounds.maxWidth,
+                    measure: () => (labelWidth, contentWidth),
                   ),
                 ],
               ),
               builder: (context, column) => Stack(
                 children: [
                   column!,
-                  Positioned(
+                  _NameColumnGrip(
                     left: layout.nameWidth - EditorMetrics.s3,
-                    top: EditorMetrics.s22,
-                    bottom: EditorMetrics.s12,
-                    width: EditorMetrics.s6,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.resizeColumn,
-                      child: GestureDetector(
-                        supportedDevices: const {
-                          PointerDeviceKind.mouse,
-                          PointerDeviceKind.touch,
-                          PointerDeviceKind.stylus,
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        onHorizontalDragStart: (e) {
-                          resizeStart = layout.nameWidth - layout.indentation;
-                          resizePointerStart = e.globalPosition.dx;
-                        },
-                        onHorizontalDragUpdate: (e) => setState(() {
-                          baseNameWidth =
-                              (resizeStart +
-                                      e.globalPosition.dx -
-                                      resizePointerStart)
-                                  .clamp(114.0 - layout.indentation, 162.0);
-                          _relane();
-                        }),
-                        onHorizontalDragCancel: () => setState(() {
-                          baseNameWidth = resizeStart;
-                          _relane();
-                        }),
-                        onDoubleTap: () => setState(() {
-                          baseNameWidth = 138;
-                          _relane();
-                        }),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
+                    onDragStart: (x) {
+                      resizeStart = layout.nameWidth - layout.indentation;
+                      resizePointerStart = x;
+                    },
+                    onDragUpdate: (x) => setState(() {
+                      baseNameWidth = (resizeStart + x - resizePointerStart)
+                          .clamp(114.0 - layout.indentation, 162.0);
+                      _relane();
+                    }),
+                    onDragCancel: () => setState(() {
+                      baseNameWidth = resizeStart;
+                      _relane();
+                    }),
+                    onReset: () => setState(() {
+                      baseNameWidth = 138;
+                      _relane();
+                    }),
                   ),
                 ],
               ),
@@ -1336,16 +1312,19 @@ class _TimelinePanelState extends State<TimelinePanel> {
                           _timeline,
                           scrolled,
                         ]),
-                        builder: (context, _) => CustomPaint(
-                          size: Size(overview.maxWidth, EditorMetrics.s18),
-                          painter: _ArrangementOverview(
-                            layers: widget.controller.layers,
-                            duration: duration,
-                            extent: overviewExtent,
-                            frame: scrubFrame ?? widget.controller.frame.value,
-                            offset: offset,
-                            scale: pixelsPerFrame,
-                            viewportWidth: bounds.maxWidth - labelWidth,
+                        builder: (context, _) => RepaintBoundary(
+                          child: CustomPaint(
+                            size: Size(overview.maxWidth, EditorMetrics.s18),
+                            painter: _ArrangementOverview(
+                              layers: widget.controller.layers,
+                              duration: duration,
+                              extent: overviewExtent,
+                              frame:
+                                  scrubFrame ?? widget.controller.frame.value,
+                              offset: offset,
+                              scale: pixelsPerFrame,
+                              viewportWidth: bounds.maxWidth - labelWidth,
+                            ),
                           ),
                         ),
                       ),
@@ -1374,6 +1353,107 @@ class _TimelinePanelState extends State<TimelinePanel> {
 /// same width on every frame of playback.
 final _labels = <(String, Color, double, double, FontWeight), TextPainter>{};
 
+/// The horizontal scrollbar under the lanes; sized from the timeline's
+/// measures, so it listens to that signal alone.
+class _TimelineScrollStrip extends StatelessWidget {
+  const _TimelineScrollStrip({
+    required this.timeline,
+    required this.horizontal,
+    required this.viewportWidth,
+    required this.measure,
+  });
+  final Listenable timeline;
+  final ScrollController horizontal;
+  final double viewportWidth;
+
+  /// (label column width, content width) as the timeline now measures them.
+  final (double, double) Function() measure;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: timeline,
+    builder: (context, _) {
+      final (labelWidth, contentWidth) = measure();
+      return Padding(
+        padding: EdgeInsets.only(left: labelWidth),
+        child: SizedBox(
+          height: EditorMetrics.s12,
+          child: EditorScrollbar(
+            controller: horizontal,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: horizontal,
+              physics: const ClampingScrollPhysics(
+                parent: NeverScrollableScrollPhysics(),
+              ),
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: math.max(viewportWidth - labelWidth, contentWidth),
+                height: EditorMetrics.s12,
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// The grip between the names and the lanes: drag to widen the name column,
+/// double-click to put it back.
+class _NameColumnGrip extends StatelessWidget {
+  const _NameColumnGrip({
+    required this.left,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragCancel,
+    required this.onReset,
+  });
+  final double left;
+  final ValueChanged<double> onDragStart, onDragUpdate;
+  final VoidCallback onDragCancel, onReset;
+  @override
+  Widget build(BuildContext context) => Positioned(
+    left: left,
+    top: EditorMetrics.s22,
+    bottom: EditorMetrics.s12,
+    width: EditorMetrics.s6,
+    child: MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        supportedDevices: const {
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+        },
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (e) => onDragStart(e.globalPosition.dx),
+        onHorizontalDragUpdate: (e) => onDragUpdate(e.globalPosition.dx),
+        onHorizontalDragCancel: onDragCancel,
+        onDoubleTap: onReset,
+        child: const SizedBox.expand(),
+      ),
+    ),
+  );
+}
+
+// paint() の中で Paint / Path を作らない(custom-canvas-and-gestures 規則 5)。
+// 塗りは 1 枚、線は 1 枚、縁取りは 1 枚を使い回し、呼ぶ度に安い属性だけ書き換える。
+// Canvas の draw* は呼んだ時の値を読むので、同じ物を続けて使っても絵は変わらない。
+// 両方の painter(_TimelinePainter と const の _ArrangementOverview)が読むので
+// file の頂点に置く — paint() は UI thread の上で 1 本ずつしか走らない。
+final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+final Paint _linePaint = Paint()..style = PaintingStyle.fill;
+final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;
+final Path _scratchPath = Path();
+
+Paint _fill(Color color) => _fillPaint..color = color;
+Paint _line(Color color, [double width = 0]) => _linePaint
+  ..color = color
+  ..strokeWidth = width;
+Paint _stroke(Color color, [double width = 0]) => _strokePaint
+  ..color = color
+  ..strokeWidth = width;
+
 class _TimelinePainter extends CustomPainter {
   _TimelinePainter({
     required this.rows,
@@ -1395,7 +1475,9 @@ class _TimelinePainter extends CustomPainter {
     this.dragKeys = const [],
     this.delta = 0,
     this.dragLayers = const {},
+    this.ink = EditorInk.dark,
   });
+  final EditorInk ink;
   final Rect? rowDropGuide;
   final bool rowDropInside;
   final double labelWidth;
@@ -1468,10 +1550,7 @@ class _TimelinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final label = labelWidth;
     const h = _TimelinePanelState.rowHeight;
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xff3c3c3c),
-    );
+    canvas.drawRect(Offset.zero & size, _fill(ink.laneGround));
     final unit = 85 / scale >= fps ? fps : 1.0;
     final desired = 85 / scale / unit;
     final magnitude = math
@@ -1494,14 +1573,13 @@ class _TimelinePainter extends CustomPainter {
       for (var i = 0; i < rows.length; i++) {
         canvas.drawRect(
           Rect.fromLTWH(label, rows[i].bounds.top, size.width - label, h),
-          Paint()
-            ..color = laneSelected(rows[i])
+          _fill(
+            laneSelected(rows[i])
                 ? EditorTheme.hover
                 : rows[i].property != null
-                ? const Color(0xff383838)
-                : (i.isEven
-                      ? const Color(0xff3d3d3d)
-                      : const Color(0xff383838)),
+                ? ink.lane
+                : (i.isEven ? ink.laneAlt : ink.lane),
+          ),
         );
       }
     }
@@ -1514,14 +1592,12 @@ class _TimelinePainter extends CustomPainter {
       if ((t ~/ gridStep).isEven)
         canvas.drawRect(
           Rect.fromLTWH(x, 0, gridStep * scale, size.height),
-          Paint()..color = Colors.white.withValues(alpha: .025),
+          _fill(EditorTheme.white.withValues(alpha: .025)),
         );
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
-        Paint()
-          ..color = const Color(0xff262626)
-          ..strokeWidth = 1.5,
+        _line(ink.grid, 1.5),
       );
       for (var sub = 1; sub < 4; sub++) {
         if (gridStep * scale / 4 < 12) break;
@@ -1529,23 +1605,21 @@ class _TimelinePainter extends CustomPainter {
         canvas.drawLine(
           Offset(sx, ruler ? size.height - 12 : 0),
           Offset(sx, size.height),
-          Paint()
-            ..color = const Color(0xff303030)
-            ..strokeWidth = 1,
+          _line(ink.gridMinor, 1),
         );
       }
       if (ruler) {
         canvas.drawLine(
           Offset(x, 9),
           Offset(x, size.height),
-          Paint()..color = const Color(0xff9b9b9b),
+          _line(ink.tick),
         );
         for (var sub = 1; sub < 4; sub++) {
           final sx = x + gridStep * scale * sub / 4;
           canvas.drawLine(
             Offset(sx, size.height - 12),
             Offset(sx, size.height - 10),
-            Paint()..color = const Color(0xff929292),
+            _line(ink.tickMinor),
           );
         }
         final seconds = t / fps;
@@ -1585,10 +1659,11 @@ class _TimelinePainter extends CustomPainter {
                 math.max(1, width),
                 math.max(1, stripe - 1),
               ),
-              Paint()
-                ..color = row.groupOpen
+              _fill(
+                row.groupOpen
                     ? EditorTheme.border
                     : EditorTheme.layerColor(child['id']),
+              ),
             );
           }
         } else if (row.property == null) {
@@ -1623,37 +1698,33 @@ class _TimelinePainter extends CustomPainter {
             if (only.width > 0) {
               canvas.drawRect(
                 only,
-                Paint()..color = EditorTheme.muted.withValues(alpha: .28),
+                _fill(EditorTheme.muted.withValues(alpha: .28)),
               );
               canvas.drawRect(
                 only.deflate(.5),
-                Paint()
-                  ..color = own.withValues(alpha: .55)
-                  ..strokeWidth = 1
-                  ..style = PaintingStyle.stroke,
+                _stroke(own.withValues(alpha: .55), 1),
               );
             }
             if (ghost.left < zero) {
-              final notch = Path()
+              final notch = _scratchPath
+                ..reset()
                 ..moveTo(zero, ghost.top)
                 ..lineTo(zero + 5, ghost.center.dy)
                 ..lineTo(zero, ghost.bottom)
                 ..close();
-              canvas.drawPath(
-                notch,
-                Paint()..color = own.withValues(alpha: .9),
-              );
+              canvas.drawPath(notch, _fill(own.withValues(alpha: .9)));
             }
           }
           final chosen = layerSelected(row);
           canvas.drawRect(
             rect,
-            Paint()
-              ..color = row.layer['hidden'] == true
+            _fill(
+              row.layer['hidden'] == true
                   ? EditorTheme.raised
                   : chosen
-                  ? Color.lerp(own, Colors.white, EditorTheme.lift)!
+                  ? Color.lerp(own, EditorTheme.white, EditorTheme.lift)!
                   : own,
+            ),
           );
           if (!row.lanesOpen)
             for (final f in row.summaryFrames) {
@@ -1661,20 +1732,15 @@ class _TimelinePainter extends CustomPainter {
                   sel.any((s) => s['layer'] == row.id && s['frame'] == f);
               final cy = y + h / 2;
               void diamond(double kx, Color fill) {
-                final path = Path()
+                final path = _scratchPath
+                  ..reset()
                   ..moveTo(kx, cy - 3.5)
                   ..lineTo(kx + 3.5, cy)
                   ..lineTo(kx, cy + 3.5)
                   ..lineTo(kx - 3.5, cy)
                   ..close();
-                canvas.drawPath(path, Paint()..color = fill);
-                canvas.drawPath(
-                  path,
-                  Paint()
-                    ..color = Colors.black
-                    ..strokeWidth = 1
-                    ..style = PaintingStyle.stroke,
-                );
+                canvas.drawPath(path, _fill(fill));
+                canvas.drawPath(path, _stroke(EditorTheme.black, 1));
               }
 
               // One diamond stands for every key at this frame. When only
@@ -1709,11 +1775,12 @@ class _TimelinePainter extends CustomPainter {
             final cy = y + h / 2;
             final chosen =
                 selectedKey(row, a, keys) && selectedKey(row, b, keys);
-            final paint = Paint()
-              ..color = chosen
+            final paint = _line(
+              chosen
                   ? EditorTheme.keyAccent
-                  : EditorTheme.muted.withValues(alpha: .6)
-              ..strokeWidth = chosen ? 2 : 1;
+                  : EditorTheme.muted.withValues(alpha: .6),
+              chosen ? 2 : 1,
+            );
             if (a['interp']?['kind'] == 'Linear') {
               for (var x = x1; x < x2; x += 6) {
                 canvas.drawLine(
@@ -1728,7 +1795,8 @@ class _TimelinePainter extends CustomPainter {
           }
           for (final key in row.keys) {
             final x = keyX(key);
-            final path = Path()
+            final path = _scratchPath
+              ..reset()
               ..moveTo(x, y + h / 2 - 5)
               ..lineTo(x + 5, y + h / 2)
               ..lineTo(x, y + h / 2 + 5)
@@ -1736,10 +1804,11 @@ class _TimelinePainter extends CustomPainter {
               ..close();
             canvas.drawPath(
               path,
-              Paint()
-                ..color = selectedKey(row, key, keys)
+              _fill(
+                selectedKey(row, key, keys)
                     ? EditorTheme.keyAccent
                     : EditorTheme.ink,
+              ),
             );
           }
         }
@@ -1749,26 +1818,20 @@ class _TimelinePainter extends CustomPainter {
         canvas.drawLine(
           Offset(label, y),
           Offset(size.width, y),
-          Paint()
-            ..color = const Color(0xff242424)
-            ..strokeWidth = 2,
+          _line(EditorTheme.line, 2),
         );
       }
     }
     canvas.drawLine(
       Offset(label, 0),
       Offset(size.width, 0),
-      Paint()
-        ..color = const Color(0xff242424)
-        ..strokeWidth = 2,
+      _line(EditorTheme.line, 2),
     );
     if (ruler)
       canvas.drawLine(
         Offset(label, size.height - 1),
         Offset(size.width, size.height - 1),
-        Paint()
-          ..color = const Color(0xff242424)
-          ..strokeWidth = 2,
+        _line(EditorTheme.line, 2),
       );
     for (final marker in markers) {
       final x =
@@ -1776,44 +1839,38 @@ class _TimelinePainter extends CustomPainter {
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
-        Paint()..color = EditorTheme.muted.withValues(alpha: .4),
+        _line(EditorTheme.muted.withValues(alpha: .4)),
       );
       if (ruler)
-        canvas.drawCircle(Offset(x, 3), 3, Paint()..color = EditorTheme.accent);
+        canvas.drawCircle(Offset(x, 3), 3, _fill(EditorTheme.accent));
     }
     final playX = label + frame * scale - offset;
     if (ruler)
       canvas.drawPath(
-        Path()
+        _scratchPath
+          ..reset()
           ..moveTo(playX - 5, 0)
           ..lineTo(playX + 5, 0)
           ..lineTo(playX, 6)
           ..close(),
-        Paint()..color = EditorTheme.keyAccent,
+        _fill(EditorTheme.keyAccent),
       );
     canvas.drawLine(
       Offset(playX, 0),
       Offset(playX, size.height),
-      Paint()
-        ..color = EditorTheme.keyAccent
-        ..strokeWidth = 1.5,
+      _line(EditorTheme.keyAccent, 1.5),
     );
     if (marquee != null) {
       canvas.drawRect(
         marquee!,
-        Paint()..color = EditorTheme.accent.withValues(alpha: .15),
+        _fill(EditorTheme.accent.withValues(alpha: .15)),
       );
-      canvas.drawRect(
-        marquee!,
-        Paint()
-          ..color = EditorTheme.accent
-          ..style = PaintingStyle.stroke,
-      );
+      canvas.drawRect(marquee!, _stroke(EditorTheme.accent));
     }
     canvas.restore();
     canvas.drawRect(
       Rect.fromLTWH(0, 0, math.min(label, size.width), size.height),
-      Paint()..color = EditorTheme.panel,
+      _fill(EditorTheme.panel),
     );
     if (!ruler) {
       canvas.save();
@@ -1823,14 +1880,11 @@ class _TimelinePainter extends CustomPainter {
         final background = row.property == null
             ? EditorTheme.layerColor(row.id)
             : (laneSelected(row) ? EditorTheme.raised : EditorTheme.panel);
-        canvas.drawRect(node.bounds, Paint()..color = background);
+        canvas.drawRect(node.bounds, _fill(background));
         for (final child in node.children) surface(child);
         canvas.drawRect(
           node.bounds.deflate(.5),
-          Paint()
-            ..color = EditorTheme.line
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1,
+          _stroke(EditorTheme.line, 1),
         );
       }
 
@@ -1865,14 +1919,14 @@ class _TimelinePainter extends CustomPainter {
               label - (row.property == null ? label - 82 : row.bounds.left),
               h,
             ),
-            Paint()..color = EditorTheme.raised,
+            _fill(EditorTheme.raised),
           );
         // Chosen rows read as one lit surface from the name cell to the
         // time field; nothing is outlined, the selection is a region.
         if (layerSelected(row))
           canvas.drawRect(
             Rect.fromLTWH(row.bounds.left, y, label - row.bounds.left, h),
-            Paint()..color = Colors.white.withValues(alpha: EditorTheme.lift),
+            _fill(EditorTheme.white.withValues(alpha: EditorTheme.lift)),
           );
         if (row.property == null) {
           text(
@@ -1881,12 +1935,12 @@ class _TimelinePainter extends CustomPainter {
             Offset(row.bounds.left + 5, y + 3),
             width: EditorMetrics.s12,
             centered: true,
-            color: const Color(0xff202020),
+            color: ink.headerInk,
           );
           text(
             canvas,
             '${row.layer['name']}',
-            color: const Color(0xff202020),
+            color: ink.headerInk,
             Offset(row.bounds.left + 23, y + 3),
             width: math.max(0.0, row.bounds.width - 29),
             weight: FontWeight.w500,
@@ -1894,8 +1948,7 @@ class _TimelinePainter extends CustomPainter {
           final keysOpen = row.lanesOpen;
           canvas.drawRect(
             Rect.fromLTWH(label - 81, y + 2, 14, h - 4),
-            Paint()
-              ..color = keysOpen ? EditorTheme.accent : const Color(0xff242424),
+            _fill(keysOpen ? EditorTheme.accent : EditorTheme.line),
           );
           text(
             canvas,
@@ -1904,7 +1957,7 @@ class _TimelinePainter extends CustomPainter {
             width: EditorMetrics.s14,
             size: EditorMetrics.dense,
             centered: true,
-            color: keysOpen ? const Color(0xff202020) : EditorTheme.ink,
+            color: keysOpen ? ink.headerInk : EditorTheme.ink,
           );
           final states = [
             row.layer['hidden'] == true,
@@ -1918,8 +1971,7 @@ class _TimelinePainter extends CustomPainter {
             final on = states[column];
             canvas.drawRect(
               Rect.fromLTWH(x, y + 2, 14, h - 4),
-              Paint()
-                ..color = on ? EditorTheme.accent : const Color(0xff242424),
+              _fill(on ? EditorTheme.accent : EditorTheme.line),
             );
             text(
               canvas,
@@ -1929,7 +1981,7 @@ class _TimelinePainter extends CustomPainter {
               size: EditorMetrics.micro,
               centered: true,
               weight: FontWeight.w600,
-              color: on ? const Color(0xff202020) : EditorTheme.muted,
+              color: on ? ink.headerInk : EditorTheme.muted,
             );
           }
         } else {
@@ -1951,16 +2003,11 @@ class _TimelinePainter extends CustomPainter {
         canvas.drawLine(
           Offset(row.bounds.left, y + h),
           Offset(size.width, y + h),
-          Paint()
-            ..color = const Color(0xff242424)
-            ..strokeWidth = 2,
+          _line(EditorTheme.line, 2),
         );
       }
     if (rowDropGuide case final Rect guide) {
-      final paint = Paint()
-        ..color = const Color(0xffaedce8)
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke;
+      final paint = _stroke(EditorTheme.select, 2);
       if (rowDropInside)
         canvas.drawRect(
           Rect.fromLTRB(
@@ -1980,7 +2027,7 @@ class _TimelinePainter extends CustomPainter {
         canvas.drawCircle(
           Offset(guide.left + 3, guide.top),
           3,
-          Paint()..color = const Color(0xffaedce8),
+          _fill(EditorTheme.select),
         );
       }
     }
@@ -1988,19 +2035,18 @@ class _TimelinePainter extends CustomPainter {
       canvas.drawLine(
         Offset(0, size.height - 1),
         Offset(size.width, size.height - 1),
-        Paint()
-          ..color = EditorTheme.line
-          ..strokeWidth = 2,
+        _line(EditorTheme.line, 2),
       );
     canvas.drawLine(
       Offset(label, 0),
       Offset(label, size.height),
-      Paint()..color = EditorTheme.line,
+      _line(EditorTheme.line),
     );
   }
 
   @override
   bool shouldRepaint(covariant _TimelinePainter old) =>
+      ink != old.ink ||
       !identical(rows, old.rows) ||
       !listEquals(selected, old.selected) ||
       !listEquals(keys, old.keys) ||
@@ -2037,7 +2083,7 @@ class _ArrangementOverview extends CustomPainter {
   final double offset, scale, viewportWidth;
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = EditorTheme.app);
+    canvas.drawRect(Offset.zero & size, _fill(EditorTheme.app));
     final unit = size.width / math.max(1, extent);
     final lane = 12 / math.max(1, layers.length);
     canvas.save();
@@ -2051,10 +2097,11 @@ class _ArrangementOverview extends CustomPainter {
           (l['duration'] as num? ?? 1) * unit,
           math.max(1, lane - 1),
         ),
-        Paint()
-          ..color = l['hidden'] == true
+        _fill(
+          l['hidden'] == true
               ? EditorTheme.border
               : EditorTheme.layerColor(l['id']),
+        ),
       );
     }
     final left = (offset / scale * unit).clamp(0.0, size.width);
@@ -2064,17 +2111,14 @@ class _ArrangementOverview extends CustomPainter {
     );
     canvas.drawRect(
       Rect.fromLTRB(left, 1, right, 17),
-      Paint()..color = Colors.white.withValues(alpha: .10),
+      _fill(EditorTheme.white.withValues(alpha: .10)),
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTRB(left, 1, right, 17),
         const Radius.circular(EditorMetrics.s3),
       ),
-      Paint()
-        ..color = EditorTheme.tab
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+      _stroke(EditorTheme.tab, 1.5),
     );
     // 尺の印(壁ではない)と、今のコマ。
     if (extent > duration) {
@@ -2082,18 +2126,14 @@ class _ArrangementOverview extends CustomPainter {
       canvas.drawLine(
         Offset(x, 1),
         Offset(x, 17),
-        Paint()
-          ..color = EditorTheme.muted
-          ..strokeWidth = 1,
+        _line(EditorTheme.muted, 1),
       );
     }
     final now = frame * unit;
     canvas.drawLine(
       Offset(now, 0),
       Offset(now, size.height),
-      Paint()
-        ..color = EditorTheme.keyAccent
-        ..strokeWidth = 1.5,
+      _line(EditorTheme.keyAccent, 1.5),
     );
     canvas.restore();
   }

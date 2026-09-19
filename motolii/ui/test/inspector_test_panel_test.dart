@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/leaves.dart';
 
 /// The Test tab builds every control from the declaration: each kind the
 /// snapshot can send gets its part, and a Vism's params need no hand layout.
@@ -140,7 +142,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
@@ -192,7 +194,7 @@ void main() {
     expect(find.text('%'), findsWidgets);
 
     // More than four plain controls: the first four are heroes above a rule.
-    expect(find.byType(Divider), findsWidgets);
+    expect(find.byType(EditorRule), findsWidgets);
 
     // The dice throws every bounded number as one edit; the reset puts every
     // number back where it rests, both through the preview-then-commit route.
@@ -296,7 +298,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
@@ -306,7 +308,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(find.byType(EditorNumericField).first);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '30');
+    await tester.enterText(find.byType(EditorTextField), '30');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     final edit = commands.firstWhere((m) => m.contains('previewProperties'));

@@ -18,6 +18,8 @@ pub(crate) struct BlockBatch {
     members: Vec<u32>,
     /// 場(`SCOPE: room`)の元の物の番号。掛かった層そのものが動くブロックは `u32::MAX`。
     source: u32,
+    /// 名指しの深さ(親・anchor を辿った段数)。同じ stage では浅い方(読まれる側)が先に走る。
+    rank: usize,
 }
 
 /// 形の層の輪郭(素材座標)。当たりは四角ではなく、この形そのもので見る
@@ -64,6 +66,29 @@ fn flatten_contours(contours: &[crate::doc::vector::Contour], offset: [f32; 2], 
             });
         }
     }
+}
+
+/// 名指しの深さ: 相手(親・anchor)の無い物は 0、相手が居れば相手の深さ + 1。輪は 0 で切る。
+/// 同じ stage の batch はこの順に走るので、読む側は読まれる側の今を見る。
+fn reference_depth(items: &[BlockItem]) -> Vec<usize> {
+    fn go(items: &[BlockItem], k: usize, memo: &mut [Option<usize>], visiting: &mut Vec<usize>) -> usize {
+        if let Some(d) = memo[k] {
+            return d;
+        }
+        if visiting.contains(&k) {
+            return 0;
+        }
+        visiting.push(k);
+        let d = [items[k].parent_slot, items[k].anchor_slot].into_iter()
+            .filter(|j| (*j as usize) < items.len())
+            .map(|j| go(items, j as usize, memo, visiting) + 1)
+            .max().unwrap_or(0);
+        visiting.pop();
+        memo[k] = Some(d);
+        d
+    }
+    let mut memo = vec![None; items.len()];
+    (0..items.len()).map(|k| go(items, k, &mut memo, &mut Vec::new())).collect()
 }
 
 /// 書類から先に読む、物ごとの住む箱と箱。
@@ -323,6 +348,25 @@ impl Engine {
                 needed.insert(target);
             }
         }
+        // 名指しの相手(親の層、Position Anchor の層)は、ブロックがその今を読むので物として並べる(`parent(k)` / `anchor(k)`)。
+        // 番号は最後(名指しだけで物になる層を先に並べると、既存の物の `k` がずれて絵が変わる)。
+        let mut named: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
+        let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
+        let anchor_of = |view: &StoreView<'_>, id: LayerId| -> Result<Option<LayerId>, EngineError> {
+            Ok(match view.value_at(id, &anchor_row, t).map_err(store)? {
+                Some(Value::LayerId(id)) if id != 0 => Some(LayerId(id)),
+                Some(Value::F64(v)) if v >= 1.0 => Some(LayerId(v.round() as u64)),
+                _ => None,
+            })
+        };
+        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost && l.effects.iter().any(|e| blocks.contains(&e.plugin_id))) {
+            if let Some(parent) = view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent {
+                named.insert(parent);
+            }
+            if let Some(target) = anchor_of(view, layer.id)? {
+                named.insert(target);
+            }
+        }
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
             // 見せるための層(可視の重ね、つなぐ線)は物にしない。物理の相手は画の中身だけ。
             if layer.effects.iter().any(|e| crate::doc::store::overlay::is_track_overlay(&e.plugin_id)) {
@@ -344,7 +388,7 @@ impl Engine {
                     room_ids.insert(layer.id, room);
                     wanted.push(layer.id);
                 }
-                None if has_block || needed.contains(&layer.id) => wanted.push(layer.id),
+                None if has_block || needed.contains(&layer.id) || named.contains(&layer.id) => wanted.push(layer.id),
                 _ => {}
             }
         }
@@ -375,7 +419,8 @@ impl Engine {
                 None => frame,
             };
             // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
-            let Some(own) = view.layer_box(layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()) else { continue };
+            // 箱の無い相手(null の層)は置き方の点 1 つ。
+            let Some(own) = view.layer_box(layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()).or_else(|| named.contains(&layer.id).then_some([0.0; 4])) else { continue };
             // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
             // 当たりが元の形の大きさのままになる。
             let stretch = solved.slots.get(&layer.id).map_or([1.0, 1.0], |slot| slot.stretch);
@@ -417,17 +462,12 @@ impl Engine {
             state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin, hardness, outline });
         }
         // 付いて置く札の相手がブロックで動くなら、札も物として並べて付いて行かせる(CSS の transform を読まない anchor() とは違う、利用者 2026-09-15「付いていく方が自然」)。
-        let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
         let area_row = PropertyId::new(crate::doc::store::layout::POSITION_AREA).map_err(store)?;
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
             if !matches!(view.value_at(layer.id, &area_row, t).map_err(store)?, Some(Value::Enum(a)) if a > 0) {
                 continue;
             }
-            let target = match view.value_at(layer.id, &anchor_row, t).map_err(store)? {
-                Some(Value::LayerId(id)) if id != 0 => LayerId(id),
-                Some(Value::F64(v)) if v >= 1.0 => LayerId(v.round() as u64),
-                _ => continue,
-            };
+            let Some(target) = anchor_of(view, layer.id)? else { continue };
             if state.placed.contains_key(&target) {
                 state.follows.insert(layer.id, target);
                 if !state.placed.contains_key(&layer.id) {
@@ -438,7 +478,19 @@ impl Engine {
         }
         // 物を先に決める: 層を組む前に箱・輪郭・場を揃えて解く。こうすると、つなぐ線も札も可視も
         // 同じコマの結果を読める(利用者 2026-09-16 の穴「つなぐ線が付いて来ない」)。
+        let mut pending: Vec<(u32, Vec<(String, Vec<f32>, bool)>)> = Vec::new();
+        let (mut order, mut late): (Vec<&ResolvedLayer>, Vec<&ResolvedLayer>) = (Vec::new(), Vec::new());
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
+            let Some(placed) = state.placed.get(&layer.id) else { continue };
+            let has_block = layer.effects.iter().any(|e| blocks.contains(&e.plugin_id));
+            if has_block || state.follows.contains_key(&layer.id) || state.field_rooms.contains(&placed.group) || needed.contains(&layer.id) {
+                order.push(layer);
+            } else if named.contains(&layer.id) {
+                late.push(layer);
+            }
+        }
+        order.extend(late);
+        for layer in order {
             let Some(placed) = state.placed.get(&layer.id).cloned() else { continue };
             let blocks_here: Vec<(String, Vec<f32>, bool)> = layer.effects.iter().filter_map(|e| {
                 let d = definitions.iter().find(|d| d.0 == e.plugin_id)?;
@@ -451,9 +503,6 @@ impl Engine {
                 }).collect();
                 Some((e.plugin_id.clone(), params, d.1))
             }).collect();
-            if blocks_here.is_empty() && !state.follows.contains_key(&layer.id) && !state.field_rooms.contains(&placed.group) && !needed.contains(&layer.id) {
-                continue;
-            }
             let m = layer.placement.transform;
             let own = placed.own;
             let corners = [[own[0], own[1]], [own[2], own[1]], [own[0], own[3]], [own[2], own[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
@@ -470,6 +519,7 @@ impl Engine {
                 group: placed.group,
                 margin: placed.margin,
                 weight: placed.weight,
+                ..Default::default()
             });
             state.outlines.push(placed.outline.as_ref().map(|points| {
                 std::sync::Arc::new(points.iter().map(|p| m.transform_point2(glam::Vec2::from(*p)).to_array()).collect::<Vec<[f32; 2]>>())
@@ -477,17 +527,31 @@ impl Engine {
             state.bases.push(([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]));
             state.object_layers.push(layer.id);
             state.object_frames.push((view.layer_time(layer.id, t).map_err(store)?.as_seconds_f64() * state.fps).round() as i64);
+            pending.push((k, blocks_here));
+        }
+        // 名指しの相手の番号は物が揃ってから引く。深さ = 親・anchor を辿った段数: 同じ stage では浅い方(読まれる側)が
+        // 先に走るので、子の block は親の block の結果を同じコマで読める(1 段ずつ、輪は 0)。
+        for k in 0..state.objects.len() {
+            let layer = state.object_layers[k];
+            let slot = |id: Option<LayerId>| id.and_then(|id| state.slots.get(&id).copied()).unwrap_or(crate::render::compositor::effects::block_program::NO_OBJECT);
+            state.objects[k].parent_slot = slot(view.attrs(layer).map_err(store)?.unwrap_or_default().parent);
+            state.objects[k].anchor_slot = slot(anchor_of(view, layer)?);
+        }
+        let depth = reference_depth(&state.objects);
+        for (k, blocks_here) in pending {
+            let rank = depth[k as usize];
             for (stage, (plugin, params, is_field)) in blocks_here.into_iter().enumerate() {
                 if is_field {
                     state.fields.push((stage, plugin, params, k));
                     continue;
                 }
-                match state.batches.iter_mut().find(|b| b.stage == stage && b.plugin == plugin && b.params == params && b.source == u32::MAX) {
+                match state.batches.iter_mut().find(|b| b.stage == stage && b.rank == rank && b.plugin == plugin && b.params == params && b.source == u32::MAX) {
                     Some(batch) => batch.members.push(k),
-                    None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX }),
+                    None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX, rank }),
                 }
             }
         }
+        state.batches.sort_by_key(|b| (b.stage, b.rank));
         // つなぐ線となぞる形は物にならないが、相手の motion を描く側で読む(利用者 2026-09-18「位置は毎コマ変わるのに
         // GPU じゃないの変すぎ」)。CPU の道は動く前の箱から引き、動いた分は頂点で足す。
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
@@ -1082,7 +1146,7 @@ mod tests {
             let b = view.layer_box(id, t).unwrap().unwrap();
             let m = view.local_transform(id, t).unwrap();
             let (lo, hi) = (m.transform_point2(glam::vec2(b[0], b[1])), m.transform_point2(glam::vec2(b[2], b[3])));
-            BlockItem { lo: lo.to_array(), hi: hi.to_array(), room_lo: [0.0; 2], room_size: [W as f32, H as f32], radius: 0.0, group: 0, margin: 0.0, weight: 1.0 }
+            BlockItem { lo: lo.to_array(), hi: hi.to_array(), room_lo: [0.0; 2], room_size: [W as f32, H as f32], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }
         }).collect();
         let engine = Engine::new().unwrap();
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
@@ -1115,7 +1179,7 @@ mod tests {
         for i in 0..40 {
             let x = 60.0 + (i as f32 * 37.0) % 180.0;
             let y = 20.0 + (i as f32 * 23.0) % 110.0;
-            items.push(BlockItem { lo: [x, y], hi: [x + 12.0, y + 12.0], room_lo: [0.0; 2], room_size: room, radius: 0.0, group: 7, margin: 0.0, weight: 1.0 });
+            items.push(BlockItem { lo: [x, y], hi: [x + 12.0, y + 12.0], room_lo: [0.0; 2], room_size: room, radius: 0.0, group: 7, margin: 0.0, weight: 1.0, ..Default::default() });
         }
         let mut world = BlockWorld::new(device);
         world.begin(device, queue, &items, 0.0);
@@ -1140,7 +1204,7 @@ mod tests {
         let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
         let bounce = program_for(device, "bounce");
         let push = program_for(device, "push_apart");
-        let items = [BlockItem { lo: [300.0, 20.0], hi: [310.0, 30.0], room_lo: [0.0; 2], room_size: [200.0, 100.0], radius: 0.0, group: 1, margin: 0.0, weight: 1.0 }];
+        let items = [BlockItem { lo: [300.0, 20.0], hi: [310.0, 30.0], room_lo: [0.0; 2], room_size: [200.0, 100.0], radius: 0.0, group: 1, margin: 0.0, weight: 1.0, ..Default::default() }];
         let mut world = BlockWorld::new(device);
         world.begin(device, queue, &items, 0.0);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
@@ -1196,6 +1260,57 @@ mod tests {
         let at = |id: u64| state[layers.iter().position(|l| l.0 == id).expect("an object")].translate;
         assert!(at(2) != [0.0, 0.0], "the square was folded by Bounce");
         assert_eq!(at(3), at(2), "its label moved with it");
+    }
+
+    /// 名指しの口を書類から: 鍵で動く Hub に Position Anchor で名指しした tile の Effector は、Hub の今の中心で判定する
+    /// (鍵は休みの箱を動かすので `anchor_centre` = 休みの箱の中心 + ずれ)。Hub は block を持たなくても物になる。
+    #[test]
+    fn an_effector_takes_its_centre_from_the_hub_the_tile_is_anchored_to() {
+        use crate::render::compositor::effects::block_program::read_state;
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
+        let (hub, tile) = (LayerId(1), LayerId(2));
+        let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
+        let square = |size: f64| vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }) })];
+        doc.apply_all([
+            Intent::AddLayer(hub),
+            Intent::SetMeta { layer: hub, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: hub, patch: two_d.clone() },
+            Intent::SetShapes { layer: hub, shapes: square(8.0) },
+            Intent::AddLayer(tile),
+            Intent::SetMeta { layer: tile, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer: tile, patch: two_d },
+            Intent::SetShapes { layer: tile, shapes: square(16.0) },
+            Intent::SetEffects { layer: tile, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.effector".into() }] },
+        ]).unwrap();
+        let put = |doc: &mut Document, layer, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+        put(&mut doc, tile, property::POSITION, Value::Vec2([80.0, 50.0]));
+        put(&mut doc, tile, layout::POSITION_ANCHOR, Value::LayerId(hub.0));
+        for (name, value) in [("shape", 0.0), ("size", 30.0), ("soft", 6.0), ("strength", 1.0), ("lift", -20.0)] {
+            put(&mut doc, tile, &format!("{}0.param.{name}", property::EFFECT_PREFIX), Value::F64(value));
+        }
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe { t: RationalTime::ZERO, value: Value::Vec2([20.0, 50.0]), interp: Interp::Linear, spatial: None });
+        track.insert(Keyframe { t: RationalTime::try_new(3, 1).unwrap(), value: Value::Vec2([140.0, 50.0]), interp: Interp::Linear, spatial: None });
+        doc.apply(Intent::SetTrack { layer: hub, property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let fps = Fps::try_new(30, 1).unwrap();
+        let mut at = |frame: i64| {
+            engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, fps).unwrap()).unwrap();
+            let slot = |id: LayerId| engine.blocks.slots[&id] as usize;
+            let (h, k) = (slot(hub), slot(tile));
+            assert_eq!(engine.blocks.objects[k].anchor_slot, h as u32, "the tile names the hub");
+            assert_eq!(engine.blocks.objects[h].anchor_slot, u32::MAX, "the hub names nobody");
+            let world = engine.blocks.world.as_ref().unwrap();
+            let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            let state = read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder);
+            (engine.blocks.objects[h].lo, state[k].translate)
+        };
+        let (hub_far, tile_far) = at(0);
+        let (hub_over, tile_over) = at(45);
+        assert!((hub_over[0] - hub_far[0] - 60.0).abs() < 0.5, "the keys move the hub's rest box: {hub_far:?} -> {hub_over:?}");
+        assert_eq!(tile_far, [0.0, 0.0], "hub 60 px away: outside the sphere, the tile sits still");
+        assert!((tile_over[1] + 20.0).abs() < 1e-3 && tile_over[0].abs() < 1e-3, "hub over the tile: the tile lifts by Lift: {tile_over:?}");
     }
 
     /// Wave: 時刻と物の順で縦の正弦波。Wavelength 個離れた物は同じ高さ、半分なら逆。

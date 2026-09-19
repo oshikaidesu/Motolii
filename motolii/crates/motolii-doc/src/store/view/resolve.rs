@@ -990,6 +990,7 @@ impl<'a> StoreView<'a> {
                     copy.placement.world_transform = Some(
                         frame3 * placement.affine3(around.extend(depth)) * frame3.inverse() * world,
                     );
+                    copy.placement.z += placement.offset_z;
                 }
                 copy.placement.opacity = (copy.placement.opacity * placement.opacity).clamp(0.0, 1.0);
                 out.push(copy);
@@ -1011,7 +1012,7 @@ impl<'a> StoreView<'a> {
             let half = glam::vec2(material[0] * stretch[0], material[1] * stretch[1]) * 0.5;
             let offset = glam::Vec2::from(mark.center) - position - half;
             let (placed, outline) = if stretch_outline { ([1.0, 1.0], stretch) } else { (stretch, [1.0, 1.0]) };
-            (placement::Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch: placed }, outline)
+            (placement::Placement { index: mark.id, offset: offset.into(), rotation_degrees: 0.0, scale: 1.0, offset_z: 0.0, opacity: 1.0, time_offset: RationalTime::ZERO, stretch: placed }, outline)
         }).collect())
     }
 

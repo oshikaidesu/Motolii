@@ -1,0 +1,13 @@
+# NOTICE
+
+このディレクトリは外部の Agent Skill をそのまま同梱した物(改変なし、skills repo の ux-heuristics/ 以下だけを写した)。
+
+- 出所: https://github.com/wondelai/skills (ux-heuristics/)
+- commit: c172996495bed0fcd26896a9416b2093fd7073f0 (2026-09-19 取得)
+- license: MIT (LICENSE 参照, Copyright (c) 2025 Wondel.ai sp. z o.o.)
+- 取り込み理由: Krug + Nielsen の severity 判定と dark pattern / WCAG の照合表。Motolii では motolii-ux-audit の第 2 の物差し。
+
+同じ調査で見た、**同梱しなかった** 2 つ(license 無し = 全権利留保。link のみ、規則は自分の言葉で motolii-ux-audit に書き直した):
+
+- https://github.com/wonjyou/design-audit — 文脈(mobile-app / web-app / marketing-site)を先に決めてから 6 分野(視覚・heuristics・部品の型・人間工学・文言・IA)を見る。所見は「具体の要素を名指し、直し方まで書く」。
+- https://github.com/uxuiprinciples/agent-skills — UX smell(名前の付いた反例)の taxonomy。本体は有料 API 頼みで、key 無しでは表が引けない。

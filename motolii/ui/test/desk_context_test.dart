@@ -126,7 +126,10 @@ void main() {
       await tester.pumpAndSettle();
       // Ease は自分の帯に道具を持つので、Desk は見出しを重ねない。
       expect(
-        find.descendant(of: find.byType(DeskPanel), matching: find.byType(EaseDesk)),
+        find.descendant(
+          of: find.byType(DeskPanel),
+          matching: find.byType(EaseDesk),
+        ),
         findsOneWidget,
       );
       expect(deskText('Ease'), findsNothing);

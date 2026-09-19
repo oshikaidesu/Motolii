@@ -26,7 +26,12 @@ void main() {
         {'id': 1, 'name': 'Clip', 'kind': 'Media'},
       ],
       'catalog': [
-        {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass', 'generation': 3},
+        {
+          'id': 'motolii.blur',
+          'name': 'Blur',
+          'stage': 'Pass',
+          'generation': 3,
+        },
       ],
       'catalogErrors': ['glow: expected ; at line 4'],
     };
@@ -43,6 +48,9 @@ void main() {
     await tester.pump();
     final request = calls.where((call) => call.method == 'request');
     expect(request, isNotEmpty);
-    expect('${request.last.arguments['command']}', contains('"op":"reloadEffects"'));
+    expect(
+      '${request.last.arguments['command']}',
+      contains('"op":"reloadEffects"'),
+    );
   });
 }

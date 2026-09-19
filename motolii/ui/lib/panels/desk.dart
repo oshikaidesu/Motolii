@@ -1,11 +1,13 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/panel_catalog.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 class DeskPanel extends StatefulWidget {
   const DeskPanel({
@@ -131,7 +133,7 @@ class _DeskPanelState extends State<DeskPanel> {
         for (final spec in panelCatalog.where(
           (p) => p.drawer && _inDrawer(p.name),
         ))
-          InkWell(
+          EditorPress(
             onTap: () => _open(spec.name),
             child: SizedBox(
               height: EditorMetrics.control,
@@ -148,15 +150,15 @@ class _DeskPanelState extends State<DeskPanel> {
                   ),
                   EditorTooltip(
                     message: 'Use ${spec.name} when idle',
-                    child: IconButton(
+                    child: EditorIconButton(
                       iconSize: EditorMetrics.s14,
                       color: _name(c.deskDefault.value) == spec.name
                           ? EditorTheme.accent
                           : EditorTheme.muted,
                       icon: Icon(
                         _name(c.deskDefault.value) == spec.name
-                            ? Icons.star
-                            : Icons.star_border,
+                            ? Glyph.star
+                            : Glyph.star_border,
                       ),
                       onPressed: () => c.deskDefault.value =
                           _name(c.deskDefault.value) == spec.name
@@ -180,10 +182,10 @@ class _DeskPanelState extends State<DeskPanel> {
       final inlineTools = live && shown == 'Ease';
       final tools = EditorTooltip(
         message: 'Desk tools',
-        child: IconButton(
+        child: EditorIconButton(
           iconSize: EditorMetrics.s18,
           onPressed: () => c.deskDrawer.value = 'Tools',
-          icon: const Icon(Icons.all_inbox_outlined),
+          icon: const Icon(Glyph.all_inbox_outlined),
         ),
       );
       return TapRegion(
@@ -192,7 +194,7 @@ class _DeskPanelState extends State<DeskPanel> {
         child: Focus(
           canRequestFocus: false,
           onFocusChange: (focused) => _inside = focused,
-          child: Material(
+          child: ColoredBox(
             color: EditorTheme.panel,
             child: Column(
               children: [

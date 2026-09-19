@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/editor_app.dart';
 import '../lib/app/editor_window.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/registry.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/layout.dart';
+import 'support/editor_test_theme.dart';
 
 /// What layout costs, panel by panel, on the two moves the window is judged
 /// on: taking one status update, and being laid out whole.
@@ -257,7 +257,7 @@ Future<String> _window(WidgetTester tester, int layers) async {
       });
   Future<void> mount() => tester.pumpWidget(
     MaterialApp(
-      theme: EditorTheme.data,
+      theme: editorTestTheme,
       builder: EditorApp.noHover,
       home: const EditorWindow(),
     ),
@@ -312,7 +312,7 @@ void main() {
         c.document.value = _status(layers, 0);
         Future<void> mount(Size size) => tester.pumpWidget(
           MaterialApp(
-            theme: EditorTheme.data,
+            theme: editorTestTheme,
             builder: EditorApp.noHover,
             home: Scaffold(
               body: Align(
@@ -402,7 +402,7 @@ void _shelfMain() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         builder: EditorApp.noHover,
         home: Scaffold(
           body: Align(
@@ -487,7 +487,7 @@ Future<EditorSession> _mounted(WidgetTester tester) async {
       });
   await tester.pumpWidget(
     MaterialApp(
-      theme: EditorTheme.data,
+      theme: editorTestTheme,
       builder: EditorApp.noHover,
       home: const EditorWindow(),
     ),
@@ -541,7 +541,7 @@ void _switchMain() {
       c.document.value = _status(3, 0);
       await tester.pumpWidget(
         MaterialApp(
-          theme: EditorTheme.data,
+          theme: editorTestTheme,
           builder: EditorApp.noHover,
           home: Scaffold(
             body: Align(

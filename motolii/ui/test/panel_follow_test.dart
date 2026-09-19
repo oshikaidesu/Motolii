@@ -7,6 +7,7 @@ import '../lib/panels/ease_desk.dart';
 import '../lib/panels/registry.dart';
 import '../lib/panels/timeline.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 /// The panels below stopped rebuilding themselves for every snapshot; each
 /// now wakes on a fingerprint of its own. A fingerprint that misses something
@@ -19,7 +20,7 @@ Future<void> _mount(
   Size size,
 ) => tester.pumpWidget(
   MaterialApp(
-    theme: EditorTheme.data,
+    theme: editorTestTheme,
     builder: EditorApp.noHover,
     home: Scaffold(
       body: Align(

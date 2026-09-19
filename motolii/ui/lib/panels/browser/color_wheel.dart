@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui show Vertices, VertexMode;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
@@ -149,7 +149,7 @@ class ColorWheelPainter extends CustomPainter {
     canvas.drawCircle(wheel.center, wheel.side / 2 - .5, rim);
 
     final shadow = Paint()
-      ..color = Colors.black45
+      ..color = EditorTheme.scrimLight
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
     if (wheel.shape == 'triangle') {
       final t = wheel.triangle(hsv.hue);
@@ -159,7 +159,7 @@ class ColorWheelPainter extends CustomPainter {
         ui.Vertices(
           ui.VertexMode.triangles,
           t,
-          colors: [pure, Colors.white, Colors.black],
+          colors: [pure, EditorTheme.white, EditorTheme.black],
         ),
         BlendMode.srcOver,
         Paint(),
@@ -174,7 +174,7 @@ class ColorWheelPainter extends CustomPainter {
       canvas.drawRRect(
         r,
         Paint()
-          ..shader = LinearGradient(colors: [Colors.white, pure])
+          ..shader = LinearGradient(colors: [EditorTheme.white, pure])
               .createShader(wheel.square),
       );
       canvas.drawRRect(
@@ -183,7 +183,7 @@ class ColorWheelPainter extends CustomPainter {
           ..shader = const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black],
+            colors: [EditorTheme.clear, EditorTheme.black],
           ).createShader(wheel.square),
       );
       canvas.drawRRect(r, rim);
@@ -198,10 +198,10 @@ class ColorWheelPainter extends CustomPainter {
       at.translate(0, 1),
       5,
       Paint()
-        ..color = Colors.black54
+        ..color = EditorTheme.scrim
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
     );
-    canvas.drawCircle(at, 5, Paint()..color = Colors.white);
+    canvas.drawCircle(at, 5, Paint()..color = EditorTheme.white);
     canvas.drawCircle(at, 3.5, Paint()..color = fill);
   }
 

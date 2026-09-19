@@ -1,7 +1,5 @@
-import 'dart:ui' show ViewFocusEvent, ViewFocusState;
-
 import 'package:flutter/services.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../foundation/metrics.dart';
 import '../foundation/theme.dart';
@@ -27,56 +25,47 @@ class GradientInspector extends StatefulWidget {
 }
 
 class _GradientInspectorState extends State<GradientInspector>
-    with WidgetsBindingObserver {
+    with
+        WidgetsBindingObserver,
+        EditorDragSession<Map<String, dynamic>, GradientInspector> {
   int selected = 0;
   final _focus = FocusNode();
   List<Map<String, dynamic>>? _dragRows, _draft;
   double _dragX = 0, _dragY = 0;
-  bool _ending = false, _dropping = false;
-  late final _queue = EditorPreviewQueue<Map<String, dynamic>>(
-    (patch) => c.command('previewProperties', {
-      'edits': [patch],
-    }),
-  );
+  bool _dropping = false;
 
   static const double _handle = EditorMetrics.s14,
       _dropReach = EditorMetrics.s32;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
+  Future<void> sendPreview(Map<String, dynamic> patch) =>
+      c.command('previewProperties', {
+        'edits': [patch],
+      });
+  @override
+  Future<void> commitDrag() => c.command('commitPreview');
+
+  /// A stop pulled off the bar is dropped once the preview is withdrawn.
+  @override
+  Future<void> cancelDrag() async {
+    await c.command('cancelPreview');
+    if (!_dropping) return;
+    await edit({'removeStop': _dragRows![selected]['id']});
+    if (mounted) setState(() => selected = 0);
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _end(true);
+  bool get discardsPreview => _dropping;
+  @override
+  void dragStopped(bool cancel) {
+    if (cancel) _dropping = false;
   }
 
   @override
-  void didChangeViewFocus(ViewFocusEvent event) {
-    if (event.state == ViewFocusState.unfocused) _end(true);
-  }
-
-  Future<void> _end(bool cancel) async {
-    if (_dragRows == null || _ending) return;
-    _ending = true;
-    final drop = _dropping && !cancel;
-    try {
-      await _queue.finish(
-        cancel || drop,
-        () => c.command(cancel || drop ? 'cancelPreview' : 'commitPreview'),
-      );
-      if (drop) {
-        await edit({'removeStop': _dragRows![selected]['id']});
-        if (mounted) setState(() => selected = 0);
-      }
-    } finally {
-      _ending = false;
-      _dragRows = null;
-      _dropping = false;
-      if (mounted) setState(() => _draft = null);
-    }
+  void dragSettled() {
+    _dragRows = null;
+    _dropping = false;
+    setState(() => _draft = null);
   }
 
   @override
@@ -84,14 +73,12 @@ class _GradientInspectorState extends State<GradientInspector>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.layer['id'] != widget.layer['id'] ||
         (oldWidget.layer['locked'] != true && widget.layer['locked'] == true))
-      _end(true);
+      endDrag(true);
   }
 
   @override
   void dispose() {
-    if (_dragRows != null && !_ending)
-      _queue.finish(true, () => c.command('cancelPreview'));
-    WidgetsBinding.instance.removeObserver(this);
+    _dropping = false;
     _focus.dispose();
     super.dispose();
   }
@@ -136,7 +123,7 @@ class _GradientInspectorState extends State<GradientInspector>
 
   void _moveStop(int i, Offset point, double span) {
     final base = _dragRows;
-    if (base == null || _ending) return;
+    if (base == null || ending) return;
     final away = (point.dy - _dragY).abs() > _dropReach && base.length > 2;
     final lower = i == 0 ? 0.0 : (base[i - 1]['offset'] as num).toDouble();
     final upper = i + 1 == base.length
@@ -153,7 +140,7 @@ class _GradientInspectorState extends State<GradientInspector>
       _draft = next;
       _dropping = away;
     });
-    _queue.add({
+    queue.add({
       'layer': widget.layer['id'],
       'property': base[i]['positionProperty'],
       'value': offset,
@@ -188,13 +175,13 @@ class _GradientInspectorState extends State<GradientInspector>
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.escape &&
             _dragRows != null) {
-          _end(true);
+          endDrag(true);
           return KeyEventResult.handled;
         }
         if ((event.logicalKey == LogicalKeyboardKey.delete ||
             event.logicalKey == LogicalKeyboardKey.backspace)) {
           if (_dragRows != null) {
-            _end(true);
+            endDrag(true);
           } else if (enabled && rows.length > 2) {
             edit({'removeStop': rows[selected]['id']});
             setState(() => selected = 0);
@@ -281,7 +268,7 @@ class _GradientInspectorState extends State<GradientInspector>
                               _dragX = point.dx;
                               _dragY = point.dy;
                             },
-                            onPointerCancel: (_) => _end(true),
+                            onPointerCancel: (_) => endDrag(true),
                             child: GestureDetector(
                               onTap: enabled
                                   ? () {
@@ -292,9 +279,10 @@ class _GradientInspectorState extends State<GradientInspector>
                               onPanStart: !enabled || solid
                                   ? null
                                   : (e) {
-                                      if (_ending) return;
+                                      if (ending) return;
                                       _focus.requestFocus();
                                       _dragRows = stops;
+                                      beginDrag();
                                       setState(() => selected = i);
                                       _moveStop(
                                         i,
@@ -309,8 +297,8 @@ class _GradientInspectorState extends State<GradientInspector>
                                       local(e.globalPosition),
                                       span,
                                     ),
-                              onPanEnd: (_) => _end(false),
-                              onPanCancel: () => _end(true),
+                              onPanEnd: (_) => endDrag(false),
+                              onPanCancel: () => endDrag(true),
                               child: Opacity(
                                 opacity: _dropping && selected == i ? .35 : 1,
                                 child: Container(

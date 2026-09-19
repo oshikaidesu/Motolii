@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
@@ -15,18 +15,22 @@ import '../panels/composition_controls.dart';
 import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/leaves.dart';
 
 /// Freeze の裏仕事の進み。走っていなければ null。失敗はその理由。
 String? freezeNotice(Map<String, dynamic> status) {
   final job = status['freeze'];
   if (job is! Map) return null;
   final phase = '${job['phase']}';
-  if (phase != 'running' && phase != 'cancelling' && phase != 'failed') return null;
+  if (phase != 'running' && phase != 'cancelling' && phase != 'failed')
+    return null;
   final layers = (status['layers'] as List? ?? const []).whereType<Map>();
-  final name = layers
-      .where((l) => l['id'] == job['layer'])
-      .map((l) => '${l['name']}')
-      .firstOrNull ?? 'layer';
+  final name =
+      layers
+          .where((l) => l['id'] == job['layer'])
+          .map((l) => '${l['name']}')
+          .firstOrNull ??
+      'layer';
   if (phase == 'failed') return 'Freeze failed: ${job['error']}';
   return 'Freezing $name ${job['done']}/${job['total']}';
 }
@@ -148,6 +152,7 @@ class _EditorWindowState extends State<EditorWindow> {
 
   @override
   void dispose() {
+    workspace.dispose();
     saveTimer?.cancel();
     c.dispose();
     super.dispose();
@@ -178,13 +183,13 @@ class _EditorWindowState extends State<EditorWindow> {
       c.native('closeWindow', {'id': c.windowInfo['id']});
       return;
     }
-    setState(() => workspace.close(name));
+    workspace.close(name);
     _publishPlaces();
     persist();
   }
 
   void movePane(String name, DockNode target, String edge) {
-    setState(() => workspace.move(name, target, edge));
+    workspace.move(name, target, edge);
     _publishPlaces();
     persist();
   }
@@ -217,7 +222,7 @@ class _EditorWindowState extends State<EditorWindow> {
     if (host != null) {
       await c.native('focusWindow', {'id': host.key});
     } else {
-      setState(() => workspace.show('Desk'));
+      workspace.show('Desk');
     }
   }
 
@@ -239,7 +244,7 @@ class _EditorWindowState extends State<EditorWindow> {
     if (placement == 'tab' &&
         existing == null &&
         dock.leaves.any((n) => n.tabs.contains(name))) {
-      setState(() => workspace.show(name));
+      workspace.show(name);
       return;
     }
     if (placement == 'show') {
@@ -248,12 +253,12 @@ class _EditorWindowState extends State<EditorWindow> {
         return;
       }
       if (dock.leaves.any((n) => n.tabs.contains(name))) {
-        setState(() => workspace.show(name));
+        workspace.show(name);
       } else if (panelSpec(name)?.drawer == true) {
         c.deskDrawer.value = name;
         await _revealDesk();
       } else {
-        setState(() => workspace.show(name));
+        workspace.show(name);
       }
       await _publishPlaces();
       persist();
@@ -264,12 +269,12 @@ class _EditorWindowState extends State<EditorWindow> {
       detached.remove(existing.key);
       await c.native('closeWindow', {'id': existing.key});
     }
-    setState(() => workspace.close(name));
+    workspace.close(name);
     if (placement == 'drawer') {
       await _revealDesk();
     }
     if (placement == 'tab') {
-      setState(() => workspace.show(name));
+      workspace.show(name);
     }
     if (placement == 'window') {
       await _detachPanel(name);
@@ -289,7 +294,7 @@ class _EditorWindowState extends State<EditorWindow> {
       );
       if (!mounted) return;
       detached['${info['id']}'] = [name];
-      setState(() => workspace.close(name));
+      workspace.close(name);
     } catch (e) {
       c.error.value = '$e';
     }
@@ -299,21 +304,21 @@ class _EditorWindowState extends State<EditorWindow> {
     c.stopPlayback();
     if (c.state['dirty'] != true) return true;
     if (!mounted) return false;
-    final result = await showDialog<String>(
+    final result = await showEditorDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => EditorDialog(
         title: const Text('Save changes?'),
         content: const Text('Save the current document before closing it.'),
         actions: [
-          TextButton(
+          EditorTextButton(
             onPressed: () => Navigator.pop(context, 'cancel'),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          EditorTextButton(
             onPressed: () => Navigator.pop(context, 'discard'),
             child: const Text("Don't Save"),
           ),
-          TextButton(
+          EditorTextButton(
             onPressed: () => Navigator.pop(context, 'save'),
             child: const Text('Save'),
           ),
@@ -412,8 +417,9 @@ class _EditorWindowState extends State<EditorWindow> {
   Widget build(BuildContext context) => Focus(
     autofocus: true,
     onKeyEvent: shortcuts.handle,
-    child: Scaffold(
-      body: DefaultTextStyle(
+    child: ColoredBox(
+      color: EditorTheme.app,
+      child: DefaultTextStyle(
         style: const TextStyle(
           fontSize: EditorMetrics.font,
           color: EditorTheme.ink,
@@ -476,15 +482,18 @@ class _EditorWindowState extends State<EditorWindow> {
                   ),
                 Expanded(
                   child: ready
-                      ? WorkspaceView(
-                          layout: dock,
-                          panelBuilder: pane,
-                          onMove: movePane,
-                          onClose: closePane,
-                          onDetach: detachPane,
-                          onLayoutChanged: persist,
+                      ? ListenableBuilder(
+                          listenable: workspace,
+                          builder: (context, _) => WorkspaceView(
+                            layout: dock,
+                            panelBuilder: pane,
+                            onMove: movePane,
+                            onClose: closePane,
+                            onDetach: detachPane,
+                            onLayoutChanged: persist,
+                          ),
                         )
-                      : const Center(child: CircularProgressIndicator()),
+                      : const Center(child: EditorSpinner()),
                 ),
                 ValueListenableBuilder<String?>(
                   valueListenable: c.error,
@@ -523,7 +532,7 @@ class _EditorWindowState extends State<EditorWindow> {
                     ? EditorMetrics.s155
                     : EditorMetrics.s200,
                 top: EditorMetrics.control,
-                child: Material(
+                child: PhysicalModel(
                   color: EditorTheme.panel,
                   elevation: 4,
                   child: Container(

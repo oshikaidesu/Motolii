@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/panel_catalog.dart';
@@ -6,6 +6,8 @@ import 'browser.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 class PanelSettings extends StatelessWidget {
   const PanelSettings({super.key, required this.controller});
@@ -60,7 +62,7 @@ class PanelSettings extends StatelessWidget {
             EditorSwitch(
               key: const ValueKey('settings:animateFrom'),
               on: controller.animateFrom,
-              glyph: Icons.diamond_outlined,
+              glyph: Glyph.diamond_outlined,
               label:
                   'When Animate is turned on, remember the frame; the first '
                   'touch at another frame keys both that frame and this one',
@@ -132,7 +134,7 @@ class PanelSettings extends StatelessWidget {
                         'window' => 'Window',
                         _ => 'Hidden',
                       },
-                      child: IconButton(
+                      child: EditorIconButton(
                         key: ValueKey('placement:${spec.name}:$place'),
                         iconSize: EditorMetrics.s17,
                         isSelected:
@@ -148,10 +150,10 @@ class PanelSettings extends StatelessWidget {
                         onPressed: () =>
                             controller.placePanel(spec.name, place),
                         icon: Icon(switch (place) {
-                          'drawer' => Icons.all_inbox_outlined,
-                          'tab' => Icons.tab,
-                          'window' => Icons.open_in_new,
-                          _ => Icons.visibility_off_outlined,
+                          'drawer' => Glyph.all_inbox_outlined,
+                          'tab' => Glyph.tab,
+                          'window' => Glyph.open_in_new,
+                          _ => Glyph.visibility_off_outlined,
                         }),
                       ),
                     ),

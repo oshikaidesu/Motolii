@@ -1,7 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../../foundation/metrics.dart';
@@ -11,6 +10,7 @@ import 'colors_shelf.dart';
 import 'create_shelf.dart';
 import 'parts.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
 
 /// Media: what the document has taken in, plus the bundled HDRIs. A
 /// double-click places one; a card drags onto the Timeline.
@@ -249,8 +249,8 @@ class MediaShelf extends BrowserShelf {
       : Draggable<Map<String, dynamic>>(
           data: {'asset': item['id'], 'name': item['name']},
           dragAnchorStrategy: pointerDragAnchorStrategy,
-          feedback: Material(
-            color: Colors.transparent,
+          feedback: DefaultTextStyle(
+            style: EditorTheme.text,
             child: Container(
               height: EditorMetrics.row,
               padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
@@ -416,12 +416,12 @@ Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) {
           )
         : Icon(
             item['missing'] == true
-                ? Icons.broken_image_outlined
+                ? Glyph.broken_image_outlined
                 : mediaFamily(item) == 'Audio'
-                ? Icons.audiotrack
+                ? Glyph.audiotrack
                 : mediaFamily(item) == '3D'
-                ? Icons.view_in_ar
-                : Icons.image_outlined,
+                ? Glyph.view_in_ar
+                : Glyph.image_outlined,
             size: EditorMetrics.s19 * tileScale,
             color: EditorTheme.muted,
           ),

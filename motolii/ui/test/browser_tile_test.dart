@@ -6,6 +6,8 @@ import '../lib/foundation/theme.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/browser.dart';
 
+import '../lib/foundation/leaves.dart';
+
 /// The Browser tile: a picture, one line of name under it, and the format and
 /// the status marks riding on the picture so nothing takes the name's width.
 void main() {
@@ -69,7 +71,9 @@ void main() {
     final line = find.byKey(const ValueKey('browser:name:a0'));
     // The tile's frame is the only thing between them: one hairline a side.
     expect(tester.getSize(line).width, tester.getSize(tile('a0')).width - 2);
-    final badge = tester.getRect(find.byKey(const ValueKey('browser:format:a0')));
+    final badge = tester.getRect(
+      find.byKey(const ValueKey('browser:format:a0')),
+    );
     final caption = tester.getRect(line);
     expect(badge.top, greaterThanOrEqualTo(caption.top));
     expect(badge.bottom, lessThanOrEqualTo(caption.bottom));
@@ -112,11 +116,11 @@ void main() {
           tester.widget<Text>(find.byKey(const ValueKey('browser:count')));
       expect(count().data, '4 items');
 
-      await tester.enterText(find.byType(TextField), 'torus');
+      await tester.enterText(find.byType(EditorTextField), 'torus');
       await tester.pump();
       expect(count().data, '1 of 4 shown');
 
-      await tester.enterText(find.byType(TextField), '');
+      await tester.enterText(find.byType(EditorTextField), '');
       await tester.pump();
       await tester.tap(tile('a0'));
       await tester.pump(const Duration(seconds: 1));

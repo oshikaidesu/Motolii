@@ -1,0 +1,13 @@
+Source: https://github.com/zakariaf/Flutter-Skills (commit 7e589a0)
+License: MIT © 2026 Zakaria Fatahi (LICENSE copied verbatim)
+Copied verbatim, unmodified: flutter-performance, custom-canvas-and-gestures,
+widget-composition, service-boundary-and-native, async-safety, adaptive-layout,
+testing-strategy, design-system-structure.
+Not copied (mobile/app-shop concerns or stacks Motolii does not use):
+state-management-riverpod, navigation-and-routing, persistence-drift,
+ads-and-iap-monetization, release-and-store-shipping, i18n-rtl-l10n,
+local-notifications-scheduler, and the rest of the 40.
+Motolii note: these assume Riverpod + MaterialApp + mobile. Motolii is
+WidgetsApp + ValueListenable/DocumentSlice + desktop; read the rules, not the
+package names. "ref.watch(select)" maps to Motolii's keyed DocumentSlice
+subscriptions.

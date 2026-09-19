@@ -266,9 +266,27 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
     Ok(format!("{bindings:?}|{entries:?}"))
 }
 
-/// 棚の module(WESL): manifest の頭 `/*{` が無い .wgsl。札ではなく、札が import で引く関数の束。
+/// 棚の module(WESL): manifest の頭 `/*{` も `fn block(` も無い .wgsl。札ではなく、札が import で引く関数の束。
 fn is_module(source: &VismSource) -> bool {
-    source.extension == "wgsl" && !source.source.trim_start().starts_with("/*{") && !source.source.contains("mainImage")
+    source.extension == "wgsl" && !has_head(&source.source) && !is_override_block(&source.source) && !source.source.contains("mainImage")
+}
+
+fn has_head(source: &str) -> bool {
+    source.trim_start().starts_with("/*{")
+}
+
+/// override の札: 頭の JSON が無く、`fn block(` を宣言する .wgsl(`block_program::wgsl_manifest`)。
+fn is_override_block(source: &str) -> bool {
+    !has_head(source) && source.lines().any(|l| l.trim_start().starts_with("fn block(") || (l.trim_start().starts_with('@') && l.contains(" fn block(")))
+}
+
+/// 札の manifest と本文: 頭の JSON(ISF)か、override の宣言(WGSL)か。
+fn manifest_of(source: &VismSource) -> Result<(isf::IsfManifest, String), String> {
+    if source.extension == "wgsl" && is_override_block(&source.source) {
+        super::block_program::wgsl_manifest(&source.name, &source.source)
+    } else {
+        isf::parse_isf_source(&source.source).map_err(|e| e.to_string())
+    }
 }
 
 fn prepare(source: VismSource, prelude: &str, modules: &[(String, String)]) -> Result<VismDefinition, String> {
@@ -290,7 +308,7 @@ fn prepare(source: VismSource, prelude: &str, modules: &[(String, String)]) -> R
         _ => source,
     };
     if source.extension != "fs" {
-        let (manifest, body) = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?;
+        let (manifest, body) = manifest_of(&source)?;
         if manifest.stage == isf::IsfStage::Block {
             for input in manifest.param_inputs() {
                 if input.ty.component_count() != 1 {
@@ -588,6 +606,21 @@ mod tests {
         assert!(ok.is_ok(), "{:?}", ok.err());
         let missing = prepare(VismSource { name: "lib_user".into(), extension: "wgsl".into(), source: body.into() }, "", &[]);
         assert!(missing.is_err(), "without the module the import has nothing to resolve");
+    }
+
+    /// override の札は頭の JSON が無くても札(module ではない)。頭も `fn block(` も無い .wgsl は module のまま。
+    #[test]
+    fn an_override_block_is_a_card_not_a_module() {
+        let modules = vec![("lib".to_owned(), "fn lib_twice(x: f32) -> f32 { return x * 2.0; }".to_owned())];
+        let body = "import package::lib::lib_twice;\n@label(\"Gain\") @range(0.0, 4.0)\noverride gain: f32 = 1.0;\nfn block(k: u32) -> Offset { return Offset(vec2f(lib_twice(gain), 0.0), 0.0, 1.0, vec4f(1.0)); }";
+        let card = VismSource { name: "gainer".into(), extension: "wgsl".into(), source: body.into() };
+        assert!(!is_module(&card));
+        assert!(is_module(&VismSource { name: "lib".into(), extension: "wgsl".into(), source: modules[0].1.clone().into() }));
+        let definition = prepare(card, "", &modules).unwrap();
+        assert_eq!(definition.plugin_id(), "motolii.gainer");
+        assert_eq!(definition.manifest.label.as_deref(), Some("Gainer"));
+        assert_eq!(definition.manifest.stage, isf::IsfStage::Block);
+        assert_eq!(definition.manifest.inputs.iter().map(|p| p.label.as_deref()).collect::<Vec<_>>(), [Some("Gain")]);
     }
 
     #[test]

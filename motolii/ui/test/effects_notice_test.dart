@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+
 import '../lib/app/editor_window.dart';
 
 void main() {
@@ -7,7 +8,10 @@ void main() {
     expect(effectsNotice({'catalogErrors': []}), '');
     expect(
       effectsNotice({
-        'catalogErrors': ['glow: expected ; at line 4', 'twist: duplicate effect ID'],
+        'catalogErrors': [
+          'glow: expected ; at line 4',
+          'twist: duplicate effect ID',
+        ],
       }),
       'Effects: glow: expected ; at line 4; twist: duplicate effect ID',
     );

@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../foundation/metrics.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 /// The history column: every edit and every record on one vertical line,
 /// oldest at the top, with the current position marked. Tapping a point
@@ -35,11 +37,11 @@ class _HistoryRecordsState extends State<HistoryRecords> {
   }
 
   static IconData? _mark(String kind) => switch (kind) {
-    'save' => Icons.save_outlined,
-    'open' => Icons.folder_open,
-    'end' => Icons.stop_circle_outlined,
-    'warning' => Icons.warning_amber,
-    'error' => Icons.error_outline,
+    'save' => Glyph.save_outlined,
+    'open' => Glyph.folder_open,
+    'end' => Glyph.stop_circle_outlined,
+    'warning' => Glyph.warning_amber,
+    'error' => Glyph.error_outline,
     _ => null,
   };
 
@@ -138,7 +140,7 @@ class _HistoryRow extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
+  Widget build(BuildContext context) => EditorPress(
     onTap: onTap,
     child: Row(
       children: [

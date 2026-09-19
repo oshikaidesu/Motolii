@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../foundation/metrics.dart';
 import '../foundation/color_field.dart';
@@ -10,6 +10,8 @@ import '../session/editor_session.dart';
 import '../session/read_model.dart';
 import 'rich_text_editor.dart';
 import 'gradient_inspector.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 part 'inspector_property_style.dart';
 
@@ -70,6 +72,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
   Map<String, dynamic>? _fromState, _fromRendered, _shown;
   Map<String, Map<String, dynamic>> _byId = const {};
   List<Map<String, dynamic>> _live = const [];
+
+  /// The selected layers other than the shown one, as of the last status; a
+  /// well reads these to say when the selection disagrees.
+  List<Map<String, dynamic>> _others = const [];
 
   /// One listenable per row: a status update pushes the rows that moved, so a
   /// number that changes rebuilds its own well and nothing else. The frame of
@@ -145,6 +151,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
       }
     }
     _shown = shown ??= c.activeLayer;
+    _others = [
+      for (final layer in _live)
+        if (layer['id'] != shown?['id'] && ids.contains(layer['id'])) layer,
+    ];
     _byId = shown == null
         ? const {}
         : {
@@ -170,12 +180,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return [
       for (final id in name.split('+')) ...[
         _byId[id],
-        [
-          for (final layer in _live)
-            if (layer['id'] != _shown?['id'] &&
-                c.selectedIds.contains(layer['id']))
-              _property(layer, id)?['value'],
-        ],
+        [for (final layer in _others) _property(layer, id)?['value']],
       ],
     ];
   }
@@ -495,13 +500,26 @@ class _InspectorPanelState extends State<InspectorPanel> {
     String? label,
     double? width,
     bool fill = false,
+    String? unit,
+    int? decimals,
+    String? zeroWord,
   }) {
     final slot = width ?? _wellWidth;
     return _live2([id], () {
       final row = _row(id);
       return row == null
           ? SizedBox(width: slot)
-          : _wellBody(layer, row, axis, label: label, width: slot, fill: fill);
+          : _wellBody(
+              layer,
+              row,
+              axis,
+              label: label,
+              width: slot,
+              fill: fill,
+              unit: unit,
+              decimals: decimals,
+              zeroWord: zeroWord,
+            );
     });
   }
 
@@ -512,6 +530,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
     String? label,
     required double width,
     bool fill = false,
+    String? unit,
+    int? decimals,
+    String? zeroWord,
   }) {
     final v = row['value'];
     final value = v is List && axis < v.length
@@ -537,8 +558,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
             (row['min'] as num?)?.toDouble() ?? (id == 'opacity' ? 0 : null),
         max = (row['max'] as num?)?.toDouble() ?? (id == 'opacity' ? 1 : null);
     final isScale = id == 'scale' || id == 'scale.z';
-    final unit = isScale ? '%' : _unitOf(row);
-    final percent = isScale || unit == '%' && max == 1;
+    // The row's own rider, unless the line asked for a plain word of its
+    // own (cols, rows, px, s) to name the field from the inside.
+    final rowUnit = unit ?? (isScale ? '%' : _unitOf(row));
+    final percent = isScale || rowUnit == '%' && max == 1;
     // A declared range sets the drag speed; a range open on one side
     // (max = f64::MAX on the native side) is unbounded and drags 1 px = 1.
     final speed = isScale
@@ -580,9 +603,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
               speed: speed * shownScale,
               mixed: mixed,
               fill: fill,
-              unit: unit ?? '',
+              unit: rowUnit ?? '',
+              zeroWord: zeroWord,
               // A narrow well keeps its digits whole rather than clipping them.
-              decimals: percent || slotWidth < EditorMetrics.field ? 0 : 2,
+              decimals:
+                  decimals ??
+                  (percent || slotWidth < EditorMetrics.field ? 0 : 2),
               defaultValue: _restOf(row, axis, shownScale),
               tint: _tintOf(row),
               track: _trackOf(row),
@@ -670,23 +696,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
   }
 
   Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) =>
-      EditorTooltip(
-        message: tip,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.only(left: EditorMetrics.s6),
-            child: Icon(
-              icon,
-              size: EditorMetrics.s12,
-              color: onTap == null
-                  ? EditorTheme.disabledInk
-                  : EditorTheme.muted,
-            ),
-          ),
-        ),
-      );
+      _HeadGlyph(icon: icon, tip: tip, onTap: onTap);
 
   /// Two wells side by side in one cell, and the wells beside a pad.
   double get _half => (_cellWidth - EditorMetrics.s4) / 2;
@@ -774,19 +784,433 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   // ---- Transform ---------------------------------------------------------
 
-  /// A camera layer authors Center, Zoom and Roll instead of a transform.
-  /// The layout rows native hands over (the group's Display and what it
-  /// needs, or the item rows under a laid-out group), in table order.
-  List<Map<String, dynamic>> _layoutRows(Map<String, dynamic> layer) => [
-    for (final row in panelRows(layer['properties']))
-      if ('${row['id']}'.startsWith('layout.')) row,
+  // ---- Layout ------------------------------------------------------------
+
+  /// The one place that says which layer authors the parent lines (grid,
+  /// gap, alignment, sizing, transition): a Group, the source that lays
+  /// its children out. A split Text becomes one later and follows the same
+  /// rule.
+  static bool _isGroup(Map<String, dynamic> layer) => layer['kind'] == 'Group';
+
+  /// A layer native hands the item rows to: it sits in a laid-out group.
+  bool _isLaidOut(Map<String, dynamic> layer) =>
+      _property(layer, 'layout.position_type') != null;
+
+  /// The Layout card shows for a Group or a laid-out child, nothing else.
+  bool _hasLayout(Map<String, dynamic> layer) =>
+      !_multiple && (_isGroup(layer) || _isLaidOut(layer));
+
+  int _choice(String id) => ((_row(id)?['value'] as num?) ?? 0).round();
+
+  /// The 3×3 alignment box as the pad's snaps.
+  static const _nineSnaps = [
+    Offset(0, 0),
+    Offset(.5, 0),
+    Offset(1, 0),
+    Offset(0, .5),
+    Offset(.5, .5),
+    Offset(1, .5),
+    Offset(0, 1),
+    Offset(.5, 1),
+    Offset(1, 1),
   ];
 
+  /// The rows whose value changes the shape of the Layout card (which lines
+  /// show, which glyph is lit); the wells watch their own.
+  static const _layoutShape = [
+    'layout.display',
+    'layout.justify_content',
+    'layout.align_items',
+    'layout.position_type',
+    'layout.horizontal_sizing',
+    'layout.vertical_sizing',
+  ];
+
+  /// Choices into every target, absolute (a choice keeps no offset, unlike
+  /// a number). [always] writes a row the snapshot left out of the panel —
+  /// the alignment of a grid, which the document reads all the same.
+  Future<void> _writeChoices(
+    Map<String, dynamic> layer,
+    Map<String, int> values, {
+    required bool preview,
+    bool always = false,
+  }) async {
+    final edits = [
+      for (final target in _targets(layer))
+        for (final e in values.entries)
+          if (always || _property(target, e.key) != null)
+            {'layer': target['id'], 'property': e.key, 'value': e.value},
+    ];
+    if (edits.isEmpty) return;
+    await c.command('previewProperties', {'edits': edits});
+    if (!preview) await c.command('commitPreview');
+  }
+
+  /// A choice row as a compact menu, watching that row alone.
+  Widget _pick(Map<String, dynamic> layer, String id, {double? width}) =>
+      _live2([id], () {
+        final row = _row(id);
+        final choices = row?['choices'];
+        return row == null
+            ? SizedBox(width: width)
+            : SizedBox(
+                width: width,
+                child: EditorChoice<dynamic>(
+                  value: (row['value'] as num?)?.round(),
+                  choices: [
+                    if (choices is List)
+                      for (var i = 0; i < choices.length; i++)
+                        MapEntry(i, '${choices[i]}'),
+                  ],
+                  onChanged: _canEdit(layer)
+                      ? (v) => _write(layer, row, v, preview: false)
+                      : null,
+                ),
+              );
+      });
+
+  Widget _layoutLine(String name, List<Widget> children) =>
+      KeyedSubtree(key: ValueKey('layout:$name'), child: _line(children));
+
+  /// The name column of a Layout line: a glyph, never a word. The CSS word
+  /// stays in the tooltip and in the row the well writes.
+  Widget _mark(IconData icon, String css) => SizedBox(
+    width: EditorMetrics.s18 + _wordWidth,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: EditorTooltip(
+        message: css,
+        child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
+      ),
+    ),
+  );
+
+  /// A one-letter leader where a glyph says nothing: W and H. The CSS word
+  /// stays in the tooltip, as the glyph marks do.
+  Widget _letter(String letter, String css) => SizedBox(
+    width: EditorMetrics.s18 + _wordWidth,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: EditorTooltip(
+        message: css,
+        child: Text(
+          letter,
+          style: const TextStyle(
+            fontSize: EditorMetrics.font,
+            color: EditorTheme.muted,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  /// The parent's lines, the child's, and the rest of the layout rows
+  /// behind the Advanced fold, unchanged (a Flex document keeps its rows
+  /// readable there).
+  List<Widget> _layout(Map<String, dynamic> layer) => [
+    _live2(_layoutShape, () {
+      final used = <String>{};
+      final lines = <Widget>[
+        if (_isGroup(layer)) ..._layoutParent(layer, used),
+        if (_isLaidOut(layer)) ..._layoutChild(layer, used),
+      ];
+      final rest = [
+        for (final row in panelRows(layer['properties']))
+          if ('${row['id']}'.startsWith('layout.') &&
+              !used.contains('${row['id']}'))
+            row,
+      ];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...lines,
+          if (rest.isNotEmpty)
+            _AdvancedFold(
+              opened: _advancedOpen,
+              id: 'layout:${layer['id']}',
+              builder: () => _cells([
+                for (final row in rest) _Cell(_control(layer, '${row['id']}')),
+              ]),
+            ),
+        ],
+      );
+    }),
+  ];
+
+  /// Laying out is always a grid: columns × rows (one row = a line across,
+  /// one column = a line down). The switch on the mark is Display itself.
+  List<Widget> _layoutParent(Map<String, dynamic> layer, Set<String> used) {
+    final can = _canEdit(layer);
+    final display = _choice('layout.display');
+    used.addAll(['layout.display', 'layout.grid_columns', 'layout.grid_rows']);
+    final lines = <Widget>[
+      _layoutLine('grid', [
+        SizedBox(
+          width: EditorMetrics.s18 + _wordWidth,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: EditorSwitch(
+              compact: true,
+              on: display != 0,
+              glyph: Glyph.grid_on,
+              label: 'display: grid',
+              onChanged: can
+                  ? (on) => _writeChoices(layer, {
+                      'layout.display': on ? 2 : 0,
+                    }, preview: false)
+                  : null,
+            ),
+          ),
+        ),
+        // Counts, so whole numbers; rows at 0 is not none of them but
+        // `auto` — as many as the children need.
+        _slot(
+          _well(
+            layer,
+            'layout.grid_columns',
+            0,
+            label: 'Columns',
+            unit: 'cols',
+            decimals: 0,
+          ),
+        ),
+        _gap(),
+        _slot(
+          _well(
+            layer,
+            'layout.grid_rows',
+            0,
+            label: 'Rows',
+            unit: 'rows',
+            decimals: 0,
+            zeroWord: 'auto',
+          ),
+        ),
+        _gap(),
+        _slot(),
+        _gap(),
+        _tail(),
+      ]),
+    ];
+    if (display == 0) return lines;
+    used.addAll(['layout.gap', 'layout.padding']);
+    lines.add(
+      _layoutLine('gap', [
+        _mark(Glyph.horizontal_distribute, 'gap'),
+        _slot(
+          _well(layer, 'layout.gap', 0, label: 'Gap', unit: 'px', decimals: 0),
+        ),
+        _gap(),
+        _slot(
+          _well(
+            layer,
+            'layout.padding',
+            0,
+            label: 'Padding X',
+            unit: 'px',
+            decimals: 0,
+          ),
+        ),
+        _gap(),
+        _slot(
+          _well(
+            layer,
+            'layout.padding',
+            1,
+            label: 'Padding Y',
+            unit: 'px',
+            decimals: 0,
+          ),
+        ),
+        _gap(),
+        _tail(
+          const Icon(
+            Glyph.padding,
+            size: EditorMetrics.s14,
+            color: EditorTheme.muted,
+          ),
+        ),
+      ]),
+    );
+    lines.add(_alignLine(layer, used));
+    lines.addAll(_sizingLines(layer, used));
+    if (_row('layout.transition_duration') != null) {
+      used.addAll(['layout.transition_duration', 'layout.transition_easing']);
+      lines.add(
+        _layoutLine('transition', [
+          _mark(Glyph.timer, 'transition'),
+          _slot(
+            _well(
+              layer,
+              'layout.transition_duration',
+              0,
+              label: 'Duration',
+              unit: 's',
+            ),
+          ),
+          _gap(),
+          _pick(
+            layer,
+            'layout.transition_easing',
+            width: _wellWidth * 2 + EditorMetrics.s4,
+          ),
+          _gap(),
+          _tail(),
+        ]),
+      );
+    }
+    return lines;
+  }
+
+  /// Justify Content (across) and Align Items (down) as one 3×3 box on the
+  /// pad; the sent value is the nearest of the nine, the dot follows the
+  /// pointer until let go.
+  Widget _alignLine(Map<String, dynamic> layer, Set<String> used) {
+    const justifyId = 'layout.justify_content', alignId = 'layout.align_items';
+    used.addAll([justifyId, alignId]);
+    final justify = _choice(justifyId), align = _choice(alignId);
+    // Start / End / Center / Between / Around / Evenly across.
+    const acrossOf = [0.0, 1.0, 0.5, 0.0, 0.5, 1.0];
+    // Stretch (the centre) / Start / End / Center down.
+    const downOf = [0.5, 0.0, 1.0, 0.5];
+    Offset? sent;
+    return _layoutLine('align', [
+      _mark(Glyph.center_focus_weak, 'justify-content · align-items'),
+      EditorPad(
+        x: acrossOf[justify.clamp(0, 5)],
+        y: downOf[align.clamp(0, 3)],
+        unit: true,
+        snaps: _nineSnaps,
+        enabled: _canEdit(layer),
+        tint: EditorTheme.spatial,
+        // Two rows tall, not three: the nine places read at this size and
+        // the card keeps its density (the craft ledger's 24 px floor, 28
+        // base — a 44 px box holds both with room for the marks).
+        size: EditorMetrics.s44,
+        onBegin: () {
+          sent = null;
+          _begin();
+        },
+        onPreview: (x, y) async {
+          final at = Offset(x, y);
+          if (at == sent) return;
+          sent = at;
+          await _writeChoices(
+            layer,
+            {
+              justifyId: [0, 2, 1][(x * 2).round()],
+              alignId: [1, 3, 2][(y * 2).round()],
+            },
+            preview: true,
+            always: true,
+          );
+        },
+        onFinish: () => _finish(false),
+        onCancel: () => _finish(true),
+      ),
+      _gap(),
+      _slot(),
+      _gap(),
+      _slot(),
+      _gap(),
+      _tail(),
+    ]);
+  }
+
+  /// Hug / Fill / Fixed as three glyphs (arrows in, arrows out, a lock), and
+  /// the number, which counts under Fixed alone and greys out otherwise.
+  List<Widget> _sizingLines(Map<String, dynamic> layer, Set<String> used) {
+    Widget line(String key, bool across, String sizingId, String sizeId) {
+      used.addAll([sizingId, sizeId]);
+      final sizing = _choice(sizingId);
+      final fixed = sizing == 2;
+      return _layoutLine(key, [
+        // W and H as letters, the way Figma leads its two size rows: one
+        // character tells which row this is, where an arrow glyph did not.
+        _letter(across ? 'W' : 'H', key),
+        _slot(_pick(layer, sizingId)),
+        _gap(),
+        _slot(
+          IgnorePointer(
+            ignoring: !fixed,
+            child: Opacity(
+              opacity: fixed ? 1 : .45,
+              child: _well(layer, sizeId, 0, unit: 'px', decimals: 0),
+            ),
+          ),
+        ),
+        _gap(),
+        _slot(),
+        _gap(),
+        _tail(),
+      ]);
+    }
+
+    return [
+      if (_row('layout.horizontal_sizing') != null)
+        line('width', true, 'layout.horizontal_sizing', 'layout.width'),
+      if (_row('layout.vertical_sizing') != null)
+        line('height', false, 'layout.vertical_sizing', 'layout.height'),
+    ];
+  }
+
+  /// The child's lines: out of the flow or not, its size, and its cell.
+  List<Widget> _layoutChild(Map<String, dynamic> layer, Set<String> used) {
+    final can = _canEdit(layer);
+    used.add('layout.position_type');
+    final lines = <Widget>[
+      _layoutLine('ignore', [
+        _mark(Glyph.filter_center_focus, 'position: absolute'),
+        _slot(
+          EditorSwitch(
+            on: _choice('layout.position_type') == 1,
+            glyph: Glyph.filter_center_focus,
+            label: 'Ignore layout (position: absolute)',
+            onChanged: can
+                ? (on) => _writeChoices(layer, {
+                    'layout.position_type': on ? 1 : 0,
+                  }, preview: false)
+                : null,
+          ),
+          true,
+        ),
+        _gap(),
+        _slot(),
+        _gap(),
+        _slot(),
+        _gap(),
+        _tail(),
+      ]),
+      ..._sizingLines(layer, used),
+    ];
+    if (_row('layout.column_start') != null) {
+      const cell = [
+        ('layout.column_start', 'grid-column-start'),
+        ('layout.row_start', 'grid-row-start'),
+        ('layout.column_span', 'grid-column span'),
+        ('layout.row_span', 'grid-row span'),
+      ];
+      used.addAll([for (final (id, _) in cell) id]);
+      final w = (_wellWidth * 3 + EditorMetrics.s22) / 4;
+      lines.add(
+        _layoutLine('cell', [
+          _mark(Glyph.grid_on, 'grid-area'),
+          for (final (i, (id, label)) in cell.indexed) ...[
+            if (i > 0) _gap(),
+            _well(layer, id, 0, label: label, width: w, decimals: 0),
+          ],
+        ]),
+      );
+    }
+    return lines;
+  }
+
+  /// A camera layer authors Center, Zoom and Roll instead of a transform.
   List<Widget> _camera(Map<String, dynamic> layer) {
     return [
       if (_row('camera.center') != null)
         _line([
-          _named(Icons.center_focus_strong, 'camera.center'),
+          _named(Glyph.center_focus_strong, 'camera.center'),
           _slot(_well(layer, 'camera.center', 0, label: 'X')),
           _gap(),
           _slot(_well(layer, 'camera.center', 1, label: 'Y')),
@@ -797,7 +1221,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.target.z') != null)
         _line([
-          _named(Icons.center_focus_weak, 'camera.target.z'),
+          _named(Glyph.center_focus_weak, 'camera.target.z'),
           _slot(_well(layer, 'camera.target.z', 0, label: 'Z')),
           _gap(),
           _slot(),
@@ -808,12 +1232,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.target') != null)
         _line([
-          _named(Icons.gps_fixed, 'camera.target'),
+          _named(Glyph.gps_fixed, 'camera.target'),
           Expanded(child: _layerPicker(layer, 'camera.target')),
         ]),
       if (_row('camera.orbit') != null)
         _line([
-          _named(Icons.threesixty, 'camera.orbit'),
+          _named(Glyph.threesixty, 'camera.orbit'),
           _slot(_well(layer, 'camera.orbit', 0, label: 'Pitch')),
           _gap(),
           _slot(_well(layer, 'camera.orbit', 1, label: 'Yaw')),
@@ -824,7 +1248,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.distance') != null)
         _line([
-          _named(Icons.straighten, 'camera.distance'),
+          _named(Glyph.straighten, 'camera.distance'),
           _slot(_well(layer, 'camera.distance', 0, label: 'Scale')),
           _gap(),
           _slot(),
@@ -835,7 +1259,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.zoom') != null)
         _line([
-          _named(Icons.zoom_in, 'camera.zoom'),
+          _named(Glyph.zoom_in, 'camera.zoom'),
           _slot(_well(layer, 'camera.zoom', 0, label: 'Zoom')),
           _gap(),
           _slot(),
@@ -846,7 +1270,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('camera.roll') != null)
         _line([
-          _named(Icons.rotate_right, 'camera.roll'),
+          _named(Glyph.rotate_right, 'camera.roll'),
           _slot(_well(layer, 'camera.roll', 0, label: 'Roll')),
           _gap(),
           _slot(),
@@ -923,7 +1347,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       const SizedBox(height: EditorMetrics.s6),
       EditorTooltip(
         message: 'Font',
-        child: InkWell(
+        child: EditorPress(
           key: const ValueKey('inspector:font'),
           onTap: _canEdit(layer) && c.supports('setFont')
               ? () => c.focusFont(layer)
@@ -996,7 +1420,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final others = c.layers.where((v) => v['id'] != layer['id']);
     return [
       _line([
-        _name(Icons.layers_outlined, 'Source'),
+        _name(Glyph.layers_outlined, 'Source'),
         Expanded(
           child: EditorChoice<dynamic>(
             value: matte['source'],
@@ -1014,7 +1438,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       ]),
       _line([
-        _name(Icons.contrast, 'Mode'),
+        _name(Glyph.contrast, 'Mode'),
         Expanded(
           child: EditorChoice<dynamic>(
             value: matte['mode'],
@@ -1043,7 +1467,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return [
       if (_row('position') != null)
         _line([
-          _named(Icons.open_with, 'position'),
+          _named(Glyph.open_with, 'position'),
           _slot(_well(layer, 'position', 0, label: 'X')),
           _gap(),
           _slot(_well(layer, 'position', 1, label: 'Y')),
@@ -1058,7 +1482,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('scale') != null)
         _line([
-          _named(Icons.aspect_ratio, 'scale'),
+          _named(Glyph.aspect_ratio, 'scale'),
           _slot(
             _well(
               layer,
@@ -1083,7 +1507,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _tail(
             EditorSwitch(
               on: _scaleLocked,
-              glyph: Icons.link,
+              glyph: Glyph.link,
               compact: true,
               label: 'Keep the shape: one number scales both axes',
               onChanged: _canEdit(layer)
@@ -1094,7 +1518,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('rotation') != null)
         _line([
-          _named(Icons.rotate_right, 'rotation'),
+          _named(Glyph.rotate_right, 'rotation'),
           _slot(_well(layer, 'rotation', 0, label: 'Rotation')),
           _gap(),
           _slot(
@@ -1111,7 +1535,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       // once the layer has left 2D; scale Z then has something to scale.
       if (_row('depth') != null && layer['projection'] != '2D')
         _line([
-          _named(Icons.view_in_ar, 'depth'),
+          _named(Glyph.view_in_ar, 'depth'),
           _slot(_well(layer, 'depth', 0, label: 'Depth')),
           _gap(),
           _slot(),
@@ -1122,7 +1546,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (_row('opacity') != null)
         _line([
-          _named(Icons.opacity, 'opacity'),
+          _named(Glyph.opacity, 'opacity'),
           SizedBox(
             width: _wellWidth * 2 + EditorMetrics.s4,
             height: EditorMetrics.s22,
@@ -1141,7 +1565,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _tail(),
         ]),
       _line([
-        _named(Icons.center_focus_weak, 'anchor'),
+        _named(Glyph.center_focus_weak, 'anchor'),
         EditorAnchorGrid(
           fraction: anchor is List
               ? [(anchor[0] as num).toDouble(), (anchor[1] as num).toDouble()]
@@ -1167,27 +1591,21 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final ghost = (layer['ghost'] as num?)?.toInt();
     return [
       _line([
-        _name(Icons.view_in_ar_outlined, 'Space'),
+        _name(Glyph.view_in_ar_outlined, 'Space'),
         for (final p in ['2D', '2.5D', '3D'])
-          Padding(
-            padding: const EdgeInsets.only(right: EditorMetrics.s2),
-            child: EditorTooltip(
-              message: p,
-              child: EditorButton(
-                p,
-                can
-                    ? () => c.command('setAttrs', {
-                        'layers': c.selectedIds,
-                        'patch': {'projection': p},
-                      })
-                    : null,
-                selected: layer['projection'] == p,
-              ),
-            ),
+          _SpaceChoice(
+            projection: p,
+            selected: layer['projection'] == p,
+            onPick: can
+                ? () => c.command('setAttrs', {
+                    'layers': c.selectedIds,
+                    'patch': {'projection': p},
+                  })
+                : null,
           ),
       ]),
       _line([
-        _name(Icons.account_tree_outlined, 'Parent'),
+        _name(Glyph.account_tree_outlined, 'Parent'),
         Expanded(
           child: EditorChoice<dynamic>(
             value: layer['parent'] ?? -1,
@@ -1207,7 +1625,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       ]),
       _line([
-        _name(Icons.layers_outlined, 'Blend'),
+        _name(Glyph.layers_outlined, 'Blend'),
         Expanded(
           child: EditorButton(
             '${layer['blendMode'] ?? 'Normal'}',
@@ -1221,7 +1639,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         _slot(
           EditorSwitch(
             on: layer['blocksLight'] == true,
-            glyph: Icons.wb_shade,
+            glyph: Glyph.wb_shade,
             label: 'Blocks light: casts this layer\'s shadow and colored light',
             onChanged: can
                 ? (on) => c.command('setAttrs', {
@@ -1236,7 +1654,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _slot(
             EditorSwitch(
               on: layer['environment'] == true,
-              glyph: Icons.wb_sunny_outlined,
+              glyph: Glyph.wb_sunny_outlined,
               label: 'Environment: this image lights and surrounds the scene',
               onChanged: can
                   ? (on) => c.command('setAttrs', {
@@ -1252,7 +1670,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _slot(
             EditorSwitch(
               on: ghost != null,
-              glyph: Icons.blur_on,
+              glyph: Glyph.blur_on,
               label: 'Ghost: the same layer seen later by a delay',
               onChanged: layer['locked'] != true && panelCan(c, 'ghost')
                   ? (on) => c.command('ghost', {'enabled': on})
@@ -1264,7 +1682,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         _slot(
           EditorSwitch(
             on: layer['clipToBelow'] == true,
-            glyph: Icons.subdirectory_arrow_right,
+            glyph: Glyph.subdirectory_arrow_right,
             label: 'Clip to the layer below',
             onChanged: layer['locked'] != true && panelCan(c, 'clip')
                 ? (_) => c.command('clip', {'layer': layer['id']})
@@ -1275,11 +1693,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
       // Freeze は旗ではなく状態(DAW の Freeze Track): 自分の行。docs/freeze-and-flatten.md
       if (layer['kind'] != 'Camera')
         _line([
-          _name(Icons.ac_unit, 'Freeze'),
+          _name(Glyph.ac_unit, 'Freeze'),
           _slot(
             EditorSwitch(
               on: layer['frozen'] == true,
-              glyph: Icons.ac_unit,
+              glyph: Glyph.ac_unit,
               label: 'Freeze: bake the picture; source and effects stay as they are until unfrozen',
               onChanged: panelCan(c, 'freeze')
                   ? (on) => c.command('freeze', {
@@ -1464,25 +1882,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       dim: effect['enabled'] == false,
       // The order is the pipeline: grab the head to move the effect up or
       // down it; the menu keeps the same move for one step at a time.
-      leading: panelCan(c, 'moveEffect')
-          ? ReorderableDragStartListener(
-              index: index,
-              child: EditorTooltip(
-                message: 'Drag to reorder',
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.grab,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: EditorMetrics.s4),
-                    child: Icon(
-                      Icons.drag_indicator,
-                      size: EditorMetrics.s12,
-                      color: EditorTheme.muted,
-                    ),
-                  ),
-                ),
-              ),
-            )
-          : null,
+      leading: panelCan(c, 'moveEffect') ? _EffectGrip(index: index) : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1490,8 +1890,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
           // same-sized glyphs that used to sit here now live behind one.
           _headGlyph(
             effect['enabled'] == false
-                ? Icons.visibility_off_outlined
-                : Icons.visibility_outlined,
+                ? Glyph.visibility_off_outlined
+                : Glyph.visibility_outlined,
             effect['enabled'] == false
                 ? 'Off — press to apply'
                 : 'Applied — press to bypass',
@@ -1505,7 +1905,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ),
           Builder(
             builder: (context) => _headGlyph(
-              Icons.more_horiz,
+              Glyph.more_horiz,
               'Effect actions',
               () => _effectMenu(context, layer, effect, index, count),
             ),
@@ -1517,31 +1917,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _cells(heroes),
           if (controls.isNotEmpty) ...[
             const SizedBox(height: EditorMetrics.s6),
-            const Divider(height: 1),
+            const EditorRule(height: 1),
             const SizedBox(height: EditorMetrics.s6),
           ],
         ],
         _cells(controls),
         if (advanced.isNotEmpty)
-          Picked<Set<String>>(
-            of: _advancedOpen,
-            test: (opened) => opened.contains(key),
-            builder: (open) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: EditorMetrics.s4),
-                EditorFold(
-                  open: open,
-                  onTap: () => _advancedOpen.value = open
-                      ? ({..._advancedOpen.value}..remove(key))
-                      : {..._advancedOpen.value, key},
-                ),
-                if (open) ...[
-                  const SizedBox(height: EditorMetrics.s4),
-                  _cells(advanced),
-                ],
-              ],
-            ),
+          _AdvancedFold(
+            opened: _advancedOpen,
+            id: key,
+            builder: () => _cells(advanced),
           ),
       ],
     );
@@ -1627,7 +2012,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _cellLabel(label, hero),
+        _CellLabel(label, hero: hero),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -1694,18 +2079,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// The word over a cell's control: the smallest type in the panel, so the
   /// value under it is what the eye lands on. A hero's word is ink, the rest
   /// stay muted; the family's hue rides the value, not the word.
-  Widget _cellLabel(String label, [bool hero = false]) => Padding(
-    padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
-    child: Text(
-      label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: EditorMetrics.micro,
-        color: hero ? EditorTheme.ink : EditorTheme.muted,
-      ),
-    ),
-  );
 
   /// A labelled control for one declared param: the word above, the control
   /// under it, sized by its kind.
@@ -1830,26 +2203,17 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ),
             if (seed) ...[
               _gap(),
-              EditorTooltip(
-                message: 'Roll a new seed',
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _canEdit(layer)
-                      ? () {
-                          final max = (row['max'] as num?)?.toDouble() ?? 9999;
-                          final n =
-                              (DateTime.now().microsecondsSinceEpoch %
-                                      max.round().clamp(1, 1 << 30))
-                                  .toDouble();
-                          _write(layer, row, n, preview: false);
-                        }
-                      : null,
-                  child: const Icon(
-                    Icons.casino_outlined,
-                    size: EditorMetrics.s16,
-                    color: EditorTheme.muted,
-                  ),
-                ),
+              _SeedRoll(
+                onTap: _canEdit(layer)
+                    ? () {
+                        final max = (row['max'] as num?)?.toDouble() ?? 9999;
+                        final n =
+                            (DateTime.now().microsecondsSinceEpoch %
+                                    max.round().clamp(1, 1 << 30))
+                                .toDouble();
+                        _write(layer, row, n, preview: false);
+                      }
+                    : null,
               ),
             ],
           ],
@@ -1862,7 +2226,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: [_cellLabel(label, hero), body],
+          children: [
+            _CellLabel(label, hero: hero),
+            body,
+          ],
         ),
       ),
     );
@@ -1888,13 +2255,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
         const SizedBox(width: EditorMetrics.s6),
         Icon(
           switch ('${layer['kind']}') {
-            'Text' => Icons.text_fields,
-            'Shape' => Icons.pentagon_outlined,
-            'Camera' => Icons.videocam_outlined,
-            'Video' => Icons.movie_outlined,
-            'Audio' => Icons.graphic_eq,
-            'Group' => Icons.folder_outlined,
-            _ => Icons.image_outlined,
+            'Text' => Glyph.text_fields,
+            'Shape' => Glyph.pentagon_outlined,
+            'Camera' => Glyph.videocam_outlined,
+            'Video' => Glyph.movie_outlined,
+            'Audio' => Glyph.graphic_eq,
+            'Group' => Glyph.folder_outlined,
+            _ => Glyph.image_outlined,
           },
           size: EditorMetrics.s14,
           color: EditorTheme.kindColor('${layer['kind']}'),
@@ -1916,7 +2283,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
         if (!_multiple && panelRows(layer['effects']).isNotEmpty)
           _headGlyph(
-            _effectsClosed(layer) ? Icons.unfold_more : Icons.unfold_less,
+            _effectsClosed(layer) ? Glyph.unfold_more : Glyph.unfold_less,
             _effectsClosed(layer) ? 'Expand effects' : 'Collapse effects',
             () {
               final closed = _effectsClosed(layer);
@@ -1934,7 +2301,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ),
         EditorSwitch(
           on: c.animating,
-          glyph: Icons.diamond_outlined,
+          glyph: Glyph.diamond_outlined,
           tint: EditorTheme.keyAccent,
           label: c.animateFrom
               ? 'Animate (A): values you touch become keys at this frame, '
@@ -2009,16 +2376,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           ),
                         if (layer['kind'] != 'Camera')
                           _card(title: 'World', children: _world(layer)),
-                        if (!_multiple && _layoutRows(layer).isNotEmpty)
-                          _card(
-                            title: 'Layout',
-                            children: [
-                              _cells([
-                                for (final row in _layoutRows(layer))
-                                  _Cell(_control(layer, '${row['id']}')),
-                              ]),
-                            ],
-                          ),
+                        if (_hasLayout(layer))
+                          _card(title: 'Layout', children: _layout(layer)),
                         if (!_multiple && text.isNotEmpty)
                           _card(title: 'Text', children: _text(layer, text)),
                         if (!_multiple &&
@@ -2138,3 +2497,142 @@ class _Cell {
   final Widget child;
   final bool tall, wide;
 }
+
+/// One glyph on a card's head; quiet, and quieter still when it cannot act.
+class _HeadGlyph extends StatelessWidget {
+  const _HeadGlyph({required this.icon, required this.tip, this.onTap});
+  final IconData icon;
+  final String tip;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: tip,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: EditorMetrics.s6),
+        child: Icon(
+          icon,
+          size: EditorMetrics.s12,
+          color: onTap == null ? EditorTheme.disabledInk : EditorTheme.muted,
+        ),
+      ),
+    ),
+  );
+}
+
+/// The word above a cell's control.
+class _CellLabel extends StatelessWidget {
+  const _CellLabel(this.label, {this.hero = false});
+  final String label;
+  final bool hero;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: EditorMetrics.micro,
+        color: hero ? EditorTheme.ink : EditorTheme.muted,
+      ),
+    ),
+  );
+}
+
+/// The handle that reorders an effect within its pipeline.
+class _EffectGrip extends StatelessWidget {
+  const _EffectGrip({required this.index});
+  final int index;
+  @override
+  Widget build(BuildContext context) => ReorderableDragStartListener(
+    index: index,
+    child: const EditorTooltip(
+      message: 'Drag to reorder',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Padding(
+          padding: EdgeInsets.only(right: EditorMetrics.s4),
+          child: Icon(
+            Glyph.drag_indicator,
+            size: EditorMetrics.s12,
+            color: EditorTheme.muted,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// An effect's advanced rows behind one fold. Listens to the fold set alone,
+/// so opening one effect rebuilds this and nothing above it.
+class _AdvancedFold extends StatelessWidget {
+  const _AdvancedFold({
+    required this.opened,
+    required this.id,
+    required this.builder,
+  });
+  final ValueNotifier<Set<String>> opened;
+  final String id;
+  final Widget Function() builder;
+  @override
+  Widget build(BuildContext context) => Picked<Set<String>>(
+    of: opened,
+    test: (set) => set.contains(id),
+    builder: (open) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: EditorMetrics.s4),
+        EditorFold(
+          open: open,
+          onTap: () => opened.value = open
+              ? ({...opened.value}..remove(id))
+              : {...opened.value, id},
+        ),
+        if (open) ...[const SizedBox(height: EditorMetrics.s4), builder()],
+      ],
+    ),
+  );
+}
+
+/// The die beside a seed well.
+class _SeedRoll extends StatelessWidget {
+  const _SeedRoll({required this.onTap});
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: 'Roll a new seed',
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: const Icon(
+        Glyph.casino_outlined,
+        size: EditorMetrics.s16,
+        color: EditorTheme.muted,
+      ),
+    ),
+  );
+}
+
+/// One of the three spaces a layer can declare (2D, 2.5D, 3D).
+class _SpaceChoice extends StatelessWidget {
+  const _SpaceChoice({
+    required this.projection,
+    required this.selected,
+    required this.onPick,
+  });
+  final String projection;
+  final bool selected;
+  final VoidCallback? onPick;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: EditorMetrics.s2),
+    child: EditorTooltip(
+      message: projection,
+      child: EditorButton(projection, onPick, selected: selected),
+    ),
+  );
+}
+

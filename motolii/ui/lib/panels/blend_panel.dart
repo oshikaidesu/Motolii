@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../foundation/metrics.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
+import '../foundation/leaves.dart';
 
 /// Blend desk. One tile per mode; the tile *is* the sample — the selected
 /// layer's own colour laid over the beds of `blend_preview.rs` (black → white
@@ -332,15 +333,15 @@ class _BlendTile extends StatelessWidget {
       onExit: (_) {
         if (desk._hover == mode) desk._aim(null);
       },
-      child: Material(
-        color: EditorTheme.panel,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(color: EditorTheme.panel),
         child: ValueListenableBuilder<_Look>(
           valueListenable: look,
           builder: (context, look, _) => Semantics(
             button: true,
             selected: look.current,
             label: mode,
-            child: InkWell(
+            child: EditorPress(
               onTap: look.live ? () => desk._apply(mode) : null,
               onFocusChange: (focused) {
                 if (focused)
@@ -393,7 +394,7 @@ class _BlendTile extends StatelessWidget {
                               ? EditorTheme.accent
                               : look.hovered
                               ? EditorTheme.select
-                              : Colors.transparent,
+                              : EditorTheme.clear,
                           width: EditorMetrics.s2,
                         ),
                       ),

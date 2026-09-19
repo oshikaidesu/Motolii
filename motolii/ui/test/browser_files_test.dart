@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import '../lib/session/editor_session.dart';
 import '../lib/panels/browser.dart';
 
@@ -10,15 +11,18 @@ void main() {
   setUp(() {
     root = Directory.systemTemp.createTempSync('motolii-files');
     Directory('${root.path}/clips').createSync();
-    File('${root.path}/still.png').writeAsBytesSync(const [0x89, 0x50, 0x4e, 0x47]);
+    File('${root.path}/still.png')
+        .writeAsBytesSync(const [0x89, 0x50, 0x4e, 0x47]);
     File('${root.path}/notes.txt').writeAsStringSync('no');
     File('${root.path}/.hidden.png').writeAsBytesSync(const [0]);
     File('${root.path}/clips/take1.mp4').writeAsBytesSync(const [0]);
   });
   tearDown(() => root.deleteSync(recursive: true));
 
-Future<void> settle(WidgetTester tester) async {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+  Future<void> settle(WidgetTester tester) async {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -55,7 +59,6 @@ Future<void> settle(WidgetTester tester) async {
     await settle(tester);
     return c;
   }
-
 
   testWidgets('A folder shows its folders and the files the shelf can take', (
     tester,

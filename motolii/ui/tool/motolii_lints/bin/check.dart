@@ -10,6 +10,8 @@ import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:motolii_lints/src/material_import.dart';
+import 'package:motolii_lints/src/raw_color.dart';
 import 'package:motolii_lints/src/raw_dimension.dart';
 import 'package:motolii_lints/src/use_metric.dart';
 import 'package:path/path.dart' as p;
@@ -20,7 +22,7 @@ Future<void> main(List<String> args) async {
   if (dirs.isEmpty) dirs.add('lib');
   final roots = dirs.map((d) => p.normalize(p.absolute(d))).toList();
   final collection = AnalysisContextCollection(includedPaths: roots);
-  var left = 0, fixed = 0;
+  var left = 0, fixed = 0, colours = 0, foreign = 0;
   for (final context in collection.contexts) {
     Map<double, String>? tokens;
     String? metricsPath;
@@ -59,13 +61,60 @@ Future<void> main(List<String> args) async {
         );
         left++;
       }
+      for (final hit in _colours(result.unit)) {
+        final at = result.lineInfo.getLocation(hit.offset);
+        stdout.writeln(
+          '${p.relative(path)}:${at.lineNumber}:${at.columnNumber}: '
+          '${hit.toSource()}',
+        );
+        colours++;
+      }
+      for (final directive in result.unit.directives) {
+        if (directive is! ImportDirective) continue;
+        final hit = materialImport(directive);
+        if (hit == null) continue;
+        final at = result.lineInfo.getLocation(hit.offset);
+        stdout.writeln(
+          '${p.relative(path)}:${at.lineNumber}:${at.columnNumber}: '
+          '${hit.toSource()}',
+        );
+        foreign++;
+      }
     }
   }
   if (fixed > 0) stderr.writeln('raw_dimension: replaced $fixed with tokens');
   stderr.writeln(
-    left == 0 ? 'raw_dimension: clean' : 'raw_dimension: $left raw measurements',
+    left == 0
+        ? 'raw_dimension: clean'
+        : 'raw_dimension: $left raw measurements',
   );
-  exit(left == 0 ? 0 : 1);
+  stderr.writeln(
+    colours == 0 ? 'raw_color: clean' : 'raw_color: $colours raw colours',
+  );
+  stderr.writeln(
+    foreign == 0
+        ? 'material_import: clean'
+        : 'material_import: $foreign Material/Cupertino imports',
+  );
+  exit(left == 0 && colours == 0 && foreign == 0 ? 0 : 1);
+}
+
+List<AstNode> _colours(CompilationUnit unit) {
+  final hits = <AstNode>[];
+  unit.accept(_ColourCollector(hits));
+  return hits;
+}
+
+class _ColourCollector extends RecursiveAstVisitor<void> {
+  _ColourCollector(this.hits);
+  final List<AstNode> hits;
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    final target = rawColor(node);
+    if (target != null) hits.add(target);
+    super.visitInstanceCreationExpression(node);
+  }
 }
 
 List<AstNode> _collect(CompilationUnit unit) {

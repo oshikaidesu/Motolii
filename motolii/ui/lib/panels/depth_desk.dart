@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
+import '../foundation/glyphs.dart';
 
 class DepthDesk extends StatefulWidget {
   const DepthDesk({super.key, required this.controller});
@@ -90,14 +91,14 @@ class _DepthDeskState extends State<DepthDesk> {
               children: [
                 const SizedBox(width: EditorMetrics.s6),
                 const Icon(
-                  Icons.videocam_outlined,
+                  Glyph.videocam_outlined,
                   size: EditorMetrics.s15,
                   color: EditorTheme.muted,
                 ),
                 if (target != null) ...[
                   const SizedBox(width: EditorMetrics.s6),
                   const Icon(
-                    Icons.gps_fixed,
+                    Glyph.gps_fixed,
                     size: EditorMetrics.s15,
                     color: EditorTheme.muted,
                   ),
@@ -233,6 +234,7 @@ class _DepthDeskState extends State<DepthDesk> {
                               scale,
                               range,
                               (data['halfFov'] as num? ?? .9).toDouble(),
+                              ink: EditorInk.of(context),
                             ),
                           ),
                         ),
@@ -259,7 +261,7 @@ class _DepthDeskState extends State<DepthDesk> {
                                 ),
                                 child: Center(
                                   child: Icon(
-                                    Icons.circle,
+                                    Glyph.circle,
                                     size: EditorMetrics.s4,
                                     color: c.selectedIds.contains(item['id'])
                                         ? EditorTheme.ink
@@ -304,7 +306,15 @@ class _DepthDeskState extends State<DepthDesk> {
 }
 
 class _DepthGrid extends CustomPainter {
-  _DepthGrid(this.origin, this.eye, this.scale, this.range, this.fov);
+  _DepthGrid(
+    this.origin,
+    this.eye,
+    this.scale,
+    this.range,
+    this.fov, {
+    this.ink = EditorInk.dark,
+  });
+  final EditorInk ink;
 
   /// 原点は注視点、eye はカメラ。frustum は eye から注視点へ向く。
   final Offset origin, eye;
@@ -321,7 +331,7 @@ class _DepthGrid extends CustomPainter {
     canvas.drawLine(Offset(origin.dx, 0), Offset(origin.dx, size.height), line);
     canvas.drawLine(Offset(0, origin.dy), Offset(size.width, origin.dy), line);
     final view = Paint()
-      ..color = const Color(0xff8ed9e6)
+      ..color = ink.camera
       ..strokeWidth = 1;
     final toTarget = origin - eye;
     final dir = toTarget.distance > 0
@@ -343,7 +353,7 @@ class _DepthGrid extends CustomPainter {
         width: EditorMetrics.s14,
         height: EditorMetrics.dense,
       ),
-      Paint()..color = const Color(0xff8ed9e6),
+      Paint()..color = ink.camera,
     );
     final arrow = Path()
       ..moveTo(-4, -7)
@@ -361,6 +371,7 @@ class _DepthGrid extends CustomPainter {
 
   @override
   bool shouldRepaint(_DepthGrid old) =>
+      ink != old.ink ||
       origin != old.origin ||
       eye != old.eye ||
       scale != old.scale ||

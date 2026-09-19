@@ -2,22 +2,22 @@ import 'dart:convert';
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
+import '../foundation/glyphs.dart';
+import '../foundation/leaves.dart';
 
 String _curveName(String kind) => kind.replaceAllMapped(
   RegExp(r'([a-z])([A-Z])'),
   (match) => '${match[1]} ${match[2]}',
 );
 
-const _easePaper = Color(0xffb7d8d1);
-const _easeInk = Color(0xff203f39);
-const _easeTime = Color(0xff854515);
 const _easeIconBox = BoxConstraints.tightFor(
   width: EditorMetrics.control,
   height: EditorMetrics.control,
@@ -58,7 +58,7 @@ class _EaseIconState extends State<_EaseIcon> {
             constraints: _easeIconBox,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: _over ? EditorTheme.hover : Colors.transparent,
+              color: _over ? EditorTheme.hover : EditorTheme.clear,
               borderRadius: BorderRadius.circular(EditorMetrics.s4),
             ),
             child: Icon(
@@ -167,15 +167,35 @@ class _EaseDeskState extends State<EaseDesk>
   /// object, so a frame tick or a hover reads the same list.
   (Object?, Object?)? _segmentsFrom;
   List<Map<String, dynamic>> _segmentsCache = const [];
+  bool _mixedCache = false;
   List<Map<String, dynamic>> get _segments {
     final from = (c.state['selectedKeys'], c.state['layers']);
     if (!identical(from.$1, _segmentsFrom?.$1) ||
         !identical(from.$2, _segmentsFrom?.$2)) {
       _segmentsFrom = from;
       _segmentsCache = _deriveSegments();
+      _mixedCache =
+          _segmentsCache
+              .map((s) => _keyOf(EditorSession.map(s['shape'])))
+              .toSet()
+              .length >
+          1;
     }
     return _segmentsCache;
   }
+
+  /// Whether the selected intervals hold more than one shape; derived with
+  /// the segments, not per build.
+  bool get _mixed {
+    _segments;
+    return _mixedCache;
+  }
+
+  /// One encoding per shape object; the status and the desk hand back the
+  /// same maps until they change, and `_shape` is replaced, never mutated.
+  final _presetKeys = Expando<String>('presetKeys');
+  String _keyOf(Map<String, dynamic> shape) =>
+      _presetKeys[shape] ??= jsonEncode(_payload(shape));
 
   List<Map<String, dynamic>> _deriveSegments() {
     final selected = EditorSession.maps(c.state['selectedKeys']);
@@ -196,7 +216,7 @@ class _EaseDeskState extends State<EaseDesk>
         if (chosen.isEmpty) continue;
         final frames = chosen.map((k) => (k['frame'] as num).toInt()).toSet();
         final last = frames.reduce(math.max);
-        final keys = EditorSession.maps(row['keys'])
+        final keys = EditorSession.maps(row['keys']).toList()
           ..sort((a, b) => (a['frame'] as num).compareTo(b['frame'] as num));
         for (var i = 0; i + 1 < keys.length; i++) {
           final frame = (keys[i]['frame'] as num).toInt();
@@ -522,16 +542,12 @@ class _EaseDeskState extends State<EaseDesk>
     ),
     child: const SizedBox.expand(),
   );
+
   @override
   Widget build(BuildContext context) {
     final segments = _segments;
     final first = _interval;
-    final mixed =
-        segments
-            .map((s) => jsonEncode(_payload(EditorSession.map(s['shape']))))
-            .toSet()
-            .length >
-        1;
+    final mixed = _mixed;
     final saved = EditorSession.maps(c.deskWork.value['easePresets']);
     final clip = EditorSession.map(c.deskWork.value['curveClip']);
     final presets = [
@@ -539,10 +555,10 @@ class _EaseDeskState extends State<EaseDesk>
       if (clip.isNotEmpty) clip,
       ...saved,
     ];
-    // Which preset is the shape in force: encoded once each, not four times
-    // per tile.
-    final shapeKey = jsonEncode(_payload(_shape));
-    final presetKeys = [for (final p in presets) jsonEncode(_payload(p))];
+    // Which preset is the shape in force: each object is encoded once, and
+    // kept while the status hands back the same object.
+    final shapeKey = _keyOf(_shape);
+    final presetKeys = [for (final p in presets) _keyOf(p)];
     final sequence = _ghostMode ? _sequence : const <Map<String, dynamic>>[];
     final target = sequence.isNotEmpty
         ? 'Sequence · ${sequence.length} layers · ghosts${!_canApply ? ' · Read only' : ''}'
@@ -611,7 +627,7 @@ class _EaseDeskState extends State<EaseDesk>
             width: side,
             height: side,
             decoration: BoxDecoration(
-              color: _easePaper,
+              color: EditorInk.dark.easePaper,
               borderRadius: BorderRadius.circular(EditorMetrics.s4),
             ),
             child: LayoutBuilder(
@@ -757,82 +773,22 @@ class _EaseDeskState extends State<EaseDesk>
                     runSpacing: EditorMetrics.s4,
                     children: [
                       for (var i = 0; i < presets.length; i++)
-                        MouseRegion(
-                          onEnter: (_) => _peek(presets[i], i),
-                          onExit: (_) => _endPeek(),
-                          child: EditorTooltip(
-                            key: ValueKey('ease-preset:$i'),
-                            message: '${presets[i]['kind']}',
-                            child: Semantics(
-                              label: '${presets[i]['kind']} preset',
-                              button: true,
-                              selected: presetKeys[i] == shapeKey,
-                              child: InkWell(
-                                canRequestFocus: false,
-                                onTap: () {
-                                  _focused = i;
-                                  _presetFocus.requestFocus();
-                                  _choose(presets[i]);
-                                },
-                                borderRadius: BorderRadius.circular(
-                                  EditorMetrics.s4,
-                                ),
-                                child: Container(
-                                  width: tileWidth,
-                                  height: tileHeight,
-                                  decoration: BoxDecoration(
-                                    color: presetKeys[i] == shapeKey
-                                        ? _easePaper
-                                        : _hover == i
-                                        ? EditorTheme.hover
-                                        : EditorTheme.panel,
-                                    borderRadius: BorderRadius.circular(
-                                      EditorMetrics.s4,
-                                    ),
-                                    border: Border.all(
-                                      color:
-                                          _presetFocus.hasFocus && _focused == i
-                                          ? _easePaper
-                                          : Colors.transparent,
-                                    ),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(
-                                      EditorMetrics.s4,
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Expanded(
-                                          child: Center(
-                                            child: SizedBox.square(
-                                              dimension: EditorMetrics.s44,
-                                              child: _plot(
-                                                presets[i],
-                                                selected:
-                                                    presetKeys[i] == shapeKey,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          _curveName('${presets[i]['kind']}'),
-                                          maxLines: 2,
-                                          textAlign: TextAlign.center,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: EditorMetrics.font,
-                                            color: presetKeys[i] == shapeKey
-                                                ? _easeInk
-                                                : EditorTheme.ink,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
+                        _PresetTile(
+                          index: i,
+                          preset: presets[i],
+                          width: tileWidth,
+                          height: tileHeight,
+                          selected: presetKeys[i] == shapeKey,
+                          hovered: _hover == i,
+                          focused: _presetFocus.hasFocus && _focused == i,
+                          free: _free,
+                          onEnter: () => _peek(presets[i], i),
+                          onExit: _endPeek,
+                          onTap: () {
+                            _focused = i;
+                            _presetFocus.requestFocus();
+                            _choose(presets[i]);
+                          },
                         ),
                     ],
                   ),
@@ -843,143 +799,51 @@ class _EaseDeskState extends State<EaseDesk>
 
           final fields = <Widget>[
             for (final param in params)
-              SizedBox(
+              _EaseParamField(
+                kind: '${_shape['kind']}',
                 width:
                     ((compact ? contentWidth : infoWidth) - EditorMetrics.s8) /
                     2,
-                height: EditorMetrics.control,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: EditorTooltip(
-                        message: param.key.replaceAll('_', ' '),
-                        child: Text(
-                          param.key.replaceAll('_', ' '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: EditorMetrics.dense,
-                            color: EditorTheme.muted,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: EditorMetrics.s44,
-                      child: EditorNumericField(
-                        key: ValueKey('${_shape['kind']}:${param.key}'),
-                        value: (param.value as num).toDouble(),
-                        label: param.key,
-                        enabled: true,
-                        speed: .005,
-                        onPreview: (v) async {
-                          _original ??= Map.of(_shape);
-                          _pending = _model({..._shape, param.key: v});
-                          await _pending;
-                        },
-                        onCommit: (v) async {
-                          _pending = _model({..._shape, param.key: v});
-                          await _commit();
-                        },
-                        onFinish: () async {
-                          if (_original != null) await _commit();
-                        },
-                        onCancel: () async => _cancel(),
-                      ),
-                    ),
-                  ],
-                ),
+                name: param.key,
+                value: (param.value as num).toDouble(),
+                onPreview: (v) async {
+                  _original ??= Map.of(_shape);
+                  _pending = _model({..._shape, param.key: v});
+                  await _pending;
+                },
+                onCommit: (v) async {
+                  _pending = _model({..._shape, param.key: v});
+                  await _commit();
+                },
+                onFinish: () async {
+                  if (_original != null) await _commit();
+                },
+                onCancel: () async => _cancel(),
               ),
           ];
-          final info = SizedBox(
+          final info = _EaseInfo(
             width: infoWidth,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    if (widget.leading != null) ...[
-                      widget.leading!,
-                      const SizedBox(width: EditorMetrics.s4),
-                    ],
-                    Expanded(
-                      child: Text(
-                        _curveName(kind),
-                        key: const ValueKey('ease-name'),
-                        maxLines: 2,
-                        style: const TextStyle(
-                          fontSize: EditorMetrics.title,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: EditorMetrics.s2),
-                Text(
-                  _audition == null
-                      ? _curveMeaning(kind)
-                      : '${_curveName(previewKind)} · ${_curveMeaning(previewKind)}',
-                  key: const ValueKey('ease-meaning'),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: EditorMetrics.font,
-                    color: EditorTheme.muted,
-                  ),
-                ),
-                const SizedBox(height: EditorMetrics.s6),
-                SizedBox(
-                  height: EditorMetrics.bar,
-                  child: Row(
-                    children: [
-                      _EaseIcon(
-                        tooltip: 'Preview motion',
-                        icon: Icons.play_arrow_outlined,
-                        color: EditorTheme.ink,
-                        onPressed: _runMotion,
-                      ),
-                      const SizedBox(width: EditorMetrics.s4),
-                      Expanded(
-                        child: AnimatedBuilder(
-                          animation: _motion,
-                          builder: (_, __) => Semantics(
-                            label: 'Motion from start to finish',
-                            child: CustomPaint(
-                              key: const ValueKey('ease-motion'),
-                              painter: EaseMotionPainter(
-                                shape: shown,
-                                time: _motion.value,
-                                free: _free,
-                              ),
-                              child: const SizedBox.expand(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (!compact) ...[
-                  const SizedBox(height: EditorMetrics.s4),
-                  Wrap(spacing: EditorMetrics.s8, children: fields),
-                ],
-              ],
-            ),
+            leading: widget.leading,
+            kind: kind,
+            previewKind: _audition == null ? null : previewKind,
+            shown: shown,
+            free: _free,
+            motion: _motion,
+            onPlay: _runMotion,
+            fields: compact ? const [] : fields,
           );
           final savedActions = <Widget>[
-            action('Copy curve', Icons.copy_outlined, () async {
+            action('Copy curve', Glyph.copy_outlined, () async {
               await c.storeDesk('curveClip', Map.of(_shape));
               if (mounted) setState(() => _notice = 'Curve copied');
             }),
-            action('Save preset', Icons.bookmark_add_outlined, () async {
+            action('Save preset', Glyph.bookmark_add_outlined, () async {
               await c.storeDesk('easePresets', [...saved, Map.of(_shape)]);
               if (mounted) setState(() => _notice = 'Preset saved');
             }),
             action(
               'Use for new keys (now ${_curveName('${c.newKeyShape['kind']}')})',
-              Icons.fiber_new_outlined,
+              Glyph.fiber_new_outlined,
               () async {
                 await c.storeDesk('newKeyShape', _payload(_shape));
                 if (c.animating) await c.setAnimate(true);
@@ -993,7 +857,7 @@ class _EaseDeskState extends State<EaseDesk>
             if (saved.isNotEmpty)
               action(
                 'Clear saved presets',
-                Icons.delete_sweep_outlined,
+                Glyph.delete_sweep_outlined,
                 () async {
                   await c.storeDesk('easePresets', []);
                   if (mounted)
@@ -1021,67 +885,15 @@ class _EaseDeskState extends State<EaseDesk>
             ),
           ];
           final applyActions = <Widget>[
-            EditorTooltip(
-              message: 'Overshoot',
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: _free ? _easePaper : EditorTheme.muted,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: EditorMetrics.s4,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => setState(() => _free = !_free),
-                child: Semantics(
-                  toggled: _free,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _free
-                            ? Icons.check_box_outlined
-                            : Icons.check_box_outline_blank,
-                        size: EditorMetrics.s14,
-                      ),
-                      if (!narrow) ...[
-                        const SizedBox(width: EditorMetrics.s3),
-                        const Text(
-                          'Overshoot',
-                          style: TextStyle(fontSize: EditorMetrics.dense),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
+            _OvershootToggle(
+              free: _free,
+              narrow: narrow,
+              onPressed: () => setState(() => _free = !_free),
             ),
             const SizedBox(width: EditorMetrics.s4),
-            EditorTooltip(
+            _ApplyButton(
               message: _canApply ? 'Apply to selected intervals' : target,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: _easePaper,
-                  foregroundColor: _easeInk,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: EditorMetrics.s8,
-                  ),
-                  minimumSize: const Size(
-                    EditorMetrics.field,
-                    EditorMetrics.control,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(EditorMetrics.s4),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: EditorMetrics.font,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                onPressed: _canApply ? _commit : null,
-                child: const Text('Apply'),
-              ),
+              onPressed: _canApply ? _commit : null,
             ),
           ];
           final footer = SizedBox(
@@ -1094,80 +906,28 @@ class _EaseDeskState extends State<EaseDesk>
               padding: const EdgeInsets.all(EditorMetrics.s8),
               child: Column(
                 children: [
-                  SizedBox(
-                    height: EditorMetrics.row,
-                    child: EditorTooltip(
-                      message: target,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              first == null
-                                  ? (sequence.isNotEmpty
-                                        ? 'Sequence · ${sequence.length} layers'
-                                        : 'Workspace · no key interval')
-                                  : '${first['name']} · ${first['property']}  ${first['frame']}–${first['end']} f',
-                              key: const ValueKey('ease-interval-target'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: EditorMetrics.dense,
-                                color: EditorTheme.ink,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: EditorMetrics.s4),
-                          ListenableBuilder(
-                            listenable: c.frame,
-                            builder: (context, _) {
-                              final u = playhead();
-                              return Text(
-                                '${c.frame.value} f${u == null
-                                    ? ''
-                                    : u < 0
-                                    ? ' · before'
-                                    : u > 1
-                                    ? ' · after'
-                                    : ''}',
-                                key: const ValueKey('ease-current-frame'),
-                                style: TextStyle(
-                                  fontSize: EditorMetrics.dense,
-                                  color: u != null && (u < 0 || u > 1)
-                                      ? EditorTheme.muted
-                                      : EditorTheme.accent,
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                  _EaseTargetRow(
+                    target: target,
+                    title: first == null
+                        ? (sequence.isNotEmpty
+                              ? 'Sequence · ${sequence.length} layers'
+                              : 'Workspace · no key interval')
+                        : '${first['name']} · ${first['property']}  ${first['frame']}–${first['end']} f',
+                    frame: c.frame,
+                    playhead: playhead,
                   ),
                   const SizedBox(height: EditorMetrics.s2),
-                  SizedBox(
-                    height: EditorMetrics.s12,
-                    child: EditorTooltip(
-                      message: target,
-                      child: ListenableBuilder(
-                        listenable: c.frame,
-                        builder: (context, _) => Semantics(
-                          label: first == null
-                              ? (sequence.isNotEmpty
-                                    ? 'Sequence of ${sequence.length} layers'
-                                    : 'No key interval')
-                              : 'Curve runs ${first['frame']} to ${first['end']} f, playhead at ${c.frame.value} f',
-                          child: CustomPaint(
-                            key: const ValueKey('ease-interval-rail'),
-                            painter: EaseIntervalPainter(
-                              segments: segments,
-                              active: railActive,
-                              frame: c.frame.value,
-                            ),
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                      ),
-                    ),
+                  _EaseRail(
+                    target: target,
+                    label: first == null
+                        ? (sequence.isNotEmpty
+                              ? 'Sequence of ${sequence.length} layers'
+                              : 'No key interval')
+                        : 'Curve runs ${first['frame']} to ${first['end']} f',
+                    hasInterval: first != null,
+                    frame: c.frame,
+                    segments: segments,
+                    active: railActive,
                   ),
                   const SizedBox(height: EditorMetrics.s2),
                   Row(
@@ -1202,6 +962,434 @@ class _EaseDeskState extends State<EaseDesk>
       ),
     );
   }
+}
+
+/// One preset in the choices grid. Immutable inputs only; the desk hands the
+/// same preset object across builds so a tile rebuilds only when its own
+/// selection, hover or focus changes.
+class _PresetTile extends StatelessWidget {
+  const _PresetTile({
+    required this.index,
+    required this.preset,
+    required this.width,
+    required this.height,
+    required this.selected,
+    required this.hovered,
+    required this.focused,
+    required this.free,
+    required this.onEnter,
+    required this.onExit,
+    required this.onTap,
+  });
+  final int index;
+  final Map<String, dynamic> preset;
+  final double width, height;
+  final bool selected, hovered, focused, free;
+  final VoidCallback onEnter, onExit, onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = '${preset['kind']}';
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: EditorTooltip(
+        key: ValueKey('ease-preset:$index'),
+        message: kind,
+        child: Semantics(
+          label: '$kind preset',
+          button: true,
+          selected: selected,
+          child: EditorPress(
+            canRequestFocus: false,
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(EditorMetrics.s4),
+            child: Container(
+              width: width,
+              height: height,
+              decoration: BoxDecoration(
+                color: selected
+                    ? EditorInk.dark.easePaper
+                    : hovered
+                    ? EditorTheme.hover
+                    : EditorTheme.panel,
+                borderRadius: BorderRadius.circular(EditorMetrics.s4),
+                border: Border.all(
+                  color: focused ? EditorInk.dark.easePaper : EditorTheme.clear,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(EditorMetrics.s4),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: SizedBox.square(
+                          dimension: EditorMetrics.s44,
+                          child: CustomPaint(
+                            painter: EaseCurvePainter(
+                              shape: preset,
+                              selected: selected,
+                              free: free,
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _curveName(kind),
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: EditorMetrics.font,
+                        color: selected
+                            ? EditorInk.dark.easeInk
+                            : EditorTheme.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One numeric parameter of the shape in force.
+class _EaseParamField extends StatelessWidget {
+  const _EaseParamField({
+    required this.kind,
+    required this.width,
+    required this.name,
+    required this.value,
+    required this.onPreview,
+    required this.onCommit,
+    required this.onFinish,
+    required this.onCancel,
+  });
+  final String kind, name;
+  final double width, value;
+  final Future<void> Function(double) onPreview, onCommit;
+  final Future<void> Function() onFinish, onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = name.replaceAll('_', ' ');
+    return SizedBox(
+      width: width,
+      height: EditorMetrics.control,
+      child: Row(
+        children: [
+          Expanded(
+            child: EditorTooltip(
+              message: label,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: EditorMetrics.dense,
+                  color: EditorTheme.muted,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: EditorMetrics.s44,
+            child: EditorNumericField(
+              key: ValueKey('$kind:$name'),
+              value: value,
+              label: name,
+              enabled: true,
+              speed: .005,
+              onPreview: onPreview,
+              onCommit: onCommit,
+              onFinish: onFinish,
+              onCancel: onCancel,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Name, meaning, the motion strip and (when not compact) the parameters.
+/// Only the strip listens to the motion; the rest is plain values.
+class _EaseInfo extends StatelessWidget {
+  const _EaseInfo({
+    required this.width,
+    required this.leading,
+    required this.kind,
+    required this.previewKind,
+    required this.shown,
+    required this.free,
+    required this.motion,
+    required this.onPlay,
+    required this.fields,
+  });
+  final double width;
+  final Widget? leading;
+  final String kind;
+  final String? previewKind;
+  final Map<String, dynamic> shown;
+  final bool free;
+  final Animation<double> motion;
+  final VoidCallback onPlay;
+  final List<Widget> fields;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            if (leading != null) ...[
+              leading!,
+              const SizedBox(width: EditorMetrics.s4),
+            ],
+            Expanded(
+              child: Text(
+                _curveName(kind),
+                key: const ValueKey('ease-name'),
+                maxLines: 2,
+                style: const TextStyle(
+                  fontSize: EditorMetrics.title,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: EditorMetrics.s2),
+        Text(
+          previewKind == null
+              ? _curveMeaning(kind)
+              : '${_curveName(previewKind!)} · ${_curveMeaning(previewKind!)}',
+          key: const ValueKey('ease-meaning'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: EditorMetrics.font,
+            color: EditorTheme.muted,
+          ),
+        ),
+        const SizedBox(height: EditorMetrics.s6),
+        SizedBox(
+          height: EditorMetrics.bar,
+          child: Row(
+            children: [
+              _EaseIcon(
+                tooltip: 'Preview motion',
+                icon: Glyph.play_arrow_outlined,
+                color: EditorTheme.ink,
+                onPressed: onPlay,
+              ),
+              const SizedBox(width: EditorMetrics.s4),
+              Expanded(
+                child: AnimatedBuilder(
+                  animation: motion,
+                  builder: (_, __) => Semantics(
+                    label: 'Motion from start to finish',
+                    child: CustomPaint(
+                      key: const ValueKey('ease-motion'),
+                      painter: EaseMotionPainter(
+                        shape: shown,
+                        time: motion.value,
+                        free: free,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (fields.isNotEmpty) ...[
+          const SizedBox(height: EditorMetrics.s4),
+          Wrap(spacing: EditorMetrics.s8, children: fields),
+        ],
+      ],
+    ),
+  );
+}
+
+/// The interval line; only the frame readout listens to the head.
+class _EaseTargetRow extends StatelessWidget {
+  const _EaseTargetRow({
+    required this.target,
+    required this.title,
+    required this.frame,
+    required this.playhead,
+  });
+  final String target, title;
+  final ValueListenable<int> frame;
+  final double? Function() playhead;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: EditorMetrics.row,
+    child: EditorTooltip(
+      message: target,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              key: const ValueKey('ease-interval-target'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: EditorMetrics.dense,
+                color: EditorTheme.ink,
+              ),
+            ),
+          ),
+          const SizedBox(width: EditorMetrics.s4),
+          ListenableBuilder(
+            listenable: frame,
+            builder: (context, _) {
+              final u = playhead();
+              return Text(
+                '${frame.value} f${u == null
+                    ? ''
+                    : u < 0
+                    ? ' · before'
+                    : u > 1
+                    ? ' · after'
+                    : ''}',
+                key: const ValueKey('ease-current-frame'),
+                style: TextStyle(
+                  fontSize: EditorMetrics.dense,
+                  color: u != null && (u < 0 || u > 1)
+                      ? EditorTheme.muted
+                      : EditorTheme.accent,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The strip of selected intervals under the head; repaints with the frame.
+class _EaseRail extends StatelessWidget {
+  const _EaseRail({
+    required this.target,
+    required this.label,
+    required this.hasInterval,
+    required this.frame,
+    required this.segments,
+    required this.active,
+  });
+  final String target, label;
+  final bool hasInterval;
+  final ValueListenable<int> frame;
+  final List<Map<String, dynamic>> segments;
+  final int active;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: EditorMetrics.s12,
+    child: EditorTooltip(
+      message: target,
+      child: ListenableBuilder(
+        listenable: frame,
+        builder: (context, _) => Semantics(
+          label: hasInterval ? '$label, playhead at ${frame.value} f' : label,
+          child: CustomPaint(
+            key: const ValueKey('ease-interval-rail'),
+            painter: EaseIntervalPainter(
+              segments: segments,
+              active: active,
+              frame: frame.value,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _OvershootToggle extends StatelessWidget {
+  const _OvershootToggle({
+    required this.free,
+    required this.narrow,
+    required this.onPressed,
+  });
+  final bool free, narrow;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: 'Overshoot',
+    child: EditorTextButton(
+      foreground: free ? EditorInk.dark.easePaper : EditorTheme.muted,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: Semantics(
+        toggled: free,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              free ? Glyph.check_box_outlined : Glyph.check_box_outline_blank,
+              size: EditorMetrics.s14,
+            ),
+            if (!narrow) ...[
+              const SizedBox(width: EditorMetrics.s3),
+              const Text(
+                'Overshoot',
+                style: TextStyle(fontSize: EditorMetrics.dense),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ApplyButton extends StatelessWidget {
+  const _ApplyButton({required this.message, required this.onPressed});
+  final String message;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: message,
+    child: EditorTextButton(
+      background: EditorInk.dark.easePaper,
+      foreground: EditorInk.dark.easeInk,
+      disabledBackground: EditorTheme.washDisabled,
+      border: BorderSide.none,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+      // The compact density Material took 8 off the declared 52 × 24.
+      minimumSize: const Size(
+        EditorMetrics.field - EditorMetrics.s8,
+        EditorMetrics.control - EditorMetrics.s8,
+      ),
+      radius: const BorderRadius.all(Radius.circular(EditorMetrics.s4)),
+      textStyle: const TextStyle(
+        fontSize: EditorMetrics.font,
+        fontWeight: FontWeight.w600,
+      ),
+      onPressed: onPressed,
+      child: const Text('Apply'),
+    ),
+  );
 }
 
 class EaseCurvePainter extends CustomPainter {
@@ -1246,7 +1434,7 @@ class EaseCurvePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final grid = Paint()
-      ..color = _easeInk.withValues(alpha: .15)
+      ..color = EditorInk.dark.easeInk.withValues(alpha: .15)
       ..strokeWidth = .5;
     Offset p(double x, double y) => toPixel(Offset(x, y), size);
     if (handles)
@@ -1286,7 +1474,7 @@ class EaseCurvePainter extends CustomPainter {
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..color = handles || selected ? _easeInk : EditorTheme.ink
+        ..color = handles || selected ? EditorInk.dark.easeInk : EditorTheme.ink
         ..strokeWidth = handles ? 2.5 : 1.5
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
@@ -1307,7 +1495,9 @@ class EaseCurvePainter extends CustomPainter {
         p(x, lo),
         p(x, hi),
         Paint()
-          ..color = inside ? _easeTime : _easeTime.withValues(alpha: .4)
+          ..color = inside
+              ? EditorInk.dark.easeTime
+              : EditorInk.dark.easeTime.withValues(alpha: .4)
           ..strokeWidth = EditorMetrics.s2,
       );
       if (inside) {
@@ -1315,12 +1505,12 @@ class EaseCurvePainter extends CustomPainter {
         canvas.drawCircle(
           current,
           EditorMetrics.s6,
-          Paint()..color = _easePaper,
+          Paint()..color = EditorInk.dark.easePaper,
         );
         canvas.drawCircle(
           current,
           EditorMetrics.s4,
-          Paint()..color = _easeTime,
+          Paint()..color = EditorInk.dark.easeTime,
         );
       } else {
         final tip = p(x, (lo + hi) / 2);
@@ -1330,7 +1520,7 @@ class EaseCurvePainter extends CustomPainter {
           ..lineTo(tip.dx, tip.dy - EditorMetrics.s4)
           ..lineTo(tip.dx, tip.dy + EditorMetrics.s4)
           ..close();
-        canvas.drawPath(arrow, Paint()..color = _easeTime);
+        canvas.drawPath(arrow, Paint()..color = EditorInk.dark.easeTime);
       }
     }
     if (handles) {
@@ -1348,11 +1538,11 @@ class EaseCurvePainter extends CustomPainter {
           8,
           Paint()
             ..color = handles || selected
-                ? _easeInk
+                ? EditorInk.dark.easeInk
                 : EditorTheme.ink.withValues(alpha: .25),
         );
-        canvas.drawCircle(q, 5, Paint()..color = _easeInk);
-        canvas.drawCircle(q, 2, Paint()..color = _easePaper);
+        canvas.drawCircle(q, 5, Paint()..color = EditorInk.dark.easeInk);
+        canvas.drawCircle(q, 2, Paint()..color = EditorInk.dark.easePaper);
       }
     }
     canvas.restore();
@@ -1361,9 +1551,9 @@ class EaseCurvePainter extends CustomPainter {
         final text = TextPainter(
           text: TextSpan(
             text: value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: EditorMetrics.micro,
-              color: _easeInk,
+              color: EditorInk.dark.easeInk,
             ),
           ),
           textDirection: TextDirection.ltr,
@@ -1426,7 +1616,7 @@ class EaseMotionPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(x(easeValueAt(shape, time)), y),
       half,
-      Paint()..color = _easePaper,
+      Paint()..color = EditorInk.dark.easePaper,
     );
   }
 
@@ -1486,7 +1676,7 @@ class EaseIntervalPainter extends CustomPainter {
         rect,
         Paint()
           ..color = chosen
-              ? _easePaper
+              ? EditorInk.dark.easePaper
               : EditorTheme.muted.withValues(alpha: .35),
       );
       if (chosen) {
@@ -1495,7 +1685,7 @@ class EaseIntervalPainter extends CustomPainter {
           Paint()
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1
-            ..color = _easeInk,
+            ..color = EditorInk.dark.easeInk,
         );
       }
       // 区間の両端 = キーフレーム。選ばれた区間だけ濃く。
@@ -1503,7 +1693,7 @@ class EaseIntervalPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(x(f), y),
           chosen ? 2.5 : 1.5,
-          Paint()..color = chosen ? _easeInk : EditorTheme.border,
+          Paint()..color = chosen ? EditorInk.dark.easeInk : EditorTheme.border,
         );
       }
     }
@@ -1512,7 +1702,7 @@ class EaseIntervalPainter extends CustomPainter {
       Offset(head, 0),
       Offset(head, size.height),
       Paint()
-        ..color = _easeTime
+        ..color = EditorInk.dark.easeTime
         ..strokeWidth = EditorMetrics.s2,
     );
     final caret = Path()
@@ -1520,7 +1710,7 @@ class EaseIntervalPainter extends CustomPainter {
       ..lineTo(head + EditorMetrics.s3, 0)
       ..lineTo(head, EditorMetrics.s4)
       ..close();
-    canvas.drawPath(caret, Paint()..color = _easeTime);
+    canvas.drawPath(caret, Paint()..color = EditorInk.dark.easeTime);
   }
 
   @override

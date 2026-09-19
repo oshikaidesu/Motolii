@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/foundation/metrics.dart';
-import 'package:motolii_stage5/foundation/panel_controls.dart';
 import 'package:motolii_stage5/foundation/theme.dart';
+
+import 'support/editor_test_theme.dart';
+
+import 'package:motolii_stage5/foundation/leaves.dart';
 
 void main() {
   testWidgets('a choice opens app-height menu rows and reports the pick', (
@@ -12,7 +15,7 @@ void main() {
     Object? picked;
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: SizedBox(
             width: EditorMetrics.s200,
@@ -33,24 +36,23 @@ void main() {
     expect(find.text('Grid'), findsNothing);
     await tester.tap(find.text('Line'));
     await tester.pumpAndSettle();
-    expect(find.byType(MenuItemButton), findsNWidgets(3));
-    final row = tester.getSize(find.byType(MenuItemButton).first);
+    expect(find.byType(EditorMenuRow), findsNWidgets(3));
+    final row = tester.getSize(find.byType(EditorMenuRow).first);
     expect(row.height, EditorMetrics.row);
     // The sheet and its type are the app's menu, not Material 3's.
     final grid = tester.renderObject<RenderParagraph>(find.text('Grid'));
     expect(grid.text.style?.fontSize, EditorMetrics.font);
     expect(grid.text.style?.color, EditorTheme.ink);
     final sheet = tester
-        .widgetList<Material>(find.byType(Material))
-        .firstWhere((m) => m.color == EditorTheme.menu);
-    expect(
-      (sheet.shape as RoundedRectangleBorder).side.color,
-      EditorTheme.menuEdge,
-    );
+        .widgetList<Container>(find.byType(Container))
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .firstWhere((d) => d.color == EditorTheme.menu);
+    expect(sheet.border?.top.color, EditorTheme.menuEdge);
     await tester.tap(find.text('Grid'));
     await tester.pumpAndSettle();
     expect(picked, 2);
-    expect(find.byType(MenuItemButton), findsNothing);
+    expect(find.byType(EditorMenuRow), findsNothing);
   });
 
   testWidgets('a disabled choice shows the value and does not open', (
@@ -58,7 +60,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: EditorChoice<int>(
             value: 1,
@@ -71,6 +73,6 @@ void main() {
     expect(find.text('Circle'), findsOneWidget);
     await tester.tap(find.text('Circle'));
     await tester.pumpAndSettle();
-    expect(find.byType(MenuItemButton), findsNothing);
+    expect(find.byType(EditorMenuRow), findsNothing);
   });
 }

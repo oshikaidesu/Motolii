@@ -259,7 +259,16 @@ impl EditorRuntime{
         let mut ids=view.layers();ids.sort_by_key(|id|std::cmp::Reverse((view.meta(*id).ok().flatten().map_or(0,|m|m.order),id.0)));
         let mut layers=Vec::new();
         let keys=self.layer_keys(&view,at,&resolved,&clipping,live)?;
+        // 軽い status で行(値・効果)を持つのは選択中の層だけ —— Inspector と Stage の枠が読む物。
+        // 他の層は今の姿(枠・位置)だけ: Stage の当たり判定はそれで足りる。
+        let wanted=|id:LayerId| !live||self.selected==Some(id)||self.selected_ids.contains(&id);
         for id in ids{
+            if !wanted(id){
+                let mut row=json!({"id":id.0});
+                self.overlay_geometry(&mut row,&eyes,&resolved,id,live)?;
+                layers.push(row);
+                continue;
+            }
             let key=keys.get(&id).copied();
             let hit=key.and_then(|key|self.snapshot_cache.borrow().rows.get(&id).filter(|(had,_)|*had==key).map(|(_,row)|row.clone()));
             let row=match hit {
@@ -283,7 +292,7 @@ impl EditorRuntime{
             let point=self.selected.map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
             let live_layers=layers;
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
-            return Ok(json!({"frame":self.frame,"playing":self.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
+            return Ok(json!({"frame":self.frame,"playing":self.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"stageWindow":self.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
                 "selectedId":self.selected.map(|s|s.0),"selectedIds":self.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
                 "animate":self.animate!=Animate::Off,"renderCount":self.render_count,"pickedColor":self.picked_color,"pickSerial":self.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
         }
@@ -311,7 +320,7 @@ impl EditorRuntime{
         let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
         let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
-        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
+        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
@@ -526,6 +535,7 @@ mod frame_cost_probe {
             track.insert(Keyframe { t: RationalTime::try_from_frame(frame, rt.doc.view().composition().unwrap().unwrap().fps).unwrap(), value: Value::F64(frame as f64 / 10.0), interp: Interp::Linear, spatial: None });
         }
         rt.doc.apply(Intent::SetTrack { layer: LayerId(100), property: p, track }).unwrap();
+        rt.request(serde_json::json!({"op":"select","ids":[100,101]})).unwrap();
         for frame in [0, 5, 10] {
             rt.frame = frame;
             let full = rt.status().unwrap();
@@ -545,6 +555,19 @@ mod frame_cost_probe {
                 for (a,b) in expected["effects"].as_array().unwrap().iter().zip(actual["effects"].as_array().unwrap()) { compare(&a["params"], &b["params"]); }
             }
         }
+        // 選択を外した層は、軽い status では枠と位置だけ(値は Inspector が読まない)。
+        rt.request(serde_json::json!({"op":"select","ids":[101]})).unwrap();
+        let full = rt.status().unwrap();
+        rt.clock.toggle();
+        let light = rt.status().unwrap();
+        rt.clock.toggle();
+        let rows = light["liveLayers"].as_array().unwrap();
+        assert_eq!(rows.len(), full["layers"].as_array().unwrap().len(), "行数は全層ぶん");
+        for (expected, actual) in full["layers"].as_array().unwrap().iter().zip(rows) {
+            for field in ["id", "x", "y", "bounds", "corners"] { assert_eq!(expected[field], actual[field], "{field}"); }
+            if actual["id"] == 101 { assert!(actual["properties"].is_array()); } else { assert!(actual.get("properties").is_none(), "{actual}"); }
+        }
+        eprintln!("PROBE room=status light={} bytes, selected-only={} bytes", { rt.request(serde_json::json!({"op":"select","ids":[100,101]})).unwrap(); rt.clock.toggle(); let s = rt.status().unwrap().to_string().len(); rt.clock.toggle(); s }, light.to_string().len());
         let before = rt.full_status_revision.borrow().clone();
         let reply = unsafe { crate::motolii_probe_request(&mut rt, c"{\"op\":\"renderInfo\"}".as_ptr()) };
         let info: serde_json::Value = serde_json::from_str(unsafe { std::ffi::CStr::from_ptr(reply) }.to_str().unwrap()).unwrap();
@@ -920,4 +943,66 @@ mod camera_view_cage_tests {
             assert!((rotation-110.0).abs()<3.0,"{projection}: a quarter turn on screen is a quarter turn of the layer: {rotation}");
         }
     }
+
+    /// 実験(2026-09-19): 縦長の Stage 窓で球(3D の網)が潰れるか。窓の縦横比と roi の縦横比が同じなら、
+    /// 出力(Camera)と同じ丸さで出るはず。潰れたら投影の縦横比が窓に引きずられている。
+    #[test]
+    #[ignore = "GPU で 10 分。2026-09-19 の実験: 窓と roi の縦横比が揃っていれば 3D も 2.5D も潰れない(結果は日報)。cargo test -- --ignored で回す"]
+    fn a_sphere_keeps_its_roundness_in_a_tall_stage_window(){
+        let mut rt=EditorRuntime::open("").unwrap();
+        request(&mut rt,json!({"op":"create","kind":"sphere"}));
+        let sphere=rt.selected.unwrap();
+        request(&mut rt,json!({"op":"select","ids":[]}));
+        let comp=rt.doc.view().composition().unwrap().unwrap().spec();
+        let (w,h)=(comp.width as f32,comp.height as f32);
+        let make=|rt:&EditorRuntime,width,height|rt.engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
+            label:Some("aspect test"),size:wgpu::Extent3d{width,height,depth_or_array_layers:1},mip_level_count:1,sample_count:1,
+            dimension:wgpu::TextureDimension::D2,format:crate::render::compositor::PRESENTABLE_FORMAT,usage:wgpu::TextureUsages::RENDER_ATTACHMENT|wgpu::TextureUsages::TEXTURE_BINDING|wgpu::TextureUsages::COPY_SRC,view_formats:&[],
+        });
+        let bbox=|rt:&EditorRuntime,texture:&wgpu::Texture,width:u32,height:u32|->(f32,f32){
+            let device=rt.engine.gpu_device();
+            let bytes_per_row=((width*4+255)/256)*256;
+            let buffer=device.create_buffer(&wgpu::BufferDescriptor{label:None,size:(bytes_per_row*height) as u64,usage:wgpu::BufferUsages::COPY_DST|wgpu::BufferUsages::MAP_READ,mapped_at_creation:false});
+            let mut encoder=device.create_command_encoder(&Default::default());
+            encoder.copy_texture_to_buffer(texture.as_image_copy(),wgpu::TexelCopyBufferInfo{buffer:&buffer,layout:wgpu::TexelCopyBufferLayout{offset:0,bytes_per_row:Some(bytes_per_row),rows_per_image:Some(height)}},wgpu::Extent3d{width,height,depth_or_array_layers:1});
+            rt.engine.gpu_queue().submit([encoder.finish()]);
+            let slice=buffer.slice(..);slice.map_async(wgpu::MapMode::Read,|_|{});device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+            let data=slice.get_mapped_range();
+            let (mut x0,mut y0,mut x1,mut y1)=(u32::MAX,u32::MAX,0u32,0u32);
+            for y in 0..height{for x in 0..width{let p=&data[(y*bytes_per_row+x*4) as usize..][..3];if p.iter().any(|&c|c>24){x0=x0.min(x);y0=y0.min(y);x1=x1.max(x);y1=y1.max(y);}}}
+            assert!(x1>x0&&y1>y0,"nothing drawn");
+            ((x1-x0+1) as f32,(y1-y0+1) as f32)
+        };
+        // 出力: 960×540(comp と同じ縦横比)。
+        let out=make(&rt,960,540);
+        rt.render_into(&out,View::Camera,crate::render::engine::Window{width:960,height:540,..crate::render::engine::Window::output(comp)}).unwrap();
+        let (ow,oh)=bbox(&rt,&out,960,540);
+        // Stage: 400×900 の縦長の窓。roi は窓と同じ縦横比で comp の幅を収める(= 一様な倍率 400/w)。
+        let roi_h=w*900.0/400.0;
+        let window=crate::render::engine::Window{width:400,height:900,roi:[0.0,(h-roi_h)*0.5,w,roi_h],projection_camera:Some(Default::default())};
+        rt.stage_window=Some(window);
+        let stage=make(&rt,400,900);
+        rt.render_into(&stage,View::User,window).unwrap();
+        let (sw,sh)=bbox(&rt,&stage,400,900);
+        let (output_ratio,stage_ratio)=(ow/oh,sw/sh);
+        assert!((output_ratio-stage_ratio).abs()<0.1,"sphere {sphere:?}: output {ow}x{oh} (ratio {output_ratio:.2}) vs tall stage {sw}x{sh} (ratio {stage_ratio:.2})");
+        // 2.5D の球、右寄り、13 % の縮尺、縦長と横長の窓: 比を出して見る(観察、落とさない)。
+        request(&mut rt,json!({"op":"setAttrs","layers":[sphere.0],"patch":{"projection":"2.5D"}}));
+        request(&mut rt,json!({"op":"setProperty","layer":sphere.0,"property":"position","value":[w*0.75,h*0.5]}));
+        request(&mut rt,json!({"op":"select","ids":[]}));
+        let out=make(&rt,960,540);
+        rt.render_into(&out,View::Camera,crate::render::engine::Window{width:960,height:540,..crate::render::engine::Window::output(comp)}).unwrap();
+        let (ow,oh)=bbox(&rt,&out,960,540);
+        for (ww,wh) in [(400u32,900u32),(1200,400)] {
+            let scale=0.13f32;
+            let (rw,rh)=(ww as f32/scale,wh as f32/scale);
+            let window=crate::render::engine::Window{width:ww,height:wh,roi:[(w-rw)*0.5,(h-rh)*0.5,rw,rh],projection_camera:Some(Default::default())};
+            rt.stage_window=Some(window);
+            let stage=make(&rt,ww,wh);
+            rt.render_into(&stage,View::User,window).unwrap();
+            let (sw,sh)=bbox(&rt,&stage,ww,wh);
+            eprintln!("ASPECT 2.5D sphere: output {ow}x{oh} ratio {:.2}; stage {ww}x{wh} at 13%: {sw}x{sh} ratio {:.2}",ow/oh,sw/sh);
+        }
+    }
+
 }

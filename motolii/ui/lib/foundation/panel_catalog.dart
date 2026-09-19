@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+
+import 'glyphs.dart';
 
 /// How much of a dock axis a panel asks for: a fixed number of pixels, all
 /// that is left (`fill`), or whatever its neighbours decide (`any`).
@@ -36,7 +38,7 @@ class PanelSpec {
 const deskHostSpec = PanelSpec(
   'Desk',
   'Host',
-  Icons.all_inbox_outlined,
+  Glyph.all_inbox_outlined,
   minWidth: 240,
   minHeight: 200,
   width: Extent.any,
@@ -46,7 +48,7 @@ const panelCatalog = [
   PanelSpec(
     'Stage',
     'Work',
-    Icons.movie_outlined,
+    Glyph.movie_outlined,
     minWidth: 720,
     minHeight: 280,
     width: Extent.fill,
@@ -55,7 +57,7 @@ const panelCatalog = [
   PanelSpec(
     'Camera',
     'Work',
-    Icons.videocam_outlined,
+    Glyph.videocam_outlined,
     minWidth: 720,
     minHeight: 280,
     width: Extent.fill,
@@ -64,7 +66,7 @@ const panelCatalog = [
   PanelSpec(
     'Timeline',
     'Work',
-    Icons.view_timeline_outlined,
+    Glyph.view_timeline_outlined,
     minWidth: 720,
     minHeight: 180,
     width: Extent.fill,
@@ -73,55 +75,55 @@ const panelCatalog = [
   PanelSpec(
     'Inspector',
     'Work',
-    Icons.tune,
+    Glyph.tune,
     minWidth: 300,
     width: Extent.fixed(300),
   ),
-  PanelSpec('Create', 'Browse', Icons.add_box_outlined),
-  PanelSpec('Media', 'Browse', Icons.perm_media_outlined),
-  PanelSpec('Effects', 'Browse', Icons.auto_fix_high_outlined),
-  PanelSpec('Fonts', 'Browse', Icons.font_download_outlined),
-  PanelSpec('Colors', 'Browse', Icons.palette_outlined),
-  PanelSpec('Files', 'Browse', Icons.folder_outlined),
+  PanelSpec('Create', 'Browse', Glyph.add_box_outlined),
+  PanelSpec('Media', 'Browse', Glyph.perm_media_outlined),
+  PanelSpec('Effects', 'Browse', Glyph.auto_fix_high_outlined),
+  PanelSpec('Fonts', 'Browse', Glyph.font_download_outlined),
+  PanelSpec('Colors', 'Browse', Glyph.palette_outlined),
+  PanelSpec('Files', 'Browse', Glyph.folder_outlined),
   PanelSpec(
     'Depth',
     'Adjust',
-    Icons.scatter_plot_outlined,
+    Glyph.scatter_plot_outlined,
     width: Extent.fixed(300),
     drawer: true,
   ),
   PanelSpec(
     'Ease',
     'Adjust',
-    Icons.timeline,
+    Glyph.timeline,
     width: Extent.fixed(300),
     drawer: true,
   ),
   PanelSpec(
     'Blend',
     'Adjust',
-    Icons.layers_outlined,
+    Glyph.layers_outlined,
     width: Extent.fixed(300),
     drawer: true,
   ),
   PanelSpec(
     'Notes',
     'Note',
-    Icons.dashboard_outlined,
+    Glyph.dashboard_outlined,
     width: Extent.fill,
     height: Extent.fill,
   ),
   PanelSpec(
     'Web',
     'Note',
-    Icons.language,
+    Glyph.language,
     width: Extent.fill,
     height: Extent.fill,
   ),
   PanelSpec(
     'History',
     'Session',
-    Icons.history,
+    Glyph.history,
     width: Extent.fixed(300),
     drawer: true,
   ),

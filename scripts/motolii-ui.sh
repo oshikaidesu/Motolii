@@ -17,6 +17,19 @@ case "${1:-dev}" in
     cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;
   restart-ui) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR2 "$(cat "$state/flutter.pid")" ;;
   reload) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR1 "$(cat "$state/flutter.pid")" ;;
+  # The real speed: Dart AOT and Rust --release. No hot reload (Flutter's
+  # profile mode has none) — use it to judge how fast Motolii actually is,
+  # not to work in.
+  profile)
+    [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
+    cd "$repo"; cargo build --release -p motolii-ui
+    export MOTOLII_NATIVE_LIBRARY="$workspace/target/release/libmotolii_ui.dylib"
+    cd "$ui"
+    if [[ $# -gt 1 ]]; then
+      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_DOCUMENT=$2"
+    fi
+    exec "$flutter_bin" run --profile -d macos
+    ;;
   dev)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
@@ -27,5 +40,5 @@ case "${1:-dev}" in
     fi
     exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|native|test|dev [document.rrd]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|native|test|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
 esac

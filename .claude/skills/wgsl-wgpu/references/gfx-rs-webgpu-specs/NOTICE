@@ -1,0 +1,5 @@
+Copied verbatim from https://github.com/gfx-rs/wgpu/tree/trunk/.claude/skills/webgpu-specs
+(fetched 2026-09-19). Licensed MIT OR Apache-2.0 by the gfx-rs developers; LICENSE.MIT alongside.
+download.sh reads `cargo metadata` — run it from the Motolii repo root; the specs land in target/claude/*.bs.
+cazala/webgpu-skill (https://github.com/cazala/webgpu-skill, commit e439805) carries NO license file and is
+therefore only linked from ../SKILL.md, not copied.

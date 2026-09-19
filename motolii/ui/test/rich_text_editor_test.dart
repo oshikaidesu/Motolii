@@ -7,8 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/panels/rich_text_editor.dart';
 import '../lib/foundation/metrics.dart';
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/leaves.dart';
 
 void main() {
   Future<EditorSession> mount(
@@ -35,7 +37,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: Align(
             alignment: Alignment.topLeft,
@@ -82,7 +84,7 @@ void main() {
     // Below the last line, inside the frame: still the field.
     await tester.tapAt(tester.getBottomLeft(box) - const Offset(-20, 10));
     await tester.pump();
-    final field = tester.widget<TextField>(
+    final field = tester.widget<EditorTextField>(
       find.byKey(const ValueKey('rich-text-content')),
     );
     expect(field.focusNode!.hasFocus, isTrue);
@@ -94,7 +96,7 @@ void main() {
   ) async {
     final c = await mount(tester, []);
     final field = find.byKey(const ValueKey('rich-text-content'));
-    final text = tester.widget<TextField>(field).controller!;
+    final text = tester.widget<EditorTextField>(field).controller!;
     // A selection in the box is only a caret's business: no span is held.
     text.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
     await tester.pump();
@@ -105,7 +107,7 @@ void main() {
     c.textStyleTarget.value = {'layer': 1, 'scope': 'upper'};
     await tester.pumpAndSettle();
     expect(
-      tester.widget<TextField>(field).controller,
+      tester.widget<EditorTextField>(field).controller,
       isA<StyledTextController>().having((t) => t.highlighted, 'highlighted', {
         5,
       }),
@@ -151,7 +153,9 @@ void main() {
     expect(sent.last['op'], 'cancelPreview');
     expect(
       tester
-          .widget<TextField>(find.byKey(const ValueKey('rich-text-content')))
+          .widget<EditorTextField>(
+            find.byKey(const ValueKey('rich-text-content')),
+          )
           .controller!
           .text,
       'あカ漢か\u3099😀ab',
@@ -202,7 +206,8 @@ void main() {
     );
     final field = find.byKey(const ValueKey('rich-text-content'));
     final box =
-        tester.widget<TextField>(field).controller! as StyledTextController;
+        tester.widget<EditorTextField>(field).controller!
+            as StyledTextController;
     box.runs = [
       {'len': 5, 'style': 0},
       {'len': 2, 'style': 1},
@@ -238,7 +243,7 @@ void main() {
     );
     final box =
         tester
-                .widget<TextField>(
+                .widget<EditorTextField>(
                   find.byKey(const ValueKey('rich-text-content')),
                 )
                 .controller!

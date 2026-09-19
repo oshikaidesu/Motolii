@@ -4,7 +4,7 @@ import 'dart:ui'
     as ui
     show instantiateImageCodec, ImageByteFormat, ViewFocusEvent, ViewFocusState;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../../foundation/metrics.dart';
@@ -16,6 +16,8 @@ import '../../foundation/panel_controls.dart';
 import 'color_wheel.dart';
 import 'parts.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
+import '../../foundation/leaves.dart';
 
 /// Colours: the wheel edits the selected layer's slot; the tiles are the
 /// palette in use, saved swatches and starters, and a click applies one.
@@ -69,6 +71,11 @@ class ColorsShelf extends BrowserShelf {
   @override
   String classification(BrowserHost host, Map<String, dynamic> item) =>
       item['saved'] == true
+      ? 'Saved'
+      : item['used'] == true
+      ? 'Used here'
+      : 'Starter';
+
   /// What the swatch is: solid or gradient, how its stops are blended, how
   /// many, and where it came from — all read off the swatch itself.
   @override
@@ -104,11 +111,6 @@ class ColorsShelf extends BrowserShelf {
       _ => null,
     };
   }
-
-      ? 'Saved'
-      : item['used'] == true
-      ? 'Used here'
-      : 'Starter';
 
   @override
   ShelfLayout layout(BrowserHost host, double width, double tile) =>
@@ -669,7 +671,7 @@ class _ColorPickerState extends State<_ColorPicker>
                           message: on
                               ? 'Click the Stage to pick a colour · Esc cancels'
                               : 'Pick a colour from the Stage',
-                          child: InkWell(
+                          child: EditorPress(
                             key: const ValueKey('browser:eyedropper'),
                             onTap: () =>
                                 widget.controller.eyedropper.value = !on,
@@ -682,7 +684,7 @@ class _ColorPickerState extends State<_ColorPicker>
                                 ),
                               ),
                               child: Icon(
-                                Icons.colorize,
+                                Glyph.colorize,
                                 size: EditorMetrics.s14,
                                 color: on
                                     ? EditorTheme.accent
@@ -696,7 +698,7 @@ class _ColorPickerState extends State<_ColorPicker>
                         message: shape == 'square'
                             ? 'Switch to triangle'
                             : 'Switch to square',
-                        child: InkWell(
+                        child: EditorPress(
                           key: const ValueKey('browser:color-shape'),
                           onTap: () => widget.controller.storeDesk(
                             'colorShape',
@@ -741,12 +743,12 @@ class _ColorPickerState extends State<_ColorPicker>
                     child: Row(
                       children: [
                         const Icon(
-                          Icons.opacity,
+                          Glyph.opacity,
                           size: EditorMetrics.s14,
                           color: EditorTheme.muted,
                         ),
                         Expanded(
-                          child: Slider(
+                          child: EditorSlider(
                             value: value[3],
                             onChanged: !widget.enabled
                                 ? null
@@ -812,7 +814,7 @@ class _FillDefinitions extends StatelessWidget {
     ) => Expanded(
       child: EditorTooltip(
         message: tip,
-        child: InkWell(
+        child: EditorPress(
           key: ValueKey(key),
           onTap: press,
           child: Container(

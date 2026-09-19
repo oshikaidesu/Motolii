@@ -25,7 +25,12 @@ void main() {
         {'id': 1, 'name': 'Clip', 'kind': 'Media'},
       ],
       'catalog': [
-        {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass', 'generation': 3},
+        {
+          'id': 'motolii.blur',
+          'name': 'Blur',
+          'stage': 'Pass',
+          'generation': 3,
+        },
       ],
     };
     c.deskWork.value = {'browserView': 0};

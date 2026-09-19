@@ -3,10 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/browser.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/leaves.dart';
 
 /// The Fonts shelf: the machine's families as rows, dressed on the selected
 /// text layer's characters; which characters, how big and how aligned are
@@ -72,7 +73,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: BrowserPanel(controller: c, fixedTab: 'Fonts'),
         ),
@@ -101,7 +102,7 @@ void main() {
       find.descendant(of: tile('Arial'), matching: find.text('A')),
       findsNothing,
     );
-    await tester.enterText(find.byType(TextField).first, 'geo');
+    await tester.enterText(find.byType(EditorTextField).first, 'geo');
     await tester.pump();
     expect(tile('Arial'), findsNothing);
     await tester.tap(tile('Georgia'));

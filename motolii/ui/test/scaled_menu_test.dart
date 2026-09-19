@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/metrics.dart';
 import '../lib/foundation/theme.dart';
+import 'support/editor_test_theme.dart';
 
 void main() {
   testWidgets('a context menu scales with the app and opens at the pointer', (
@@ -15,7 +16,7 @@ void main() {
     // host of any kind, only the MaterialApp everything gets for free.
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         builder: (context, child) => EditorScale(
           notifier: scale,
           child: ValueListenableBuilder(

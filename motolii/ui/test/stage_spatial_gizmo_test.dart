@@ -1,9 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/stage.dart';
-import '../lib/foundation/theme.dart';
+import 'support/editor_test_theme.dart';
 
 /// 3D レイヤーの 3 軸ギズモと、2D の平面ケージは別物。
 /// 掴む所は、native が当たり判定に使うのと同じ三角形。
@@ -20,16 +21,26 @@ class GestureSession extends EditorSession {
   }
 }
 
-Map<String, dynamic> _layer(int id, String projection) => {
+Map<String, dynamic> _layer(
+  int id,
+  String projection, {
+  String kind = 'Shape',
+  int? parent,
+  List<List<int>>? corners,
+}) => {
   'id': id,
+  'kind': kind,
+  'parent': parent,
   'projection': projection,
   'stageBounds': {
-    'corners': [
-      [100, 100],
-      [300, 100],
-      [300, 300],
-      [100, 300],
-    ],
+    'corners':
+        corners ??
+        [
+          [100, 100],
+          [300, 100],
+          [300, 300],
+          [100, 300],
+        ],
   },
 };
 
@@ -79,7 +90,7 @@ Offset Function(double, double) _screen(WidgetTester tester) {
 Future<Rect> _mount(WidgetTester tester, GestureSession c) async {
   await tester.pumpWidget(
     MaterialApp(
-      theme: EditorTheme.data,
+      theme: editorTestTheme,
       home: Scaffold(
         body: SizedBox(
           width: 464,
@@ -154,5 +165,58 @@ void main() {
     expect(c.commands.every((v) => v.$2['mode'] != 'spatial'), isTrue);
     await drag.up();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('a group is never what the Stage touches: its child is', (
+    tester,
+  ) async {
+    // The group's box covers the whole comp; its child sits inside.
+    final c = GestureSession()
+      ..document.value = {
+        ..._doc(projection: '2D', mesh: false),
+        'layers': [
+          _layer(
+            1,
+            '2D',
+            kind: 'Group',
+            corners: [
+              [0, 0],
+              [400, 0],
+              [400, 400],
+              [0, 400],
+            ],
+          ),
+          _layer(2, '2D', parent: 1),
+        ],
+        'selectedId': 1,
+        'selectedIds': [1],
+      };
+    await _mount(tester, c);
+    final overlay = find.byWidgetPredicate(
+      (w) => w is CustomPaint && '${w.painter.runtimeType}' == '_StageOverlay',
+    );
+    dynamic painter() => tester.widget<CustomPaint>(overlay).painter;
+    // Hovering the child under the selected group: no cage on the group.
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: _screen(tester)(200, 200));
+    addTearDown(gesture.removePointer);
+    await tester.pump();
+    await gesture.moveTo(_screen(tester)(200, 200));
+    await tester.pump();
+    expect(painter().outlines, isEmpty);
+    expect(painter().handles, isEmpty);
+    // A press there takes the child, not the group.
+    await gesture.down(_screen(tester)(200, 200));
+    await tester.pump();
+    final select = c.commands.lastWhere((v) => v.$1 == 'select');
+    expect(select.$2['ids'], [2]);
+    await gesture.up();
+    await tester.pump();
+    // Where only the group lies, nothing is taken: a marquee starts.
+    await gesture.down(_screen(tester)(20, 20));
+    await tester.pump();
+    expect(c.commands.where((v) => v.$1 == 'select').length, 1);
+    await gesture.up();
+    await tester.pump();
   });
 }

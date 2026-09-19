@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/stage.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 /// 地は comp の値、市松はその見せ方。枠の事実の隣の 1 つの札で往復し、
 /// 透明のあいだだけ Stage が市松を敷く(Photoshop・AE と同じ描き方)。
@@ -46,7 +46,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: SizedBox(
             width: 464,

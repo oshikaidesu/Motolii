@@ -1,0 +1,8 @@
+# NOTICE
+
+このディレクトリは外部の Agent Skill をそのまま同梱した物(改変なし、CONTRIBUTING.md と .gitignore のみ除外)。
+
+- 出所: https://github.com/EliaAlberti/ux-audit-skill
+- commit: 76eb1ab73560c90275823395fda52c3ca4ea8b2b (2026-09-19 取得)
+- license: MIT (LICENSE 参照, Copyright (c) 2026 Elia Alberti)
+- 取り込み理由: 画面の写真から severity 付き・heuristic 出典付きで所見を出す手順。Motolii では .claude/skills/motolii-ux-audit が土台として呼ぶ。

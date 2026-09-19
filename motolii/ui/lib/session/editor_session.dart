@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../bridge/native_bridge.dart';
+import '../bridge/native_frames.dart';
 import '../bridge/protocol.dart';
 import '../foundation/theme.dart';
 
@@ -267,14 +271,22 @@ class EditorSession {
   /// values that move (liveLayers); they are laid over the document layers by id.
   List<Map<String, dynamic>> liveLayers() {
     if (!renderedIsFresh) return layers;
-    final r = rendered.value;
-    if (r['layers'] is List) return maps(r['layers']);
+    final r = rendered.value, s = state;
+    if (identical(r, _liveFromRendered) && identical(s, _liveFromState))
+      return _liveCache!;
+    _liveFromRendered = r;
+    _liveFromState = s;
+    if (r['layers'] is List) return _liveCache = maps(r['layers']);
     final live = {for (final l in maps(r['liveLayers'])) l['id']: l};
-    return [
+    return _liveCache = [
       for (final l in layers)
         if (live[l['id']] case final o?) overlayLayer(l, o) else l,
     ];
   }
+
+  /// One overlay per (document, frame): Stage and Inspector read the same list.
+  List<Map<String, dynamic>>? _liveCache;
+  Map<String, dynamic>? _liveFromRendered, _liveFromState;
 
   static Map<String, dynamic> overlayLayer(
     Map<String, dynamic> base,
@@ -322,17 +334,124 @@ class EditorSession {
 
   bool supports(String op) =>
       (state['capabilities'] as List? ?? const []).contains(op);
-  static Map<String, dynamic> map(dynamic v) =>
-      v is Map ? Map<String, dynamic>.from(v) : {};
-  static List<Map<String, dynamic>> maps(dynamic v) =>
-      (v as List? ?? const []).map(map).toList();
+
+  /// A reply, with every map and every list of maps typed, once. After this
+  /// [map] and [maps] hand back the object they are given. "Typed" is the
+  /// exact runtime type this makes: a narrower literal (a test's
+  /// `List<Map<String, Object>>`) is copied, so a reader's `orElse` fits.
+  static Object? typed(Object? v) {
+    if (v is Map) {
+      if (_typedMap(v)) return v;
+      return <String, dynamic>{
+        for (final e in v.entries) '${e.key}': typed(e.value),
+      };
+    }
+    if (v is List) {
+      if (v.isNotEmpty && v.every((e) => e is Map)) {
+        if (v.runtimeType == _mapsType && v.every(_typedMap)) return v;
+        return <Map<String, dynamic>>[
+          for (final e in v) typed(e) as Map<String, dynamic>,
+        ];
+      }
+      if (v.runtimeType == _listType && v.every(_typedLeaf)) return v;
+      return <dynamic>[for (final e in v) typed(e)];
+    }
+    return v;
+  }
+
+  static final _mapType = <String, dynamic>{}.runtimeType;
+  static final _mapsType = <Map<String, dynamic>>[].runtimeType;
+  static final _listType = <dynamic>[].runtimeType;
+  static bool _typedMap(Object? v) =>
+      v is Map && v.runtimeType == _mapType && v.values.every(_typedLeaf);
+  static bool _typedLeaf(Object? v) {
+    if (v is Map) return _typedMap(v);
+    if (v is List) {
+      if (v.runtimeType == _mapsType) return v.every(_typedMap);
+      return v.runtimeType == _listType && v.every(_typedLeaf);
+    }
+    return true;
+  }
+
+  /// Views, not copies: a typed map or list comes back as is. Callers that
+  /// change what they get copy first (`.toList()`, `{...}`).
+  static Map<String, dynamic> map(dynamic v) {
+    if (v is Map<String, dynamic> && v.runtimeType == _mapType) return v;
+    return v is Map ? Map<String, dynamic>.from(v) : {};
+  }
+
+  static List<Map<String, dynamic>> maps(dynamic v) {
+    if (v is List<Map<String, dynamic>> && v.runtimeType == _mapsType) return v;
+    if (v is! List) return const [];
+    return [for (final e in v) map(e)];
+  }
+
   Future<dynamic> native(
     String method, [
     Map<String, dynamic> args = const {},
-  ]) => _bridge.invoke(method, args);
+  ]) async {
+    final reply = await _bridge.invoke(method, args);
+    if (method == 'openPanelWindow') _panelWindows++;
+    return reply;
+  }
+
+  /// The same-frame path, once the host has handed over its runtime. Null in
+  /// tests and while no document is open: everything then goes by channel.
+  FfiFrames? _frames;
+  bool get sameFrame => _frames != null;
+
+  /// Panel windows the host shows besides this one; they read the document
+  /// through the host's broadcast, which this window feeds after each reply.
+  int _panelWindows = 0;
+
+  /// The IOSurfaces each view is drawn into (two, taken in turn, so the
+  /// raster of one frame never reads the surface the next is drawn into)
+  /// and the size they were made for.
+  final _surfaces = <String, ({int width, int height, List<int> ids})>{};
+  int _flip = 0;
+
+  void _bindFrames(Map<String, dynamic> envelope) {
+    final library = envelope['library'], context = envelope['context'];
+    if (library is! String || context is! int || windowInfo['main'] == false)
+      return;
+    try {
+      final held = _frames;
+      if (held == null) {
+        _frames = FfiFrames(library, context);
+      } else if (held.context != context) {
+        held.context = context;
+        _surfaces.clear();
+      }
+    } catch (e) {
+      debugPrint('PROBE room=bridge verdict=channel-fallback reason=$e');
+      _frames = null;
+    }
+  }
+
+  /// Replies that arrive while a frame is being built wait until it is done:
+  /// a build may not mark widgets outside its own subtree.
+  List<void Function()>? _deferred;
+  void _flushDeferred() {
+    final held = _deferred;
+    _deferred = null;
+    if (held == null) return;
+    for (final apply in held) {
+      try {
+        apply();
+      } catch (e) {
+        if (!_disposed) error.value = '$e';
+      }
+    }
+  }
+
   void _accept(dynamic reply, {bool notify = true}) {
     if (_disposed) return;
-    final envelope = map(reply);
+    if (_deferred case final held?) {
+      held.add(() => _accept(reply, notify: notify));
+      return;
+    }
+    final envelope = map(typed(reply));
+    _bindFrames(envelope);
     final inner = map(envelope['status']);
     final next = inner.isEmpty ? envelope : inner;
     if (next['error'] != null && '${next['error']}'.isNotEmpty) {
@@ -429,15 +548,24 @@ class EditorSession {
           refreshPreview();
         }
       }
+      // vism/ の file が変わった(host の見張り)。棚を読み直すのは main の窓の仕事。
+      if (call.method == 'effectsChanged' && windowInfo['main'] != false) {
+        command('reloadEffects');
+      }
       if (call.method == 'documentClosed') {
         _cancelCadence();
         playing.value = false;
         textureId.value = null;
         rendered.value = {};
         document.value = {};
+        _surfaces.clear();
+        _frames?.dispose();
+        _frames = null;
       }
-      if (call.method == 'windowClosed')
+      if (call.method == 'windowClosed') {
+        if (_panelWindows > 0) _panelWindows--;
         windowClosed?.call(map(call.arguments));
+      }
       if (call.method == 'dragHover')
         dragging.value = map(call.arguments)['active'] == true;
       if (call.method == 'filesDropped' &&
@@ -454,6 +582,7 @@ class EditorSession {
     final info = map(await native('windowInfo'));
     if (_disposed) return;
     windowInfo = info;
+    _panelWindows = (info['panelWindows'] as num?)?.toInt() ?? 0;
     panePlaces.value = map(map(info['paneState'])['places']);
     deskDrawer.value = map(info['paneState'])['drawer'] as String?;
     if (windowInfo['main'] == false) {
@@ -488,17 +617,59 @@ class EditorSession {
     });
   }
 
-  Future<dynamic> _request(
-    DocumentOperation operation, [
-    Map<String, dynamic> args = const {},
-  ]) => _bridge.request(operation, args, {
+  Map<String, dynamic> _snapshotContext(DocumentOperation operation) => {
     'knownSnapshotId': state['snapshotId'],
     'knownReferenceId': state['referenceId'],
     'deferSnapshot':
         operation != DocumentOperation.play &&
         operation != DocumentOperation.pause,
-  });
+  };
+
+  Future<dynamic> _request(
+    DocumentOperation operation, [
+    Map<String, dynamic> args = const {},
+  ]) {
+    if (_frames case final frames?) {
+      return Future.value(_requestNow(frames, operation, args));
+    }
+    return _bridge.request(operation, args, _snapshotContext(operation));
+  }
+
+  /// A specimen or a measurement answers this window alone; anything else
+  /// may have moved the document and is worth telling the other windows.
+  static const _askedAlone = {'visualSample', 'renderInfo', 'easeModel'};
+
+  Map<String, dynamic> _requestNow(
+    FfiFrames frames,
+    DocumentOperation operation,
+    Map<String, dynamic> args,
+  ) {
+    final raw = frames.request(
+      operation.encode({...args, ..._snapshotContext(operation)}),
+    );
+    final reply = map(typed(jsonDecode(raw)));
+    if (!_askedAlone.contains(operation.wireName) && reply['error'] == null) {
+      _broadcast(raw);
+    }
+    return reply;
+  }
+
+  void _broadcast(String status, {bool frameReady = false, bool frameOnly = false}) {
+    if (_panelWindows <= 0 || _disposed) return;
+    _bridge
+        .invoke('broadcast', {
+          'status': status,
+          'frameReady': frameReady,
+          'frameOnly': frameOnly,
+        })
+        .catchError((_) => null);
+  }
+
   Future<void> _render({bool notify = true, bool playback = false}) async {
+    if (_frames case final frames?) {
+      _renderNow(frames, notify: notify, playback: playback);
+      return;
+    }
     final response = await native('render', {
       'playing': playback,
       'knownSnapshotId': state['snapshotId'],
@@ -507,11 +678,147 @@ class EditorSession {
     _accept(response, notify: notify);
   }
 
+  /// Draw every view the runtime lists into its surface and take the status,
+  /// all before returning. A view whose surface is missing or the wrong size
+  /// is skipped this time: the host makes one (a channel round trip, once per
+  /// size) and the render repeats. Returns whether every view was drawn.
+  bool _renderNow(
+    FfiFrames frames, {
+    bool notify = true,
+    bool playback = false,
+  }) {
+    if (playback) {
+      final tick = map(jsonDecode(frames.request('{"op":"tick","quiet":true}')));
+      // The clock lands on whole frames, so most display frames ask for the
+      // picture that is already on screen. Nothing to draw: give the thread back.
+      if (tick['needsRender'] == false) return true;
+    }
+    final info = map(jsonDecode(frames.request('{"op":"renderInfo"}')));
+    if (info['error'] != null) throw StateError('${info['error']}');
+    final listed = maps(info['views']);
+    if (listed.isEmpty) throw StateError('Document dimensions missing');
+    final views = _shownViews.isEmpty
+        ? listed
+        : [
+            for (final v in listed)
+              if (_shownViews.contains('${v['view']}')) v,
+          ];
+    if (views.isEmpty) return true;
+    var drawn = false, missing = false;
+    _flip ^= 1;
+    for (final view in views) {
+      final name = '${view['view']}';
+      final width = (view['width'] as num).toInt(),
+          height = (view['height'] as num).toInt();
+      final have = _surfaces[name];
+      if (have == null || have.width != width || have.height != height) {
+        missing = true;
+        continue;
+      }
+      // One render costs 0.18 ms of CPU, so the GPU is waited for right here:
+      // the picture, its window and the status all belong to this one frame.
+      // The pair of surfaces per view still keeps the compositor off the one
+      // being written.
+      final surface = have.ids[_flip % have.ids.length];
+      final code = frames.render(surface, name);
+      if (code < 0) {
+        final status = map(jsonDecode(frames.request('{"op":"status"}')));
+        throw StateError('Rust render failed for $name: ${status['error']}');
+      }
+      drawn = true;
+    }
+    final raw = frames.request(
+      jsonEncode({
+        'op': 'status',
+        'knownSnapshotId': state['snapshotId'],
+        'knownReferenceId': state['referenceId'],
+      }),
+    );
+    _accept({
+      'status': jsonDecode(raw),
+      'frameReady': drawn,
+      'frameOnly': playback,
+    }, notify: notify);
+    _broadcast(raw, frameReady: drawn, frameOnly: playback);
+    if (missing) {
+      _serial(() async {
+        await _ensureSurfaces(views);
+        if (_frames case final frames?) _renderNow(frames, notify: notify);
+      }, displayBusy: false);
+    }
+    return !missing;
+  }
+
+  /// The host makes (or keeps) the surfaces and textures for these views and
+  /// drops the ones no longer listed.
+  Future<void> _ensureSurfaces(List<Map<String, dynamic>> views) async {
+    final reply = map(await native('ensureSurfaces', {'views': views}));
+    if (_disposed) return;
+    _surfaces.clear();
+    for (final entry in map(reply['surfaces']).entries) {
+      final surface = map(entry.value);
+      _surfaces[entry.key] = (
+        width: (surface['width'] as num).toInt(),
+        height: (surface['height'] as num).toInt(),
+        ids: [for (final id in surface['ids'] as List) (id as num).toInt()],
+      );
+    }
+    _accept(reply);
+  }
+
+  /// The same-frame path for a view change: the request, its render and the
+  /// status all complete before this frame is built, so the picture the
+  /// raster shows is the one asked for. The status reaches the notifiers
+  /// after the frame (a build may not mark widgets outside its own subtree).
+  /// Returns true when every view was drawn with the request applied; false
+  /// means the request went the ordinary way and the picture follows later.
+  bool commandNow(String op, [Map<String, dynamic> args = const {}]) {
+    final frames = _frames;
+    if (frames == null || _disposed || _pendingWork > 0 || _deferred != null) {
+      command(op, args);
+      return false;
+    }
+    final DocumentOperation operation;
+    try {
+      operation = DocumentOperation.parse(op);
+      DocumentOperation.validateArguments(args);
+    } catch (e) {
+      error.value = '$e';
+      return false;
+    }
+    _deferred = [];
+    scheduleMicrotask(_flushDeferred);
+    try {
+      final response = _requestNow(frames, operation, args);
+      final needsRender =
+          response['needsRender'] as bool? ?? operation.requiresRender;
+      final stateless =
+          response['ok'] == true ||
+          (response.length == 1 && response['needsRender'] == true);
+      if (!stateless) _accept(response);
+      if (!needsRender) return false;
+      return _renderNow(frames);
+    } catch (e) {
+      _deferred?.add(() => throw e);
+      return false;
+    }
+  }
+
   Future<void> refreshPreview() => _serial(() => _render(), displayBusy: false);
 
+  /// The views a tab is looking at. A hidden tab's picture is not drawn: the
+  /// Stage tab withdraws its window, and every other view (Camera) is skipped
+  /// here. Empty means nobody has said yet — draw them all, as before.
+  final _shownViews = <String>{};
+
   /// A Stage tab that comes into view asks for its own texture.
-  Future<void> attachView(String view) =>
-      _serial(() async => _accept(await native('attach', {'view': view})));
+  Future<void> attachView(String view) {
+    _shownViews.add(view);
+    return _serial(() async => _accept(await native('attach', {'view': view})));
+  }
+
+  /// A tab that leaves view (or is disposed) stops asking for its picture.
+  void detachView(String view) => _shownViews.remove(view);
 
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
@@ -553,8 +860,8 @@ class EditorSession {
       // 状態を持たない返信は 2 つだけ — 繰り延べた {"needsRender":true} と
       // quiet な seek/tick の {"ok":true}。それ以外は必ず取り込む。
       final stateless =
-          response.length == 1 &&
-          (response['needsRender'] == true || response['ok'] == true);
+          response['ok'] == true ||
+          (response.length == 1 && response['needsRender'] == true);
       if (!stateless) _accept(response);
       if (operation == DocumentOperation.select) {
         editingFocus.value = {'selection': true};
@@ -608,6 +915,17 @@ class EditorSession {
     _ticker?.dispose();
     _ticker = Ticker((_) {
       if (_disposed || generation != _generation || _pendingWork > 0) return;
+      // Same frame: the tick's picture and status are in before this frame builds.
+      if (_frames case final frames?) {
+        try {
+          _renderNow(frames, notify: false, playback: true);
+        } catch (e) {
+          debugPrint('PROBE room=playback verdict=cadence-stopped reason=$e');
+          _schedulePause(renderFinal: false);
+          error.value = '$e';
+        }
+        return;
+      }
       _serial(() async {
         if (_disposed || generation != _generation) return;
         try {
@@ -725,6 +1043,8 @@ class EditorSession {
       try {
         await native('close');
       } catch (_) {}
+      _frames?.dispose();
+      _frames = null;
     });
     for (final slice in _slices.values) {
       slice.dispose();

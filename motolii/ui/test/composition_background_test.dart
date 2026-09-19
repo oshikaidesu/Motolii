@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/composition_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/foundation/color_field.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/leaves.dart';
 
 class RecordingSession extends EditorSession {
   final commands = <(String, Map<String, dynamic>)>[];
@@ -33,7 +35,7 @@ void main() {
       };
       await tester.pumpWidget(
         MaterialApp(
-          theme: EditorTheme.data,
+          theme: editorTestTheme,
           home: Scaffold(
             body: SizedBox(
               width: 600,
@@ -55,7 +57,7 @@ void main() {
       // the focus to the Browser's wheel as the composition's background.
       expect(
         tester
-            .widgetList<TextField>(find.byType(TextField))
+            .widgetList<EditorTextField>(find.byType(EditorTextField))
             .every((f) => !(f.controller?.text ?? '').startsWith('#')),
         isTrue,
         reason: 'no hex on the sheet',

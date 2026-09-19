@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 Map<String, dynamic> _number(
   String id,
@@ -40,19 +40,28 @@ Map<String, dynamic> _document(Map<String, double> moved) {
         'blendMode': 'Normal',
         'projection': '2.5D',
         'properties': [
-          _number('position', 'Position', [at('position.0', 10), 20.0],
-              kind: 'vec2'),
+          _number('position', 'Position', [
+            at('position.0', 10),
+            20.0,
+          ], kind: 'vec2'),
           _number('position.z', 'Position Z', at('position.z', 0)),
-          _number('scale', 'Scale', [at('scale.0', 1), at('scale.1', 1)],
-              kind: 'vec2'),
+          _number('scale', 'Scale', [
+            at('scale.0', 1),
+            at('scale.1', 1),
+          ], kind: 'vec2'),
           _number('scale.z', 'Scale Z', at('scale.z', 1)),
           _number('rotation', 'Rotation', at('rotation', 0)),
           _number('rotation.x', 'Rotation X', at('rotation.x', 0)),
           _number('rotation.y', 'Rotation Y', at('rotation.y', 0)),
           _number('opacity', 'Opacity', at('opacity', 1)),
           _number('depth', 'Depth', at('depth', 0), min: 0, max: 100000),
-          _number('roughness', 'Roughness', at('roughness', 0.5),
-              min: 0, max: 1),
+          _number(
+            'roughness',
+            'Roughness',
+            at('roughness', 0.5),
+            min: 0,
+            max: 1,
+          ),
         ],
         'effects': [
           {
@@ -60,11 +69,21 @@ Map<String, dynamic> _document(Map<String, double> moved) {
             'name': 'Warp',
             'enabled': true,
             'params': [
-              _number('warp.param.amount', 'Amount', at('warp.param.amount', 2),
-                  min: 0, max: 10),
+              _number(
+                'warp.param.amount',
+                'Amount',
+                at('warp.param.amount', 2),
+                min: 0,
+                max: 10,
+              ),
               _number('warp.param.angle', 'Angle', at('warp.param.angle', 0)),
-              _number('warp.param.seed', 'Seed', at('warp.param.seed', 1),
-                  min: 0, max: 9999),
+              _number(
+                'warp.param.seed',
+                'Seed',
+                at('warp.param.seed', 1),
+                min: 0,
+                max: 9999,
+              ),
               _number(
                 'warp.param.center_x',
                 'Center X',
@@ -75,8 +94,12 @@ Map<String, dynamic> _document(Map<String, double> moved) {
                 'Center Y',
                 at('warp.param.center_y', 0),
               ),
-              _number('warp.param.mode', 'Mode', at('warp.param.mode', 0),
-                  choices: const ['Push', 'Pull']),
+              _number(
+                'warp.param.mode',
+                'Mode',
+                at('warp.param.mode', 0),
+                choices: const ['Push', 'Pull'],
+              ),
               {
                 'id': 'warp.param.tint',
                 'label': 'Tint',
@@ -112,21 +135,25 @@ void main() {
     final ops = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(EditorSession.channel, (call) async {
-      ops.add('${call.method} ${call.arguments}');
-      return <String, dynamic>{};
-    });
+          ops.add('${call.method} ${call.arguments}');
+          return <String, dynamic>{};
+        });
     final c = EditorSession();
     addTearDown(c.dispose);
     c.document.value = _document(const {});
-    await tester.pumpWidget(MaterialApp(
-      theme: EditorTheme.data,
-      home: Scaffold(body: InspectorPanel(controller: c)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: editorTestTheme,
+        home: Scaffold(body: InspectorPanel(controller: c)),
+      ),
+    );
     await tester.pumpAndSettle();
     ops.clear();
     final well = find.byKey(const ValueKey('inspector:position:0'));
     final at = tester.getCenter(well);
-    final fingers = await tester.createGesture(kind: PointerDeviceKind.trackpad);
+    final fingers = await tester.createGesture(
+      kind: PointerDeviceKind.trackpad,
+    );
     await fingers.panZoomStart(at);
     for (var n = 1; n <= 4; n++) {
       await fingers.panZoomUpdate(at, pan: Offset(-10.0 * n, 0));

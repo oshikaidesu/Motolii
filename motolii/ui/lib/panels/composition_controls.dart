@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';

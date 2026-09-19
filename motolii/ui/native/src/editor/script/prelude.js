@@ -205,3 +205,65 @@ globalThis.camera = create("camera");
 globalThis.group = (...layers) => { op("select", { ids: layers.map((l) => l.id) }); return new Layer(op("group").selected); };
 /** The window's effect names. */
 globalThis.effects = () => JSON.parse(__effects()).map((e) => e.name);
+
+/**
+ * Cuts on the beat: cuts(bpm, [[layerOrLayers, beats], ...]) lays each row back to back, a layer on screen only in its slot.
+ * A layer may sit in one slot only (duplicate it for a second cut). Returns the total seconds.
+ */
+globalThis.cuts = (bpm, table) => {
+  if (!(typeof bpm === "number" && bpm > 0)) throw new Error(`cuts: bpm must be a positive number, got ${JSON.stringify(bpm)}`);
+  if (!Array.isArray(table)) throw new Error("cuts: the table is [[layer, beats], ...]");
+  const beat = 60 / bpm;
+  const seen = new Set();
+  let at = 0;
+  for (const row of table) {
+    if (!Array.isArray(row) || row.length !== 2) throw new Error(`cuts: each row is [layer, beats], got ${JSON.stringify(row)}`);
+    const [what, beats] = row;
+    if (!(typeof beats === "number" && beats > 0)) throw new Error(`cuts: beats must be a positive number, got ${JSON.stringify(beats)}`);
+    const end = at + beats * beat;
+    const [from, to] = [frameOf(at), Math.max(frameOf(at) + 1, frameOf(end))];
+    for (const layer of Array.isArray(what) ? what : [what]) {
+      if (!(layer instanceof Layer)) throw new Error(`cuts: a row holds a layer or an array of layers, got ${JSON.stringify(layer)}`);
+      if (seen.has(layer.id)) throw new Error(`cuts: ${layer.label()} is in two cuts; a layer sits in one slot (duplicate it for another)`);
+      seen.add(layer.id);
+      op("setTiming", { layer: layer.id, start: from, duration: to - from, sourceIn: layer.json().sourceIn });
+    }
+    at = end;
+  }
+  return at;
+};
+
+/**
+ * Shuffle the letters of a text (Cavalry's Shuffle): shuffle(layer, { seconds, rate, charset, seed, settle }).
+ * Every 1/rate seconds the unsettled letters are redrawn from charset (seeded, so the same seed gives the same run);
+ * over the last `settle` seconds the letters settle left to right until the text reads as it was. Spaces stay.
+ */
+globalThis.shuffle = (layer, { seconds = 1, rate = 12, charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", seed = 0, settle } = {}) => {
+  if (!(layer instanceof Layer)) throw new Error("shuffle: the first argument is a text layer");
+  if (!(seconds > 0) || !(rate > 0)) throw new Error("shuffle: seconds and rate must be positive numbers");
+  if (typeof charset !== "string" || charset.length === 0) throw new Error("shuffle: charset is a non-empty string");
+  const settleFor = Math.min(seconds, settle ?? seconds / 2);
+  const row = layer.json().properties.find((p) => p.id === "content");
+  if (!row) throw new Error(`shuffle: ${layer.label()} has no text`);
+  const final = [...String(row.value)];
+  const draw = random(seed);
+  const letters = [...charset];
+  const written = new Set();
+  const writeAt = (frame, content, force = false) => {
+    if (written.has(frame) && !force) return;
+    written.add(frame);
+    op("seek", { frame });
+    const keyed = layer.json().contentKeys.some((k) => k.frame === frame);
+    if (!keyed) op("toggleKey", { layer: layer.id, property: "content" });
+    op("setText", { layer: layer.id, content });
+  };
+  for (let step = 0; step / rate < seconds - 1e-9; step += 1) {
+    const t = step / rate;
+    const settled = settleFor > 0 ? Math.max(0, (t - (seconds - settleFor)) / settleFor) : 0;
+    const locked = Math.floor(settled * final.length);
+    const content = final.map((ch, i) => (i < locked || ch === " " || ch === "\n" ? ch : letters[Math.floor(draw() * letters.length)]));
+    writeAt(frameOf(t), content.join(""));
+  }
+  writeAt(frameOf(seconds), final.join(""), true);
+  return layer;
+};

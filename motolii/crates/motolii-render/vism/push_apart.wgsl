@@ -1,18 +1,12 @@
-/*{
-  "ID": "motolii.push_apart",
-  "LABEL": "Push Apart",
-  "STAGE": "block",
-  "ROUNDS": 32,
-  "REACH": "margin",
-  "DESCRIPTION": "Things in the same box push each other apart until their margins clear (C4D Push Apart; Motolii's margin law). Each round measures everyone near at once and moves them together",
-  "INPUTS": [
-    { "NAME": "margin", "LABEL": "Margin", "TYPE": "float", "DEFAULT": 10.0, "MIN": 0.0, "MAX": 1000.0 }
-  ]
-}*/
+@description("Things in the same box push each other apart until their margins clear (C4D Push Apart; Motolii's margin law). Each round measures everyone near at once and moves them together")
+@rounds(32)
 
-fn block(k: u32, p: BlockParams) -> Offset {
+@label("Margin") @range(0.0, 1000.0) @reach
+override margin: f32 = 10.0;
+
+fn block(k: u32) -> Offset {
     let a = objects[k];
-    let ma = select(p.margin, a.margin, a.margin > 0.0);
+    let ma = select(margin, a.margin, a.margin > 0.0);
     let alo = now_lo(k) - vec2f(ma);
     let ahi = now_hi(k) + vec2f(ma);
     var step = vec2f(0.0);
@@ -21,7 +15,7 @@ fn block(k: u32, p: BlockParams) -> Offset {
         let b = objects[j];
         let s = a.weight + b.weight;
         if s <= 0.0 { continue; }
-        let mb = select(p.margin, b.margin, b.margin > 0.0);
+        let mb = select(margin, b.margin, b.margin > 0.0);
         let blo = now_lo(j) - vec2f(mb);
         let bhi = now_hi(j) + vec2f(mb);
         // 中心から中心への向きに、離れるのに要るだけ(浅い軸で押すと、軸が入れ替わる瞬間に向きが 90° 跳ぶ)。

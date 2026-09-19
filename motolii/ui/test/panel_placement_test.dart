@@ -5,7 +5,7 @@ import '../lib/app/editor_window.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/layout.dart';
 import '../lib/foundation/panel_catalog.dart';
-import '../lib/foundation/theme.dart';
+import 'support/editor_test_theme.dart';
 
 void main() {
   testWidgets('Settings shares placement while only auxiliary tools use Desk', (
@@ -49,7 +49,7 @@ void main() {
       }
     });
     await tester.pumpWidget(
-      MaterialApp(theme: EditorTheme.data, home: const EditorWindow()),
+      MaterialApp(theme: editorTestTheme, home: const EditorWindow()),
     );
     await tester.pumpAndSettle();
     final dynamic host = tester.state(find.byType(EditorWindow));

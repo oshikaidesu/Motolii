@@ -2,12 +2,16 @@
 // 調査 2026-09-18(docs/reviews/2026-09-18-gpu-mograph-survey.md): 3 社とも「法 × 形の重み」で、法の中身は Notch だけが text(HLSL)。
 // ここでは重み(形)だけを関数にし、法はどの札でも書ける。使い方: `return ef_apply(law, ef_box(centre, box_lo, box_hi, soft) * strength);`
 // 引用のルール: 札はここの関数を import して呼ぶだけ。ここを直せば引いた札全部に届く。
-import package::motolii::{ Offset, now_lo, now_hi };
+import package::motolii::{ Offset, now_lo, now_hi, objects, NO_OBJECT };
 import package::cavalry::{ cv_range, cv_noise };
 import package::processing::random;
 
 /// 今の中心(前の段の結果込み)。段は同じコマで順に走るので、前の札が動かした後の位置で形を判定できる = 関係のチェーン。
 fn now_centre(k: u32) -> vec2f { return (now_lo(k) + now_hi(k)) * 0.5; }
+
+/// 名指しの相手の今の中心(相手の休みの箱の中心 + 相手の今のずれ)。CSS の `anchor()` / AE の parent。相手が無ければ自分の今の中心。
+fn anchor_centre(k: u32) -> vec2f { let j = objects[k].anchor_slot; if j == NO_OBJECT { return now_centre(k); } return now_centre(j); }
+fn parent_centre(k: u32) -> vec2f { let j = objects[k].parent_slot; if j == NO_OBJECT { return now_centre(k); } return now_centre(j); }
 
 /// 重み w で Offset を「無し」へ寄せる(rotate は度)(w = 1 で法そのまま、0 で NO_OFFSET)。Notch の Strength / Unreal の Effector Weight。
 fn ef_apply(d: Offset, w: f32) -> Offset {

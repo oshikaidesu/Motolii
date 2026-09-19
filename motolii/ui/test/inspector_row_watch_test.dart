@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/foundation/color_field.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 /// Every row of the Inspector watches its own value now, so the danger is the
 /// opposite of a rebuild storm: a row that quietly stops following the
@@ -161,7 +161,7 @@ void main() {
     c.document.value = _document(const {});
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );

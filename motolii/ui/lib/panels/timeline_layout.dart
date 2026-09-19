@@ -104,7 +104,7 @@ class _LaneLayout {
       final nested = <_LaneContainer>[];
       if (row.isGroup) row.descendants = descendants(id, {});
       if (expanded.contains(id)) {
-        final properties = EditorSession.maps(layer['properties']);
+        final properties = EditorSession.maps(layer['properties']).toList();
         if (layer['contentKeys'] is List &&
             !properties.any((p) => p['id'] == 'content'))
           properties.add({

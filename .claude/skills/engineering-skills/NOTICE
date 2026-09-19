@@ -1,0 +1,10 @@
+Source: https://github.com/addyosmani/agent-skills (commit c004a74)
+License: MIT (c) 2025 Addy Osmani — LICENSE copied verbatim
+Copied verbatim, unmodified: interview-me, constraint-driven-development,
+doubt-driven-development, incremental-implementation, performance-optimization,
+code-simplification, planning-and-task-breakdown, spec-driven-development.
+Not copied: the rest of the 25 (CI, security, git, browser testing, shipping,
+observability, api design, frontend-ui, deprecation, docs/ADR, context
+engineering, source-driven, test-driven, debugging, idea-refine, using-agent-skills).
+Motolii note: read these as the generic discipline. Motolii's own rulings win
+where they differ (UX の合否は利用者、家は 5 つ、足すなら消す — motolii/AGENTS.md).

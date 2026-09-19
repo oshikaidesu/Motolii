@@ -26,9 +26,21 @@ void main() {
       ],
       'catalog': [
         {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass'},
-        {'id': 'motolii.pucker_bloat', 'name': 'Pucker & Bloat', 'stage': 'Path'},
-        {'id': 'motolii.turbulent_warp', 'name': 'Turbulent Warp 2D', 'stage': 'Warp'},
-        {'id': 'motolii.turbulent_displace', 'name': 'Turbulent Displace', 'stage': 'Field'},
+        {
+          'id': 'motolii.pucker_bloat',
+          'name': 'Pucker & Bloat',
+          'stage': 'Path',
+        },
+        {
+          'id': 'motolii.turbulent_warp',
+          'name': 'Turbulent Warp 2D',
+          'stage': 'Warp',
+        },
+        {
+          'id': 'motolii.turbulent_displace',
+          'name': 'Turbulent Displace',
+          'stage': 'Field',
+        },
       ],
     };
     c.deskWork.value = {'browserView': 0};
@@ -58,18 +70,20 @@ void main() {
     await mount(tester, [1, 2]);
     expect(tile('motolii.pucker_bloat'), findsOneWidget);
   });
-  testWidgets('material warp and spatial field have separate visible families', (tester) async {
-    await mount(tester, [2]);
-    expect(tile('motolii.turbulent_warp'), findsOneWidget);
-    expect(tile('motolii.turbulent_displace'), findsOneWidget);
-    await tester.tap(find.text('Distort'));
-    await tester.pump();
-    expect(tile('motolii.turbulent_warp'), findsOneWidget);
-    expect(tile('motolii.turbulent_displace'), findsNothing);
-    await tester.tap(find.text('3D'));
-    await tester.pump();
-    expect(tile('motolii.turbulent_warp'), findsNothing);
-    expect(tile('motolii.turbulent_displace'), findsOneWidget);
-  });
-
+  testWidgets(
+    'material warp and spatial field have separate visible families',
+    (tester) async {
+      await mount(tester, [2]);
+      expect(tile('motolii.turbulent_warp'), findsOneWidget);
+      expect(tile('motolii.turbulent_displace'), findsOneWidget);
+      await tester.tap(find.text('Distort'));
+      await tester.pump();
+      expect(tile('motolii.turbulent_warp'), findsOneWidget);
+      expect(tile('motolii.turbulent_displace'), findsNothing);
+      await tester.tap(find.text('3D'));
+      await tester.pump();
+      expect(tile('motolii.turbulent_warp'), findsNothing);
+      expect(tile('motolii.turbulent_displace'), findsOneWidget);
+    },
+  );
 }

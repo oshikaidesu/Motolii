@@ -5,9 +5,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/foundation/theme.dart';
 import '../lib/panels/browser.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
+
+import '../lib/foundation/leaves.dart';
 
 /// Live 12's browser, on the Fonts shelf: filter groups the item's own facts
 /// fill, the user's tags and collections kept with the desk, and a filter
@@ -66,7 +68,7 @@ void main() {
     c.deskWork.value = {'browserRail': 120.0};
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: BrowserPanel(controller: c, fixedTab: 'Fonts'),
         ),
@@ -263,7 +265,7 @@ void main() {
       await tester.tap(find.text('Clear'));
       await tester.pumpAndSettle();
       expect(tile('Georgia'), findsOneWidget);
-      await tester.tap(find.widgetWithText(InkWell, 'serif').last);
+      await tester.tap(find.widgetWithText(EditorPress, 'serif').last);
       await tester.pumpAndSettle();
       expect(tile('Georgia'), findsNothing);
       // The × on the chip takes our tag off again; the default facts stay.
@@ -311,7 +313,7 @@ void main() {
     c.deskWork.value = {'browserRail': 120.0, 'browserView': 0};
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: BrowserPanel(controller: c, fixedTab: tab),
         ),

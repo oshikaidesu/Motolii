@@ -9,6 +9,8 @@ import '../lib/foundation/panel_controls.dart';
 import '../lib/input/editor_shortcuts.dart';
 import '../lib/session/editor_session.dart';
 
+import '../lib/foundation/leaves.dart';
+
 /// 打ち始めた瞬間に別の数へ化けない。見えていた桁と単位のまま、枡の中で打つ。
 Future<void> _open(WidgetTester tester) async {
   final at = tester.getCenter(find.byType(EditorNumericField));
@@ -47,7 +49,7 @@ void main() {
 
     await _open(tester);
 
-    final field = tester.widget<TextField>(find.byType(TextField));
+    final field = tester.widget<EditorTextField>(find.byType(EditorTextField));
     expect(field.controller!.text, '-19');
     // 単位の札は打っている間も居る。
     expect(find.text('px'), findsOneWidget);
@@ -62,7 +64,7 @@ void main() {
     await _open(tester);
 
     expect(tester.getRect(find.byType(EditorNumericField)), resting);
-    final field = tester.widget<TextField>(find.byType(TextField));
+    final field = tester.widget<EditorTextField>(find.byType(EditorTextField));
     expect(field.controller!.text, '0.00');
     expect(field.textAlign, TextAlign.right);
   });
@@ -114,15 +116,15 @@ void main() {
         ),
       );
       await _open(tester);
-      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(EditorTextField), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.pump();
       expect(commands, isEmpty, reason: 'typing A must not enable Animate');
-      await tester.enterText(find.byType(TextField), '1100');
+      await tester.enterText(find.byType(EditorTextField), '1100');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
       expect(committed, [1100]);
-      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(EditorTextField), findsNothing);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
-import '../lib/foundation/theme.dart';
 import '../lib/panels/browser.dart';
 import '../lib/panels/history_records.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/panels/timeline.dart';
 import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
 
 /// A panel rebuilds when the widget it hands back is a fresh object.
 class _Rebuilds {
@@ -83,7 +83,7 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        theme: EditorTheme.data,
+        theme: editorTestTheme,
         home: Scaffold(
           body: Column(
             children: [

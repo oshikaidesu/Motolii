@@ -1,15 +1,17 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../foundation/theme.dart';
 import '../../foundation/metrics.dart';
 import '../../session/editor_session.dart';
+import '../../foundation/glyphs.dart';
+import '../../foundation/leaves.dart';
 
 /// A bordered action beside the search field.
 Widget shelfAction(String label, VoidCallback? press) => EditorTooltip(
   message: press == null ? '$label · unavailable' : label,
-  child: InkWell(
+  child: EditorPress(
     onTap: press,
     child: Container(
       height: EditorMetrics.row,
@@ -39,13 +41,13 @@ Widget shelfButton(
   bool selected = false,
 }) => EditorTooltip(
   message: press == null ? '$label · unavailable' : label,
-  child: InkWell(
+  child: EditorPress(
     onTap: press,
     child: Container(
       height: EditorMetrics.control,
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-      color: selected ? EditorTheme.raised : Colors.transparent,
+      color: selected ? EditorTheme.raised : EditorTheme.clear,
       child: Text(
         label,
         maxLines: 1,
@@ -73,17 +75,17 @@ Widget shelfViews(EditorSession controller, int viewMode) => DecoratedBox(
     mainAxisSize: MainAxisSize.min,
     children: [
       for (final (mode, icon, label) in [
-        (0, Icons.grid_view, 'Grid'),
-        (1, Icons.view_list, 'List'),
-        (2, Icons.crop_landscape, 'Thumbnails'),
+        (0, Glyph.grid_view, 'Grid'),
+        (1, Glyph.view_list, 'List'),
+        (2, Glyph.crop_landscape, 'Thumbnails'),
       ])
         Container(
           width: EditorMetrics.control,
           height: EditorMetrics.row,
-          color: viewMode == mode ? EditorTheme.raised : Colors.transparent,
+          color: viewMode == mode ? EditorTheme.raised : EditorTheme.clear,
           child: EditorTooltip(
             message: label,
-            child: IconButton(
+            child: EditorIconButton(
               key: ValueKey('browser:view:$mode'),
               iconSize: EditorMetrics.s14,
               color: viewMode == mode ? EditorTheme.ink : EditorTheme.muted,

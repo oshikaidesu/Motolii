@@ -1,12 +1,14 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
 import '../../foundation/panel_controls.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
+import '../../foundation/leaves.dart';
 
 /// Fonts: the editor at the top says which characters of the selected text
 /// layer are being dressed (a script, a case, or all of it) and how they sit
@@ -204,7 +206,7 @@ class FontsShelf extends BrowserShelf {
         border: Border(
           left: BorderSide(
             width: EditorMetrics.s3,
-            color: chosen ? EditorTheme.accent : Colors.transparent,
+            color: chosen ? EditorTheme.accent : EditorTheme.clear,
           ),
           bottom: const BorderSide(color: EditorTheme.line),
         ),
@@ -417,13 +419,13 @@ class _Justify extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final entry in const {
-          0: (Icons.format_align_left, 'Align left'),
-          2: (Icons.format_align_center, 'Align center'),
-          1: (Icons.format_align_right, 'Align right'),
+          0: (Glyph.format_align_left, 'Align left'),
+          2: (Glyph.format_align_center, 'Align center'),
+          1: (Glyph.format_align_right, 'Align right'),
         }.entries)
           SizedBox(
             width: EditorMetrics.control,
-            child: IconButton(
+            child: EditorIconButton(
               key: ValueKey('fonts:justify:${entry.key}'),
               tooltip: entry.value.$2,
               isSelected: value == entry.key,

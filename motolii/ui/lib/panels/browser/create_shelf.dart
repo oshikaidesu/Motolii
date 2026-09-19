@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
 import '../../session/editor_session.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
 
 /// Create: text, shapes, paths, helpers and the bundled 3D bodies; a
 /// double-click adds one to the composition.
@@ -95,7 +96,7 @@ class CreateShelf extends BrowserShelf {
     return Center(
       child: host.id(item) == 'camera'
           ? Icon(
-              Icons.videocam_outlined,
+              Glyph.videocam_outlined,
               size: EditorMetrics.bar,
               color: identity,
             )

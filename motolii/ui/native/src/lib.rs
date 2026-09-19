@@ -9,6 +9,7 @@ mod export_job;
 mod freeze_job;
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use motolii_doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, Value};
@@ -71,6 +72,30 @@ pub struct EditorRuntime {
     effects_watch: Option<motolii_render::engine::CatalogWatcher>,
     /// 直前に走らせたスクリプト: (file, 走る前の履歴の位置, 走った後の位置)。Rerun はここへ戻して走らせ直す。
     last_script: Option<(String, i64, i64)>,
+    /// GPU completion callback registration. Unregistering also cancels queued signals.
+    frame_ready: Arc<Mutex<Option<FrameTarget>>>,
+}
+
+/// `(user, view, surface_id)`: この IOSurface にこの view の絵が入った。
+pub type FrameReady = unsafe extern "C" fn(*mut std::ffi::c_void, *const c_char, u32);
+
+struct FrameTarget { ready: FrameReady, user: usize }
+/// C の callback を別 thread へ渡すための包み。中身は host が渡した関数と不透明な user。
+struct Signal { target: Arc<Mutex<Option<FrameTarget>>>, view: CString, surface: u32 }
+impl Signal {
+    fn fire(self) {
+        let target = self.target.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(target) = &*target {
+            unsafe { (target.ready)(target.user as *mut std::ffi::c_void, self.view.as_ptr(), self.surface) }
+        }
+    }
+}
+
+impl Drop for EditorRuntime {
+    fn drop(&mut self) {
+        *self.frame_ready.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        let _ = self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely());
+    }
 }
 
 impl EditorRuntime {
@@ -91,7 +116,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), freezer: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_snap: [None, None], stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None, last_script: None })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_snap: [None, None], stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), stage_window: None, stage_view: View::User, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history, effects_watch: None, last_script: None, frame_ready: Default::default() })
     }
 
     /// Freeze の cache の置き場: 書類の隣。未保存の書類は temp(保存した時に引っ越さない — Freeze し直す)。
@@ -150,8 +175,8 @@ impl EditorRuntime {
 
 
     fn render(&mut self, surface_id: u32, view: View) -> Result<(), String> {
-        let surface = IOSurfaceRef::lookup(surface_id).ok_or("IOSurface lookup failed")?;
         let window = self.window(view)?;
+        let surface = IOSurfaceRef::lookup(surface_id).ok_or("IOSurface lookup failed")?;
         if surface.width() != window.width as usize || surface.height() != window.height as usize {
             return Err(format!("IOSurface dimensions differ from the {} window", view.name()));
         }
@@ -183,10 +208,16 @@ impl EditorRuntime {
             })
         };
         drop(hal);
-        self.render_into(&texture, view, window)
+        self.render_into_surface(&texture, view, window, surface_id)
     }
 
+    /// 窓を持たない道(試験)。合図の surface は 0。
+    #[cfg(test)]
     fn render_into(&mut self, texture: &wgpu::Texture, view: View, window: Window) -> Result<(), String> {
+        self.render_into_surface(texture, view, window, 0)
+    }
+
+    fn render_into_surface(&mut self, texture: &wgpu::Texture, view: View, window: Window, surface_id: u32) -> Result<(), String> {
         let started = Instant::now();
         let time = self.time()?;
         let view_camera = self.view_camera(view)?;
@@ -195,8 +226,14 @@ impl EditorRuntime {
         let outline: &[LayerId] = if self.clock.playing() { &[] } else { &self.selected_ids };
         self.engine.render_frame_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window).map_err(|e|e.to_string())?;
         if self.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
+        let signal = Signal {
+            target: Arc::clone(&self.frame_ready), surface: surface_id,
+            view: CString::new(view.name()).unwrap_or_default(),
+        };
         self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).map_err(|e|e.to_string())?;
         self.take_selection_bounds(view, window);
+        // 描き終わった所で、呼んだ thread のままその場で鳴る。
+        signal.fire();
         self.snapshot_cache.borrow_mut().invalidate_geometry();
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -287,7 +324,9 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         return probe.reply.as_ptr();
     }
     if quiet && probe.error.is_none() {
-        probe.reply = CString::new("{\"ok\":true}").unwrap();
+        // 静かな tick/seek でも「絵が動いたか」は返す。動いていなければ窓は描かない。
+        let moved = before_image != probe.image_key();
+        probe.reply = CString::new(format!("{{\"ok\":true,\"needsRender\":{moved}}}")).unwrap();
         return probe.reply.as_ptr();
     }
     let needs_render = before_image != probe.image_key();
@@ -314,6 +353,19 @@ pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_i
     }
 }
 
+/// Register `ready(user, view, surface_id)` for completed renders. The render is
+/// synchronous, so the callback runs on the calling thread inside `motolii_probe_render`.
+/// Removing/replacing the registration cancels old signals. A callback must not
+/// re-enter this setter; `user` must live until unregister returns.
+#[no_mangle]
+pub unsafe extern "C" fn motolii_probe_set_frame_ready(ctx: *mut EditorRuntime, ready: Option<FrameReady>, user: *mut std::ffi::c_void) -> i32 {
+    if ctx.is_null() { return -1; }
+    let probe = unsafe { &mut *ctx };
+    *probe.frame_ready.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    probe.frame_ready = Arc::new(Mutex::new(ready.map(|ready| FrameTarget { ready, user: user as usize })));
+    0
+}
+
 /// 効果の棚(vism/)の見張りを立てる。file が変わる度に `wake(user)` が別 thread から呼ばれる。
 /// 呼ばれた側は自分の thread へ戻してから `{"op":"reloadEffects"}` を送る。
 /// 焼き込み build(load_shaders_from_disk 無し)では見張りは空で、0 を返すだけ。
@@ -337,4 +389,40 @@ pub unsafe extern "C" fn motolii_probe_watch_effects(ctx: *mut EditorRuntime, wa
 #[no_mangle]
 pub unsafe extern "C" fn motolii_probe_close(ctx: *mut EditorRuntime) {
     if !ctx.is_null() { let _ = catch_unwind(AssertUnwindSafe(|| { let mut probe = unsafe { Box::from_raw(ctx) }; probe.history.close(); drop(probe); })); }
+}
+
+#[cfg(test)]
+mod frame_ready_tests {
+    use super::*;
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFString};
+
+    unsafe extern "C" fn count(user: *mut std::ffi::c_void, view: *const c_char, surface: u32) {
+        let seen = unsafe { &mut *(user as *mut Vec<(String, u32)>) };
+        seen.push((unsafe { CStr::from_ptr(view) }.to_str().unwrap().to_owned(), surface));
+    }
+
+    /// 描くたびに合図が 1 回、描いた view と surface を持って、同じ thread で来る。外せば来ない。
+    #[test]
+    fn the_frame_ready_signal_fires_once_per_render() {
+        let mut rt = EditorRuntime::open("").unwrap();
+        let comp = rt.doc.view().composition().unwrap().unwrap().spec();
+        let keys: Vec<&CFString> = unsafe { vec![objc2_io_surface::kIOSurfaceWidth, objc2_io_surface::kIOSurfaceHeight, objc2_io_surface::kIOSurfaceBytesPerElement, objc2_io_surface::kIOSurfacePixelFormat] };
+        let values = [CFNumber::new_i32(comp.width as i32), CFNumber::new_i32(comp.height as i32), CFNumber::new_i32(4), CFNumber::new_i32(u32::from_be_bytes(*b"BGRA") as i32)];
+        let values: Vec<&CFNumber> = values.iter().map(|v| &**v).collect();
+        let properties = CFDictionary::from_slices(&keys, &values);
+        let surface = unsafe { IOSurfaceRef::new(properties.as_opaque()) }.expect("IOSurface");
+        let mut seen: Vec<(String, u32)> = Vec::new();
+        let user = &mut seen as *mut _ as *mut std::ffi::c_void;
+        assert_eq!(unsafe { motolii_probe_set_frame_ready(&mut rt, Some(count), user) }, 0);
+        for _ in 0..2 {
+            assert_eq!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Camera".as_ptr()) }, 0, "{:?}", rt.error);
+        }
+        assert_eq!(seen, vec![("Camera".to_owned(), surface.id()); 2]);
+        // 失敗した描画は合図しない。
+        assert_ne!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Nowhere".as_ptr()) }, 0);
+        assert_eq!(seen.len(), 2);
+        assert_eq!(unsafe { motolii_probe_set_frame_ready(&mut rt, None, std::ptr::null_mut()) }, 0);
+        assert_eq!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Camera".as_ptr()) }, 0);
+        assert_eq!(seen.len(), 2);
+    }
 }

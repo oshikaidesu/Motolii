@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../app/editor_window.dart' show effectsNotice;
 import '../../foundation/metrics.dart';
@@ -6,6 +6,8 @@ import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../native_visual_sample.dart';
 import 'shelf.dart';
+import '../../foundation/glyphs.dart';
+import '../../foundation/leaves.dart';
 
 /// Effects: the shelf of effects the engine knows. A tile is the effect's
 /// snapshot picture (VST3's plug-in snapshot); the glyph stays when it ships
@@ -55,12 +57,12 @@ class EffectsShelf extends BrowserShelf {
         children: [
           EditorTooltip(
             message: 'Reload effects',
-            child: IconButton(
+            child: EditorIconButton(
               key: const ValueKey('browser:effects:reload'),
               iconSize: EditorMetrics.s14,
               color: EditorTheme.muted,
               onPressed: () => host.controller.command('reloadEffects'),
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Glyph.refresh),
             ),
           ),
           const SizedBox(width: EditorMetrics.s4),

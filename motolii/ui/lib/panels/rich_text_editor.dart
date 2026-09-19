@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../foundation/metrics.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../session/editor_session.dart';
+import '../foundation/leaves.dart';
 
 class StyledTextController extends TextEditingController {
   StyledTextController({required super.text});
@@ -351,7 +352,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
           minHeight: EditorMetrics.s96,
           maxHeight: EditorMetrics.s200,
           padding: const EdgeInsets.all(EditorMetrics.s8),
-          child: TextField(
+          child: EditorTextField(
             key: const ValueKey('rich-text-content'),
             controller: _text,
             focusNode: _focus,
@@ -362,7 +363,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
               height: 1.3,
               color: EditorTheme.ink,
             ),
-            decoration: const InputDecoration(hintText: 'Type here'),
+            hint: 'Type here',
             onChanged: _typed,
           ),
         ),

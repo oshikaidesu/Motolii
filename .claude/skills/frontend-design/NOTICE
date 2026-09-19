@@ -1,0 +1,8 @@
+frontend-design skill
+Source: https://github.com/anthropics/skills — path skills/frontend-design/
+Commit: 34040c9c568585f6929bedeaad110ad08f079624 (2026-09-10)
+License: Apache License 2.0 (see LICENSE; original file name LICENSE.txt)
+Copyright: Anthropic, PBC
+Modification: SKILL.md frontmatter line "license: Complete terms in LICENSE.txt"
+changed to "license: Complete terms in LICENSE" (file renamed). No other changes.
+MOTOLII.md is a local companion, not part of the upstream skill.

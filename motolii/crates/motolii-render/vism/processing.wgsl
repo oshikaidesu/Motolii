@@ -1,6 +1,6 @@
 // 関数の棚の下の段(WESL の module `package::processing`): Processing の語彙(reference の名前と引数の順のまま)。WGSL の組み込みと同じ物は書かない
 // (lerp = mix、constrain = clamp、dist = distance、sq = x * x)。上の段(cavalry.wgsl)はこれを import して呼ぶ。
-// manifest の頭が無い .wgsl は札でなく module。札は `import package::processing::{ map, random };` で引く。
+// 頭の JSON も `fn block(` も無い .wgsl は札でなく module。札は `import package::processing::{ map, random };` で引く。
 
 /// map(value, start1, stop1, start2, stop2): 範囲の写し替え。
 fn map(value: f32, start1: f32, stop1: f32, start2: f32, stop2: f32) -> f32 {
