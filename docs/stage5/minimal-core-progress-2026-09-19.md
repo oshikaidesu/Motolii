@@ -163,7 +163,22 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 
 この逆転で、同梱一式に黙って寄りかかっていた test が 4 件露見した(見本の `blank_project()` を含む)。どれも必要な効果を自分で登録する形へ直した。
 
-**まだ `extensions/` は `motolii-doc` の中にある。** 参照が 0 になったので物理的に出せる状態だが、出し先は `motolii-render/src/extensions/`(「contracts live in doc; implementations are selected here」と既に書いてある場所)で、家は増えない。
+### 同梱の効果をコアの外へ(物理)
+
+参照が 0 になったので、`motolii-doc/src/extensions/` を `motolii-render/src/extensions/` へ移した。行き先は「contracts live in doc; implementations are selected here」と既に書いてあった場所で、**家は増えていない**(doc・render・ui・vism・tests のまま)。
+
+| | 前 | 後 |
+|---|---|---|
+| `motolii-doc` | 77 file / 22,374 行 | **71 file / 21,259 行** |
+| 同梱の効果 | doc の中 | `motolii-render/src/extensions/` 10 file / 1,687 行 |
+
+**コアは効果を 1 つも compile しない。** 契約(`store::kind` の `PlacementProgram`・`SamplingProgram`・`SnapProgram`・`Programs`)だけが残る。
+
+移動で露見した物:
+
+- 見本の `blank_project()` は効果ゼロになった。効果を使う検査は `with_programs` で自分が要る物を登録する。
+- 同梱の振る舞いを見ていた結合 test 5 件(Repeater の Transform、Group の子の引き、Motion のサンプル、Blob の飛び番)は `motolii-render/tests/bundled_effects.rs` へ移した。効果の検査は効果の家に置く。
+- コアに残った 1 件(写しの重なり順)は、必要な配置効果を**その test 自身が定義する**形にした。何を試しているかが test に書いてある。
 
 ### 構造で守る(検査)
 
@@ -229,5 +244,10 @@ Rustの依存環境は[CONTRIBUTING](../../CONTRIBUTING.md)と開発スクリプ
 | `f3055fb62` | 止め具・cacheをviewの`Scratch`へ、隠れた大域を検査で禁止 |
 | `851a14b97` | layoutを時刻・文字・並べる・道・箱へ分割、解き手の名は1箇所 |
 | `4e55c0377` | flow→boxesの継ぎ目を`Extent`1つへ(8口→4口) |
+| `c8dbf2be6` | Motion Blur を `SamplingProgram`/`Shutter` で受け取る |
+| `eb0e60b84` | 格子寄せと子の引きを効果の申告へ |
+| `10c35273f` | 3 本の lookup を `Programs` 1 枚へ |
+| `e0dc63908` | 効果は書類を開く側が渡す(既定は効果ゼロ) |
+| `94351a6cd` | 同梱の効果を `motolii-render/src/extensions/` へ移設 |
 | `d85909621` | `push_placements`の説明をapply_fieldsの上から戻す(元からの取り違え) |
 | `8351ecc68` | resolveを観測・文字・切り・効果列・整える手・写しへ分割 |
