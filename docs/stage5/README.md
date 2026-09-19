@@ -4,6 +4,8 @@
 
 進行中の引き継ぎ作業は[2026-09-11作業表](claude-handoff-2026-09-11.md)に記録する。
 
+最小コア化の到達点・検証・残件は[2026-09-19進捗・引き継ぎ](minimal-core-progress-2026-09-19.md)を参照。
+
 ## コンセプトと採用事項
 
 [根本コンセプト](../concept.md) → [UIと操作の採用事項](product-contract.md) → [文書の救出・照合](document-map.md)。保存形式・GPU共有・測定の範囲は[技術境界](technical-boundaries.md)。下記は実装の配置と移行状況であり、製品コンセプトの代わりではない。
