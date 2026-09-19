@@ -98,6 +98,11 @@ impl<'a> StoreView<'a> {
         (program.snapping)(program.plugin_id, params)
     }
 
+    /// 見つけた格子へ寄せる気のある効果か(寄せるかどうかは取っ手次第)。
+    pub(crate) fn is_snap_effect(&self, plugin_id: &str) -> bool {
+        (self.programs.snap)(plugin_id).is_some()
+    }
+
     pub(crate) fn is_sampling_effect(&self, plugin_id: &str) -> bool {
         (self.programs.sampling)(plugin_id).is_some()
     }

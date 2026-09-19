@@ -85,8 +85,10 @@ impl<'a> StoreView<'a> {
     /// 寄せる気のある効果に、拾った物の箱の辺を渡して線を立ててもらい、その線へ画面の上で寄せる。
     /// 線は寄せる前の箱から立てる(寄せた結果を読み直さない)。どの辺が同じ線に乗るかはコアの知る所ではない。
     fn snap_to_found_grids(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+        // 相手を拾う効果は層に 1 つ(最初の 1 つ)。それが寄せる気でなければ、この層は寄せない。
         let snappers: Vec<(LayerId, crate::doc::store::kind::Snapping)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
-            l.effects.iter().find_map(|e| Some((l.id, self.snapping_of(&e.plugin_id, &e.params)?)))
+            let effect = l.effects.iter().find(|e| self.is_snap_effect(&e.plugin_id))?;
+            Some((l.id, self.snapping_of(&effect.plugin_id, &effect.params)?))
         }).collect();
         for (overlay_layer, snap) in snappers {
             let scope = self.overlay_scope(overlay_layer, out, t)?;
