@@ -193,6 +193,23 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 
 **効果を触ってもコアは再 build されない。** これは移設の前は成り立っていなかった。ただし render が太いので時間は 31.4 → 24.9s にしか縮んでいない — 「コアを触らない」は達成したが、「速くなった」はまだ小さい。次に効くのは render 側の分割で、そこは今回の範囲外。
 
+### 今夜の検証(回帰は無し)
+
+| 対象 | 結果 |
+|---|---|
+| doc 単体 | **111 成功** |
+| doc 編集 transaction | **16 成功** |
+| doc 配置 program(効果の受け渡しを含む) | **3 成功** |
+| 同梱の効果(`motolii-render/tests/bundled_effects.rs`) | **5 成功** |
+| doc `owned_budget` | 失敗(既知、残件7) |
+| render 単体 | 218 成功・**13 失敗** |
+| ui 単体 | 86 成功・**5 失敗** |
+| 構成検査・native build | PASS |
+
+失敗 18 件は**全て今夜の作業前から同じ**ことを確認した。render の 13 件は `dec0eddbb` で同じ名前・同じ数が失敗。ui の 5 件は、2 件が baseline で同一の diff、2 件は単独実行では成功(全 suite 同時実行の GPU の取り合い)、残る `the_cage_follows_the_drawn_text_under_an_orbited_camera` は構造の作業前の `1dd075511` でも失敗する。
+
+途中、効果の移設で render の contract 24 件が倒れたが、これは**移設の仕事が終わっていなかったため**(render が自分の効果を登録していなかった)。登録を足して 13 = 元からの数に戻した。
+
 ### 渡し忘れは黙って効果を消す(構造で塞いだ)
 
 コアの既定が効果ゼロになったので、`with_programs` を通さずに作った作品は**効果が黙って効かない**。実際に踏んだ:
