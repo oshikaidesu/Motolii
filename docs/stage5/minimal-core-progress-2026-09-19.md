@@ -180,6 +180,20 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 - 同梱の振る舞いを見ていた結合 test 5 件(Repeater の Transform、Group の子の引き、Motion のサンプル、Blob の飛び番)は `motolii-render/tests/bundled_effects.rs` へ移した。効果の検査は効果の家に置く。
 - コアに残った 1 件(写しの重なり順)は、必要な配置効果を**その test 自身が定義する**形にした。何を試しているかが test に書いてある。
 
+### 次の境界: 層の種類(未着手、朝の相談待ち)
+
+効果の次に大きい結合は**層の種類**。コアは `LayerSource::{Shape, Text, Group, File, Camera, Stage, Null, Particles}` で **44 箇所**分岐している(test を除く)。
+
+| 箇所 | 実装 |
+|---|---|
+| 10 | `store/layout/boxes.rs` — 素の箱が種類ごと(形は輪郭、文字は文字の箱、素材は寸法、Group は並べた大きさ) |
+| 7 | `store/view/resolve/settle.rs` |
+| 5 | `store/view/resolve.rs` |
+| 4 | `store/view/resolve/copies.rs` |
+| 18 | その他 11 file |
+
+ここを効果と同じ形(種類が自分の箱と輪郭を申告する)にすれば、`vector/`(3,814行)がコアを離れられる。ただし `LayerSource` は保存形式に載る enum なので、**開いた種類(plugin id)にするかは意味の決定**であり、勝手に決めない。AviUtl 型の拡張を本気でやるならここが分かれ目。
+
 ### 構造で守る(検査)
 
 - coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/stage5/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
