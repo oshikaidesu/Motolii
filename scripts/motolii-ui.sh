@@ -22,7 +22,14 @@ esac
 case "${1:-dev}" in
   check) exec python3 "$repo/scripts/check-stage5.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
+  test-window)
+    window_check_dir=$(mktemp -d /tmp/motolii-window-check.XXXXXX)
+    trap 'rm -f -- "$window_check_dir/check"; rmdir -- "$window_check_dir"' EXIT
+    xcrun swiftc "$ui/macos/Runner/WindowAttachment.swift" "$ui/tool/window_attachment_check.swift" -o "$window_check_dir/check"
+    "$window_check_dir/check"
+    ;;
   test)
+    "$repo/scripts/motolii-ui.sh" test-window
     cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-ui --lib; cargo test -p motolii-render --lib
     dart_bin="$(dirname "$flutter_bin")/dart"
     (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
@@ -52,5 +59,5 @@ case "${1:-dev}" in
     fi
     exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|native|test|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|native|test|test-window|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
 esac

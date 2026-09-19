@@ -64,6 +64,9 @@ bool sameValue(Object? a, Object? b) {
 class EditorSession {
   static const channel = NativeBridge.channel;
   final _bridge = NativeBridge();
+  int? _attachmentId;
+  final _runtimeEpoch = ValueNotifier<int>(0);
+  ValueListenable<int> get runtimeEpoch => _runtimeEpoch;
   final document = ValueNotifier<Map<String, dynamic>>({});
   Map<String, dynamic> get state => document.value;
   bool get animating => state['animate'] == true;
@@ -76,7 +79,13 @@ class EditorSession {
   /// camera wherever it sits; 3D stands in the world and turns with it.
   String get flatProjection =>
       deskWork.value['flatProjection'] == '3D' ? '3D' : '2.5D';
-  String? _sentFlatProjection;
+  String? _sentFlatProjection = '2.5D';
+  void restoreDeskWork(Map<String, dynamic> settings) {
+    _sentFlatProjection = null;
+    deskWork.value = settings;
+    _syncPreferences();
+  }
+
   void _syncPreferences() {
     if (_sentFlatProjection == flatProjection) return;
     _sentFlatProjection = flatProjection;
@@ -397,7 +406,25 @@ class EditorSession {
     String method, [
     Map<String, dynamic> args = const {},
   ]) async {
-    final reply = await _bridge.invoke(method, args);
+    final connects = method == 'attach' || method == 'open';
+    final reply = await _bridge.invoke(method, {
+      ...args,
+      if (connects && _attachmentId != null) 'attachmentId': _attachmentId,
+    });
+    if (connects) {
+      final attachment = map(reply)['attachmentId'];
+      if (attachment is num) {
+        if (_disposed) {
+          try {
+            await _bridge.invoke('detach', {
+              'attachmentId': attachment.toInt(),
+            });
+          } catch (_) {}
+        } else {
+          _attachmentId = attachment.toInt();
+        }
+      }
+    }
     if (method == 'openPanelWindow') _panelWindows++;
     return reply;
   }
@@ -458,6 +485,16 @@ class EditorSession {
       return;
     }
     final envelope = map(typed(reply));
+    final epoch = envelope['runtimeEpoch'];
+    if (epoch is num && epoch.toInt() != _runtimeEpoch.value) {
+      _surfaces.clear();
+      rendered.value = {};
+      _runtimeEpoch.value = epoch.toInt();
+      if (windowInfo['main'] != false) {
+        _sentFlatProjection = null;
+        _syncPreferences();
+      }
+    }
     _bindFrames(envelope);
     final inner = map(envelope['status']);
     final next = inner.isEmpty ? envelope : inner;
@@ -485,6 +522,13 @@ class EditorSession {
     if (next['playing'] is bool) {
       playing.value = next['playing'] as bool;
       if (!playing.value && _ticker != null) _cancelCadence();
+      if (playing.value &&
+          _ticker == null &&
+          textureId.value != null &&
+          windowInfo['main'] != false) {
+        _playRequested = true;
+        _beginCadence(++_generation);
+      }
     }
     if (notify || next['layers'] is List) absorb(next);
   }
@@ -597,20 +641,18 @@ class EditorSession {
       try {
         _accept(await native('attach'));
       } on PlatformException catch (e) {
+        if (_disposed) return;
         if (e.message?.contains('Open a document first') != true) rethrow;
         await open();
         return;
       }
+      if (_disposed) return;
       // `motolii-ui.sh dev <document>`: the launch names a document and nothing is open yet.
       if (_path.isNotEmpty && '${state['path'] ?? ''}'.isEmpty) {
         await open();
         return;
       }
       await _render();
-      if (playing.value) {
-        _playRequested = true;
-        _beginCadence(++_generation);
-      }
     }
   }
 
@@ -919,11 +961,11 @@ class EditorSession {
         _playRequested = false;
         return;
       }
-      _beginCadence(generation);
     });
   }
 
   void _beginCadence(int generation) {
+    if (_disposed || windowInfo['main'] == false) return;
     _ticker?.dispose();
     _ticker = Ticker((_) {
       if (_disposed || generation != _generation || _pendingWork > 0) return;
@@ -1041,19 +1083,16 @@ class EditorSession {
 
   void dispose() {
     if (_disposed) return;
-    final ownedPlayback = _playRequested || _ticker != null;
+    final attachmentId = _attachmentId;
     _cancelCadence();
     _disposed = true;
     _bridge.listen(null);
-    // Let an already-running native call retire before releasing its document.
+    // Retire this attachment only; the application owns the document and clock.
     _tail.then((_) async {
-      if (ownedPlayback) {
-        try {
-          await _request(DocumentOperation.pause);
-        } catch (_) {}
-      }
       try {
-        await native('close');
+        if (attachmentId != null) {
+          await _bridge.invoke('detach', {'attachmentId': attachmentId});
+        }
       } catch (_) {}
       _frames?.dispose();
       _frames = null;
@@ -1064,6 +1103,7 @@ class EditorSession {
     _slices.clear();
     document.removeListener(_spreadDocument);
     document.dispose();
+    _runtimeEpoch.dispose();
     textureId.dispose();
     textureIds.dispose();
     frame.dispose();

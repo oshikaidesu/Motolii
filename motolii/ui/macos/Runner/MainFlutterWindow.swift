@@ -271,7 +271,7 @@ final class ProbeSession {
   /// 効果の file が変わった。棚を読み直すのは main の窓(Dart が reloadEffects を送り、絵を描き直し、他の窓へ配る)。
   fileprivate func effectsChanged() {
     precondition(Thread.isMainThread)
-    guard let main = hosts.allObjects.first(where: { $0.isMain && !$0.closed }) else { return }
+    guard let main = hosts.allObjects.first(where: { $0.isMain && !$0.closed && $0.attached }) else { return }
     main.channel.invokeMethod("effectsChanged", arguments: nil)
   }
 
@@ -282,7 +282,7 @@ final class ProbeSession {
     precondition(Thread.isMainThread)
     guard let buffer = surfaces[view]?.entries.first(where: { $0.id == id })?.buffer else { return }
     latest[view] = buffer
-    for host in hosts.allObjects where !host.closed && host.isMain {
+    for host in hosts.allObjects where !host.closed && host.attached && host.isMain {
       try? host.ensureTexture(view)
       host.publish(view, buffer)
     }
@@ -317,7 +317,7 @@ final class ProbeSession {
     self.state.merge(state) { _, next in next }
     latest.merge(buffers) { _, next in next }
     let fresh = frameReady ? latest : buffers
-    for host in hosts.allObjects where !host.closed {
+    for host in hosts.allObjects where !host.closed && host.attached {
       do {
         try host.ensureTexture(ProbeHost.outputView)
         if host !== origin {
@@ -327,8 +327,9 @@ final class ProbeSession {
           // The picture and its size travel as one step: Dart learns the size
           // (envelope) first, and only then is the frame made available to the
           // raster thread. A resized Stage never paints an old frame stretched.
+          let attachmentID = host.attachmentID
           host.channel.invokeMethod("documentChanged", arguments: event) { [weak host] _ in
-            guard let host, !host.closed else { return }
+            guard let host, !host.closed, host.attached, host.attachmentID == attachmentID else { return }
             for (view, buffer) in fresh { host.publish(view, buffer) }
           }
         } else {
@@ -352,13 +353,13 @@ final class ProbeSession {
     guard !confirming else { completion(false); return }
     confirming = true
     let group = DispatchGroup()
-    for host in hosts.allObjects where !host.closed { group.enter(); host.channel.invokeMethod("flushEditors", arguments: nil) { _ in group.leave() } }
+    for host in hosts.allObjects where !host.closed && host.attached { group.enter(); host.channel.invokeMethod("flushEditors", arguments: nil) { _ in group.leave() } }
     group.notify(queue: .main) {
       if let status = try? self.runtime.status() { self.state = status }
       guard self.state["dirty"] as? Bool == true else {
         self.confirming = false; completion(true); return
       }
-      guard let main = self.hosts.allObjects.first(where: { $0.isMain && !$0.closed }) else {
+      guard let main = self.hosts.allObjects.first(where: { $0.isMain && !$0.closed && $0.attached }) else {
         self.confirming = false; completion(false); return
       }
       main.window?.deminiaturize(nil)
@@ -402,6 +403,9 @@ final class ProbeHost: NSObject {
   private var textureIDs: [String: Int64] = [:]
   fileprivate weak var window: NSWindow?
   fileprivate var closed = false
+  private var attachment = WindowAttachment()
+  fileprivate var attached: Bool { attachment.id != nil }
+  fileprivate var attachmentID: Int? { attachment.id }
   let id: String
   let panels: [String]
   let isMain: Bool
@@ -447,6 +451,8 @@ final class ProbeHost: NSObject {
 
   fileprivate func envelope(_ status: [String: Any], frameReady: Bool = false) -> [String: Any] {
     var reply: [String: Any] = ["status": status, "windowId": id, "frameReady": frameReady]
+    reply["runtimeEpoch"] = session.epoch
+    if let attachmentID = attachment.id { reply["attachmentId"] = attachmentID }
     if let context = session.runtime.context, let library = session.runtime.location {
       reply["context"] = Int(bitPattern: context)
       reply["library"] = library
@@ -481,10 +487,11 @@ final class ProbeHost: NSObject {
   func detachWindow() {
     guard !closed else { return }
     closed = true
+    attachment.invalidate()
     channel.setMethodCallHandler(nil)
     detachTexture()
     session.hosts.remove(self)
-    for host in session.hosts.allObjects where host.isMain && !host.closed {
+    for host in session.hosts.allObjects where host.isMain && !host.closed && host.attached {
       host.channel.invokeMethod("windowClosed", arguments: ["id": id, "panels": panels])
     }
   }
@@ -530,14 +537,14 @@ final class ProbeHost: NSObject {
       result(NSWorkspace.shared.open(url))
     case "flushEditors":
       let group = DispatchGroup()
-      for host in session.hosts.allObjects where !host.closed { group.enter(); host.channel.invokeMethod("flushEditors", arguments: nil) { _ in group.leave() } }
+      for host in session.hosts.allObjects where !host.closed && host.attached { group.enter(); host.channel.invokeMethod("flushEditors", arguments: nil) { _ in group.leave() } }
       group.notify(queue: .main) { result(true) }
     case "placePanel":
-      guard let main = session.hosts.allObjects.first(where: { $0.isMain && !$0.closed }) else { fail(result, "Main window unavailable"); return }
+      guard let main = session.hosts.allObjects.first(where: { $0.isMain && !$0.closed && $0.attached }) else { fail(result, "Main window unavailable"); return }
       main.channel.invokeMethod("placePanel", arguments: args) { value in result(value) }
     case "setPaneState":
       session.paneState = args
-      for host in session.hosts.allObjects where !host.closed { host.channel.invokeMethod("paneState", arguments: args) }
+      for host in session.hosts.allObjects where !host.closed && host.attached { host.channel.invokeMethod("paneState", arguments: args) }
       result(true)
     case "windowInfo":
       result(["id": id, "panels": panels, "main": isMain, "paneState": session.paneState, "panelWindows": session.windows.count])
@@ -564,6 +571,9 @@ final class ProbeHost: NSObject {
         target.deminiaturize(nil)
         target.makeKeyAndOrderFront(nil)
         result(true)
+      } else if !host.attached {
+        target.performClose(nil)
+        result(["requested": true])
       } else {
         host.channel.invokeMethod("flushEditors", arguments: nil) { _ in target.performClose(nil); result(["requested": true]) }
       }
@@ -574,9 +584,16 @@ final class ProbeHost: NSObject {
     case "attach":
       let view = args["view"] as? String ?? ProbeHost.outputView
       perform(result, work: { try self.session.runtime.status() }) { status in
+        guard self.attachment.attach(reusing: (args["attachmentId"] as? NSNumber)?.intValue) != nil else {
+          throw ProbeFailure.message("Stale UI attachment")
+        }
         try self.ensureTexture(view)
         return self.envelope(status)
       }
+    case "detach":
+      let detached = (args["attachmentId"] as? NSNumber).map { attachment.detach($0.intValue) } ?? false
+      if detached { detachTexture() }
+      result(["detached": detached, "windowId": id])
     case "pickOpen", "pickImport":
       let panel = NSOpenPanel()
       let importing = call.method == "pickImport"
@@ -608,13 +625,19 @@ final class ProbeHost: NSObject {
     case "open":
       guard isMain else { fail(result, "Open documents from the main window"); return }
       guard let path = args["path"] as? String else { fail(result, "open requires path"); return }
-      session.epoch &+= 1
+      if let expected = (args["attachmentId"] as? NSNumber)?.intValue, attachment.id != expected {
+        fail(result, "Stale UI attachment"); return
+      }
       session.terminationApproved = false
       rendering = false
       perform(result, work: {
         let status = try self.session.runtime.open(path: path)
         return status
       }) { status in
+        guard self.attachment.attach(reusing: (args["attachmentId"] as? NSNumber)?.intValue) != nil else {
+          throw ProbeFailure.message("Stale UI attachment")
+        }
+        self.session.epoch &+= 1
         self.session.clearFrames()
         self.session.broadcast(status, origin: self)
         return self.envelope(status)
@@ -676,7 +699,7 @@ final class ProbeHost: NSObject {
       session.clearFrames()
       session.state = [:]
       perform(result, work: { self.session.runtime.close(); return ["closed": true] }) { state in
-        for host in self.session.hosts.allObjects where !host.closed {
+        for host in self.session.hosts.allObjects where !host.closed && host.attached {
           host.channel.invokeMethod("documentClosed", arguments: nil)
         }
         return state
@@ -740,7 +763,7 @@ final class PanelFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestinatio
     return true
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    if closeApproved { return true }
+    if closeApproved || host?.attached != true { return true }
     if closePending { return false }
     closePending = true
     host?.channel.invokeMethod("flushEditors", arguments: nil) { [weak self] _ in

@@ -19,7 +19,10 @@ void main() {
           return <String, dynamic>{};
         });
     final c = EditorSession();
-    c.deskWork.value = {'flatProjection': '2.5D'};
+    c.deskWork.value = {'easePresets': []};
+    await tester.pump();
+    expect(commands, isEmpty);
+    c.restoreDeskWork({'flatProjection': '2.5D'});
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(body: PanelSettings(controller: c)),

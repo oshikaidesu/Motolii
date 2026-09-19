@@ -32,6 +32,8 @@ void main() {
         for (var i = 0; i < 3; i++)
           {
             'offset': i / 2,
+            'id': i,
+            'positionProperty': 'fill.stop.$i.offset',
             'rgba': [i / 2, 0.0, 1 - i / 2, 1.0],
             'slot': {
               'ShapeGradientPoint': {
@@ -45,6 +47,7 @@ void main() {
       c.document.value = {
         'capabilities': [
           'setGradient',
+          'previewProperties',
           'focusColor',
           'commitPreview',
           'cancelPreview',
@@ -80,7 +83,9 @@ void main() {
         'layer': 1,
         'slot': points[1]['slot'],
       });
-      expect(placements, isEmpty);
+      expect(placements, [
+        {'name': 'Colors', 'placement': 'show'},
+      ]);
       expect(c.browserTab.value, 'Colors');
       expect(find.byType(MenuAnchor), findsNothing);
       // Pressing the bar adds a stop there, coloured like the bar.
@@ -88,7 +93,9 @@ void main() {
       await tester.tapAt(tester.getTopLeft(bar) + const Offset(30, 8));
       await tester.pumpAndSettle();
       expect(sent.last['op'], 'setGradient');
-      expect((sent.last['stops'] as List).length, 4);
+      expect(sent.last['slot'], slot);
+      expect(sent.last['addStop'], inExclusiveRange(0, .5));
+      expect(sent.last.containsKey('stops'), isFalse);
       sent.clear();
       final pointer = await tester.startGesture(
         tester.getCenter(find.byKey(const ValueKey('gradient-stop:1'))),
@@ -101,9 +108,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.where((r) => r['op'] == 'commitPreview').length, 1);
       final preview = sent.lastWhere(
-        (r) => r['op'] == 'setGradient' && r['preview'] == true,
+        (r) => r['op'] == 'previewProperties',
       );
-      expect((preview['stops'][1]['offset'] as num), greaterThan(.5));
+      final edit = (preview['edits'] as List).single as Map;
+      expect(edit['layer'], 1);
+      expect(edit['property'], 'fill.stop.1.offset');
+      expect(edit['value'] as num, greaterThan(.5));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       c.dispose();

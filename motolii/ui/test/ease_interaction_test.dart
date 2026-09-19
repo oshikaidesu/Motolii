@@ -365,8 +365,12 @@ void main() {
           expect(plot.hitTestable(), findsOneWidget);
           final thumbnail = find.descendant(
             of: preset,
-            matching: find.byType(CustomPaint),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is CustomPaint && widget.painter is EaseCurvePainter,
+            ),
           );
+          expect(thumbnail, findsOneWidget);
           expect(
             tester.getSize(thumbnail).shortestSide,
             greaterThanOrEqualTo(44),

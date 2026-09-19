@@ -100,7 +100,7 @@ class _EditorWindowState extends State<EditorWindow> {
     Map<String, dynamic>? restored;
     if (c.windowInfo['main'] == false) {
       final settings = EditorSession.map(await c.native('readSettings'));
-      c.deskWork.value = EditorSession.map(settings['deskWork']);
+      c.restoreDeskWork(EditorSession.map(settings['deskWork']));
       dock = DockNode.leaf(
         'detached',
         (c.windowInfo['panels'] as List? ?? []).whereType<String>().toList(),
@@ -113,7 +113,7 @@ class _EditorWindowState extends State<EditorWindow> {
         restored = data['panelPlacements'] is Map
             ? EditorSession.map(data['panelPlacements'])
             : null;
-        c.deskWork.value = EditorSession.map(data['deskWork']);
+        c.restoreDeskWork(EditorSession.map(data['deskWork']));
         c.deskDefault.value = data['deskDefault'] as String? ?? 'Tools';
         if (restored != null) {
           hiddenPanels.addAll(

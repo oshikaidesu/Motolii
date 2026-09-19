@@ -66,6 +66,7 @@ class _StagePanelState extends State<StagePanel> {
   void initState() {
     super.initState();
     c.viewCommand.addListener(_viewCommand);
+    c.runtimeEpoch.addListener(_runtimeChanged);
     HardwareKeyboard.instance.addHandler(_heldKey);
   }
 
@@ -73,9 +74,16 @@ class _StagePanelState extends State<StagePanel> {
   /// texture; the Stage tab also places its window, and withdraws it when hidden
   /// so native draws only the pictures somebody is looking at.
   bool _shown = false;
+  void _runtimeChanged() {
+    _windowKey = null;
+    _sentWindow = null;
+    _drawnWindow = null;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _windowKey = null;
     final shown = Visibility.of(context);
     if (shown == _shown) return;
     _shown = shown;
@@ -1096,6 +1104,7 @@ class _StagePanelState extends State<StagePanel> {
       _drained.whenComplete(() => c.command('stageGesture', args));
     }
     c.viewCommand.removeListener(_viewCommand);
+    c.runtimeEpoch.removeListener(_runtimeChanged);
     c.detachView(widget.view);
     if (_userStage && _sentWindow != null && c.supports('stageWindow'))
       c.command('stageWindow', {'width': 0, 'height': 0});
@@ -1263,6 +1272,7 @@ class _StagePanelState extends State<StagePanel> {
                             child: AnimatedBuilder(
                               animation: Listenable.merge([
                                 _slice,
+                                c.runtimeEpoch,
                                 c.rendered,
                                 c.textureIds,
                                 c.playing,
