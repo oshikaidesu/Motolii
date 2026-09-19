@@ -91,11 +91,11 @@ fn motion_sampling_preserves_read_authority_and_effect_order() {
     assert_eq!(still[0].placement.opacity, 1.0);
 }
 
-fn two_copies(_: &PlacementInput<'_>) -> Vec<PlacementOutput> {
+fn two_copies(input: &PlacementInput<'_>) -> Vec<PlacementOutput> {
     (0..2)
         .map(|index| Placement {
             index,
-            offset: [index as f32 * 25.0, 0.0],
+            offset: [index as f32 * 25.0 + input.position[0], 0.0],
             rotation_degrees: 0.0,
             scale: 1.0,
             offset_z: 0.0,
@@ -113,6 +113,12 @@ fn an_external_placement_program_changes_only_the_read_projection() {
     let layer = LayerId(1);
     doc.apply_all([
         Intent::AddLayer(layer),
+        Intent::SetConstant {
+            layer,
+            property: motolii_doc::store::PropertyId::new(motolii_doc::store::property::POSITION)
+                .unwrap(),
+            value: motolii_doc::store::Value::Vec2([10.0, 0.0]),
+        },
         Intent::SetMeta {
             layer,
             meta: LayerMeta {
@@ -157,6 +163,29 @@ fn an_external_placement_program_changes_only_the_read_projection() {
             < 0.001
     );
     assert_ne!(view.revision_key(), supplied.revision_key());
+    let position_programs = [PlacementProgram {
+        needs_position: true,
+        ..programs[0]
+    }];
+    let positioned = view
+        .clone()
+        .with_placement_programs(&position_programs)
+        .resolved_layers(RationalTime::ZERO)
+        .unwrap();
+    assert!(
+        (positioned[0].placement.transform.translation.x
+            - placed[0].placement.transform.translation.x
+            - 10.0)
+            .abs()
+            < 0.001
+    );
+    assert_ne!(
+        supplied.revision_key(),
+        view.clone()
+            .with_placement_programs(&position_programs)
+            .revision_key(),
+        "different evaluator input requirements must not share display identity"
+    );
     assert_ne!(
         view.revision_key(),
         view.clone().with_placement_programs(&[]).revision_key()

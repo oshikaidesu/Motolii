@@ -139,6 +139,7 @@ impl<'a> StoreView<'a> {
             programs.len().hash(&mut hasher);
             for program in programs {
                 program.plugin_id.hash(&mut hasher);
+                program.needs_position.hash(&mut hasher);
                 (program.evaluate as usize).hash(&mut hasher);
             }
         }
