@@ -56,6 +56,7 @@ impl Recording {
             &self.records,
             &self.layout,
             crate::doc::extensions::placement_program,
+            crate::doc::extensions::sampling_program,
         )
     }
 }

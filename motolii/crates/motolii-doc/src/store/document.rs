@@ -209,6 +209,7 @@ impl Document {
             &self.record_cache,
             &self.layout_cache,
             crate::doc::extensions::placement_program,
+            crate::doc::extensions::sampling_program,
         )
     }
 

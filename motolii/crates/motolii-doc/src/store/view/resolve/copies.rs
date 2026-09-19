@@ -40,7 +40,7 @@ impl<'a> StoreView<'a> {
         visiting: &mut HashSet<LayerId>,
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
-        let blur = base.effects.iter().position(|e| crate::doc::extensions::motion::is_motion_blur(&e.plugin_id));
+        let blur = base.effects.iter().position(|e| self.is_sampling_effect(&e.plugin_id));
         let places = |e: &ResolvedEffect| self.placement_program(&e.plugin_id).is_some();
         let Some(first) = base.effects.iter().position(places) else {
             return match blur {
@@ -163,14 +163,14 @@ impl<'a> StoreView<'a> {
         visiting: &mut HashSet<LayerId>,
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
-        use crate::doc::extensions::motion;
         let frame_seconds = self.composition()?.map_or(0.0, |c| c.fps.den() as f64 / c.fps.num() as f64);
-        let sampling = if base.source == crate::doc::store::LayerSource::Group { None }
-            else { motion::sampling(&base.effects[at_index].params, t, frame_seconds) };
+        let effect = &base.effects[at_index];
+        let shutter = if base.source == crate::doc::store::LayerSource::Group || frame_seconds <= 0.0 { None }
+            else { self.shutter_of(&effect.plugin_id, &effect.params) };
         let below = base.effects.split_off(at_index + 1);
         base.effects.pop();
         base.after_effects.splice(0..0, below);
-        let Some(sampling) = sampling else {
+        let Some(shutter) = shutter else {
             out.push(base);
             return Ok(());
         };
@@ -180,9 +180,9 @@ impl<'a> StoreView<'a> {
         let parent3 = parent.and_then(|p| world_transforms.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
         let now_inverse = self.local_placement_transform(layer, t)?.inverse();
         let local_delta = |at: RationalTime| -> Result<glam::Affine2, StoreError> {
-            Ok(self.local_placement_transform_sampled(layer, t, Some((at, sampling.channels)))? * now_inverse)
+            Ok(self.local_placement_transform_sampled(layer, t, Some((at, shutter.channels)))? * now_inverse)
         };
-        let samples = sampling.deltas(base.declared_size, base.placement.transform, parent2, local_delta)?;
+        let samples = shutter.deltas(t, frame_seconds, base.declared_size, base.placement.transform, parent2, local_delta)?;
         let count = samples.len() as u32;
         if count <= 1 {
             out.push(base);

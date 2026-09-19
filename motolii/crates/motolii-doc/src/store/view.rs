@@ -37,6 +37,7 @@ pub struct StoreView<'a> {
     layout_memo: super::layout::Memo,
     layout_cache: &'a RefCell<super::layout::LayoutCache>,
     placement_lookup: fn(&str) -> Option<super::kind::PlacementProgram>,
+    sampling_lookup: fn(&str) -> Option<super::kind::SamplingProgram>,
     placement_programs: Option<&'a [super::kind::PlacementProgram]>,
 }
 
@@ -53,6 +54,7 @@ impl<'a> StoreView<'a> {
         record_cache: &'a RefCell<RecordCache>,
         layout_cache: &'a RefCell<super::layout::LayoutCache>,
         placement_lookup: fn(&str) -> Option<super::kind::PlacementProgram>,
+        sampling_lookup: fn(&str) -> Option<super::kind::SamplingProgram>,
     ) -> Self {
         Self {
             db,
@@ -67,6 +69,7 @@ impl<'a> StoreView<'a> {
             layout_memo: Default::default(),
             layout_cache,
             placement_lookup,
+            sampling_lookup,
             placement_programs: None,
         }
     }
@@ -85,6 +88,15 @@ impl<'a> StoreView<'a> {
         self.placement_programs = Some(programs);
         self.layout_memo = Default::default();
         self
+    }
+
+    /// 1 コマの中で層を取り直す効果の取っ手。無ければその効果はぼかさない。
+    pub(crate) fn shutter_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Shutter> {
+        ((self.sampling_lookup)(plugin_id)?.shutter)(params)
+    }
+
+    pub(crate) fn is_sampling_effect(&self, plugin_id: &str) -> bool {
+        (self.sampling_lookup)(plugin_id).is_some()
     }
 
     pub(crate) fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {

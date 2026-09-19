@@ -92,6 +92,66 @@ pub struct PlacementProgram {
     pub evaluate: fn(&PlacementInput<'_>) -> Vec<PlacementOutput>,
 }
 
+/// 1 コマの中で層を取り直す効果(Motion Blur など)が返す取っ手。
+/// どの欄を・どれだけの幅で・何枚に分けるかは効果の方針で、コアは道のりを測って枚数を訊き、
+/// 言われた時刻の変換を取り直して平均の印を付けるだけ。
+pub struct Shutter {
+    /// 取り直す欄(位置・大きさ・角度)。
+    pub channels: [bool; 3],
+    /// コマ何個ぶんの幅で開くか。
+    pub width_frames: f64,
+    /// 層の縁が 1 コマで動いた道のり(px)から、写しの枚数。1 ならぼかさない。
+    pub count: fn(f32) -> u32,
+    /// `k` 枚目が、コマの中心からどれだけずれた所か(幅を 1 とした比、-0.5 から 0.5)。
+    pub offset: fn(u32, u32) -> f64,
+}
+
+impl Shutter {
+    /// コマの中心から幅の両端まで層がどれだけ動いたかを測り、効果に枚数を訊き、
+    /// 各写しの時刻の変換を返す。動きの測り方と時刻の刻みはコアの仕事、枚数と刻み幅は効果の方針。
+    pub fn deltas<E>(
+        &self,
+        time: RationalTime,
+        frame_seconds: f64,
+        size: [f32; 2],
+        transform: glam::Affine2,
+        parent: glam::Affine2,
+        mut read_delta: impl FnMut(RationalTime) -> Result<glam::Affine2, E>,
+    ) -> Result<Vec<Result<glam::Affine2, E>>, E> {
+        const DEN: i64 = 1_000_000;
+        let at = |share: f64| {
+            RationalTime::try_new((share * self.width_frames * frame_seconds * DEN as f64).round() as i64, DEN)
+                .ok()
+                .and_then(|offset| time.try_add(offset).ok())
+        };
+        let (Some(first), Some(last)) = (at(-0.5), at(0.5)) else { return Ok(Vec::new()) };
+        let inverse = parent.inverse();
+        let early = parent * read_delta(first)? * inverse;
+        let late = parent * read_delta(last)? * inverse;
+        // 未確定の素材寸法は原点の周り 200px で回転の道のりを見積もる。
+        let [w, h] = size;
+        let (lo, hi) = if w > 0.0 && h > 0.0 { ([0.0, 0.0], [w, h]) } else { ([-100.0, -100.0], [100.0, 100.0]) };
+        let travel = [[lo[0], lo[1]], [hi[0], lo[1]], [lo[0], hi[1]], [hi[0], hi[1]]]
+            .map(|corner| {
+                let p = transform.transform_point2(glam::Vec2::from(corner));
+                early.transform_point2(p).distance(late.transform_point2(p))
+            })
+            .into_iter()
+            .fold(0.0f32, f32::max);
+        let count = (self.count)(travel);
+        if count <= 1 {
+            return Ok(Vec::new());
+        }
+        Ok((0..count).filter_map(|k| at((self.offset)(k, count))).map(read_delta).collect())
+    }
+}
+
+/// 取っ手の値から Shutter を読む効果。`plugin_id` が合う効果に 1 つ。
+pub struct SamplingProgram {
+    pub plugin_id: &'static str,
+    pub shutter: fn(&[(String, Value)]) -> Option<Shutter>,
+}
+
 pub struct PlacementInput<'a> {
     pub params: &'a [(String, Value)],
     pub layer: super::LayerId,
