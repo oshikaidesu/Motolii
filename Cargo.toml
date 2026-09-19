@@ -1,7 +1,7 @@
 # Stage 5 workspace. Default build target is the Flutter native bridge.
 [workspace]
 resolver = "2"
-members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/ui/native"]
+members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/ui/native", "motolii/ui/extensions/script", "motolii/ui/extensions/jobs"]
 default-members = ["motolii/ui/native"]
 
 [workspace.dependencies]

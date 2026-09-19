@@ -53,6 +53,17 @@ for role,relative in document_entries:
 if set(contract.get('documents',{})) != {'concept','interaction','migration','recovery','technical'}:
  errors.append('Stage 5 must expose concept, interaction, migration, recovery and technical documents')
 modules=json.loads((root/'docs/stage5/modules.json').read_text())
+playback=(root/modules['readOnlyPlayback']).read_text().split('#[cfg(test)]\nmod tests')[0]
+for imported in re.findall(r'\buse\s+([^;]+);',playback):
+ if re.search(r'\b(?:Document|Intent|EditorRuntime)\b',imported):
+  errors.append('Playback must consume a read-only StoreView, not editor authority')
+for relative,allowed in modules.get('isolatedExtensions',{}).items():
+ path=root/relative/'Cargo.toml'
+ source=path.read_text()
+ dependencies=re.search(r'^\[dependencies\]\s*(.*?)(?=^\[|\Z)',source,re.M|re.S)
+ names=set(re.findall(r'^([\w-]+)\s*=',dependencies.group(1),re.M)) if dependencies else set()
+ if names!=set(allowed) or re.search(r'\b(?:path|git|package)\s*=',dependencies.group(1) if dependencies else ''):
+  errors.append(f'{relative}: extension dependencies must stay isolated: {allowed}')
 dart_root=root/modules['dartRoot']
 for path in dart_root.rglob('*.dart'):
  rel=path.relative_to(dart_root)

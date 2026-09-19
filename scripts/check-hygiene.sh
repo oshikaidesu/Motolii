@@ -20,8 +20,8 @@ else
 fi
 incr=$( [ -d target/debug/incremental ] && ls target/debug/incremental | wc -l | tr -d ' ' || echo 0 )
 check incremental_sessions "$incr"
-# 生きている家だけ数える(doc・render・ui/lib の Dart・ui/native)。旧 src/ui は比較用なので数えない。
-sizes() { find crates/*/src ui/native/src -name '*.rs' -exec wc -l {} + ; find ui/lib -name '*.dart' -exec wc -l {} + ; }
+# 生きている家とその拡張を数える。退役した実装はGit履歴にある。
+sizes() { find crates/*/src ui/native/src ui/extensions -name '*.rs' -exec wc -l {} + ; find ui/lib -name '*.dart' -exec wc -l {} + ; }
 longest=$(sizes | grep -v ' total$' | sort -rn | head -1 | awk '{print $1}')
 check longest_file_lines "$longest"
 files_over=$(sizes | grep -v ' total$' | awk -v l="$(val file_lines_soft)" '$1>l' | wc -l | tr -d ' ')

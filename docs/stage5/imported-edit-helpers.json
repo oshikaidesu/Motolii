@@ -180,7 +180,7 @@
     {
       "source_sha256": "a240f6758290de96c97acdae1cfe472cb1cb5cffbfc6f25445a54b67e9760645",
       "adaptation": "visibility; fingerprint includes Level/Pan/Fade property sources read by existing AudioProgram",
-      "current": "motolii/ui/native/src/editor/playback.rs",
+      "current": "motolii/crates/motolii-render/src/playback.rs",
       "owner": "editor",
       "historicalOrigin": "motolii/src/ui/playback.rs",
       "historical_adapted_sha256": "5525104b22d152842bc4c50fcdd20beb9d526dce67b447407e77d8af3ab6411b",

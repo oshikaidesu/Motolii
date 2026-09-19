@@ -10,6 +10,10 @@
     "bridge": {"dependsOn": [], "owns": "Native transport and typed operation protocol"}
   },
   "nativeEditor": "motolii/ui/native/src/editor",
+  "readOnlyPlayback": "motolii/crates/motolii-render/src/playback.rs",
+  "isolatedExtensions": {
+    "motolii/ui/extensions/script": ["rquickjs", "serde_json"]
+  },
   "history": "docs/stage5/history/retired-source.md",
   "legacyPolicy": "retired to pinned Git history; changes target nativeEditor"
 }

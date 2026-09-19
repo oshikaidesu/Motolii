@@ -26,7 +26,7 @@ description: Export a Motolii document to a movie (range, audio mixed in, ffmpeg
   Layer `Level`, `Pan`, `Fade In/Out`, `Time Remap`, `Speed` (names.rs:25-30) are the mix's inputs — export hears what playback hears.
 - **Temp output** (`TempOutput` 227-293): writes `.<stem>.export-<pid>-<n>.<ext>` next to the destination, renames on success, removes it on
   cancel/failure — a half movie never sits at the destination path.
-- **UI ops** (`motolii/ui/native/src/port.rs:235-236`, controller `ui/native/src/export_job.rs`): `{"op":"export","path":…,"start":f,"end":f}`
+- **UI ops** (`motolii/ui/native/src/port.rs:235-236`, controller `ui/extensions/jobs/src/export.rs`): `{"op":"export","path":…,"start":f,"end":f}`
   (end exclusive, must be inside the comp and non-empty, 18); snapshot = `document.flattened()` (19) rendered on a thread named
   `motolii-port-export` with a fresh `Engine` and `qp0: false` (25). `exportStatus` (read from `status`) → `{ phase: idle | running |
   cancelling | complete | cancelled | failed, done, total, path, error }` (13); `cancelExport` (14). One export at a time (16).

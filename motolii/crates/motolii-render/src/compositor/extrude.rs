@@ -271,8 +271,8 @@ mod tests {
         let flat = engine.render_frame(&doc.view(), t).unwrap();
         doc.apply_all([
             Intent::SetEffects { layer: LayerId(1), effects: vec![
-                EffectInstance { id: EffectId(0), plugin_id: crate::doc::store::solid::EXTRUDE.into() },
-                EffectInstance { id: EffectId(1), plugin_id: crate::doc::store::solid::BEVEL.into() },
+                EffectInstance { id: EffectId(0), plugin_id: crate::doc::extensions::solid::EXTRUDE.into() },
+                EffectInstance { id: EffectId(1), plugin_id: crate::doc::extensions::solid::BEVEL.into() },
             ] },
             Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(0), "depth").unwrap(), value: Value::F64(24.0) },
             Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(1), "radius").unwrap(), value: Value::F64(6.0) },

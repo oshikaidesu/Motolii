@@ -84,57 +84,38 @@ pub struct Kind {
     pub family: Family,
 }
 
-/// shader を持たない棚の 1 枚の全部。棚と admission はこの表と ISF の manifest だけを読む。
-pub fn all() -> impl Iterator<Item = Kind> {
-    crate::doc::store::placement::KINDS
-        .iter()
-        .map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement })
-        .chain(crate::doc::store::pathop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Path }))
-        .chain(crate::doc::store::blob::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement }))
-        .chain(crate::doc::store::motion::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement }))
-        .chain(crate::doc::store::solid::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Solid }))
-        .chain(crate::doc::store::overlay::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Output }))
-        .chain(crate::doc::store::textop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Text }))
+use crate::doc::core::RationalTime;
+
+/// 配置 1 つ。値は層の**親の空間**で、回転と大きさは層の位置を中心にする。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placement {
+    pub index: u32,
+    pub offset: [f32; 2],
+    pub rotation_degrees: f32,
+    pub scale: f32,
+    /// 奥行きのずれ。2.5D/3D の写しだけが受ける(2D の transform には無い)。
+    pub offset_z: f32,
+    pub opacity: f32,
+    /// 正なら遅れて出る(この配置は `t - time_offset` の姿)。
+    pub time_offset: RationalTime,
+    /// 縦横の伸び(Blob Track が素材を箱に合わせる)。Repeater は [1, 1]。
+    pub stretch: [f32; 2],
 }
 
-pub fn kind(plugin_id: &str) -> Option<Kind> {
-    all().find(|k| k.plugin_id == plugin_id)
-}
+impl Placement {
+    pub fn affine2(&self, pivot: glam::Vec2) -> glam::Affine2 {
+        use glam::{Affine2, Vec2};
+        Affine2::from_translation(Vec2::from(self.offset) + pivot)
+            * Affine2::from_angle(self.rotation_degrees.to_radians())
+            * Affine2::from_scale(Vec2::new(self.scale * self.stretch[0], self.scale * self.stretch[1]))
+            * Affine2::from_translation(-pivot)
+    }
 
-/// 棚と Inspector に出す名前。
-pub fn label(plugin_id: &str) -> Option<&'static str> {
-    kind(plugin_id).map(|k| k.label)
-}
-
-pub fn choices(plugin_id: &str, param: &str) -> Option<&'static [&'static str]> {
-    kind(plugin_id)?.params.iter().find(|p| p.name == param)?.choices()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 4 つの家が 1 つの表に載り、id は被らず、欄の既定は範囲の中。
-    #[test]
-    fn every_kind_is_on_one_table_with_sane_params() {
-        let kinds: Vec<Kind> = all().collect();
-        assert!(!kinds.is_empty());
-        for (i, k) in kinds.iter().enumerate() {
-            assert!(kinds[..i].iter().all(|o| o.plugin_id != k.plugin_id), "{} が 2 枚ある", k.plugin_id);
-            assert!(!k.label.is_empty());
-            for p in k.params {
-                if let Some((lo, hi)) = p.range {
-                    assert!(lo <= p.default[0] && p.default[0] <= hi, "{}.{} の既定が範囲外", k.plugin_id, p.name);
-                }
-                if let Some(c) = p.choices() {
-                    assert!((p.default[0] as usize) < c.len());
-                }
-            }
-        }
-        assert_eq!(label(crate::doc::store::placement::REPEAT), Some("Repeater"));
-        assert_eq!(choices(crate::doc::store::placement::REPEAT, "mode"), Some(crate::doc::store::placement::SHAPES));
-        assert_eq!(kind(crate::doc::store::pathop::PUCKER_BLOAT).map(|k| k.family), Some(Family::Path));
-        assert_eq!(kind(crate::doc::store::textop::TEXT_MORPH).map(|k| k.family), Some(Family::Text));
-        assert_eq!(kind(crate::doc::store::textop::TEXT_MORPH).and_then(|k| k.params.iter().find(|p| p.name == "target")).map(|p| p.default_value()), Some(Value::LayerId(0)));
+    pub fn affine3(&self, pivot: glam::Vec3) -> glam::Affine3A {
+        use glam::{Affine3A, Quat, Vec3};
+        Affine3A::from_translation(Vec3::new(self.offset[0], self.offset[1], self.offset_z) + pivot)
+            * Affine3A::from_quat(Quat::from_rotation_z(self.rotation_degrees.to_radians()))
+            * Affine3A::from_scale(Vec3::new(self.scale * self.stretch[0], self.scale * self.stretch[1], 1.0))
+            * Affine3A::from_translation(-pivot)
     }
 }

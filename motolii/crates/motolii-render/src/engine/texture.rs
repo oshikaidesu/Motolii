@@ -280,7 +280,7 @@ impl Engine {
         match &layer.source {
             LayerSource::Text => {
                 let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
-                let partner = crate::doc::store::textop::morph(&layer.effects)
+                let partner = crate::extensions::text::morph(&layer.effects)
                     .and_then(|(target, amount)| view.resolved_text_document(target, t).ok().flatten().map(|d| (d, amount)));
                 let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height).moving(text::Flow::of(layer));
                 let cached = self.text_textures.get(&key)?;
@@ -329,7 +329,7 @@ impl Engine {
         projection_camera: crate::doc::core::ResolvedCamera,
     ) -> Result<(Option<LayerContent>, [f32; 2], Option<crate::render::compositor::effects::vism::ImageFrame>), EngineError> {
         // Track Overlay(出力の効果)を持つ層は、自分の素材の代わりに下の合成から組んだ箱・印を描く(調整層と同じ)。
-        if layer.effects.iter().any(|e| crate::doc::store::overlay::is_track_overlay(&e.plugin_id)) {
+        if layer.effects.iter().any(|e| crate::doc::extensions::overlay::is_track_overlay(&e.plugin_id)) {
             return Ok(match self.overlay_content(layer.id, comp)? { Some((content, natural)) => (Some(content), natural, None), None => (None, [0.0, 0.0], None) });
         }
         let needs_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));

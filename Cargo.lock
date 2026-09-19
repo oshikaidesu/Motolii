@@ -3163,6 +3163,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-jobs"
+version = "0.1.0"
+dependencies = [
+ "motolii-doc",
+ "motolii-render",
+ "serde_json",
+]
+
+[[package]]
 name = "motolii-render"
 version = "0.0.0"
 dependencies = [
@@ -3205,6 +3214,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-script"
+version = "0.1.0"
+dependencies = [
+ "rquickjs",
+ "serde_json",
+]
+
+[[package]]
 name = "motolii-ui"
 version = "0.1.0"
 dependencies = [
@@ -3213,13 +3230,14 @@ dependencies = [
  "glam 0.30.10",
  "image",
  "motolii-doc",
+ "motolii-jobs",
  "motolii-render",
+ "motolii-script",
  "objc2",
  "objc2-core-foundation",
  "objc2-io-surface",
  "objc2-metal",
  "peniko",
- "rquickjs",
  "serde",
  "serde_json",
  "transform-gizmo",

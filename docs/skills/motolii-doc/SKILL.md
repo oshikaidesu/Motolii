@@ -17,14 +17,14 @@ The render crate reads `StoreView`; the UI writes through `Intent` only.
   (`src/store/layout.rs:145`). Tables: `GROUP_ROWS` (150), `ITEM_ROWS` (185), `SPACE_ROWS` (230), `CONNECT_ROWS` (267), `READOUT_ROWS`
   (283). `layout::row(property)` (297) chains them; `names::label` (`names.rs:87`) resolves any property to its label, fixed transform
   names at `names.rs:10-51`. Add a row = add one tuple; the Inspector and the script read the same table.
-- **Placement effects** (`src/store/placement.rs`): an effect that returns placements, not pixels. `PlacementKind { plugin_id, label,
+- **Placement effects** (`src/extensions/placement.rs`): an effect that returns placements, not pixels. `PlacementKind { plugin_id, label,
   params, shape, grid }` (22-29); `KINDS` (77-124) has `REPEAT = "motolii.repeat"` (Line / Circle / Grid, Each and Random columns,
   `Pick`, `Transform` Each/Whole) and `MIRROR = "motolii.mirror"` (Axis Horizontal / Vertical / Both / Radial, `Segments`, `Centre`).
   `placements(kind, params) -> Vec<Placement>` (185) is a pure function of `(params, seed)`; `mirrors` (250) is `x ↦ R(θ) S (x − c) + c`
   written as `offset = c − R S c`, `stretch = ±1`. `Placement` (151-163): `index`, `offset`, `rotation_degrees`, `scale`, `offset_z`
   (2.5D/3D only, via `affine3` 174), `opacity`, `time_offset` (a copy shows `t − time_offset`), `stretch` (Blob Track / Mirror).
   `picks` (281) hands a group's children out per placement (Random by `share.<id>` weight, or Iterate).
-  Registration is automatic: `kind::all()` (`kind.rs:88`) chains `placement::KINDS` into the shelf; `resolve.rs:896-920` expands the
+  Registration is automatic: `motolii-render::extensions::all()` chains `placement::KINDS` into the shelf; `resolve.rs:896-920` expands the
   first placement effect on a layer; `resolve.rs:1120-1128` hides a placed group's children; `ui/native/src/snapshot.rs:456` builds the
   grid rows from `PlacementKind::grid`.
 - **Connecting and tracing lines** (`src/store/connect.rs`): a shape layer with `Connect From` + `Connect To` has its outline replaced by a

@@ -7,9 +7,10 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
 
 use crate::doc::store::{
-    placement, property, LayerId, LayerPlacement, PropertyId, ResolvedEffect, ResolvedLayer,
+    property, LayerId, LayerPlacement, PropertyId, ResolvedEffect, ResolvedLayer,
     ResolvedMask, StoreError, TextDocument,
 };
+use crate::doc::extensions::{placement};
 
 use super::StoreView;
 
@@ -585,7 +586,7 @@ impl<'a> StoreView<'a> {
     fn group_effects(&self, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
         let (mut each, mut whole) = (Vec::new(), Vec::new());
         for effect in self.resolved_effects(group, t)? {
-            if placement::kind(&effect.plugin_id).is_some() || crate::doc::store::blob::is_blob_track(&effect.plugin_id) {
+            if placement::kind(&effect.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&effect.plugin_id) {
                 continue;
             }
             if !whole.is_empty() || effect.scope == crate::doc::store::EffectScope::Whole {
@@ -717,7 +718,7 @@ impl<'a> StoreView<'a> {
     /// Track Overlay(Layers、Snap Strength > 0)が、拾った物の箱の辺から立てた格子の線(`overlay::edge_lines`)へ、物を画面の上で寄せる。
     /// 線は寄せる前の箱から立てる(寄せた結果を読み直さない)。
     fn snap_to_found_grids(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
-        use crate::doc::store::overlay;
+        use crate::doc::extensions::overlay;
         let overlays: Vec<(LayerId, f32, f32)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
             let effect = l.effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id))?;
             let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
@@ -892,8 +893,8 @@ impl<'a> StoreView<'a> {
         visiting: &mut HashSet<LayerId>,
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
-        let blur = base.effects.iter().position(|e| crate::doc::store::motion::is_motion_blur(&e.plugin_id));
-        let places = |e: &ResolvedEffect| placement::kind(&e.plugin_id).is_some() || crate::doc::store::blob::is_blob_track(&e.plugin_id);
+        let blur = base.effects.iter().position(|e| crate::doc::extensions::motion::is_motion_blur(&e.plugin_id));
+        let places = |e: &ResolvedEffect| placement::kind(&e.plugin_id).is_some() || crate::doc::extensions::blob::is_blob_track(&e.plugin_id);
         let Some(first) = base.effects.iter().position(places) else {
             return match blur {
                 Some(at) => self.push_motion_blur(base, at, t, present, world_transforms, memo, visiting, out),
@@ -1002,7 +1003,7 @@ impl<'a> StoreView<'a> {
     /// Blob Track: host が解いた塊(`AnalysisInputs`)を配置に。素材(この層)の中心を塊の中心へ、Box なら素材を箱の大きさへ伸ばす。
     /// 解析の入力が無ければ空(描く前・UI の問い合わせ)。鍵の効果の番号は、層の中で何番目の Blob Track か。
     fn blob_placements(&self, layer: LayerId, t: RationalTime, params: &[(String, crate::doc::store::Value)], stretch_outline: bool) -> Result<Vec<(placement::Placement, [f32; 2])>, StoreError> {
-        use crate::doc::store::blob;
+        use crate::doc::extensions::blob;
         let Some(marks) = self.analysis().and_then(|a| a.blobs(layer, crate::doc::store::EffectId(0), t)) else { return Ok(Vec::new()) };
         let position = glam::Vec2::from(self.resolve_position(layer, t)?);
         let material = blob::vec2_of(params, "material").map(|v| v.max(1e-3) as f32);
@@ -1030,7 +1031,7 @@ impl<'a> StoreView<'a> {
         visiting: &mut HashSet<LayerId>,
         out: &mut Vec<ResolvedLayer>,
     ) -> Result<(), StoreError> {
-        use crate::doc::store::motion;
+        use crate::doc::extensions::motion;
         let (tune, mask) = motion::settings(&base.effects[at_index].params);
         let below = base.effects.split_off(at_index + 1);
         base.effects.pop();
@@ -1711,7 +1712,7 @@ mod clipping_contract {
         let group = add(&mut doc, 9, 5, None, false);
         let ink = add(&mut doc, 2, 1, Some(group), false);
         let paper = add(&mut doc, 3, 2, Some(group), false);
-        doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: placement::REPEAT.to_owned() }] }).unwrap();
+        doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: crate::doc::extensions::placement::REPEAT.to_owned() }] }).unwrap();
         for (name, value) in [("count", 4.0), ("pick", 1.0)] {
             doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(1), name).unwrap(), value: Value::F64(value) }).unwrap();
         }

@@ -6,7 +6,7 @@ description: Write a Motolii script — a JS file that builds a document with th
 # Motolii script (2026-09-19)
 
 A script is JS run once by `run_script` (`motolii/ui/native/src/editor/script.rs:18`) on QuickJS with the prelude
-(`motolii/ui/native/src/editor/script/prelude.js`). Every call is a window op (`__op`), every name is a name the
+(`motolii/ui/extensions/script/src/prelude.js`). Every call is a window op (`__op`), every name is a name the
 window shows. A refused script leaves nothing behind (script.rs:26-28). Budget 20 s (script.rs:10), memory 512 MB.
 
 ## The whole contract

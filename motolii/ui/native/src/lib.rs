@@ -5,8 +5,6 @@ mod editor;
 mod port;
 mod snapshot;
 mod snapshot_cache;
-mod export_job;
-mod freeze_job;
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
@@ -32,10 +30,10 @@ pub struct EditorRuntime {
     path: Option<String>,
     saved_signature: String,
     color_target: Option<editor::session::ColorSlot>,
-    exporter: export_job::ExportController,
+    exporter: motolii_jobs::export::ExportController,
     /// Freeze の裏仕事(層のコマを焼く)。
-    freezer: freeze_job::FreezeController,
-    clock: editor::playback::Clock,
+    freezer: motolii_jobs::freeze::FreezeController,
+    clock: crate::render::playback::Clock,
     clock_revision: doc::store::Revision,
     frame: i64,
     device_id: u64,
@@ -110,8 +108,8 @@ impl EditorRuntime {
         let device_id = unsafe { engine.gpu_device().as_hal::<wgpu::hal::api::Metal>() }
             .ok_or("Engine did not create a Metal device")?.raw_device().registryID();
         let saved_signature = snapshot::authored_signature(&doc)?;
-        let clock = editor::playback::Clock::from_document(&doc, 60.0);
-        clock.sync_document(&doc);
+        let clock = crate::render::playback::Clock::from_view(&doc.view(), 60.0);
+        clock.sync_view(&doc.view());
         let clock_revision = doc.revision();
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));

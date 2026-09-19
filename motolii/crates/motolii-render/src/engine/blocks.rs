@@ -369,7 +369,7 @@ impl Engine {
         }
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
             // 見せるための層(可視の重ね、つなぐ線)は物にしない。物理の相手は画の中身だけ。
-            if layer.effects.iter().any(|e| crate::doc::store::overlay::is_track_overlay(&e.plugin_id)) {
+            if layer.effects.iter().any(|e| crate::doc::extensions::overlay::is_track_overlay(&e.plugin_id)) {
                 continue;
             }
             let connects = |name: &str| -> Result<bool, EngineError> {

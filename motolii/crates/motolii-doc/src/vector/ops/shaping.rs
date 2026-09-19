@@ -18,8 +18,8 @@ fn value_noise(seed: u64, index: u32, phase: f64) -> f64 {
     let cell = phase.floor();
     let f = phase - cell;
     let f = f * f * (3.0 - 2.0 * f);
-    let a = crate::doc::store::placement::noise(seed, index, cell as i64 as u64);
-    let b = crate::doc::store::placement::noise(seed, index, (cell as i64 + 1) as u64);
+    let a = crate::doc::extensions::placement::noise(seed, index, cell as i64 as u64);
+    let b = crate::doc::extensions::placement::noise(seed, index, (cell as i64 + 1) as u64);
     a + (b - a) * f
 }
 

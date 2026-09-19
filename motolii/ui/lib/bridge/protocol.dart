@@ -42,6 +42,7 @@ enum DocumentOperation {
   expandEffect('expandEffect'),
   moveEffect('moveEffect'),
   enableEffect('enableEffect'),
+  scopeEffect('scopeEffect'),
   animate('animate'),
   preferences('preferences'),
   clip('clip'),
@@ -75,7 +76,9 @@ enum DocumentOperation {
   pause('pause'),
   tick('tick'),
   moveLayers('moveLayers'),
-  reloadEffects('reloadEffects');
+  reloadEffects('reloadEffects'),
+  runScript('runScript'),
+  rerunScript('rerunScript');
 
   const DocumentOperation(this.wireName);
   final String wireName;

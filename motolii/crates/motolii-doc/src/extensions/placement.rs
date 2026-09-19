@@ -146,39 +146,7 @@ pub fn kind(plugin_id: &str) -> Option<&'static PlacementKind> {
     KINDS.iter().find(|kind| kind.plugin_id == plugin_id)
 }
 
-/// 配置 1 つ。値は層の**親の空間**で、回転と大きさは層の位置を中心にする。
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Placement {
-    pub index: u32,
-    pub offset: [f32; 2],
-    pub rotation_degrees: f32,
-    pub scale: f32,
-    /// 奥行きのずれ。2.5D/3D の写しだけが受ける(2D の transform には無い)。
-    pub offset_z: f32,
-    pub opacity: f32,
-    /// 正なら遅れて出る(この配置は `t - time_offset` の姿)。
-    pub time_offset: RationalTime,
-    /// 縦横の伸び(Blob Track が素材を箱に合わせる)。Repeater は [1, 1]。
-    pub stretch: [f32; 2],
-}
-
-impl Placement {
-    pub fn affine2(&self, pivot: glam::Vec2) -> glam::Affine2 {
-        use glam::{Affine2, Vec2};
-        Affine2::from_translation(Vec2::from(self.offset) + pivot)
-            * Affine2::from_angle(self.rotation_degrees.to_radians())
-            * Affine2::from_scale(Vec2::new(self.scale * self.stretch[0], self.scale * self.stretch[1]))
-            * Affine2::from_translation(-pivot)
-    }
-
-    pub fn affine3(&self, pivot: glam::Vec3) -> glam::Affine3A {
-        use glam::{Affine3A, Quat, Vec3};
-        Affine3A::from_translation(Vec3::new(self.offset[0], self.offset[1], self.offset_z) + pivot)
-            * Affine3A::from_quat(Quat::from_rotation_z(self.rotation_degrees.to_radians()))
-            * Affine3A::from_scale(Vec3::new(self.scale * self.stretch[0], self.scale * self.stretch[1], 1.0))
-            * Affine3A::from_translation(-pivot)
-    }
-}
+pub use crate::doc::store::Placement;
 
 const TIME_DEN: i64 = 1_000_000;
 

@@ -86,7 +86,7 @@ pub fn text_shapes_moving(
     }
     if let Some((target, amount)) = morph.filter(|(_, amount)| *amount > 0.0) {
         if let Some(other) = shape_document(target, t, canvas)? {
-            let pairs = crate::doc::vector::morph::morph_glyphs(&shaped.contours, &shaped.contour_glyphs, &other.contours, &other.contour_glyphs, amount);
+            let pairs = crate::extensions::text::morph::morph_glyphs(&shaped.contours, &shaped.contour_glyphs, &other.contours, &other.contour_glyphs, amount);
             let styles: Vec<usize> = pairs.iter().map(|(_, glyph)| {
                 shaped.contour_glyphs.iter().position(|g| g == glyph).map_or(0, |i| shaped.contour_styles[i])
             }).collect();
@@ -114,7 +114,7 @@ pub(crate) fn morph_partner<'a>(
     documents: &'a std::collections::HashMap<crate::doc::store::LayerId, TextDocument>,
 ) -> Option<(&'a TextDocument, f64)> {
     let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-    let (target, amount) = crate::doc::store::textop::morph(&effects)?;
+    let (target, amount) = crate::extensions::text::morph(&effects)?;
     documents.get(&target).map(|d| (d, amount))
 }
 

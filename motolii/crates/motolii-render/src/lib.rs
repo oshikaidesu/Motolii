@@ -4,7 +4,9 @@ pub mod audio;
 pub mod compositor;
 pub mod engine;
 pub mod export;
+pub mod extensions;
 pub mod media;
+pub mod playback;
 
 pub use motolii_doc as doc;
 

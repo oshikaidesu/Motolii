@@ -3,7 +3,7 @@
 //! 中間は折れ線、両端(t = 0・1)は元の輪郭そのもの。
 //! 先例: Flubber / GSAP MorphSVG の点合わせ、fontTools `interpolatable` の輪郭対応(ハンガリー法)。
 
-use crate::doc::vector::geom::bezier_point;
+use crate::doc::vector::bezier_point;
 use crate::doc::vector::{Contour, Point};
 
 /// 1 輪郭あたりの点数(中間の折れ線)。

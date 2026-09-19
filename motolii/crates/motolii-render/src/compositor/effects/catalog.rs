@@ -390,7 +390,7 @@ fn prepare(source: VismSource, prelude: &str, modules: &[(String, String)]) -> R
 
 fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     // shader を持たない棚の 1 枚(配置・表面・場)は doc の 1 つの表から。棚と Inspector には同じ列で並ぶ。
-    let declared = crate::doc::store::kind::all().map(|kind| EffectDescriptor {
+    let declared = crate::extensions::all().map(|kind| EffectDescriptor {
         persistent: false,
         image_time_sources: Vec::new(),
         image_time_bases: Vec::new(),

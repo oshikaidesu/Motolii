@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
-use crate::doc::store::{blob, overlay, EffectId, LayerId, RationalTime, ResolvedLayer, StoreView};
+use crate::doc::store::{EffectId, LayerId, RationalTime, ResolvedLayer, StoreView};
+use crate::doc::extensions::{blob, overlay};
 use crate::render::compositor::LayerContent;
 use crate::render::engine::render::{collect_shape_documents, collect_text_documents};
 use crate::render::engine::{Engine, EngineError};
@@ -251,7 +252,7 @@ impl Engine {
                     let mut pushes = scope.iter().map(|(i, _)| view.pushed_on_screen(resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
                     // 物理の可視は、下の層ではなく解き手が持っている物そのものから拾う
                     // (箱の中の子は「下の層」に出て来ないため)。
-                    let physics = effect.plugin_id == crate::doc::store::overlay::PHYSICS_TRACE;
+                    let physics = effect.plugin_id == crate::doc::extensions::overlay::PHYSICS_TRACE;
                     let mut marks = marks;
                     let (mut links, mut wells) = (Vec::new(), Vec::new());
                     if physics {

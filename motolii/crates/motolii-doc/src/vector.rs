@@ -9,12 +9,11 @@ mod raster;
 pub mod coverage;
 
 pub mod text;
-pub mod morph;
 pub mod strokes;
 
 use serde::{Deserialize, Serialize};
 
-pub use geom::{Contour, Path, Point, Vertex};
+pub use geom::{bezier_point, Contour, Path, Point, Vertex};
 pub use group::{content_bounds, content_canvas, flatten, stretch_outline, render_tree, ShapeGroup, ShapeNode};
 
 use geom::{ellipse, polystar, rect};

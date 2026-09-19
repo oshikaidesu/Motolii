@@ -13,7 +13,8 @@ motolii-doc = { path = "../../crates/motolii-doc" }
 motolii-render = { path = "../../crates/motolii-render", features = ["shared-bgra-output"] }
 wgpu = { workspace = true }
 serde_json = { workspace = true }
-rquickjs = { workspace = true }
+motolii-script = { path = "../extensions/script" }
+motolii-jobs = { path = "../extensions/jobs" }
 serde = { workspace = true }
 peniko = { workspace = true }
 image = { workspace = true }

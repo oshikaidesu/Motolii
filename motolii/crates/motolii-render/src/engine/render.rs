@@ -1221,7 +1221,7 @@ pub(super) fn collect_text_documents(
             }
             // Text Morph の相手は見えていない層でもよい: 書類だけ持ってくる。
             let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-            if let Some((target, _)) = crate::doc::store::textop::morph(&effects) {
+            if let Some((target, _)) = crate::extensions::text::morph(&effects) {
                 if !documents.contains_key(&target) {
                     if let Some(document) = view.resolved_text_document(target, t).map_err(|e| EngineError::Store(e.to_string()))? {
                         documents.insert(target, document);
@@ -1257,7 +1257,7 @@ pub(super) fn collect_shape_documents(
 /// パス効果を掛けた姿。配置の上下どちらに積んでも輪郭には同じに効く(輪郭は絵より先)。
 pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
     let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-    crate::doc::store::pathop::with_effects(shapes, &effects)
+    crate::doc::extensions::pathop::with_effects(shapes, &effects)
 }
 
 /// 層の 4 隅を画面に映して、効果の余白込みで枠の外に丸ごと出ていれば true。
@@ -1307,9 +1307,10 @@ mod placement_contract {
     //! 配置効果(motolii.repeat)は他の効果と同じ口から入り、素材を N 個置く。
     //! 既定は通り抜け。配置効果の**下**に効果を積んだ時だけ、配置を 1 枚に合わせてから掛かる。
     use crate::doc::store::{
-        placement, property, Composition, Document, EffectId, EffectInstance, EffectScope, Fps, Intent,
+        property, Composition, Document, EffectId, EffectInstance, EffectScope, Fps, Intent,
         LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
+use crate::doc::extensions::{placement};
     use crate::render::engine::{known_effects, Engine};
 
     const SIZE: u32 = 48;

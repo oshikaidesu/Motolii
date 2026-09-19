@@ -121,14 +121,14 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         .into_iter()
         .map(|instance| {
             let id = instance.id;
-            if let Some(kind) = crate::doc::store::placement::kind(&instance.plugin_id) {
+            if let Some(kind) = crate::doc::extensions::placement::kind(&instance.plugin_id) {
                 // 配置効果は形のトグルで出る欄が変わる。表の順・名前・組をそのまま運ぶ。
                 let get = |name: &str| PropertyId::effect_param(id, name).ok().and_then(|p| view.value_at(layer, &p, t).ok().flatten());
                 let mode = match get("mode") { Some(Value::F64(m)) => m.round().max(0.0) as u8, _ => 0 };
                 let rows = kind.params.iter().filter(|p| p.shown(mode)).filter_map(|param| {
                     let prop = PropertyId::effect_param(id, param.name).ok()?;
                     let keyed = view.track(layer, &prop).ok().flatten().is_some();
-                    let value = get(param.name).or_else(|| crate::doc::store::placement::default_for(kind, param.name, mode)).unwrap_or_else(|| param.default_value());
+                    let value = get(param.name).or_else(|| crate::doc::extensions::placement::default_for(kind, param.name, mode)).unwrap_or_else(|| param.default_value());
                     let (cells, vec2) = match value {
                         Value::Vec2([x, y]) => ([f(x), f(y), String::new()], true),
                         Value::F64(v) => ([String::new(), String::new(), f(v)], false),
@@ -145,8 +145,8 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                     }).collect();
                     kids.sort_by_key(|k| (k.0, k.1));
                     for (_, child, name) in kids {
-                        let Ok(prop) = PropertyId::effect_param(id, &format!("{}{}", crate::doc::store::placement::SHARE_PREFIX, child.0)) else { continue };
-                        let v = match view.value_at(layer, &prop, t).ok().flatten() { Some(Value::F64(v)) => v, _ => crate::doc::store::placement::SHARE_DEFAULT };
+                        let Ok(prop) = PropertyId::effect_param(id, &format!("{}{}", crate::doc::extensions::placement::SHARE_PREFIX, child.0)) else { continue };
+                        let v = match view.value_at(layer, &prop, t).ok().flatten() { Some(Value::F64(v)) => v, _ => crate::doc::extensions::placement::SHARE_DEFAULT };
                         let keyed = view.track(layer, &prop).ok().flatten().is_some();
                         let label = if name.is_empty() { format!("Layer {}", child.0) } else { name };
                         rows.push(PropRow { label, cells: [String::new(), String::new(), f(v)], dims: [false, false, false], keyed, property: Some(prop.name().to_owned()), vec2: false, value: Value::F64(v), range: Some((0.0, 1000.0)), axis: [None, None, None] });

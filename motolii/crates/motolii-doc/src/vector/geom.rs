@@ -194,7 +194,7 @@ pub(crate) fn lerp_point(a: Point, b: Point, t: f64) -> Point {
     a.add(b.sub(a).scale(t))
 }
 
-pub(crate) fn bezier_point(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
+pub fn bezier_point(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
     if is_straight(v0, v1) {
         return lerp_point(v0.point, v1.point, t);
     }

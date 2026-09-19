@@ -3,6 +3,7 @@
 //! 文字の層にだけ掛かる(裁定 2026-09-13: 書体を跨ぐ morph は核でなく効果)。
 
 use crate::doc::eval::Value;
+pub mod morph;
 use crate::doc::store::kind::Param;
 use crate::doc::store::{LayerId, ResolvedEffect};
 

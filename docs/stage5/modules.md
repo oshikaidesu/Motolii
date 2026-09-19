@@ -2,6 +2,25 @@
 
 依存の正本は[modules.json](modules.json)。`scripts/motolii-ui.sh check`で参照方向と所有を確認する。ファイル数や行数だけを完成条件にしない。
 
+## コアと拡張
+
+再生側は作品の読み取りと時刻を受け、編集UIを知らずに描く。編集側はDocument/Intentを通して書き込みとUndoを所有する。拡張は操作要求または共通の入出力型を使い、Documentの第二の所有者にならない。Documentの読み取り・保存・編集はまだ同じcrate内で、再生だけの最小コアへの分離は未完。現行の分離は静的リンクであり、任意のネイティブプラグインを安全に実行する仕組みではない。
+
+| 所有者 | 実装 | 接続する口 |
+|---|---|---|
+| 再生時計・音声transport | `motolii-render/src/playback.rs` | `StoreView`の読み取りだけ。編集Document/Intent、Flutter、パネルを受け取らない |
+| 作品の保存・編集 | `motolii-doc/src/store/document.rs`、`Intent`、`persist.rs` | Document/Intent、共通の値・効果宣言型 |
+| JS実行器・作者用関数 | `motolii/ui/extensions/script` (`motolii-script`) | `Host::command` と読み取り専用 `Host::query`。doc/render/Flutterへの依存なし |
+| スクリプトと編集の接続 | `ui/native/src/editor/script.rs` | 操作の検証・Document/Undo・ファイルの再実行。JS VMは所有しない |
+| 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | Documentスナップショットを受けて処理し、状態とキャンセルを提供。ライブのEditorRuntimeを知らない |
+| 同梱効果の組み立て | `motolii-render/src/extensions/mod.rs` | 共通 `Kind` 宣言を既存の描画catalogへ渡す |
+| Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
+| WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
+
+**残る分離**: 配置・パス・解析などの組み込み効果は `motolii-doc/src/extensions` に分離したが、レイアウトと効果評価の組み立てはまだdoc内にある。`motolii-doc`全体が最小コアになったとは扱わない。保存形式の変更や、9月17日の未決定の「idと時刻だけ」案の採用は、この移動に含めない。
+
+## UIの所有
+
 | モジュール | 持つ責任 | 持たない責任 |
 |---|---|---|
 | `app` | 起動、窓のライフサイクル、保存確認、OS窓との接続 | Dock内部、個別キーの判定、作品データ |
