@@ -90,6 +90,22 @@ pub struct PlacementProgram {
     pub plugin_id: &'static str,
     pub needs_position: bool,
     pub evaluate: fn(&PlacementInput<'_>) -> Vec<PlacementOutput>,
+    /// グループの子が素材の袋になる時、`count` 個の写しがそれぞれどの子を引くか(子の並びの番号)。
+    /// 引き方は効果の方針(順に・重みで・種から)。子が無ければ空。
+    pub pick: fn(&[(String, Value)], &[u64], usize) -> Vec<usize>,
+    /// この取っ手ではグループ全体が 1 つの物として動くか(子を 1 枚ずつ動かすのではなく)。
+    pub moves_whole: fn(&[(String, Value)]) -> bool,
+}
+
+/// 子を引かない効果の既定: `k` 番目の写しは `k` 番目の子。
+pub fn pick_in_turn(_params: &[(String, Value)], children: &[u64], count: usize) -> Vec<usize> {
+    if children.is_empty() { return Vec::new() }
+    (0..count).map(|index| index % children.len()).collect()
+}
+
+/// 全体を動かす取っ手を持たない効果の既定。
+pub fn never_moves_whole(_params: &[(String, Value)]) -> bool {
+    false
 }
 
 /// 1 コマの中で層を取り直す効果(Motion Blur など)が返す取っ手。
@@ -144,6 +160,23 @@ impl Shutter {
         }
         Ok((0..count).filter_map(|k| at((self.offset)(k, count))).map(read_delta).collect())
     }
+}
+
+/// 拾った物の箱の辺を格子の線へまとめ、そこへ寄せる効果が返す取っ手。
+/// どの辺が同じ線に乗るかは効果の方針で、コアは箱を集めて渡し、返った線へ動かすだけ。
+pub struct Snapping {
+    /// 寄せる強さ(0 なら寄せない)。
+    pub strength: f32,
+    /// 線をまとめる度合い。効果の取っ手の値で、コアは意味を知らない。
+    pub merge: f32,
+    /// 辺の座標の列を、同じ長さの「その辺が乗る線」の列へ。
+    pub lines: fn(&[f32], f32) -> Vec<f32>,
+}
+
+/// 取っ手の値から Snapping を読む効果。
+pub struct SnapProgram {
+    pub plugin_id: &'static str,
+    pub snapping: fn(&str, &[(String, Value)]) -> Option<Snapping>,
 }
 
 /// 取っ手の値から Shutter を読む効果。`plugin_id` が合う効果に 1 つ。

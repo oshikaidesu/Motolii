@@ -150,7 +150,13 @@ pub fn kind(plugin_id: &str) -> Option<&'static PlacementKind> {
 }
 
 pub fn program(plugin_id: &str) -> Option<crate::doc::store::kind::PlacementProgram> {
-    kind(plugin_id).map(|kind| crate::doc::store::kind::PlacementProgram { plugin_id: kind.plugin_id, needs_position: false, evaluate: kind.evaluate })
+    kind(plugin_id).map(|kind| crate::doc::store::kind::PlacementProgram {
+        plugin_id: kind.plugin_id,
+        needs_position: false,
+        evaluate: kind.evaluate,
+        pick: picks,
+        moves_whole: |params| params.iter().any(|(n, v)| n == "transform" && matches!(v, Value::F64(x) if x.round() == f64::from(TRANSFORM_WHOLE))),
+    })
 }
 
 pub use crate::doc::store::Placement;

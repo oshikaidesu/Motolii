@@ -236,6 +236,25 @@ pub fn color_of(params: &[(String, Value)], name: &str) -> [f64; 4] {
 /// 重みは幅 `merge` のガウス。近い辺同士の線は同じ所に重なって 1 本に見え、離れれば分かれる。分布の山を拾う方法と違い
 /// 枝分かれの点が無いので、辺が動いても線は滑らかに動く。濃さは 1 / (近くの辺の数) で、重なった線が 1 本分の濃さに近づく。
 /// 戻り値は辺と同じ順の (線の位置, 濃さ)。`merge` が 0 なら辺そのもの。
+/// この効果が寄せる気なら、その取っ手。Detection Method が Layers でなく、
+/// Snap Strength が 0 なら寄せない。
+pub fn snapping(plugin_id: &str, params: &[(String, Value)]) -> Option<crate::doc::store::kind::Snapping> {
+    let params = with_defaults(plugin_id, params);
+    let strength = number_of(&params, "grid_snap").clamp(0.0, 1.0) as f32;
+    if number_of(&params, "method").round() as i64 != 2 || strength <= 0.0 {
+        return None;
+    }
+    Some(crate::doc::store::kind::Snapping {
+        strength,
+        merge: number_of(&params, "grid_merge").max(0.0) as f32,
+        lines: |edges, merge| edge_lines(edges, merge).into_iter().map(|(at, _)| at).collect(),
+    })
+}
+
+pub fn program(plugin_id: &str) -> Option<crate::doc::store::kind::SnapProgram> {
+    KINDS.iter().find(|k| k.plugin_id == plugin_id).map(|k| crate::doc::store::kind::SnapProgram { plugin_id: k.plugin_id, snapping })
+}
+
 pub fn edge_lines(edges: &[f32], merge: f32) -> Vec<(f32, f32)> {
     if merge <= 1e-3 {
         return edges.iter().map(|e| (*e, 1.0)).collect();

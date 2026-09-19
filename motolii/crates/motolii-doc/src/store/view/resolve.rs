@@ -16,7 +16,6 @@ use crate::doc::store::{
     property, LayerId, LayerPlacement, PropertyId, ResolvedEffect, ResolvedLayer,
     ResolvedMask, StoreError, TextDocument,
 };
-use crate::doc::extensions::{placement};
 
 use super::StoreView;
 

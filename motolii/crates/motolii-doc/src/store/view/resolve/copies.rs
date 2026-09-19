@@ -64,8 +64,8 @@ impl<'a> StoreView<'a> {
             return Ok(());
         }
         let whole = is_group && base.effects[first].scope == crate::doc::store::EffectScope::Whole;
-        let whole_transform = params.iter().any(|(n, v)| n == "transform" && matches!(v, crate::doc::store::Value::F64(x) if x.round() == f64::from(placement::TRANSFORM_WHOLE)));
-        let picks = placement::picks(params, &children.iter().map(|c| c.0).collect::<Vec<_>>(), placements.len());
+        let whole_transform = (program.moves_whole)(params);
+        let picks = (program.pick)(params, &children.iter().map(|c| c.0).collect::<Vec<_>>(), placements.len());
         // 引いた子の写しは番号の順に重ねる(AE の Repeater・Cavalry の Duplicator)。子の order のまま並べ直すと、同じ子の写しが全部まとまって重なる。
         let copies_slot = if is_group && !whole {
             children.iter().filter_map(|c| self.meta(*c).ok().flatten().map(|m| m.order)).min()

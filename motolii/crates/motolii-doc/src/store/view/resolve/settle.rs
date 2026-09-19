@@ -82,31 +82,26 @@ impl<'a> StoreView<'a> {
     }
 
     /// 見つけた格子へ寄せる(2026-09-15 利用者「ものは動かします。グリッドが動的に動くと Tracery のような効果になる」):
-    /// Track Overlay(Layers、Snap Strength > 0)が、拾った物の箱の辺から立てた格子の線(`overlay::edge_lines`)へ、物を画面の上で寄せる。
-    /// 線は寄せる前の箱から立てる(寄せた結果を読み直さない)。
+    /// 寄せる気のある効果に、拾った物の箱の辺を渡して線を立ててもらい、その線へ画面の上で寄せる。
+    /// 線は寄せる前の箱から立てる(寄せた結果を読み直さない)。どの辺が同じ線に乗るかはコアの知る所ではない。
     fn snap_to_found_grids(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
-        use crate::doc::extensions::overlay;
-        let overlays: Vec<(LayerId, f32, f32)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
-            let effect = l.effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id))?;
-            let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
-            let strength = overlay::number_of(&params, "grid_snap").clamp(0.0, 1.0) as f32;
-            (overlay::number_of(&params, "method").round() as i64 == 2 && strength > 0.0)
-                .then(|| (l.id, strength, overlay::number_of(&params, "grid_merge").max(0.0) as f32))
+        let snappers: Vec<(LayerId, crate::doc::store::kind::Snapping)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
+            l.effects.iter().find_map(|e| Some((l.id, self.snapping_of(&e.plugin_id, &e.params)?)))
         }).collect();
-        for (overlay_layer, strength, merge) in overlays {
+        for (overlay_layer, snap) in snappers {
             let scope = self.overlay_scope(overlay_layer, out, t)?;
             if scope.is_empty() {
                 continue;
             }
             let xs: Vec<f32> = scope.iter().flat_map(|(_, b)| [b[0], b[2]]).collect();
             let ys: Vec<f32> = scope.iter().flat_map(|(_, b)| [b[1], b[3]]).collect();
-            let (lx, ly) = (overlay::edge_lines(&xs, merge), overlay::edge_lines(&ys, merge));
+            let (lx, ly) = ((snap.lines)(&xs, snap.merge), (snap.lines)(&ys, snap.merge));
             for (k, &(index, b)) in scope.iter().enumerate() {
                 if out[index].source == crate::doc::store::LayerSource::Group {
                     continue;
                 }
-                let dx = ((lx[2 * k].0 - b[0]) + (lx[2 * k + 1].0 - b[2])) * 0.5 * strength;
-                let dy = ((ly[2 * k].0 - b[1]) + (ly[2 * k + 1].0 - b[3])) * 0.5 * strength;
+                let dx = ((lx[2 * k] - b[0]) + (lx[2 * k + 1] - b[2])) * 0.5 * snap.strength;
+                let dy = ((ly[2 * k] - b[1]) + (ly[2 * k + 1] - b[3])) * 0.5 * snap.strength;
                 let layer = &mut out[index];
                 layer.placement.transform = glam::Affine2::from_translation(glam::vec2(dx, dy)) * layer.placement.transform;
                 if let Some(world) = layer.placement.world_transform {

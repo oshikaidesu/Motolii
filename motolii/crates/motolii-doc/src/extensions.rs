@@ -13,3 +13,7 @@ pub fn placement_program(plugin_id: &str) -> Option<crate::store::kind::Placemen
 pub fn sampling_program(plugin_id: &str) -> Option<crate::store::kind::SamplingProgram> {
     motion::program(plugin_id)
 }
+
+pub fn snap_program(plugin_id: &str) -> Option<crate::store::kind::SnapProgram> {
+    overlay::program(plugin_id)
+}

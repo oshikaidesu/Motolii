@@ -210,6 +210,7 @@ impl Document {
             &self.layout_cache,
             crate::doc::extensions::placement_program,
             crate::doc::extensions::sampling_program,
+            crate::doc::extensions::snap_program,
         )
     }
 

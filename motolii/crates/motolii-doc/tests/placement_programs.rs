@@ -204,6 +204,8 @@ fn an_external_placement_program_changes_only_the_read_projection() {
         plugin_id: "test.external-placement",
         needs_position: false,
         evaluate: two_copies,
+        pick: motolii_doc::store::kind::pick_in_turn,
+        moves_whole: motolii_doc::store::kind::never_moves_whole,
     }];
     let view = doc.view();
     let ordinary = view.resolved_layers(RationalTime::ZERO).unwrap();

@@ -56,7 +56,11 @@ pub fn is_blob_track(plugin_id: &str) -> bool {
 
 pub fn program(plugin_id: &str) -> Option<crate::store::kind::PlacementProgram> {
     KINDS.iter().find(|kind| kind.plugin_id == plugin_id).map(|kind| crate::store::kind::PlacementProgram {
-        plugin_id: kind.plugin_id, needs_position: true, evaluate: placements,
+        plugin_id: kind.plugin_id,
+        needs_position: true,
+        evaluate: placements,
+        pick: crate::store::kind::pick_in_turn,
+        moves_whole: crate::store::kind::never_moves_whole,
     })
 }
 
