@@ -232,7 +232,7 @@ impl EditorRuntime{
             "placeAsset"|"replaceAsset"=>{let a=self.doc.view().asset(asset_id(&j)?).map_err(e)?.ok_or("Asset missing")?;let path=a.path_absolute.ok_or("Asset path missing")?;if !std::path::Path::new(&path).exists(){return Err("Asset file missing".into())}if op=="placeAsset"{let start=j["start"].as_i64().unwrap_or(self.viewer.frame);let landing=j["placement"].as_str().map(|p|(j["target"].as_u64().map(LayerId),p.to_owned()));self.place_layer(editor::create::NewKind::Media{path,name:a.name},start,landing,j["visibleFrames"].as_i64(),None)?;}else{let layer=self.viewer.selected().ok_or("Select layer to replace")?;self.apply([Intent::SetSource{layer,source:LayerSource::File{path,fingerprint:None}}])?;}}
             "relinkAsset"=>{let id=asset_id(&j)?;let path=j["path"].as_str().ok_or("Missing path")?.to_owned();if !std::path::Path::new(&path).exists(){return Err("No file at that path".into())}let a=self.doc.view().asset(id).map_err(e)?.ok_or("Asset missing")?;let kind=std::path::Path::new(&path).extension().and_then(|x|x.to_str()).and_then(crate::render::media::asset_type_for_extension).ok_or("Unsupported file type")?;let same_family=kind.split('/').next()==a.asset_type.split('/').next();if !same_family{return Err(format!("Pick a {} file",a.asset_type.split('/').next().unwrap_or("matching")))}self.apply([Intent::RelinkAsset{asset:id,path_absolute:path,project_root:None}])?;}
             "removeAsset"=>{let id=asset_id(&j)?;if self.asset_used(id)?{return Err("Asset is still in use".into())}self.apply([Intent::RemoveAsset{asset:id}])?;}
-            "export"=>self.exporter.start(&self.doc,std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
+            "export"=>self.exporter.start(&self.doc.view(),||self.doc.flattened().map(|doc|doc.into_recording()).map_err(e),std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
             "cancelExport"=>self.exporter.cancel(),
             "runScript"=>self.run_script_file(string(&j,"path")?)?,
             "rerunScript"=>self.rerun_script()?,
@@ -263,7 +263,7 @@ impl EditorRuntime{
                     let meta=self.doc.view().meta(id).map_err(e)?.ok_or("Layer has no timing")?;
                     self.apply([Intent::Freeze{group:id}])?;
                     let root=Self::cache_root_for(self.path.as_deref());
-                    if let Err(error)=self.freezer.start(&self.doc,id,root,meta.timing.start,meta.timing.start+meta.timing.duration){
+                    if let Err(error)=self.freezer.start(||self.doc.flattened().map(|doc|doc.into_recording()).map_err(e),id,root,meta.timing.start,meta.timing.start+meta.timing.duration){
                         let _=self.apply([Intent::Unfreeze{group:id}]);
                         return Err(error);
                     }

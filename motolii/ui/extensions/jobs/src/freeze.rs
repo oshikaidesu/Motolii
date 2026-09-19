@@ -1,10 +1,30 @@
 //! Freeze の裏仕事: 別 thread の engine が層のコマを順に焼き、書類の隣の cache へ置く(export と同じ型)。
 //! 本番の engine は disk に増えたコマをそのまま読む。法は docs/freeze-and-flatten.md。
-use crate::doc::store::{Document, LayerId};
+use crate::doc::store::{Recording, LayerId};
 use crate::render::{engine::Engine, export::Cancel};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejected_freeze_does_not_copy_the_document() {
+        let mut job = FreezeController::default();
+        assert!(job.start(|| panic!("invalid range copied"), LayerId(1), None, 0, 0).is_err());
+        { let mut state = job.state.lock().unwrap(); state.phase = "running"; state.layer = Some(1); }
+        assert!(job.start(|| panic!("busy job copied"), LayerId(1), None, 0, 1).is_err());
+    }
+
+    #[test]
+    fn snapshot_failure_does_not_start_freeze() {
+        let mut job = FreezeController::default();
+        assert_eq!(job.start(|| Err("snapshot failed".into()), LayerId(1), None, 0, 1), Err("snapshot failed".into()));
+        assert_eq!(job.status()["phase"], "idle");
+    }
+}
 
 struct State {
     phase: &'static str,
@@ -54,7 +74,7 @@ impl FreezeController {
     /// 層の入点〜出点を順に焼く。既に走っていれば断る(1 本ずつ)。
     pub fn start(
         &mut self,
-        document: &Document,
+        snapshot: impl FnOnce() -> Result<Recording, String>,
         layer: LayerId,
         root: Option<PathBuf>,
         start: i64,
@@ -66,7 +86,7 @@ impl FreezeController {
         if end <= start {
             return Err("The layer has no frames to freeze".into());
         }
-        let snapshot = document.flattened().map_err(|e| e.to_string())?.into_recording();
+        let snapshot = snapshot()?;
         let cancel = Cancel::new();
         self.cancel = Some(cancel.clone());
         {

@@ -25,7 +25,7 @@ case "${1:-dev}" in
   check-read-only)
     cd "$repo"
     cargo check -p motolii-doc --no-default-features
-    exec cargo check -p motolii-render --lib
+    exec cargo check -p motolii-render -p motolii-jobs --lib
     ;;
   test-window)
     window_check_dir=$(mktemp -d /tmp/motolii-window-check.XXXXXX)

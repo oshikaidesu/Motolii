@@ -1,4 +1,4 @@
-use crate::doc::store::Document;
+use crate::doc::store::{Recording, StoreView};
 use crate::render::{
     engine::Engine,
     export::{export_range_with_progress, Cancel, ExportError, ExportJob},
@@ -6,6 +6,28 @@ use crate::render::{
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejected_export_does_not_copy_the_document() {
+        let document = crate::doc::store::blank_project();
+        let mut job = ExportController::default();
+        assert!(job.start(&document.view(), || panic!("invalid range copied"), PathBuf::new(), 0, 0).is_err());
+        job.state.lock().unwrap().phase = "running";
+        assert!(job.start(&document.view(), || panic!("busy job copied"), PathBuf::new(), 0, 1).is_err());
+    }
+
+    #[test]
+    fn snapshot_failure_does_not_start_export() {
+        let document = crate::doc::store::blank_project();
+        let mut job = ExportController::default();
+        assert_eq!(job.start(&document.view(), || Err("snapshot failed".into()), PathBuf::new(), 0, 1), Err("snapshot failed".into()));
+        assert_eq!(job.status()["phase"], "idle");
+    }
+}
 
 struct State {
     phase: &'static str,
@@ -48,7 +70,8 @@ impl ExportController {
     }
     pub fn start(
         &mut self,
-        document: &Document,
+        source: &StoreView<'_>,
+        snapshot: impl FnOnce() -> Result<Recording, String>,
         path: PathBuf,
         start: i64,
         end: i64,
@@ -59,15 +82,14 @@ impl ExportController {
                 return Err("An export is already running".into());
             }
         }
-        let comp = document
-            .view()
+        let comp = source
             .composition()
             .map_err(|e| e.to_string())?
             .ok_or("No composition")?;
         if start < 0 || end <= start || end > comp.duration_frames {
             return Err("Export range must be inside the composition and nonempty".into());
         }
-        let snapshot = document.flattened().map_err(|e| e.to_string())?.into_recording();
+        let snapshot = snapshot()?;
         let cancel = Cancel::new();
         self.cancel = Some(cancel.clone());
         {

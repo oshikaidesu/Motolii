@@ -5,9 +5,12 @@ edition = "2021"
 publish = false
 
 [dependencies]
-motolii-doc = { path = "../../../crates/motolii-doc" }
+motolii-doc = { path = "../../../crates/motolii-doc", default-features = false }
 motolii-render = { path = "../../../crates/motolii-render" }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+motolii-doc = { path = "../../../crates/motolii-doc", features = ["editing"] }
 
 [lints]
 workspace = true

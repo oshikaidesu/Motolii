@@ -16,7 +16,7 @@
 | 閲覧状態 | `ui/native/src/viewer.rs` | 選択・閲覧時刻・再生時計・観測カメラ・表示範囲・ポインタなど。作品を所有せず、読み取りViewから初期化する。主選択は一覧の末尾から導出し二重保存しない |
 | JS実行器・作者用関数 | `motolii/ui/extensions/script` (`motolii-script`) | `Host::command` と読み取り専用 `Host::query`。doc/render/Flutterへの依存なし |
 | スクリプトと編集の接続 | `ui/native/src/editor/script.rs` | 操作の検証・Document/Undo・ファイルの再実行。JS VMは所有しない |
-| 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | 受付でDocumentの確定スナップショットを作り、ワーカーへ読み取り専用Recordingを渡す。状態とキャンセルを提供し、ライブのEditorRuntimeを知らない |
+| 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | 受付条件を検証後、呼出し側の一回限りの関数からRecordingを受け取る。作品コピーの作成はnative editorが所有し、jobsはDocument/Intentに依存しない。状態とキャンセルを提供する |
 | 同梱効果の組み立て | `motolii-render/src/extensions/mod.rs` | 共通 `Kind` 宣言を既存の描画catalogへ渡す |
 | Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
 | WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
@@ -26,6 +26,8 @@
 Recordingの検収: doc単体128件、編集transaction19件、Undoを呼べないcompile-fail testが成功し、jobsを含むbuild checkが成功。RRDからの同値読み込み、Undo後の確定位置、一時値を除く変換、workerへ移せるSendを確認した。新しい型を使った実窓でのexport/Freeze完走は未検収。型の権限分離であり、編集実装をビルド依存から外すcrate分離ではない。
 
 ビルド境界の追加検収: `cargo check -p motolii-doc --no-default-features`と`cargo check -p motolii-render --lib`が成功。文字描画で使う書記素・style IDの読み取りは`text_read`へ分け、編集helperは同じ関数を再公開する。Cargo featureは加算されるため、編集アプリ全体ではeditingを含む。物理的なcrate分割・ビルド時間短縮の実証とは区別する。専用入口は`scripts/motolii-ui.sh check-read-only`。
+
+jobs入口の追加検収: native editor接続check、jobsの受付拒否・snapshot失敗4テスト、`check-read-only`での描画/jobsビルドが成功。jobs内にDocument依存を仮挿入すると構成検査が拒否した。compiler dep-infoでも読み取り専用docの入力からdocument/persist/text_editが外れ、編集構成には含まれることを確認。実窓でのexport/Freeze完走と時間短縮の実測は未検収。
 
 `owned_budget`は未合格: compute pipeline 2/0、shader module 2/0、bind-group layout 2/0、render pass 4/3、GPU無期限待機18/4、naga parser 4/3(実測/上限)。Recording変更はこれらを追加していない。上限は据え置き、描画側の残件として扱う。
 

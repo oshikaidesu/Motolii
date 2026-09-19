@@ -11,6 +11,7 @@
   },
   "nativeEditor": "motolii/ui/native/src/editor",
   "readOnlyPlayback": "motolii/crates/motolii-render/src/playback.rs",
+  "readOnlyDocumentConsumers": ["motolii/crates/motolii-render", "motolii/ui/extensions/jobs"],
   "readOnlyModels": [
     "motolii/crates/motolii-doc/src/store/view.rs",
     "motolii/crates/motolii-doc/src/store/view",
@@ -19,7 +20,8 @@
     "motolii/crates/motolii-doc/src/store/recording.rs",
     "motolii/crates/motolii-doc/src/store/text_read.rs",
     "motolii/crates/motolii-doc/src/store/ids.rs",
-    "motolii/ui/native/src/viewer.rs"
+    "motolii/ui/native/src/viewer.rs",
+    "motolii/ui/extensions/jobs/src"
   ],
   "isolatedExtensions": {
     "motolii/ui/extensions/script": ["rquickjs", "serde_json"]
