@@ -112,6 +112,21 @@ if process_state:
   if not (core/name).is_file():errors.append(f'coreProcessState: missing {name}')
 # One solver, one owner. A layer's box, its time and its text must not learn the flow's
 # solver by name: the day a second file says `taffy`, the responsibility has two homes.
+# The core registers no effects, so a work made anywhere but the one door has none of them
+# and fails silently. Only that door may make one.
+registration=modules.get('effectRegistration')
+if registration:
+ house=root/registration['root']
+ owner=registration['owner']
+ if not (house/owner).is_file():errors.append(f"effectRegistration: missing {owner}")
+ for path in sorted(house.rglob('*.rs')):
+  name=str(path.relative_to(house))
+  if name==owner:continue
+  source=re.sub(r'#\[cfg\(test\)\]\s*mod\s+\w+\s*\{.*?^\}', '', path.read_text(), flags=re.M|re.S)
+  source='\n'.join(l for l in source.split('\n') if not l.lstrip().startswith('//'))
+  for call in registration['calls']:
+   if re.search(r'(?<![\w:])'+re.escape(call)+r'\s*\(',source):
+    errors.append(f'{path.relative_to(root)}: a work must be made through {owner}, not {call}')
 for solver,owner in modules.get('coreSolvers',{}).get('owners',{}).items():
  core=root/modules['coreSolvers']['root']
  if not (core/owner).is_file():errors.append(f'coreSolvers: missing {owner}')

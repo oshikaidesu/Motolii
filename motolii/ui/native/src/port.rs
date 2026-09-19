@@ -240,7 +240,7 @@ impl EditorRuntime{
                 self.doc.save(path).map_err(e)?;
                 if j["copy"].as_bool()!=Some(true){self.path=Some(path.into());self.engine.set_cache_root(Self::cache_root_for(Some(path)));self.saved_signature=snapshot::authored_signature(&self.doc)?;}
             }
-            "new"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.doc=blank_project();self.viewer.clock=crate::render::playback::Clock::from_view(&self.doc.view(),60.0);self.path=None;self.pick(vec![]);self.viewer.selected_keys.clear();self.viewer.frame=0;self.saved_signature=snapshot::authored_signature(&self.doc)?;self.viewer.color_target=None;}
+            "new"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.doc=crate::work(None)?;self.viewer.clock=crate::render::playback::Clock::from_view(&self.doc.view(),60.0);self.path=None;self.pick(vec![]);self.viewer.selected_keys.clear();self.viewer.frame=0;self.saved_signature=snapshot::authored_signature(&self.doc)?;self.viewer.color_target=None;}
             "undo"=>{self.doc.undo();self.viewer.selected_keys.clear();}
             "redo"=>{self.doc.redo();self.viewer.selected_keys.clear();}
             // 履歴の点を押した時。段の番号まで戻る/進むを一手で。

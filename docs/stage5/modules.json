@@ -25,6 +25,7 @@
     "motolii/ui/extensions/jobs/src"
   ],
   "coreProcessState": {"root": "motolii/crates/motolii-doc/src", "owners": {"vector/text.rs": ["SYSTEM", "KNOWN"]}},
+  "effectRegistration": {"root": "motolii/ui/native/src", "owner": "lib.rs", "calls": ["blank_project", "Document::load"]},
   "coreSolvers": {"root": "motolii/crates/motolii-doc/src", "owners": {"taffy": "store/layout/flow.rs"}},
   "isolatedExtensions": {
     "motolii/ui/extensions/script": ["rquickjs", "serde_json"]

@@ -66,14 +66,19 @@ impl Drop for EditorRuntime {
     }
 }
 
+/// この編集機が扱う作品は、必ずここを通って生まれる。効果を渡すのはこの 1 箇所だけ
+/// (コアの既定は効果ゼロなので、別の道で作った作品は効果が黙って効かない)。
+pub(crate) fn work(path: Option<&str>) -> Result<Document, String> {
+    let doc = match path {
+        None => doc::store::blank_project(),
+        Some(path) => Document::load(path).map_err(|e| e.to_string())?,
+    };
+    Ok(doc.with_programs(render::extensions::bundled()))
+}
+
 impl EditorRuntime {
     fn open(path: &str) -> Result<Self, String> {
-        // 編集機が、この作品で使える効果を書類へ渡す。コアは誰が何を実装しているか知らない。
-        let doc = if path.is_empty() {
-            doc::store::blank_project()
-        } else {
-            Document::load(path).map_err(|e| e.to_string())?.with_programs(render::extensions::bundled())
-        };
+        let doc = work(if path.is_empty() { None } else { Some(path) })?;
         if doc.view().composition().map_err(|e| e.to_string())?.is_none() {
             return Err("Saved document has no composition".into());
         }
