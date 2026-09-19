@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 
 pub mod boxes;
+pub mod frame;
 pub mod flow;
 pub mod path;
 pub mod text;
@@ -411,64 +412,7 @@ impl LayoutCache {
 
 impl StoreView<'_> {
 
-    /// その時刻に並べた結果。Display の Group が無ければ空。
-    pub fn layout_frame(&self, t: RationalTime) -> Result<std::sync::Arc<Frame>, StoreError> {
-        if let Some(hit) = self.layout_memo().borrow().frames.get(&t) {
-            return Ok(hit.clone());
-        }
-        if let Some((cache, revision)) = self.shared_layout_cache() {
-            let cache = cache.borrow();
-            if cache.revision.as_ref() == Some(revision) {
-                if let Some(hit) = cache.frames.get(&t) {
-                    self.layout_memo().borrow_mut().frames.insert(t, hit.clone());
-                    return Ok(hit.clone());
-                }
-            }
-        }
-        // 解いている間に同じ時刻を問われたら(面の Group の親を辿る時など)、空の結果で答えて巡らない。
-        self.layout_memo().borrow_mut().frames.insert(t, std::sync::Arc::new(Frame::default()));
-        // 解いている途中の内側の時刻は、巡り止めの空の結果を読んでいるかもしれない。コマをまたいで覚えるのは一番外側だけ。
-        let outermost = self.layout_memo().borrow_mut().enter();
-        let computed = crate::doc::store::layout::flow::compute_layout(self, t);
-        self.layout_memo().borrow_mut().leave();
-        let frame = std::sync::Arc::new(computed?);
-        self.layout_memo().borrow_mut().frames.insert(t, frame.clone());
-        if let Some((cache, revision)) = self.shared_layout_cache().filter(|_| outermost) {
-            let mut cache = cache.borrow_mut();
-            if cache.revision.as_ref() != Some(revision) || cache.frames.len() >= LayoutCache::LIMIT {
-                cache.revision = Some(revision.clone());
-                cache.frames.clear();
-            }
-            cache.frames.insert(t, frame.clone());
-        }
-        Ok(frame)
-    }
 
-    /// 並ぶ子なら、層の Position と Scale の代わりに使う値。
-    pub(crate) fn laid_out(&self, layer: LayerId, t: RationalTime) -> Result<Option<Slot>, StoreError> {
-        let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent else { return Ok(None) };
-        if self.display(parent, t)? == 0 {
-            return Ok(None);
-        }
-        let Some(mut slot) = self.layout_frame(t)?.slots.get(&layer).copied() else { return Ok(None) };
-        // 移り方: 少し前の行き先を、区間の重みで混ぜる(位置と大きさ)。
-        let mut acc = [[0.0f32; 2]; 4];
-        let mut total = 0.0f32;
-        for (at, weight) in self.transition_samples(layer, t)? {
-            if let Some(past) = self.layout_frame(at)?.slots.get(&layer) {
-                for (sum, value) in acc.iter_mut().zip([past.position, past.scale, past.stretch, past.anchor]) {
-                    for axis in 0..2 {
-                        sum[axis] += value[axis] * weight;
-                    }
-                }
-                total += weight;
-            }
-        }
-        if total > 1e-6 {
-            [slot.position, slot.scale, slot.stretch, slot.anchor] = acc.map(|sum| sum.map(|v| v / total));
-        }
-        Ok(Some(slot))
-    }
 
 
 
@@ -883,9 +827,9 @@ mod tests {
         let slab = rect(&mut doc, 2, group, [100.0, 50.0]);
         let card = rect(&mut doc, 3, group, [60.0, 50.0]);
         put(&mut doc, slab, property::DEPTH, Value::F64(100.0));
-        let z = |doc: &Document, id| doc.view().layout_frame(T).unwrap().slots[&id].z;
+        let z = |doc: &Document, id| crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap().slots[&id].z;
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, 0.0), "Back: backs on the face, the slab stands out toward the camera");
-        assert_eq!(doc.view().layout_frame(T).unwrap().depths[&group], [-100.0, 0.0]);
+        assert_eq!(crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap().depths[&group], [-100.0, 0.0]);
         put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(1));
         assert_eq!((z(&doc, slab), z(&doc, card)), (-100.0, -50.0), "Center: the card floats at the slab's middle");
         put(&mut doc, group, DEPTH_ALIGNMENT, Value::Enum(2));
@@ -904,7 +848,7 @@ mod tests {
         let slab = rect(&mut doc, 3, group, [100.0, 50.0]);
         let front = rect(&mut doc, 4, group, [100.0, 50.0]);
         put(&mut doc, slab, property::DEPTH, Value::F64(30.0));
-        let frame = doc.view().layout_frame(T).unwrap();
+        let frame = crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap();
         assert_eq!([frame.slots[&front].z, frame.slots[&slab].z, frame.slots[&back].z], [0.0, 20.0, 70.0], "top of the stack in front, then thickness + gap each");
         assert_eq!(frame.depths[&group], [0.0, 70.0]);
         assert_eq!(frame.slots[&front].position, frame.slots[&back].position, "one spot on the face");
@@ -1047,16 +991,16 @@ mod tests {
             put(&mut doc, layer, property::POSITION, Value::Vec2([300.0, 300.0]));
         }
         put(&mut doc, b, property::POSITION_Z, Value::F64(400.0));
-        let frame = doc.view().layout_frame(T).unwrap();
+        let frame = crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap();
         assert!(frame.nudges.is_empty() && frame.nudges_z.is_empty(), "one behind the other with room between: nobody moves");
         put(&mut doc, b, property::POSITION_Z, Value::F64(60.0));
-        let frame = doc.view().layout_frame(T).unwrap();
+        let frame = crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap();
         let (za, zb) = (frame.nudges_z.get(&a).copied().unwrap_or(0.0), frame.nudges_z.get(&b).copied().unwrap_or(0.0));
         assert!(za < 0.0 && zb > 0.0, "overlapping in depth, they push apart along depth: {za} {zb}");
         assert!((zb - za - 50.0).abs() < 2.0, "just enough to clear depth + margins: {}", zb - za);
         assert!(frame.nudges.values().all(|d| d[0].abs() < 1e-3 && d[1].abs() < 1e-3), "straight behind each other: no sideways push");
         doc.apply(Intent::SetAttrs { layer: b, patch: LayerAttrsPatch { projection: Some(crate::doc::store::LayerProjection::TwoD), ..Default::default() } }).unwrap();
-        let frame = doc.view().layout_frame(T).unwrap();
+        let frame = crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap();
         assert!(frame.nudges_z.is_empty(), "a 2D thing has no depth to push along");
     }
 
@@ -1073,7 +1017,7 @@ mod tests {
         put(&mut doc, trace, CONNECT_FROM, Value::LayerId(thing.0));
         put(&mut doc, trace, TRACE, Value::Enum(2));
         put(&mut doc, trace, MARGIN, Value::F64(6.0));
-        let frame = doc.view().layout_frame(T).unwrap();
+        let frame = crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap();
         assert!(frame.nudges.is_empty() && frame.nudges_z.is_empty(), "the trace and its box overlap by design: nobody moves");
     }
 
@@ -1178,7 +1122,7 @@ mod tests {
         for layer in [a, b] {
             doc.apply(Intent::SetShapes { layer, shapes: vec![rect_shape([255; 4], [40.0, 40.0])] }).unwrap();
         }
-        let x = |doc: &Document| doc.view().layout_frame(T).unwrap().slots[&b].position[0];
+        let x = |doc: &Document| crate::doc::store::layout::frame::layout_frame(&doc.view(), T).unwrap().slots[&b].position[0];
         let first = x(&doc);
         assert_eq!(x(&doc), first, "a second view reads the same frame");
         put(&mut doc, row, GAP, Value::F64(50.0));
@@ -1190,16 +1134,16 @@ mod tests {
         assert!((x(&doc) - first - 40.0).abs() < 0.01, "and after the preview the committed layout is back");
         doc.set_transient(row, PropertyId::new(GAP).unwrap(), Value::F64(0.0));
         let shown = doc.view();
-        let transient = shown.layout_frame(T).unwrap();
-        let committed = shown.clone().without_transients().layout_frame(T).unwrap();
+        let transient = crate::doc::store::layout::frame::layout_frame(&shown, T).unwrap();
+        let committed = crate::doc::store::layout::frame::layout_frame(&shown.clone().without_transients(), T).unwrap();
         assert!((committed.slots[&b].position[0] - first - 40.0).abs() < 0.01,
             "excluding transients must not reuse the shown layout");
         assert!((transient.slots[&b].position[0] - (first - 10.0)).abs() < 0.01);
-        assert_eq!(shown.layout_frame(T).unwrap(), transient,
+        assert_eq!(crate::doc::store::layout::frame::layout_frame(&shown, T).unwrap(), transient,
             "the original view keeps its own evaluation inputs");
         let owner = doc.begin_preview();
         doc.preview_edits(owner, &[Intent::SetConstant { layer: row, property: PropertyId::new(GAP).unwrap(), value: Value::F64(25.0) }]).unwrap();
-        let unchanged = doc.view().without_transients().layout_frame(T).unwrap();
+        let unchanged = crate::doc::store::layout::frame::layout_frame(&doc.view().without_transients(), T).unwrap();
         assert!(std::sync::Arc::ptr_eq(&committed, &unchanged),
             "a committed read must reuse its layout while excluded previews change");
     }
@@ -1391,7 +1335,7 @@ mod tests {
         let mut inputs = crate::doc::store::analysis::AnalysisInputs::default();
         inputs.set_extent("/tmp/photo.png", [320.0, 180.0, 0.0]);
         let view = doc.view().with_analysis(&inputs);
-        let frame = view.layout_frame(T).unwrap();
+        let frame = crate::doc::store::layout::frame::layout_frame(&view, T).unwrap();
         assert_eq!(crate::doc::store::layout::boxes::layer_box(&view, picture, T).unwrap(), Some([0.0, 0.0, 320.0, 180.0]));
         // 箱の左端 = 位置 - 中心 + 箱の左(形の素材座標は輪郭の canvas の 1 画素外が原点、画は 0)。
         let left = |id: LayerId, min: f32| frame.slots[&id].position[0] - frame.slots[&id].anchor[0] + min;

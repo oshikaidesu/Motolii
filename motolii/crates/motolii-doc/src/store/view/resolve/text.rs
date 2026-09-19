@@ -10,7 +10,7 @@ pub fn resolved_text_document(
     t: RationalTime,
 ) -> Result<Option<TextDocument>, StoreError> {
     let Some(mut document) = authored_text_document(view, layer, t)? else { return Ok(None) };
-    if let (Some(wrap), Some(comp)) = (view.laid_out(layer, t)?.and_then(|slot| slot.wrap), view.composition()?) {
+    if let (Some(wrap), Some(comp)) = (crate::doc::store::layout::frame::laid_out(view, layer, t)?.and_then(|slot| slot.wrap), view.composition()?) {
         document.wrap_size = Some([wrap.max(1.0), comp.height as f32]);
     }
     Ok(Some(document))

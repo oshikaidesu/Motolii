@@ -256,7 +256,7 @@ pub(crate) fn constrained(view: &StoreView<'_>, child: LayerId, parent: LayerId,
         return Ok(None);
     }
     // 基準は時刻 0 の親の箱。
-    let design = if t == RationalTime::ZERO { size } else { view.layout_frame(RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
+    let design = if t == RationalTime::ZERO { size } else { crate::doc::store::layout::frame::layout_frame(view, RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
     let Some(b) = crate::doc::store::layout::boxes::layer_box(view, child, t)? else { return Ok(None) };
     let scale = view.pair(child, property::SCALE, [1.0, 1.0], t)?;
     let position = crate::doc::store::view::resolve::transform::resolve_position(view, child, t)?;

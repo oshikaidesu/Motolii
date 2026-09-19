@@ -91,7 +91,7 @@ impl StoreView<'_> {
         }
         let Some(comp) = self.composition()? else { return Ok(own) };
         let window = base.iter().map(|(back, _)| *back).fold(0.0, f64::max) + 1.0 + ((stagger + own) * comp.fps.as_f64()).ceil();
-        let before = self.layout_frame(self.frame_time(window, t)?)?;
+        let before = crate::doc::store::layout::frame::layout_frame(self, self.frame_time(window, t)?)?;
         let (Some(size), Some(slot)) = (before.sizes.get(&parent).copied(), before.slots.get(&layer).copied()) else { return Ok(own) };
         let p = glam::Vec2::from(slot.position);
         let (w, h) = (size[0].max(1e-3), size[1].max(1e-3));

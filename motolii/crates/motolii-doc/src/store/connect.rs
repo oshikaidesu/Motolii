@@ -230,7 +230,7 @@ pub(crate) fn readout(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> 
 
 /// Grid の Group の升目の線(列と行の始まりと終わり、升目の端から端まで)。Grid でなければ何も描かない。
 pub(crate) fn trace_grid(view: &StoreView<'_>, layer: LayerId, group: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
-    let frame = view.layout_frame(t)?;
+    let frame = crate::doc::store::layout::frame::layout_frame(view, t)?;
     let Some((columns, rows)) = frame.fields.get(&group) else { return Ok(None) };
     let (Some(first_c), Some(last_c), Some(first_r), Some(last_r)) = (columns.first(), columns.last(), rows.first(), rows.last()) else { return Ok(None) };
     let mut to_here = crate::doc::store::layout::boxes::world_2d(view, group, t)?;

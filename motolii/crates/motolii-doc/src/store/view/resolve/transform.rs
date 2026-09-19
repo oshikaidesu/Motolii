@@ -48,7 +48,7 @@ pub(super) fn local_placement_transform_sampled(
     if let Some(position) = crate::doc::store::connect::connector_position(view, layer, t)? {
         return Ok(LayerPlacement::from_transform([0.0, 0.0], position, [1.0, 1.0], 0.0, 0.0, 0.0));
     }
-    let slot = view.laid_out(layer, when(0))?;
+    let slot = crate::doc::store::layout::frame::laid_out(view, layer, when(0))?;
     let (position, scale) = match slot {
         Some(slot) => (slot.position, slot.scale),
         None => {
@@ -76,7 +76,7 @@ pub fn local_transform3d(
     t: RationalTime,
 ) -> Result<glam::Affine3A, StoreError> {
     let xy = local_placement_transform(view, layer, t)?;
-    let slot = view.laid_out(layer, t)?;
+    let slot = crate::doc::store::layout::frame::laid_out(view, layer, t)?;
     let connector = crate::doc::store::connect::connector_position(view, layer, t)?;
     let position = match slot {
         _ if connector.is_some() => connector.unwrap_or_default(),

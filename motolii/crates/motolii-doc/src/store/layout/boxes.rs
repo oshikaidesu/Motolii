@@ -61,14 +61,14 @@ pub(crate) fn extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, boun
 
 /// 押し合いの奥行きのずれ(移り方を混ぜた後)。
 pub(crate) fn nudge_z(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
-    let now = view.layout_frame(t)?.nudges_z.get(&layer).copied().unwrap_or(0.0);
+    let now = crate::doc::store::layout::frame::layout_frame(view, t)?.nudges_z.get(&layer).copied().unwrap_or(0.0);
     let samples = view.transition_samples(layer, t)?;
     if samples.is_empty() {
         return Ok(now);
     }
     let (mut acc, mut total) = (0.0f32, 0.0f32);
     for (at, weight) in samples {
-        acc += view.layout_frame(at)?.nudges_z.get(&layer).copied().unwrap_or(0.0) * weight;
+        acc += crate::doc::store::layout::frame::layout_frame(view, at)?.nudges_z.get(&layer).copied().unwrap_or(0.0) * weight;
         total += weight;
     }
     Ok(if total > 1e-6 { acc / total } else { now })
@@ -107,7 +107,7 @@ pub(crate) fn box_seen_from(view: &StoreView<'_>, target: LayerId, from: LayerId
         let (c, h) = (glam::Vec2::from(mark.center), glam::Vec2::from(mark.size) * 0.5);
         (c - h, c + h)
     } else {
-        let stretch = view.laid_out(target, t)?.map(|s| s.stretch).filter(|s| *s != [1.0, 1.0]);
+        let stretch = crate::doc::store::layout::frame::laid_out(view, target, t)?.map(|s| s.stretch).filter(|s| *s != [1.0, 1.0]);
         let b = match (stretch, view.meta(target)?.map(|m| m.source)) {
             (Some(stretch), Some(LayerSource::Shape)) => shape_box(&crate::doc::vector::stretch_outline(&view.shapes_at(target, t)?, stretch)),
             _ => layer_box(view, target, t)?,
@@ -161,11 +161,11 @@ pub(crate) fn anchored_inner(view: &StoreView<'_>, layer: LayerId, anchor: Layer
 
 /// 並べる Group の箱の大きさ(移り方を混ぜた後)。背景・切り抜き・層の箱が読む。
 pub(crate) fn group_size(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
-    let Some(now) = view.layout_frame(t)?.sizes.get(&group).copied() else { return Ok(None) };
+    let Some(now) = crate::doc::store::layout::frame::layout_frame(view, t)?.sizes.get(&group).copied() else { return Ok(None) };
     let mut acc = [0.0f32; 2];
     let mut total = 0.0f32;
     for (at, weight) in view.transition_samples(group, t)? {
-        if let Some(past) = view.layout_frame(at)?.sizes.get(&group) {
+        if let Some(past) = crate::doc::store::layout::frame::layout_frame(view, at)?.sizes.get(&group) {
             acc[0] += past[0] * weight;
             acc[1] += past[1] * weight;
             total += weight;
@@ -177,7 +177,7 @@ pub(crate) fn group_size(view: &StoreView<'_>, group: LayerId, t: RationalTime) 
 /// 容器の外で押し合ったずれ(移り方を混ぜた後)。
 pub(crate) fn nudge(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
     let shift = |at: RationalTime| -> Result<[f32; 2], StoreError> {
-        let pushed = view.layout_frame(at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+        let pushed = crate::doc::store::layout::frame::layout_frame(view, at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
         let anchored = anchored(view, layer, at)?.unwrap_or([0.0; 2]);
         Ok([pushed[0] + anchored[0], pushed[1] + anchored[1]])
     };
@@ -259,7 +259,7 @@ pub(super) fn declared_shape(view: &StoreView<'_>, layer: LayerId, mode: i64, t:
 pub(crate) fn outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
     let Some(meta) = view.meta(layer)? else { return Ok(Vec::new()) };
     if meta.source == LayerSource::Shape {
-        let stretch = view.laid_out(layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch);
+        let stretch = crate::doc::store::layout::frame::laid_out(view, layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch);
         let shapes = crate::doc::vector::stretch_outline(&view.shapes_at(layer, t)?, stretch);
         let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(Vec::new()) };
         let origin = glam::vec2(canvas.origin_x as f32, canvas.origin_y as f32);

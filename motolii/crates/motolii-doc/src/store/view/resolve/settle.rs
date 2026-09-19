@@ -131,7 +131,7 @@ pub(crate) fn snap_to_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
         if view.display(parent, t)? != 2 {
             continue;
         }
-        let frame = match &frame { Some(f) => f, None => { frame = Some(view.layout_frame(t)?); frame.as_ref().unwrap() } };
+        let frame = match &frame { Some(f) => f, None => { frame = Some(crate::doc::store::layout::frame::layout_frame(view, t)?); frame.as_ref().unwrap() } };
         let Some((columns, rows)) = frame.fields.get(&parent) else { continue };
         if columns.is_empty() || rows.is_empty() {
             continue;

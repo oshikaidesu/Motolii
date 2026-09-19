@@ -317,7 +317,7 @@ impl Engine {
             state.field_rooms.insert(parent.map_or(0, |p| p.0 as u32));
         }
         let field_rooms = state.field_rooms.clone();
-        let solved = view.layout_frame(t).map_err(store)?;
+        let solved = crate::doc::store::layout::frame::layout_frame(view, t).map_err(store)?;
         // 部屋 = 場の立っている一番近い先祖の箱(提案 2026-09-16「場のある箱が部屋」)。入れ子の中の字も、
         // ポスター全体に立った場で散れる。箱(Group)そのものは物にならず、中の葉が物。
         let room_ancestor = lies.room_ancestor;
