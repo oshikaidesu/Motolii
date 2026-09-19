@@ -167,3 +167,39 @@ fn an_external_placement_program_changes_only_the_read_projection() {
     assert_eq!(doc.revision(), revision);
     assert_eq!(doc.edit_head(), head);
 }
+
+/// 作品に渡した効果は、平らにしても読み取り専用にしても付いて行く。
+/// 落ちると絵から効果が黙って消えるだけで、どこも失敗しない(書き出しと Freeze がこの道)。
+#[test]
+fn a_work_keeps_its_effects_when_it_is_flattened_and_made_read_only() {
+    use motolii_doc::store::kind::{pick_in_turn, never_moves_whole, PlacementProgram, Programs};
+
+    const MARK: &str = "test.two-copies";
+    fn program(plugin_id: &str) -> Option<PlacementProgram> {
+        (plugin_id == MARK).then_some(PlacementProgram {
+            plugin_id: MARK,
+            needs_position: false,
+            evaluate: two_copies,
+            pick: pick_in_turn,
+            moves_whole: never_moves_whole,
+        })
+    }
+
+    let mut doc = blank_project().with_programs(Programs { placement: program, ..Programs::NONE });
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 300) } },
+        Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(1), plugin_id: MARK.to_owned() }] },
+    ])
+    .unwrap();
+
+    let copies = |view: &motolii_doc::store::StoreView<'_>| view.resolved_layers(RationalTime::ZERO).unwrap().len();
+    assert_eq!(copies(&doc.view()), 2, "the work itself places two copies");
+
+    let flat = doc.flattened().unwrap();
+    assert_eq!(copies(&flat.view()), 2, "flattening must not drop the effects");
+
+    let recording = flat.into_recording();
+    assert_eq!(copies(&recording.view()), 2, "the read-only work exports with its effects");
+}

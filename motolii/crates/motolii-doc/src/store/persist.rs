@@ -7,7 +7,8 @@ use crate::doc::store::{Document, Intent, Revision, StoreError};
 impl Document {
     pub fn flattened(&self) -> Result<Self, StoreError> {
         let view = self.view();
-        let mut out = Self::new();
+        // 同じ作品なので、使える効果も同じ物を持つ(書き出しと Freeze はこの道を通る)。
+        let mut out = Self::new().with_programs(self.programs());
         let at = 1;
 
         for (component, json) in view.track_json_components(&Document::composition_path())? {
