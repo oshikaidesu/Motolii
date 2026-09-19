@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show Icons;
+import 'package:flutter/widgets.dart';
 
 import '../foundation/theme.dart';
 import '../foundation/panel_catalog.dart';
 import 'layout.dart';
 import 'panel_ids.dart';
 import '../foundation/metrics.dart';
+import '../foundation/leaves.dart';
 
 class WorkspaceView extends StatefulWidget {
   const WorkspaceView({
@@ -171,11 +173,14 @@ class _LeafState extends State<_Leaf> {
 
   Widget _tab(String name, String shown) => Draggable<String>(
     data: name,
-    feedback: Material(
-      color: EditorTheme.raised,
-      child: Padding(
-        padding: const EdgeInsets.all(EditorMetrics.s8),
-        child: Text(name),
+    feedback: DefaultTextStyle(
+      style: DefaultTextStyle.of(context).style,
+      child: ColoredBox(
+        color: EditorTheme.raised,
+        child: Padding(
+          padding: const EdgeInsets.all(EditorMetrics.s8),
+          child: Text(name),
+        ),
       ),
     ),
     childWhenDragging: Opacity(opacity: .4, child: Text(name)),
@@ -192,7 +197,7 @@ class _LeafState extends State<_Leaf> {
         if (action == 'detach' || action == 'window') widget.onDetach(name);
         if (action == 'close') widget.onClose(name);
       },
-      child: InkWell(
+      child: EditorPress(
         onTap: () => _show(name),
         child: Container(
           height: EditorMetrics.row,
@@ -275,8 +280,8 @@ class _LeafState extends State<_Leaf> {
                         )
                       : Border.all(
                           color: focused == node.id
-                              ? const Color(0xffacacac)
-                              : Colors.transparent,
+                              ? EditorInk.of(context).focusRing
+                              : EditorTheme.clear,
                           width: 1,
                         ),
                   borderRadius: BorderRadius.circular(EditorMetrics.s3),
