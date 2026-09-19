@@ -2,6 +2,7 @@
 //! 外から来るのは「どの層がどの親に、どんな大きさで」だけ。解いた枠は Slot にして返す。
 //! ここが層の値を書き換えることはない。
 
+use super::boxes::{footprint, shape_box};
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
