@@ -175,17 +175,46 @@ mod clipping_contract {
         layer
     }
 
-    /// Repeater が Group の子を 1 つずつ引く時、写しは番号の順に重なる(子ごとにまとまらない)。Cavalry の Concentrick で踏んだ。
+    /// 子を 1 つずつ引く配置効果。この検査が要る物だけを置く — コアは同梱の効果を知らない。
+    const FOUR_COPIES: &str = "test.four-copies";
+
+    fn four_copies(_input: &kind::PlacementInput<'_>) -> Vec<kind::PlacementOutput> {
+        (0..4)
+            .map(|index| kind::Placement {
+                index,
+                offset: [0.0; 2],
+                rotation_degrees: 0.0,
+                scale: 1.0,
+                offset_z: 0.0,
+                opacity: 1.0,
+                time_offset: RationalTime::ZERO,
+                stretch: [1.0; 2],
+            })
+            .map(Into::into)
+            .collect()
+    }
+
+    fn picking_programs() -> kind::Programs {
+        fn program(plugin_id: &str) -> Option<kind::PlacementProgram> {
+            (plugin_id == FOUR_COPIES).then_some(kind::PlacementProgram {
+                plugin_id: FOUR_COPIES,
+                needs_position: false,
+                evaluate: four_copies,
+                pick: kind::pick_in_turn,
+                moves_whole: kind::never_moves_whole,
+            })
+        }
+        kind::Programs { placement: program, ..kind::Programs::NONE }
+    }
+
+    /// 配置効果が Group の子を 1 つずつ引く時、写しは番号の順に重なる(子ごとにまとまらない)。Cavalry の Concentrick で踏んだ。
     #[test]
     fn picked_copies_stack_by_their_number_not_by_child() {
-        let mut doc = blank_project();
+        let mut doc = blank_project().with_programs(picking_programs());
         let group = add(&mut doc, 9, 5, None, false);
         let ink = add(&mut doc, 2, 1, Some(group), false);
         let paper = add(&mut doc, 3, 2, Some(group), false);
-        doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: crate::doc::extensions::placement::REPEAT.to_owned() }] }).unwrap();
-        for (name, value) in [("count", 4.0), ("pick", 1.0)] {
-            doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(1), name).unwrap(), value: Value::F64(value) }).unwrap();
-        }
+        doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: FOUR_COPIES.to_owned() }] }).unwrap();
         let resolved = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
         let drawn: Vec<(LayerId, u32)> = resolved.iter().filter(|l| l.id != group).map(|l| (l.id, l.copy)).collect();
         assert_eq!(drawn, vec![(ink, 0), (paper, 1), (ink, 2), (paper, 3)], "ink, paper, ink, paper from the bottom up");

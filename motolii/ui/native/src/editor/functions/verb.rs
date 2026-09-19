@@ -3,7 +3,7 @@ use crate::doc::store::{
     Document, EffectId, EffectInstance, Intent, KeyframeTrack, LayerId, LayerSource, LayerTiming,
     RationalTime, ShapeNode, StoreError,
 };
-use crate::doc::extensions::{placement};
+use crate::render::extensions::{placement};
 use crate::doc::vector::{Brush, Rgb};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -300,7 +300,7 @@ pub(crate) fn retime_layer(
 mod effect_insert_position {
     use super::effect_batch_intents;
     use crate::doc::store::{Document, EffectId, EffectInstance, Intent, LayerId};
-use crate::doc::extensions::{placement};
+use crate::render::extensions::{placement};
 
     fn with_effects(plugins: &[&str]) -> Document {
         let mut doc = Document::new();

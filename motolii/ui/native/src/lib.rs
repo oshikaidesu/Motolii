@@ -72,7 +72,7 @@ impl EditorRuntime {
         let doc = if path.is_empty() {
             doc::store::blank_project()
         } else {
-            Document::load(path).map_err(|e| e.to_string())?.with_programs(doc::extensions::bundled())
+            Document::load(path).map_err(|e| e.to_string())?.with_programs(render::extensions::bundled())
         };
         if doc.view().composition().map_err(|e| e.to_string())?.is_none() {
             return Err("Saved document has no composition".into());

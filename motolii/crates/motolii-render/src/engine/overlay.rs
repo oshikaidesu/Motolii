@@ -3,7 +3,7 @@
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::analysis::BlobMark;
-use crate::doc::extensions::overlay::{color_of, number_of, switch_of};
+use crate::extensions::overlay::{color_of, number_of, switch_of};
 use crate::doc::store::{LayerId, Value};
 use crate::doc::vector::{Brush, Contour, Dash, Fill, LineCap, PathSource, Point, RepeaterTransform, Rgb, Shape, ShapeGroup, ShapeNode, StarType, Stroke};
 use crate::render::compositor::LayerContent;
@@ -102,10 +102,10 @@ fn grid_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<Shape
     let merge = number_of(params, "grid_merge").max(0.0) as f32;
     let xs: Vec<f32> = marks.iter().flat_map(|m| [m.center[0] - m.size[0] * 0.5, m.center[0] + m.size[0] * 0.5]).collect();
     let ys: Vec<f32> = marks.iter().flat_map(|m| [m.center[1] - m.size[1] * 0.5, m.center[1] + m.size[1] * 0.5]).collect();
-    for (x, opacity) in crate::doc::extensions::overlay::edge_lines(&xs, merge) {
+    for (x, opacity) in crate::extensions::overlay::edge_lines(&xs, merge) {
         out.push(line(Point { x: f64::from(x), y: 0.0 }, Point { x: f64::from(x), y: comp[1] }, f64::from(opacity)));
     }
-    for (y, opacity) in crate::doc::extensions::overlay::edge_lines(&ys, merge) {
+    for (y, opacity) in crate::extensions::overlay::edge_lines(&ys, merge) {
         out.push(line(Point { x: 0.0, y: f64::from(y) }, Point { x: comp[0], y: f64::from(y) }, f64::from(opacity)));
     }
     out
@@ -116,7 +116,7 @@ fn grid_shapes(params: &Params, marks: &[BlobMark], comp: [f64; 2]) -> Vec<Shape
 /// 奥行きの面の上に x・y の線(画面の幅・高さいっぱい)、x と y の交点に奥行きの柱(一番手前から一番奥まで)。
 /// 線は寄り合っても消さず、重みで薄める(寄り合う途中で線が出たり消えたりしない)。奥行きが 1 つなら柱は無く、平面の格子と同じ。
 pub(crate) fn lattice(params: &Params, marks: &[BlobMark], depths: &[f32], comp: [f32; 2]) -> crate::render::compositor::CloudLinks {
-    use crate::doc::extensions::overlay::edge_lines;
+    use crate::extensions::overlay::edge_lines;
     let c = color_of(params, "grid_color");
     let base = (number_of(params, "grid_opacity").clamp(0.0, 1.0) * c[3]) as f32;
     let merge = number_of(params, "grid_merge").max(0.0) as f32;
@@ -478,7 +478,7 @@ mod tests {
             BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 },
             BlobMark { id: 1, center: [300.0, 150.0], size: [40.0, 20.0], age: 0 },
         ];
-        let p = crate::doc::extensions::overlay::with_defaults(crate::doc::extensions::overlay::PUSH_TRACE, &[("box", Value::F64(0.0))].map(|(n, v)| (n.to_owned(), v)));
+        let p = crate::extensions::overlay::with_defaults(crate::extensions::overlay::PUSH_TRACE, &[("box", Value::F64(0.0))].map(|(n, v)| (n.to_owned(), v)));
         let shapes = overlay_shapes(&p, &marks, &[[30.0, -40.0], [0.0, 0.0]], [400.0, 300.0]);
         let paths: Vec<&Vec<Contour>> = shapes.iter().filter_map(|n| match n { ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), stroke: Some(_), .. }) => Some(path), _ => None }).collect();
         assert_eq!(paths.len(), 2, "one trace per thing");

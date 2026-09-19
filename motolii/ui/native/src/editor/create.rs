@@ -181,7 +181,7 @@ fn shape_recipe(kind: &NewKind, comp: (f64, f64)) -> ShapeRecipe {
     let star = |name, star_type, inner| filled(name, PathSource::PolyStar { points: 5.0, inner_radius: side * 0.5 * inner, outer_radius: side * 0.5, star_type });
     match kind {
         NewKind::Rectangle => filled("Rectangle", PathSource::Rectangle { size: square }),
-        NewKind::RoundedRectangle => ShapeRecipe { effects: &[crate::doc::extensions::pathop::ROUNDED_CORNERS], ..filled("Rounded Rectangle", PathSource::Rectangle { size: square }) },
+        NewKind::RoundedRectangle => ShapeRecipe { effects: &[crate::render::extensions::pathop::ROUNDED_CORNERS], ..filled("Rounded Rectangle", PathSource::Rectangle { size: square }) },
         NewKind::Ellipse => filled("Ellipse", PathSource::Ellipse { size: square }),
         NewKind::Star => star("Star", StarType::Star, 0.5),
         NewKind::Polygon => star("Polygon", StarType::Polygon, 1.0),

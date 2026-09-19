@@ -1,7 +1,7 @@
 //! 解析の入力の審判(実 GPU): Blob Track が元の層の絵から塊を拾い、素材を塊ごとに置く。
 
 use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
-use crate::doc::extensions::{blob};
+use crate::extensions::{blob};
 use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode, Stroke};
 use crate::render::engine::Engine;
 
@@ -148,7 +148,7 @@ fn track_overlay_frames_what_it_finds_below() {
         Intent::SetMeta { layer: host, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 50) } },
         Intent::SetShapes { layer: host, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 10.0, y: 10.0 } }, ops: Vec::new(), stroke: None, fill: Some(Fill::default()) })] },
         Intent::SetConstant { layer: host, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) },
-        Intent::SetEffects { layer: host, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::doc::extensions::overlay::TRACK_OVERLAY.into() }] },
+        Intent::SetEffects { layer: host, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::extensions::overlay::TRACK_OVERLAY.into() }] },
     ]).unwrap();
     for (name, value) in [("method", Value::F64(1.0)), ("key_color", Value::Color([1.0, 1.0, 1.0, 1.0])), ("threshold", Value::F64(30.0)), ("min_region", Value::F64(50.0)), ("separation", Value::F64(0.0)),
                           ("box_stroke_color", Value::Color([0.0, 1.0, 0.0, 1.0])), ("box_stroke_width", Value::F64(3.0))] {

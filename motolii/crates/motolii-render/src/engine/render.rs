@@ -1257,7 +1257,7 @@ pub(super) fn collect_shape_documents(
 /// パス効果を掛けた姿。配置の上下どちらに積んでも輪郭には同じに効く(輪郭は絵より先)。
 pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
     let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-    crate::doc::extensions::pathop::with_effects(shapes, &effects)
+    crate::extensions::pathop::with_effects(shapes, &effects)
 }
 
 /// 層の 4 隅を画面に映して、効果の余白込みで枠の外に丸ごと出ていれば true。
@@ -1310,7 +1310,7 @@ mod placement_contract {
         property, Composition, Document, EffectId, EffectInstance, EffectScope, Fps, Intent,
         LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
-use crate::doc::extensions::{placement};
+use crate::extensions::{placement};
     use crate::render::engine::{known_effects, Engine};
 
     const SIZE: u32 = 48;

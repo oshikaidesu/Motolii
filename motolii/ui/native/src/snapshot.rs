@@ -456,7 +456,7 @@ impl EditorRuntime{
         for row in properties.iter_mut(){if row["kind"]=="color"{if let Some(slot)=row["id"].as_str().and_then(|name|editor::color::slot_of(&self.doc,id,name)){row["alpha"]=json!(matches!(slot,crate::viewer::ColorSlot::TextFill{..}|crate::viewer::ColorSlot::Property{..}));row["slot"]=json!(slot);}}}
         let fill_slot=(meta.source==LayerSource::Shape).then(||view.shapes(id).ok()).flatten().and_then(|shapes|editor::functions::read::first_shape_fill(&shapes,Vec::new())).map(|(path,_)|crate::viewer::ColorSlot::ShapeFill{layer:id,path});
         let effects:Result<Vec<_>,String>=data.effects.iter().map(|effect|{
-            let kind=crate::doc::extensions::placement::kind(&effect.plugin_id);
+            let kind=crate::render::extensions::placement::kind(&effect.plugin_id);
             let mut params:Vec<Json>=effect.params.iter().filter_map(|p|p.property.as_ref().map(|idp|prop(view,id,idp,&p.label,&p.value,p.range,at,fps,live))).collect::<Result<_,_>>()?;
             if live { return Ok(json!({"id":effect.id,"params":params})); }
             for row in &mut params{
@@ -478,10 +478,10 @@ impl EditorRuntime{
             let layout=kind.map(|k|{
                 let pid=|name:&str|format!("effect.{}.param.{}",effect.id,name);
                 let shown=|name:&str|params.iter().any(|r|r["id"]==pid(name));
-                let share=format!("effect.{}.param.{}",effect.id,crate::doc::extensions::placement::SHARE_PREFIX);
+                let share=format!("effect.{}.param.{}",effect.id,crate::render::extensions::placement::SHARE_PREFIX);
                 json!({"columns":["Each","Random"],"count":pid("count"),"along":pid("mode"),"pick":pid("pick"),"seed":pid("seed"),
                     "materials":params.iter().filter(|r|r["id"].as_str().is_some_and(|i|i.starts_with(&share))).map(|r|json!({"id":r["id"],"label":r["label"]})).collect::<Vec<_>>(),
-                    "shape":k.shape.iter().filter(|n|shown(n)).map(|n|json!({"id":pid(n),"label":k.params.iter().find(|p|p.name==*n).map_or(*n,|p|p.label),"unit":crate::doc::extensions::placement::unit(n)})).collect::<Vec<_>>(),
+                    "shape":k.shape.iter().filter(|n|shown(n)).map(|n|json!({"id":pid(n),"label":k.params.iter().find(|p|p.name==*n).map_or(*n,|p|p.label),"unit":crate::render::extensions::placement::unit(n)})).collect::<Vec<_>>(),
                     "rows":k.grid.iter().map(|r|json!({"label":r.label,"unit":r.unit,"each":r.each.map(pid),"random":r.random.map(pid),"axis":r.axis,"advanced":r.advanced})).collect::<Vec<_>>()})
             });
             let enabled=!matches!(view.value_at(id,&PropertyId::effect_enabled(EffectId(effect.id)),at).map_err(e)?,Some(Value::Bool(false)));let whole=matches!(view.value_at(id,&PropertyId::effect_scope(EffectId(effect.id)),at).map_err(e)?,Some(Value::Enum(v)) if v==crate::doc::store::EffectScope::Whole.enum_value());Ok(json!({"id":effect.id,"enabled":enabled,"whole":whole,"pluginId":effect.plugin_id,"name":catalog.iter().find(|d|d.plugin_id==effect.plugin_id).map_or(effect.plugin_id.as_str(),|d|d.label.as_str()),"placement":kind.is_some(),"layout":layout,"params":params}))
@@ -512,7 +512,7 @@ mod frame_cost_probe {
                 Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: i as i16, timing: LayerTiming::place(0, None, 1800) } },
                 Intent::SetShapes { layer, shapes: vec![rect_shape([200, 80, 40, 255], [60.0, 60.0])] },
                 Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([100.0 + 40.0 * f64::from(i), 100.0 + 150.0 * f64::from(i)]) },
-                Intent::SetEffects { layer, effects: vec![EffectInstance { id: repeat, plugin_id: crate::doc::extensions::placement::REPEAT.to_owned() }] },
+                Intent::SetEffects { layer, effects: vec![EffectInstance { id: repeat, plugin_id: crate::render::extensions::placement::REPEAT.to_owned() }] },
                 Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(copies) },
                 Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([90.0, 0.0]) },
             ]).unwrap();

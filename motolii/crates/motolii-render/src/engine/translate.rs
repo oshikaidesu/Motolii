@@ -256,7 +256,7 @@ mod shelf_tests {
 /// 立体を作る族(Extrude・Bevel)の読み取り。どちらも無ければ None。depth 0 で Bevel だけなら
 /// 「縁だけ丸い板」(奥行きは丸みの半径)。
 pub(crate) fn translate_solid(effects: &[crate::doc::store::ResolvedEffect]) -> Option<crate::render::compositor::extrude::Solid> {
-    use crate::doc::extensions::solid::{BEVEL, EXTRUDE};
+    use crate::extensions::solid::{BEVEL, EXTRUDE};
     let catalog = known_effects();
     let read = |id: &str, name: &str| -> Option<f32> {
         let effect = effects.iter().rev().find(|e| e.plugin_id == id)?;

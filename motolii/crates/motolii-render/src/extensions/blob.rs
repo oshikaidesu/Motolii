@@ -54,18 +54,18 @@ pub fn is_blob_track(plugin_id: &str) -> bool {
     plugin_id == BLOB_TRACK
 }
 
-pub fn program(plugin_id: &str) -> Option<crate::store::kind::PlacementProgram> {
-    KINDS.iter().find(|kind| kind.plugin_id == plugin_id).map(|kind| crate::store::kind::PlacementProgram {
+pub fn program(plugin_id: &str) -> Option<crate::doc::store::kind::PlacementProgram> {
+    KINDS.iter().find(|kind| kind.plugin_id == plugin_id).map(|kind| crate::doc::store::kind::PlacementProgram {
         plugin_id: kind.plugin_id,
         needs_position: true,
         evaluate: placements,
-        pick: crate::store::kind::pick_in_turn,
-        moves_whole: crate::store::kind::never_moves_whole,
+        pick: crate::doc::store::kind::pick_in_turn,
+        moves_whole: crate::doc::store::kind::never_moves_whole,
     })
 }
 
-fn placements(input: &crate::store::kind::PlacementInput<'_>) -> Vec<crate::store::kind::PlacementOutput> {
-    use crate::store::{kind::PlacementOutput, EffectId, Placement, RationalTime};
+fn placements(input: &crate::doc::store::kind::PlacementInput<'_>) -> Vec<crate::doc::store::kind::PlacementOutput> {
+    use crate::doc::store::{kind::PlacementOutput, EffectId, Placement, RationalTime};
     let Some(marks) = input.analysis.and_then(|a| a.blobs(input.layer, EffectId(0), input.time)) else { return Vec::new() };
     let position = glam::Vec2::from(input.position);
     let material = vec2_of(input.params, "material").map(|v| v.max(1e-3) as f32);
@@ -106,7 +106,7 @@ mod tests {
     /// 塊は解析の入力から来る: 入力が無ければ置かれず、あれば素材を塊ごとに置き、Box なら箱の大きさへ伸ばす(左上が層の位置の素材)。
     #[test]
     fn blob_track_places_the_material_on_each_mark_from_the_analysis() {
-        let mut doc = Document::new().with_programs(crate::doc::extensions::bundled());
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 640, height: 360, fps: Fps::try_new(25, 1).unwrap(), duration_frames: 10, background: [0.0; 4] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([

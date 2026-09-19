@@ -5,7 +5,7 @@ use crate::doc::store::{
     property, Document, EffectId, Intent, KeyframeTrack, LayerId, LayerTiming,
     Placement, PropertyId, RationalTime, StoreError, StoreView, Value,
 };
-use crate::doc::extensions::{placement};
+use crate::render::extensions::{placement};
 use crate::editor::timeline_edit::{copy_layers, remap_clipboard_intent};
 
 pub(crate) fn expand_intents(

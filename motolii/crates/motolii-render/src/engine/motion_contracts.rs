@@ -100,7 +100,7 @@ mod motion_blur_follows_the_keyframes {
             Intent::SetTrack { layer, property: PropertyId::new(property::POSITION).unwrap(), track },
         ]).unwrap();
         if let Some(params) = blur {
-            doc.apply(Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::doc::extensions::motion::MOTION_BLUR.into() }] }).unwrap();
+            doc.apply(Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::extensions::motion::MOTION_BLUR.into() }] }).unwrap();
             for (name, value) in params {
                 doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), name).unwrap(), value: Value::F64(*value) }).unwrap();
             }

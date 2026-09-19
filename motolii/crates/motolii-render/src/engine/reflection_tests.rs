@@ -4,7 +4,7 @@ use crate::doc::store::{
     property, Document, EffectId, EffectInstance, Intent, LayerId, LayerSource,
     PropertyId, Value,
 };
-use crate::doc::extensions::{placement};
+use crate::extensions::{placement};
 
 #[test]
 #[ignore = "near-contact reflection continuity diagnostic"]
