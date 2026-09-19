@@ -574,8 +574,6 @@ impl Engine {
             }
         }
         self.solve_physics(t);
-        // 解き手のずれも motion に入る(seed)ので、書類の側の CPU のずれは空にする(二重に動かさない)。
-        crate::doc::store::layout::set_physics_shifts(HashMap::new());
         Ok(())
     }
 

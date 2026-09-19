@@ -503,7 +503,6 @@ impl StoreView<'_> {
     /// `target` の画面の上の箱を、`from` の親の空間で(軸に沿った箱)。Blob Track の層は ID の一番小さい塊。
     /// 並べて伸ばした形は伸ばした後の箱。付いて置く札とつなぐ線が、相手の箱を読む口。
     pub(crate) fn box_seen_from(&self, target: LayerId, from: LayerId, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
-        let shift = physics_shift(target);
         let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
         let marks = self.analysis().and_then(|a| a.blobs(target, crate::doc::store::EffectId(0), t)).filter(|m| !m.is_empty());
         let (lo, hi) = if let Some(mark) = marks.and_then(|m| m.iter().min_by_key(|m| m.id)) {
@@ -520,7 +519,6 @@ impl StoreView<'_> {
             bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point2(glam::Vec2::from(c))))
         };
         // 物理が動かした分を足す(つなぐ線の端が、解き手が動かした箱に付いて行く)。
-        let (lo, hi) = (lo + shift, hi + shift);
         Ok(Some(match self.attrs(from)?.unwrap_or_default().parent {
             Some(parent) => {
                 let inverse = self.world_2d(parent, t)?.inverse();
@@ -1821,21 +1819,6 @@ fn grid_fields(tree: &TaffyTree<Measure>, node: NodeId) -> Option<(Vec<(f32, f32
         out.into_iter().skip(skip).take(tracks.explicit_tracks as usize).collect::<Vec<_>>()
     };
     Some((lines(&info.columns, padding.left + CANVAS_MARGIN), lines(&info.rows, padding.top + CANVAS_MARGIN)))
-}
-
-thread_local! {
-    /// 外の解き手(物理)が動かした分。描く側が 1 コマごとに置き、箱を読む所が足す
-    /// (つなぐ線・付いて置く札が、物理で動いた相手に付いて行くため。提案 2026-09-16)。
-    static PHYSICS_SHIFTS: std::cell::RefCell<HashMap<LayerId, [f32; 2]>> = std::cell::RefCell::new(HashMap::new());
-}
-
-/// このコマの物理のずれを置く(空なら誰も動いていない)。
-pub fn set_physics_shifts(shifts: HashMap<LayerId, [f32; 2]>) {
-    PHYSICS_SHIFTS.with(|s| *s.borrow_mut() = shifts);
-}
-
-fn physics_shift(layer: LayerId) -> glam::Vec2 {
-    PHYSICS_SHIFTS.with(|s| s.borrow().get(&layer).map_or(glam::Vec2::ZERO, |v| glam::Vec2::from(*v)))
 }
 
 /// 形の層の素材座標の箱(伸ばした後)。
