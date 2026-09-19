@@ -2,7 +2,7 @@
 //! 外から来るのは「どの層がどの親に、どんな大きさで」だけ。解いた枠は Slot にして返す。
 //! ここが層の値を書き換えることはない。
 
-use super::boxes::{footprint, shape_box};
+use super::boxes::Extent;
 use taffy::prelude::*;
 
 use super::*;
@@ -426,8 +426,8 @@ impl StoreView<'_> {
             }
             let bounds = self.layer_box(child, t)?.unwrap_or([0.0; 4]);
             let scale = self.pair(child, property::SCALE, [1.0, 1.0], t)?;
-            let (lo, hi) = footprint(bounds, self.raw_depth(child, t)?, [0.0, 0.0], [scale[0], scale[1], 1.0], self.layout_rotation(child, t)?);
-            let natural = [hi[0] - lo[0], hi[1] - lo[1]];
+            let extent = self.natural_extent(child, t, bounds, scale)?;
+            let natural = [extent.hi[0] - extent.lo[0], extent.hi[1] - extent.lo[1]];
             let mut item = Style::default();
             let sizing = self.item_style(child, t, natural, &mut item)?;
             let text_fill = sizing[0] == Sizing::Fill && self.meta(child)?.is_some_and(|m| m.source == LayerSource::Text);
@@ -474,14 +474,11 @@ impl StoreView<'_> {
         };
         let is_shape = self.meta(layer)?.is_some_and(|m| m.source == LayerSource::Shape);
         let (stretch, bounds, scale) = if is_shape && factor != [1.0, 1.0] {
-            let shapes = crate::doc::vector::stretch_outline(&self.shapes_at(layer, t)?, factor);
-            (factor, shape_box(&shapes).unwrap_or(bounds), scale)
+            (factor, stretched_shape_box(&self.shapes_at(layer, t)?, factor).unwrap_or(bounds), scale)
         } else {
             ([1.0, 1.0], bounds, [scale[0] * factor[0], scale[1] * factor[1]])
         };
-        let rotation = self.layout_rotation(layer, t)?;
-        let anchor = self.item_anchor(layer, t, bounds)?;
-        let (lo, hi) = footprint(bounds, self.raw_depth(layer, t)?, anchor, [scale[0], scale[1], 1.0], rotation);
+        let Extent { lo, hi, anchor, rotation } = self.placed_extent(layer, t, bounds, scale)?;
         let shown = [hi[0] - lo[0], hi[1] - lo[1]];
         let mut position = [0.0; 2];
         for axis in 0..2 {

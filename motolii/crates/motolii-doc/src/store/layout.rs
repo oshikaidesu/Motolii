@@ -562,7 +562,6 @@ impl StoreView<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::boxes::shape_box;
     use super::*;
     use crate::doc::store::{
         blank_project, rect_shape, ContentKeyframe, ContentTrack, Document, FontRef, Intent, LayerAttrsPatch, LayerMeta, LayerTiming, TextDocument, TextDocumentStyle,
@@ -598,7 +597,7 @@ mod tests {
         let resolved = view.resolved_layers(t).unwrap();
         let r = resolved.iter().find(|l| l.id == layer).unwrap();
         let b = if r.source == LayerSource::Shape {
-            shape_box(&crate::doc::vector::stretch_outline(&view.shapes_at(layer, t).unwrap(), r.shape_stretch)).unwrap()
+            stretched_shape_box(&view.shapes_at(layer, t).unwrap(), r.shape_stretch).unwrap()
         } else {
             view.layer_box(layer, t).unwrap().unwrap()
         };
@@ -630,7 +629,7 @@ mod tests {
         assert!(background.is_none(), "no Background colour, nothing to draw");
         put(&mut doc, group, BACKGROUND, Value::Color([0.2, 0.2, 0.6, 1.0]));
         let background = doc.view().background_shapes(group, T).unwrap().unwrap();
-        assert_eq!(shape_box(&background), Some([1.0, 1.0, 261.0, 67.0]), "the background is drawn where the box is");
+        assert_eq!(stretched_shape_box(&background, [1.0, 1.0]), Some([1.0, 1.0, 261.0, 67.0]), "the background is drawn where the box is");
     }
 
     #[test]
@@ -948,7 +947,7 @@ mod tests {
         let resolved = view.resolved_layers(T).unwrap();
         let centre = |id: LayerId| {
             let r = resolved.iter().find(|l| l.id == id).unwrap();
-            let b = shape_box(&crate::doc::vector::stretch_outline(&view.shapes_at(id, T).unwrap(), r.shape_stretch)).unwrap();
+            let b = stretched_shape_box(&view.shapes_at(id, T).unwrap(), r.shape_stretch).unwrap();
             r.placement.transform.transform_point2(glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5))
         };
         let in_middle = cards.iter().filter(|&&c| { let p = centre(c); p.x > 101.0 && p.x < 201.0 && p.y > 101.0 && p.y < 201.0 }).count();

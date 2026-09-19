@@ -9,7 +9,7 @@ pub(crate) fn stretched_shape_box(shapes: &[crate::doc::vector::ShapeNode], stre
     if stretch == [1.0, 1.0] { shape_box(shapes) } else { shape_box(&crate::doc::vector::stretch_outline(shapes, stretch)) }
 }
 
-pub(super) fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
+fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
     let canvas = crate::doc::vector::content_canvas(shapes).ok().flatten()?;
     let b = crate::doc::vector::content_bounds(shapes).ok().flatten()?;
     let (ox, oy) = (canvas.origin_x as f64, canvas.origin_y as f64);
@@ -18,7 +18,7 @@ pub(super) fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32
 
 /// 箱(素材座標の x, y と奥行き z)を、アンカーのまわりで拡縮・回した時の軸に沿った範囲。回し方は層の変換と同じ
 /// (Tilt X・Tilt Y の後に Rotation と Scale)。回転が 0 なら拡縮した箱そのもの。
-pub(super) fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3], rotation: [f32; 3]) -> ([f32; 3], [f32; 3]) {
+fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3], rotation: [f32; 3]) -> ([f32; 3], [f32; 3]) {
     let turn = glam::Quat::from_rotation_x(rotation[0].to_radians()) * glam::Quat::from_rotation_y(rotation[1].to_radians()) * glam::Quat::from_rotation_z(rotation[2].to_radians());
     let (mut lo, mut hi) = (glam::Vec3::splat(f32::INFINITY), glam::Vec3::splat(f32::NEG_INFINITY));
     for x in [bounds[0], bounds[2]] {
@@ -33,7 +33,33 @@ pub(super) fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], sca
     (lo.to_array(), hi.to_array())
 }
 
+/// 並べる側へ返す、層が親の空間で占める場所。枠へ合わせるのに要る物を 1 度に渡す
+/// (部品で訊くと、奥行き・回し方・アンカーの読み方が呼ぶ側ごとにずれる)。
+pub(super) struct Extent {
+    pub lo: [f32; 3],
+    pub hi: [f32; 3],
+    pub anchor: [f32; 2],
+    pub rotation: [f32; 3],
+}
+
 impl StoreView<'_> {
+    /// アンカーを原点に置いた時の範囲。子の素の大きさを測る時に使う(まだ枠が無い)。
+    pub(super) fn natural_extent(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2]) -> Result<Extent, StoreError> {
+        self.extent(layer, t, bounds, scale, [0.0, 0.0])
+    }
+
+    /// 層が書いたアンカーで置いた時の範囲。決まった枠へ合わせる時に使う。
+    pub(super) fn placed_extent(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2]) -> Result<Extent, StoreError> {
+        let anchor = self.item_anchor(layer, t, bounds)?;
+        self.extent(layer, t, bounds, scale, anchor)
+    }
+
+    fn extent(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2], anchor: [f32; 2]) -> Result<Extent, StoreError> {
+        let rotation = self.layout_rotation(layer, t)?;
+        let (lo, hi) = footprint(bounds, self.raw_depth(layer, t)?, anchor, [scale[0], scale[1], 1.0], rotation);
+        Ok(Extent { lo, hi, anchor, rotation })
+    }
+
     /// 押し合いの奥行きのずれ(移り方を混ぜた後)。
     pub(crate) fn nudge_z(&self, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
         let now = self.layout_frame(t)?.nudges_z.get(&layer).copied().unwrap_or(0.0);
@@ -424,7 +450,7 @@ impl StoreView<'_> {
     }
 
     /// 並ぶ子の拡縮・回転の中心。Transform Origin があれば箱の中のその点、Anchor を書いた層はその値、書いていなければ箱の中心(CSS の transform-origin)。
-    pub(super) fn item_anchor(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<[f32; 2], StoreError> {
+    fn item_anchor(&self, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<[f32; 2], StoreError> {
         if let Some(origin) = self.origin_in(layer, t, bounds)? {
             return Ok(origin);
         }
@@ -435,12 +461,12 @@ impl StoreView<'_> {
     }
 
     /// 並べる前の奥行きの範囲(Scale Z 込み、Object Fit と回転は無し)。葉の箱を測る時。
-    pub(super) fn raw_depth(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+    fn raw_depth(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
         self.depth_range(layer, t, &Frame::default())
     }
 
     /// 回転の欄(Tilt X・Tilt Y・Rotation)。
-    pub(super) fn layout_rotation(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 3], StoreError> {
+    fn layout_rotation(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 3], StoreError> {
         Ok([self.number(layer, LAYOUT_TILT_X, 0.0, t)? as f32, self.number(layer, LAYOUT_TILT_Y, 0.0, t)? as f32, self.number(layer, LAYOUT_ROTATION, 0.0, t)? as f32])
     }
 
