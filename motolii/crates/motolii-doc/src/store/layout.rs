@@ -16,6 +16,7 @@ mod time;
 
 pub(crate) use boxes::stretched_shape_box;
 pub(crate) use path::rounded_rect_path;
+pub(crate) use path::{offset_rotation as path_offset_rotation, on_offset_path as path_on_offset_path};
 
 use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
@@ -1325,7 +1326,7 @@ mod tests {
         let at = |doc: &mut Document, percent: f64| {
             put(doc, dot, OFFSET_DISTANCE, Value::F64(percent));
             let view = doc.view();
-            (view.on_offset_path(dot, T).unwrap().unwrap(), view.offset_rotation(dot, T).unwrap())
+            (path::on_offset_path(&view, dot, T).unwrap().unwrap(), path::offset_rotation(&view, dot, T).unwrap())
         };
         let ((p, _), turn) = at(&mut doc, 25.0);
         assert!((p[0] - (1.0 + 300.0)).abs() < 0.01 && (p[1] - 1.0).abs() < 0.01 && turn.abs() < 0.01, "a quarter of 1200 px is 300 px along the top: {p:?}");

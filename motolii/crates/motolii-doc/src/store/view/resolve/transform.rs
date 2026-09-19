@@ -61,7 +61,7 @@ impl<'a> StoreView<'a> {
             match slot { Some(slot) => slot.anchor, None => self.free_anchor(layer, t)? },
             position,
             scale,
-            scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]) + self.offset_rotation(layer, when(2))?,
+            scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]) + crate::doc::store::layout::path_offset_rotation(self, layer, when(2))?,
             scalar(property::SKEW, 0.0, t)?,
             scalar(property::SKEW_AXIS, 0.0, t)?,
         ))
@@ -172,7 +172,7 @@ impl<'a> StoreView<'a> {
 
     pub(crate) fn resolve_position(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
         // 箱の輪郭を道にする物は、道の上の点が Position の代わり。
-        if let Some((point, _)) = self.on_offset_path(layer, t)? {
+        if let Some((point, _)) = crate::doc::store::layout::path_on_offset_path(self, layer, t)? {
             return Ok(point);
         }
         let position = PropertyId::new(property::POSITION)?;

@@ -240,7 +240,7 @@ impl StoreView<'_> {
             self.free_anchor(layer, t)?,
             self.resolve_position(layer, t)?,
             self.pair(layer, property::SCALE, [1.0, 1.0], t)?,
-            self.number(layer, property::ROTATION, 0.0, t)? as f32 + self.offset_rotation(layer, t)?,
+            self.number(layer, property::ROTATION, 0.0, t)? as f32 + super::path::offset_rotation(self, layer, t)?,
             self.number(layer, property::SKEW, 0.0, t)? as f32,
             self.number(layer, property::SKEW_AXIS, 0.0, t)? as f32,
         ))
