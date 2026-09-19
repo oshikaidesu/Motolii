@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
 
 import '../../foundation/metrics.dart';
@@ -773,7 +774,7 @@ class _RailTitle extends StatelessWidget {
 
 /// The band above the zoom bar while rows are picked: the picked items' own
 /// tags (quiet, not removable), the user's tags with an ×, and an Add… field.
-class QuickTags extends StatelessWidget {
+class QuickTags extends StatefulWidget {
   const QuickTags({
     super.key,
     required this.title,
@@ -791,6 +792,71 @@ class QuickTags extends StatelessWidget {
   final ValueChanged<String> onAdd;
   final ValueChanged<String> onRemove;
   @override
+  State<QuickTags> createState() => _QuickTagsState();
+}
+
+class _QuickTagsState extends State<QuickTags> {
+  late Widget input = _input();
+  late Widget tags = _tags();
+
+  @override
+  void didUpdateWidget(QuickTags old) {
+    super.didUpdateWidget(old);
+    if (!listEquals(old.builtin, widget.builtin) ||
+        !listEquals(old.own, widget.own)) {
+      tags = _tags();
+    }
+    if (old.addFocus != widget.addFocus ||
+        old.addController != widget.addController) {
+      input = _input();
+    }
+  }
+
+  Widget _tags() => Expanded(
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final t in widget.builtin) _Chip(t, muted: true),
+          for (final t in widget.own)
+            _Chip(
+              t,
+              onRemove: () => widget.onRemove(t),
+              key: ValueKey('browser:quicktag:$t'),
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _input() => SizedBox(
+    width: EditorMetrics.s96,
+    child: EditorFieldFrame(
+      focus: widget.addFocus,
+      padding: EdgeInsets.zero,
+      child: EditorTextField(
+        key: const ValueKey('browser:quicktags:add'),
+        controller: widget.addController,
+        focusNode: widget.addFocus,
+        style: const TextStyle(
+          fontSize: EditorMetrics.font,
+          color: EditorTheme.ink,
+        ),
+        hint: 'Add…',
+        padding: const EdgeInsets.symmetric(
+          horizontal: EditorMetrics.s6,
+          vertical: EditorMetrics.s4,
+        ),
+        onSubmitted: (value) {
+          final tag = value.trim();
+          if (tag.isNotEmpty) widget.onAdd(tag);
+          widget.addController.clear();
+        },
+      ),
+    ),
+  );
+
+  @override
   Widget build(BuildContext context) => Container(
     key: const ValueKey('browser:quicktags'),
     padding: const EdgeInsets.symmetric(
@@ -802,58 +868,26 @@ class QuickTags extends StatelessWidget {
     ),
     child: Row(
       children: [
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: EditorMetrics.dense,
-            color: EditorTheme.muted,
+        Expanded(
+          child: SizedBox(
+            height: EditorMetrics.row,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                widget.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: EditorMetrics.dense,
+                  color: EditorTheme.muted,
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: EditorMetrics.s8),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final t in builtin) _Chip(t, muted: true),
-                for (final t in own)
-                  _Chip(
-                    t,
-                    onRemove: () => onRemove(t),
-                    key: ValueKey('browser:quicktag:$t'),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(
-          width: EditorMetrics.s96,
-          child: EditorFieldFrame(
-            focus: addFocus,
-            padding: EdgeInsets.zero,
-            child: EditorTextField(
-              key: const ValueKey('browser:quicktags:add'),
-              controller: addController,
-              focusNode: addFocus,
-              style: const TextStyle(
-                fontSize: EditorMetrics.font,
-                color: EditorTheme.ink,
-              ),
-              hint: 'Add…',
-              padding: const EdgeInsets.symmetric(
-                horizontal: EditorMetrics.s6,
-                vertical: EditorMetrics.s4,
-              ),
-              onSubmitted: (value) {
-                final tag = value.trim();
-                if (tag.isNotEmpty) onAdd(tag);
-                addController.clear();
-              },
-            ),
-          ),
-        ),
+        tags,
+        input,
       ],
     ),
   );

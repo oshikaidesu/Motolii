@@ -50,6 +50,27 @@ void main() {
   }
 
   Finder tile(String id) => find.byKey(ValueKey('browser:Media:$id'));
+  testWidgets(
+    'selection preserves tile content and narrow tags stay inside the shelf',
+    (tester) async {
+      final c = await mount(tester);
+      addTearDown(c.dispose);
+      await tester.pumpAndSettle();
+      final caption = find.byKey(const ValueKey('browser:name:a0'));
+      final held = tester.widget(caption);
+      await tester.tap(tile('a0'));
+      await tester.pumpAndSettle();
+      expect(identical(tester.widget(caption), held), isTrue);
+      await tester.tap(tile('a1'));
+      await tester.pumpAndSettle();
+      expect(identical(tester.widget(caption), held), isTrue);
+      tester.view.physicalSize = const Size(240, 640);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('browser:quicktags')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   BoxDecoration frame(WidgetTester tester, String id) =>
       tester
               .widgetList<Container>(

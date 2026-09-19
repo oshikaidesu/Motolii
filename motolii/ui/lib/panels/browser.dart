@@ -958,17 +958,9 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     );
   }
 
-  Widget _tile(Map<String, dynamic> item) => Picked<Set<String>>(
-    of: picked,
-    test: (chosen) => chosen.contains(id(item)),
-    builder: (isSelected) => Hover(
-      builder: (hovered) => ShelfTile(
-        host: this,
-        item: item,
-        hovered: hovered,
-        selected: isSelected,
-      ),
-    ),
+  Widget _tile(Map<String, dynamic> item) => Hover(
+    builder: (hovered) =>
+        ShelfTile(host: this, item: item, hovered: hovered, selection: picked),
   );
 }
 

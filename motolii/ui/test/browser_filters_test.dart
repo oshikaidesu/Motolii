@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/panels/browser.dart';
+import '../lib/panels/browser/filters.dart' show QuickTags;
 import '../lib/session/editor_session.dart';
 import 'support/editor_test_theme.dart';
 
@@ -15,6 +16,51 @@ import '../lib/foundation/leaves.dart';
 /// fill, the user's tags and collections kept with the desk, and a filter
 /// saved as a label.
 void main() {
+  testWidgets(
+    'quick tag input survives selection and uses the current target',
+    (tester) async {
+      final controller = TextEditingController();
+      final focus = FocusNode();
+      final calls = <String>[];
+      addTearDown(controller.dispose);
+      addTearDown(focus.dispose);
+      Widget view(String target) => MaterialApp(
+        home: Scaffold(
+          body: QuickTags(
+            title: target,
+            builtin: const ['Video'],
+            own: const ['Keep'],
+            addFocus: focus,
+            addController: controller,
+            onAdd: (tag) => calls.add('$target:add:$tag'),
+            onRemove: (tag) => calls.add('$target:remove:$tag'),
+          ),
+        ),
+      );
+      await tester.pumpWidget(view('first'));
+      final input = find.byKey(const ValueKey('browser:quicktags:add'));
+      final held = tester.widget(input);
+      await tester.enterText(
+        find.descendant(of: input, matching: find.byType(EditableText)),
+        'Draft',
+      );
+      await tester.pumpWidget(view('second'));
+      expect(identical(tester.widget(input), held), isTrue);
+      expect(controller.text, 'Draft');
+      expect(focus.hasFocus, isTrue);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('browser:quicktag:Keep')),
+          matching: find.byType(EditorPress),
+        ),
+      );
+      expect(calls, ['second:add:Draft', 'second:remove:Keep']);
+      expect(controller.text, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   Future<(EditorSession, Map<String, dynamic>)> mount(
     WidgetTester tester,
   ) async {

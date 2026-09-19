@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kPrimaryButton;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
@@ -8,6 +9,7 @@ import '../../foundation/theme.dart';
 import 'parts.dart';
 import 'shelf.dart';
 import '../../foundation/glyphs.dart';
+import '../../foundation/panel_controls.dart' show Picked;
 
 /// One tile of the grid: the shelf's preview in the frame's caption, badge,
 /// marks and selection, laid out for the view in force.
@@ -17,19 +19,16 @@ class ShelfTile extends StatelessWidget {
     required this.host,
     required this.item,
     required this.hovered,
-    required this.selected,
+    required this.selection,
   });
   final BrowserHost host;
   final Map<String, dynamic> item;
   final bool hovered;
-  final bool selected;
+  final ValueListenable<Set<String>> selection;
 
   @override
   Widget build(BuildContext context) {
-    final host = this.host,
-        item = this.item,
-        hovered = this.hovered,
-        isSelected = selected;
+    final host = this.host, item = this.item, hovered = this.hovered;
     final shelf = host.shelf;
     final tileScale = host.tileScale;
     final captionSize = math.max(
@@ -134,119 +133,138 @@ class ShelfTile extends StatelessWidget {
         ),
       ),
     );
-    final body = EditorTooltip(
-      key: ValueKey('browser:${host.tab}:${host.id(item)}'),
-      message: [
-        name,
-        if (missing) 'Missing file',
-        if (item['used'] == true) 'In use by a layer',
-        if (item['detail'] != null) '${item['detail']}',
-        supported
-            ? (bare && !twice
-                  ? 'Click to apply · Right-click for actions'
-                  : 'Double-click or Enter to apply · Right-click for actions')
-            : 'Apply unavailable',
-      ].join('\n'),
-      // The pick is on the press itself, below the gesture arena: a tap
-      // recognizer beside a double-tap one reports its down only after the
-      // press deadline.
-      child: Listener(
-        onPointerDown: (e) {
-          if (e.buttons == kPrimaryButton) host.select(item);
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: bare && supported && !twice ? () => host.apply(item) : null,
-          onSecondaryTapDown: (event) => host.menu(item, event.globalPosition),
-          onDoubleTap: !bare || (twice && supported)
-              ? () => host.apply(item)
-              : null,
-          child: Container(
-            decoration: BoxDecoration(
-              color: EditorTheme.panel,
-              border: Border.all(
-                color: isSelected ? EditorTheme.spatial : EditorTheme.clear,
-              ),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: bare
-                      ? preview
-                      : host.viewMode == 2
-                      ? Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            preview,
-                            // The chosen card says its name, and so does the
-                            // one under the pointer: a band over the picture's
-                            // foot, so the picture stays the point.
-                            if (isSelected || hovered)
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  key: ValueKey(
-                                    'browser:band:${host.id(item)}',
+    return Picked<Set<String>>(
+      of: selection,
+      test: (chosen) => chosen.contains(host.id(item)),
+      builder: (isSelected) {
+        final body = EditorTooltip(
+          key: ValueKey('browser:${host.tab}:${host.id(item)}'),
+          message: [
+            name,
+            if (missing) 'Missing file',
+            if (item['used'] == true) 'In use by a layer',
+            if (item['detail'] != null) '${item['detail']}',
+            supported
+                ? (bare && !twice
+                      ? 'Click to apply · Right-click for actions'
+                      : 'Double-click or Enter to apply · Right-click for actions')
+                : 'Apply unavailable',
+          ].join('\n'),
+          // The pick is on the press itself, below the gesture arena: a tap
+          // recognizer beside a double-tap one reports its down only after the
+          // press deadline.
+          child: Listener(
+            onPointerDown: (e) {
+              if (e.buttons == kPrimaryButton) host.select(item);
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: bare && supported && !twice
+                  ? () => host.apply(item)
+                  : null,
+              onSecondaryTapDown: (event) =>
+                  host.menu(item, event.globalPosition),
+              onDoubleTap: !bare || (twice && supported)
+                  ? () => host.apply(item)
+                  : null,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: EditorTheme.panel,
+                  border: Border.all(
+                    color: isSelected ? EditorTheme.spatial : EditorTheme.clear,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: bare
+                          ? preview
+                          : host.viewMode == 2
+                          ? Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                preview,
+                                // The chosen card says its name, and so does the
+                                // one under the pointer: a band over the picture's
+                                // foot, so the picture stays the point.
+                                if (isSelected || hovered)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      key: ValueKey(
+                                        'browser:band:${host.id(item)}',
+                                      ),
+                                      height: EditorMetrics.row * tileScale,
+                                      padding: EdgeInsets.only(
+                                        left: air,
+                                        right: badgeRoom + air,
+                                      ),
+                                      alignment: Alignment.centerLeft,
+                                      color: EditorTheme.app.withValues(
+                                        alpha: .75,
+                                      ),
+                                      child: FittedName(
+                                        displayName(host, item),
+                                        host.tileWidth - air * 2 - badgeRoom,
+                                        size: captionSize,
+                                        sliding: hovered,
+                                      ),
+                                    ),
                                   ),
-                                  height: EditorMetrics.row * tileScale,
-                                  padding: EdgeInsets.only(
-                                    left: air,
-                                    right: badgeRoom + air,
+                                if (badge != null)
+                                  Positioned(
+                                    right: air,
+                                    bottom: air,
+                                    child: badge,
                                   ),
-                                  alignment: Alignment.centerLeft,
-                                  color: EditorTheme.app.withValues(alpha: .75),
-                                  child: FittedName(
-                                    displayName(host, item),
-                                    host.tileWidth - air * 2 - badgeRoom,
-                                    size: captionSize,
-                                    sliding: hovered,
+                              ],
+                            )
+                          : host.viewMode == 1
+                          ? Row(
+                              children: [
+                                SizedBox(
+                                  width: EditorMetrics.s76,
+                                  child: preview,
+                                ),
+                                Expanded(child: caption),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: preview,
                                   ),
                                 ),
-                              ),
-                            if (badge != null)
-                              Positioned(right: air, bottom: air, child: badge),
-                          ],
-                        )
-                      : host.viewMode == 1
-                      ? Row(
-                          children: [
-                            SizedBox(width: EditorMetrics.s76, child: preview),
-                            Expanded(child: caption),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: preview,
-                              ),
+                                caption,
+                              ],
                             ),
-                            caption,
-                          ],
-                        ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
-    final wrapped = shelf.draggable(host, item, body);
-    // A shelf that does not drag its tiles out still lets the frame drag them
-    // onto a collection in the rail (the picked rows come along).
-    if (!identical(wrapped, body)) return wrapped;
-    return Draggable<BrowserDrag>(
-      data: BrowserDrag(host.tab, {...host.selectedIds, host.id(item)}),
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: dragFeedback(
-        host.selectedIds.contains(host.id(item)) && host.selectedIds.length > 1
-            ? '${host.selectedIds.length} rows'
-            : name,
-      ),
-      child: body,
+        );
+        final wrapped = shelf.draggable(host, item, body);
+        // A shelf that does not drag its tiles out still lets the frame drag them
+        // onto a collection in the rail (the picked rows come along).
+        if (!identical(wrapped, body)) return wrapped;
+        return Draggable<BrowserDrag>(
+          data: BrowserDrag(host.tab, {...host.selectedIds, host.id(item)}),
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: dragFeedback(
+            host.selectedIds.contains(host.id(item)) &&
+                    host.selectedIds.length > 1
+                ? '${host.selectedIds.length} rows'
+                : name,
+          ),
+          child: body,
+        );
+      },
     );
   }
 }
