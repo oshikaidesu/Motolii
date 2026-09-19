@@ -5,6 +5,64 @@ use motolii_doc::store::{
 };
 
 #[test]
+fn committed_and_transient_views_have_distinct_display_identity() {
+    use motolii_doc::store::{property, PropertyId, Value};
+    let mut doc = blank_project();
+    let layer = LayerId(1);
+    let position = PropertyId::new(property::POSITION).unwrap();
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetConstant {
+            layer,
+            property: position.clone(),
+            value: Value::Vec2([10.0, 0.0]),
+        },
+    ])
+    .unwrap();
+    doc.set_transient(layer, position.clone(), Value::Vec2([20.0, 0.0]));
+    let shown = doc.view();
+    let committed = shown.clone().without_transients();
+    assert_eq!(
+        shown
+            .value_at(layer, &position, RationalTime::ZERO)
+            .unwrap(),
+        Some(Value::Vec2([20.0, 0.0]))
+    );
+    assert_eq!(
+        committed
+            .value_at(layer, &position, RationalTime::ZERO)
+            .unwrap(),
+        Some(Value::Vec2([10.0, 0.0]))
+    );
+    assert_ne!(shown.revision_key(), committed.revision_key());
+    assert_eq!(
+        committed.revision_key(),
+        committed.clone().without_transients().revision_key()
+    );
+    let key = committed.revision_key();
+    doc.set_transient(layer, position.clone(), Value::Vec2([30.0, 0.0]));
+    assert_eq!(doc.view().without_transients().revision_key(), key);
+    let owner = doc.begin_preview();
+    doc.preview_edits(
+        owner,
+        &[Intent::SetConstant {
+            layer,
+            property: position.clone(),
+            value: Value::Vec2([50.0, 0.0]),
+        }],
+    )
+    .unwrap();
+    let committed = doc.view().without_transients();
+    assert_eq!(committed.revision_key(), key);
+    assert_eq!(
+        committed
+            .value_at(layer, &position, RationalTime::ZERO)
+            .unwrap(),
+        Some(Value::Vec2([10.0, 0.0]))
+    );
+}
+
+#[test]
 fn motion_sampling_preserves_read_authority_and_effect_order() {
     use motolii_doc::store::{property, Interp, Keyframe, KeyframeTrack, PropertyId, Value};
     let mut doc = blank_project();

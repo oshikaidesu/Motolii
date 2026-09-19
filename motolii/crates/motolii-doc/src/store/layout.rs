@@ -2486,6 +2486,11 @@ mod tests {
         assert!((transient.slots[&b].position[0] - (first - 10.0)).abs() < 0.01);
         assert_eq!(shown.layout_frame(T).unwrap(), transient,
             "the original view keeps its own evaluation inputs");
+        let owner = doc.begin_preview();
+        doc.preview_edits(owner, &[Intent::SetConstant { layer: row, property: PropertyId::new(GAP).unwrap(), value: Value::F64(25.0) }]).unwrap();
+        let unchanged = doc.view().without_transients().layout_frame(T).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&committed, &unchanged),
+            "a committed read must reuse its layout while excluded previews change");
     }
 
     #[test]

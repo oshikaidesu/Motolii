@@ -77,7 +77,7 @@ impl<'a> StoreView<'a> {
 
     /// コマをまたぐ配置の覚えを使ってよい view か(解析・仮の編集・一時の値のどれも読まない)。
     pub(crate) fn shared_layout_cache(&self) -> Option<(&RefCell<super::layout::LayoutCache>, &Revision)> {
-        (self.placement_programs.is_none() && self.analysis.is_none() && self.preview_edits.is_empty() && (self.transient.is_empty() || self.ignore_transients)).then_some((self.layout_cache, &self.revision))
+        (self.placement_programs.is_none() && self.analysis.is_none() && (self.ignore_transients || (self.preview_edits.is_empty() && self.transient.is_empty()))).then_some((self.layout_cache, &self.revision))
     }
 
     /// Supply the complete set of stateless placement programs for this read view.
@@ -133,8 +133,11 @@ impl<'a> StoreView<'a> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         format!("{:?}", self.db.generation()).hash(&mut hasher);
         self.at.hash(&mut hasher);
-        format!("{:?}", self.transient).hash(&mut hasher);
-        self.preview_edits.generation.hash(&mut hasher);
+        self.ignore_transients.hash(&mut hasher);
+        if !self.ignore_transients {
+            format!("{:?}", self.transient).hash(&mut hasher);
+            self.preview_edits.generation.hash(&mut hasher);
+        }
         if let Some(programs) = self.placement_programs {
             programs.len().hash(&mut hasher);
             for program in programs {
