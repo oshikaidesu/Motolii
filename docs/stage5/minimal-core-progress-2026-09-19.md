@@ -142,6 +142,29 @@
 
 solo・隠し・重ね方・Matte も切りかけたが**取り消した**。5 つの口に対して中身が 5 つで、全部が外から呼ばれる — それは境界ではなく file を増やしただけになる。複数の module が共有する語彙なので、入口に残す。
 
+### 機能の名前をコアから抜く(2026-09-19 夜)
+
+「最小コア」を行数で測るのをやめ、**コアが機能の名前を呼んでいる箇所の数**で測った。開始時は 9 本(うち `use super::*` の陰に隠れていた 2 本を含め、実数はもっと多かった)。
+
+| 逆流 | 正体 | 始末 |
+|---|---|---|
+| `placement::noise` (3 箇所) | 拡張ではなく種から決まる乱数。形の縁の揺らぎと粒の散りが拡張の戸を通って読んでいた | `core/noise.rs` へ戻す |
+| `motion::is_motion_blur` / `motion::sampling` | Motion Blur を名指しして、ぼかすかどうかと時刻の刻みを訊いていた | `SamplingProgram` + `Shutter`(開く欄・幅・枚数・刻み)。道のりを測るのはコア、枚数と刻みは効果 |
+| `overlay::is_track_overlay` / `edge_lines` ほか | どの辺が同じ格子の線に乗るかを拡張の関数で解いていた | `SnapProgram` + `Snapping`(強さ・まとめ具合・線を立てる関数) |
+| `placement::picks` / `TRANSFORM_WHOLE` | どの子をどの写しが引くか、全体が 1 つとして動くか | `PlacementProgram` の `pick` と `moves_whole` |
+| `extensions::placement_program` ほか 3 本の lookup | コアが同梱の一式を名指しして view へ渡していた | `Programs` 1 枚の表にまとめ、`Document`/`Recording` が持つ。**既定は `Programs::NONE`(効果ゼロ)** |
+
+結果、**コアの実装から同梱の効果への参照は 0**。効果は書類を開く側が渡す:
+
+```rust
+// motolii/ui/native/src/lib.rs
+Document::load(path)?.with_programs(doc::extensions::bundled())
+```
+
+この逆転で、同梱一式に黙って寄りかかっていた test が 4 件露見した(見本の `blank_project()` を含む)。どれも必要な効果を自分で登録する形へ直した。
+
+**まだ `extensions/` は `motolii-doc` の中にある。** 参照が 0 になったので物理的に出せる状態だが、出し先は `motolii-render/src/extensions/`(「contracts live in doc; implementations are selected here」と既に書いてある場所)で、家は増えない。
+
 ### 構造で守る(検査)
 
 - coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/stage5/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。

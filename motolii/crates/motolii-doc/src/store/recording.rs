@@ -21,6 +21,8 @@ pub struct Recording {
     tracks: RefCell<TrackCache>,
     records: RefCell<RecordCache>,
     layout: RefCell<super::layout::LayoutCache>,
+    /// この作品で使える効果。読み込む側が渡す。
+    programs: super::kind::Programs,
 }
 
 impl Recording {
@@ -39,7 +41,15 @@ impl Recording {
             tracks: Default::default(),
             records: Default::default(),
             layout: Default::default(),
+            programs: super::kind::Programs::NONE,
         }
+    }
+
+    /// 読み込む側が、この作品で使える効果の表を渡す。
+    #[must_use]
+    pub fn with_programs(mut self, programs: super::kind::Programs) -> Self {
+        self.programs = programs;
+        self
     }
 
     pub fn view(&self) -> StoreView<'_> {
@@ -55,9 +65,7 @@ impl Recording {
             &self.tracks,
             &self.records,
             &self.layout,
-            // 最後の紐: 同梱の効果一式をコアが名指ししている。外から渡す形にすれば extensions/ は
-            // この crate を離れられる(Document を作る 75 箇所を通す必要があるので、そこは別の一手)。
-            crate::doc::extensions::bundled(),
+            self.programs,
         )
     }
 }

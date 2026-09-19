@@ -19,7 +19,7 @@ fn position() -> PropertyId {
 }
 
 fn document() -> Document {
-    let mut doc = Document::new();
+    let mut doc = Document::new().with_programs(motolii_doc::extensions::bundled());
     doc.apply(Intent::SetComposition(Composition {
         width: 640,
         height: 480,

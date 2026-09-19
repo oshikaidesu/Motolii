@@ -157,6 +157,9 @@ pub struct Document {
     record_cache: RefCell<RecordCache>,
     /// 並べた結果をコマをまたいで覚える(書類の版と時刻で。解析・仮の編集・一時の値を読まない view だけ)。
     layout_cache: RefCell<super::layout::LayoutCache>,
+    /// この書類で使える効果。開く側が渡す — コアは誰が何を実装しているか知らない。
+    /// 渡さなければ効果は 1 つも無い(読んで並べて描くだけの書類)。
+    programs: super::kind::Programs,
 }
 
 impl Default for Document {
@@ -168,6 +171,17 @@ impl Default for Document {
 impl Document {
     pub fn new() -> Self {
         Self::with_store_id(StoreId::random(StoreKind::Recording, "motolii"))
+    }
+
+    /// 開く側が、この書類で使える効果の表を渡す。
+    #[must_use]
+    pub fn with_programs(mut self, programs: super::kind::Programs) -> Self {
+        self.programs = programs;
+        self
+    }
+
+    pub fn programs(&self) -> super::kind::Programs {
+        self.programs
     }
 
     pub(crate) fn with_store_id(store_id: StoreId) -> Self {
@@ -183,6 +197,7 @@ impl Document {
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
             layout_cache: RefCell::new(Default::default()),
+            programs: super::kind::Programs::NONE,
         }
     }
 
@@ -208,9 +223,7 @@ impl Document {
             &self.track_cache,
             &self.record_cache,
             &self.layout_cache,
-            // 最後の紐: 同梱の効果一式をコアが名指ししている。外から渡す形にすれば extensions/ は
-            // この crate を離れられる(Document を作る 75 箇所を通す必要があるので、そこは別の一手)。
-            crate::doc::extensions::bundled(),
+            self.programs,
         )
     }
 
@@ -220,7 +233,7 @@ impl Document {
 
     /// Consume editing authority, retaining the committed edit head without previews.
     pub fn into_recording(self) -> super::Recording {
-        super::Recording::new(self.db, self.head)
+        super::Recording::new(self.db, self.head).with_programs(self.programs)
     }
 
     pub(crate) fn rebuild_head_from_store(&mut self) {

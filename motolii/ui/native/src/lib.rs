@@ -68,7 +68,12 @@ impl Drop for EditorRuntime {
 
 impl EditorRuntime {
     fn open(path: &str) -> Result<Self, String> {
-        let doc = if path.is_empty() { doc::store::blank_project() } else { Document::load(path).map_err(|e| e.to_string())? };
+        // 編集機が、この作品で使える効果を書類へ渡す。コアは誰が何を実装しているか知らない。
+        let doc = if path.is_empty() {
+            doc::store::blank_project()
+        } else {
+            Document::load(path).map_err(|e| e.to_string())?.with_programs(doc::extensions::bundled())
+        };
         if doc.view().composition().map_err(|e| e.to_string())?.is_none() {
             return Err("Saved document has no composition".into());
         }

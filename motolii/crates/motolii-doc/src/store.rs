@@ -538,7 +538,8 @@ pub struct ResolvedLayer {
 #[cfg(feature = "editing")]
 pub fn blank_project() -> Document {
     use crate::doc::store::{Composition, Document, Fps, Intent};
-    let mut doc = Document::new();
+    // 見本の作品は、アプリが開くのと同じ効果一式を持つ。コアの経路は何も登録しない。
+    let mut doc = Document::new().with_programs(crate::doc::extensions::bundled());
     let comp = Composition {
         width: 1920,
         height: 1080,

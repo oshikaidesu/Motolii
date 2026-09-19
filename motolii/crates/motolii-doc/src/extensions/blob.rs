@@ -106,7 +106,7 @@ mod tests {
     /// 塊は解析の入力から来る: 入力が無ければ置かれず、あれば素材を塊ごとに置き、Box なら箱の大きさへ伸ばす(左上が層の位置の素材)。
     #[test]
     fn blob_track_places_the_material_on_each_mark_from_the_analysis() {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::doc::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 640, height: 360, fps: Fps::try_new(25, 1).unwrap(), duration_frames: 10, background: [0.0; 4] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
