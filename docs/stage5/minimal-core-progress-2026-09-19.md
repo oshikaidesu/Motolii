@@ -180,6 +180,19 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 - 同梱の振る舞いを見ていた結合 test 5 件(Repeater の Transform、Group の子の引き、Motion のサンプル、Blob の飛び番)は `motolii-render/tests/bundled_effects.rs` へ移した。効果の検査は効果の家に置く。
 - コアに残った 1 件(写しの重なり順)は、必要な配置効果を**その test 自身が定義する**形にした。何を試しているかが test に書いてある。
 
+### 再 build の範囲(実測)
+
+進捗文書が「まだ証明していない」と書いていた「拡張変更でコア再 build 不要」を測った。同じ機械・warm な状態で `cargo build -p motolii-ui`。
+
+| 触った物 | 再 build される crate | 時間 |
+|---|---|---|
+| 同梱の効果(移設前 = コアの中) | **doc** → render → jobs → ui | 31.4s |
+| 同梱の効果(移設後 = render の中) | render → jobs → ui | **24.9s** |
+| コア(`store/layout/flow.rs`) | doc → render → jobs → ui | 29.2s |
+| 拡張 crate(`ui/extensions/jobs`) | jobs → ui | 14.6s |
+
+**効果を触ってもコアは再 build されない。** これは移設の前は成り立っていなかった。ただし render が太いので時間は 31.4 → 24.9s にしか縮んでいない — 「コアを触らない」は達成したが、「速くなった」はまだ小さい。次に効くのは render 側の分割で、そこは今回の範囲外。
+
 ### 渡し忘れは黙って効果を消す(構造で塞いだ)
 
 コアの既定が効果ゼロになったので、`with_programs` を通さずに作った作品は**効果が黙って効かない**。実際に踏んだ:
