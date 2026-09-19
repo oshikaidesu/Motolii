@@ -123,6 +123,25 @@
 
 分割の良し悪しは**file数ではなく継ぎ目の口の数**で測る。timeとpathは0口で閉じた(元から独立していた責任)。flow→boxesは最初8口で、これは線が本当の境目の手前にあった印。奥行き・回し方・アンカーを部品で訊いていたのを`Extent`1つに畳んで4口にした。
 
+### 何を描くかの組み立て(`store/view/resolve.rs`)
+
+同じ手順で 1,850 行を切った。
+
+| 責任 | 実装 | 行 | 外への口 |
+|---|---|---|---|
+| 観測(効いている Stage と Camera、その姿勢) | `resolve/camera.rs` | 314 | 0 |
+| 文字の書類 | `resolve/text.rs` | 127 | 0 |
+| 切り(自分のマスク・Matte・祖先の箱) | `resolve/mask.rs` | 314 | 1 |
+| 効果の列(自分・グループから降りる・子/板) | `resolve/effects.rs` | 168 | 2 |
+| 整える手(背景 → 面 → 線 → 型紙 → 格子 → Field) | `resolve/settle.rs` | 341 | 1 |
+| 写しを積む(配置・Motion Blur・Split・Ghost) | `resolve/copies.rs` | 335 | 2 |
+| 変換 | `resolve/transform.rs` | 377 | 既存 |
+| 入口と組み立て(`resolve`・`resolved_layers`・solo/隠し/重ね方) | `resolve.rs` | 357 | — |
+
+切る時に 2 度畳んだ。切りは `resolved_masks` と `clipped_masks` を呼ぶ側が合成していた(順番を間違えると祖先の箱が自分のマスクの前に掛かる)ので、`masks_of` 1 口へ。整える手は 7 つの pass の**順番が法**なのに、その順番が `resolved_layers` の記憶にあったので、`settle` 1 口へ移した。
+
+solo・隠し・重ね方・Matte も切りかけたが**取り消した**。5 つの口に対して中身が 5 つで、全部が外から呼ばれる — それは境界ではなく file を増やしただけになる。複数の module が共有する語彙なので、入口に残す。
+
 ### 構造で守る(検査)
 
 - coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/stage5/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
@@ -133,7 +152,7 @@
 
 ## 残件・注意点
 
-1. **最小コアの完成は未証明**：評価・効果列／Group／Motionの組み立てがdoc内に残る(`store/view/resolve.rs` 1,850行が次の塊)。ファイル分割やfeature分離を、完全な物理分離と呼ばない。
+1. **最小コアの完成は未証明**：次の塊は `store/document/group.rs`(1,249行)と `vector.rs`+`vector/`(約2,700行)、`eval/track.rs`(647行)。ファイル分割やfeature分離を、完全な物理分離と呼ばない。
 2. 独立した選択・閲覧時刻を窓ごとに持つ製品接続は未実装。別窓からの再生開始は実窓未検収。
 3. ~~直近のBlob／Motion分離の実窓検収~~ **完了**（後述）。
 4. Flutterのlayout上限超過3件。上限は据え置き。
@@ -187,3 +206,5 @@ Rustの依存環境は[CONTRIBUTING](../../CONTRIBUTING.md)と開発スクリプ
 | `f3055fb62` | 止め具・cacheをviewの`Scratch`へ、隠れた大域を検査で禁止 |
 | `851a14b97` | layoutを時刻・文字・並べる・道・箱へ分割、解き手の名は1箇所 |
 | `4e55c0377` | flow→boxesの継ぎ目を`Extent`1つへ(8口→4口) |
+| `d85909621` | `push_placements`の説明をapply_fieldsの上から戻す(元からの取り違え) |
+| `8351ecc68` | resolveを観測・文字・切り・効果列・整える手・写しへ分割 |
