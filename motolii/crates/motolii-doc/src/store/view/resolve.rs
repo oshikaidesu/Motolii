@@ -247,12 +247,6 @@ impl<'a> StoreView<'a> {
         Ok((each, None))
     }
 
-    /// 配置効果を持つ層を、その配置の数だけ増やす。配置効果より上の効果は各配置の素材に、
-    /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
-    /// 配置効果を持つ層を、その配置の数だけ増やす。配置効果より上の効果は各配置の素材に、
-    /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
-    /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
-    #[allow(clippy::too_many_arguments)]
     /// Field(C4D の Fields の Box): 指した層の箱からの距離で、画面の上の大きさ・不透明度・押し出しを変える。写しは 1 枚ずつ。
     fn apply_fields(&self, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
         use crate::doc::store::layout::{FIELD, FIELD_FALLOFF, FIELD_OPACITY, FIELD_PUSH, FIELD_SCALE};
@@ -507,6 +501,10 @@ impl<'a> StoreView<'a> {
         Ok(())
     }
 
+    /// 配置効果を持つ層を、その配置の数だけ増やす。配置効果より上の効果は各配置の素材に、
+    /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
+    /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
+    #[allow(clippy::too_many_arguments)]
     fn push_placements(
         &self,
         base: ResolvedLayer,
