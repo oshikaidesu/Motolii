@@ -132,7 +132,7 @@ pub(crate) fn clipped_masks(
     let mut next = Some(layer);
     let mut own: Option<glam::Affine2> = None;
     while let Some(group) = next.filter(|g| seen.insert(*g) && present.contains(g)) {
-        let cuts = if group == layer { [None, view.clip_inset(group, t)?] } else { [view.clip_box(group, t)?, view.clip_inset(group, t)?] };
+        let cuts = if group == layer { [None, crate::doc::store::layout::boxes::clip_inset(view, group, t)?] } else { [crate::doc::store::layout::boxes::clip_box(view, group, t)?, crate::doc::store::layout::boxes::clip_inset(view, group, t)?] };
         for (b, radius) in cuts.into_iter().flatten() {
             let world = match own {
                 Some(w) => w,

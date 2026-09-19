@@ -173,7 +173,7 @@ impl<'a> StoreView<'a> {
             }
             let b = match layer.source {
                 crate::doc::store::LayerSource::Shape => crate::doc::store::layout::stretched_shape_box(&self.shapes_at(layer.id, t)?, layer.shape_stretch),
-                _ => self.layer_box(layer.id, t)?,
+                _ => crate::doc::store::layout::boxes::layer_box(self, layer.id, t)?,
             };
             let Some(b) = b else { continue };
             let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| layer.placement.transform.transform_point2(glam::Vec2::from(c)));
@@ -333,14 +333,14 @@ impl<'a> StoreView<'a> {
                 continue;
             }
             // ゴーストは元より先に積む(同じ重ね順なら後の物が上に描かれるので、元が手前に来る)。
-            self.push_ghosts(layer, t, any_solo, &present, &mut out)?;
+            crate::doc::store::view::resolve::copies::push_ghosts(self, layer, t, any_solo, &present, &mut out)?;
             if let Some(resolved) =
                 self.resolve_with_solo(layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)?
             {
-                self.push_copies(resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
+                crate::doc::store::view::resolve::copies::push_copies(self, resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
             }
         }
-        self.settle(&mut out, t)?;
+        crate::doc::store::view::resolve::settle::settle(self, &mut out, t)?;
         Ok(out)
     }
 

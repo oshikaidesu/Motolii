@@ -104,7 +104,7 @@ impl Engine {
                 None => layer.placement.transform.transform_point2(p).to_array(),
             };
             let name = view.attrs(layer.id).map_err(store)?.unwrap_or_default().name;
-            if let Some(b) = view.layer_box(layer.id, t).map_err(store)? {
+            if let Some(b) = crate::doc::store::layout::boxes::layer_box(&view, layer.id, t).map_err(store)? {
                 out.push((format!("L{} {name}.min", layer.id.0), to_screen(glam::vec2(b[0], b[1]))));
                 out.push((format!("L{} {name}.max", layer.id.0), to_screen(glam::vec2(b[2], b[3]))));
                 // 奥行きの向きの動き(世界の z と、中心の x)。

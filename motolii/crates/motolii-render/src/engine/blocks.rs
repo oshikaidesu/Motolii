@@ -277,7 +277,7 @@ impl Engine {
             if matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Shape)) {
                 continue;
             }
-            let extent = match view.layer_box(layer.id, t).map_err(store)? {
+            let extent = match crate::doc::store::layout::boxes::layer_box(view, layer.id, t).map_err(store)? {
                 Some(own) => Some(own),
                 // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
                 None => match view.meta(layer.id).map_err(store)?.map(|m| m.source) {
@@ -402,7 +402,7 @@ impl Engine {
                 None => view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent,
             };
             let room = match parent {
-                Some(parent) => match (resolved.iter().find(|l| l.id == parent && l.copy == 0 && !l.ghost), view.layer_box(parent, t).map_err(store)?) {
+                Some(parent) => match (resolved.iter().find(|l| l.id == parent && l.copy == 0 && !l.ghost), crate::doc::store::layout::boxes::layer_box(view, parent, t).map_err(store)?) {
                     (Some(owner), Some(b)) => {
                         let m = owner.placement.transform;
                         let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
@@ -420,7 +420,7 @@ impl Engine {
             };
             // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
             // 箱の無い相手(null の層)は置き方の点 1 つ。
-            let Some(own) = view.layer_box(layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()).or_else(|| named.contains(&layer.id).then_some([0.0; 4])) else { continue };
+            let Some(own) = crate::doc::store::layout::boxes::layer_box(view, layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()).or_else(|| named.contains(&layer.id).then_some([0.0; 4])) else { continue };
             // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
             // 当たりが元の形の大きさのままになる。
             let stretch = solved.slots.get(&layer.id).map_or([1.0, 1.0], |slot| slot.stretch);
@@ -471,7 +471,7 @@ impl Engine {
             if state.placed.contains_key(&target) {
                 state.follows.insert(layer.id, target);
                 if !state.placed.contains_key(&layer.id) {
-                    let own = view.layer_box(layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
+                    let own = crate::doc::store::layout::boxes::layer_box(view, layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
                     state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0, hardness: 0.5, outline: None });
                 }
             }

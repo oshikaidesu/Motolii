@@ -133,7 +133,7 @@ impl StoreView<'_> {
             }
             // 奥行きの揃えは内の Group から(外の Group は内の奥行きを子の奥行きとして読む)。
             for (_, group, _) in groups_order {
-                self.align_depth(group, t, &children, &mut frame)?;
+                crate::doc::store::layout::boxes::align_depth(self, group, t, &children, &mut frame)?;
             }
         }
         self.push_apart(t, &displayed, &mut frame)?;
@@ -161,7 +161,7 @@ impl StoreView<'_> {
             // 並べる Group の箱は今解いた大きさ(覚えにはまだ入っていない)。
             let b = match frame.sizes.get(&layer) {
                 Some(size) => [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]],
-                None => match self.layer_box(layer, t)? { Some(b) => b, None => continue },
+                None => match crate::doc::store::layout::boxes::layer_box(self, layer, t)? { Some(b) => b, None => continue },
             };
             // 押し合いの出発点は書いた位置(鍵・親)。ずれを含めた変換を読むと、前の時刻のずれを辿って巡る。
             let local = self.authored_local(layer, t)?;
@@ -171,7 +171,7 @@ impl StoreView<'_> {
             let spatial = attrs.projection != crate::doc::store::LayerProjection::TwoD;
             let (z0, z1) = if spatial {
                 let z = self.number(layer, property::POSITION_Z, 0.0, t)? as f32;
-                let range = self.depth_range(layer, t, frame)?;
+                let range = crate::doc::store::layout::boxes::depth_range(self, layer, t, frame)?;
                 ((z + range[0].min(range[1])) - margin, (z + range[0].max(range[1])) + margin)
             } else {
                 (0.0, 0.0)
@@ -237,7 +237,7 @@ impl StoreView<'_> {
     /// 書いた値だけの層の変換(並べた結果・押し合いのずれを含まない)。
     pub(super) fn authored_local(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
         Ok(crate::doc::core::LayerPlacement::from_transform(
-            self.free_anchor(layer, t)?,
+            crate::doc::store::layout::boxes::free_anchor(self, layer, t)?,
             crate::doc::store::view::resolve::transform::resolve_position(self, layer, t)?,
             self.pair(layer, property::SCALE, [1.0, 1.0], t)?,
             self.number(layer, property::ROTATION, 0.0, t)? as f32 + super::path::offset_rotation(self, layer, t)?,
@@ -258,10 +258,10 @@ impl StoreView<'_> {
         }
         // 基準は時刻 0 の親の箱。
         let design = if t == RationalTime::ZERO { size } else { self.layout_frame(RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
-        let Some(b) = self.layer_box(child, t)? else { return Ok(None) };
+        let Some(b) = crate::doc::store::layout::boxes::layer_box(self, child, t)? else { return Ok(None) };
         let scale = self.pair(child, property::SCALE, [1.0, 1.0], t)?;
         let position = crate::doc::store::view::resolve::transform::resolve_position(self, child, t)?;
-        let anchor = self.free_anchor(child, t)?;
+        let anchor = crate::doc::store::layout::boxes::free_anchor(self, child, t)?;
         let mut out_position = position;
         let mut out_scale = scale;
         for axis in 0..2 {
@@ -424,9 +424,9 @@ impl StoreView<'_> {
                 nodes.push(self.container(tree, child, t, children, displayed, false, leaves, groups)?);
                 continue;
             }
-            let bounds = self.layer_box(child, t)?.unwrap_or([0.0; 4]);
+            let bounds = crate::doc::store::layout::boxes::layer_box(self, child, t)?.unwrap_or([0.0; 4]);
             let scale = self.pair(child, property::SCALE, [1.0, 1.0], t)?;
-            let extent = self.natural_extent(child, t, bounds, scale)?;
+            let extent = crate::doc::store::layout::boxes::natural_extent(self, child, t, bounds, scale)?;
             let natural = [extent.hi[0] - extent.lo[0], extent.hi[1] - extent.lo[1]];
             let mut item = Style::default();
             let sizing = self.item_style(child, t, natural, &mut item)?;
@@ -478,7 +478,7 @@ impl StoreView<'_> {
         } else {
             ([1.0, 1.0], bounds, [scale[0] * factor[0], scale[1] * factor[1]])
         };
-        let Extent { lo, hi, anchor, rotation } = self.placed_extent(layer, t, bounds, scale)?;
+        let Extent { lo, hi, anchor, rotation } = crate::doc::store::layout::boxes::placed_extent(self, layer, t, bounds, scale)?;
         let shown = [hi[0] - lo[0], hi[1] - lo[1]];
         let mut position = [0.0; 2];
         for axis in 0..2 {
@@ -522,7 +522,7 @@ impl StoreView<'_> {
             let rows = lines(&info.rows, padding.top + CANVAS_MARGIN);
             let (skip_c, skip_r) = (info.columns.negative_implicit_tracks as usize, info.rows.negative_implicit_tracks as usize);
             let (n_c, n_r) = (info.columns.explicit_tracks as usize, info.rows.explicit_tracks as usize);
-            let to_local = self.world_2d(group, t)?.inverse();
+            let to_local = crate::doc::store::layout::boxes::world_2d(self, group, t)?.inverse();
             let mut taken = std::collections::BTreeSet::new();
             for mark in marks {
                 let half = glam::Vec2::from(mark.size) * 0.5;

@@ -93,7 +93,7 @@ pub(crate) fn frame_of(view: &StoreView<'_>, id: LayerId, t: RationalTime, frami
     let Some(comp) = view.composition()? else { return Ok(None) };
     let present = view.layers().into_iter().collect();
     let Some(world) = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target).copied() else { return Ok(None) };
-    let Some(b) = view.layer_box(target, t)? else { return Ok(None) };
+    let Some(b) = crate::doc::store::layout::boxes::layer_box(view, target, t)? else { return Ok(None) };
     let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point3(glam::vec3(c[0], c[1], 0.0)));
     let lo = corners.iter().fold(glam::Vec3::MAX, |a, p| a.min(*p));
     let hi = corners.iter().fold(glam::Vec3::MIN, |a, p| a.max(*p));
@@ -238,7 +238,7 @@ mod camera_target_contract {
             let projection = camera_projection(comp, resolved);
             let matrix = projection.projection_matrix() * projection.view_matrix();
             let world = crate::doc::store::view::resolve::transform::world_transform3d(&view, card, RationalTime::ZERO).unwrap();
-            let b = view.layer_box(card, RationalTime::ZERO).unwrap().unwrap();
+            let b = crate::doc::store::layout::boxes::layer_box(&view, card, RationalTime::ZERO).unwrap().unwrap();
             let ndc: Vec<glam::Vec2> = [[b[0], b[1]], [b[2], b[3]]].iter().map(|c| {
                 let clip = matrix * world.transform_point3(glam::vec3(c[0], c[1], 0.0)).extend(1.0);
                 glam::vec2(clip.x / clip.w, clip.y / clip.w)

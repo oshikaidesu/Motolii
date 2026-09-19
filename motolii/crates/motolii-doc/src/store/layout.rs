@@ -600,7 +600,7 @@ mod tests {
         let b = if r.source == LayerSource::Shape {
             stretched_shape_box(&view.shapes_at(layer, t).unwrap(), r.shape_stretch).unwrap()
         } else {
-            view.layer_box(layer, t).unwrap().unwrap()
+            crate::doc::store::layout::boxes::layer_box(&view, layer, t).unwrap().unwrap()
         };
         let (lo, hi) = (r.placement.transform.transform_point2(glam::vec2(b[0], b[1])), r.placement.transform.transform_point2(glam::vec2(b[2], b[3])));
         // 群の箱の左上(素材座標の 1 画素の外)から測る。
@@ -625,11 +625,11 @@ mod tests {
         assert_eq!(shown(&doc, a, T), [20.0, 8.0, 120.0, 58.0]);
         assert_eq!(shown(&doc, b, T), [130.0, 8.0, 190.0, 58.0]);
         assert_eq!(shown(&doc, c, T), [200.0, 8.0, 240.0, 58.0]);
-        assert_eq!(doc.view().layer_box(group, T).unwrap(), Some([1.0, 1.0, 261.0, 67.0]), "Hug: padding + boxes + gaps");
-        let background = doc.view().background_shapes(group, T).unwrap();
+        assert_eq!(crate::doc::store::layout::boxes::layer_box(&doc.view(), group, T).unwrap(), Some([1.0, 1.0, 261.0, 67.0]), "Hug: padding + boxes + gaps");
+        let background = crate::doc::store::layout::boxes::background_shapes(&doc.view(), group, T).unwrap();
         assert!(background.is_none(), "no Background colour, nothing to draw");
         put(&mut doc, group, BACKGROUND, Value::Color([0.2, 0.2, 0.6, 1.0]));
-        let background = doc.view().background_shapes(group, T).unwrap().unwrap();
+        let background = crate::doc::store::layout::boxes::background_shapes(&doc.view(), group, T).unwrap().unwrap();
         assert_eq!(stretched_shape_box(&background, [1.0, 1.0]), Some([1.0, 1.0, 261.0, 67.0]), "the background is drawn where the box is");
     }
 
@@ -869,7 +869,7 @@ mod tests {
         let resolved = doc.view().resolved_layers(T).unwrap();
         let plane = |id| resolved.iter().find(|l| l.id == id).unwrap().placement.plane;
         let world = resolved.iter().find(|l| l.id == group).unwrap().placement.world_transform.unwrap();
-        let b = doc.view().layer_box(group, T).unwrap().unwrap();
+        let b = crate::doc::store::layout::boxes::layer_box(&doc.view(), group, T).unwrap().unwrap();
         let face = world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0)).to_array();
         assert_eq!(plane(group), Some(face), "the tilted group is the face");
         assert_eq!(plane(flat), Some(face), "a flat child lies on it and stacks by order");
@@ -1094,9 +1094,9 @@ mod tests {
         put(&mut doc, trace, CONNECT_FROM, Value::LayerId(b.0));
         put(&mut doc, trace, TRACE, Value::Enum(7));
         let view = doc.view();
-        let pushed = glam::Vec2::from(view.nudge(b, T).unwrap());
+        let pushed = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(&view, b, T).unwrap());
         assert!(pushed.x > 10.0, "b is pushed right, away from a: {pushed:?}");
-        let (lo, hi) = view.box_seen_from(b, trace, T).unwrap().unwrap();
+        let (lo, hi) = crate::doc::store::layout::boxes::box_seen_from(&view, b, trace, T).unwrap().unwrap();
         let path = view.trace_path(trace, T).unwrap().unwrap();
         assert_eq!(path.len(), 3, "the wanted box, the shaft and the head");
         let ghost: Vec<glam::Vec2> = path[0].vertices.iter().map(|v| glam::vec2(v.point.x as f32, v.point.y as f32)).collect();
@@ -1392,7 +1392,7 @@ mod tests {
         inputs.set_extent("/tmp/photo.png", [320.0, 180.0, 0.0]);
         let view = doc.view().with_analysis(&inputs);
         let frame = view.layout_frame(T).unwrap();
-        assert_eq!(view.layer_box(picture, T).unwrap(), Some([0.0, 0.0, 320.0, 180.0]));
+        assert_eq!(crate::doc::store::layout::boxes::layer_box(&view, picture, T).unwrap(), Some([0.0, 0.0, 320.0, 180.0]));
         // 箱の左端 = 位置 - 中心 + 箱の左(形の素材座標は輪郭の canvas の 1 画素外が原点、画は 0)。
         let left = |id: LayerId, min: f32| frame.slots[&id].position[0] - frame.slots[&id].anchor[0] + min;
         assert_eq!(left(after, 1.0), left(picture, 0.0) + 320.0 + 10.0, "the next item starts after the picture and the gap");
@@ -1415,7 +1415,7 @@ mod tests {
         } }).unwrap();
         let object = add(&mut doc, 3, LayerSource::Shape, None);
         doc.apply(Intent::SetShapes { layer: object, shapes: vec![rect_shape([255; 4], [160.0, 160.0])] }).unwrap();
-        let middle = doc.view().world_2d(words, T).unwrap().transform_point2(glam::vec2(300.0, comp.height as f32 * 0.5));
+        let middle = crate::doc::store::layout::boxes::world_2d(&doc.view(), words, T).unwrap().transform_point2(glam::vec2(300.0, comp.height as f32 * 0.5));
         put(&mut doc, object, property::POSITION, Value::Vec2([middle.x as f64, middle.y as f64]));
         let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         // 物の占める範囲(文字の枠の座標)と重なる字の数。

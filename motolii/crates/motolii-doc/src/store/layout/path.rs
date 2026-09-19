@@ -36,7 +36,7 @@ pub(crate) fn on_offset_path(view: &StoreView<'_>, layer: LayerId, t: RationalTi
             if view.display(parent, t)? == 0 {
                 return Ok(None);
             }
-            let Some(size) = view.group_size(parent, t)? else { return Ok(None) };
+            let Some(size) = crate::doc::store::layout::boxes::group_size(view, parent, t)? else { return Ok(None) };
             ([CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]], view.number(parent, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)
         }
         None => {

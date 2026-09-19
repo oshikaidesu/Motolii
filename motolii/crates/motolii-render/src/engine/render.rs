@@ -1245,7 +1245,7 @@ pub(super) fn collect_shape_documents(
                 .map_err(|e| EngineError::Store(e.to_string()))?;
             documents.insert(layer.id, shown_shapes(&shapes, layer));
         } else if layer.source == LayerSource::Group {
-            if let Some(background) = view.background_shapes(layer.id, t).map_err(|e| EngineError::Store(e.to_string()))? {
+            if let Some(background) = crate::doc::store::layout::boxes::background_shapes(view, layer.id, t).map_err(|e| EngineError::Store(e.to_string()))? {
                 documents.insert(layer.id, background);
             }
         }

@@ -73,7 +73,7 @@ pub(crate) fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) 
             if crate::doc::store::view::resolve::text::resolved_text_document(view, text, t)?.and_then(|d| d.wrap_size).is_none() {
                 return Ok(None);
             }
-            to_text = Some(view.world_2d(text, t)?.inverse());
+            to_text = Some(crate::doc::store::layout::boxes::world_2d(view, text, t)?.inverse());
         }
         let to_text = to_text.unwrap_or(glam::Affine2::IDENTITY);
         let margin = view.number(layer, SHAPE_MARGIN, 0.0, t)?.max(0.0) as f32;
@@ -82,7 +82,7 @@ pub(crate) fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) 
             samples.push((t, 1.0));
         }
         for (at, weight) in samples {
-            for poly in view.declared_shape(layer, mode, at)? {
+            for poly in crate::doc::store::layout::boxes::declared_shape(view, layer, mode, at)? {
                 if poly.len() >= 3 {
                     out.push(crate::doc::store::text_frame::Obstacle { margin, weight, points: poly.into_iter().map(|p| to_text.transform_point2(p).to_array()).collect() });
                 }

@@ -117,7 +117,7 @@ impl StoreView<'_> {
         if kind == 7 {
             return self.trace_push(layer, target, t);
         }
-        let Some((lo, hi)) = self.box_seen_from(target, layer, t)? else { return Ok(None) };
+        let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(self, target, layer, t)? else { return Ok(None) };
         let m = self.number(layer, MARGIN, 0.0, t)? as f32;
         let (lo, hi) = (lo - glam::Vec2::splat(m), hi + glam::Vec2::splat(m));
         let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
@@ -146,7 +146,7 @@ impl StoreView<'_> {
                 let screen = [glam::Vec2::ZERO, glam::vec2(comp.width as f32, comp.height as f32)];
                 let (s_lo, s_hi) = match self.attrs(layer)?.unwrap_or_default().parent {
                     Some(parent) => {
-                        let inverse = self.world_2d(parent, t)?.inverse();
+                        let inverse = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.inverse();
                         let corners = [screen[0], glam::vec2(screen[1].x, 0.0), screen[1], glam::vec2(0.0, screen[1].y)].map(|q| inverse.transform_point2(q));
                         corners.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), q| (a.min(*q), b.max(*q)))
                     }
@@ -167,7 +167,7 @@ impl StoreView<'_> {
     /// 間合いの法で押された物の、書いた場所の箱(押される前にいたかった所)と、そこから今の箱の中心への矢印。
     /// 押されていなければ跡の箱は今の箱に重なり、矢印は長さと一緒に 0 へ縮む(出たり消えたりしない)。
     fn trace_push(&self, layer: LayerId, target: LayerId, t: RationalTime) -> Result<Option<crate::doc::vector::Path>, StoreError> {
-        let Some((lo, hi)) = self.box_seen_from(target, layer, t)? else { return Ok(None) };
+        let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(self, target, layer, t)? else { return Ok(None) };
         let shift = self.push_seen_from(target, layer, t)?;
         let p = |v: glam::Vec2| Point { x: f64::from(v.x), y: f64::from(v.y) };
         let (was_lo, was_hi) = (lo - shift, hi - shift);
@@ -186,21 +186,21 @@ impl StoreView<'_> {
 
     /// 物が押されたずれ(移り方を混ぜた後)を、comp の向きで(Push Trace が画面の箱と並べて読む)。
     pub fn pushed_on_screen(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
-        let mut shift = glam::Vec2::from(self.nudge(layer, t)?);
+        let mut shift = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(self, layer, t)?);
         if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent {
-            shift = self.world_2d(parent, t)?.transform_vector2(shift);
+            shift = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.transform_vector2(shift);
         }
         Ok(shift.to_array())
     }
 
     /// 物が押されたずれ(移り方を混ぜた後)を、`from` の親の空間の向きで。
     pub(crate) fn push_seen_from(&self, target: LayerId, from: LayerId, t: RationalTime) -> Result<glam::Vec2, StoreError> {
-        let mut shift = glam::Vec2::from(self.nudge(target, t)?);
+        let mut shift = glam::Vec2::from(crate::doc::store::layout::boxes::nudge(self, target, t)?);
         if let Some(parent) = self.attrs(target)?.unwrap_or_default().parent {
-            shift = self.world_2d(parent, t)?.transform_vector2(shift);
+            shift = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.transform_vector2(shift);
         }
         if let Some(parent) = self.attrs(from)?.unwrap_or_default().parent {
-            shift = self.world_2d(parent, t)?.inverse().transform_vector2(shift);
+            shift = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.inverse().transform_vector2(shift);
         }
         Ok(shift)
     }
@@ -222,7 +222,7 @@ impl StoreView<'_> {
         let value = match kind {
             1 => self.push_seen_from(target, target, t)?.length(),
             _ => {
-                let Some((lo, hi)) = self.box_seen_from(target, target, t)? else { return Ok(None) };
+                let Some((lo, hi)) = crate::doc::store::layout::boxes::box_seen_from(self, target, target, t)? else { return Ok(None) };
                 if kind == 2 { hi.x - lo.x } else { hi.y - lo.y }
             }
         };
@@ -234,9 +234,9 @@ impl StoreView<'_> {
         let frame = self.layout_frame(t)?;
         let Some((columns, rows)) = frame.fields.get(&group) else { return Ok(None) };
         let (Some(first_c), Some(last_c), Some(first_r), Some(last_r)) = (columns.first(), columns.last(), rows.first(), rows.last()) else { return Ok(None) };
-        let mut to_here = self.world_2d(group, t)?;
+        let mut to_here = crate::doc::store::layout::boxes::world_2d(self, group, t)?;
         if let Some(parent) = self.attrs(layer)?.unwrap_or_default().parent {
-            to_here = self.world_2d(parent, t)?.inverse() * to_here;
+            to_here = crate::doc::store::layout::boxes::world_2d(self, parent, t)?.inverse() * to_here;
         }
         let p = |x: f32, y: f32| { let q = to_here.transform_point2(glam::vec2(x, y)); Point { x: f64::from(q.x), y: f64::from(q.y) } };
         let mut path = Vec::new();
@@ -304,7 +304,7 @@ impl StoreView<'_> {
     /// その時刻の箱だけから解いた道(線の層の親の空間)。
     fn route_at(&self, layer: LayerId, t: RationalTime) -> Result<Option<Route>, StoreError> {
         let Some((from, to)) = self.connection(layer, t)? else { return Ok(None) };
-        let (Some(a), Some(b)) = (self.box_seen_from(from, layer, t)?, self.box_seen_from(to, layer, t)?) else { return Ok(None) };
+        let (Some(a), Some(b)) = (crate::doc::store::layout::boxes::box_seen_from(self, from, layer, t)?, crate::doc::store::layout::boxes::box_seen_from(self, to, layer, t)?) else { return Ok(None) };
         let margin = self.number(layer, MARGIN, 0.0, t)? as f32;
         let (ca, cb) = ((a.0 + a.1) * 0.5, (b.0 + b.1) * 0.5);
         let (p0, n0) = socket(a, cb, self.choice(layer, FROM_SIDE, t)?, margin);
@@ -441,8 +441,8 @@ mod tests {
     /// 画面の上の箱(世界)。
     fn shown(doc: &Document, layer: LayerId) -> [f32; 4] {
         let view = doc.view();
-        let b = view.layer_box(layer, T).unwrap().unwrap();
-        let world = view.world_2d(layer, T).unwrap();
+        let b = crate::doc::store::layout::boxes::layer_box(&view, layer, T).unwrap().unwrap();
+        let world = crate::doc::store::layout::boxes::world_2d(&view, layer, T).unwrap();
         let (lo, hi) = (world.transform_point2(glam::vec2(b[0], b[1])), world.transform_point2(glam::vec2(b[2], b[3])));
         [lo.x.min(hi.x), lo.y.min(hi.y), lo.x.max(hi.x), lo.y.max(hi.y)]
     }

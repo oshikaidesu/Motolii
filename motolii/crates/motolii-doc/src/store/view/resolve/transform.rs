@@ -52,12 +52,12 @@ pub(super) fn local_placement_transform_sampled(
     let (position, scale) = match slot {
         Some(slot) => (slot.position, slot.scale),
         None => {
-            let (p, d) = (resolve_position(view, layer, when(0))?, view.nudge(layer, when(0))?);
+            let (p, d) = (resolve_position(view, layer, when(0))?, crate::doc::store::layout::boxes::nudge(view, layer, when(0))?);
             ([p[0] + d[0], p[1] + d[1]], vec2(property::SCALE, [1.0, 1.0], when(1))?)
         }
     };
     Ok(LayerPlacement::from_transform(
-        match slot { Some(slot) => slot.anchor, None => view.free_anchor(layer, t)? },
+        match slot { Some(slot) => slot.anchor, None => crate::doc::store::layout::boxes::free_anchor(view, layer, t)? },
         position,
         scale,
         scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]) + crate::doc::store::layout::path_offset_rotation(view, layer, when(2))?,
@@ -82,7 +82,7 @@ pub fn local_transform3d(
         _ if connector.is_some() => connector.unwrap_or_default(),
         Some(slot) => slot.position,
         None => {
-            let (p, d) = (resolve_position(view, layer, t)?, view.nudge(layer, t)?);
+            let (p, d) = (resolve_position(view, layer, t)?, crate::doc::store::layout::boxes::nudge(view, layer, t)?);
             [p[0] + d[0], p[1] + d[1]]
         }
     };
@@ -90,7 +90,7 @@ pub fn local_transform3d(
     Ok(LayerPlacement::spatial_from_transform(
         xy,
         position,
-        scalar(property::POSITION_Z)? + match slot { Some(s) => s.z, None => view.nudge_z(layer, t)? },
+        scalar(property::POSITION_Z)? + match slot { Some(s) => s.z, None => crate::doc::store::layout::boxes::nudge_z(view, layer, t)? },
         scalar(property::ROTATION_X)? + slot.map_or(0.0, |s| s.rotation[0]),
         scalar(property::ROTATION_Y)? + slot.map_or(0.0, |s| s.rotation[1]),
         split_position_component(view, layer, property::SCALE_Z, t)?.unwrap_or(1.0) * slot.map_or(1.0, |s| s.scale_z),
