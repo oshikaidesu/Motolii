@@ -24,6 +24,7 @@
     "motolii/ui/native/src/viewer.rs",
     "motolii/ui/extensions/jobs/src"
   ],
+  "coreProcessState": {"root": "motolii/crates/motolii-doc/src", "owners": {"vector/text.rs": ["SYSTEM", "KNOWN"]}},
   "isolatedExtensions": {
     "motolii/ui/extensions/script": ["rquickjs", "serde_json"]
   },

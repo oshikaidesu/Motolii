@@ -92,6 +92,24 @@ for path in read_paths:
  imports=' '.join(re.findall(r'\buse\s+([^;]+);',source))
  if re.search(r'\b(?:Document|Intent|EditorRuntime)\b',imports) or re.search(r'\b(?:Document|Intent|EditorRuntime)::|::(?:Document|Intent|EditorRuntime)\b|::document::',source):
   errors.append(f'{relative}: read-side code must not depend on editing authority')
+# The core may not keep state that outlives a read. A guard or a cache that hides in the
+# process is a responsibility nobody holds: the view that recurses must own what it needs.
+# The few process resources that are genuinely one per program are named in the contract.
+process_state=modules.get('coreProcessState',{})
+if process_state:
+ core=root/process_state['root']
+ owners={k:set(v) for k,v in process_state['owners'].items()}
+ for path in sorted(core.rglob('*.rs')):
+  relative=path.relative_to(root)
+  name=str(path.relative_to(core))
+  source=re.sub(r'#\[cfg\(test\)\][^\n]*\n','',path.read_text())
+  for hit in re.findall(r'\bthread_local\s*!|\bstatic\s+mut\b',source):
+   errors.append(f'{relative}: hidden process state in the core ({hit.strip()})')
+  for held in re.findall(r'\bstatic\s+([A-Z_][A-Z0-9_]*)\s*:\s*[^;=]*\b(?:RefCell|Cell|Mutex|RwLock)\b',source):
+   if held not in owners.get(name,set()):
+    errors.append(f'{relative}: {held} is process-wide mutable state the contract does not name')
+ for name,held in owners.items():
+  if not (core/name).is_file():errors.append(f'coreProcessState: missing {name}')
 for relative,allowed in modules.get('isolatedExtensions',{}).items():
  path=root/relative/'Cargo.toml'
  source=path.read_text()
