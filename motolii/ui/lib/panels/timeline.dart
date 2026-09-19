@@ -62,11 +62,13 @@ class _TimelinePanelState extends State<TimelinePanel> {
   int? pendingSeek;
 
   /// 掴んでいる間のヘッドの位置。絵(native の seek と render)が返るのを待たずにここへ描く。
-  int? scrubFrame;
+  /// ヘッドを読むのは三枚の painter だけなので、State ではなくここに置く。
+  /// setState にすると、線を動かすたびに行も lane も組み直すことになる。
+  final scrubFrame = ValueNotifier<int?>(null);
   void requestSeek(int value) {
     // 再生中でも止めない: 飛ぶだけで回り続ける(Ableton と同じ)。
     pendingSeek = value;
-    setState(() => scrubFrame = value);
+    scrubFrame.value = value;
     seekFlight ??= pumpSeek();
   }
 
@@ -79,7 +81,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
       }
     } finally {
       seekFlight = null;
-      if (mounted) setState(() => scrubFrame = null);
+      if (mounted) scrubFrame.value = null;
     }
   }
 
@@ -197,6 +199,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
     _motion?.dispose();
     pendingSeek = null;
     queuedTimings = null;
+    scrubFrame.dispose();
     if (previewUsed) widget.controller.cancelPreview();
     horizontal.removeListener(changed);
     _timeline.removeListener(_relane);
@@ -1039,6 +1042,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                         child: ListenableBuilder(
                           listenable: Listenable.merge([
                             widget.controller.frame,
+                            scrubFrame,
                             _timeline,
                             scrolled,
                           ]),
@@ -1050,7 +1054,8 @@ class _TimelinePanelState extends State<TimelinePanel> {
                               selected: const [],
                               keys: const [],
                               frame:
-                                  scrubFrame ?? widget.controller.frame.value,
+                                  scrubFrame.value ??
+                                  widget.controller.frame.value,
                               scale: pixelsPerFrame,
                               offset: offset,
                               duration: duration,
@@ -1095,6 +1100,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                               child: ListenableBuilder(
                                 listenable: Listenable.merge([
                                   widget.controller.frame,
+                                  scrubFrame,
                                   _timeline,
                                   scrolled,
                                 ]),
@@ -1119,7 +1125,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                         selected: widget.controller.selectedIds,
                                         keys: selectedKeys,
                                         frame:
-                                            scrubFrame ??
+                                            scrubFrame.value ??
                                             widget.controller.frame.value,
                                         scale: pixelsPerFrame,
                                         offset: offset,
@@ -1309,6 +1315,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                       child: ListenableBuilder(
                         listenable: Listenable.merge([
                           widget.controller.frame,
+                          scrubFrame,
                           _timeline,
                           scrolled,
                         ]),
@@ -1320,7 +1327,8 @@ class _TimelinePanelState extends State<TimelinePanel> {
                               duration: duration,
                               extent: overviewExtent,
                               frame:
-                                  scrubFrame ?? widget.controller.frame.value,
+                                  scrubFrame.value ??
+                                  widget.controller.frame.value,
                               offset: offset,
                               scale: pixelsPerFrame,
                               viewportWidth: bounds.maxWidth - labelWidth,
@@ -1609,11 +1617,7 @@ class _TimelinePainter extends CustomPainter {
         );
       }
       if (ruler) {
-        canvas.drawLine(
-          Offset(x, 9),
-          Offset(x, size.height),
-          _line(ink.tick),
-        );
+        canvas.drawLine(Offset(x, 9), Offset(x, size.height), _line(ink.tick));
         for (var sub = 1; sub < 4; sub++) {
           final sx = x + gridStep * scale * sub / 4;
           canvas.drawLine(
@@ -1841,8 +1845,7 @@ class _TimelinePainter extends CustomPainter {
         Offset(x, size.height),
         _line(EditorTheme.muted.withValues(alpha: .4)),
       );
-      if (ruler)
-        canvas.drawCircle(Offset(x, 3), 3, _fill(EditorTheme.accent));
+      if (ruler) canvas.drawCircle(Offset(x, 3), 3, _fill(EditorTheme.accent));
     }
     final playX = label + frame * scale - offset;
     if (ruler)
@@ -1882,10 +1885,7 @@ class _TimelinePainter extends CustomPainter {
             : (laneSelected(row) ? EditorTheme.raised : EditorTheme.panel);
         canvas.drawRect(node.bounds, _fill(background));
         for (final child in node.children) surface(child);
-        canvas.drawRect(
-          node.bounds.deflate(.5),
-          _stroke(EditorTheme.line, 1),
-        );
+        canvas.drawRect(node.bounds.deflate(.5), _stroke(EditorTheme.line, 1));
       }
 
       for (final root in containers) surface(root);
@@ -2123,11 +2123,7 @@ class _ArrangementOverview extends CustomPainter {
     // 尺の印(壁ではない)と、今のコマ。
     if (extent > duration) {
       final x = duration * unit;
-      canvas.drawLine(
-        Offset(x, 1),
-        Offset(x, 17),
-        _line(EditorTheme.muted, 1),
-      );
+      canvas.drawLine(Offset(x, 1), Offset(x, 17), _line(EditorTheme.muted, 1));
     }
     final now = frame * unit;
     canvas.drawLine(
