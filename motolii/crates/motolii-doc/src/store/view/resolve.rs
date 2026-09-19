@@ -1,5 +1,6 @@
 
 mod camera;
+mod mask;
 mod text;
 mod transform;
 
@@ -19,98 +20,6 @@ use super::StoreView;
 impl<'a> StoreView<'a> {
 
 
-    fn resolved_masks(
-        &self,
-        layer: LayerId,
-        t: RationalTime,
-    ) -> Result<Vec<ResolvedMask>, StoreError> {
-        let mut out = Vec::new();
-        for mask in self.masks(layer)? {
-            let mode = match self.value_at(layer, &PropertyId::mask_mode(mask.id), t)? {
-                Some(Value::Enum(v)) => crate::doc::store::MaskMode::from_enum_value(v).ok_or_else(|| {
-                    StoreError::Property(format!(
-                        "マスク {} の mode track に未知の enum 値が入っている: {v}",
-                        mask.id
-                    ))
-                })?,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の mode に enum でない値が入っている(track が壊れている): {other:?}",
-                        mask.id
-                    )))
-                }
-                None => mask.mode,
-            };
-
-            let inverted = match self.value_at(layer, &PropertyId::mask_inverted(mask.id), t)? {
-                Some(Value::Bool(v)) => v,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の inverted に真偽でない値が入っている(track が壊れている): {other:?}",
-                        mask.id
-                    )))
-                }
-                None => mask.inverted,
-            };
-
-            let shape_property = PropertyId::mask_shape(mask.id);
-            let shape = match self.value_at(layer, &shape_property, t)? {
-                Some(Value::Path(path)) => path,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の形状にパスでない値が入っている: {other:?}",
-                        mask.id
-                    )))
-                }
-                None => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} に形状が無い(`mask.{}.shape` が未設定)",
-                        mask.id, mask.id
-                    )))
-                }
-            };
-
-            let opacity_property = PropertyId::mask_opacity(mask.id);
-            let opacity = match self.value_at(layer, &opacity_property, t)? {
-                Some(Value::F64(v)) => v as f32,
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の不透明度に数値でない値が入っている: {other:?}",
-                        mask.id
-                    )))
-                }
-                None => 1.0,
-            };
-
-            let expansion_property = PropertyId::mask_expansion(mask.id);
-            let expansion = match self.value_at(layer, &expansion_property, t)? {
-                Some(Value::F64(v)) if v.is_finite() => v,
-                Some(Value::F64(v)) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の膨張に有限でない値が入っている: {v}",
-                        mask.id
-                    )))
-                }
-                Some(other) => {
-                    return Err(StoreError::Property(format!(
-                        "マスク {} の膨張に数値でない値が入っている: {other:?}",
-                        mask.id
-                    )))
-                }
-                None => 0.0,
-            };
-
-            out.push(ResolvedMask {
-                mode,
-                inverted,
-                opacity: opacity.clamp(0.0, 1.0),
-                expansion,
-                shape,
-                frame: crate::doc::store::MaskFrame::Layer,
-            });
-        }
-        Ok(out)
-    }
 
     fn effect_enabled(&self, layer: LayerId, effect: crate::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
         match self.value_at(layer, &crate::store::PropertyId::effect_enabled(effect), t)? {
@@ -269,7 +178,7 @@ impl<'a> StoreView<'a> {
             source_frame,
             source_time: RationalTime::try_from_frame(source_frame, composition.fps)
                 .map_err(|e| StoreError::Property(e.to_string()))?,
-            masks: self.clipped_masks(layer, t, self.resolved_masks(layer, t)?, present, memo, visiting)?,
+            masks: self.masks_of(layer, t, present, memo, visiting)?,
             effects,
             blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,
             matte: if attrs.clip_to_below {
@@ -994,48 +903,6 @@ impl<'a> StoreView<'a> {
         Ok(true)
     }
 
-    /// Overflow が Clip の並べる Group の子孫は、その箱で切る: 箱を層の素材座標へ写した角丸の矩形を Intersect で足す。
-    /// 祖先の箱の切りは箱の枠に付く(`MaskFrame::Box`)、自分の inset は自分の枠(`Layer`)。
-    fn clipped_masks(
-        &self,
-        layer: LayerId,
-        t: RationalTime,
-        mut masks: Vec<ResolvedMask>,
-        present: &HashSet<LayerId>,
-        memo: &mut HashMap<LayerId, glam::Affine2>,
-        visiting: &mut HashSet<LayerId>,
-    ) -> Result<Vec<ResolvedMask>, StoreError> {
-        // 奥行きを持つ網・点群は 2D の mask で切れない(切り口は面の法の宿題)。
-        if let Some(crate::doc::store::LayerMeta { source: crate::doc::store::LayerSource::File { path, .. }, .. }) = self.meta(layer)? {
-            if self.analysis().and_then(|a| a.extent(&path)).is_some_and(|e| e[2] > 0.0) {
-                return Ok(masks);
-            }
-        }
-        let mut seen = HashSet::new();
-        // inset は自分の背景も切る(CSS の clip-path は要素ごと)。Overflow は箱の外の子孫だけ。
-        let mut next = Some(layer);
-        let mut own: Option<glam::Affine2> = None;
-        while let Some(group) = next.filter(|g| seen.insert(*g) && present.contains(g)) {
-            let cuts = if group == layer { [None, self.clip_inset(group, t)?] } else { [self.clip_box(group, t)?, self.clip_inset(group, t)?] };
-            for (b, radius) in cuts.into_iter().flatten() {
-                let world = match own {
-                    Some(w) => w,
-                    None => *own.insert(self.world_affine(layer, t, present, memo, visiting)?),
-                };
-                let to = world.inverse() * self.world_affine(group, t, present, memo, visiting)?;
-                masks.push(ResolvedMask {
-                    mode: crate::doc::store::MaskMode::Intersect,
-                    inverted: false,
-                    opacity: 1.0,
-                    expansion: 0.0,
-                    shape: crate::doc::store::layout::rounded_rect_path(b, radius, to),
-                    frame: if group == layer { crate::doc::store::MaskFrame::Layer } else { crate::doc::store::MaskFrame::Box },
-                });
-            }
-            next = self.attrs(group)?.unwrap_or_default().parent;
-        }
-        Ok(masks)
-    }
 
     /// 並べる Group の面に乗る物へ、その面の基準点を付ける(箱の奥行きの法 3)。面は、z・Tilt・Depth の無い層を
     /// 親へ辿って届く一番外の Display の Group(面の Group 自身は傾いてよい)。
@@ -1228,163 +1095,6 @@ mod group_scope_contract {
     }
 }
 
-#[cfg(test)]
-mod clipping_contract {
-    use crate::doc::store::*;
-
-    fn add(doc: &mut Document, id: u64, order: i16, parent: Option<LayerId>, clipped: bool) -> LayerId {
-        let layer = LayerId(id);
-        doc.apply_all([
-            Intent::AddLayer(layer),
-            Intent::SetMeta { layer, meta: LayerMeta {
-                source: if id == 9 { LayerSource::Group } else { LayerSource::Shape },
-                order,
-                timing: LayerTiming::place(0, None, 300),
-            }},
-            Intent::SetAttrs { layer, patch: LayerAttrsPatch {
-                parent: Some(parent), clip_to_below: Some(clipped), ..Default::default()
-            }},
-        ]).unwrap();
-        layer
-    }
-
-    /// Repeater が Group の子を 1 つずつ引く時、写しは番号の順に重なる(子ごとにまとまらない)。Cavalry の Concentrick で踏んだ。
-    #[test]
-    fn picked_copies_stack_by_their_number_not_by_child() {
-        let mut doc = blank_project();
-        let group = add(&mut doc, 9, 5, None, false);
-        let ink = add(&mut doc, 2, 1, Some(group), false);
-        let paper = add(&mut doc, 3, 2, Some(group), false);
-        doc.apply(Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(1), plugin_id: crate::doc::extensions::placement::REPEAT.to_owned() }] }).unwrap();
-        for (name, value) in [("count", 4.0), ("pick", 1.0)] {
-            doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(1), name).unwrap(), value: Value::F64(value) }).unwrap();
-        }
-        let resolved = doc.view().resolved_layers(RationalTime::ZERO).unwrap();
-        let drawn: Vec<(LayerId, u32)> = resolved.iter().filter(|l| l.id != group).map(|l| (l.id, l.copy)).collect();
-        assert_eq!(drawn, vec![(ink, 0), (paper, 1), (ink, 2), (paper, 3)], "ink, paper, ink, paper from the bottom up");
-        let orders: Vec<i32> = resolved.iter().map(|l| l.placement.order).collect();
-        assert!(orders.windows(2).all(|w| w[0] < w[1]), "and each is drawn at its own step, never a tie: {orders:?}");
-    }
-
-    /// Stencil はクリッピングマスクの逆: 自分の形で下を切る。範囲は clip していれば束、していなければ同じ Group の下だけ。
-    #[test]
-    fn a_stencil_cuts_its_group_below_it_or_only_its_clipping_stack() {
-        let mut doc = blank_project();
-        let background = add(&mut doc, 1, 0, None, false);
-        let group = add(&mut doc, 9, 5, None, false);
-        let low = add(&mut doc, 4, 1, Some(group), false);
-        let photo = add(&mut doc, 5, 3, Some(group), false);
-        let stencil = add(&mut doc, 6, 4, Some(group), false);
-        let above = add(&mut doc, 7, 8, Some(group), false);
-        doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { blend_mode: Some(BlendMode::StencilAlpha), ..Default::default() } }).unwrap();
-        let matte_of = |doc: &Document, id: LayerId| doc.view().resolved_layers(RationalTime::ZERO).unwrap().into_iter().find(|l| l.id == id).and_then(|l| l.matte);
-        let cut = Some(Matte { layer: stencil, mode: MatteMode::Alpha });
-        assert_eq!((matte_of(&doc, low), matte_of(&doc, photo)), (cut, cut), "without clip: everything below it in the group");
-        assert_eq!((matte_of(&doc, above), matte_of(&doc, background)), (None, None), "not what is above, not outside the group");
-
-        doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { clip_to_below: Some(true), ..Default::default() } }).unwrap();
-        assert_eq!(matte_of(&doc, photo), cut, "clipped: only its clipping base");
-        assert_eq!(matte_of(&doc, low), None, "the rest of the group is left alone");
-        assert_eq!(matte_of(&doc, stencil), None, "the stencil does not clip itself to the base it cuts");
-
-        doc.apply(Intent::SetAttrs { layer: stencil, patch: LayerAttrsPatch { blend_mode: Some(BlendMode::SilhouetteAlpha), ..Default::default() } }).unwrap();
-        assert_eq!(matte_of(&doc, photo), Some(Matte { layer: stencil, mode: MatteMode::InvertedAlpha }), "Silhouette punches a hole");
-    }
-
-    #[test]
-    fn clipping_cache_preserves_equal_order_and_preview_isolation() {
-        let mut doc = blank_project();
-        let base = add(&mut doc, 1, 0, None, false);
-        let tied = add(&mut doc, 2, 0, None, false);
-        let top = add(&mut doc, 3, 10, None, true);
-        assert_eq!(doc.view().clipping_base(tied).unwrap(), None);
-        assert_eq!(doc.view().clipping_base(top).unwrap(), Some(tied));
-        let owner = doc.begin_preview();
-        doc.preview_edits(owner, &[Intent::SetAttrs { layer: tied, patch: LayerAttrsPatch { clip_to_below: Some(true), ..Default::default() } }]).unwrap();
-        assert_eq!(doc.view().clipping_base(top).unwrap(), Some(base));
-        assert_eq!(doc.view().without_transients().clipping_base(top).unwrap(), Some(tied));
-        doc.clear_preview_edits(owner);
-        assert_eq!(doc.view().clipping_base(top).unwrap(), Some(tied));
-    }
-
-    #[test]
-    fn clipping_stack_retargets_on_reorder_without_crossing_parent_boundaries() {
-        let mut doc = blank_project();
-        let base = add(&mut doc, 1, 0, None, false);
-        let first = add(&mut doc, 2, 10, None, true);
-        let second = add(&mut doc, 3, 20, None, true);
-        let group = add(&mut doc, 9, 30, None, false);
-        let child_base = add(&mut doc, 4, 5, Some(group), false);
-        let child = add(&mut doc, 5, 15, Some(group), true);
-        assert_eq!(doc.view().clipping_base(first).unwrap(), Some(base));
-        assert_eq!(doc.view().clipping_base(second).unwrap(), Some(base));
-        assert_eq!(doc.view().clipping_base(child).unwrap(), Some(child_base));
-        assert_eq!(doc.view().clipping_base(child_base).unwrap(), None);
-        assert_eq!(doc.view().clipping_base(LayerId(999)).unwrap(), None);
-        let resolved = doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap();
-        assert!(resolved.clip_to_below);
-        assert_eq!(resolved.matte, Some(Matte { layer: base, mode: MatteMode::Alpha }));
-
-        doc.apply(Intent::SetOrder { layer: base, order: 25 }).unwrap();
-        assert_eq!(doc.view().clipping_base(second).unwrap(), None);
-        let orphan = doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap();
-        assert!(orphan.clip_to_below && orphan.matte.is_none());
-        assert!(doc.undo());
-        assert_eq!(doc.view().clipping_base(second).unwrap(), Some(base));
-
-        let inserted = add(&mut doc, 6, 15, None, false);
-        assert_eq!(doc.view().clipping_base(first).unwrap(), Some(base));
-        assert_eq!(doc.view().clipping_base(second).unwrap(), Some(inserted));
-        doc.apply(Intent::SetAttrs { layer: inserted, patch: LayerAttrsPatch {
-            hidden: Some(true), ..Default::default()
-        }}).unwrap();
-        assert!(doc.view().resolve(inserted, RationalTime::ZERO).unwrap().is_none());
-        assert_eq!(doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap().matte,
-            Some(Matte { layer: inserted, mode: MatteMode::Alpha }));
-    }
-
-    #[test]
-    fn clipping_toggle_preserves_explicit_matte_lock_and_saved_relationship() {
-        let mut doc = blank_project();
-        let base = add(&mut doc, 1, 0, None, false);
-        let layer = add(&mut doc, 2, 10, None, false);
-        let explicit = Matte { layer: base, mode: MatteMode::Luma };
-        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
-            matte: Some(Some(explicit)), ..Default::default()
-        }}).unwrap();
-        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
-            clip_to_below: Some(true), ..Default::default()
-        }}).unwrap();
-        assert_eq!(doc.view().attrs(layer).unwrap().unwrap().matte, Some(explicit));
-        assert_eq!(doc.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
-            Some(Matte { layer: base, mode: MatteMode::Alpha }));
-        assert!(doc.undo());
-        let previous = doc.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap();
-        assert!(!previous.clip_to_below);
-        assert_eq!(previous.matte, Some(explicit));
-        assert!(doc.redo());
-        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
-            locked: Some(true), ..Default::default()
-        }}).unwrap();
-        let history = doc.history_depth();
-        assert!(doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
-            clip_to_below: Some(false), ..Default::default()
-        }}).is_err());
-        assert_eq!(doc.history_depth(), history);
-        assert!(doc.view().attrs(layer).unwrap().unwrap().clip_to_below);
-
-        let path = std::env::temp_dir().join(format!("motolii-clipping-{}-{}.rrd",
-            std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-        doc.save(&path).unwrap();
-        let loaded = Document::load(&path).unwrap();
-        std::fs::remove_file(&path).unwrap();
-        assert!(loaded.view().attrs(layer).unwrap().unwrap().clip_to_below);
-        assert_eq!(loaded.view().attrs(layer).unwrap().unwrap().matte, Some(explicit));
-        assert_eq!(loaded.view().clipping_base(layer).unwrap(), Some(base));
-        assert_eq!(loaded.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
-            Some(Matte { layer: base, mode: MatteMode::Alpha }));
-    }
-}
 
 #[cfg(test)]
 mod ghost_contract {
