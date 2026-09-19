@@ -651,7 +651,7 @@ mod tests {
     use crate::render::engine::Engine;
 
     fn document_with_effects(path: &std::path::Path, plugins: &[&str]) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply_all([
             Intent::SetComposition(Composition {
                 width: 24,
@@ -755,7 +755,7 @@ mod tests {
         for y in 32..48 { for x in 20..36 { let p = ((y*size+x)*4) as usize; pixels[p..p+4].copy_from_slice(&[255,255,255,255]); } }
         image::save_buffer(&source, &pixels, size, size, image::ColorType::Rgba8).unwrap();
         let doc = if let Ok(path) = std::env::var("MOTOLII_RADIANCE_BENCH_DOCUMENT") {
-            let mut doc = Document::load(path).unwrap();
+            let mut doc = Document::load(path).unwrap().with_programs(crate::extensions::bundled());
             let ids = doc.view().resolved_layers(RationalTime::ZERO).unwrap().iter().map(|l| l.id).collect::<Vec<_>>();
             for layer in ids { for effect in doc.view().effects(layer).unwrap() { doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_enabled(effect.id), value: Value::Bool(true) }).unwrap(); } }
             doc
@@ -874,7 +874,7 @@ mod passes_reach_every_material {
     const SIZE: u32 = 64;
 
     fn document(path: &std::path::Path, radius: f64) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
@@ -940,7 +940,7 @@ mod passes_can_read_what_is_beneath {
         let dir = tempfile::tempdir().unwrap();
         let white = png(dir.path(), "white.png", SIZE, [255, 255, 255, 255]);
         let grey = png(dir.path(), "grey.png", 32, [128, 128, 128, 255]);
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         for (id, path, order, at) in [(1u64, &white, 0i16, 0.0), (2, &grey, 1, 16.0)] {
             let layer = LayerId(id);
@@ -972,7 +972,7 @@ mod passes_can_read_what_is_beneath {
         let dir = tempfile::tempdir().unwrap();
         let white = png(dir.path(), "white.png", SIZE, [255, 255, 255, 255]);
         let square = png(dir.path(), "square.png", 32, [255, 255, 255, 255]);
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         for (id, path, order, at) in [(1u64, &white, 0i16, 0.0), (2, &square, 1, 16.0)] {
             let layer = LayerId(id);
@@ -999,7 +999,7 @@ mod passes_can_read_what_is_beneath {
         let dir = tempfile::tempdir().unwrap();
         let blue = png(dir.path(), "blue.png", SIZE, [0, 0, 100, 255]);
         let red = png(dir.path(), "red.png", 32, [255, 0, 0, 255]);
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         for (id, path, order, at) in [(1u64, &blue, 0i16, 0.0), (2, &red, 1, 16.0)] {
             let layer = LayerId(id);
@@ -1054,7 +1054,7 @@ mod passes_can_read_a_picked_layer {
         let red = dir.path().join("red.png");
         image::save_buffer(&red, &[255u8, 0, 0, 255].repeat((SIZE * SIZE) as usize), SIZE, SIZE, image::ColorType::Rgba8).unwrap();
 
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         for (id, path, order) in [(1u64, &blue, 0i16), (2, &matte, 1), (3, &red, 2)] {
             let layer = LayerId(id);
@@ -1098,7 +1098,7 @@ mod stylize_without_machine_learning {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("in.png");
         image::save_buffer(&path, &pixels, SIZE, SIZE, image::ColorType::Rgba8).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([

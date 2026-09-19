@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let refresh = motolii_render::compositor::refresh_effect_catalog();
     for e in &refresh.errors { eprintln!("catalog: {e}"); }
 
-    let mut doc = Document::new();
+    let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
     doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: frames, background: [0.0, 0.0, 0.0, 1.0] }))?;
     // 下: 実写。
     let clip_layer = LayerId(1);

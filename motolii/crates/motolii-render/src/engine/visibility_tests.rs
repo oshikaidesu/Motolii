@@ -12,7 +12,7 @@ fn capture_visibility_diagnosis() {
     let source = std::env::var("MOTOLII_DIAGNOSTIC_SCENE").unwrap();
     let out = std::path::PathBuf::from(std::env::var("MOTOLII_DIAGNOSTIC_DIR").unwrap());
     std::fs::create_dir_all(&out).unwrap();
-    let mut doc = Document::load(source).unwrap();
+    let mut doc = Document::load(source).unwrap().with_programs(crate::extensions::bundled());
     let card = file_layer(
         &mut doc,
         6,

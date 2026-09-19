@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let path = args.next().ok_or("doc")?;
     let frames: Vec<i64> = { let v: Vec<i64> = args.filter_map(|a| a.parse().ok()).collect(); if v.is_empty() { vec![0, 15, 30, 45] } else { v } };
-    let doc = Document::load(&path)?;
+    let doc = Document::load(&path)?.with_programs(motolii_render::extensions::bundled());
     let comp = doc.view().composition()?.ok_or("comp")?;
     let mut engine = Engine::new()?;
     println!("frame\tthings\tmoved\tturned\tsized\ttinted\tvalues");

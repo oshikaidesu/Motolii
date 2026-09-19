@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut engine = Engine::new()?;
     for (name, amount, world) in [("world-still", 0.0, false), ("world-moved", 70.0, false), ("world-linked", 70.0, true)] {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.07, 0.07, 0.09, 1.0] }))?;
         layer(&mut doc, 1, &flag, 0, [90.0, 290.0], Some(0.45), amount, world)?;
         layer(&mut doc, 2, &ply, 1, [540.0, 270.0], Some(1.25), amount, world)?;
@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 旗 1 枚だけ: 面内(XYZ)と法線(Normal)。AE ならマスク + Repeat Edge Pixels が要る所。
     for (name, amount, along) in [("flag-still", 0.0, 1.0), ("flag-xyz", 60.0, 1.0), ("flag-normal", 60.0, 0.0)] {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.07, 0.07, 0.09, 1.0] }))?;
         let layer = LayerId(1);
         let fx = EffectId(0);
@@ -116,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 絵の効果(Pass)も素材を選ばない。板は層の絵へ焼かれ、網と点群は描いた後の窓で効く。
     {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.07, 0.07, 0.09, 1.0] }))?;
         for (id, path, order, pos, scale) in [
             (1u64, flag.clone(), 0i16, [90.0, 290.0], Some(0.45)),
@@ -145,7 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 決定的な絵: 点群を旗の真上へ重ねる。場が世界で繋がっていれば、点は旗の波に乗る。
     for (name, world) in [("overlap-loose", false), ("overlap-linked", true)] {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.07, 0.07, 0.09, 1.0] }))?;
         let at = [580.0, 300.0];
         layer(&mut doc, 1, &flag, 0, at, Some(0.9), 70.0, world)?;

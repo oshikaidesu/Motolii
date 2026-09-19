@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = args.next().ok_or("document path required")?;
     let frame: i64 = args.next().as_deref().unwrap_or("0").parse()?;
     let out = args.next().unwrap_or_else(|| "render_doc.png".into());
-    let mut doc = Document::load(&path)?;
+    let mut doc = Document::load(&path)?.with_programs(motolii_render::extensions::bundled());
     // 切り分け: MOTOLII_ONLY=<layer id> でその層だけ、MOTOLII_STRIP=<layer id> でその層の効果を外す。
     let only: Option<u64> = std::env::var("MOTOLII_ONLY").ok().and_then(|v| v.parse().ok());
     let strip: Option<u64> = std::env::var("MOTOLII_STRIP").ok().and_then(|v| v.parse().ok());

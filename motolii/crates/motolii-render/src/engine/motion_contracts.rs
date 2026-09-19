@@ -22,7 +22,7 @@ mod pixel_motion_blur_follows_the_motion {
 
     fn document(path: &std::path::Path, fps: i64, shutter: Option<f64>) -> Document {
         let fps = Fps::try_new(fps, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
@@ -86,7 +86,7 @@ mod motion_blur_follows_the_keyframes {
     fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
 
     fn document(moving: bool, blur: Option<&[(&str, f64)]>) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         let mut track = KeyframeTrack::new();
@@ -166,7 +166,7 @@ mod particles_are_a_closed_form {
     fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
 
     fn document(values: &[(&str, Value)]) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 96, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([

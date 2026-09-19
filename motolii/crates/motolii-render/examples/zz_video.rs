@@ -1,6 +1,6 @@
 //! 動画が進まない時の切り分け: コマを描く度に frame cache の当たり・数を出す。
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let doc = motolii_render::doc::store::Document::load(&std::env::args().nth(1).ok_or("doc")?)?;
+    let doc = motolii_render::doc::store::Document::load(&std::env::args().nth(1).ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let view = doc.view();
     let comp = view.composition()?.ok_or("comp")?;
     let mut engine = motolii_render::engine::Engine::new()?;

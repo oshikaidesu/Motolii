@@ -116,7 +116,7 @@ fn gallery_scene() -> (Document, LayerId) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let doc =
         Document::load(root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd"))
-            .unwrap();
+            .unwrap().with_programs(crate::extensions::bundled());
     let ball = doc
         .view()
         .resolved_layers(RationalTime::ZERO)

@@ -1,7 +1,7 @@
 use motolii_render::doc::store::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let doc = Document::load(&args.next().ok_or("doc")?)?;
+    let doc = Document::load(&args.next().ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let frame: i64 = args.next().ok_or("frame")?.parse()?;
     let filter = args.next().unwrap_or_default();
     let view = doc.view();

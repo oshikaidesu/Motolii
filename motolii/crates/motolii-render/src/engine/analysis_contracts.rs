@@ -28,7 +28,7 @@ fn document(path: &std::path::Path, persist: bool) -> Document {
 }
 
 fn document_with(path: &std::path::Path, persist: bool, fill: Option<Fill>, stroke: Option<Stroke>) -> Document {
-    let mut doc = Document::new();
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
     doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
     let (source, material) = (LayerId(1), LayerId(2));
     doc.apply_all([
@@ -137,7 +137,7 @@ fn a_track_matte_of_blob_boxes_reveals_every_box() {
 fn track_overlay_frames_what_it_finds_below() {
     let dir = tempfile::tempdir().unwrap();
     let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
-    let mut doc = Document::new();
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
     doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
     let (video, host) = (LayerId(1), LayerId(2));
     doc.apply_all([

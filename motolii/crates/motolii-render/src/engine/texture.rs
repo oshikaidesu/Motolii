@@ -1336,7 +1336,7 @@ mod media_time_contract {
         let dir = tempfile::tempdir().unwrap();
         let clip = black_then_white_24fps(dir.path());
 
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 64,
             height: 64,
@@ -1391,7 +1391,7 @@ mod media_time_contract {
         let info = crate::render::media::probe(&clip).expect("VFR must be admitted");
         assert!(info.nb_frames.is_some_and(|n| n == 84), "24 + 60 frames, got {:?}", info.nb_frames);
 
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 64,
             height: 64,
@@ -1440,7 +1440,7 @@ mod media_time_contract {
         let above = clip("above.mp4", "white");
 
         let build = |top_opacity: Option<f64>| {
-            let mut doc = Document::new();
+            let mut doc = Document::new().with_programs(crate::extensions::bundled());
             doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
             for (id, path, order) in [(1, &below, 0), (2, &above, 1)] {
                 let layer = LayerId(id);
@@ -1482,7 +1482,7 @@ mod media_time_contract {
             .status()
             .expect("spawn ffmpeg");
         assert!(status.success());
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -1526,7 +1526,7 @@ mod media_time_contract {
             .expect("spawn ffmpeg");
         assert!(status.success());
         crate::render::media::probe(&clip).expect("HDR must be admitted");
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0, 1.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -1556,7 +1556,7 @@ mod media_time_contract {
             .args(["-v", "error", "-y", "-f", "lavfi", "-i", "color=c=white:s=64x64:r=30:d=1", "-pix_fmt", "yuv420p", "-c:v", "libx264"])
             .arg(&clip).status().unwrap();
         assert!(status.success());
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
         for (id, path) in [(1, &clip), (2, &song)] {
             let layer = LayerId(id);
@@ -1582,7 +1582,7 @@ mod media_time_contract {
             .args(["-v", "error", "-y", "-f", "lavfi", "-i", "color=c=white:s=64x64:r=30:d=1", "-pix_fmt", "yuv420p", "-c:v", "libx264"])
             .arg(&clip).status().unwrap();
         assert!(status.success());
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -1634,7 +1634,7 @@ mod media_time_contract {
             .expect("spawn ffmpeg");
         assert!(status.success(), "video fixture failed");
 
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 64,
             height: 64,
@@ -1679,7 +1679,7 @@ mod media_time_contract {
             .status()
             .expect("spawn ffmpeg");
         assert!(status.success());
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -1709,7 +1709,7 @@ mod media_time_contract {
             .status()
             .expect("spawn ffmpeg");
         assert!(status.success());
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 3840, height: 2160, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply(Intent::AddLayer(layer)).unwrap();

@@ -1,7 +1,6 @@
 //! 同梱の効果が、契約どおりに振る舞うか。効果はこの家の物なので、検査もここに置く
 //! (コアは誰が何を実装しているか知らないので、コアの検査には書けない)。
 
-use motolii_doc::store::kind::{PlacementInput, PlacementOutput, PlacementProgram};
 
 use motolii_doc::store::{
     property, Composition, Document, EffectScope, Fps, Interp, Keyframe, KeyframeTrack, PropertyId,

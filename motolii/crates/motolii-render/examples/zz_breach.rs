@@ -1,7 +1,7 @@
 //! 壁の抜けを輪郭基準で測る: 各物の当たりの外接が部屋(comp)をどれだけ越えるか。
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let doc = motolii_render::doc::store::Document::load(&args.next().ok_or("doc")?)?;
+    let doc = motolii_render::doc::store::Document::load(&args.next().ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let last: i64 = args.next().ok_or("frame")?.parse()?;
     let view = doc.view();
     let comp = view.composition()?.ok_or("comp")?;

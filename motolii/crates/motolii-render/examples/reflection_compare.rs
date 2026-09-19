@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !(3..=4).contains(&args.len()) {
         return Err("usage: reflection_compare document.rrd result.json [gpu-sharing]".into());
     }
-    let mut doc = Document::load(&args[1])?;
+    let mut doc = Document::load(&args[1])?.with_programs(motolii_render::extensions::bundled());
     let comp = doc.view().composition()?.ok_or("no composition")?;
     let layers = doc.view().resolved_layers(RationalTime::ZERO)?;
     let receiver = layers

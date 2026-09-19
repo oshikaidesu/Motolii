@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dialed: Vec<(&str, Vec<&str>, Vec<(&str, f64)>)> = vec![("city-timediff0", vec!["motolii.time_difference"], vec![("offset", 0.0)])];
     let cases: Vec<(&str, Vec<&str>, Vec<(&str, f64)>)> = cases.into_iter().map(|(n, e)| (n, e, vec![])).chain(dialed).collect();
     for (name, effects, params) in cases {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps: Fps::try_new(24, 1).unwrap(), duration_frames: 240, background: [0.0, 0.0, 0.0, 1.0] }))?;
         let layer = LayerId(1);
         doc.apply_all([
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // レンズの意図: 一番上のグラフィックス(旗)に「背景のコピー → ぼかし」。旗の実態は出ず、
     // 旗の形の中だけ街がぼける。変化だけが見える。
     if let Some(flag) = std::env::args().nth(3) {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps: Fps::try_new(24, 1).unwrap(), duration_frames: 240, background: [0.0, 0.0, 0.0, 1.0] }))?;
         for (id, path, order, at, scale) in [(1u64, clip.clone(), 0i16, [0.0, 0.0], 1.0), (2, flag, 1, [400.0, 123.0], 0.5)] {
             let layer = LayerId(id);

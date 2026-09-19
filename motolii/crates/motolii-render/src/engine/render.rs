@@ -1317,7 +1317,7 @@ use crate::extensions::{placement};
     const DOT: u32 = 4;
 
     fn document(path: &std::path::Path, count: f64, below: &[&str]) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: SIZE,
             height: SIZE,
@@ -1408,7 +1408,7 @@ use crate::extensions::{placement};
         assert!(red_floor(&pixels) >= 120, "a half-transparent clip is drawn once over overlapping copies, got red {}", red_floor(&pixels));
 
         // 中で: グループに赤と(赤へ clip した)緑を入れて丸ごと 2 枚に増やす。緑は自分の番号の赤にだけ切られる。
-        let mut inside = Document::new();
+        let mut inside = Document::new().with_programs(crate::extensions::bundled());
         inside.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4] })).unwrap();
         let group = LayerId(10);
         inside.apply_all([
@@ -1433,7 +1433,7 @@ use crate::extensions::{placement};
         let dir = tempfile::tempdir().unwrap();
         let red = png(dir.path(), "red.png", [255, 0, 0, 255]);
         let mut engine = Engine::new().unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4] })).unwrap();
         let group = LayerId(10);
         doc.apply_all([
@@ -1466,7 +1466,7 @@ use crate::extensions::{placement};
         let dir = tempfile::tempdir().unwrap();
         let green = png(dir.path(), "green.png", [0, 255, 0, 255]);
         let mut engine = Engine::new().unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
         add_file_layer(&mut doc, 1, 0, &green, None, false);
         // 注視点(comp 中心)に置く。寄せたカメラでも枠の中に残る。
@@ -1742,7 +1742,7 @@ mod projection_contract {
         ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(color), ..Default::default() }) })
     }
     fn document() -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 256, height: 256, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [1.0, 1.0, 1.0, 1.0] })).unwrap();
         doc
     }
@@ -1916,7 +1916,7 @@ mod time_reference_is_deterministic {
     }
 
     fn document(path: &std::path::Path) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(10, 1).unwrap(), duration_frames: 20, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
@@ -1996,7 +1996,7 @@ mod feedback_is_a_recurrence_from_the_in_point {
     fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).unwrap() }
 
     fn document(path: &std::path::Path, with_trail: bool) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
@@ -2125,7 +2125,7 @@ mod composite_at_another_time {
 
     /// 下 = 動画、上 = 白い板(comp 全面)に効果。`top` が None なら下だけ。
     fn document(clip: &std::path::Path, top: Option<(&std::path::Path, &str)>) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let below = LayerId(1);
         doc.apply_all([
@@ -2221,7 +2221,7 @@ mod freeze_keeps_the_picture {
         status.success().then_some(out)
     }
     fn document(path: &std::path::Path) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
@@ -2241,7 +2241,7 @@ mod freeze_keeps_the_picture {
     #[test]
     fn a_plain_shape_freezes_to_material_space_without_changing_its_picture() {
         let dir = tempfile::tempdir().unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         let layer = LayerId(1);
         doc.apply_all([
             Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] }),

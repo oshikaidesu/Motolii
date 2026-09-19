@@ -1,6 +1,6 @@
 use motolii_render::doc::store::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let doc = Document::load(&std::env::args().nth(1).ok_or("doc")?)?;
+    let doc = Document::load(&std::env::args().nth(1).ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let view = doc.view();
     let comp = view.composition()?.ok_or("comp")?;
     let t = RationalTime::try_from_frame(120, comp.fps)?;

@@ -788,7 +788,7 @@ mod tests {
     /// 灰色でない住む箱(Display の Group、角丸 0)の中を、白い四角が右下へまっすぐ漂う。`gpu` なら子に Bounce のブロック、
     /// そうでなければ親の Overflow = Bounce(書類の CPU の法)。
     fn scene(gpu: bool) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
         let (group, child) = (LayerId(1), LayerId(2));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
@@ -824,7 +824,7 @@ mod tests {
     /// 住む箱(Display の Group、(10,10) から 120×70、`clip` なら Overflow Clip)の底の白い四角(16 px、箱の (30, 50))が、
     /// `start` コマ目から Arrive で下から来る(From 90・Distance 80・Arrive 0.7・Bounce 0・Stagger 0・Spin 0)。
     fn arrive_scene(start: i64, clip: bool) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
         let (group, child) = (LayerId(1), LayerId(2));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
@@ -939,7 +939,7 @@ mod tests {
     #[test]
     fn a_field_moves_everyone_in_its_room_who_carries_no_effect() {
         let fps = Fps::try_new(30, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
         let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
@@ -999,7 +999,7 @@ mod tests {
     #[test]
     fn a_field_moves_without_jumping_between_frames() {
         let fps = Fps::try_new(30, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0; 4] })).unwrap();
         let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
@@ -1056,7 +1056,7 @@ mod tests {
     #[test]
     fn things_stop_moving_once_they_have_settled() {
         let fps = Fps::try_new(30, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
         let (group, field) = (LayerId(1), LayerId(2));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
@@ -1117,7 +1117,7 @@ mod tests {
     fn the_push_apart_block_pushes_like_the_margin_law() {
         use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
         let place = |margin: bool| {
-            let mut doc = Document::new();
+            let mut doc = Document::new().with_programs(crate::extensions::bundled());
             doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4] })).unwrap();
             let spots = [[40.0, 40.0], [52.0, 44.0], [60.0, 30.0], [100.0, 60.0], [104.0, 64.0], [20.0, 80.0]];
             for (i, at) in spots.iter().enumerate() {
@@ -1217,7 +1217,7 @@ mod tests {
     #[ignore]
     fn dump_blocks() {
         use crate::render::compositor::effects::block_program::read_state;
-        let doc = Document::load(std::env::var("MOTOLII_BLOCK_DOC").unwrap()).unwrap();
+        let doc = Document::load(std::env::var("MOTOLII_BLOCK_DOC").unwrap()).unwrap().with_programs(crate::extensions::bundled());
         let frame: i64 = std::env::var("MOTOLII_BLOCK_FRAME").unwrap().parse().unwrap();
         let view = doc.view();
         let fps = view.composition().unwrap().unwrap().fps;
@@ -1265,7 +1265,7 @@ mod tests {
     #[test]
     fn an_effector_takes_its_centre_from_the_hub_the_tile_is_anchored_to() {
         use crate::render::compositor::effects::block_program::read_state;
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
         let (hub, tile) = (LayerId(1), LayerId(2));
         let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };

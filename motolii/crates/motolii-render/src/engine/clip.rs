@@ -112,7 +112,7 @@ mod clipping_contract {
     use crate::render::engine::Engine;
 
     fn composition(width: u32, height: u32) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width,
             height,

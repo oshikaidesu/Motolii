@@ -3,7 +3,7 @@
 use motolii_render::{doc::store::*, engine::Engine};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let mut doc = Document::load(&args.next().ok_or("doc")?)?;
+    let mut doc = Document::load(&args.next().ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let out = args.next().ok_or("out")?;
     let frames: Vec<i64> = args.next().ok_or("frames")?.split(',').map(|f| f.parse()).collect::<Result<_, _>>()?;
     let layers: Vec<(LayerId, String)> = doc.view().resolved_layers(RationalTime::ZERO)?.iter().map(|l| (l.id, doc.view().attrs(l.id).ok().flatten().map(|a| a.name).unwrap_or_default())).collect();

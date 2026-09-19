@@ -285,7 +285,7 @@ mod tests {
 
     fn rectangle_document(depth: f64, tilt_y: f64) -> Document {
         let fps = Fps::try_new(30, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: 96, height: 96, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         let put = |name: &str, value: Value| Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value };

@@ -243,7 +243,7 @@ mod field_leaves_the_rectangle {
     const BOX_MAX: u32 = 48;
 
     fn document(path: &std::path::Path, amount: f64) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([

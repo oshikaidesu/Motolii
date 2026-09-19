@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fps = Fps::try_new(24, 1)?;
     let frames = 120i64;
     let build = |trail: bool, delay: bool| -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: frames, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([

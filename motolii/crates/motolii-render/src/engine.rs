@@ -491,7 +491,7 @@ mod spatial_cache_tests {
     };
 
     fn document(path: &std::path::Path) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 64,
             height: 64,
@@ -632,7 +632,7 @@ mod environment_tests {
         let obj = dir.join("quad.obj");
         // 法線はカメラ向き(世界の -z)。法線の無い obj は陰影が付かないので照明の test にならない。
         std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: SIZE,
             height: SIZE,
@@ -1036,7 +1036,7 @@ mod presentable_matches_export {
     fn the_window_target_holds_the_same_bytes_as_the_export_readback() {
         let (w, h) = (64u32, 32u32);
         let fps = Fps::try_new(30, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: w,
             height: h,

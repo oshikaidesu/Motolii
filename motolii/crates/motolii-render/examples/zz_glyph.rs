@@ -1,7 +1,7 @@
 //! 文字の当たり(輪郭の外接)と親の箱を、コマを追って並べる: 壁を抜けるコマを見つける。
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let doc = motolii_render::doc::store::Document::load(&args.next().ok_or("doc")?)?;
+    let doc = motolii_render::doc::store::Document::load(&args.next().ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let last: i64 = args.next().unwrap_or("150".into()).parse()?;
     let view = doc.view();
     let comp = view.composition()?.ok_or("comp")?;

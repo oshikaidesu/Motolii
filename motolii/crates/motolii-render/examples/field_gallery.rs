@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&obj, sphere_obj(96, 48))?;
 
     let mut engine = Engine::new()?;
-    let mut doc = Document::new();
+    let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
     doc.apply(Intent::SetComposition(Composition {
         width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1,
         background: [0.03, 0.03, 0.05, 1.0],

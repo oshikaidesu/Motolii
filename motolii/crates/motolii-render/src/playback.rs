@@ -426,7 +426,7 @@ mod tests {
     use crate::doc::store::{Composition, Document, Intent};
 
     fn document_at(fps_num: i64, fps_den: i64, duration_frames: i64) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 1920,
             height: 1080,

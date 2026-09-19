@@ -386,7 +386,7 @@ mod background_decode {
             .unwrap();
         assert!(status.success());
 
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 16,
             height: 16,

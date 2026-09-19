@@ -55,7 +55,7 @@ mod contract {
     const SIZE: u32 = 64;
 
     fn document(path: &std::path::Path, scale: Option<f64>, axis: f64) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         // 背景は不透明の黒: 透明背景だと点群の一部画素が出ない(既存の挙動)ので、色で判定する。
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);

@@ -15,7 +15,7 @@ fn median(mut v: Vec<f32>) -> f32 {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let doc = Document::load(&args.next().ok_or("doc")?)?;
+    let doc = Document::load(&args.next().ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
     let (from, to): (i64, i64) = (args.next().ok_or("from")?.parse()?, args.next().ok_or("to")?.parse()?);
     let comp = doc.view().composition()?.ok_or("comp")?;
     let mut engine = Engine::new()?;

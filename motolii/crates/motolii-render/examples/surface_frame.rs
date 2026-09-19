@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !(3..=4).contains(&args.len()) {
         return Err("usage: surface_frame document.rrd output.png [measured_frames]".into());
     }
-    let doc = Document::load(&args[1])?;
+    let doc = Document::load(&args[1])?.with_programs(motolii_render::extensions::bundled());
     let view = doc.view();
     let comp = view.composition()?.ok_or("Missing composition")?;
     let mut engine = Engine::new()?;

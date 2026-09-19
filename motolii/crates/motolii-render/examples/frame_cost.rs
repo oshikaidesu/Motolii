@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).ok_or("document path required")?;
     for case in ["no_glass", "no_radiance", "no_text_glass", "no_torus_glass", "all", "no_effects", "no_text", "no_shapes", "no_files", "text_only", "shapes_only", "files_only", "empty"] {
         if std::env::args().nth(2).is_some_and(|wanted| wanted != case) { continue; }
-        let mut doc = Document::load(&path)?;
+        let mut doc = Document::load(&path)?.with_programs(motolii_render::extensions::bundled());
         if std::env::args().nth(3).as_deref() == Some("enable") {
             let ids = doc.view().resolved_layers(RationalTime::ZERO)?.iter().map(|l| l.id).collect::<Vec<_>>();
             for id in ids {

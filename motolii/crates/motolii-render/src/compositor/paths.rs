@@ -204,7 +204,7 @@ mod tests {
     fn a_shape_layer_is_drawn_by_the_path_renderer() {
         let (w, h) = (64u32, 64u32);
         let fps = Fps::try_new(30, 1).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
         let layer = LayerId(1);
         let red = Rgb { r: 1.0, g: 0.0, b: 0.0 };
