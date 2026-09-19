@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn copied_layers_survive_source_deletion_and_paste_as_one_history_step() {
         let layer = LayerId(1);
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         doc.apply_all([
             Intent::AddLayer(layer),
             Intent::SetMeta {
@@ -335,7 +335,7 @@ mod tests {
                 spatial: None,
             });
         }
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         doc.apply_all([
             Intent::SetComposition(crate::doc::store::Composition {
                 width: 640,
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn key_paste_uses_the_selected_destination_and_undo_restores_its_track() {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         let fps = crate::doc::store::Fps::try_new(30, 1).unwrap();
         let property = PropertyId::new(property::OPACITY).unwrap();
         let source = LayerId(1);
@@ -505,7 +505,7 @@ mod tests {
         let shape = LayerId(3);
         let property = PropertyId::new(property::OPACITY).unwrap();
         let time = |frame| RationalTime::try_from_frame(frame, fps).unwrap();
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         doc.apply(Intent::SetComposition(crate::doc::store::Composition {
             width: 640,
             height: 480,
@@ -766,7 +766,7 @@ mod key_ownership_regressions {
 
     #[test]
     fn missing_multi_layer_sources_cannot_merge_onto_one_fallback() {
-        let mut doc = blank_project();
+        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
         for id in [1, 2, 3] {
             doc.apply_all([
                 Intent::AddLayer(LayerId(id)),
@@ -812,7 +812,7 @@ mod document_identity_regressions {
     use crate::doc::store::*;
 
     fn document() -> Document {
-        let mut doc = blank_project();
+        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
         for id in [1, 2] {
             let mut track = KeyframeTrack::new();
             track.insert(Keyframe {

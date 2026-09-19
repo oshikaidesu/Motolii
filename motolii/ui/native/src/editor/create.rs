@@ -448,7 +448,7 @@ mod camera_tests {
             let canvas = crate::render::engine::content_canvas(&shapes).unwrap().unwrap();
             let centre = glam::vec2(((b[0] + b[2]) * 0.5 + canvas.origin_x as f64) as f32,
                 ((b[1] + b[3]) * 0.5 + canvas.origin_y as f64) as f32);
-            let mut doc = blank_project();
+            let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
             let layer = LayerId(1);
             doc.apply_all(new_layer_intents(layer, 0, 0, 90, fps, comp, kind, None)).unwrap();
             doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(73.0) }).unwrap();
@@ -491,12 +491,12 @@ mod camera_tests {
         };
         assert_eq!(timing_of(Some(90)).duration, 90, "90 = 120 の 3/4");
         assert_eq!(timing_of(None).duration, 290, "渡さなければ comp の終わりまで");
-        let _ = (Document::new(), Composition::default_background());
+        let _ = (Document::new().with_programs(crate::render::extensions::bundled()), Composition::default_background());
     }
 
     #[test]
     fn camera_layer_uses_normal_properties_lifetime_and_undo() {
-        let mut doc = blank_project();
+        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
         let layer = LayerId(1);
         let fps = Fps::try_new(30,1).unwrap();
         doc.apply_all(new_layer_intents(layer,0,0,60,fps,(1920.0,1080.0),NewKind::Camera,None)).unwrap();

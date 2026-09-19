@@ -154,7 +154,7 @@ mod tests {
     use crate::doc::store::*;
     #[test]
     fn legacy_interval_application_is_one_undo_and_has_no_terminal_interval() {
-        let mut doc = crate::doc::store::blank_project();
+        let mut doc = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
         let layer = LayerId(1);
         let fps = Fps::try_new(30, 1).unwrap();
         doc.apply_all(crate::editor::create::new_layer_intents(layer, 0, 0, 60, fps, (1920.0,1080.0), crate::editor::create::NewKind::Rectangle, None)).unwrap();

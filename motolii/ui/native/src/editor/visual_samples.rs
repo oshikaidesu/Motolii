@@ -64,7 +64,7 @@ mod tests {
     use super::*;
     #[test]
     fn gradient_sample_has_the_authored_end_colors_and_no_history() {
-        let doc=crate::doc::store::blank_project();let before=doc.history_depth();
+        let doc=crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());let before=doc.history_depth();
         let result=reply(&doc,RationalTime::ZERO,&json!({"kind":"gradient","stops":[[1,0,0,1],[0,0,1,1]]})).unwrap();
         let png=base64::engine::general_purpose::STANDARD.decode(result["image"].as_str().unwrap()).unwrap();
         let image=image::load_from_memory(&png).unwrap().to_rgba8();
@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn font_sample_uses_selected_content_without_a_document_edit() {
         use crate::doc::store::*;
-        let mut doc=blank_project();let layer=LayerId(1);
+        let mut doc=blank_project().with_programs(crate::render::extensions::bundled());let layer=LayerId(1);
         doc.apply_all(crate::editor::create::new_layer_intents(layer,0,0,60,Fps::try_new(30,1).unwrap(),(1920.0,1080.0),crate::editor::create::NewKind::Text,None)).unwrap();
         let before=doc.view().text_document(layer).unwrap();let history=doc.history_depth();
         let family=&before.as_ref().unwrap().styles[0].font.family;

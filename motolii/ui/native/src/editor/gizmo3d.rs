@@ -494,7 +494,7 @@ mod spatial_gizmo_tests {
     /// 立てると掴んでも何も届かない札が世界の別の場所に出る。
     #[test]
     fn guide_layers_get_no_three_axis_handle() {
-        let mut doc = blank_project();
+        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
         let fps = doc.view().composition().unwrap().unwrap().fps;
         let at = RationalTime::ZERO;
         let mut make = |id: u64, source: LayerSource| {
@@ -568,7 +568,7 @@ mod spatial_gizmo_tests {
     }
 
     fn document() -> (Document, LayerId) {
-        let mut doc = crate::doc::store::blank_project();
+        let mut doc = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
         let layer = LayerId(41);
         doc.apply_all([
             Intent::AddLayer(layer),

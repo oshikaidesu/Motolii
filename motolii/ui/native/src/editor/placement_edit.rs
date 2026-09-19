@@ -181,7 +181,7 @@ mod expand_contract {
     };
 
     fn document() -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
             width: 64,
             height: 64,

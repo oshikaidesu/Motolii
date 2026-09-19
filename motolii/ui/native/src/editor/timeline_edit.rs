@@ -976,7 +976,7 @@ mod hierarchy_clipboard_regressions {
 
     #[test]
     fn copied_group_contains_descendants_through_non_group_parents() {
-        let mut doc = crate::doc::store::blank_project();
+        let mut doc = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
         for (id, source, parent) in [
             (1, LayerSource::Group, None),
             (2, LayerSource::Null, Some(LayerId(1))),

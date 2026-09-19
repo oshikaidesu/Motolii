@@ -13,7 +13,7 @@ mod tests {
 
     #[test]
     fn rejected_export_does_not_copy_the_document() {
-        let document = crate::doc::store::blank_project();
+        let document = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
         let mut job = ExportController::default();
         assert!(job.start(&document.view(), || panic!("invalid range copied"), PathBuf::new(), 0, 0).is_err());
         job.state.lock().unwrap().phase = "running";
@@ -22,7 +22,7 @@ mod tests {
 
     #[test]
     fn snapshot_failure_does_not_start_export() {
-        let document = crate::doc::store::blank_project();
+        let document = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
         let mut job = ExportController::default();
         assert_eq!(job.start(&document.view(), || Err("snapshot failed".into()), PathBuf::new(), 0, 1), Err("snapshot failed".into()));
         assert_eq!(job.status()["phase"], "idle");

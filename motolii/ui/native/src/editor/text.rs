@@ -89,7 +89,7 @@ mod font_tests {
     use super::*;
     #[test]
     fn font_family_change_preserves_text_and_undo_restores_it() {
-        let mut doc = blank_project();
+        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
         let id = LayerId(1);
         doc.apply_all(crate::editor::create::new_layer_intents(id, 0, 0, 60,
             Fps::try_new(30, 1).unwrap(), (1920.0,1080.0), crate::editor::create::NewKind::Text, None)).unwrap();

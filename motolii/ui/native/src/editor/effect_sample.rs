@@ -77,7 +77,7 @@ mod snapshots {
     fn document(stage: EffectStage) -> Result<(Document, LayerId), String> {
         let fps = Fps::try_new(FPS, 1).map_err(|e| e.to_string())?;
         let comp = ((WIDTH * SCALE) as f64, (HEIGHT * SCALE) as f64);
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition { width: WIDTH * SCALE, height: HEIGHT * SCALE, fps, duration_frames: DURATION_FRAMES, background: [0.0; 4] })).map_err(|e| e.to_string())?;
         let place = |layer: LayerId, order: i16, kind: NewKind| create::new_layer_intents(layer, order, 0, DURATION_FRAMES, fps, comp, kind, None);
         let subject = LayerId(1);

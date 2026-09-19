@@ -303,7 +303,7 @@ mod effect_insert_position {
 use crate::render::extensions::{placement};
 
     fn with_effects(plugins: &[&str]) -> Document {
-        let mut doc = Document::new();
+        let mut doc = Document::new().with_programs(crate::render::extensions::bundled());
         doc.apply_all([
             Intent::AddLayer(LayerId(1)),
             Intent::SetEffects {

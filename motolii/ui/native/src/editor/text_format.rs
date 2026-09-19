@@ -73,7 +73,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     fn project() -> Document {
-        let mut doc=blank_project();
+        let mut doc=blank_project().with_programs(crate::render::extensions::bundled());
         doc.apply_all(crate::editor::create::new_layer_intents(LayerId(1),0,0,60,Fps::try_new(30,1).unwrap(),(1920.0,1080.0),crate::editor::create::NewKind::Text,None)).unwrap();
         crate::editor::text::write_content(&mut doc,LayerId(1),RationalTime::ZERO,"あカ漢か\u{3099}😀ab".into()).unwrap();
         doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::text_style_size(TextStyleId(0)),value:Value::F64(40.0)}).unwrap();doc
@@ -125,7 +125,7 @@ mod tests {
         let sizes:Vec<_>=ids.iter().map(|id|formatted.styles.iter().find(|s|s.id==*id).unwrap().size).collect();
         assert_eq!(sizes,vec![80.0,40.0,40.0,80.0,40.0,40.0,40.0]);
         let path=std::env::temp_dir().join(format!("motolii-rich-text-{}.rrd",std::process::id()));
-        doc.save(&path).unwrap();let loaded=Document::load(&path).unwrap();
+        doc.save(&path).unwrap();let loaded=Document::load(&path).unwrap().with_programs(crate::render::extensions::bundled());
         assert_eq!(loaded.view().text_document(layer).unwrap(),doc.view().text_document(layer).unwrap());std::fs::remove_file(path).unwrap();
         assert!(doc.undo());assert_eq!(doc.view().text_document(layer).unwrap().unwrap(),before);
     }
