@@ -204,7 +204,7 @@ impl StoreView<'_> {
         let Some(meta) = self.meta(layer)? else { return Ok(None) };
         Ok(match meta.source {
             LayerSource::Shape => shape_box(&self.shapes_at(layer, t)?),
-            LayerSource::Text => self.text_box(layer, t, None)?,
+            LayerSource::Text => super::text::text_box(self, layer, t, None)?,
             LayerSource::File { path, .. } => self.analysis().and_then(|a| a.extent(&path)).filter(|e| e[0] > 0.0 && e[1] > 0.0).map(|e| [0.0, 0.0, e[0], e[1]]),
             LayerSource::Group => {
                 if self.display(layer, t)? != 0 {

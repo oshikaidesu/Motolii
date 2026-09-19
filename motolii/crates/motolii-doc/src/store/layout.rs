@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 
-mod boxes;
-mod flow;
-mod path;
-mod text;
+pub(crate) mod boxes;
+pub(crate) mod flow;
+pub(crate) mod path;
+pub(crate) mod text;
 mod time;
 
 pub(crate) use boxes::stretched_shape_box;

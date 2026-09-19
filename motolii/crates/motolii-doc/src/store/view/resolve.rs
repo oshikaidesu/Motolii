@@ -149,8 +149,8 @@ impl<'a> StoreView<'a> {
             plate: plate.map(|(group, _)| group),
             averaged: 0,
             shape_stretch: self.laid_out(layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch),
-            glyph_offsets: self.glyph_offsets(layer, t)?,
-            flow_around: self.flow_around(layer, t)?,
+            glyph_offsets: crate::doc::store::layout::text::glyph_offsets(self, layer, t)?,
+            flow_around: crate::doc::store::layout::text::flow_around(self, layer, t)?,
         }))
     }
 

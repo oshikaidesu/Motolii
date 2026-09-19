@@ -219,7 +219,7 @@ impl<'a> StoreView<'a> {
         if base.source != crate::doc::store::LayerSource::Text || self.number(base.id, STAGGER, 0.0, t)? <= 0.0 {
             return Ok(false);
         }
-        let units = self.text_units(base.id, t)?;
+        let units = crate::doc::store::layout::text::text_units(self, base.id, t)?;
         if units.len() < 2 {
             return Ok(false);
         }

@@ -88,7 +88,7 @@ impl StoreView<'_> {
                 Some(m) => {
                     // 折り返し幅は、決まった幅か、taffy が使ってよいと言った幅。どちらも無ければ折り返さない。
                     let width = known.width.or(match available.width { AvailableSpace::Definite(w) => Some(w), _ => None });
-                    let [width, height] = self.measure_text(*m, width, known.height, t);
+                    let [width, height] = super::text::measure_text(self, *m, width, known.height, t);
                     Size { width, height }
                 }
                 None => Size::ZERO,
@@ -124,7 +124,7 @@ impl StoreView<'_> {
                 let slot = if leaf.text_fill {
                     let scale = self.pair(leaf.layer, property::SCALE, [1.0, 1.0], t)?[0].abs().max(1e-3);
                     let wrap = placed.size.width / scale;
-                    let bounds = self.text_box(leaf.layer, t, Some(wrap))?.unwrap_or(leaf.bounds);
+                    let bounds = super::text::text_box(self, leaf.layer, t, Some(wrap))?.unwrap_or(leaf.bounds);
                     Slot { wrap: Some(wrap), ..self.slot(leaf.layer, t, bounds, [Sizing::Hug; 2], 3, placed)? }
                 } else {
                     self.slot(leaf.layer, t, leaf.bounds, leaf.sizing, leaf.fit, placed)?
