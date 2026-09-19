@@ -345,8 +345,47 @@ pub struct Slot {
     pub anchor: [f32; 2],
 }
 
+/// 読み view 1 つが、巡る配置のために持つ手控え。中身は全部この view の物で、
+/// 寿命も view と同じ(別の view と混ぜると、巡り止めが他人の巡りを止める)。
+#[derive(Default)]
+pub(crate) struct Scratch {
+    /// 解いたコマの配置。view は値を変えないので、時刻ごとに 1 回で足りる。
+    frames: HashMap<RationalTime, std::sync::Arc<Frame>>,
+    /// 解いている入れ子の深さ。0 から入った物だけがコマをまたぐ覚えへ書く。
+    depth: u32,
+    /// 付き合いの輪と線の輪。掛けた物は必ず外す。
+    anchoring: std::collections::HashSet<(u64, i64, i64)>,
+    routing: std::collections::HashSet<(u64, i64, i64)>,
+    /// 箱の子の順。版ごとに覚える。
+    kids: HashMap<(u64, LayerId), std::sync::Arc<Vec<LayerId>>>,
+}
+
+impl Scratch {
+    /// 一番外側から入ったか。出る時は必ず `leave`。
+    fn enter(&mut self) -> bool {
+        let outermost = self.depth == 0;
+        self.depth += 1;
+        outermost
+    }
+
+    fn leave(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+    }
+}
+
+/// 巡り止め: 掛かれば解いてよい、掛からなければ既に自分が巡っている。外すのは掛けた者の責任。
+impl Scratch {
+    pub(crate) fn begin_route(&mut self, key: (u64, i64, i64)) -> bool {
+        self.routing.insert(key)
+    }
+
+    pub(crate) fn end_route(&mut self, key: (u64, i64, i64)) {
+        self.routing.remove(&key);
+    }
+}
+
 /// view の寿命の間、時刻ごとに 1 回だけ解く(view は値を変えない)。
-pub(crate) type Memo = Rc<RefCell<HashMap<RationalTime, std::sync::Arc<Frame>>>>;
+pub(crate) type Memo = Rc<RefCell<Scratch>>;
 
 /// 書類が持つ、コマをまたぐ配置の覚え。版が変われば丸ごと捨てる。移り方が 1 コマに過去の時刻の配置を何十回も解くので、
 /// 次のコマで同じ時刻を解き直さない(天井の棚卸し 2026-09-15)。
@@ -402,27 +441,26 @@ impl StoreView<'_> {
 
     /// その時刻に並べた結果。Display の Group が無ければ空。
     pub fn layout_frame(&self, t: RationalTime) -> Result<std::sync::Arc<Frame>, StoreError> {
-        if let Some(hit) = self.layout_memo().borrow().get(&t) {
+        if let Some(hit) = self.layout_memo().borrow().frames.get(&t) {
             return Ok(hit.clone());
         }
         if let Some((cache, revision)) = self.shared_layout_cache() {
             let cache = cache.borrow();
             if cache.revision.as_ref() == Some(revision) {
                 if let Some(hit) = cache.frames.get(&t) {
-                    self.layout_memo().borrow_mut().insert(t, hit.clone());
+                    self.layout_memo().borrow_mut().frames.insert(t, hit.clone());
                     return Ok(hit.clone());
                 }
             }
         }
         // 解いている間に同じ時刻を問われたら(面の Group の親を辿る時など)、空の結果で答えて巡らない。
-        self.layout_memo().borrow_mut().insert(t, std::sync::Arc::new(Frame::default()));
+        self.layout_memo().borrow_mut().frames.insert(t, std::sync::Arc::new(Frame::default()));
         // 解いている途中の内側の時刻は、巡り止めの空の結果を読んでいるかもしれない。コマをまたいで覚えるのは一番外側だけ。
-        thread_local! { static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) }; }
-        let outermost = DEPTH.with(|d| { let v = d.get(); d.set(v + 1); v == 0 });
+        let outermost = self.layout_memo().borrow_mut().enter();
         let computed = self.compute_layout(t);
-        DEPTH.with(|d| d.set(d.get() - 1));
+        self.layout_memo().borrow_mut().leave();
         let frame = std::sync::Arc::new(computed?);
-        self.layout_memo().borrow_mut().insert(t, frame.clone());
+        self.layout_memo().borrow_mut().frames.insert(t, frame.clone());
         if let Some((cache, revision)) = self.shared_layout_cache().filter(|_| outermost) {
             let mut cache = cache.borrow_mut();
             if cache.revision.as_ref() != Some(revision) || cache.frames.len() >= LayoutCache::LIMIT {
@@ -490,13 +528,12 @@ impl StoreView<'_> {
             return Ok(None);
         }
         // 付き合いが輪になっていれば、2 度目は付かない。
-        thread_local! { static ANCHORING: RefCell<std::collections::HashSet<(u64, i64, i64)>> = RefCell::new(Default::default()); }
         let key = (layer.0, t.num(), t.den());
-        if !ANCHORING.with(|a| a.borrow_mut().insert(key)) {
+        if !self.layout_memo().borrow_mut().anchoring.insert(key) {
             return Ok(None);
         }
         let result = self.anchored_inner(layer, anchor, area, t);
-        ANCHORING.with(|a| a.borrow_mut().remove(&key));
+        self.layout_memo().borrow_mut().anchoring.remove(&key);
         result
     }
 
@@ -793,11 +830,8 @@ impl StoreView<'_> {
 
     /// 箱の子を層の順に(順番の札が読む)。書類の版ごとに覚える。
     fn schedule_children(&self, parent: LayerId) -> Result<std::sync::Arc<Vec<LayerId>>, StoreError> {
-        thread_local! {
-            static KIDS: RefCell<HashMap<(u64, LayerId), std::sync::Arc<Vec<LayerId>>>> = RefCell::new(HashMap::new());
-        }
         let key = (self.revision_key(), parent);
-        if let Some(hit) = KIDS.with(|k| k.borrow().get(&key).cloned()) {
+        if let Some(hit) = self.layout_memo().borrow().kids.get(&key).cloned() {
             return Ok(hit);
         }
         let mut kids: Vec<(i16, LayerId)> = Vec::new();
@@ -810,13 +844,11 @@ impl StoreView<'_> {
         }
         kids.sort();
         let out = std::sync::Arc::new(kids.into_iter().map(|(_, l)| l).collect::<Vec<_>>());
-        KIDS.with(|k| {
-            let mut k = k.borrow_mut();
-            if k.len() > 512 {
-                k.clear();
-            }
-            k.insert(key, out.clone());
-        });
+        let mut scratch = self.layout_memo().borrow_mut();
+        if scratch.kids.len() > 512 {
+            scratch.kids.clear();
+        }
+        scratch.kids.insert(key, out.clone());
         Ok(out)
     }
 

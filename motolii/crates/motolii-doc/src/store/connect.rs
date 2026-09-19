@@ -6,7 +6,6 @@
 //! 線の色・太さ・破線・Trim Paths は形のまま。道は線の層の親の空間で解き、層の変換は道をそのまま置く。
 //! 時刻の純関数(垂れは懸垂線の閉じた式)。線の Transition は端を箱に付けたまま、腹だけを遅らせる。
 
-use std::cell::RefCell;
 
 use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
@@ -257,9 +256,8 @@ impl StoreView<'_> {
     /// 道: 今の端に、移り方で遅れた腹(弦からのずれ)を足す。
     fn route(&self, layer: LayerId, t: RationalTime) -> Result<Option<Route>, StoreError> {
         // 線が線につながって輪になれば、2 度目は解かない。
-        thread_local! { static ROUTING: RefCell<std::collections::HashSet<(u64, i64, i64)>> = RefCell::new(Default::default()); }
         let key = (layer.0, t.num(), t.den());
-        if !ROUTING.with(|r| r.borrow_mut().insert(key)) {
+        if !self.layout_memo().borrow_mut().begin_route(key) {
             return Ok(None);
         }
         let result = (|| {
@@ -299,7 +297,7 @@ impl StoreView<'_> {
             }).collect();
             Ok(Some(Route { points }))
         })();
-        ROUTING.with(|r| r.borrow_mut().remove(&key));
+        self.layout_memo().borrow_mut().end_route(key);
         result
     }
 
