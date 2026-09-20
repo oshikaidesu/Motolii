@@ -96,6 +96,10 @@ private final class ProbeRuntime {
   private let renderQueueKey = DispatchSpecificKey<UInt8>()
   private let playbackGate = NSLock()
   private var playbackQueued = false
+  private var playbackDropped = 0
+  /// Samples are confined to `renderQueue`. They measure CPU time through the
+  /// native tick and submit only; GPU completion remains the IOSurface signal.
+  private var playbackSubmitUs: [UInt64] = []
   private var library: UnsafeMutableRawPointer?
   /// The native host owns playback pulses; Dart retains this context only for
   /// one-shot commands and still frames. Both use the macOS main thread
@@ -117,6 +121,38 @@ private final class ProbeRuntime {
   private func onRenderQueue<T>(_ body: () throws -> T) throws -> T {
     if DispatchQueue.getSpecific(key: renderQueueKey) != nil { return try body() }
     return try renderQueue.sync(execute: body)
+  }
+
+  fileprivate func resetPlaybackStats() {
+    renderQueue.async { [weak self] in self?.playbackSubmitUs.removeAll(keepingCapacity: true) }
+    playbackGate.lock()
+    playbackDropped = 0
+    playbackGate.unlock()
+  }
+
+  fileprivate func reportPlaybackStats() {
+    renderQueue.async { [weak self] in
+      guard let self else { return }
+      let samples = self.playbackSubmitUs
+      self.playbackSubmitUs.removeAll(keepingCapacity: true)
+      self.playbackGate.lock()
+      let dropped = self.playbackDropped
+      self.playbackDropped = 0
+      self.playbackGate.unlock()
+      guard !samples.isEmpty || dropped > 0 else { return }
+      let sorted = samples.sorted()
+      let percentile = { (fraction: Double) -> UInt64 in
+        guard !sorted.isEmpty else { return 0 }
+        return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded(.up)))]
+      }
+      print("PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)")
+    }
+  }
+
+  private func dropPlaybackFrame() {
+    playbackGate.lock()
+    playbackDropped += 1
+    playbackGate.unlock()
   }
 
   func open(path: String) throws -> [String: Any] {
@@ -197,12 +233,17 @@ private final class ProbeRuntime {
     completion: @escaping (Result<Int64, Error>) -> Void
   ) -> Bool {
     playbackGate.lock()
-    guard !playbackQueued else { playbackGate.unlock(); return false }
+    guard !playbackQueued else {
+      playbackDropped += 1
+      playbackGate.unlock()
+      return false
+    }
     playbackQueued = true
     playbackGate.unlock()
     renderQueue.async { [weak self] in
       guard let self else { return }
       let outcome: Result<Int64?, Error> = Result {
+        let started = DispatchTime.now().uptimeNanoseconds
         guard let context = self.context, let tick = self.playbackTickFunction,
               let render = self.renderFunction else { throw ProbeFailure.message("Document is closed") }
         let frame = tick(context)
@@ -212,7 +253,14 @@ private final class ProbeRuntime {
           _ = target.keepAlive
           let code = target.view.withCString { render(context, target.surface, $0) }
           if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
+          // Busy means Metal still owns this IOSurface. Do not advance the UI
+          // onto a frame that was never submitted; the next host pulse retries.
+          if code > 0 {
+            self.dropPlaybackFrame()
+            return nil
+          }
         }
+        self.playbackSubmitUs.append((DispatchTime.now().uptimeNanoseconds - started) / 1_000)
         return frame
       }
       self.playbackGate.lock()
@@ -501,6 +549,7 @@ final class ProbeSession {
   fileprivate func startPlayback() {
     precondition(Thread.isMainThread)
     guard playbackTimer == nil else { return }
+    runtime.resetPlaybackStats()
     // Flutter's run loop can be idle while its skin has no frame to build.
     // The transport therefore cannot use a RunLoop Timer: cadence belongs to
     // the native host, and each pulse merely queues Rust/Rerun work on the
@@ -519,6 +568,7 @@ final class ProbeSession {
     playbackTimer?.setEventHandler {}
     playbackTimer?.cancel()
     playbackTimer = nil
+    runtime.reportPlaybackStats()
   }
 
   private func playbackPulse() {
