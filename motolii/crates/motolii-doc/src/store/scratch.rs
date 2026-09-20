@@ -100,6 +100,10 @@ pub struct LayoutCache {
 pub struct Structure {
     pub layers: Vec<crate::doc::store::LayerId>,
     pub present: std::collections::HashSet<crate::doc::store::LayerId>,
+    /// Static document records. Transient/preview views deliberately do not
+    /// share Structure, so these never leak an uncommitted edit.
+    pub metas: HashMap<crate::doc::store::LayerId, crate::doc::store::LayerMeta>,
+    pub attrs: HashMap<crate::doc::store::LayerId, crate::doc::store::LayerAttrs>,
     /// 親子と積み順は書類の版でのみ変わる。再生の時刻では子が「居るか」
     /// だけが変わるので、Flow はここを再走査・再 sort しない。
     pub children: HashMap<crate::doc::store::LayerId, Vec<(i16, crate::doc::store::LayerId)>>,

@@ -237,6 +237,19 @@ pub fn any_solo(view: &StoreView<'_>, t: RationalTime) -> Result<bool, StoreErro
     Ok(false)
 }
 
+fn any_solo_in_structure(
+    view: &StoreView<'_>, t: RationalTime,
+    structure: &crate::doc::store::scratch::Structure,
+) -> Result<bool, StoreError> {
+    for &layer in &structure.layers {
+        let Some(meta) = structure.metas.get(&layer) else { continue };
+        if matches!(meta.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage) { continue; }
+        let static_solo = structure.attrs.get(&layer).map_or(false, |attrs| attrs.solo);
+        if resolved_solo(view, layer, t, static_solo)? { return Ok(true); }
+    }
+    Ok(false)
+}
+
 pub fn resolved_solo(
     view: &StoreView<'_>,
     layer: LayerId,
@@ -330,15 +343,20 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             let mut children = HashMap::new();
             let mut parents = HashMap::new();
             let mut groups = HashSet::new();
+            let mut metas = HashMap::new();
+            let mut attrs = HashMap::new();
             let mut dynamic_layers = HashSet::new();
             let mut dynamic_properties = HashSet::new();
             let mut layout_topology_dynamic = false;
             for &layer in &layers {
                 let Some(meta) = view.meta(layer)? else { continue };
+                metas.insert(layer, meta.clone());
                 if meta.source == crate::doc::store::LayerSource::Group {
                     groups.insert(layer);
                 }
-                let parent = view.attrs(layer)?.unwrap_or_default().parent;
+                let layer_attrs = view.attrs(layer)?.unwrap_or_default();
+                let parent = layer_attrs.parent;
+                attrs.insert(layer, layer_attrs);
                 parents.insert(layer, parent);
                 if let Some(parent) = parent {
                     children.entry(parent).or_insert_with(Vec::new).push((meta.order, layer));
@@ -369,6 +387,8 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             let built = std::sync::Arc::new(crate::doc::store::scratch::Structure {
                 layers,
                 present,
+                metas,
+                attrs,
                 children,
                 parents,
                 groups,
@@ -388,7 +408,7 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             built
         }
     };
-    let any_solo = any_solo(view, t)?;
+    let any_solo = any_solo_in_structure(view, t, &structure)?;
     let handed_out = handed_out_by_a_group(view, &structure.present, t)?;
     let present = &structure.present;
     let layers = structure.layers.clone();
