@@ -1045,21 +1045,24 @@ class _BrowserSearchBar extends StatelessWidget {
           tool,
         ],
         if (filterable) ...[
-          const SizedBox(width: EditorMetrics.s6),
+          const SizedBox(width: EditorMetrics.s4),
           EditorTooltip(
             message: 'Show filters',
             child: EditorPress(
               key: const ValueKey('browser:filters-toggle'),
               onTap: onToggleFilters,
-              child: Icon(
-                Glyph.filter_list,
-                size: EditorMetrics.s14,
-                color: filtering ? EditorTheme.accent : EditorTheme.muted,
+              child: SizedBox.square(
+                dimension: EditorMetrics.row,
+                child: Icon(
+                  Glyph.filter_list,
+                  size: EditorMetrics.s14,
+                  color: filtering ? EditorTheme.accent : EditorTheme.muted,
+                ),
               ),
             ),
           ),
         ],
-        if (views != null) ...[const SizedBox(width: EditorMetrics.s6), views!],
+        if (views != null) ...[const SizedBox(width: EditorMetrics.s4), views!],
       ],
     ),
   );

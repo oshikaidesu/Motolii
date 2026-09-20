@@ -12,21 +12,8 @@ import 'support/window_fixture.dart';
 /// guidelines Flutter ships (docs/reviews/2026-09-19-design-craft-ledger.md
 /// 4-4 and 3-1): a target of at least 24 px, and text at 4.5:1.
 ///
-/// Text that does not fit and text that cannot be read are held at none. Small
-/// targets are frozen at what the panels have today: a panel may lose some,
-/// never gain one, until the shared press surface has a rule for them.
-///
-/// Every panel is judged before any is reported, so one run names them all.
-const _smallTargets = <String, int>{
-  'Create': 2,
-  'Media': 3,
-  'Effects': 3,
-  'Colors': 6,
-  'Fonts': 3,
-  'Inspector': 6,
-  'Notes': 4,
-};
-
+/// All three are held at none. Every panel is judged before any is reported,
+/// so one run names them all.
 void main() {
   const tapTarget24 = MinimumTapTargetGuideline(
     size: Size(24, 24),
@@ -74,13 +61,9 @@ void main() {
       await tester.pumpAndSettle();
       for (final rule in guidelines.entries) {
         final result = await rule.value.evaluate(tester);
-        if (result.passed) continue;
-        final nodes = 'SemanticsNode#'.allMatches(result.reason ?? '').length;
-        final frozen = rule.key == 'target 24'
-            ? _smallTargets[entry.key]
-            : null;
-        if (frozen != null && nodes <= frozen) continue;
-        found.add('${entry.key} · ${rule.key}\n${_summary(result.reason)}');
+        if (!result.passed) {
+          found.add('${entry.key} · ${rule.key}\n${_summary(result.reason)}');
+        }
       }
       await tester.pumpWidget(const SizedBox());
     }

@@ -200,7 +200,7 @@ class EditorIconButton extends StatelessWidget {
         pressColor: EditorTheme.hover,
         focusColor: EditorTheme.clear,
         child: SizedBox.square(
-          dimension: size,
+          dimension: math.max(size, EditorMetrics.row),
           child: IconTheme.merge(
             data: IconThemeData(
               size: size,

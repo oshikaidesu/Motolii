@@ -624,7 +624,7 @@ class _ColorPickerState extends State<_ColorPicker>
                 ),
                 Container(
                   width: wheel.side,
-                  height: EditorMetrics.s23,
+                  height: EditorMetrics.row,
                   margin: const EdgeInsets.only(top: EditorMetrics.s6),
                   padding: const EdgeInsets.symmetric(
                     horizontal: EditorMetrics.s5,
@@ -676,7 +676,7 @@ class _ColorPickerState extends State<_ColorPicker>
                             onTap: () =>
                                 widget.controller.eyedropper.value = !on,
                             child: Container(
-                              padding: const EdgeInsets.all(EditorMetrics.s3),
+                              padding: const EdgeInsets.all(EditorMetrics.s5),
                               decoration: BoxDecoration(
                                 color: on ? EditorTheme.hover : null,
                                 borderRadius: BorderRadius.circular(
@@ -704,7 +704,9 @@ class _ColorPickerState extends State<_ColorPicker>
                             'colorShape',
                             shape == 'square' ? 'triangle' : 'square',
                           ),
-                          child: Padding(
+                          child: Container(
+                            height: EditorMetrics.row,
+                            alignment: Alignment.center,
                             padding: const EdgeInsets.symmetric(
                               horizontal: EditorMetrics.s3,
                             ),

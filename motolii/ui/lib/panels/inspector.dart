@@ -756,7 +756,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         EditorMetrics.s6 * 2 +
         EditorMetrics.s18 +
         EditorMetrics.s4 * 3 +
-        EditorMetrics.s22;
+        EditorMetrics.row;
     var free = panelWidth - fixed - EditorMetrics.s48;
     _wordWidth = EditorMetrics.s48;
     if (free / 3 < EditorMetrics.s44) {
@@ -776,7 +776,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         : child,
   );
   Widget _tail([Widget? child]) => SizedBox(
-    width: EditorMetrics.s22,
+    width: EditorMetrics.row,
     height: EditorMetrics.row,
     child: child == null ? null : Center(child: child),
   );
@@ -1195,7 +1195,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ('layout.row_span', 'grid-row span'),
       ];
       used.addAll([for (final (id, _) in cell) id]);
-      final w = (_wellWidth * 3 + EditorMetrics.s22) / 4;
+      final w = (_wellWidth * 3 + EditorMetrics.row) / 4;
       lines.add(
         _layoutLine('cell', [
           _mark(Glyph.grid_on, 'grid-area'),
@@ -1553,7 +1553,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _named(Glyph.opacity, 'opacity'),
           SizedBox(
             width: _wellWidth * 2 + EditorMetrics.s4,
-            height: EditorMetrics.s22,
+            height: EditorMetrics.row,
             child: _well(
               layer,
               'opacity',
@@ -2154,7 +2154,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               layer,
               row,
               0,
-              width: _cellWidth - EditorMetrics.s22 - EditorMetrics.s4,
+              width: _cellWidth - EditorMetrics.row - EditorMetrics.s4,
             ),
           ],
         );
@@ -2521,8 +2521,11 @@ class _HeadGlyph extends StatelessWidget {
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Padding(
+      child: Container(
+        height: EditorMetrics.row,
+        constraints: const BoxConstraints(minWidth: EditorMetrics.row),
         padding: const EdgeInsets.only(left: EditorMetrics.s6),
+        alignment: Alignment.center,
         child: Icon(
           icon,
           size: EditorMetrics.s12,
