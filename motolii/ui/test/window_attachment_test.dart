@@ -164,38 +164,38 @@ void main() {
       await tester.pump();
     },
   );
-  testWidgets('the main viewer renders playback started by another window', (
-    tester,
-  ) async {
-    final host = AttachmentHost();
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(EditorSession.channel, host.handle);
-    final session = EditorSession();
-    addTearDown(() {
+  testWidgets(
+    'the main viewer does not render playback started by another window',
+    (tester) async {
+      final host = AttachmentHost();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(EditorSession.channel, host.handle);
+      final session = EditorSession();
+      addTearDown(() {
+        session.dispose();
+        messenger.setMockMethodCallHandler(EditorSession.channel, null);
+      });
+      await session.initialize();
+      await tester.pump();
+      await tester.pump();
+      final before = host.calls.where((call) => call == 'render').length;
+      host.playing = true;
+      await messenger.handlePlatformMessage(
+        EditorSession.channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('documentChanged', {'status': host.status()}),
+        ),
+        null,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(host.calls.where((call) => call == 'render').length, before);
+      expect(host.calls, isNot(contains('request:play')));
       session.dispose();
-      messenger.setMockMethodCallHandler(EditorSession.channel, null);
-    });
-    await session.initialize();
-    final before = host.calls.where((call) => call == 'render').length;
-    host.playing = true;
-    await messenger.handlePlatformMessage(
-      EditorSession.channel.name,
-      const StandardMethodCodec().encodeMethodCall(
-        MethodCall('documentChanged', {'status': host.status()}),
-      ),
-      null,
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 16));
-    expect(
-      host.calls.where((call) => call == 'render').length,
-      greaterThan(before),
-    );
-    expect(host.calls, isNot(contains('request:play')));
-    session.dispose();
-    await tester.pump();
-  });
+      await tester.pump();
+    },
+  );
 
   testWidgets(
     'a panel can request playback without owning the shared render cadence',

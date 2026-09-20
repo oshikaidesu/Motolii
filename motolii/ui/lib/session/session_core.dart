@@ -81,17 +81,11 @@ abstract class SessionCore {
 
   Future<void> _tail = Future.value();
   bool _disposed = false, _playRequested = false, _pauseQueued = false;
-  int _pendingWork = 0;
   int _generation = 0;
 
-  /// Replies that arrive while a frame is being built wait until it is done:
-  /// a build may not mark widgets outside its own subtree.
-  List<void Function()>? _deferred;
-
-  /// The same-frame path, once the host has handed over its runtime. Null in
-  /// tests and while no document is open: everything then goes by channel.
-  FfiFrames? _frames;
-  bool get sameFrame => _frames != null;
+  /// Flutter is a skin. Document commands and all rendering go through the
+  /// native serial actor; the UI only receives compact snapshots and textures.
+  bool get sameFrame => false;
 
   /// Panel windows the host shows besides this one; they read the document
   /// through the host's broadcast, which this window feeds after each reply.
@@ -115,27 +109,13 @@ abstract class SessionCore {
     DocumentOperation operation, [
     Map<String, dynamic> args = const {},
   ]);
-  Map<String, dynamic> _requestNow(
-    FfiFrames frames,
-    DocumentOperation operation,
-    Map<String, dynamic> args,
-  );
   void _accept(dynamic reply, {bool notify = true});
-  void _broadcast(
-    String status, {
-    bool frameReady = false,
-    bool frameOnly = false,
-  });
-  void _flushDeferred();
   bool supports(String op);
   void absorb(Map<String, dynamic> next);
   // 口をまたぐのは既定のまま描く時だけ。notify/playback は render の中の話。
   Future<void> _render();
-  bool _renderNow(FfiFrames frames);
   Future<void> refreshPreview();
   void _clearSurfaces();
-  bool get _cadenceRunning;
-  void _beginCadence(int generation);
   void _cancelCadence();
   void _schedulePause({required bool renderFinal});
   void _startPlayback();

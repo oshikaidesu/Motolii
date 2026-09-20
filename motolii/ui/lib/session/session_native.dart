@@ -31,32 +31,12 @@ mixin SessionNative on SessionCore {
   }
 
   void _bindFrames(Map<String, dynamic> envelope) {
-    // The native actor owns the context for both still and playback work.
-    // Flutter receives textures and compact snapshots through the channel; it
-    // must not retain a second FFI writer into Document/Rerun.
-    _frames?.dispose();
-    _frames = null;
-  }
-
-  void _flushDeferred() {
-    final held = _deferred;
-    _deferred = null;
-    if (held == null) return;
-    for (final apply in held) {
-      try {
-        apply();
-      } catch (e) {
-        if (!_disposed) error.value = '$e';
-      }
-    }
+    // Compatibility envelopes may still carry the old fields. They are not
+    // capabilities: Flutter must never obtain a renderer pointer.
   }
 
   void _accept(dynamic reply, {bool notify = true}) {
     if (_disposed) return;
-    if (_deferred case final held?) {
-      held.add(() => _accept(reply, notify: notify));
-      return;
-    }
     final envelope = EditorSession.map(EditorSession.typed(reply));
     final epoch = envelope['runtimeEpoch'];
     if (epoch is num && epoch.toInt() != _runtimeEpoch.value) {
@@ -94,15 +74,7 @@ mixin SessionNative on SessionCore {
     }
     if (next['playing'] is bool) {
       playing.value = next['playing'] as bool;
-      if (!playing.value && _cadenceRunning) _cancelCadence();
-      if (playing.value &&
-          !_cadenceRunning &&
-          _frames == null &&
-          textureId.value != null &&
-          windowInfo['main'] != false) {
-        _playRequested = true;
-        _beginCadence(++_generation);
-      }
+      if (!playing.value) _cancelCadence();
     }
     if (notify || next['layers'] is List) absorb(next);
   }
@@ -112,7 +84,6 @@ mixin SessionNative on SessionCore {
     bool displayBusy = true,
   }) {
     if (_disposed) return Future<void>.value();
-    _pendingWork++;
     final work = _tail.then((_) async {
       try {
         if (_disposed) return;
@@ -124,7 +95,6 @@ mixin SessionNative on SessionCore {
       } catch (e) {
         if (!_disposed) error.value = '$e';
       } finally {
-        _pendingWork--;
         if (!_disposed && displayBusy) busy.value = false;
       }
     });
@@ -143,49 +113,7 @@ mixin SessionNative on SessionCore {
   Future<dynamic> _request(
     DocumentOperation operation, [
     Map<String, dynamic> args = const {},
-  ]) {
-    if (_frames case final frames?
-        when !playing.value &&
-            operation != DocumentOperation.play &&
-            operation != DocumentOperation.pause) {
-      return Future.value(_requestNow(frames, operation, args));
-    }
-    return _bridge.request(operation, args, _snapshotContext(operation));
-  }
-
-  /// A specimen or a measurement answers this window alone; anything else
-  /// may have moved the document and is worth telling the other windows.
-  static const _askedAlone = {'visualSample', 'renderInfo', 'easeModel'};
-
-  Map<String, dynamic> _requestNow(
-    FfiFrames frames,
-    DocumentOperation operation,
-    Map<String, dynamic> args,
-  ) {
-    final raw = frames.request(
-      operation.encode({...args, ..._snapshotContext(operation)}),
-    );
-    final reply = EditorSession.map(EditorSession.typed(jsonDecode(raw)));
-    if (!_askedAlone.contains(operation.wireName) && reply['error'] == null) {
-      _broadcast(raw);
-    }
-    return reply;
-  }
-
-  void _broadcast(
-    String status, {
-    bool frameReady = false,
-    bool frameOnly = false,
-  }) {
-    if (_panelWindows <= 0 || _disposed) return;
-    _bridge
-        .invoke('broadcast', {
-          'status': status,
-          'frameReady': frameReady,
-          'frameOnly': frameOnly,
-        })
-        .catchError((_) => null);
-  }
+  ]) => _bridge.request(operation, args, _snapshotContext(operation));
 
   bool supports(String op) =>
       (state['capabilities'] as List? ?? const []).contains(op);
@@ -252,8 +180,6 @@ mixin SessionNative on SessionCore {
         rendered.value = {};
         document.value = {};
         _clearSurfaces();
-        _frames?.dispose();
-        _frames = null;
       }
       if (call.method == 'windowClosed') {
         if (_panelWindows > 0) _panelWindows--;
