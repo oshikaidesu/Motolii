@@ -22,7 +22,7 @@ fn image_layer(texture: GpuTexture2D, size: [f32; 2]) -> Layer {
         content: LayerContent::LinearTexture(texture), size, placement: Default::default(),
         projection: LayerProjection::TwoD, projection_camera: Default::default(),
         blend_mode: BlendMode::Normal, shading: Default::default(), displace: Default::default(),
-        clip: None, blocks_light: false, outline: 0, frame: None,
+        clip: None, shadow: 0.0, outline: 0, frame: None,
     }
 }
 

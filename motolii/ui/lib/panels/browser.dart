@@ -85,7 +85,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   /// The current tab's selection as a signal: [selected] is the store, this
   /// is what a tile and the count watch, so a pick redraws only them.
   final picked = ValueNotifier<Set<String>>(const {});
-  late final DocumentSlice _slice;
+  late DocumentSlice _slice;
   int columns = 1;
 
   /// One tile's width at the shelf's current size. The grid already knows it,
@@ -161,28 +161,41 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     widget.controller.importedAssets.addListener(_revealImported);
     widget.controller.browserTab.addListener(_revealTab);
     widget.controller.deskWork.addListener(_redraw);
-    _slice = widget.controller.slice(
-      'browser',
-      const [
-        'assets',
-        'backgrounds',
-        'primitives',
-        'catalog',
-        'palette',
-        'colorTarget',
-        'importExtensions',
-        'capabilities',
-      ],
-      // The frame reads the selection once: whether there is anything to
-      // apply to. Each shelf names what else it derives, so the shelves keep
-      // still while layers are picked.
-      derived: () => [
-        widget.controller.selectedIds.isEmpty,
-        for (final s in shelves) ...s.derived(widget.controller),
-      ],
-    );
-    _slice.addListener(_onDocument);
+    _slice = _sliceFor(tab)..addListener(_onDocument);
     _enter();
+  }
+
+  static const _frameKeys = [
+    'assets',
+    'backgrounds',
+    'primitives',
+    'catalog',
+    'palette',
+    'colorTarget',
+    'importExtensions',
+    'capabilities',
+  ];
+
+  /// One slice per tab, not one for the Browser: the frame reads the
+  /// selection once (whether there is anything to apply to) and then only
+  /// what the shelf in front derives. A shelf behind the front one names
+  /// readings the front one does not draw, so watching them all woke every
+  /// Browser in the dock on a reading only one of them shows.
+  DocumentSlice _sliceFor(String name) => widget.controller.slice(
+    'browser:$name',
+    _frameKeys,
+    derived: () => [
+      widget.controller.selectedIds.isEmpty,
+      ...shelves.firstWhere((s) => s.name == name).derived(widget.controller),
+    ],
+  );
+
+  /// Move the frame's ear to another tab; what that tab derives is taken
+  /// afresh by [_enter].
+  void _watch(String next) {
+    _slice.removeListener(_onDocument);
+    tab = next;
+    _slice = _sliceFor(next)..addListener(_onDocument);
   }
 
   void _onDocument() {
@@ -250,7 +263,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     if (widget.fixedTab != null && widget.fixedTab != 'Media') return;
     setState(() {
       queries[tab] = search.text;
-      tab = 'Media';
+      _watch('Media');
       search.text = '';
       queries['Media'] = '';
       classifications['Media'] = 'All';
@@ -288,7 +301,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   void changeTab(String value) {
     setState(() {
       queries[tab] = search.text;
-      tab = value;
+      _watch(value);
       search.text = queries[value] ?? '';
       _enter();
     });

@@ -52,7 +52,7 @@ pub(crate) fn hooks<'a>(effects: &'a [ResolvedEffect], definitions: &'a [VismDef
         match def.manifest.stage {
             super::IsfStage::Field => field = Some(def),
             super::IsfStage::Surface => surface = Some(def),
-            super::IsfStage::Pass | super::IsfStage::Warp | super::IsfStage::Clip | super::IsfStage::Block => {}
+            super::IsfStage::Pass | super::IsfStage::Warp | super::IsfStage::Clip | super::IsfStage::Shadow | super::IsfStage::Block => {}
         }
     }
     (field, surface)

@@ -191,6 +191,21 @@ pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect
     Some(crate::render::compositor::ClipSpec { axis, offset: read("offset"), cap: read("cap") > 0.5 })
 }
 
+/// Cast Shadow の欄 → 型紙の濃さ。掛かっていなければ 0(影を落とさない)。
+/// 柔らかさ・灯の選択・距離は compositor に実装が無いので欄も無い(2026-09-20)。
+pub(crate) fn translate_cast_shadow(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
+    const ID: &str = "motolii.cast_shadow";
+    let Some(effect) = effects.iter().rev().find(|e| e.plugin_id == ID) else { return 0.0 };
+    let catalog = known_effects();
+    let default = catalog.iter().find(|d| d.plugin_id == ID)
+        .and_then(|d| d.params.iter().find(|p| p.name == "strength"))
+        .map_or(1.0, |p| p.default as f32);
+    effect.params.iter().find(|(n, _)| n == "strength").and_then(|(_, v)| match v {
+        crate::doc::store::Value::F64(v) => Some(*v as f32),
+        _ => None,
+    }).unwrap_or(default).clamp(0.0, 1.0)
+}
+
 pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
     crate::render::compositor::catalog_snapshot().descriptors.clone()
 }

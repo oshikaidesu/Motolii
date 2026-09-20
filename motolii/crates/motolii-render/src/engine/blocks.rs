@@ -755,6 +755,8 @@ impl Engine {
                 if *source != definition.vertex_text {
                     *source = definition.vertex_text.clone();
                     *program = BlockProgram::new(&ctx.device, &batch.plugin, source, definition.manifest.rounds);
+                    // 前の道の bind group は誰も呼ばない。世界に溜めない。
+                    world.forget_all();
                 }
                 program.record_from(&ctx.device, &ctx.queue, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params, batch.source);
             }
@@ -766,12 +768,10 @@ impl Engine {
         state.follow_pass.get_or_insert_with(|| FollowPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &pairs);
         let links: Vec<(u32, u32)> = state.connectors.iter().map(|(_, a, b)| (*a, *b)).collect();
         let motion = re_renderer::MotionBuffer::new(ctx, (state.objects.len() + 2 * links.len()) as u64);
-        let bases_buffer = state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, motion.buffer());
-        if let Some(bases_buffer) = bases_buffer.as_ref() {
-            let frame = (t.as_seconds_f64() * state.fps).round() as i64;
-            state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
-                .record(&ctx.device, &ctx.queue, &mut encoder, world, bases_buffer, &links, &state.ropes, motion.buffer(), frame, state.fps as f32);
-        }
+        state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, motion.buffer());
+        let frame = (t.as_seconds_f64() * state.fps).round() as i64;
+        state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
+            .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, motion.buffer(), frame, state.fps as f32);
         ctx.queue.submit([encoder.finish()]);
         self.compositor.motion = Some(motion);
     }

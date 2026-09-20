@@ -42,7 +42,7 @@ impl Engine {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
-            blocks_light: base.layer.blocks_light,
+            shadow: base.layer.shadow,
             outline: base.layer.outline,
             frame: None,
         };

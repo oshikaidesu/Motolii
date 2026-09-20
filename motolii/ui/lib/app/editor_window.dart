@@ -37,6 +37,20 @@ String? freezeNotice(Map<String, dynamic> status) {
   return 'Freezing $name ${job['done']}/${job['total']}';
 }
 
+/// 窓の下の 1 行。文だけを受け取るので、文が同じ間は建て直らない。
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: EditorMetrics.row,
+    alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+    color: EditorTheme.of(context).app,
+    child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+  );
+}
+
 class EditorWindow extends StatefulWidget {
   const EditorWindow({super.key});
   @override
@@ -55,6 +69,14 @@ class _EditorWindowState extends State<EditorWindow> {
   );
 
   final workspace = WorkspaceLayout();
+
+  /// 下の 1 行が読む物は、そこに出る文そのもの。再生で layers が毎コマ
+  /// 動いても、文が変わらない限り建て直さない。
+  late final notice = c.slice(
+    'notice',
+    const [],
+    derived: () => freezeNotice(c.state) ?? effectsNotice(c.state),
+  );
   DockNode get dock => workspace.root;
   set dock(DockNode value) => workspace.root = value;
   final paneKeys = {for (final id in paneNames) id: GlobalKey()};
@@ -518,20 +540,11 @@ class _EditorWindowState extends State<EditorWindow> {
                   valueListenable: c.error,
                   builder: (_, message, __) =>
                       ValueListenableBuilder<Map<String, dynamic>>(
-                        valueListenable: c.document,
-                        builder: (_, doc, __) => Container(
-                          height: EditorMetrics.row,
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: EditorMetrics.s6,
-                          ),
-                          color: EditorTheme.of(context).app,
-                          child: Text(
-                            // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
-                            message ?? freezeNotice(doc) ?? effectsNotice(doc),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        valueListenable: notice,
+                        builder: (_, doc, __) => _StatusLine(
+                          // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
+                          text:
+                              message ?? freezeNotice(doc) ?? effectsNotice(doc),
                         ),
                       ),
                 ),

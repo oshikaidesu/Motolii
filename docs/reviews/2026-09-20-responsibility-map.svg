@@ -2,7 +2,7 @@
 <rect width="1500" height="1000" fill="#141414"/>
 <style>text{font-family:-apple-system,"Helvetica Neue",sans-serif}</style>
 <text x="28" y="40" fill="#e8e8e8" font-size="19">Motolii — 責任の地図</text>
-<text x="28" y="62" fill="#8a8a8a" font-size="12">線 = 同じ commit で一緒に変わった割合（参照ではなく振る舞い）。丸の大きさ = 行数、濃い縁 = test の割合。直近 303 commit。</text>
+<text x="28" y="62" fill="#8a8a8a" font-size="12">線 = 同じ commit で一緒に変わった割合（参照ではなく振る舞い）。丸の大きさ = 行数、濃い縁 = test の割合。直近 305 commit。</text>
 <line x1="573" y1="785" x2="345" y2="930" stroke="#ffd9a0" stroke-opacity="0.16" stroke-width="0.7"/>
 <line x1="867" y1="516" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.7"/>
 <line x1="459" y1="244" x2="494" y2="70" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.7"/>

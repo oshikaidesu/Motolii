@@ -94,6 +94,7 @@ class EffectsShelf extends BrowserShelf {
         'motolii.gradient': 'Color',
         'motolii.tri_led': 'Stylize',
         'motolii.repeat': 'Place',
+        'motolii.cast_shadow': 'Light',
       }[host.id(item)] ??
       // shader を持たない棚の札は native の stage が族(Path = 形の層の輪郭)。
       switch (item['stage']) {
@@ -114,6 +115,7 @@ class EffectsShelf extends BrowserShelf {
       'Surface',
       'Field',
       'Clip',
+      'Shadow',
       'Path',
       'Placement',
       'Solid',

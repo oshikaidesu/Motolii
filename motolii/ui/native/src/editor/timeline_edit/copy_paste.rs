@@ -10,7 +10,6 @@ fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     LayerAttrsPatch {
         flatten: Some(a.flatten),
         environment: Some(a.environment),
-        blocks_light: Some(a.blocks_light),
         ghost: Some(a.ghost),
         hidden: Some(a.hidden),
         parent: Some(a.parent),

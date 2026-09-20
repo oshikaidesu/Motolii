@@ -164,8 +164,8 @@ mixin _InspectorTransformCard on _InspectorControls {
     final can = panelCan(c, 'setAttrs') && layer['locked'] != true;
     final ghost = (layer['ghost'] as num?)?.toInt();
     final flagColumns = layer['kind'] == 'Image' && layer['ghostable'] == true
-        ? 4
-        : 3;
+        ? 3
+        : 2;
     return [
       _line(_name(Glyph.view_in_ar_outlined, 'Space'), [
         _RowCell(
@@ -220,21 +220,6 @@ mixin _InspectorTransformCard on _InspectorControls {
         ),
       ]),
       _line(_name(), [
-        _RowCell(
-          EditorSwitch(
-            compact:
-                _columns.division(flagColumns) < EditorSwitch.minExpandedWidth,
-            on: layer['blocksLight'] == true,
-            glyph: Glyph.wb_shade,
-            label: 'Blocks light: casts this layer\'s shadow and colored light',
-            onChanged: can
-                ? (on) => c.command('setAttrs', {
-                    'layers': [layer['id']],
-                    'patch': {'blocksLight': on},
-                  })
-                : null,
-          ),
-        ),
         if (layer['kind'] == 'Image') ...[
           _RowCell(
             EditorSwitch(
@@ -281,27 +266,8 @@ mixin _InspectorTransformCard on _InspectorControls {
           ),
         ),
       ], divisions: flagColumns),
-      // Freeze は旗ではなく状態(DAW の Freeze Track): 自分の行。docs/freeze-and-flatten.md
-      if (layer['kind'] != 'Camera')
-        _line(_name(Glyph.ac_unit, 'Freeze'), [
-          _RowCell(
-            EditorSwitch(
-              compact: _wellWidth < EditorSwitch.minExpandedWidth,
-              on: layer['frozen'] == true,
-              glyph: Glyph.ac_unit,
-              label: 'Freeze: bake the picture; source and effects stay as they are until unfrozen',
-              onChanged: panelCan(c, 'freeze')
-                  ? (on) => c.command('freeze', {
-                      'layer': layer['id'],
-                      'enabled': on,
-                    })
-                  : null,
-            ),
-            center: true,
-          ),
-          _RowCell(null),
-          _RowCell(null),
-        ]),
+      // Freeze の入口は Timeline にある(右クリック)。焼けているかは列の色で見せる物で、
+      // Inspector の行ではない。ここに置くと入口が二重になる。
     ];
   }
 }

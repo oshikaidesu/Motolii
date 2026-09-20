@@ -1,9 +1,9 @@
-//! Render a document with every Glass layer set to block light (shadow + colored light on the rest),
+//! Render a document with Cast Shadow on every Glass layer (shadow + colored light on the rest),
 //! next to the untouched document. Nothing is saved back.
 use motolii_edit::{Document, Intent};
 use motolii_render::picture::resolve::resolved_layers;
 use motolii_render::{
-    doc::store::{LayerAttrsPatch, RationalTime},
+    doc::store::{EffectId, EffectInstance, RationalTime},
     engine::Engine,
 };
 
@@ -23,9 +23,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|l| l.id)
         .collect();
     let mut engine = Engine::new()?;
-    for (name, blocks) in [("plain", false), ("blocks-light", true)] {
+    for (name, blocks) in [("plain", false), ("cast-shadow", true)] {
         for &layer in &glass {
-            doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch { blocks_light: Some(blocks), ..Default::default() } })?;
+            let effects = if blocks { vec![EffectInstance { id: EffectId(900), plugin_id: "motolii.cast_shadow".into() }] } else { Vec::new() };
+            doc.apply(Intent::SetEffects { layer, effects })?;
         }
         engine.render_frame(&doc.view(), RationalTime::ZERO)?;
         let started = std::time::Instant::now();

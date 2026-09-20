@@ -54,7 +54,7 @@ impl Compositor {
                 shading: layer.shading.clone(),
                 displace: layer.displace,
                 clip: layer.clip,
-                blocks_light: layer.blocks_light,
+                shadow: layer.shadow,
                 outline: layer.outline,
                 screen_passes: &[],
                 screen_sources: &[],
@@ -219,7 +219,7 @@ impl Compositor {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
-            blocks_light: layer.blocks_light,
+            shadow: layer.shadow,
             outline: layer.outline,
             frame: None,
         })

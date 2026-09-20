@@ -166,7 +166,7 @@ fn the_world_pass_hands_scale_and_tint_to_the_drawing_side() {
     world.begin_from(device, queue, &items, 0.0, &[BlockOffset { translate: [3.0, 0.0], rotate: 0.0, scale: 0.5, tint: [1.0, 0.5, 0.25, 0.5] }]);
     let motion = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-motion"), size: 64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    let _ = WorldPass::new(device).record(device, queue, &mut encoder, &world, &[([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [5.0, 5.0, 0.0])], &[], &motion);
+    WorldPass::new(device).record(device, queue, &mut encoder, &mut world, &[([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [5.0, 5.0, 0.0])], &[], &motion);
     let staging = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-read"), size: 64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
     encoder.copy_buffer_to_buffer(&motion, 0, &staging, 0, 64);
     queue.submit([encoder.finish()]);
@@ -194,8 +194,8 @@ fn the_rope_pass_writes_the_bellies_of_a_cubic_behind_the_things() {
     let bases = [([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]), ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [30.0, 0.0, 0.0])];
     let motion = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-motion"), size: 4 * 64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    let basis = WorldPass::new(device).record(device, queue, &mut encoder, &world, &bases, &[(0, 1)], &motion).unwrap();
-    RopePass::new(device).record(device, queue, &mut encoder, &world, &basis, &[(0, 1)], &[(0, 20.0, 60.0, 6.0)], &motion, 0, 30.0);
+    WorldPass::new(device).record(device, queue, &mut encoder, &mut world, &bases, &[(0, 1)], &motion);
+    RopePass::new(device).record(device, queue, &mut encoder, &mut world, &[(0, 20.0, 60.0, 6.0)], &motion, 0, 30.0);
     let staging = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-read"), size: 4 * 64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
     encoder.copy_buffer_to_buffer(&motion, 0, &staging, 0, 4 * 64);
     queue.submit([encoder.finish()]);

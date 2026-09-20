@@ -91,6 +91,17 @@ pub type Memo = Rc<RefCell<Scratch>>;
 pub struct LayoutCache {
     pub revision: Option<crate::doc::store::Revision>,
     pub frames: HashMap<RationalTime, std::sync::Arc<Frame>>,
+    /// 版が変わらない限り同じ物。時刻では変わらないので、コマごとに作り直さない。
+    /// (層の並び, グループに引き取られた層, solo が 1 つでもあるか)
+    pub structure: Option<std::sync::Arc<Structure>>,
+}
+
+/// 書類の形。時刻に依らない。
+pub struct Structure {
+    pub layers: Vec<crate::doc::store::LayerId>,
+    pub present: std::collections::HashSet<crate::doc::store::LayerId>,
+    pub handed_out: std::collections::HashSet<crate::doc::store::LayerId>,
+    pub any_solo: bool,
 }
 
 impl LayoutCache {

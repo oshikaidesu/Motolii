@@ -1,4 +1,4 @@
-//! 調査用(2026-09-15 2.5D の嘘): 作品を読み、名前で層に environment / blocks_light を立てて、指定コマを PNG へ。
+//! 調査用(2026-09-15 2.5D の嘘): 作品を読み、名前で層に environment / Cast Shadow を足して、指定コマを PNG へ。
 //! `zz_lies <doc.rrd> <out_dir> <frames,comma> [Name=env|blocks ...]`
 use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, engine::Engine, picture::resolve::resolved_layers};
@@ -11,8 +11,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for edit in args {
         let (name, what) = edit.split_once('=').ok_or("Name=env|blocks")?;
         let id = layers.iter().find(|(_, n)| n == name).ok_or(format!("no layer {name}"))?.0;
-        let patch = match what { "env" => LayerAttrsPatch { environment: Some(true), ..Default::default() }, _ => LayerAttrsPatch { blocks_light: Some(true), ..Default::default() } };
-        doc.apply(Intent::SetAttrs { layer: id, patch })?;
+        match what {
+            "env" => doc.apply(Intent::SetAttrs { layer: id, patch: LayerAttrsPatch { environment: Some(true), ..Default::default() } })?,
+            _ => doc.apply(Intent::SetEffects { layer: id, effects: vec![EffectInstance { id: EffectId(900), plugin_id: "motolii.cast_shadow".into() }] })?,
+        }
     }
     let comp = doc.view().composition()?.ok_or("comp")?;
     let mut engine = Engine::new()?;

@@ -107,6 +107,7 @@ mixin SessionNative on SessionCore {
       if (!playing.value && _cadenceRunning) _cancelCadence();
       if (playing.value &&
           !_cadenceRunning &&
+          _frames == null &&
           textureId.value != null &&
           windowInfo['main'] != false) {
         _playRequested = true;
@@ -153,7 +154,10 @@ mixin SessionNative on SessionCore {
     DocumentOperation operation, [
     Map<String, dynamic> args = const {},
   ]) {
-    if (_frames case final frames?) {
+    if (_frames case final frames?
+        when !playing.value &&
+            operation != DocumentOperation.play &&
+            operation != DocumentOperation.pause) {
       return Future.value(_requestNow(frames, operation, args));
     }
     return _bridge.request(operation, args, _snapshotContext(operation));
@@ -242,6 +246,10 @@ mixin SessionNative on SessionCore {
             windowInfo['main'] != false) {
           refreshPreview();
         }
+      }
+      if (call.method == 'playbackFrame') {
+        final current = EditorSession.map(call.arguments)['frame'];
+        if (current is num) frame.value = current.toInt();
       }
       // vism/ の file が変わった(host の見張り)。棚を読み直すのは main の窓の仕事。
       if (call.method == 'effectsChanged' && windowInfo['main'] != false) {

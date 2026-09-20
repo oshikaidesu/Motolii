@@ -141,9 +141,9 @@ mod snapshots {
                 out.push(Intent::SetConstant { layer: subject, property: PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, value: Value::Vec2([0.0, 0.0]) });
                 out
             }
-            EffectStage::Surface | EffectStage::Field | EffectStage::Clip => {
+            EffectStage::Surface | EffectStage::Field | EffectStage::Clip | EffectStage::Shadow => {
                 let mut out = Vec::new();
-                if stage == EffectStage::Surface {
+                if matches!(stage, EffectStage::Surface | EffectStage::Shadow) {
                     out.extend(place(LayerId(2), 0, create::background("photo-studio")?));
                 }
                 out.extend(place(subject, 1, create::primitive("sphere")?));

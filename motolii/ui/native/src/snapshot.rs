@@ -195,8 +195,10 @@ impl EditorRuntime{
     /// 出力(Camera)で見た枠。anchor など view を問わない用途。
     pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{ self.bounds_seen(layer,View::Camera) }
     pub(crate) fn bounds_seen(&self,layer:LayerId,seen:View)->Option<Json>{
-        let resolved=crate::render::picture::resolve::resolved_layers(&self.doc.view(), self.time().ok()?).ok()?;
-        self.bounds_from(&self.eye(seen)?,resolved.as_slice(),layer,seen)
+        let view=self.doc.view();let at=self.time().ok()?;
+        let resolved=match self.engine.resolved_for(&view,at){Some(r)=>r,None=>crate::render::picture::resolve::resolved_layers(&view,at).ok()?};
+        let index:std::collections::HashMap<LayerId,usize>=resolved.iter().enumerate().filter(|(_,r)|!r.ghost).map(|(i,r)|(r.id,i)).fold(std::collections::HashMap::new(),|mut m,(id,i)|{m.entry(id).or_insert(i);m});
+        self.bounds_from(&view,&self.eye(seen)?,resolved.as_slice(),&index,layer,seen)
     }
     /// 見ている姿勢 —— comp・作中カメラ・その view の観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
     fn eye(&self,seen:View)->Option<Eye>{
@@ -210,12 +212,12 @@ impl EditorRuntime{
             self.viewer.selection_bounds.insert(seen,found.into_iter().map(|(id,[x0,y0,x1,y1])|(id,[x+x0*sx,y+y0*sy,x+x1*sx,y+y1*sy])).collect());
         }
     }
-    fn bounds_from(&self,eye:&Eye,resolved:&[crate::render::picture::resolved::ResolvedLayer],layer:LayerId,seen:View)->Option<Json>{
-        let view=self.doc.view();let Eye{time,comp,camera,observer,document}=*eye;
-        let r=resolved.iter().find(|r|r.id==layer&&!r.ghost)?;
+    fn bounds_from(&self,view:&crate::doc::store::StoreView<'_>,eye:&Eye,resolved:&[crate::render::picture::resolved::ResolvedLayer],at:&std::collections::HashMap<LayerId,usize>,layer:LayerId,seen:View)->Option<Json>{
+        let Eye{time,comp,camera,observer,document}=*eye;
+        let r=resolved.get(*at.get(&layer)?)?;
         // 2D は箱に貼り付いているので、どの view でも作中カメラで置く。
         let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
-        let b=self.engine.selected_layer_bounds_in(&view,resolved,layer,time)?;
+        let b=self.engine.selected_layer_bounds_in(view,resolved,layer,time)?;
         let world=crate::doc::core::depth_scaled(r.placement.world_transform?);
         // 選ばれた層は絵そのもの(mask)の広がり: 透視・effect・変位込みで 1 px。届く前は写した点で包む。
         // 2D・2.5D の籠は向きを持たない: こちらを向いた矩形。向きは Inspector が決める。
@@ -224,7 +226,7 @@ impl EditorRuntime{
             (None,projection)=>match projection{
             LayerProjection::ThreeD=>crate::doc::core::projected_screen_corners(comp,camera,observer,r.projection,world,b.min,b.max).iter().map(|p|[p.x as f64,p.y as f64]).collect(),
             _=>{
-                let outline=self.engine.selected_layer_outline_in(&view,resolved,layer,time).unwrap_or_else(||b.corners().to_vec());
+                let outline=self.engine.selected_layer_outline_in(view,resolved,layer,time).unwrap_or_else(||b.corners().to_vec());
                 crate::doc::core::facing_frame(comp,camera,observer,r.projection,world,b.min,b.max,&outline).iter().map(|p|[p.x as f64,p.y as f64]).collect()
             }
         }};
@@ -234,25 +236,34 @@ impl EditorRuntime{
     }
     /// 今の姿 —— 観測者と時刻で動く物。cache した行の上へ毎回これを載せる。
     /// `bounds` は Camera(出力)、`stageBounds` は Stage(観測者)で見た枠。
-    fn overlay_geometry(&self,row:&mut Json,eyes:&(Eye,Eye),resolved:&[crate::render::picture::resolved::ResolvedLayer],id:LayerId,live:bool)->Result<(),String>{
-        let position=self.position(id)?;let bounds=self.bounds_from(&eyes.0,resolved,id,View::Camera);
+    fn overlay_geometry(&self,view:&crate::doc::store::StoreView<'_>,row:&mut Json,eyes:&(Eye,Eye),resolved:&[crate::render::picture::resolved::ResolvedLayer],at:&std::collections::HashMap<LayerId,usize>,id:LayerId,live:bool)->Result<(),String>{
+        let position=self.position_in(view,id)?;let bounds=self.bounds_from(view,&eyes.0,resolved,at,id,View::Camera);
         row["corners"]=json!(bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|if c.len()==8{vec![c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]}else{c.clone()}));
         row["x"]=json!(position[0]);row["y"]=json!(position[1]);
         if !live {row["anchorFraction"]=bounds.as_ref().map(|b|b["anchorFraction"].clone()).unwrap_or(Json::Null);}
         row["bounds"]=json!(bounds);
-        row["stageBounds"]=json!(self.bounds_from(&eyes.1,resolved,id,View::User));
+        row["stageBounds"]=json!(self.bounds_from(view,&eyes.1,resolved,at,id,View::User));
         Ok(())
     }
     pub(crate) fn build_status(&self)->Result<Json,String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;let at=self.time()?;
         let catalog=crate::render::engine::known_effects();
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?;
+        // 描く側がこのコマで解いた物があればそれを使う(1 コマに 2 度解かない)。
+        let resolved=match self.engine.resolved_for(&view, at) {
+            Some(layers)=>layers,
+            None=>crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?,
+        };
         let clipping=view.clipping_bases().map_err(e)?;
         let eyes=(self.eye(View::Camera).ok_or("No composition")?,self.eye(View::User).ok_or("No composition")?);
         // 再生中で Document が変わっていなければ、時刻で変わる物(値・枠)だけの軽い status にする。
         let revision=format!("{:?}",self.doc.revision());
         let live=self.viewer.clock.playing()&&self.full_status_revision.borrow().as_deref()==Some(revision.as_str());
-        let mut ids=view.layers();ids.sort_by_key(|id|std::cmp::Reverse((view.meta(*id).ok().flatten().map_or(0,|m|m.order),id.0)));
+        // 層ごとに resolved を走査すると層数の 2 乗になる。索引を 1 回だけ作る。
+        let at_index:std::collections::HashMap<LayerId,usize>=resolved.iter().enumerate().filter(|(_,r)|!r.ghost).map(|(i,r)|(r.id,i)).fold(std::collections::HashMap::new(),|mut m,(id,i)|{m.entry(id).or_insert(i);m});
+        // 並べ替えの鍵も 1 層 1 回。sort_by_key は比較のたびに鍵を引くので、store を O(n log n) 回叩いていた。
+        let mut ids=view.layers();
+        let order:std::collections::HashMap<LayerId,i16>=ids.iter().map(|id|(*id,view.meta(*id).ok().flatten().map_or(0,|m|m.order))).collect();
+        ids.sort_by_key(|id|std::cmp::Reverse((order.get(id).copied().unwrap_or(0),id.0)));
         let mut layers=Vec::new();
         let keys=self.layer_keys(&view,at,&resolved,&clipping,live)?;
         // 軽い status で行(値・効果)を持つのは選択中の層だけ —— Inspector と Stage の枠が読む物。
@@ -261,7 +272,7 @@ impl EditorRuntime{
         for id in ids{
             if !wanted(id){
                 let mut row=json!({"id":id.0});
-                self.overlay_geometry(&mut row,&eyes,&resolved,id,live)?;
+                self.overlay_geometry(&view,&mut row,&eyes,&resolved,&at_index,id,live)?;
                 layers.push(row);
                 continue;
             }
@@ -279,7 +290,7 @@ impl EditorRuntime{
                     built
                 }
             };
-            if let Some(mut row)=row {self.overlay_geometry(&mut row,&eyes,&resolved,id,live)?;layers.push(row);}
+            if let Some(mut row)=row {self.overlay_geometry(&view,&mut row,&eyes,&resolved,&at_index,id,live)?;layers.push(row);}
         }
         self.snapshot_cache.borrow_mut().rows.retain(|id,_|keys.contains_key(id));
         if live {
@@ -290,7 +301,7 @@ impl EditorRuntime{
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
             return Ok(json!({"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
                 "selectedId":self.viewer.selected().map(|s|s.0),"selectedIds":self.viewer.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
-                "animate":self.viewer.animate!=Animate::Off,"renderCount":self.render_count,"pickedColor":self.viewer.picked_color,"pickSerial":self.viewer.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
+                "animate":self.viewer.animate!=Animate::Off,"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"pickedColor":self.viewer.picked_color,"pickSerial":self.viewer.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
         }
         *self.full_status_revision.borrow_mut()=Some(revision);
         let assets:Result<Vec<_>,String>=view.assets().map_err(e)?.into_iter().map(|a|{
@@ -316,7 +327,7 @@ impl EditorRuntime{
         let selected_keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
         let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
-        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
+        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
@@ -494,7 +505,7 @@ impl EditorRuntime{
             return Ok(Some(row));
         }
         let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
-        let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"blocksLight":attrs.blocks_light,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"effects":effects?,"contentKeys":content_keys});
+        let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"effects":effects?,"contentKeys":content_keys});
         if let Some(slot)=&fill_slot{row["fill"]=editor::gradient::model(&self.doc,slot,at).unwrap_or(Json::Null);}
         Ok(Some(row))
     }

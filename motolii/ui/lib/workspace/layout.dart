@@ -96,12 +96,26 @@ class DockNode {
           'second': second!.json(),
         };
   static DockNode read(Map<String, dynamic> m) {
+    final root = _read(m);
+    // A pane has one stateful body and therefore one GlobalKey. Old saved
+    // layouts may contain the same pane in two leaves after a detach/move;
+    // keep its first seat instead of mounting that body twice on restart.
+    final seen = <String>{};
+    for (final leaf in root.leaves) {
+      leaf.tabs = leaf.tabs.where(seen.add).toList();
+      if (!leaf.tabs.contains(leaf.active))
+        leaf.active = leaf.tabs.isEmpty ? '' : leaf.tabs.first;
+    }
+    return root;
+  }
+
+  static DockNode _read(Map<String, dynamic> m) {
     if (m['axis'] != null)
       return DockNode.split(
         m['axis'] == 'horizontal' ? Axis.horizontal : Axis.vertical,
         (m['ratio'] as num).toDouble().clamp(.1, .9),
-        read(Map<String, dynamic>.from(m['first'] as Map)),
-        read(Map<String, dynamic>.from(m['second'] as Map)),
+        _read(Map<String, dynamic>.from(m['first'] as Map)),
+        _read(Map<String, dynamic>.from(m['second'] as Map)),
       )..offset = (m['offset'] as num? ?? 0).toDouble();
     final tabs = (m['tabs'] as List)
         .whereType<String>()

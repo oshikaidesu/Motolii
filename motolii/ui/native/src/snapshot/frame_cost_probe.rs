@@ -109,3 +109,158 @@ fn probe() {
         eprintln!("layers={layers} copies={copies:4}: resolve={resolve:?} status={status:?} ({status_bytes} bytes) render={render:?}");
     }
 }
+
+/// 1 コマの時間を持ち主ごとに割る(Flutter 無し)。再生の Ticker と同じ順で
+/// tick → renderInfo → view ごとに描く → status を回し、段ごとに時計を置く。
+/// 拍を 1 つおきに二役へ振る: 偶数は本番の道(`motolii_probe_render` = IOSurface の
+/// 紐付けも込み)、奇数は中の段を 1 つずつ。差が「橋と紐付けの取り分」。
+/// `MOTOLII_PROBE_DOC` の書類、`MOTOLII_PROBE_SECONDS`(既定 12)秒、
+/// `MOTOLII_PROBE_STAGE`(既定 `1000x700`)の Stage 窓。集計は終わりに 1 回。
+#[test]
+#[ignore]
+fn frame_owners() {
+    use crate::viewer::View;
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFString};
+    let path = std::env::var("MOTOLII_PROBE_DOC").unwrap_or_default();
+    let seconds: f64 = std::env::var("MOTOLII_PROBE_SECONDS").ok().and_then(|v| v.parse().ok()).unwrap_or(12.0);
+    let stage = std::env::var("MOTOLII_PROBE_STAGE").unwrap_or_else(|_| "1000x700".into());
+    let (sw, sh) = stage.split_once('x').unwrap();
+    let (sw, sh): (u32, u32) = (sw.parse().unwrap(), sh.parse().unwrap());
+    // 書類を言われなければ、この file の見本(層 5 × 100 枚)で回す。
+    let mut rt = if path.is_empty() { runtime(5, 100.0) } else { crate::EditorRuntime::open(&path).unwrap() };
+    let comp = rt.doc.view().composition().unwrap().unwrap().spec();
+    // `stageWindow` は port の op ではなく lib.rs:275 の口。Stage tab が置く窓と同じ。
+    rt.set_stage_window(&serde_json::json!({"width":sw,"height":sh,
+        "roi":[0.0, 0.0, comp.width as f32, comp.height as f32]})).unwrap();
+
+    let views = [View::Camera, View::User];
+    // 本番の道の的。Flutter の host が作り置く物と同じ IOSurface。
+    let surfaces: Vec<_> = views.iter().map(|v| {
+        let w = rt.window(*v).unwrap();
+        let keys: Vec<&CFString> = unsafe { vec![objc2_io_surface::kIOSurfaceWidth, objc2_io_surface::kIOSurfaceHeight, objc2_io_surface::kIOSurfaceBytesPerElement, objc2_io_surface::kIOSurfacePixelFormat] };
+        let values = [CFNumber::new_i32(w.width as i32), CFNumber::new_i32(w.height as i32), CFNumber::new_i32(4), CFNumber::new_i32(u32::from_be_bytes(*b"BGRA") as i32)];
+        let values: Vec<&CFNumber> = values.iter().map(|v| &**v).collect();
+        unsafe { objc2_io_surface::IOSurfaceRef::new(CFDictionary::from_slices(&keys, &values).as_opaque()) }.expect("IOSurface")
+    }).collect();
+    // 中の段の的。紐付けを外して測るための素の texture。
+    let device = rt.engine.gpu_device().clone();
+    let targets: Vec<_> = views.iter().map(|v| {
+        let w = rt.window(*v).unwrap();
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("frame-owners"), size: wgpu::Extent3d { width: w.width, height: w.height, depth_or_array_layers: 1 },
+            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+            format: crate::render::compositor::PRESENTABLE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+    }).collect();
+
+    let names = ["tick(FFI)", "renderInfo(FFI)", "status(FFI+serde)", "parse(serde)",
+        "Camera whole(本番)", "Camera build+submit(CPU)", "Camera poll(GPU 待ち)", "Camera bounds", "Camera warm",
+        "User whole(本番)", "User build+submit(CPU)", "User poll(GPU 待ち)", "User bounds", "User warm"];
+    let mut owners: Vec<Vec<u64>> = names.iter().map(|_| Vec::new()).collect();
+    let mut whole_tick = Vec::new();
+    // 合否用: UI thread に居た時間を道ごとに。本番 = 出して返る、中の段 = その場で待つ(直す前の形)。
+    let (mut budget, mut budget_waiting): (Vec<u64>, Vec<u64>) = (Vec::new(), Vec::new());
+    let mut status_bytes = Vec::new();
+    let (mut ticks, mut drawn, mut skipped) = (0u64, 0u64, 0u64);
+
+    rt.request(serde_json::json!({"op":"play"})).unwrap();
+    // 1 回目は shader と pipeline の compile。定常の値を測るので捨てる。
+    for (view, target) in views.iter().zip(&targets) {
+        let (t, cam, w) = (rt.time().unwrap(), rt.view_camera(*view).unwrap(), rt.window(*view).unwrap());
+        rt.engine.render_frame_into_window(&rt.doc.view(), t, target, cam, true, &[], w).unwrap();
+        rt.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    }
+
+    let started = std::time::Instant::now();
+    while started.elapsed().as_secs_f64() < seconds {
+        let frame_start = std::time::Instant::now();
+        ticks += 1;
+        // 静かな tick の返信の `needsRender` と同じ審判(lib.rs:314 の image_key)。
+        let before_image = rt.image_key();
+        let t0 = std::time::Instant::now();
+        rt.request(serde_json::json!({"op":"tick","quiet":true})).unwrap();
+        owners[0].push(t0.elapsed().as_micros() as u64);
+        if before_image == rt.image_key() {
+            skipped += 1;
+            whole_tick.push(frame_start.elapsed().as_micros() as u64);
+            std::thread::sleep(std::time::Duration::from_micros(8_333));
+            continue;
+        }
+        drawn += 1;
+        let t0 = std::time::Instant::now();
+        let _ = rt.request(serde_json::json!({"op":"renderInfo"})).unwrap();
+        owners[1].push(t0.elapsed().as_micros() as u64);
+        let production = drawn % 2 == 0;
+        for (i, view) in views.iter().enumerate() {
+            let base = 4 + i * 5;
+            if production {
+                let name = std::ffi::CString::new(view.name()).unwrap();
+                let t0 = std::time::Instant::now();
+                let code = unsafe { crate::motolii_probe_render(&mut rt, surfaces[i].id(), name.as_ptr()) };
+                owners[base].push(t0.elapsed().as_micros() as u64);
+                // 0 = 出した、1 = 番人が止めた(この harness は面が 1 枚なので有り得る)。
+                assert!(code >= 0, "{:?}", rt.error);
+                continue;
+            }
+            let target = &targets[i];
+            let (t, cam, w) = (rt.time().unwrap(), rt.view_camera(*view).unwrap(), rt.window(*view).unwrap());
+            rt.engine.set_realtime(true);
+            let t0 = std::time::Instant::now();
+            rt.engine.render_frame_into_window(&rt.doc.view(), t, target, cam, true, &[], w).unwrap();
+            owners[base + 1].push(t0.elapsed().as_micros() as u64);
+            let t0 = std::time::Instant::now();
+            rt.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).unwrap();
+            owners[base + 2].push(t0.elapsed().as_micros() as u64);
+            let t0 = std::time::Instant::now();
+            rt.take_selection_bounds(*view, w);
+            owners[base + 3].push(t0.elapsed().as_micros() as u64);
+            let t0 = std::time::Instant::now();
+            let _ = rt.engine.warm_upcoming(&rt.doc.view(), t);
+            owners[base + 4].push(t0.elapsed().as_micros() as u64);
+            rt.snapshot_cache.borrow_mut().invalidate_geometry();
+        }
+        let t0 = std::time::Instant::now();
+        let status = rt.status().unwrap();
+        let text = status.to_string();
+        owners[2].push(t0.elapsed().as_micros() as u64);
+        status_bytes.push(text.len() as u64);
+        let t0 = std::time::Instant::now();
+        let _: serde_json::Value = serde_json::from_str(&text).unwrap();
+        owners[3].push(t0.elapsed().as_micros() as u64);
+        whole_tick.push(frame_start.elapsed().as_micros() as u64);
+        let spent = frame_start.elapsed().as_micros() as u64;
+        if production { budget.push(spent) } else { budget_waiting.push(spent) }
+        if spent < 8_333 { std::thread::sleep(std::time::Duration::from_micros(8_333 - spent)); }
+    }
+    rt.request(serde_json::json!({"op":"pause"})).unwrap();
+
+    let stat = |v: &mut Vec<u64>| -> String {
+        if v.is_empty() { return "       —        —        —  n=0".into() }
+        v.sort_unstable();
+        let p90 = v[(v.len() as f64 * 0.9).ceil() as usize - 1];
+        format!("{:8.3} {:8.3} {:8.3}  n={}", v[v.len()/2] as f64/1000.0, p90 as f64/1000.0, v[v.len()-1] as f64/1000.0, v.len())
+    };
+    eprintln!("\nPROBE room=frame-owners doc={path} stage={sw}x{sh} comp={}x{} seconds={seconds}",
+        comp.width, comp.height);
+    eprintln!("ticks={ticks} drawn={drawn} skipped={skipped} ({:.0}%)", skipped as f64 * 100.0 / ticks.max(1) as f64);
+    eprintln!("{:28} {:>8} {:>8} {:>8}", "owner (ms)", "median", "p90", "max");
+    for (name, us) in names.iter().zip(owners.iter_mut()) {
+        eprintln!("{:28} {}", name, stat(us));
+    }
+    eprintln!("{:28} {}", "1 tick (whole)", stat(&mut whole_tick));
+    status_bytes.sort_unstable();
+    eprintln!("status bytes median={} max={}", status_bytes.get(status_bytes.len()/2).copied().unwrap_or(0), status_bytes.last().copied().unwrap_or(0));
+    // 合否は分布ではなく予算で。1 拍 8.333 ms に対して、UI thread に居た割合と超えた本数。
+    // `waiting` はその場で GPU を待つ道(直す前の形)、`submit` は出して返る道(本番)。
+    let verdict = |name: &str, ticks: &[u64]| {
+        let over = |us: u64| ticks.iter().filter(|&&spent| spent > us).count();
+        let spent: u64 = ticks.iter().sum();
+        eprintln!("PROBE room=playback-budget path={name} ticks={} ui={:.0}% over16.7={} over33={}",
+            ticks.len(), spent as f64 * 100.0 / (ticks.len().max(1) as f64 * 8_333.0), over(16_700), over(33_300));
+    };
+    verdict("waiting", &budget_waiting);
+    verdict("submit", &budget);
+    eprintln!("PROBE room=playback-budget skipped-by-guard={}", rt.frames.skipped());
+}

@@ -60,6 +60,17 @@ void main() {
       expect(tabs.toSet(), paneNames.toSet());
     },
   );
+  test('saved dock never mounts one pane twice', () {
+    final dock = DockNode.read({
+      'axis': 'horizontal',
+      'ratio': .5,
+      'first': {'id': 'left', 'tabs': ['Stage', 'Inspector'], 'active': 'Stage'},
+      'second': {'id': 'right', 'tabs': ['Inspector', 'Timeline'], 'active': 'Inspector'},
+    });
+    final tabs = dock.leaves.expand((leaf) => leaf.tabs).toList();
+    expect(tabs.where((name) => name == 'Inspector'), hasLength(1));
+    expect(dock.second!.active, 'Timeline');
+  });
   testWidgets(
     'text input keeps keyboard ownership and repeated view commands notify',
     (tester) async {
