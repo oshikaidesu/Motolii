@@ -1522,7 +1522,7 @@ class _TimelinePainter extends CustomPainter {
         style: TextStyle(
           color: color,
           fontSize: size,
-          fontFamily: 'Arial',
+          fontFamily: EditorTheme.fontFamily,
           fontWeight: weight,
         ),
       ),

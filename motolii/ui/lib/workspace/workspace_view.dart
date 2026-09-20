@@ -171,73 +171,111 @@ class _LeafState extends State<_Leaf> {
     active.value = name;
   }
 
-  Widget _tab(String name, String shown) => Draggable<String>(
-    data: name,
-    feedback: DefaultTextStyle(
-      style: DefaultTextStyle.of(context).style,
-      child: ColoredBox(
-        color: EditorTheme.raised,
-        child: Padding(
-          padding: const EdgeInsets.all(EditorMetrics.s8),
-          child: Text(name),
+  /// What a tab takes with its word beside the icon: icon, gap, padding both
+  /// sides and the rule. Names repeat, so each is measured once.
+  static final _labelled = <String, double>{};
+  static double _labelledWidth(String name) => _labelled[name] ??= () {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: name,
+        style: const TextStyle(
+          fontFamily: EditorTheme.fontFamily,
+          fontWeight: FontWeight.w600,
+          fontSize: EditorMetrics.dense,
         ),
       ),
-    ),
-    childWhenDragging: Opacity(opacity: .4, child: Text(name)),
-    child: GestureDetector(
-      onSecondaryTapDown: (details) async {
-        final action = await showEditorMenu<String>(
-          context,
-          details.globalPosition,
-          [
-            const EditorMenuItem(value: 'detach', child: Text('Detach')),
-            const EditorMenuItem(value: 'close', child: Text('Close')),
-          ],
-        );
-        if (action == 'detach' || action == 'window') widget.onDetach(name);
-        if (action == 'close') widget.onClose(name);
-      },
-      child: EditorPress(
-        onTap: () => _show(name),
-        child: Container(
-          height: EditorMetrics.row,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
-          decoration: BoxDecoration(
-            color: widget.node.tabs.length > 1 && shown == name
-                ? EditorTheme.tab
-                : EditorTheme.app,
-            border: const Border(
-              right: BorderSide(
-                color: EditorTheme.line,
-                width: EditorMetrics.s2,
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width +
+        EditorMetrics.title +
+        EditorMetrics.s4 +
+        EditorMetrics.s5 * 2 +
+        EditorMetrics.s2;
+  }();
+
+  /// Tabs that do not fit with their words keep the word only for the one in
+  /// front; the rest are their icon, named on hover. A strip that scrolled its
+  /// last tab out of sight cut it mid-word with nothing to say so.
+  bool _fits(List<String> tabs, double room) =>
+      tabs.length < 2 ||
+      tabs.fold<double>(0, (sum, name) => sum + _labelledWidth(name)) <= room;
+
+  Widget _tab(String name, String shown, {bool compact = false}) =>
+      Draggable<String>(
+        data: name,
+        feedback: DefaultTextStyle(
+          style: DefaultTextStyle.of(context).style,
+          child: ColoredBox(
+            color: EditorTheme.raised,
+            child: Padding(
+              padding: const EdgeInsets.all(EditorMetrics.s8),
+              child: Text(name),
+            ),
+          ),
+        ),
+        childWhenDragging: Opacity(opacity: .4, child: Text(name)),
+        child: GestureDetector(
+          onSecondaryTapDown: (details) async {
+            final action = await showEditorMenu<String>(
+              context,
+              details.globalPosition,
+              [
+                const EditorMenuItem(value: 'detach', child: Text('Detach')),
+                const EditorMenuItem(value: 'close', child: Text('Close')),
+              ],
+            );
+            if (action == 'detach' || action == 'window') widget.onDetach(name);
+            if (action == 'close') widget.onClose(name);
+          },
+          child: EditorPress(
+            onTap: () => _show(name),
+            child: Container(
+              height: EditorMetrics.row,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+              decoration: BoxDecoration(
+                color: widget.node.tabs.length > 1 && shown == name
+                    ? EditorTheme.tab
+                    : EditorTheme.app,
+                border: const Border(
+                  right: BorderSide(
+                    color: EditorTheme.line,
+                    width: EditorMetrics.s2,
+                  ),
+                ),
+              ),
+              child: EditorTooltip(
+                message: name,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      panelSpec(name)?.icon ?? Icons.all_inbox_outlined,
+                      size: EditorMetrics.title,
+                    ),
+                    if (!compact) ...[
+                      const SizedBox(width: EditorMetrics.s4),
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: widget.node.tabs.length > 1 && shown == name
+                              ? EditorTheme.tabInk
+                              : EditorTheme.ink,
+                          fontWeight: FontWeight.w600,
+                          fontSize: EditorMetrics.dense,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                panelSpec(name)?.icon ?? Icons.all_inbox_outlined,
-                size: EditorMetrics.title,
-              ),
-              const SizedBox(width: EditorMetrics.s4),
-              Text(
-                name,
-                style: TextStyle(
-                  color: widget.node.tabs.length > 1 && shown == name
-                      ? EditorTheme.tabInk
-                      : EditorTheme.ink,
-                  fontWeight: FontWeight.w600,
-                  fontSize: EditorMetrics.dense,
-                ),
-              ),
-            ],
-          ),
         ),
-      ),
-    ),
-  );
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -295,15 +333,24 @@ class _LeafState extends State<_Leaf> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ValueListenableBuilder<String>(
-                              valueListenable: active,
-                              builder: (context, shown, _) => Row(
-                                children: [
-                                  for (final name in node.tabs)
-                                    _tab(name, shown),
-                                ],
+                          child: LayoutBuilder(
+                            builder: (context, room) => SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ValueListenableBuilder<String>(
+                                valueListenable: active,
+                                builder: (context, shown, _) {
+                                  final fits = _fits(node.tabs, room.maxWidth);
+                                  return Row(
+                                    children: [
+                                      for (final name in node.tabs)
+                                        _tab(
+                                          name,
+                                          shown,
+                                          compact: !fits && name != shown,
+                                        ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ),

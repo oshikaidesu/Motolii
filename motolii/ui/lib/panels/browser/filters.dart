@@ -762,7 +762,7 @@ class _RailTitle extends StatelessWidget {
     child: Text(
       text.toUpperCase(),
       maxLines: 1,
-      overflow: TextOverflow.clip,
+      overflow: TextOverflow.ellipsis,
       style: const TextStyle(
         fontSize: EditorMetrics.micro,
         letterSpacing: 1,

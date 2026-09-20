@@ -177,7 +177,7 @@ class FittedName extends StatefulWidget {
       final painter = TextPainter(
         text: TextSpan(
           text: name,
-          style: TextStyle(fontSize: size),
+          style: TextStyle(fontFamily: EditorTheme.fontFamily, fontSize: size),
         ),
         maxLines: 1,
         textDirection: TextDirection.ltr,
@@ -249,13 +249,29 @@ class _FittedNameState extends State<FittedName>
       child: ClipRect(
         child: AnimatedBuilder(
           animation: _slide,
-          builder: (context, child) => Transform.translate(
-            offset: Offset(
-              -overflow * Curves.easeInOut.transform(_slide.value),
-              0,
-            ),
-            child: child,
-          ),
+          // At rest the name says it is longer than its room; sliding reads it.
+          builder: (context, child) =>
+              _slide.value == 0 && widget.sliding != true
+              ? SizedBox(
+                  width: widget.width,
+                  child: Text(
+                    widget.name,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: EditorTheme.ink,
+                      fontSize: widget.size,
+                    ),
+                  ),
+                )
+              : Transform.translate(
+                  offset: Offset(
+                    -overflow * Curves.easeInOut.transform(_slide.value),
+                    0,
+                  ),
+                  child: child,
+                ),
           child: OverflowBox(
             alignment: Alignment.centerLeft,
             maxWidth: double.infinity,

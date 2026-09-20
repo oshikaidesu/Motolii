@@ -1552,6 +1552,7 @@ class EaseCurvePainter extends CustomPainter {
           text: TextSpan(
             text: value,
             style: TextStyle(
+              fontFamily: EditorTheme.fontFamily,
               fontSize: EditorMetrics.micro,
               color: EditorInk.dark.easeInk,
             ),

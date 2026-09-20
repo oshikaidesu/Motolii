@@ -288,6 +288,7 @@ double _badgeWidth(String format) => _badgeWidths[format] ??= () {
     text: TextSpan(
       text: format,
       style: const TextStyle(
+        fontFamily: EditorTheme.fontFamily,
         fontSize: EditorMetrics.micro,
         fontWeight: FontWeight.w600,
         letterSpacing: .5,
