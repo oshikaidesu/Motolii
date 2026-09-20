@@ -1,5 +1,6 @@
 //! 仮の編集の姿は、解いた層まで含めて元に戻る。解いた層を見るので絵の家で試す。
 
+use motolii_edit::{Document, Intent};
 use motolii_doc::store::*;
 use motolii_render::picture::resolve::resolved_layers;
 

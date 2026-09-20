@@ -1,3 +1,4 @@
+use motolii_edit::{Document, Intent};
 use super::environment_tests::{file_layer, scene, sky_png, MESH_X, MESH_Y, SIZE};
 use super::*;
 use crate::doc::store::{

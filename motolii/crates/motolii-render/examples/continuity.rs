@@ -3,6 +3,7 @@
 //! 跳び = 1 コマの移動が前後 3 コマの中央値の 4 倍を越え、かつ 6 px を越えるコマ(範囲の最後のコマは比べる相手が片側なので除く)。尖り = 速度の変化が 6 px を越え、前後の 4 倍を越えるコマ。
 use std::collections::BTreeMap;
 
+use motolii_edit::Document;
 use motolii_render::{doc::store::*, engine::Engine};
 
 fn median(mut v: Vec<f32>) -> f32 {

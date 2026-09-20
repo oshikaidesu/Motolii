@@ -1,3 +1,4 @@
+use motolii_edit::{Document, Intent};
 use super::environment_tests::{SIZE, scene, sky_png};
 use super::reflection_tests::set;
 use super::*;

@@ -1,5 +1,6 @@
 //! 広がりの法の審判(実 GPU): 周りを照らす効果の光は、宣言した余白の中で消える。
 //! 余白が光より狭いと、余白の縁で光が段になって切れ、灰色の板が見える(2026-09-14 の総当たりで Glow・Radiance)。
+use motolii_edit::{Document, Intent, blank_project};
 use crate::doc::store::*;
 use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape};
 use crate::render::engine::{content_canvas, Engine};

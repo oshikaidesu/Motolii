@@ -1,5 +1,6 @@
 //! Saved-document ablation using the preview target and GPU completion boundary.
-use motolii_render::{doc::store::*, engine::Engine};
+use motolii_edit::{Document, Intent};
+use motolii_render::{doc::store::*, engine::Engine, picture::resolve::resolved_layers};
 use std::time::Instant;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).ok_or("document path required")?;
@@ -7,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if std::env::args().nth(2).is_some_and(|wanted| wanted != case) { continue; }
         let mut doc = Document::load(&path)?.with_programs(motolii_render::extensions::bundled());
         if std::env::args().nth(3).as_deref() == Some("enable") {
-            let ids = doc.view().resolved_layers(RationalTime::ZERO)?.iter().map(|l| l.id).collect::<Vec<_>>();
+            let ids = resolved_layers(&doc.view(), RationalTime::ZERO)?.iter().map(|l| l.id).collect::<Vec<_>>();
             for id in ids {
                 let effects = doc.view().effects(id)?.to_vec();
                 for effect in effects {
@@ -16,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         let comp = doc.view().composition()?.ok_or("composition")?;
-        let layers = doc.view().resolved_layers(RationalTime::ZERO)?;
+        let layers = resolved_layers(&doc.view(), RationalTime::ZERO)?;
         for l in &layers {
             if case == "all" { eprintln!("layer {:?}: {:?}, effects={:?}", l.id, l.source, l.effects.iter().map(|e| &e.plugin_id).collect::<Vec<_>>()); }
             let text = l.source == LayerSource::Text;

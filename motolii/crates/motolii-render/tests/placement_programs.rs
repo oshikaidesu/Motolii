@@ -1,3 +1,4 @@
+use motolii_edit::{blank_project, Intent};
 use motolii_doc::store::kind::{PlacementInput, PlacementOutput, PlacementProgram};
 use motolii_doc::store::{
     EffectId, EffectInstance, LayerId, LayerMeta, LayerSource, LayerTiming,

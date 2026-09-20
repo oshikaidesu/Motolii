@@ -1,6 +1,8 @@
 //! Paired current-time comparison, with and without reflection content reuse.
+use motolii_edit::{Document, Intent};
+use motolii_render::picture::resolve::resolved_layers;
 use motolii_render::{
-    doc::store::{Document, Intent, PropertyId, RationalTime, Value},
+    doc::store::{PropertyId, RationalTime, Value},
     engine::Engine,
 };
 use serde_json::json;
@@ -13,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut doc = Document::load(&args[1])?.with_programs(motolii_render::extensions::bundled());
     let comp = doc.view().composition()?.ok_or("no composition")?;
-    let layers = doc.view().resolved_layers(RationalTime::ZERO)?;
+    let layers = resolved_layers(&doc.view(), RationalTime::ZERO)?;
     let receiver = layers
         .iter()
         .find(|l| l.effects.iter().any(|e| e.plugin_id == "motolii.glass"))

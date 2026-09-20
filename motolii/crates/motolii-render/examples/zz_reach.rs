@@ -1,6 +1,7 @@
 //! 波及の物差し: 書類 1 つを数コマ描き、ブロックが物の component をいくつ動かしたかを数える。
 //! `zz_reach <doc.rrd> [frames...]` → コマごとに 物の数 / 位置が動いた / 回った / 大きさが変わった / 色か不透明が変わった。
 //! 「1 つの手が何に作用したか」を数で見る(利用者 2026-09-18「css はひとつのオブジェクトが数多くに作用した。物理もそう。測れるものにできるのでは」)。
+use motolii_edit::Document;
 use motolii_render::{doc::store::*, engine::Engine};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

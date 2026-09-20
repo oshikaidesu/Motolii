@@ -1,8 +1,6 @@
 //! Render a saved surface comparison through the same Engine as preview/export.
-use motolii_render::{
-    doc::store::{Document, RationalTime},
-    engine::Engine,
-};
+use motolii_edit::Document;
+use motolii_render::{doc::store::RationalTime, engine::Engine};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     re_log::setup_logging();

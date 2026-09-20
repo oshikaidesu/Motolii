@@ -170,7 +170,7 @@ pub fn resolve_camera(view: &StoreView<'_>, t: RationalTime) -> Result<crate::do
 
 #[cfg(test)]
 mod stage_extent_contract {
-    use motolii_edit::{Animate, Document, Intent};
+    use motolii_edit::{Animate, Document, Intent, blank_project};
     use crate::doc::store::*;
 
     /// Boxcam の working comp / AE の guide layer: 区間内の最上位が効き、区間の外では出力枠に戻る。
@@ -201,6 +201,7 @@ mod stage_extent_contract {
 
 #[cfg(test)]
 mod camera_target_contract {
+    use motolii_edit::{Document, Intent, blank_project};
     use crate::doc::core::{camera_projection, ResolvedCamera};
     use crate::doc::store::*;
 

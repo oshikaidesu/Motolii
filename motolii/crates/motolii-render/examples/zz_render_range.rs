@@ -1,5 +1,6 @@
 //! コマの範囲を PNG に書き出す。往復を速くする口: `MOTOLII_STEP=n` で n コマおき、
 //! `MOTOLII_SHRINK=k` で 1/k に縮めて保存(描く側は comp の大きさのまま、保存だけ縮める)。
+use motolii_edit::Document;
 use motolii_render::{doc::store::*, engine::Engine};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

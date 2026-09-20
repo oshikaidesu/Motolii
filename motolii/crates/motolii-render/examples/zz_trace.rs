@@ -1,3 +1,4 @@
+use motolii_edit::Document;
 use motolii_render::doc::store::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = Document::load(&std::env::args().nth(1).ok_or("doc")?)?.with_programs(motolii_render::extensions::bundled());
@@ -8,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let name = view.meta(id)?.map(|m| format!("{:?}", m.source)).unwrap_or_default();
         let from = view.value_at(id, &PropertyId::new(layout::CONNECT_FROM)?, t)?;
         if from.is_none() { continue; }
-        let shapes = view.shapes_at(id, t)?;
+        let shapes = motolii_render::picture::shapes::shapes_at(&view, id, t)?;
         let points: usize = shapes.iter().map(|_| 1).sum();
         println!("{id:?} {name} connect_from={from:?} shapes={points}");
         if let Some(motolii_render::doc::vector::ShapeNode::Leaf(leaf)) = shapes.first() {

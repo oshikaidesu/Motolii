@@ -236,6 +236,7 @@ mod program_contract {
 /// 出られない実装(拾う場所をずらすだけ)だと、外の画素は必ず 0 のままになる。
 #[cfg(test)]
 mod field_leaves_the_rectangle {
+    use motolii_edit::{Document, Intent};
     use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 

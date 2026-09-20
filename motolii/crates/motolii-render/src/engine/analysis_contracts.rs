@@ -1,5 +1,6 @@
 //! 解析の入力の審判(実 GPU): Blob Track が元の層の絵から塊を拾い、素材を塊ごとに置く。
 
+use motolii_edit::{Document, Intent};
 use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
 use crate::extensions::{blob};
 use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode, Stroke};

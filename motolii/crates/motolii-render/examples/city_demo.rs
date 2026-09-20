@@ -1,4 +1,5 @@
 //! 使い捨て: 貼った Shadertoy を実写へ乗せる。
+use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, engine::Engine};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     re_log::setup_logging();

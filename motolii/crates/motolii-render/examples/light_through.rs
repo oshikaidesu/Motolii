@@ -1,7 +1,9 @@
 //! Render a document with every Glass layer set to block light (shadow + colored light on the rest),
 //! next to the untouched document. Nothing is saved back.
+use motolii_edit::{Document, Intent};
+use motolii_render::picture::resolve::resolved_layers;
 use motolii_render::{
-    doc::store::{Document, Intent, LayerAttrsPatch, RationalTime},
+    doc::store::{LayerAttrsPatch, RationalTime},
     engine::Engine,
 };
 
@@ -15,9 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comp = doc.view().composition()?.ok_or("no composition")?;
     let out = std::path::PathBuf::from(&args[2]);
     std::fs::create_dir_all(&out)?;
-    let glass: Vec<_> = doc
-        .view()
-        .resolved_layers(RationalTime::ZERO)?
+    let glass: Vec<_> = resolved_layers(&doc.view(), RationalTime::ZERO)?
         .iter()
         .filter(|l| l.effects.iter().any(|e| e.plugin_id == "motolii.glass"))
         .map(|l| l.id)
