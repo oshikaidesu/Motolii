@@ -326,11 +326,29 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
         None => {
             let layers = view.layers();
             let present: HashSet<LayerId> = layers.iter().copied().collect();
+            let mut children = HashMap::new();
+            let mut parents = HashMap::new();
+            let mut groups = HashSet::new();
+            for &layer in &layers {
+                let Some(meta) = view.meta(layer)? else { continue };
+                if meta.source == crate::doc::store::LayerSource::Group {
+                    groups.insert(layer);
+                }
+                let parent = view.attrs(layer)?.unwrap_or_default().parent;
+                parents.insert(layer, parent);
+                if let Some(parent) = parent {
+                    children.entry(parent).or_insert_with(Vec::new).push((meta.order, layer));
+                }
+            }
+            for list in children.values_mut() { list.sort(); }
             let built = std::sync::Arc::new(crate::doc::store::scratch::Structure {
                 any_solo: any_solo(view, t)?,
                 handed_out: handed_out_by_a_group(view, &present, t)?,
                 layers,
                 present,
+                children,
+                parents,
+                groups,
             });
             if let Some((cache, revision)) = shared.as_ref() {
                 let mut cache = cache.borrow_mut();

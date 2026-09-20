@@ -100,6 +100,11 @@ pub struct LayoutCache {
 pub struct Structure {
     pub layers: Vec<crate::doc::store::LayerId>,
     pub present: std::collections::HashSet<crate::doc::store::LayerId>,
+    /// 親子と積み順は書類の版でのみ変わる。再生の時刻では子が「居るか」
+    /// だけが変わるので、Flow はここを再走査・再 sort しない。
+    pub children: HashMap<crate::doc::store::LayerId, Vec<(i16, crate::doc::store::LayerId)>>,
+    pub parents: HashMap<crate::doc::store::LayerId, Option<crate::doc::store::LayerId>>,
+    pub groups: std::collections::HashSet<crate::doc::store::LayerId>,
     pub handed_out: std::collections::HashSet<crate::doc::store::LayerId>,
     pub any_solo: bool,
 }
