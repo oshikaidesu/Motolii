@@ -221,9 +221,13 @@ impl EditorRuntime {
         // 止まっている 1 枚は、絵と窓(roi)が同じコマで揃っていないといけないので、ここで待つ
         // (掴む・伸ばす・Fit の道)。再生中だけは待たない —— UI thread を GPU に明け渡さない。
         if !self.viewer.clock.playing() { self.frames.finish(); }
-        // 籠は読み戻し: 選択がある時だけ、その読み戻しが自分で待つ。
-        self.take_selection_bounds(view, window);
-        self.snapshot_cache.borrow_mut().invalidate_geometry();
+        // Playback has no outline, so a selection readback and geometry cache
+        // invalidation cannot produce a new cage. Keep both off the realtime
+        // path; exact still frames retain the bridge below.
+        if !self.viewer.clock.playing() {
+            self.take_selection_bounds(view, window);
+            self.snapshot_cache.borrow_mut().invalidate_geometry();
+        }
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
         self.error = if self.engine.layer_failures().is_empty() { None } else { Some(self.engine.layer_failures().join("; ")) };
