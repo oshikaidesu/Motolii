@@ -779,9 +779,13 @@ mod cache_tests {
         let cache = std::rc::Rc::new(FlowCache::default());
         let at0 = RationalTime::ZERO;
         let at1 = RationalTime::try_new(1, 1).unwrap();
-        let first = crate::picture::frame::layout_frame(&doc.view().with_layout_solver(cache.clone()), at0).unwrap();
+        let view0 = doc.view().with_layout_solver(cache.clone());
+        crate::picture::resolve::resolved_layers(&view0, at0).unwrap();
+        let first = crate::picture::frame::layout_frame(&view0, at0).unwrap();
         let node = cache.roots.borrow()[&group].root.id;
-        let second = crate::picture::frame::layout_frame(&doc.view().with_layout_solver(cache.clone()), at1).unwrap();
+        let view1 = doc.view().with_layout_solver(cache.clone());
+        crate::picture::resolve::resolved_layers(&view1, at1).unwrap();
+        let second = crate::picture::frame::layout_frame(&view1, at1).unwrap();
 
         assert_eq!(cache.roots.borrow()[&group].root.id, node, "style changes must not rebuild the tree");
         assert_eq!(first.sizes[&group], [120.0, 70.0]);
