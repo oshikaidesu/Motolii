@@ -80,7 +80,7 @@ Widget shelfViews(EditorSession controller, int viewMode) => DecoratedBox(
         (2, Glyph.crop_landscape, 'Thumbnails'),
       ])
         Container(
-          width: EditorMetrics.control,
+          width: EditorMetrics.row,
           height: EditorMetrics.row,
           color: viewMode == mode ? EditorTheme.raised : EditorTheme.clear,
           child: EditorTooltip(

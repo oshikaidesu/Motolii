@@ -728,6 +728,8 @@ class _ColorPickerState extends State<_ColorPicker>
                     valueListenable: widget.controller.eyedropper,
                     builder: (context, on, _) => Text(
                       on ? 'PICK STAGE · ESC TO CANCEL' : 'HEX · 3 OR 6 DIGITS',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: EditorMetrics.micro,
                         color: on ? EditorTheme.accent : EditorTheme.muted,

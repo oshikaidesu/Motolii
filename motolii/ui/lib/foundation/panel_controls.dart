@@ -463,6 +463,14 @@ class _EditorNumericFieldState extends State<EditorNumericField>
     }
   }
 
+  /// A grabbed well with no track of its own turns to its family's flat
+  /// colour, ink reversed: the touch answers the instant it lands.
+  bool get _flooded =>
+      dragging &&
+      widget.enabled &&
+      widget.tint != null &&
+      !(widget.fill && widget.min != null && widget.max != null);
+
   double _bounded(double n) => n
       .clamp(
         widget.min ?? double.negativeInfinity,
@@ -776,7 +784,9 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                         child: Container(
                           height: EditorMetrics.row,
                           decoration: BoxDecoration(
-                            color: dragging
+                            color: _flooded
+                                ? widget.tint
+                                : dragging
                                 ? EditorTheme.hover
                                 : EditorTheme.app,
                             border: Border.all(color: EditorTheme.line),
@@ -784,6 +794,16 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
+                              // The family's rule down the left edge: a flat
+                              // colour the eye can follow down a column of wells.
+                              if (widget.tint != null && widget.enabled)
+                                Positioned(
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: EditorMetrics.s3,
+                                  child: ColoredBox(color: widget.tint!),
+                                ),
                               if (widget.fill &&
                                   widget.min != null &&
                                   widget.max != null)
@@ -799,7 +819,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                 ),
                               Padding(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: EditorMetrics.s2,
+                                  horizontal: EditorMetrics.s4,
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
@@ -820,6 +840,8 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                           // quiet; moved, it is ink.
                                           color: !widget.enabled
                                               ? EditorTheme.muted
+                                              : _flooded
+                                              ? EditorTheme.tabInk
                                               : widget.defaultValue != null &&
                                                     (widget.value -
                                                                 widget
@@ -1027,11 +1049,16 @@ class EditorSwitch extends StatelessWidget {
     required this.onChanged,
     this.compact = false,
     this.tint,
+    this.ink,
   });
   final bool on;
   final IconData glyph;
   final String label;
   final ValueChanged<bool>? onChanged;
+
+  /// The glyph's colour, on or off, when the switch sits on a head that is
+  /// not the panel grey.
+  final Color? ink;
 
   /// The lit colour; the accent unless the switch belongs to another mode.
   final Color? tint;
@@ -1073,16 +1100,12 @@ class EditorSwitch extends StatelessWidget {
               padding: const EdgeInsets.all(EditorMetrics.s2),
               decoration: BoxDecoration(
                 color: on ? tint ?? EditorTheme.accent : EditorTheme.raised,
-                borderRadius: BorderRadius.circular(EditorMetrics.s6),
               ),
               alignment: on ? Alignment.centerRight : Alignment.centerLeft,
               child: Container(
                 width: EditorMetrics.s8,
                 height: EditorMetrics.s8,
-                decoration: BoxDecoration(
-                  color: on ? EditorTheme.tabInk : EditorTheme.ink,
-                  shape: BoxShape.circle,
-                ),
+                color: on ? EditorTheme.tabInk : EditorTheme.ink,
               ),
             ),
             const SizedBox(width: EditorMetrics.s4),
@@ -1091,9 +1114,7 @@ class EditorSwitch extends StatelessWidget {
               size: EditorMetrics.s14,
               color: !enabled
                   ? EditorTheme.disabledInk
-                  : on
-                  ? EditorTheme.ink
-                  : EditorTheme.muted,
+                  : ink ?? (on ? EditorTheme.ink : EditorTheme.muted),
             ),
           ],
         ),
