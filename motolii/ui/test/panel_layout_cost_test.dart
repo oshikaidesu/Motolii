@@ -9,6 +9,7 @@ import '../lib/panels/registry.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/layout.dart';
 import 'support/editor_test_theme.dart';
+import 'support/window_fixture.dart';
 
 /// What layout costs, panel by panel, on the two moves the window is judged
 /// on: taking one status update, and being laid out whole.
@@ -57,164 +58,6 @@ Future<_Cost> _cost(WidgetTester tester, Future<void> Function() act) async {
   );
 }
 
-Map<String, dynamic> _number(String id, String label, Object v) => {
-  'id': id,
-  'label': label,
-  'kind': 'number',
-  'value': v,
-  'keys': const [],
-  'keyedNow': false,
-  'min': null,
-  'max': null,
-};
-
-/// A layer as the native side sends it: thirteen animatable rows, the flags
-/// the Timeline reads, and one effect.
-Map<String, dynamic> _layer(int id, String kind, double x) => {
-  'id': id,
-  'order': id,
-  'name': '$kind $id',
-  'kind': kind,
-  'locked': false,
-  'hidden': false,
-  'solo': false,
-  'frozen': false,
-  'ghostable': true,
-  'flatten': false,
-  'clipToBelow': false,
-  'environment': false,
-  'blendMode': 'Normal',
-  'projection': '2.5D',
-  'start': 0,
-  'sourceIn': 0,
-  'duration': 180,
-  'parent': null,
-  'colors': const [],
-  'contentKeys': const [],
-  'x': x,
-  'y': 244.0,
-  'properties': [
-    {
-      'id': 'position',
-      'label': 'Position',
-      'kind': 'vec2',
-      'value': [x, 244.0],
-      'keys': const [],
-      'keyedNow': false,
-      'min': null,
-      'max': null,
-    },
-    _number('position.z', 'Position Z', 0.0),
-    {
-      'id': 'scale',
-      'label': 'Scale',
-      'kind': 'vec2',
-      'value': const [1.0, 1.0],
-      'keys': const [],
-      'keyedNow': false,
-      'min': null,
-      'max': null,
-    },
-    _number('scale.z', 'Scale Z', 1.0),
-    _number('rotation', 'Rotation', 0.0),
-    _number('rotation.x', 'Rotation X', 0.0),
-    _number('rotation.y', 'Rotation Y', 0.0),
-    _number('opacity', 'Opacity', 1.0),
-    _number('text_style.0.size', 'Size', 14.0),
-    _number('text_style.0.line_height', 'Line height', 144.0),
-    _number('text_style.0.tracking', 'Tracking', 0.0),
-  ],
-  'effects': [
-    {
-      'id': 'motolii.blur',
-      'name': 'Blur',
-      'params': [_number('amount', 'Amount', 2.0)],
-    },
-  ],
-};
-
-/// The two documents of the report: the small one the window is judged on and
-/// a fifteen-layer one that says how the cost grows.
-Map<String, dynamic> _status(int layers, double x) => {
-  'layers': [
-    for (var i = 0; i < layers; i++)
-      _layer(i + 1, i == 0 ? 'Cube' : 'Rectangle', i == 0 ? x : i * 3.0),
-  ],
-  'selectedId': 1,
-  'selectedIds': const [1],
-  'selectedKeys': const [],
-  'assets': [
-    for (var i = 0; i < 6; i++)
-      {'id': 'a$i', 'name': 'clip$i.mp4', 'mime': 'video/mp4'},
-  ],
-  'background': const [0.1, 0.1, 0.1, 1.0],
-  'backgrounds': const [],
-  'catalog': const [
-    {'id': 'motolii.isf_bloom', 'name': 'Bloom'},
-    {'id': 'motolii.blur', 'name': 'Blur'},
-    {'id': 'motolii.clip', 'name': 'Clip'},
-    {'id': 'motolii.colorize', 'name': 'Colorize'},
-    {'id': 'motolii.echo', 'name': 'Echo'},
-    {'id': 'motolii.glow', 'name': 'Glow'},
-    {'id': 'motolii.levels', 'name': 'Levels'},
-    {'id': 'motolii.mirror', 'name': 'Mirror'},
-    {'id': 'motolii.noise', 'name': 'Noise'},
-    {'id': 'motolii.shadow', 'name': 'Shadow'},
-    {'id': 'motolii.warp', 'name': 'Warp'},
-  ],
-  'palette': [
-    for (var i = 0; i < 8; i++) {'id': 'p$i', 'hex': '#10101$i'},
-  ],
-  'easeKinds': const ['Linear', 'Hold', 'Ease', 'EaseIn', 'EaseOut'],
-  'fontFamilies': const ['Arial', 'Georgia', 'Hiragino Sans'],
-  'importExtensions': const ['png', 'jpg', 'mp4', 'obj'],
-  'history': const {
-    'head': 0,
-    'entries': [
-      {'head': 0, 'kind': 'edit', 'label': 'Open', 'detail': ''},
-    ],
-  },
-  'capabilities': const [
-    'setFont',
-    'preview',
-    'animate',
-    'placeAsset',
-    'previewProperties',
-    'commitPreview',
-    'cancelPreview',
-    'removeAsset',
-    'import',
-  ],
-  'durationFrames': 180,
-  'fps': 30.0,
-  'width': 1600,
-  'height': 1000,
-  'frame': 0,
-  'stageView': 'free',
-  'contentRevision': '$x',
-  'documentRevision': '$x',
-  'snapshotId': 1,
-  'referenceId': 1,
-};
-
-/// Panel, and the pixels the default dock gives it inside a 1280x796 window.
-const _panels = <String, Size>{
-  'Create': Size(260, 537),
-  'Media': Size(260, 537),
-  'Effects': Size(260, 537),
-  'Colors': Size(260, 537),
-  'Fonts': Size(260, 537),
-  'Stage': Size(712, 537),
-  'Inspector': Size(300, 333),
-  'Notes': Size(712, 537),
-  'Desk': Size(300, 200),
-  'Ease': Size(300, 200),
-  'Depth': Size(300, 200),
-  'Blend': Size(300, 200),
-  'History': Size(300, 200),
-  'Timeline': Size(1280, 255),
-};
-
 /// What one status update and one whole layout may cost a panel:
 /// `(widgets rebuilt, layouts on the update, layouts when laid out whole)`.
 /// Held so no panel goes back to measuring itself once per card, to
@@ -250,7 +93,7 @@ Future<String> _window(WidgetTester tester, int layers) async {
             return {'dock': initialDock().json()};
           case 'attach':
           case 'render':
-            return _status(layers, 0);
+            return windowStatus(layers, 0);
           default:
             return <String, dynamic>{};
         }
@@ -267,7 +110,7 @@ Future<String> _window(WidgetTester tester, int layers) async {
   final dynamic host = tester.state(find.byType(EditorWindow));
   final c = host.c as EditorSession;
   var step = 0;
-  void move() => c.document.value = _status(layers, (++step).toDouble());
+  void move() => c.document.value = windowStatus(layers, (++step).toDouble());
   move();
   await tester.pump();
   final update = await _cost(tester, () async {
@@ -306,10 +149,10 @@ void main() {
       // names every panel over budget.
       final over = <String>[];
       report.add(await _window(tester, layers));
-      for (final entry in _panels.entries) {
+      for (final entry in dockPanels.entries) {
         final c = EditorSession();
         addTearDown(c.dispose);
-        c.document.value = _status(layers, 0);
+        c.document.value = windowStatus(layers, 0);
         Future<void> mount(Size size) => tester.pumpWidget(
           MaterialApp(
             theme: editorTestTheme,
@@ -328,7 +171,8 @@ void main() {
         await mount(entry.value);
         await tester.pumpAndSettle();
         var step = 0;
-        void move() => c.document.value = _status(layers, (++step).toDouble());
+        void move() =>
+            c.document.value = windowStatus(layers, (++step).toDouble());
         // Warm: first update settles whatever mounting deferred.
         move();
         await tester.pump();
@@ -389,7 +233,7 @@ void _shelfMain() {
     final c = EditorSession();
     addTearDown(c.dispose);
     c.document.value = {
-      ..._status(3, 0),
+      ...windowStatus(3, 0),
       'assets': [
         for (var i = 0; i < 500; i++)
           {
@@ -408,7 +252,7 @@ void _shelfMain() {
           body: Align(
             alignment: Alignment.topLeft,
             child: SizedBox.fromSize(
-              size: _panels['Media'],
+              size: dockPanels['Media'],
               child: buildPanel('Media', c, const ValueKey('panel')),
             ),
           ),
@@ -480,7 +324,7 @@ Future<EditorSession> _mounted(WidgetTester tester) async {
             return {'dock': initialDock().json()};
           case 'attach':
           case 'render':
-            return _status(3, 0);
+            return windowStatus(3, 0);
           default:
             return <String, dynamic>{};
         }
@@ -501,11 +345,11 @@ Future<EditorSession> _mounted(WidgetTester tester) async {
 /// judged on when a layer is clicked on the Stage.
 Future<String> _windowSwitch(WidgetTester tester) async {
   final c = await _mounted(tester);
-  c.document.value = _status(3, 1);
+  c.document.value = windowStatus(3, 1);
   await tester.pump();
   final pick = await _cost(tester, () async {
     c.document.value = {
-      ..._status(3, 1),
+      ...windowStatus(3, 1),
       'selectedId': 2,
       'selectedIds': const [2],
     };
@@ -538,7 +382,7 @@ void _switchMain() {
     for (final entry in _switching.entries) {
       final c = EditorSession();
       addTearDown(c.dispose);
-      c.document.value = _status(3, 0);
+      c.document.value = windowStatus(3, 0);
       await tester.pumpWidget(
         MaterialApp(
           theme: editorTestTheme,
@@ -556,11 +400,11 @@ void _switchMain() {
       );
       await tester.pumpAndSettle();
       // Warm: one move of the values, so nothing mounting deferred is counted.
-      c.document.value = _status(3, 1);
+      c.document.value = windowStatus(3, 1);
       await tester.pump();
       final pick = await _cost(tester, () async {
         c.document.value = {
-          ..._status(3, 1),
+          ...windowStatus(3, 1),
           'selectedId': 2,
           'selectedIds': const [2],
         };
