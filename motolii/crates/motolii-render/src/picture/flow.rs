@@ -25,6 +25,8 @@ pub struct Measure {
 pub struct FlowCache {
     document: std::cell::RefCell<Option<usize>>,
     roots: std::cell::RefCell<HashMap<LayerId, CachedTree>>,
+    #[cfg(test)]
+    layout_passes: std::cell::Cell<usize>,
 }
 
 struct CachedTree {
@@ -86,19 +88,25 @@ impl PlanNode {
         Ok(CachedNode { id, key: self.key, measure: self.measure, children })
     }
 
-    fn update(&self, tree: &mut TaffyTree<Measure>, cached: &mut CachedNode) -> Result<(), StoreError> {
+    /// Taffy marks an ancestor dirty only when style or measurement context
+    /// changes. Preserve that distinction so a paint/transform frame does not
+    /// ask the CSS solver to lay out the unchanged tree again.
+    fn update(&self, tree: &mut TaffyTree<Measure>, cached: &mut CachedNode) -> Result<bool, StoreError> {
         debug_assert!(self.same_shape(cached));
+        let mut dirty = false;
         if tree.style(cached.id).map_err(layout_error)? != &self.style {
             tree.set_style(cached.id, self.style.clone()).map_err(layout_error)?;
+            dirty = true;
         }
         if cached.measure != self.measure {
             tree.set_node_context(cached.id, self.measure).map_err(layout_error)?;
             cached.measure = self.measure;
+            dirty = true;
         }
         for (next, held) in self.children.iter().zip(&mut cached.children) {
-            next.update(tree, held)?;
+            dirty |= next.update(tree, held)?;
         }
-        Ok(())
+        Ok(dirty)
     }
 
     fn collect(&self, cached: &CachedNode, leaves: &mut Vec<Leaf>, groups: &mut Vec<(NodeId, LayerId, bool)>) {
@@ -185,7 +193,7 @@ pub fn compute_layout(view: &StoreView<'_>, t: RationalTime) -> Result<Frame, St
         tree.disable_rounding();
         let (mut leaves, mut groups) = (Vec::new(), Vec::new());
         let node = container(view, &mut tree, root, t, &children, &displayed, true, &mut leaves, &mut groups)?;
-        solve_root(view, t, root, &children, &mut frame, &mut tree, node, &mut leaves, &mut groups, &mut Vec::new())?;
+        solve_root(view, t, root, &children, &mut frame, &mut tree, node, &mut leaves, &mut groups, &mut Vec::new(), true)?;
     }
     push_apart(view, t, &displayed, &mut frame)?;
     Ok(frame)
@@ -229,20 +237,26 @@ impl FlowCache {
             // Do not hold the cache borrow while a layout query recursively asks
             // for a neighbouring time (motion/box evaluation can do that).
             let mut cached = self.roots.borrow_mut().remove(&root);
-            match &mut cached {
+            let layout_dirty = match &mut cached {
                 Some(held) if plan.same_shape(&held.root) => plan.update(&mut held.tree, &mut held.root)?,
                 _ => {
                     let mut tree = TaffyTree::new();
                     tree.disable_rounding();
                     let root_node = plan.create(&mut tree)?;
                     cached = Some(CachedTree { tree, root: root_node, blockers: Vec::new() });
+                    true
                 }
-            }
+            };
             let mut cached = cached.expect("a plan always creates a Taffy tree");
             let (mut leaves, mut groups) = (Vec::new(), Vec::new());
             plan.collect(&cached.root, &mut leaves, &mut groups);
             let node = cached.root.id;
-            solve_root(view, t, root, &children, &mut frame, &mut cached.tree, node, &mut leaves, &mut groups, &mut cached.blockers)?;
+            #[cfg(test)]
+            let computed = solve_root(view, t, root, &children, &mut frame, &mut cached.tree, node, &mut leaves, &mut groups, &mut cached.blockers, layout_dirty)?;
+            #[cfg(not(test))]
+            solve_root(view, t, root, &children, &mut frame, &mut cached.tree, node, &mut leaves, &mut groups, &mut cached.blockers, layout_dirty)?;
+            #[cfg(test)]
+            if computed { self.layout_passes.set(self.layout_passes.get() + 1); }
             self.roots.borrow_mut().insert(root, cached);
         }
         self.roots.borrow_mut().retain(|root, _| roots.contains(root));
@@ -289,8 +303,9 @@ fn solve_root(
     view: &StoreView<'_>, t: RationalTime, root: LayerId,
     children: &HashMap<LayerId, Vec<(i16, LayerId)>>, frame: &mut Frame,
     tree: &mut TaffyTree<Measure>, node: NodeId, leaves: &mut Vec<Leaf>,
-    groups: &mut Vec<(NodeId, LayerId, bool)>, blockers: &mut Vec<NodeId>,
-) -> Result<(), StoreError> {
+    groups: &mut Vec<(NodeId, LayerId, bool)>, blockers: &mut Vec<NodeId>, layout_dirty: bool,
+) -> Result<bool, StoreError> {
+    let had_blockers = !blockers.is_empty();
     for blocker in blockers.drain(..) { let _ = tree.remove(blocker); }
     let sizing = sizing(view, root, t)?;
     let available = |axis: usize, name: &str| -> Result<AvailableSpace, StoreError> {
@@ -305,9 +320,21 @@ fn solve_root(
         }
         None => Size::ZERO,
     };
-    tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| measured(known, available, measure)).map_err(layout_error)?;
-    if exclude_blobs_into(view, tree, groups, t, blockers)? {
+    // A dynamic exclusion changes the children Taffy sees, even if style did
+    // not. Static roots without an exclusions source keep their solved boxes.
+    let exclusions = PropertyId::new(EXCLUSIONS)?;
+    let has_exclusions = groups.iter().try_fold(false, |any, &(_, group, _)| {
+        Ok::<_, StoreError>(any || view.property_source(group, &exclusions)?.is_some())
+    })?;
+    // A fill-width text leaf is measured by Taffy itself; its document can
+    // change without changing the surrounding CSS style, so retain the
+    // measure pass until text carries an explicit generation of its own.
+    let computed = layout_dirty || had_blockers || has_exclusions || leaves.iter().any(|leaf| leaf.text_fill);
+    if computed {
         tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| measured(known, available, measure)).map_err(layout_error)?;
+        if has_exclusions && exclude_blobs_into(view, tree, groups, t, blockers)? {
+            tree.compute_layout_with_measure(node, space, |known, available, _, measure, _| measured(known, available, measure)).map_err(layout_error)?;
+        }
     }
     let shifted = |mut placed: taffy::Layout| { placed.location.x += CANVAS_MARGIN; placed.location.y += CANVAS_MARGIN; placed };
     let groups_order = groups.clone();
@@ -334,7 +361,7 @@ fn solve_root(
         frame.slots.insert(leaf.layer, slot);
     }
     for (_, group, _) in groups_order { crate::picture::boxes::align_depth(view, group, t, children, frame)?; }
-    Ok(())
+    Ok(computed)
 }
 
 /// 容器の外の兄弟同士の押し合い(間合いの法 2・3): Margin を宣言した物の箱(親の空間、間合いで広げる)の重なりを、
@@ -749,46 +776,5 @@ fn exclude_blobs_into(view: &StoreView<'_>, tree: &mut TaffyTree<Measure>, group
 }
 
 #[cfg(test)]
-mod cache_tests {
-    use super::*;
-    use crate::doc::store::{layout, Composition, Fps, Interp, Keyframe, KeyframeTrack, LayerMeta, LayerSource, LayerTiming, PropertyId, Value};
-    use motolii_edit::{Document, Intent};
-
-    /// Width is a layout input, not a paint value: a persistent tree must take
-    /// the new style, while keeping the same Taffy node alive between frames.
-    #[test]
-    fn a_timed_size_updates_the_reused_taffy_node() {
-        let mut doc = Document::new();
-        let fps = Fps::try_new(30, 1).unwrap();
-        let group = LayerId(1);
-        doc.apply(Intent::SetComposition(Composition { width: 640, height: 480, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
-        let width = KeyframeTrack::try_from_keys(vec![
-            Keyframe { t: RationalTime::ZERO, value: Value::F64(120.0), interp: Interp::Linear, spatial: None },
-            Keyframe { t: RationalTime::try_new(1, 1).unwrap(), value: Value::F64(240.0), interp: Interp::Linear, spatial: None },
-        ]).unwrap();
-        doc.apply_all([
-            Intent::AddLayer(group),
-            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
-            Intent::SetConstant { layer: group, property: PropertyId::new(layout::DISPLAY).unwrap(), value: Value::Enum(1) },
-            Intent::SetConstant { layer: group, property: PropertyId::new(layout::HORIZONTAL_SIZING).unwrap(), value: Value::Enum(2) },
-            Intent::SetConstant { layer: group, property: PropertyId::new(layout::VERTICAL_SIZING).unwrap(), value: Value::Enum(2) },
-            Intent::SetConstant { layer: group, property: PropertyId::new(layout::HEIGHT).unwrap(), value: Value::F64(70.0) },
-            Intent::SetTrack { layer: group, property: PropertyId::new(layout::WIDTH).unwrap(), track: width },
-        ]).unwrap();
-
-        let cache = std::rc::Rc::new(FlowCache::default());
-        let at0 = RationalTime::ZERO;
-        let at1 = RationalTime::try_new(1, 1).unwrap();
-        let view0 = doc.view().with_layout_solver(cache.clone());
-        crate::picture::resolve::resolved_layers(&view0, at0).unwrap();
-        let first = crate::picture::frame::layout_frame(&view0, at0).unwrap();
-        let node = cache.roots.borrow()[&group].root.id;
-        let view1 = doc.view().with_layout_solver(cache.clone());
-        crate::picture::resolve::resolved_layers(&view1, at1).unwrap();
-        let second = crate::picture::frame::layout_frame(&view1, at1).unwrap();
-
-        assert_eq!(cache.roots.borrow()[&group].root.id, node, "style changes must not rebuild the tree");
-        assert_eq!(first.sizes[&group], [120.0, 70.0]);
-        assert_eq!(second.sizes[&group], [240.0, 70.0], "a changed width must dirty Taffy rather than freeze the old layout");
-    }
-}
+#[path = "flow_cache_tests.rs"]
+mod cache_tests;
