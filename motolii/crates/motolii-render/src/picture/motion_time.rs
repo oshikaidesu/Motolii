@@ -41,11 +41,12 @@ pub fn transition_samples(view: &StoreView<'_>, layer: LayerId, t: RationalTime)
     }
     let delay = transition_delay(view, layer, t, &base)? * fps.as_f64();
     if delay <= 1e-6 {
-        return base.into_iter().map(|(back, w)| Ok((frame_time(view, back, t)?, w))).collect();
+        return base.iter().map(|&(back, w)| Ok((frame_time(view, back, t)?, w))).collect();
     }
-    let base = if base.is_empty() { vec![(0.0, 1.0)] } else { base };
+    let alone = [(0.0f64, 1.0f32)];
+    let base: &[(f64, f32)] = if base.is_empty() { &alone } else { &base };
     let mut out = Vec::with_capacity(base.len() * 2);
-    for (back, w) in base {
+    for &(back, w) in base {
         let at = back + delay;
         let lo = at.floor();
         let frac = (at - lo) as f32;
@@ -57,21 +58,40 @@ pub fn transition_samples(view: &StoreView<'_>, layer: LayerId, t: RationalTime)
     Ok(out)
 }
 
+/// 標本の**形**は (コマ数, ease) だけで決まる — 層にも時刻にも依らない。
+/// 書類の中で使われる組み合わせは数種類しかないので、作った形は取っておく。
+/// 取っておかないと、層の数 × 毎コマ × 120 個ぶんの `ease` を解き直すことになる
+/// (2026-09-21 の標本で、再生の render thread の 23% がここだった)。
+fn base_shape(frames: f64, easing: i64) -> std::sync::Arc<Vec<(f64, f32)>> {
+    thread_local! {
+        static SHAPES: std::cell::RefCell<std::collections::HashMap<(u64, i64), std::sync::Arc<Vec<(f64, f32)>>>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+    let key = (frames.to_bits(), easing);
+    SHAPES.with(|shapes| {
+        if let Some(hit) = shapes.borrow().get(&key) {
+            return hit.clone();
+        }
+        // コマごとに 1 つ(時刻をずらしても重みの形が変わらない、畳み込みとして滑らか)。長い移り方だけ間引く。
+        let n = frames.min(120.0) as usize;
+        let built = std::sync::Arc::new((0..n).map(|k| {
+            let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+            ((frames * u0).round(), (ease(easing, u1) - ease(easing, u0)) as f32)
+        }).collect());
+        shapes.borrow_mut().insert(key, std::sync::Arc::clone(&built));
+        built
+    })
+}
+
 /// 遅れの無い標本: (遡るコマ数, 重み)。
-pub fn base_samples(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Vec<(f64, f32)>, StoreError> {
+pub fn base_samples(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<std::sync::Arc<Vec<(f64, f32)>>, StoreError> {
     let duration = view.number(layer, TRANSITION_DURATION, 0.0, t)?;
-    let Some(comp) = view.composition()? else { return Ok(Vec::new()) };
+    let Some(comp) = view.composition()? else { return Ok(Default::default()) };
     let frames = (duration * comp.fps.as_f64()).round();
     if frames < 1.0 {
-        return Ok(Vec::new());
+        return Ok(Default::default());
     }
-    let easing = view.choice(layer, TRANSITION_EASING, t)?;
-    // コマごとに 1 つ(時刻をずらしても重みの形が変わらない、畳み込みとして滑らか)。長い移り方だけ間引く。
-    let n = frames.min(120.0) as usize;
-    Ok((0..n).map(|k| {
-        let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
-        ((frames * u0).round(), (ease(easing, u1) - ease(easing, u0)) as f32)
-    }).collect())
+    Ok(base_shape(frames, view.choice(layer, TRANSITION_EASING, t)?))
 }
 
 /// 今のコマから `back` コマ前の時刻(0 より前は 0)。
