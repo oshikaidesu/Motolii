@@ -103,6 +103,7 @@ private final class ProbeRuntime {
   /// Samples are confined to `renderQueue`. They measure CPU time through the
   /// native tick and submit only; GPU completion remains the IOSurface signal.
   private var playbackSubmitUs: [UInt64] = []
+  private var playbackViewSubmitUs: [String: [UInt64]] = [:]
   private var library: UnsafeMutableRawPointer?
   /// The native host owns playback pulses; Dart retains this context only for
   /// one-shot commands and still frames. Both use the macOS main thread
@@ -127,7 +128,10 @@ private final class ProbeRuntime {
   }
 
   fileprivate func resetPlaybackStats() {
-    renderQueue.async { [weak self] in self?.playbackSubmitUs.removeAll(keepingCapacity: true) }
+    renderQueue.async { [weak self] in
+      self?.playbackSubmitUs.removeAll(keepingCapacity: true)
+      self?.playbackViewSubmitUs.removeAll(keepingCapacity: true)
+    }
     playbackGate.lock()
     playbackDropped = 0
     playbackGate.unlock()
@@ -138,6 +142,8 @@ private final class ProbeRuntime {
       guard let self else { return }
       let samples = self.playbackSubmitUs
       self.playbackSubmitUs.removeAll(keepingCapacity: true)
+      let byView = self.playbackViewSubmitUs
+      self.playbackViewSubmitUs.removeAll(keepingCapacity: true)
       self.playbackGate.lock()
       let dropped = self.playbackDropped
       self.playbackDropped = 0
@@ -148,7 +154,13 @@ private final class ProbeRuntime {
         guard !sorted.isEmpty else { return 0 }
         return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded(.up)))]
       }
-      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)"
+      let viewStats = byView.keys.sorted().map { view -> String in
+        let values = byView[view, default: []].sorted()
+        guard !values.isEmpty else { return "\(view)=—" }
+        let at = { (fraction: Double) in values[min(values.count - 1, Int((Double(values.count - 1) * fraction).rounded(.up)))] }
+        return "\(view)=\(Double(at(0.5)) / 1000.0)/\(Double(at(0.9)) / 1000.0)ms"
+      }.joined(separator: " ")
+      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0) views=\(viewStats)"
       playbackLog.info("\(message, privacy: .public)")
       // Diagnostics are one line on pause, never a per-frame disk write. The
       // file is intentionally in tmp: it is not authored state or telemetry.
@@ -258,6 +270,7 @@ private final class ProbeRuntime {
         for target in targets {
           // `keepAlive` holds the IOSurface until Rust has imported it.
           _ = target.keepAlive
+          let startedView = DispatchTime.now().uptimeNanoseconds
           let code = target.view.withCString { render(context, target.surface, $0) }
           if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
           // Busy means Metal still owns this IOSurface. Do not advance the UI
@@ -266,6 +279,7 @@ private final class ProbeRuntime {
             self.dropPlaybackFrame()
             return nil
           }
+          self.playbackViewSubmitUs[target.view, default: []].append((DispatchTime.now().uptimeNanoseconds - startedView) / 1_000)
         }
         self.playbackSubmitUs.append((DispatchTime.now().uptimeNanoseconds - started) / 1_000)
         return frame

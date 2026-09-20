@@ -214,7 +214,9 @@ impl EditorRuntime {
         self.engine.render_frame_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window).map_err(|e|e.to_string())?;
         // 出した束の番号。これが終われば、この surface に絵が入っている。
         let submission = self.engine.last_submission();
-        if self.viewer.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
+        // `warm_upcoming` resolves now and ahead to find media. That is useful
+        // as an explicit preload, but forbidden on the realtime render path:
+        // it turns one submitted frame into two extra full-document resolves.
         self.frames.submitted(submission, view.name(), surface_id);
         // 止まっている 1 枚は、絵と窓(roi)が同じコマで揃っていないといけないので、ここで待つ
         // (掴む・伸ばす・Fit の道)。再生中だけは待たない —— UI thread を GPU に明け渡さない。
