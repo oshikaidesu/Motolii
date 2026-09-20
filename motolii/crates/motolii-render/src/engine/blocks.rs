@@ -28,16 +28,16 @@ pub(crate) struct BlockBatch {
 /// (利用者 2026-09-16「今のコリジョンの当たり判定は四角で変です。2d も 3d もシルエットが算出できるはず」)。
 /// 2D は書類の形(`vector::resolve`)、3D の網・粒は `media::silhouette_points`(まだ箱のまま)。
 fn outline_of(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<Vec<[f32; 2]>> {
-    let shapes = if stretch == [1.0, 1.0] { shapes.to_vec() } else { crate::doc::vector::stretch_outline(shapes, stretch) };
-    let leaves = crate::doc::vector::flatten(&shapes).ok()?;
-    let canvas = crate::doc::vector::content_canvas(&shapes).ok().flatten()?;
+    let shapes = if stretch == [1.0, 1.0] { shapes.to_vec() } else { crate::picture::shapes_ops::stretch_outline(shapes, stretch) };
+    let leaves = crate::picture::shapes_ops::flatten(&shapes).ok()?;
+    let canvas = crate::picture::shapes_ops::content_canvas(&shapes).ok().flatten()?;
     let (ox, oy) = (canvas.origin_x as f32, canvas.origin_y as f32);
     let mut points = Vec::new();
     for shape in &leaves {
         if shape.fill.is_none() {
             continue;
         }
-        for instance in crate::doc::vector::resolve(shape).ok()?.iter() {
+        for instance in crate::picture::shapes_ops::resolve(shape).ok()?.iter() {
             flatten_contours(&instance.path, [ox, oy], &mut points);
         }
     }

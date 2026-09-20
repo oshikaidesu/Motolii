@@ -294,7 +294,7 @@ impl Engine {
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
                 let _cached = self.shape_textures.get(&key)?;
                 let natural = [canvas.width as f32, canvas.height as f32];
-                let bounds = crate::doc::vector::content_bounds(&shapes).ok().flatten()?;
+                let bounds = crate::picture::shapes_ops::content_bounds(&shapes).ok().flatten()?;
                 planar(SpatialBounds {
                     min: [bounds[0] as f32 + canvas.origin_x as f32, bounds[1] as f32 + canvas.origin_y as f32, 0.0],
                     max: [bounds[2] as f32 + canvas.origin_x as f32, bounds[3] as f32 + canvas.origin_y as f32, 0.0],
@@ -353,7 +353,7 @@ impl Engine {
         // Display の Group の背景も形の書類を持ち、形の層と同じ道で描く。
         let shaped = layer.source == LayerSource::Shape || (layer.source == LayerSource::Group && shape_documents.contains_key(&layer.id));
         let stretched = (shaped && layer.shape_stretch != [1.0, 1.0])
-            .then(|| crate::doc::vector::stretch_outline(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]), layer.shape_stretch));
+            .then(|| crate::picture::shapes_ops::stretch_outline(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]), layer.shape_stretch));
         let natural = if shaped {
             let canvas = content_canvas(stretched.as_deref().or(shape_documents.get(&layer.id).map(Vec::as_slice)).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
@@ -453,7 +453,7 @@ impl Engine {
         };
         let outlines = match &layer.source {
             LayerSource::Text => {
-                let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+                let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
                 match text_documents.get(&layer.id).and_then(|d| text::text_shapes_moving(d, text::morph_partner(layer, text_documents), text::Flow::of(layer), t, &canvas).ok().flatten()) {
                     Some(shapes) => crate::render::compositor::paths::outlines(&shapes, &canvas)?,
                     None => Vec::new(),
@@ -462,7 +462,7 @@ impl Engine {
             LayerSource::Shape => {
                 let shapes = shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]);
                 // 並べる法の Fill / Blob の箱合わせで輪郭を伸ばした形は、押し出しも伸ばした輪郭から(板の絵と同じ形)。
-                let stretched = (layer.shape_stretch != [1.0, 1.0]).then(|| crate::doc::vector::stretch_outline(shapes, layer.shape_stretch));
+                let stretched = (layer.shape_stretch != [1.0, 1.0]).then(|| crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch));
                 let shapes = stretched.as_deref().unwrap_or(shapes);
                 match content_canvas(shapes)? {
                     Some(canvas) => crate::render::compositor::paths::outlines(shapes, &canvas)?,
@@ -497,7 +497,7 @@ impl Engine {
             return Ok((None, [0.0, 0.0], None));
         };
 
-        let canvas = crate::doc::vector::Canvas {
+        let canvas = crate::picture::shapes_ops::Canvas {
             width: comp.width,
             height: comp.height,
             origin_x: 0,
@@ -516,7 +516,7 @@ impl Engine {
         let Some(shapes) = text::text_shapes_moving(document, morph, flow, t, &canvas)? else {
             return Ok((None, [0.0, 0.0], None));
         };
-        let bounds = crate::doc::vector::content_bounds(&shapes)?.map(|b| crate::render::media::SpatialBounds {
+        let bounds = crate::picture::shapes_ops::content_bounds(&shapes)?.map(|b| crate::render::media::SpatialBounds {
             min: [b[0] as f32, b[1] as f32, 0.0],
             max: [b[2] as f32, b[3] as f32, 0.0],
         });
@@ -1168,8 +1168,8 @@ pub(crate) fn raster_pixel_budget(comp: CompSpec) -> u64 {
 
 pub fn content_canvas(
     shapes: &[ShapeNode],
-) -> Result<Option<crate::doc::vector::Canvas>, EngineError> {
-    Ok(crate::doc::vector::content_canvas(shapes)?)
+) -> Result<Option<crate::picture::shapes_ops::Canvas>, EngineError> {
+    Ok(crate::picture::shapes_ops::content_canvas(shapes)?)
 }
 
 /// 点の直径(comp のピクセル)。層の属性になるまでの既定値。

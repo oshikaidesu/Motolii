@@ -858,7 +858,7 @@ mod tests {
         doc.apply(Intent::SetShapes { layer: object, shapes: vec![rect_shape([255; 4], [160.0, 160.0])] }).unwrap();
         let middle = motolii_render::picture::boxes::world_2d(&doc.view(), words, T).unwrap().transform_point2(glam::vec2(300.0, comp.height as f32 * 0.5));
         put(&mut doc, object, property::POSITION, Value::Vec2([middle.x as f64, middle.y as f64]));
-        let canvas = motolii_doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        let canvas = motolii_render::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         // 物の占める範囲(文字の枠の座標)と重なる字の数。
         let overlapping = |doc: &Document| {
             let view = doc.view();

@@ -1,6 +1,6 @@
 
 use crate::doc::vector::geom::{Contour, Path, Point, Vertex};
-use crate::doc::vector::ops;
+use crate::doc::vector::geom as ops;
 
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum PathEditError {

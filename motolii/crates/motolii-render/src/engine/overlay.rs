@@ -183,7 +183,7 @@ fn push_shapes(params: &Params, mark: &BlobMark, push: [f32; 2]) -> Vec<ShapeNod
 fn label_family() -> &'static str {
     static FAMILY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     FAMILY.get_or_init(|| {
-        let families = crate::doc::vector::text::font_families();
+        let families = crate::picture::shaping::font_families();
         ["SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "Noto Sans Mono"].into_iter().find(|f| families.iter().any(|g| g == f)).unwrap_or("").to_owned()
     })
 }
@@ -202,7 +202,7 @@ fn label_shape(params: &Params, mark: &BlobMark, push: [f32; 2]) -> Option<Shape
         }
     };
     let font = crate::doc::vector::text::GlyphFont { path: String::new(), family: label_family().to_owned() };
-    let shaped = crate::doc::vector::text::shape_text(&content, &font, &crate::doc::vector::text::TextLayout::new(number_of(params, "font_size").max(1.0) as f32)).ok()?;
+    let shaped = crate::picture::shaping::shape_text(&content, &font, &crate::doc::vector::text::TextLayout::new(number_of(params, "font_size").max(1.0) as f32)).ok()?;
     let c = color_of(params, "label_color");
     let at = [mark.center[0] - mark.size[0] * 0.5 + number_of(params, "label_offset_x") as f32, mark.center[1] + mark.size[1] * 0.5 + number_of(params, "label_offset_y") as f32];
     Some(self::at(at, 0.0, Shape {
@@ -417,7 +417,7 @@ impl Engine {
         if shapes.is_empty() {
             return Ok(None);
         }
-        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let texture = self.compositor.render_paths("track-overlay", &shapes, &canvas, 1.0, super::texture::raster_pixel_budget(comp))?;
         Ok(texture.map(|t| (LayerContent::Texture(t), natural)))
     }

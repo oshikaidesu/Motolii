@@ -1,9 +1,11 @@
 #[allow(unused_imports)]
+use crate::picture::shapes_ops::{Canvas, Raster};
+#[allow(unused_imports)]
 use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::store::{MaskMode, Path as EvalPath, };
-use crate::doc::vector::coverage::{self, Coverage};
+use crate::picture::shapes_ops::coverage::{self, Coverage};
 use crate::doc::vector::{
-    Brush, Canvas, Fill, FillRule, LineJoin, OpKind, PathSource, Raster, Rgb, Shape, ShapeOp,
+    Brush, Fill, FillRule, LineJoin, OpKind, PathSource, Rgb, Shape, ShapeOp,
     VectorError,
 };
 
@@ -60,7 +62,7 @@ pub fn rasterize_mask_coverage(
         }),
         stroke: None,
     };
-    crate::doc::vector::render(&shape, canvas)
+    crate::picture::shapes_ops::render(&shape, canvas)
 }
 
 #[derive(Debug, thiserror::Error)]

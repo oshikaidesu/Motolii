@@ -1072,7 +1072,7 @@ impl Engine {
         // Group の背景(と影)の形は、箱の左上が素材座標の 1 に来る前提で並ぶ子と揃う。影が箱の外へ出ると形の画布の原点がずれるので、その分だけ置き場所を戻す。
         let mut placement = layer.placement;
         if layer.source == LayerSource::Group {
-            if let Some(Ok(Some(canvas))) = shape_documents.get(&layer.id).map(|shapes| crate::doc::vector::content_canvas(shapes)) {
+            if let Some(Ok(Some(canvas))) = shape_documents.get(&layer.id).map(|shapes| crate::picture::shapes_ops::content_canvas(shapes)) {
                 let shift = glam::vec2(canvas.origin_x as f32 - 1.0, canvas.origin_y as f32 - 1.0);
                 if shift != glam::Vec2::ZERO {
                     placement.transform = placement.transform * glam::Affine2::from_translation(-shift);
@@ -1130,7 +1130,7 @@ impl Engine {
             return Ok(layer);
         };
         let [width, height] = texture.width_height();
-        let canvas = crate::doc::vector::Canvas {
+        let canvas = crate::picture::shapes_ops::Canvas {
             width,
             height,
             origin_x: 0,

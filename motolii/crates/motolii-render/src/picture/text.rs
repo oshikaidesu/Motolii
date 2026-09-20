@@ -15,7 +15,7 @@ pub fn glyph_offsets(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> R
         return Ok(None);
     }
     let Some(comp) = view.composition()? else { return Ok(None) };
-    let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+    let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     // 字は元の文字の byte で対にする(組み直しで行頭の空白が落ちても、隣の字と取り違えない)。
     let glyphs = |at: RationalTime| -> Result<Vec<(usize, [f32; 2])>, StoreError> {
         let Some(document) = crate::picture::resolve::text::resolved_text_document(view, layer, at)? else { return Ok(Vec::new()) };
@@ -47,7 +47,7 @@ pub fn text_units(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Resu
         return Ok(Vec::new());
     }
     let (Some(document), Some(comp)) = (crate::picture::resolve::text::resolved_text_document(view, layer, t)?, view.composition()?) else { return Ok(Vec::new()) };
-    let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+    let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     let Some(shaped) = crate::picture::text_frame::shape_document(&document, t, &canvas).ok().flatten() else { return Ok(Vec::new()) };
     Ok(crate::picture::text_frame::split_boxes(&document, &shaped, &canvas, document.content.eval(t), split))
 }
@@ -97,13 +97,13 @@ pub fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) -> Resu
 /// 形の層と同じ輪郭の道で取る(利用者 2026-09-16「文字の透過は svg ルートなんだから普通にできそう」)。
 pub fn text_outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Vec<crate::doc::vector::Contour>>, StoreError> {
     let (Some(document), Some(comp)) = (crate::picture::resolve::text::authored_text_document(view, layer, t)?, view.composition()?) else { return Ok(None) };
-    let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+    let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     Ok(crate::picture::text_frame::shape_document(&document, t, &canvas).ok().flatten().map(|shaped| shaped.contours))
 }
 
 pub fn text_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime, wrap: Option<f32>) -> Result<Option<[f32; 4]>, StoreError> {
     let (Some(mut document), Some(comp)) = (crate::picture::resolve::text::authored_text_document(view, layer, t)?, view.composition()?) else { return Ok(None) };
-    let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+    let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
     if let Some(width) = wrap {
         document.wrap_size = Some([width.max(1.0), comp.height as f32]);
     }

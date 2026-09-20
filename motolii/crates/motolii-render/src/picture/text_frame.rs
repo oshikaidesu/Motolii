@@ -2,10 +2,10 @@
 
 use crate::doc::core::RationalTime;
 use crate::doc::store::{TextDocument, TextDocumentStyle, TextJustify as StoreJustify};
-use crate::doc::vector::text::{
+use crate::picture::shaping::{
     shape_rich_text, shape_text, GlyphFont, ShapedText, StyledText, TextFeature, TextJustify, TextLayout, TextShapeError,
 };
-use crate::doc::vector::Canvas;
+use crate::picture::shapes_ops::Canvas;
 
 fn to_glyph_font(style: &TextDocumentStyle) -> GlyphFont {
     GlyphFont {
@@ -176,7 +176,7 @@ pub fn shape_document_around(
         let spans: Vec<_> = pieces.iter().map(|(text,i)|StyledText{text,font:&fonts[*i],layout:&layouts[*i],style:*i}).collect();
         let width = layout.wrap_width.unwrap_or(canvas.width as f32);
         let band = dy as f32;
-        shaped = crate::doc::vector::text::shape_rich_text_around(&spans, &layout, &|y0, y1| open_segments(around, width, y0 + band, y1 + band))?;
+        shaped = crate::picture::shaping::shape_rich_text_around(&spans, &layout, &|y0, y1| open_segments(around, width, y0 + band, y1 + band))?;
     }
     for contour in &mut shaped.contours {
         for v in &mut contour.vertices {

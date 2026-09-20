@@ -69,7 +69,7 @@ pub(crate) fn toggle_content_key(
 }
 
 pub(crate) fn font_intent(doc: &Document, layer: LayerId, family: &str) -> Result<Intent, String> {
-    if !crate::doc::vector::text::font_families().iter().any(|name| name == family) {
+    if !crate::render::picture::shaping::font_families().iter().any(|name| name == family) {
         return Err("Font family is not installed".into());
     }
     let view = doc.view().without_transients();
@@ -94,7 +94,7 @@ mod font_tests {
         doc.apply_all(crate::editor::create::new_layer_intents(id, 0, 0, 60,
             Fps::try_new(30, 1).unwrap(), (1920.0,1080.0), crate::editor::create::NewKind::Text, None)).unwrap();
         let before = doc.view().text_document(id).unwrap().unwrap();
-        let family = crate::doc::vector::text::font_families().iter()
+        let family = crate::render::picture::shaping::font_families().iter()
             .find(|f| **f != before.styles[0].font.family).expect("installed font");
         doc.apply(font_intent(&doc, id, family).unwrap()).unwrap();
         let after = doc.view().text_document(id).unwrap().unwrap();

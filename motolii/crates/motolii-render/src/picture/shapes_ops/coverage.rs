@@ -1,5 +1,5 @@
 
-use crate::doc::vector::Raster;
+use crate::picture::shapes_ops::Raster;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Coverage {

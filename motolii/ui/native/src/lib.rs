@@ -279,7 +279,7 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             return Ok(());
         }
         if value["op"] == "fontFacts" {
-            model_reply = Some(Ok(json!({"facts": crate::doc::vector::text::font_facts()})));
+            model_reply = Some(Ok(json!({"facts": crate::render::picture::shaping::font_facts()})));
             return Ok(());
         }
         if value["op"] == "easeModel" {

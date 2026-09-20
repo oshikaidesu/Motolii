@@ -318,7 +318,7 @@ impl EditorRuntime{
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
-        status["fontFamilies"]=json!(crate::doc::vector::text::font_families());
+        status["fontFamilies"]=json!(crate::render::picture::shaping::font_families());
         status["history"]=self.history.snapshot(self.doc.edit_head());
         status["spatialGizmo"]=self.spatial_gizmo(View::Camera)?;
         status["stageSpatialGizmo"]=self.spatial_gizmo(View::User)?;

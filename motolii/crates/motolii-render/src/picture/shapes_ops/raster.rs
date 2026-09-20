@@ -1,4 +1,20 @@
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Canvas {
+    pub width: u32,
+    pub height: u32,
+    pub origin_x: i32,
+    pub origin_y: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Raster {
+    pub width: u32,
+    pub height: u32,
+    pub premultiplied_rgba8: Vec<u8>,
+}
+
+#[allow(unused_imports)]
 use tiny_skia::{
     FillRule as TsFillRule, GradientStop as TsStop, LineCap as TsCap, LineJoin as TsJoin,
     LinearGradient, Paint, PathBuilder, Pixmap, RadialGradient, Shader, SpreadMode,
@@ -7,7 +23,7 @@ use tiny_skia::{
 
 use crate::doc::vector::geom::{is_straight, Contour, Path, Point};
 use crate::doc::vector::{
-    Brush, Canvas, Fill, FillRule, Gradient, GradientType, LineCap, LineJoin, Raster, Stroke,
+    Brush, Fill, FillRule, Gradient, GradientType, LineCap, LineJoin, Stroke,
     VectorError,
 };
 
@@ -118,32 +134,26 @@ fn clamp01(v: f64) -> f64 {
     }
 }
 
-impl From<FillRule> for TsFillRule {
-    fn from(r: FillRule) -> Self {
-        match r {
-            FillRule::NonZero => TsFillRule::Winding,
-            FillRule::EvenOdd => TsFillRule::EvenOdd,
-        }
+pub fn to_tsfillrule(r: FillRule) -> TsFillRule {
+    match r {
+        FillRule::NonZero => TsFillRule::Winding,
+        FillRule::EvenOdd => TsFillRule::EvenOdd,
     }
 }
 
-impl From<LineCap> for TsCap {
-    fn from(c: LineCap) -> Self {
-        match c {
-            LineCap::Butt => TsCap::Butt,
-            LineCap::Round => TsCap::Round,
-            LineCap::Square => TsCap::Square,
-        }
+pub fn to_tscap(c: LineCap) -> TsCap {
+    match c {
+        LineCap::Butt => TsCap::Butt,
+        LineCap::Round => TsCap::Round,
+        LineCap::Square => TsCap::Square,
     }
 }
 
-impl From<LineJoin> for TsJoin {
-    fn from(j: LineJoin) -> Self {
-        match j {
-            LineJoin::Miter => TsJoin::Miter,
-            LineJoin::Round => TsJoin::Round,
-            LineJoin::Bevel => TsJoin::Bevel,
-        }
+pub fn to_tsjoin(j: LineJoin) -> TsJoin {
+    match j {
+        LineJoin::Miter => TsJoin::Miter,
+        LineJoin::Round => TsJoin::Round,
+        LineJoin::Bevel => TsJoin::Bevel,
     }
 }
 
@@ -170,11 +180,11 @@ pub(crate) fn draw(
             // tiny-skia has no sweep or diamond shader: cover the path with a mask and
             // colour each pixel from the same parameter the GPU path uses.
             Brush::Gradient(g) if matches!(g.kind, GradientType::Angular | GradientType::Diamond) => {
-                fill_by_parameter(pixmap, &ts_path, f.rule.into(), g, origin, f.opacity * weight);
+                fill_by_parameter(pixmap, &ts_path, to_tsfillrule(f.rule), g, origin, f.opacity * weight);
             }
             _ => {
                 let paint = paint_for(&f.brush, origin, f.opacity * weight);
-                pixmap.fill_path(&ts_path, &paint, f.rule.into(), Transform::identity(), None);
+                pixmap.fill_path(&ts_path, &paint, to_tsfillrule(f.rule), Transform::identity(), None);
             }
         }
     }
@@ -183,8 +193,8 @@ pub(crate) fn draw(
         let ts_stroke = TsStroke {
             width: s.width as f32,
             miter_limit: s.miter_limit as f32,
-            line_cap: s.cap.into(),
-            line_join: s.join.into(),
+            line_cap: to_tscap(s.cap),
+            line_join: to_tsjoin(s.join),
             dash: s.dash.as_ref().and_then(|d| {
                 StrokeDash::new(
                     d.pattern.iter().map(|v| *v as f32).collect(),

@@ -31,7 +31,7 @@ impl Point {
         }
     }
 
-    pub(crate) fn dot(self, o: Point) -> f64 {
+    pub fn dot(self, o: Point) -> f64 {
         self.x * o.x + self.y * o.y
     }
 
@@ -39,7 +39,7 @@ impl Point {
         self.dot(self).sqrt()
     }
 
-    pub(crate) fn normalized(self) -> Point {
+    pub fn normalized(self) -> Point {
         let l = self.length();
         if l < f64::EPSILON {
             Point::ZERO
@@ -48,7 +48,7 @@ impl Point {
         }
     }
 
-    pub(crate) fn rotate(self, angle: f64) -> Point {
+    pub fn rotate(self, angle: f64) -> Point {
         let (s, c) = angle.sin_cos();
         Point {
             x: self.x * c - self.y * s,
@@ -98,7 +98,7 @@ impl Contour {
 
 pub type Path = Vec<Contour>;
 
-pub(crate) fn rect(size: Point) -> Path {
+pub fn rect(size: Point) -> Path {
     let hx = size.x * 0.5;
     let hy = size.y * 0.5;
     vec![Contour::closed([
@@ -109,7 +109,7 @@ pub(crate) fn rect(size: Point) -> Path {
     ])]
 }
 
-pub(crate) fn ellipse(size: Point) -> Path {
+pub fn ellipse(size: Point) -> Path {
     const KAPPA: f64 = 0.552_284_749_830_793_6;
     let rx = size.x * 0.5;
     let ry = size.y * 0.5;
@@ -142,7 +142,7 @@ pub(crate) fn ellipse(size: Point) -> Path {
     }]
 }
 
-pub(crate) fn polystar(
+pub fn polystar(
     points: f64,
     outer_radius: f64,
     inner_radius: f64,
@@ -186,11 +186,11 @@ pub(crate) fn polystar(
     }]
 }
 
-pub(crate) fn is_straight(v0: &Vertex, v1: &Vertex) -> bool {
+pub fn is_straight(v0: &Vertex, v1: &Vertex) -> bool {
     v0.out_tangent == Point::ZERO && v1.in_tangent == Point::ZERO
 }
 
-pub(crate) fn lerp_point(a: Point, b: Point, t: f64) -> Point {
+pub fn lerp_point(a: Point, b: Point, t: f64) -> Point {
     a.add(b.sub(a).scale(t))
 }
 
@@ -209,7 +209,7 @@ pub fn bezier_point(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
         .add(p3.scale(t * t * t))
 }
 
-pub(crate) fn bezier_tangent(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
+pub fn bezier_tangent(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
     if is_straight(v0, v1) {
         return v1.point.sub(v0.point);
     }
@@ -224,12 +224,12 @@ pub(crate) fn bezier_tangent(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
         .add(p3.sub(p2).scale(3.0 * t * t))
 }
 
-pub(crate) fn centroid_of(vertices: &[Vertex]) -> Point {
+pub fn centroid_of(vertices: &[Vertex]) -> Point {
     let sum = vertices.iter().fold(Point::ZERO, |acc, v| acc.add(v.point));
     sum.scale(1.0 / vertices.len() as f64)
 }
 
-pub(crate) fn contour_polyline_samples(c: &Contour) -> Vec<Point> {
+pub fn contour_polyline_samples(c: &Contour) -> Vec<Point> {
     let n = c.vertices.len();
     if n <= 1 {
         return c.vertices.iter().map(|v| v.point).collect();
@@ -264,7 +264,7 @@ pub(crate) fn contour_polyline_samples(c: &Contour) -> Vec<Point> {
 
 pub(crate) const ARC_SAMPLES: usize = 24;
 
-pub(crate) fn segment_sample_lengths(v0: &Vertex, v1: &Vertex) -> ([f64; ARC_SAMPLES + 1], f64) {
+pub fn segment_sample_lengths(v0: &Vertex, v1: &Vertex) -> ([f64; ARC_SAMPLES + 1], f64) {
     let mut cum = [0.0; ARC_SAMPLES + 1];
     let mut prev = v0.point;
     for i in 1..=ARC_SAMPLES {
@@ -277,7 +277,7 @@ pub(crate) fn segment_sample_lengths(v0: &Vertex, v1: &Vertex) -> ([f64; ARC_SAM
     (cum, total)
 }
 
-pub(crate) fn t_at_length(cum: &[f64; ARC_SAMPLES + 1], total_len: f64, target: f64) -> f64 {
+pub fn t_at_length(cum: &[f64; ARC_SAMPLES + 1], total_len: f64, target: f64) -> f64 {
     if total_len <= f64::EPSILON {
         return 0.0;
     }
@@ -298,7 +298,7 @@ pub(crate) fn t_at_length(cum: &[f64; ARC_SAMPLES + 1], total_len: f64, target: 
     1.0
 }
 
-pub(crate) fn normalize_angle(a: f64) -> f64 {
+pub fn normalize_angle(a: f64) -> f64 {
     let two_pi = std::f64::consts::TAU;
     let mut x = a % two_pi;
     if x <= -std::f64::consts::PI {
@@ -309,7 +309,7 @@ pub(crate) fn normalize_angle(a: f64) -> f64 {
     x
 }
 
-pub(crate) fn arc_vertices(center: Point, radius: f64, a0: f64, a1: f64) -> Vec<Vertex> {
+pub fn arc_vertices(center: Point, radius: f64, a0: f64, a1: f64) -> Vec<Vertex> {
     if radius <= 0.0 || (a1 - a0).abs() < 1e-12 {
         let p = center.add(Point {
             x: radius * a0.cos(),
@@ -350,4 +350,54 @@ pub(crate) fn arc_vertices(center: Point, radius: f64, a0: f64, a1: f64) -> Vec<
             }
         })
         .collect()
+}
+
+pub fn split_bezier(v0: &Vertex, v1: &Vertex, t: f64) -> (Vertex, Vertex, Vertex) {
+    if is_straight(v0, v1) {
+        let m = lerp_point(v0.point, v1.point, t);
+        return (
+            Vertex {
+                point: v0.point,
+                in_tangent: v0.in_tangent,
+                out_tangent: Point::ZERO,
+            },
+            Vertex {
+                point: m,
+                in_tangent: Point::ZERO,
+                out_tangent: Point::ZERO,
+            },
+            Vertex {
+                point: v1.point,
+                in_tangent: Point::ZERO,
+                out_tangent: v1.out_tangent,
+            },
+        );
+    }
+    let p0 = v0.point;
+    let p1 = v0.point.add(v0.out_tangent);
+    let p2 = v1.point.add(v1.in_tangent);
+    let p3 = v1.point;
+    let a = lerp_point(p0, p1, t);
+    let b = lerp_point(p1, p2, t);
+    let cc = lerp_point(p2, p3, t);
+    let d = lerp_point(a, b, t);
+    let e = lerp_point(b, cc, t);
+    let m = lerp_point(d, e, t);
+    (
+        Vertex {
+            point: p0,
+            in_tangent: v0.in_tangent,
+            out_tangent: a.sub(p0),
+        },
+        Vertex {
+            point: m,
+            in_tangent: d.sub(m),
+            out_tangent: e.sub(m),
+        },
+        Vertex {
+            point: p3,
+            in_tangent: cc.sub(p3),
+            out_tangent: v1.out_tangent,
+        },
+    )
 }

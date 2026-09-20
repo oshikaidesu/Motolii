@@ -1,23 +1,17 @@
 
 pub mod edit;
 pub mod stack_edit;
-mod geom;
-mod group;
-mod ops;
-mod raster;
+pub mod geom;
+pub mod group;
 
-pub mod coverage;
 
 pub mod text;
-pub mod strokes;
 
 use serde::{Deserialize, Serialize};
 
 pub use geom::{bezier_point, Contour, Path, Point, Vertex};
-pub use group::{content_bounds, content_canvas, flatten, stretch_outline, render_tree, ShapeGroup, ShapeNode};
+pub use group::{ShapeGroup, ShapeNode};
 
-use geom::{ellipse, polystar, rect};
-pub use ops::Instance;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
@@ -51,21 +45,6 @@ pub enum PathSource {
     },
 }
 
-impl PathSource {
-    fn to_path(&self) -> Path {
-        match self {
-            PathSource::Bezier(p) => p.clone(),
-            PathSource::Rectangle { size } => rect(*size),
-            PathSource::Ellipse { size } => ellipse(*size),
-            PathSource::PolyStar {
-                points,
-                outer_radius,
-                inner_radius,
-                star_type,
-            } => polystar(*points, *outer_radius, *inner_radius, *star_type),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShapeOp {
@@ -512,31 +491,8 @@ pub enum TrimMultiple {
     Individually,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Canvas {
-    pub width: u32,
-    pub height: u32,
-    pub origin_x: i32,
-    pub origin_y: i32,
-}
 
-impl Canvas {
-    pub fn centered(width: u32, height: u32) -> Self {
-        Self {
-            width,
-            height,
-            origin_x: (width / 2) as i32,
-            origin_y: (height / 2) as i32,
-        }
-    }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Raster {
-    pub width: u32,
-    pub height: u32,
-    pub premultiplied_rgba8: Vec<u8>,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum VectorError {
@@ -546,108 +502,5 @@ pub enum VectorError {
     OpenPathOffset,
 }
 
-pub fn render(shape: &Shape, canvas: &Canvas) -> Result<Raster, VectorError> {
-    render_tree(&[ShapeNode::Leaf(shape.clone())], canvas)
-}
 
-/// 輪郭ごとの純関数を、複製の全部へ。
-fn each(instances: Vec<Instance>, f: impl Fn(&Path) -> Path) -> Vec<Instance> {
-    instances.into_iter().map(|i| Instance { path: f(&i.path), opacity: i.opacity }).collect()
-}
 
-pub fn resolve(shape: &Shape) -> Result<Vec<Instance>, VectorError> {
-    let mut instances = vec![Instance {
-        path: shape.source.to_path(),
-        opacity: 1.0,
-    }];
-    for op in &shape.ops {
-        if op.hidden {
-            continue;
-        }
-        instances = match &op.kind {
-            OpKind::TrimPath {
-                start,
-                end,
-                offset,
-                multiple,
-            } => instances
-                .into_iter()
-                .map(|i| Instance {
-                    path: ops::trim(&i.path, *start, *end, *offset, *multiple),
-                    opacity: i.opacity,
-                })
-                .collect(),
-            OpKind::RoundedCorners { radius } => instances
-                .into_iter()
-                .map(|i| Instance {
-                    path: ops::round_corners(&i.path, *radius),
-                    opacity: i.opacity,
-                })
-                .collect(),
-            OpKind::PuckerBloat { amount } => instances
-                .into_iter()
-                .map(|i| Instance {
-                    path: ops::pucker_bloat(&i.path, *amount),
-                    opacity: i.opacity,
-                })
-                .collect(),
-            OpKind::ZigZag {
-                amplitude,
-                frequency,
-                point_type,
-            } => instances
-                .into_iter()
-                .map(|i| Instance {
-                    path: ops::zigzag(&i.path, *amplitude, *frequency, *point_type),
-                    opacity: i.opacity,
-                })
-                .collect(),
-            OpKind::OffsetPath {
-                amount,
-                join,
-                miter_limit,
-            } => instances
-                .into_iter()
-                .map(|i| {
-                    Ok(Instance {
-                        path: ops::offset_path(&i.path, *amount, *join, *miter_limit)?,
-                        opacity: i.opacity,
-                    })
-                })
-                .collect::<Result<Vec<_>, VectorError>>()?,
-            OpKind::Twist { angle, center } => instances
-                .into_iter()
-                .map(|i| Instance {
-                    path: ops::twist(&i.path, *angle, *center),
-                    opacity: i.opacity,
-                })
-                .collect(),
-            OpKind::Wiggle { size, detail, point_type, phase, seed } => each(instances, |p| ops::wiggle(p, *size, *detail, *point_type, *phase, *seed)),
-            OpKind::Smooth { strength, iterations } => each(instances, |p| ops::smooth(p, *strength, *iterations)),
-            OpKind::Subdivide { divisions } => each(instances, |p| ops::subdivide(p, *divisions)),
-            OpKind::Reverse => each(instances, ops::reverse),
-            OpKind::Extend { start, end } => each(instances, |p| ops::extend(p, *start, *end)),
-            OpKind::Chop { length, gap } => each(instances, |p| ops::chop(p, *length, *gap)),
-            OpKind::Resample { spacing, point_type } => each(instances, |p| ops::resample(p, *spacing, *point_type)),
-            OpKind::Bend { angle, center } => each(instances, |p| ops::bend(p, *angle, *center)),
-            OpKind::Oscillator { amplitude, frequency, offset, detail } => each(instances, |p| ops::oscillate(p, *amplitude, *frequency, *offset, *detail)),
-            OpKind::Repeater {
-                copies,
-                offset,
-                transform,
-                composite,
-                start_opacity,
-                end_opacity,
-            } => ops::repeater(
-                &instances,
-                *copies,
-                *offset,
-                transform,
-                *composite,
-                *start_opacity,
-                *end_opacity,
-            ),
-        };
-    }
-    Ok(instances)
-}

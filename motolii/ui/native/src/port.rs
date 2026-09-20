@@ -96,7 +96,7 @@ impl EditorRuntime{
         let mut intents=editor::create::new_layer_intents(id,order,start,comp.duration_frames,comp.fps,(comp.width as f64,comp.height as f64),kind,editor::create::unbounded_frames(visible));
         editor::create::prefer_projection(&mut intents,self.flat_projection);
         if let Some(family)=family{
-            if !crate::doc::vector::text::font_families().iter().any(|name|name==family){return Err("Font family is not installed".into())}
+            if !crate::render::picture::shaping::font_families().iter().any(|name|name==family){return Err("Font family is not installed".into())}
             for i in &mut intents{if let Intent::SetTextDocument{document,..}=i{for style in &mut document.styles{style.font=crate::doc::store::FontRef{family:family.into(),..Default::default()};}}}
         }
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
@@ -730,7 +730,7 @@ mod font_shortcut_tests {
     #[test]
     fn creating_text_with_a_family_is_one_step() {
         let mut rt=EditorRuntime::open("").unwrap();
-        let family=crate::doc::vector::text::font_families().first().cloned().expect("a font");
+        let family=crate::render::picture::shaping::font_families().first().cloned().expect("a font");
         let before=rt.doc.history_depth().0;
         rt.request(json!({"op":"create","kind":"text","family":family})).unwrap();
         assert_eq!(rt.doc.history_depth().0,before+1);

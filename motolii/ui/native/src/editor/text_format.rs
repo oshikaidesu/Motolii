@@ -18,7 +18,7 @@ pub(crate) fn edits(doc:&Document, layer:LayerId, time:RationalTime, j:&J) -> Re
     let selected=text_edit::selected(&text,start,end,scope);
     if !selected.iter().any(|v|*v) && !(text.is_empty() && scope=="all") { return Err("No matching characters".into()); }
     let family=j["family"].as_str();
-    if family.is_some_and(|f|!crate::doc::vector::text::font_families().iter().any(|n|n==f)) { return Err("Font family is not installed".into()); }
+    if family.is_some_and(|f|!crate::render::picture::shaping::font_families().iter().any(|n|n==f)) { return Err("Font family is not installed".into()); }
     let size=if j.get("size").is_some() {Some(j["size"].as_f64().filter(|v|v.is_finite()&&(1.0..=1000.0).contains(v)).ok_or("Size must be between 1 and 1000")?)} else {None};
     if family.is_none() && size.is_none() { return Err("Choose a font or size".into()); }
     let mut ids=text_edit::style_ids(&document,&text);
@@ -98,12 +98,12 @@ mod tests {
             json!({"TextStroke":{"layer":1,"style":0}})
         ).is_err());
         let resolved = motolii_render::picture::resolve::text::resolved_text_document(&view, layer, time).unwrap().unwrap();
-        let canvas = crate::doc::vector::Canvas { width: 800, height: 240, origin_x: 0, origin_y: 0 };
+        let canvas = crate::render::picture::shapes_ops::Canvas { width: 800, height: 240, origin_x: 0, origin_y: 0 };
         let shapes = crate::render::engine::text::text_shapes(&resolved, time, &canvas).unwrap().unwrap();
         let mut visible = 0;
         for node in shapes {
             let ShapeNode::Leaf(shape) = node else { panic!("Expected glyph paths") };
-            let raster = crate::doc::vector::render(&shape, &canvas).unwrap();
+            let raster = crate::render::picture::shapes_ops::render(&shape, &canvas).unwrap();
             for pixel in raster.premultiplied_rgba8.chunks_exact(4).filter(|p| p[3] != 0) {
                 visible += 1;
                 assert_eq!(pixel[0], pixel[3], "White text must not have black stroke pixels");
@@ -133,9 +133,9 @@ mod tests {
     fn partial_font_and_size_reach_raster_and_replacement_keeps_runs() {
         let mut doc=project();let layer=LayerId(1);let time=RationalTime::ZERO;
         let before=motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();
-        let canvas=crate::doc::vector::Canvas{width:800,height:240,origin_x:0,origin_y:0};
+        let canvas=crate::render::picture::shapes_ops::Canvas{width:800,height:240,origin_x:0,origin_y:0};
         let a=crate::render::engine::text::text_shapes(&before,time,&canvas).unwrap().unwrap();
-        let family=crate::doc::vector::text::font_families().iter().find(|f|f.as_str()=="Georgia").unwrap();
+        let family=crate::render::picture::shaping::font_families().iter().find(|f|f.as_str()=="Georgia").unwrap();
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"selection","start":7,"end":8,"size":120.0,"family":family})).unwrap()).unwrap();
         let after=motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();
         let ids=text_edit::style_ids(&after,after.content.eval(time));

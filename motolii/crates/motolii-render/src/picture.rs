@@ -12,6 +12,8 @@ pub mod resolve;
 pub mod resolved;
 pub mod shape_props;
 pub mod shapes;
+pub mod shaping;
+pub mod shapes_ops;
 pub mod text;
 pub mod text_frame;
 

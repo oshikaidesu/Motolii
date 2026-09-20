@@ -1,5 +1,6 @@
+use crate::render::picture::shapes_ops::Canvas;
 use crate::doc::store::{Document, LayerId, RationalTime, ContentTrack, ContentKeyframe, TextJustify};
-use crate::doc::vector::{Brush, Canvas, Fill, Gradient, PathSource, Point, Shape};
+use crate::doc::vector::{Brush, Fill, Gradient, PathSource, Point, Shape};
 use serde_json::{Value as J, json};
 use base64::Engine as _;
 
@@ -20,7 +21,7 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
                 }
             };
             let content=text.content.eval(time).lines().next().unwrap_or("").split_whitespace().take(8).collect::<Vec<_>>().join(" ");
-            if content.chars().count()>256 || !crate::doc::vector::text::font_supports_sample(family,&content) { return Ok(json!({"image":null})); }
+            if content.chars().count()>256 || !crate::render::picture::shaping::font_supports_sample(family,&content) { return Ok(json!({"image":null})); }
             text.content=ContentTrack::new();text.content.insert(ContentKeyframe{t:RationalTime::ZERO,content});
             text.justify=TextJustify::Left;text.wrap_size=None;
             let scale=40.0/text.styles.first().ok_or("Text style missing")?.size.max(1.0);
@@ -32,7 +33,7 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
             // 見本画は Flutter へ渡す画素なので CPU で焼く(層の絵は fork の paths renderer。ここは GPU 読み戻しの口が付くまでの残余)。
             let canvas=Canvas{width:560,height:100,origin_x:0,origin_y:0};
             match crate::render::engine::text::text_shapes(&text,RationalTime::ZERO,&canvas).map_err(|e|e.to_string())? {
-                Some(shapes)=>Some(crate::doc::vector::render_tree(&shapes,&canvas).map_err(|e|e.to_string())?),
+                Some(shapes)=>Some(crate::render::picture::shapes_ops::render_tree(&shapes,&canvas).map_err(|e|e.to_string())?),
                 None=>None,
             }
         },
@@ -46,7 +47,7 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
             let blend=j["blend"].as_str().map(|b|crate::doc::vector::GradientBlend::parse(b).ok_or("Unknown blend")).transpose()?.unwrap_or_default();
             let gradient=Gradient{ stop_ids: Vec::new(), next_stop_id: 0,kind,start:Point{x:-cos*extent,y:-sin*extent},end:Point{x:cos*extent,y:sin*extent},stops,blend};
             let shape=Shape{source:PathSource::Rectangle{size:Point{x:280.0,y:64.0}},ops:vec![],stroke:None,fill:Some(Fill{brush:Brush::Gradient(gradient),..Default::default()})};
-            Some(crate::doc::vector::render(&shape,&Canvas::centered(280,64)).map_err(|e|e.to_string())?)
+            Some(crate::render::picture::shapes_ops::render(&shape,&Canvas::centered(280,64)).map_err(|e|e.to_string())?)
         },
         _=>return Err("Unknown visual sample".into()),
     };
@@ -80,7 +81,7 @@ mod tests {
         let family=&before.as_ref().unwrap().styles[0].font.family;
         let result=reply(&doc,RationalTime::ZERO,&json!({"kind":"font","layer":1,"family":family})).unwrap();
         assert!(result["image"].is_string());
-        assert!(!crate::doc::vector::text::font_supports_sample(family,"\u{10ffff}"));
+        assert!(!crate::render::picture::shaping::font_supports_sample(family,"\u{10ffff}"));
         assert_eq!(doc.view().text_document(layer).unwrap(),before);assert_eq!(doc.history_depth(),history);
         // 層が無くても書体名で見本が出る。
         let result=reply(&doc,RationalTime::ZERO,&json!({"kind":"font","family":family})).unwrap();

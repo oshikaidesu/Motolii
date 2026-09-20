@@ -1,9 +1,11 @@
+#[allow(unused_imports)]
+use crate::picture::shapes_ops::{Canvas, Raster};
 use crate::doc::store::{RationalTime, TextDocument, TextDocumentStyle};
 use crate::picture::text_frame::{shape_document, shape_document_around, Obstacle};
 use crate::doc::vector::text::TextShapeError;
 use crate::doc::store::ShapeNode;
 use crate::doc::vector::{
-    Brush, Canvas, Fill, FillRule, PathSource, Rgb, Shape, VectorError,
+    Brush, Fill, FillRule, PathSource, Rgb, Shape, VectorError,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -161,7 +163,7 @@ mod tests {
     #[test]
     fn morph_walks_from_this_face_to_the_target_face() {
         let (a, b) = ("Hiragino Sans", "Hiragino Mincho ProN");
-        if !(crate::doc::vector::text::font_supports_sample(a, "永") && crate::doc::vector::text::font_supports_sample(b, "永")) {
+        if !(crate::picture::shaping::font_supports_sample(a, "永") && crate::picture::shaping::font_supports_sample(b, "永")) {
             eprintln!("skipped: fonts missing");
             return;
         }

@@ -1,58 +1,10 @@
 //! Trim Paths — 輪郭を長さで切り出す。`chop` もこの窓の切り出しを使う。
+use crate::doc::vector::geom::split_bezier;
 use crate::doc::vector::geom::{
     is_straight, lerp_point, segment_sample_lengths, t_at_length, Contour, Path, Point, Vertex,
 };
 use crate::doc::vector::TrimMultiple;
 
-pub(crate) fn split_bezier(v0: &Vertex, v1: &Vertex, t: f64) -> (Vertex, Vertex, Vertex) {
-    if is_straight(v0, v1) {
-        let m = lerp_point(v0.point, v1.point, t);
-        return (
-            Vertex {
-                point: v0.point,
-                in_tangent: v0.in_tangent,
-                out_tangent: Point::ZERO,
-            },
-            Vertex {
-                point: m,
-                in_tangent: Point::ZERO,
-                out_tangent: Point::ZERO,
-            },
-            Vertex {
-                point: v1.point,
-                in_tangent: Point::ZERO,
-                out_tangent: v1.out_tangent,
-            },
-        );
-    }
-    let p0 = v0.point;
-    let p1 = v0.point.add(v0.out_tangent);
-    let p2 = v1.point.add(v1.in_tangent);
-    let p3 = v1.point;
-    let a = lerp_point(p0, p1, t);
-    let b = lerp_point(p1, p2, t);
-    let cc = lerp_point(p2, p3, t);
-    let d = lerp_point(a, b, t);
-    let e = lerp_point(b, cc, t);
-    let m = lerp_point(d, e, t);
-    (
-        Vertex {
-            point: p0,
-            in_tangent: v0.in_tangent,
-            out_tangent: a.sub(p0),
-        },
-        Vertex {
-            point: m,
-            in_tangent: d.sub(m),
-            out_tangent: e.sub(m),
-        },
-        Vertex {
-            point: p3,
-            in_tangent: cc.sub(p3),
-            out_tangent: v1.out_tangent,
-        },
-    )
-}
 
 fn sub_bezier(v0: &Vertex, v1: &Vertex, t0: f64, t1: f64) -> (Vertex, Vertex) {
     if t0 <= 0.0 && t1 >= 1.0 {

@@ -1,5 +1,7 @@
 //! 形・文字の輪郭と塗りをrerunへ渡す。通常は三角形、画像が必要な境界だけtextureを受け取る。
-use crate::doc::vector::{Brush, Canvas, Contour, Gradient, Point, ShapeNode};
+#[allow(unused_imports)]
+use crate::picture::shapes_ops::{Canvas, Raster};
+use crate::doc::vector::{Brush, Contour, Gradient, Point, ShapeNode};
 use crate::render::compositor::{Compositor, CompositorError, GpuTexture2D};
 use re_renderer::renderer::{PathContour, PathDrawDataBuilder, PathFillRule, PathLineCap, PathLineJoin, PathStroke, PathVertex};
 use re_renderer::view_builder::{BlendWithBackground, OrthographicCameraMode, Projection, RenderMode, TargetConfiguration, ViewBuilder, ViewBuilderId};
@@ -74,8 +76,8 @@ fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> 
 fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<PathDrawDataBuilder, CompositorError> {
     let origin = Point { x: canvas.origin_x as f64, y: canvas.origin_y as f64 };
     let mut b = PathDrawDataBuilder::default().with_tolerance(tolerance);
-    for shape in crate::doc::vector::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
-        for instance in crate::doc::vector::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
+    for shape in crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
+        for instance in crate::picture::shapes_ops::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
             let outline = contours(&instance.path, origin, step);
             if let Some(fill) = shape.fill.as_ref().filter(|f| !f.hidden) {
                 let rule = match fill.rule { crate::doc::vector::FillRule::NonZero => PathFillRule::NonZero, crate::doc::vector::FillRule::EvenOdd => PathFillRule::EvenOdd };
@@ -100,12 +102,12 @@ fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, ste
 pub(crate) fn outlines(shapes: &[ShapeNode], canvas: &Canvas) -> Result<Vec<(Vec<PathContour>, PathFillRule)>, CompositorError> {
     let origin = Point { x: canvas.origin_x as f64, y: canvas.origin_y as f64 };
     let mut out = Vec::new();
-    for shape in crate::doc::vector::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
+    for shape in crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
         let rule = match shape.fill.as_ref().map(|f| f.rule) {
             Some(crate::doc::vector::FillRule::EvenOdd) => PathFillRule::EvenOdd,
             _ => PathFillRule::NonZero,
         };
-        for instance in crate::doc::vector::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
+        for instance in crate::picture::shapes_ops::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
             out.push((contours(&instance.path, origin, None), rule));
         }
     }

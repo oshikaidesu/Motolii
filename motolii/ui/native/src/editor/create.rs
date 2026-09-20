@@ -123,7 +123,7 @@ fn center_intents(layer: LayerId, anchor: [f64; 2], comp: (f64, f64)) -> Vec<Int
 }
 
 fn shape_anchor(shapes: &[ShapeNode]) -> [f64; 2] {
-    let bounds = crate::doc::vector::content_bounds(shapes).ok().flatten();
+    let bounds = crate::render::picture::shapes_ops::content_bounds(shapes).ok().flatten();
     let canvas = crate::render::engine::content_canvas(shapes).ok().flatten();
     match (bounds, canvas) {
         (Some(b), Some(c)) => [(b[0] + b[2]) * 0.5 + c.origin_x as f64, (b[1] + b[3]) * 0.5 + c.origin_y as f64],
@@ -420,12 +420,12 @@ pub(crate) fn new_layer_intents(
                     },
                 },
             ];
-            let canvas = crate::doc::vector::Canvas { width: comp.0 as u32, height: comp.1 as u32, origin_x: 0, origin_y: 0 };
+            let canvas = crate::render::picture::shapes_ops::Canvas { width: comp.0 as u32, height: comp.1 as u32, origin_x: 0, origin_y: 0 };
             let anchor = out.iter().find_map(|intent| {
                 let Intent::SetTextDocument { document, .. } = intent else { return None };
                 let t = RationalTime::try_from_frame(playhead, fps).ok()?;
                 let shapes = crate::render::engine::text::text_shapes(document, t, &canvas).ok()??;
-                let b = crate::doc::vector::content_bounds(&shapes).ok()??;
+                let b = crate::render::picture::shapes_ops::content_bounds(&shapes).ok()??;
                 Some([(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5])
             }).unwrap_or([comp.0 * 0.5, comp.1 * 0.5]);
             out.extend(center_intents(layer, anchor, comp));
@@ -444,7 +444,7 @@ mod camera_tests {
         for kind in [NewKind::Rectangle, NewKind::RoundedRectangle, NewKind::Ellipse,
             NewKind::Star, NewKind::Polygon, NewKind::Line, NewKind::Bezier] {
             let shapes = shape_recipe(&kind, comp).shapes;
-            let b = crate::doc::vector::content_bounds(&shapes).unwrap().unwrap();
+            let b = crate::render::picture::shapes_ops::content_bounds(&shapes).unwrap().unwrap();
             let canvas = crate::render::engine::content_canvas(&shapes).unwrap().unwrap();
             let centre = glam::vec2(((b[0] + b[2]) * 0.5 + canvas.origin_x as f64) as f32,
                 ((b[1] + b[3]) * 0.5 + canvas.origin_y as f64) as f32);

@@ -90,7 +90,7 @@ impl Engine {
         let inputs = self.analysis_inputs(view, t)?;
         let view = if inputs.is_empty() { view.clone() } else { view.clone().with_analysis(&inputs) };
         let Some(comp) = view.composition().map_err(store)? else { return Ok(Vec::new()) };
-        let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
+        let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let mut out = Vec::new();
         // カメラの動き(注視点と、距離の対数を px 相当に)。
         let camera = crate::picture::resolve::camera::resolve_camera(&view, t).map_err(store)?;

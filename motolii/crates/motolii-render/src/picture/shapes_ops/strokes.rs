@@ -5,7 +5,7 @@
 
 use tiny_skia::{FillRule, Paint, Pixmap, Transform};
 
-use crate::doc::vector::raster::{path_bounds, to_tiny_skia};
+use crate::picture::shapes_ops::raster::{path_bounds, to_tiny_skia};
 use crate::doc::vector::{Contour, Point};
 
 /// 割り当てに使う画素の一辺。

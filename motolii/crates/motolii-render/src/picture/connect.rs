@@ -103,7 +103,7 @@ pub fn connector_position(view: &StoreView<'_>, layer: LayerId, t: RationalTime)
         return Ok(None);
     }
     let shapes = crate::picture::shapes::shapes_at(view, layer, t)?;
-    let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(None) };
+    let Ok(Some(canvas)) = crate::picture::shapes_ops::content_canvas(&shapes) else { return Ok(None) };
     Ok(Some([-(canvas.origin_x as f32), -(canvas.origin_y as f32)]))
 }
 

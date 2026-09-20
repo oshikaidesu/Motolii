@@ -14,6 +14,11 @@ parry2d = { workspace = true }
 lyon_geom = { workspace = true }
 motolii-doc = { path = "../motolii-doc", default-features = false }
 taffy = { workspace = true }
+cosmic-text = { workspace = true }
+tiny-skia = { workspace = true }
+unicode-script = "=0.5.8"
+unicode-general-category = "=1.1.0"
+unicode-width = "=0.2.2"
 unicode-segmentation = "=1.13.3"
 tobj = { workspace = true }
 gltf = { workspace = true }

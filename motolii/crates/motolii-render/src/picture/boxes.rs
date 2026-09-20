@@ -6,12 +6,12 @@ use super::*;
 
 /// 形の層の素材座標の箱(伸ばした後)。
 pub fn stretched_shape_box(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<[f32; 4]> {
-    if stretch == [1.0, 1.0] { shape_box(shapes) } else { shape_box(&crate::doc::vector::stretch_outline(shapes, stretch)) }
+    if stretch == [1.0, 1.0] { shape_box(shapes) } else { shape_box(&crate::picture::shapes_ops::stretch_outline(shapes, stretch)) }
 }
 
 pub fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
-    let canvas = crate::doc::vector::content_canvas(shapes).ok().flatten()?;
-    let b = crate::doc::vector::content_bounds(shapes).ok().flatten()?;
+    let canvas = crate::picture::shapes_ops::content_canvas(shapes).ok().flatten()?;
+    let b = crate::picture::shapes_ops::content_bounds(shapes).ok().flatten()?;
     let (ox, oy) = (canvas.origin_x as f64, canvas.origin_y as f64);
     Some([(b[0] + ox) as f32, (b[1] + oy) as f32, (b[2] + ox) as f32, (b[3] + oy) as f32])
 }
@@ -109,7 +109,7 @@ pub fn box_seen_from(view: &StoreView<'_>, target: LayerId, from: LayerId, t: Ra
     } else {
         let stretch = crate::picture::frame::laid_out(view, target, t)?.map(|s| s.stretch).filter(|s| *s != [1.0, 1.0]);
         let b = match (stretch, view.meta(target)?.map(|m| m.source)) {
-            (Some(stretch), Some(LayerSource::Shape)) => shape_box(&crate::doc::vector::stretch_outline(&crate::picture::shapes::shapes_at(view, target, t)?, stretch)),
+            (Some(stretch), Some(LayerSource::Shape)) => shape_box(&crate::picture::shapes_ops::stretch_outline(&crate::picture::shapes::shapes_at(view, target, t)?, stretch)),
             _ => layer_box(view, target, t)?,
         };
         let Some(b) = b else { return Ok(None) };
@@ -260,12 +260,12 @@ pub fn outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<
     let Some(meta) = view.meta(layer)? else { return Ok(Vec::new()) };
     if meta.source == LayerSource::Shape {
         let stretch = crate::picture::frame::laid_out(view, layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch);
-        let shapes = crate::doc::vector::stretch_outline(&crate::picture::shapes::shapes_at(view, layer, t)?, stretch);
-        let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(Vec::new()) };
+        let shapes = crate::picture::shapes_ops::stretch_outline(&crate::picture::shapes::shapes_at(view, layer, t)?, stretch);
+        let Ok(Some(canvas)) = crate::picture::shapes_ops::content_canvas(&shapes) else { return Ok(Vec::new()) };
         let origin = glam::vec2(canvas.origin_x as f32, canvas.origin_y as f32);
         let mut out = Vec::new();
-        for shape in crate::doc::vector::flatten(&shapes).unwrap_or_default() {
-            for instance in crate::doc::vector::resolve(&shape).unwrap_or_default() {
+        for shape in crate::picture::shapes_ops::flatten(&shapes).unwrap_or_default() {
+            for instance in crate::picture::shapes_ops::resolve(&shape).unwrap_or_default() {
                 for contour in &instance.path {
                     let n = contour.vertices.len();
                     let mut poly = Vec::new();
