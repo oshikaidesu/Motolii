@@ -16,6 +16,10 @@ pub(crate) struct FrameOwners {
     included: Vec<(String, [Vec<u64>; 3])>,
     /// ▶ の時点の落とした数。番人(`Frames`)が通しで数えるので、差だけを見る。
     dropped_base: u64,
+    /// 尺の外のコマ。再生は尺を越えて進み、越えた先は帯の外なので何も描かれない
+    /// (`port.rs` の `clock_frame`)。これを混ぜると空のコマが分布を薄めて、
+    /// 速くなったように見える。数に残して、表からは外す。
+    outside: u64,
     /// resolve の中を、回したデータで割った行。**名前は固定しない** —
     /// 層の種類や相が増えれば、ここへ勝手に行が増える。面ごと・行名ごとの標本。
     inside: Vec<(String, Vec<(String, Vec<u64>)>)>,
@@ -29,7 +33,13 @@ impl FrameOwners {
         self.included.clear();
         self.inside.clear();
         self.worst.clear();
+        self.outside = 0;
         self.dropped_base = dropped_base;
+    }
+
+    /// 尺の外のコマ。持ち主の表には入れない。
+    pub(crate) fn outside(&mut self) {
+        self.outside += 1;
     }
 
     pub(crate) fn dropped_since_play(&self, now: u64) -> u64 {
@@ -91,7 +101,8 @@ impl FrameOwners {
     pub(crate) fn report(&self, head: &str, budget_us: u64, dropped: u64) -> String {
         use std::fmt::Write;
         let mut out = String::new();
-        let _ = writeln!(out, "PROBE room=playback-owners {head} budget={:.3}ms dropped={}", budget_us as f64 / 1000.0, dropped);
+        let _ = writeln!(out, "PROBE room=playback-owners {head} budget={:.3}ms dropped={} 尺の外={}(数えない)",
+            budget_us as f64 / 1000.0, dropped, self.outside);
         for ((view, owners), (_, included)) in self.views.iter().zip(&self.included) {
             let frames = owners[0].len();
             let whole: Vec<u64> = (0..frames).map(|i| owners.iter().map(|s| s[i]).sum()).collect();

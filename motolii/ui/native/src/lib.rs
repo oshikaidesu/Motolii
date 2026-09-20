@@ -236,8 +236,14 @@ impl EditorRuntime {
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
         // 再生中だけ畳む。止まっている 1 枚は待つ道なので、同じ物差しに混ぜない。
         if self.viewer.clock.playing() {
-            self.owners.push(view.name(), self.engine.frame_measurement());
-            self.owners.push_inside(view.name(), self.engine.resolve_tally(), self.engine.resolve_worst());
+            // 尺を越えた先は描く物が無い。空のコマを混ぜると分布が薄まるので数に残すだけ。
+            let duration = self.doc.view().composition().ok().flatten().map(|c| c.duration_frames);
+            if duration.is_some_and(|last| self.viewer.frame >= last) {
+                self.owners.outside();
+            } else {
+                self.owners.push(view.name(), self.engine.frame_measurement());
+                self.owners.push_inside(view.name(), self.engine.resolve_tally(), self.engine.resolve_worst());
+            }
         }
         self.error = if self.engine.layer_failures().is_empty() { None } else { Some(self.engine.layer_failures().join("; ")) };
         Ok(true)

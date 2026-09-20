@@ -10,8 +10,23 @@ use crate::doc::store::StoreError;
 pub struct LayerId(pub u64);
 
 impl LayerId {
+    /// 層の置き場。`EntityPath` は文字列を組んで部品ごとに intern し hash まで取るので、
+    /// 番号から作り直すと 1 コマに層の数 × 読む回数だけ同じ物を作ることになる
+    /// (2026-09-21 の標本で、再生の render thread の 5%)。`EntityPath` は中が `Arc` なので、
+    /// 一度作れば clone は安い。書類の層の数だけしか増えない。
     pub fn entity_path(self) -> EntityPath {
-        EntityPath::from(format!("/layer/{}", self.0))
+        thread_local! {
+            static PATHS: std::cell::RefCell<std::collections::HashMap<u64, EntityPath>> =
+                std::cell::RefCell::new(std::collections::HashMap::new());
+        }
+        PATHS.with(|paths| {
+            if let Some(hit) = paths.borrow().get(&self.0) {
+                return hit.clone();
+            }
+            let built = EntityPath::from(format!("/layer/{}", self.0));
+            paths.borrow_mut().insert(self.0, built.clone());
+            built
+        })
     }
 }
 
@@ -22,7 +37,18 @@ pub struct PropertyId {
 }
 
 impl PropertyId {
+    /// 欄の名前。予約語の走査・`Layer:` を足した文字列・その intern は、名前が同じなら
+    /// 毎回同じ答えになる。読む側は 1 コマに何百回もこれを作るので、作った物は取っておく
+    /// (2026-09-21 の標本で、再生の render thread の 12%)。
+    /// 増えるのは書類が持つ欄の名前の種類だけ(効果・マスクを足した分)。
     pub fn new(name: &str) -> Result<Self, StoreError> {
+        thread_local! {
+            static IDS: std::cell::RefCell<std::collections::HashMap<String, PropertyId>> =
+                std::cell::RefCell::new(std::collections::HashMap::new());
+        }
+        if let Some(hit) = IDS.with(|ids| ids.borrow().get(name).cloned()) {
+            return Ok(hit);
+        }
         if crate::doc::store::property::RESERVED.contains(&name) {
             return Err(StoreError::Property(format!(
                 "`{name}` は layer 自身の component 名なので property に使えない"
@@ -30,10 +56,9 @@ impl PropertyId {
         }
         let component = re_types_core::ComponentIdentifier::try_new(format!("Layer:{name}"))
             .map_err(|e| StoreError::Property(e.to_string()))?;
-        Ok(Self {
-            name: name.to_owned(),
-            component,
-        })
+        let built = Self { name: name.to_owned(), component };
+        IDS.with(|ids| ids.borrow_mut().insert(name.to_owned(), built.clone()));
+        Ok(built)
     }
 
     pub fn mask_shape(mask: crate::doc::store::MaskId) -> Self {
