@@ -114,7 +114,7 @@ fn probe() {
 /// tick → renderInfo → view ごとに描く → status を回し、段ごとに時計を置く。
 /// 拍を 1 つおきに二役へ振る: 偶数は本番の道(`motolii_probe_render` = IOSurface の
 /// 紐付けも込み)、奇数は中の段を 1 つずつ。差が「橋と紐付けの取り分」。
-/// `MOTOLII_PROBE_DOC` の書類、`MOTOLII_PROBE_SECONDS`(既定 12)秒、
+/// `MOTOLII_PROBE_DOC` の書類、または `MOTOLII_PROBE_SCRIPT` の script、`MOTOLII_PROBE_SECONDS`(既定 12)秒、
 /// `MOTOLII_PROBE_STAGE`(既定 `1000x700`)の Stage 窓。集計は終わりに 1 回。
 #[test]
 #[ignore]
@@ -122,12 +122,17 @@ fn frame_owners() {
     use crate::viewer::View;
     use objc2_core_foundation::{CFDictionary, CFNumber, CFString};
     let path = std::env::var("MOTOLII_PROBE_DOC").unwrap_or_default();
+    let script = std::env::var("MOTOLII_PROBE_SCRIPT").unwrap_or_default();
     let seconds: f64 = std::env::var("MOTOLII_PROBE_SECONDS").ok().and_then(|v| v.parse().ok()).unwrap_or(12.0);
     let stage = std::env::var("MOTOLII_PROBE_STAGE").unwrap_or_else(|_| "1000x700".into());
     let (sw, sh) = stage.split_once('x').unwrap();
     let (sw, sh): (u32, u32) = (sw.parse().unwrap(), sh.parse().unwrap());
     // 書類を言われなければ、この file の見本(層 5 × 100 枚)で回す。
-    let mut rt = if path.is_empty() { runtime(5, 100.0) } else { crate::EditorRuntime::open(&path).unwrap() };
+    // Script は実窓と同じ入口で書類へ落とすので、CSS の layout sample も
+    // synthetic benchmark に取り替えず測れる。
+    let mut rt = if path.is_empty() { crate::EditorRuntime::open("").unwrap() } else { crate::EditorRuntime::open(&path).unwrap() };
+    if !script.is_empty() { rt.run_script_file(&script).unwrap(); }
+    else if path.is_empty() { rt = runtime(5, 100.0); }
     let comp = rt.doc.view().composition().unwrap().unwrap().spec();
     // `stageWindow` は port の op ではなく lib.rs:275 の口。Stage tab が置く窓と同じ。
     rt.set_stage_window(&serde_json::json!({"width":sw,"height":sh,
