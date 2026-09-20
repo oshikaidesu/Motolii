@@ -1,7 +1,16 @@
-part of 'timeline.dart';
+import 'dart:math' as math;
 
-class _TrackRow {
-  _TrackRow(this.layer, [this.property]);
+import 'package:flutter/widgets.dart';
+
+import '../../session/editor_session.dart';
+
+/// Timeline の値と配置 — 行・入れ子の器・並び、そして行と定規の高さ。
+/// 掴み手も絵も板も、場所の話はここの型だけを読む。
+const double timelineRowHeight = 20;
+const double timelineRulerHeight = 32;
+
+class TrackRow {
+  TrackRow(this.layer, [this.property]);
   final Map<String, dynamic> layer;
   final Map<String, dynamic>? property;
   Rect bounds = Rect.zero;
@@ -43,15 +52,20 @@ class _TrackRow {
       allKeys.map((k) => (k['frame'] as num).toInt()).toSet().toList()..sort();
 }
 
-class _LaneContainer {
-  _LaneContainer(this.row, this.children);
-  final _TrackRow row;
-  final List<_LaneContainer> children;
+class LaneContainer {
+  LaneContainer(this.row, this.children);
+  final TrackRow row;
+  final List<LaneContainer> children;
   Rect bounds = Rect.zero;
-  void place(double left, double top, double nameWidth, List<_TrackRow> rows) {
-    row.bounds = Rect.fromLTWH(left, top, math.max(0, nameWidth - left), 20);
+  void place(double left, double top, double nameWidth, List<TrackRow> rows) {
+    row.bounds = Rect.fromLTWH(
+      left,
+      top,
+      math.max(0, nameWidth - left),
+      timelineRowHeight,
+    );
     rows.add(row);
-    var bottom = top + 20;
+    var bottom = top + timelineRowHeight;
     for (final child in children) {
       child.place(left + 8, bottom, nameWidth, rows);
       bottom = child.bounds.bottom;
@@ -65,8 +79,8 @@ class _LaneContainer {
   }
 }
 
-class _LaneLayout {
-  _LaneLayout(
+class LaneLayout {
+  LaneLayout(
     List<Map<String, dynamic>> layers,
     Set<int> expanded,
     Set<int> all,
@@ -93,15 +107,15 @@ class _LaneLayout {
       ];
     }
 
-    _LaneContainer? node(Map<String, dynamic> layer, List<int> ancestors) {
+    LaneContainer? node(Map<String, dynamic> layer, List<int> ancestors) {
       final id = (layer['id'] as num).toInt();
       if (!visited.add(id)) return null;
-      final row = _TrackRow(layer)
+      final row = TrackRow(layer)
         ..ancestors = ancestors
         ..depth = ancestors.length
         ..groupOpen = !collapsed.contains(id)
         ..lanesOpen = expanded.contains(id);
-      final nested = <_LaneContainer>[];
+      final nested = <LaneContainer>[];
       if (row.isGroup) row.descendants = descendants(id, {});
       if (expanded.contains(id)) {
         final properties = EditorSession.maps(layer['properties']).toList();
@@ -116,8 +130,8 @@ class _LaneLayout {
           if (all.contains(id) ||
               EditorSession.maps(property['keys']).isNotEmpty)
             nested.add(
-              _LaneContainer(
-                _TrackRow(layer, property)
+              LaneContainer(
+                TrackRow(layer, property)
                   ..ancestors = ancestors
                   ..depth = ancestors.length,
                 [],
@@ -131,7 +145,7 @@ class _LaneLayout {
           if (result != null) nested.add(result);
         }
       }
-      return _LaneContainer(row, nested);
+      return LaneContainer(row, nested);
     }
 
     for (final layer in layers) {
@@ -139,7 +153,7 @@ class _LaneLayout {
       final result = node(layer, []);
       if (result != null) roots.add(result);
     }
-    int depth(_LaneContainer node) => node.children.isEmpty
+    int depth(LaneContainer node) => node.children.isEmpty
         ? 0
         : 1 + node.children.map(depth).reduce(math.max);
     indentation = (roots.isEmpty ? 0 : roots.map(depth).reduce(math.max)) * 8.0;
@@ -151,13 +165,13 @@ class _LaneLayout {
     }
     height = top;
   }
-  final roots = <_LaneContainer>[];
-  final rows = <_TrackRow>[];
+  final roots = <LaneContainer>[];
+  final rows = <TrackRow>[];
   double height = 0;
   double nameWidth = 138;
   double indentation = 0;
-  _LaneContainer? container(int id) {
-    _LaneContainer? find(_LaneContainer node) {
+  LaneContainer? container(int id) {
+    LaneContainer? find(LaneContainer node) {
       if (node.row.property == null && node.row.id == id) return node;
       for (final child in node.children) {
         final match = find(child);
