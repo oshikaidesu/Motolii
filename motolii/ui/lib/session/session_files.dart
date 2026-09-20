@@ -24,17 +24,30 @@ mixin SessionFiles on SessionCore {
       } on PlatformException catch (e) {
         if (_disposed) return;
         if (e.message?.contains('Open a document first') != true) rethrow;
-        await open();
+        await _openLaunchTarget();
         return;
       }
       if (_disposed) return;
       // `motolii-ui.sh dev <document>`: the launch names a document and nothing is open yet.
       if (_path.isNotEmpty && '${state['path'] ?? ''}'.isEmpty) {
-        await open();
+        await _openLaunchTarget();
         return;
       }
       await _render();
     }
+  }
+
+  /// 起動の引数。`.js` は書類ではなく script なので、File menu と同じ道で走らせる。
+  /// これで再生の計測に file picker が要らない。
+  Future<void> _openLaunchTarget() async {
+    if (_path.toLowerCase().endsWith('.js')) {
+      // script は書類を書き換える口なので、先に空の書類を開く(File menu と同じ前提)。
+      final script = _path;
+      await open('');
+      await command('runScript', {'path': script});
+      return;
+    }
+    await open();
   }
 
   Future<void> open([String? path]) {

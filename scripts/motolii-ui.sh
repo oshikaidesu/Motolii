@@ -77,5 +77,5 @@ case "${1:-dev}" in
     fi
     exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
 esac
