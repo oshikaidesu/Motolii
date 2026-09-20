@@ -46,46 +46,12 @@ mixin SessionCommands on SessionCore {
     await command('select', back);
   }
 
-  /// The same-frame path for a view change: the request, its render and the
-  /// status all complete before this frame is built, so the picture the
-  /// raster shows is the one asked for. The status reaches the notifiers
-  /// after the frame (a build may not mark widgets outside its own subtree).
-  /// Returns true when every view was drawn with the request applied; false
-  /// means the request went the ordinary way and the picture follows later.
+  /// Flutter no longer has a renderer fast path. Keep this small UI-facing
+  /// convenience for callers which want to request a state change during a
+  /// build; native owns the serial command and render sequence.
   bool commandNow(String op, [Map<String, dynamic> args = const {}]) {
-    final frames = _frames;
-    if (frames == null ||
-        playing.value ||
-        _disposed ||
-        _pendingWork > 0 ||
-        _deferred != null) {
-      command(op, args);
-      return false;
-    }
-    final DocumentOperation operation;
-    try {
-      operation = DocumentOperation.parse(op);
-      DocumentOperation.validateArguments(args);
-    } catch (e) {
-      error.value = '$e';
-      return false;
-    }
-    _deferred = [];
-    scheduleMicrotask(_flushDeferred);
-    try {
-      final response = _requestNow(frames, operation, args);
-      final needsRender =
-          response['needsRender'] as bool? ?? operation.requiresRender;
-      final stateless =
-          response['ok'] == true ||
-          (response.length == 1 && response['needsRender'] == true);
-      if (!stateless) _accept(response);
-      if (!needsRender) return false;
-      return _renderNow(frames);
-    } catch (e) {
-      _deferred?.add(() => throw e);
-      return false;
-    }
+    command(op, args);
+    return false;
   }
 
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {

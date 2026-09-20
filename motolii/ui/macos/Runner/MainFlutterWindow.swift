@@ -403,7 +403,7 @@ final class ProbeSession {
   /// The native host, not Flutter's `Ticker`, owns playback cadence.  The
   /// Flutter side receives a texture availability signal and a small playhead
   /// integer only.
-  private var playbackTimer: Timer?
+  private var playbackTimer: DispatchSourceTimer?
   private var playbackSurfaceFlip = false
   private var confirming = false
   var terminationApproved = false
@@ -501,15 +501,23 @@ final class ProbeSession {
   fileprivate func startPlayback() {
     precondition(Thread.isMainThread)
     guard playbackTimer == nil else { return }
-    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-      self?.playbackPulse()
+    // Flutter's run loop can be idle while its skin has no frame to build.
+    // The transport therefore cannot use a RunLoop Timer: cadence belongs to
+    // the native host, and each pulse merely queues Rust/Rerun work on the
+    // serial actor.  The main hop only snapshots IOSurface ownership and
+    // publishes a finished texture; it never enters the renderer.
+    let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
+    timer.schedule(deadline: .now(), repeating: .milliseconds(16), leeway: .milliseconds(1))
+    timer.setEventHandler { [weak self] in
+      DispatchQueue.main.async { self?.playbackPulse() }
     }
     playbackTimer = timer
-    RunLoop.main.add(timer, forMode: .common)
+    timer.resume()
   }
 
   fileprivate func stopPlayback() {
-    playbackTimer?.invalidate()
+    playbackTimer?.setEventHandler {}
+    playbackTimer?.cancel()
     playbackTimer = nil
   }
 

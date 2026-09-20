@@ -1,13 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:developer' show Timeline;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../bridge/native_bridge.dart';
-import '../bridge/native_frames.dart';
 import '../bridge/protocol.dart';
 
 part 'session_values.dart';
@@ -125,8 +121,6 @@ class EditorSession extends SessionCore
           await _bridge.invoke('detach', {'attachmentId': attachmentId});
         }
       } catch (_) {}
-      _frames?.dispose();
-      _frames = null;
     });
     for (final slice in _slices.values) {
       slice.dispose();
