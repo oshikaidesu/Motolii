@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/stage.dart';
 import 'support/editor_test_theme.dart';
+import 'support/painters.dart';
 
 /// rerun 3D view の取説: object をダブルクリックで Focus、背景をダブルクリックで Reset view。
 class ObserverSession extends EditorSession {
@@ -207,17 +208,18 @@ void main() {
       ),
     );
     await tester.pump();
-    CustomPaint overlay() => tester
-        .widgetList<CustomPaint>(find.byType(CustomPaint))
-        .firstWhere((w) => '${w.painter.runtimeType}' == '_StageOverlay');
-    expect((overlay().painter as dynamic).anchorPreview, isNull);
+    dynamic overlay() => paintersCarrying(
+      tester,
+      (p) => p.viewport is Rect && p.dimOutside is bool,
+    ).single;
+    expect(overlay().anchorPreview, isNull);
     c.anchorPreview.value = [1.0, 0.0];
     await tester.pump();
-    final at = (overlay().painter as dynamic).anchorPreview as Offset?;
+    final at = overlay().anchorPreview as Offset?;
     expect(at, isNotNull, reason: 'the cross appears while a cell is hovered');
     c.anchorPreview.value = null;
     await tester.pump();
-    expect((overlay().painter as dynamic).anchorPreview, isNull);
+    expect(overlay().anchorPreview, isNull);
     await tester.pumpWidget(const SizedBox());
   });
 

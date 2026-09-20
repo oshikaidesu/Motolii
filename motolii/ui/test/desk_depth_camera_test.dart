@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/panels/depth_desk.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 
+import 'support/painters.dart';
+
 /// Depth: 注視点が原点、カメラは eye に居て、掴んで回すと Orbit の yaw と Distance が届く。
 void main() {
   testWidgets(
@@ -69,9 +71,7 @@ void main() {
       );
       expect(find.text('Aim'), findsOneWidget, reason: 'the target is named');
       final box = tester.getRect(
-        find.byWidgetPredicate(
-          (w) => w is CustomPaint && '${w.painter.runtimeType}' == '_DepthGrid',
-        ),
+        painterCarrying((p) => p.fov is double && p.eye is Offset),
       );
       final origin = box.center;
       // range = 1000 * 1.25、scale = (min(w,h) - 36) / (2 * range)

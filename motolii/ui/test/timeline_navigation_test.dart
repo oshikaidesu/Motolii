@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/timeline.dart';
+import '../lib/panels/timeline/paint.dart';
 
 void main() {
   testWidgets('trackpad pan and anchored pinch only change the viewport', (
@@ -41,11 +42,12 @@ void main() {
         home: Scaffold(body: TimelinePanel(controller: controller)),
       ),
     );
-    dynamic painter() => tester
+    TimelinePainter painter() => tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
         .map((w) => w.painter)
-        .firstWhere((p) => p.runtimeType.toString() == '_TimelinePainter');
-    final initialScale = painter().scale as double;
+        .whereType<TimelinePainter>()
+        .first;
+    final initialScale = painter().scale;
     await tester.sendEventToBinding(
       const PointerScrollEvent(
         position: Offset(500, 250),
@@ -76,7 +78,7 @@ void main() {
       (painter().offset + 500 - painter().labelWidth) / painter().scale,
       closeTo(anchor, 0.01),
     );
-    final before = painter().offset as double;
+    final before = painter().offset;
     final beforeY = vertical.pixels;
     await gesture.panZoomUpdate(
       const Offset(500, 250),
@@ -89,7 +91,7 @@ void main() {
     expect(vertical.pixels, closeTo(beforeY + 40, 0.01));
     await gesture.panZoomEnd();
     await tester.pump();
-    final rulerScrollScale = painter().scale as double;
+    final rulerScrollScale = painter().scale;
     final rulerScrollAnchor =
         (painter().offset + 500 - painter().labelWidth) / painter().scale;
     await tester.sendEventToBinding(
@@ -106,7 +108,7 @@ void main() {
       (painter().offset + 500 - painter().labelWidth) / painter().scale,
       closeTo(rulerScrollAnchor, .01),
     );
-    final rulerScale = painter().scale as double;
+    final rulerScale = painter().scale;
     final ruler = await tester.createGesture(kind: PointerDeviceKind.trackpad);
     await ruler.panZoomStart(const Offset(500, 35));
     await ruler.panZoomUpdate(const Offset(500, 35), scale: 1.1);
@@ -130,7 +132,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 16));
     }
-    final scrubRelease = painter().scale as double;
+    final scrubRelease = painter().scale;
     final scrubY = vertical.pixels;
     await scrub.panZoomEnd(timeStamp: const Duration(milliseconds: 101));
     await tester.pump();
@@ -150,7 +152,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 16));
     }
-    final releaseX = painter().offset as double;
+    final releaseX = painter().offset;
     final releaseY = vertical.pixels;
     await fling.panZoomEnd(timeStamp: const Duration(milliseconds: 181));
     await tester.pump();

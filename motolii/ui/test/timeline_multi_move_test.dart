@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
 import '../lib/panels/timeline.dart';
+import '../lib/panels/timeline/paint.dart';
 
 class RecordingController extends EditorSession {
   final commands = <Map<String, dynamic>>[];
@@ -140,21 +141,18 @@ void main() {
       // 15 frames left would put the first key at -10: the grip stops at -5.
       await pointer.moveTo(Offset(x(20) - 60, 64));
       await tester.pump();
-      dynamic lanes() => tester
+      TimelinePainter lanes() => tester
           .widgetList<CustomPaint>(find.byType(CustomPaint))
           .map((w) => w.painter)
-          .firstWhere(
-            (p) =>
-                p.runtimeType.toString() == '_TimelinePainter' &&
-                (p as dynamic).ruler == false,
-          );
+          .whereType<TimelinePainter>()
+          .firstWhere((p) => !p.ruler);
       expect(lanes().delta, -5);
       await pointer.up();
       await tester.pump();
       expect(c.commands.last, {'op': 'moveKeys', 'deltaFrames': -5});
       // The reply has not landed: the keys are still drawn at their new place.
       expect(lanes().delta, -5);
-      expect((lanes().dragKeys as List).length, 2);
+      expect(lanes().dragKeys.length, 2);
       c.hold!.complete();
       await tester.pump();
       expect(lanes().delta, 0);

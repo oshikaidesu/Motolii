@@ -27,6 +27,22 @@ HOUSES = [
 WARN, SOFT = 600, 800
 
 
+TEST_PATH = re.compile(
+    r"(^|/)tests?/|_tests?\.rs$|_test\.dart$|_contracts?\.rs$|_regressions?\.rs$|_probe\.rs$|_diagnostic\.rs$|/fixture\.rs$"
+)
+
+
+def is_test(path):
+    """test の file は結合の証拠にならない。
+
+    inline の `#[cfg(test)]` は path では見分けられないが、2026-09-20 に長い file の
+    test を隣の file へ出したので、以後 test だけの commit は実装 file を触らない。
+    それ以前の履歴では、実装と test の共変化がそのまま結合として出る(M の調査で
+    block_program ↔ blocks が 86% → production だけなら 60% だった例)。
+    """
+    return bool(TEST_PATH.search(path))
+
+
 def git(*args):
     return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True).stdout
 
@@ -41,7 +57,8 @@ def spread(commits, ceiling=25, min_ratio=0.45):
                 batches.append(cur)
             cur = []
         elif line.strip().endswith((".rs", ".dart")) and line.startswith("motolii/"):
-            cur.append(line.strip())
+            if not is_test(line.strip()):
+                cur.append(line.strip())
     if cur:
         batches.append(cur)
     changed, pairs = collections.Counter(), collections.Counter()
