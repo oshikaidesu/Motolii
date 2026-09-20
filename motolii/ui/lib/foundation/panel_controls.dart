@@ -1083,14 +1083,17 @@ class EditorSwitch extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? () => onChanged!(!on) : null,
-          child: Icon(
-            glyph,
-            size: EditorMetrics.s16,
-            color: !enabled
-                ? EditorTheme.disabledInk
-                : on
-                ? tint ?? EditorTheme.accent
-                : EditorTheme.muted,
+          child: SizedBox.square(
+            dimension: EditorMetrics.row,
+            child: Icon(
+              glyph,
+              size: EditorMetrics.s16,
+              color: !enabled
+                  ? EditorTheme.disabledInk
+                  : on
+                  ? tint ?? EditorTheme.accent
+                  : EditorTheme.muted,
+            ),
           ),
         ),
       );
@@ -1098,34 +1101,38 @@ class EditorSwitch extends StatelessWidget {
     return EditorTooltip(
       message: label,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => onChanged!(!on) : null,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              width: EditorMetrics.s22,
-              height: EditorMetrics.s12,
-              padding: const EdgeInsets.all(EditorMetrics.s2),
-              decoration: BoxDecoration(
-                color: on ? tint ?? EditorTheme.accent : EditorTheme.raised,
+        child: SizedBox(
+          height: EditorMetrics.row,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: EditorMetrics.s22,
+                height: EditorMetrics.s12,
+                padding: const EdgeInsets.all(EditorMetrics.s2),
+                decoration: BoxDecoration(
+                  color: on ? tint ?? EditorTheme.accent : EditorTheme.raised,
+                ),
+                alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: EditorMetrics.s8,
+                  height: EditorMetrics.s8,
+                  color: on ? EditorTheme.tabInk : EditorTheme.ink,
+                ),
               ),
-              alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-              child: Container(
-                width: EditorMetrics.s8,
-                height: EditorMetrics.s8,
-                color: on ? EditorTheme.tabInk : EditorTheme.ink,
+              const SizedBox(width: EditorMetrics.s4),
+              Icon(
+                glyph,
+                size: EditorMetrics.s14,
+                color: !enabled
+                    ? EditorTheme.disabledInk
+                    : ink ?? (on ? EditorTheme.ink : EditorTheme.muted),
               ),
-            ),
-            const SizedBox(width: EditorMetrics.s4),
-            Icon(
-              glyph,
-              size: EditorMetrics.s14,
-              color: !enabled
-                  ? EditorTheme.disabledInk
-                  : ink ?? (on ? EditorTheme.ink : EditorTheme.muted),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2023,14 +2030,14 @@ class EditorZoomBar extends StatelessWidget {
     Widget step(IconData icon, int delta, String suffix) => EditorPress(
       key: ValueKey('$keyPrefix-$suffix'),
       onTap: () => change(percent.roundToDouble() + delta),
-      child: SizedBox(
-        width: EditorMetrics.row,
+      child: SizedBox.square(
+        dimension: EditorMetrics.row,
         child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
       ),
     );
     return Container(
       height: EditorMetrics.row,
-      decoration: const BoxDecoration(
+      foregroundDecoration: const BoxDecoration(
         border: Border(top: BorderSide(color: EditorTheme.line)),
       ),
       child: LayoutBuilder(

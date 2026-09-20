@@ -85,13 +85,16 @@ void main() {
         ],
       ),
     );
-    // The Material button under the compact density measured 19 × 12; the
-    // switch is its 22 × 12 track and the glyph beside it.
+    // The Material button under the compact density measured 19 × 12. The
+    // switch is its 22 × 12 track and the glyph beside it, and a row tall to
+    // press: WCAG 2.2 SC 2.5.8 asks 24 px, Material's 48 dp is what is refused.
     expect(tester.getSize(find.byType(EditorTextButton)), const Size(19, 12));
-    expect(tester.getSize(find.byType(EditorSwitch)).height, EditorMetrics.s14);
+    expect(tester.getSize(find.byType(EditorSwitch)).height, EditorMetrics.row);
   });
 
-  testWidgets('an IconButton is exactly its icon, at any size', (tester) async {
+  testWidgets('an IconButton is its icon, at least a row square', (
+    tester,
+  ) async {
     await pump(
       tester,
       Column(
@@ -115,14 +118,14 @@ void main() {
     for (final size in [12.0, 14.0, 16.0, 17.0]) {
       expect(
         tester.getSize(find.byKey(ValueKey(size))),
-        Size(size, size),
+        const Size(EditorMetrics.row, EditorMetrics.row),
         reason: 'iconSize $size',
       );
     }
-    // Unsized, the button is the icon theme's 14, as Material's was.
+    // Unsized, the icon is the icon theme's 14, as Material's was, in a row.
     expect(
       tester.getSize(find.byKey(const ValueKey('themed'))),
-      const Size(EditorMetrics.s14, EditorMetrics.s14),
+      const Size(EditorMetrics.row, EditorMetrics.row),
     );
   });
 
