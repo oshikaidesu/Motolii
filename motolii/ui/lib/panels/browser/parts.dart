@@ -9,26 +9,32 @@ import '../../foundation/glyphs.dart';
 import '../../foundation/leaves.dart';
 
 /// A bordered action beside the search field.
-Widget shelfAction(String label, VoidCallback? press) => EditorTooltip(
-  message: press == null ? '$label · unavailable' : label,
-  child: EditorPress(
-    onTap: press,
-    child: Container(
-      height: EditorMetrics.row,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-      decoration: BoxDecoration(
-        color: EditorTheme.app,
-        border: Border.all(
-          color: press == null ? EditorTheme.line : EditorTheme.border,
+Widget shelfAction(String label, VoidCallback? press) => Builder(
+  builder: (context) => EditorTooltip(
+    message: press == null ? '$label · unavailable' : label,
+    child: EditorPress(
+      onTap: press,
+      child: Container(
+        height: EditorMetrics.row,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+        decoration: BoxDecoration(
+          color: EditorTheme.of(context).app,
+          border: Border.all(
+            color: press == null
+                ? EditorTheme.of(context).line
+                : EditorTheme.of(context).border,
+          ),
         ),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        style: TextStyle(
-          fontSize: EditorMetrics.font,
-          color: press == null ? EditorTheme.disabledInk : EditorTheme.ink,
+        child: Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: EditorMetrics.font,
+            color: press == null
+                ? EditorTheme.of(context).disabledInk
+                : EditorTheme.of(context).ink,
+          ),
         ),
       ),
     ),
@@ -39,26 +45,28 @@ Widget shelfButton(
   String label,
   VoidCallback? press, {
   bool selected = false,
-}) => EditorTooltip(
-  message: press == null ? '$label · unavailable' : label,
-  child: EditorPress(
-    onTap: press,
-    child: Container(
-      height: EditorMetrics.control,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-      color: selected ? EditorTheme.raised : EditorTheme.clear,
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: EditorMetrics.font,
-          color: press == null
-              ? EditorTheme.muted.withValues(alpha: .45)
-              : selected
-              ? EditorTheme.accent
-              : EditorTheme.ink,
+}) => Builder(
+  builder: (context) => EditorTooltip(
+    message: press == null ? '$label · unavailable' : label,
+    child: EditorPress(
+      onTap: press,
+      child: Container(
+        height: EditorMetrics.control,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+        color: selected ? EditorTheme.of(context).raised : EditorTheme.clear,
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: EditorMetrics.font,
+            color: press == null
+                ? EditorTheme.of(context).muted.withValues(alpha: .45)
+                : selected
+                ? EditorTheme.of(context).accent
+                : EditorTheme.of(context).ink,
+          ),
         ),
       ),
     ),
@@ -66,35 +74,41 @@ Widget shelfButton(
 );
 
 /// Grid / List / Thumbnails, beside the search field.
-Widget shelfViews(EditorSession controller, int viewMode) => DecoratedBox(
-  decoration: BoxDecoration(
-    color: EditorTheme.app,
-    border: Border.all(color: EditorTheme.line),
-  ),
-  child: Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      for (final (mode, icon, label) in [
-        (0, Glyph.grid_view, 'Grid'),
-        (1, Glyph.view_list, 'List'),
-        (2, Glyph.crop_landscape, 'Thumbnails'),
-      ])
-        Container(
-          width: EditorMetrics.row,
-          height: EditorMetrics.row,
-          color: viewMode == mode ? EditorTheme.raised : EditorTheme.clear,
-          child: EditorTooltip(
-            message: label,
-            child: EditorIconButton(
-              key: ValueKey('browser:view:$mode'),
-              iconSize: EditorMetrics.s14,
-              color: viewMode == mode ? EditorTheme.ink : EditorTheme.muted,
-              onPressed: () => controller.storeDesk('browserView', mode),
-              icon: Icon(icon),
+Widget shelfViews(EditorSession controller, int viewMode) => Builder(
+  builder: (context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: EditorTheme.of(context).app,
+      border: Border.all(color: EditorTheme.of(context).line),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (mode, icon, label) in [
+          (0, Glyph.grid_view, 'Grid'),
+          (1, Glyph.view_list, 'List'),
+          (2, Glyph.crop_landscape, 'Thumbnails'),
+        ])
+          Container(
+            width: EditorMetrics.control,
+            height: EditorMetrics.row,
+            color: viewMode == mode
+                ? EditorTheme.of(context).raised
+                : EditorTheme.clear,
+            child: EditorTooltip(
+              message: label,
+              child: EditorIconButton(
+                key: ValueKey('browser:view:$mode'),
+                iconSize: EditorMetrics.s14,
+                color: viewMode == mode
+                    ? EditorTheme.of(context).ink
+                    : EditorTheme.of(context).muted,
+                onPressed: () => controller.storeDesk('browserView', mode),
+                icon: Icon(icon),
+              ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   ),
 );
 
@@ -105,27 +119,29 @@ Widget shelfGrip({
   required VoidCallback onEnd,
   VoidCallback? onDoubleTap,
   bool vertical = false,
-}) => MouseRegion(
-  cursor: vertical
-      ? SystemMouseCursors.resizeUpDown
-      : SystemMouseCursors.resizeLeftRight,
-  child: GestureDetector(
-    key: key,
-    behavior: HitTestBehavior.opaque,
-    onHorizontalDragUpdate: vertical ? null : (d) => onDrag(d.delta.dx),
-    onHorizontalDragEnd: vertical ? null : (_) => onEnd(),
-    onVerticalDragUpdate: vertical ? (d) => onDrag(d.delta.dy) : null,
-    onVerticalDragEnd: vertical ? (_) => onEnd() : null,
-    onDoubleTap: onDoubleTap,
-    child: Container(
-      width: vertical ? null : EditorMetrics.s4,
-      height: vertical ? EditorMetrics.s4 : null,
-      color: EditorTheme.line,
-      alignment: Alignment.center,
+}) => Builder(
+  builder: (context) => MouseRegion(
+    cursor: vertical
+        ? SystemMouseCursors.resizeUpDown
+        : SystemMouseCursors.resizeLeftRight,
+    child: GestureDetector(
+      key: key,
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: vertical ? null : (d) => onDrag(d.delta.dx),
+      onHorizontalDragEnd: vertical ? null : (_) => onEnd(),
+      onVerticalDragUpdate: vertical ? (d) => onDrag(d.delta.dy) : null,
+      onVerticalDragEnd: vertical ? (_) => onEnd() : null,
+      onDoubleTap: onDoubleTap,
       child: Container(
-        width: vertical ? EditorMetrics.s16 : EditorMetrics.s2,
-        height: vertical ? EditorMetrics.s2 : EditorMetrics.s16,
-        color: EditorTheme.raised,
+        width: vertical ? null : EditorMetrics.s4,
+        height: vertical ? EditorMetrics.s4 : null,
+        color: EditorTheme.of(context).line,
+        alignment: Alignment.center,
+        child: Container(
+          width: vertical ? EditorMetrics.s16 : EditorMetrics.s2,
+          height: vertical ? EditorMetrics.s2 : EditorMetrics.s16,
+          color: EditorTheme.of(context).raised,
+        ),
       ),
     ),
   ),
@@ -240,7 +256,10 @@ class _FittedNameState extends State<FittedName>
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.visible,
-      style: TextStyle(color: EditorTheme.ink, fontSize: widget.size),
+      style: TextStyle(
+        color: EditorTheme.of(context).ink,
+        fontSize: widget.size,
+      ),
     );
     if (overflow <= 0) return text;
     return MouseRegion(
@@ -260,7 +279,7 @@ class _FittedNameState extends State<FittedName>
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: EditorTheme.ink,
+                      color: EditorTheme.of(context).ink,
                       fontSize: widget.size,
                     ),
                   ),

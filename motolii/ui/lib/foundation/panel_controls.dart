@@ -71,19 +71,21 @@ Widget panelButton(
   bool selected = false,
 }) =>
     EditorButton(label, action, tooltip: tooltip ?? label, selected: selected);
-Widget panelTitle(String title) => Container(
-  height: EditorMetrics.s22,
-  alignment: Alignment.centerLeft,
-  padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-  decoration: const BoxDecoration(
-    color: EditorTheme.raised,
-    border: Border(bottom: BorderSide(color: EditorTheme.line)),
-  ),
-  child: Text(
-    title,
-    style: const TextStyle(
-      fontSize: EditorMetrics.font,
-      color: EditorTheme.ink,
+Widget panelTitle(String title) => Builder(
+  builder: (context) => Container(
+    height: EditorMetrics.s22,
+    alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+    decoration: BoxDecoration(
+      color: EditorTheme.of(context).raised,
+      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
+    ),
+    child: Text(
+      title,
+      style: TextStyle(
+        fontSize: EditorMetrics.font,
+        color: EditorTheme.of(context).ink,
+      ),
     ),
   ),
 );
@@ -96,16 +98,17 @@ class EditorBar extends StatelessWidget {
     required this.children,
     this.height = EditorMetrics.s22,
     this.padding = EdgeInsets.zero,
-    this.decoration = const BoxDecoration(color: EditorTheme.panel),
+    this.decoration,
   });
   final List<Widget> children;
   final double height;
   final EdgeInsetsGeometry padding;
-  final BoxDecoration decoration;
+  final BoxDecoration? decoration;
   @override
   Widget build(BuildContext context) => Container(
     height: height,
-    decoration: decoration,
+    decoration:
+        decoration ?? BoxDecoration(color: EditorTheme.of(context).panel),
     child: LayoutBuilder(
       builder: (context, box) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -137,16 +140,16 @@ class EditorFieldFrame extends StatelessWidget {
     this.minHeight,
     this.maxHeight,
     this.padding = const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
-    this.color = EditorTheme.app,
+    this.color,
   });
   final Widget child;
   final FocusNode? focus;
   final bool error;
   final double? height, minHeight, maxHeight;
   final EdgeInsets padding;
-  final Color color;
+  final Color? color;
 
-  Widget _box(bool focused) => GestureDetector(
+  Widget _box(BuildContext context, bool focused) => GestureDetector(
     behavior: HitTestBehavior.translucent,
     onTap: focus?.requestFocus,
     child: Container(
@@ -159,13 +162,13 @@ class EditorFieldFrame extends StatelessWidget {
             ),
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? EditorTheme.of(context).app,
         border: Border.all(
           color: error
-              ? EditorTheme.error
+              ? EditorTheme.of(context).error
               : focused
-              ? EditorTheme.accent
-              : EditorTheme.line,
+              ? EditorTheme.of(context).accent
+              : EditorTheme.of(context).line,
         ),
       ),
       child: child,
@@ -174,10 +177,10 @@ class EditorFieldFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => focus == null
-      ? _box(false)
+      ? _box(context, false)
       : ListenableBuilder(
           listenable: focus!,
-          builder: (_, __) => _box(focus!.hasFocus),
+          builder: (_, __) => _box(context, focus!.hasFocus),
         );
 }
 
@@ -198,14 +201,14 @@ class EditorFold extends StatelessWidget {
           Icon(
             open ? Glyph.expand_more : Glyph.chevron_right,
             size: EditorMetrics.s14,
-            color: EditorTheme.muted,
+            color: EditorTheme.of(context).muted,
           ),
           const SizedBox(width: EditorMetrics.s2),
-          const Text(
+          Text(
             'Advanced',
             style: TextStyle(
               fontSize: EditorMetrics.dense,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(context).muted,
             ),
           ),
           const SizedBox(width: EditorMetrics.s6),
@@ -301,9 +304,9 @@ class _EditorDraftFieldState extends State<EditorDraftField> {
         enabled: widget.enabled,
         minLines: 1,
         maxLines: widget.multiline ? 4 : 1,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: EditorMetrics.font,
-          color: EditorTheme.ink,
+          color: EditorTheme.of(context).ink,
         ),
         hint: widget.label,
         onSubmitted: (_) => _commit(),
@@ -712,13 +715,13 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                       focusNode: _focus,
                       autofocus: true,
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: EditorMetrics.font,
-                        color: EditorTheme.ink,
+                        color: EditorTheme.of(context).ink,
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                       cursorWidth: 1,
-                      cursorColor: EditorTheme.ink,
+                      cursorColor: EditorTheme.of(context).ink,
                       onSubmitted: (_) => _commitText(),
                     ),
                   ),
@@ -730,9 +733,9 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                       ),
                       child: Text(
                         widget.unit!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: EditorMetrics.micro,
-                          color: EditorTheme.muted,
+                          color: EditorTheme.of(context).muted,
                         ),
                       ),
                     ),
@@ -787,8 +790,8 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                             color: _flooded
                                 ? widget.tint
                                 : dragging
-                                ? EditorTheme.hover
-                                : EditorTheme.app,
+                                ? EditorTheme.of(context).hover
+                                : EditorTheme.of(context).app,
                             // The family's rule down the left edge: a flat
                             // colour the eye can follow down a column of wells,
                             // drawn by the well's own border.
@@ -798,17 +801,19 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                       color: widget.tint!,
                                       width: EditorMetrics.s3,
                                     ),
-                                    top: const BorderSide(
-                                      color: EditorTheme.line,
+                                    top: BorderSide(
+                                      color: EditorTheme.of(context).line,
                                     ),
-                                    right: const BorderSide(
-                                      color: EditorTheme.line,
+                                    right: BorderSide(
+                                      color: EditorTheme.of(context).line,
                                     ),
-                                    bottom: const BorderSide(
-                                      color: EditorTheme.line,
+                                    bottom: BorderSide(
+                                      color: EditorTheme.of(context).line,
                                     ),
                                   )
-                                : Border.all(color: EditorTheme.line),
+                                : Border.all(
+                                    color: EditorTheme.of(context).line,
+                                  ),
                           ),
                           child: Stack(
                             fit: StackFit.expand,
@@ -818,11 +823,14 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                   widget.max != null)
                                 CustomPaint(
                                   painter: _TrackPainter(
+                                    colors: EditorTheme.of(context),
                                     value: _shown ?? widget.value,
                                     min: widget.min!,
                                     max: widget.max!,
                                     rest: widget.defaultValue,
-                                    tint: widget.tint ?? EditorTheme.raised,
+                                    tint:
+                                        widget.tint ??
+                                        EditorTheme.of(context).raised,
                                     style: widget.track,
                                   ),
                                 ),
@@ -848,17 +856,17 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                           // Resting at its default the number is
                                           // quiet; moved, it is ink.
                                           color: !widget.enabled
-                                              ? EditorTheme.muted
+                                              ? EditorTheme.of(context).muted
                                               : _flooded
-                                              ? EditorTheme.tabInk
+                                              ? EditorTheme.of(context).tabInk
                                               : widget.defaultValue != null &&
                                                     (widget.value -
                                                                 widget
                                                                     .defaultValue!)
                                                             .abs() <
                                                         .0005
-                                              ? EditorTheme.tab
-                                              : EditorTheme.ink,
+                                              ? EditorTheme.of(context).tab
+                                              : EditorTheme.of(context).ink,
                                           // A number you can drag wears a dotted
                                           // underline, unless a track already says
                                           // so; a read-only one never does.
@@ -871,7 +879,9 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                               : TextDecoration.none,
                                           decorationStyle:
                                               TextDecorationStyle.dotted,
-                                          decorationColor: EditorTheme.muted,
+                                          decorationColor: EditorTheme.of(
+                                            context,
+                                          ).muted,
                                         ),
                                       ),
                                     ),
@@ -885,9 +895,10 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                         ),
                                         child: Text(
                                           widget.unit!,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: EditorMetrics.micro,
-                                            color: EditorTheme.muted,
+                                            color: EditorTheme.of(context)
+                                                .muted,
                                           ),
                                         ),
                                       ),
@@ -928,8 +939,8 @@ class _RungPill extends StatelessWidget {
       horizontal: EditorMetrics.s8,
       vertical: EditorMetrics.s4,
     ),
-    decoration: const BoxDecoration(
-      color: EditorTheme.tooltip,
+    decoration: BoxDecoration(
+      color: EditorTheme.of(context).tooltip,
       borderRadius: BorderRadius.all(Radius.circular(EditorMetrics.s4)),
     ),
     child: Text.rich(
@@ -940,7 +951,9 @@ class _RungPill extends StatelessWidget {
             TextSpan(
               text: _name(r),
               style: TextStyle(
-                color: r == rung ? EditorTheme.black : EditorTheme.disabledInk,
+                color: r == rung
+                    ? EditorTheme.black
+                    : EditorTheme.of(context).disabledInk,
                 fontWeight: r == rung ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -991,9 +1004,9 @@ class _EditorLampState extends State<EditorLamp> {
     final state = widget.state;
     final color = switch (state) {
       KeyLamp.none => null,
-      KeyLamp.keyed => EditorTheme.keyAccent.withValues(alpha: .55),
-      KeyLamp.now => EditorTheme.keyAccent,
-      KeyLamp.draft => EditorTheme.keyAccent.withValues(alpha: .3),
+      KeyLamp.keyed => EditorTheme.of(context).keyAccent.withValues(alpha: .55),
+      KeyLamp.now => EditorTheme.of(context).keyAccent,
+      KeyLamp.draft => EditorTheme.of(context).keyAccent.withValues(alpha: .3),
     };
     // Unlit lamps show as a hollow ring only while the pointer is near, so
     // the corner stays quiet until it is wanted.
@@ -1032,7 +1045,9 @@ class _EditorLampState extends State<EditorLamp> {
                               color: color,
                               shape: BoxShape.circle,
                               border: color == null
-                                  ? Border.all(color: EditorTheme.muted)
+                                  ? Border.all(
+                                      color: EditorTheme.of(context).muted,
+                                    )
                                   : null,
                             ),
                           )
@@ -1089,10 +1104,10 @@ class EditorSwitch extends StatelessWidget {
               glyph,
               size: EditorMetrics.s16,
               color: !enabled
-                  ? EditorTheme.disabledInk
+                  ? EditorTheme.of(context).disabledInk
                   : on
-                  ? tint ?? EditorTheme.accent
-                  : EditorTheme.muted,
+                  ? tint ?? EditorTheme.of(context).accent
+                  : EditorTheme.of(context).muted,
             ),
           ),
         ),
@@ -1114,13 +1129,17 @@ class EditorSwitch extends StatelessWidget {
                 height: EditorMetrics.s12,
                 padding: const EdgeInsets.all(EditorMetrics.s2),
                 decoration: BoxDecoration(
-                  color: on ? tint ?? EditorTheme.accent : EditorTheme.raised,
+                  color: on
+                      ? tint ?? EditorTheme.of(context).accent
+                      : EditorTheme.of(context).raised,
                 ),
                 alignment: on ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   width: EditorMetrics.s8,
                   height: EditorMetrics.s8,
-                  color: on ? EditorTheme.tabInk : EditorTheme.ink,
+                  color: on
+                      ? EditorTheme.of(context).tabInk
+                      : EditorTheme.of(context).ink,
                 ),
               ),
               const SizedBox(width: EditorMetrics.s4),
@@ -1128,8 +1147,11 @@ class EditorSwitch extends StatelessWidget {
                 glyph,
                 size: EditorMetrics.s14,
                 color: !enabled
-                    ? EditorTheme.disabledInk
-                    : ink ?? (on ? EditorTheme.ink : EditorTheme.muted),
+                    ? EditorTheme.of(context).disabledInk
+                    : ink ??
+                          (on
+                              ? EditorTheme.of(context).ink
+                              : EditorTheme.of(context).muted),
               ),
             ],
           ),
@@ -1340,10 +1362,11 @@ class _EditorDialState extends State<EditorDial>
           child: CustomPaint(
             size: Size.square(widget.size),
             painter: _DialPainter(
+              colors: EditorTheme.of(context),
               _shown ?? widget.degrees,
               !widget.enabled
-                  ? EditorTheme.muted
-                  : widget.tint ?? EditorTheme.ink,
+                  ? EditorTheme.of(context).muted
+                  : widget.tint ?? EditorTheme.of(context).ink,
             ),
           ),
         ),
@@ -1353,7 +1376,13 @@ class _EditorDialState extends State<EditorDial>
 }
 
 class _DialPainter extends CustomPainter {
-  const _DialPainter(this.degrees, this.ink);
+  final EditorTheme colors;
+
+  const _DialPainter(
+    this.degrees,
+    this.ink, {
+    this.colors = EditorTheme.chromatic,
+  });
   final double degrees;
   final Color ink;
   @override
@@ -1364,14 +1393,14 @@ class _DialPainter extends CustomPainter {
       c,
       r,
       Paint()
-        ..color = EditorTheme.app
+        ..color = colors.app
         ..style = PaintingStyle.fill,
     );
     canvas.drawCircle(
       c,
       r,
       Paint()
-        ..color = EditorTheme.border
+        ..color = colors.border
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
@@ -1388,7 +1417,7 @@ class _DialPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DialPainter old) =>
-      old.degrees != degrees || old.ink != ink;
+      colors != old.colors || old.degrees != degrees || old.ink != ink;
 }
 
 /// Where the layer turns and scales from: nine places, the current one lit.
@@ -1432,10 +1461,10 @@ class EditorAnchorGrid extends StatelessWidget {
                             fraction != null &&
                                 (fraction![0] - x).abs() < .05 &&
                                 (fraction![1] - y).abs() < .05
-                            ? EditorTheme.accent
+                            ? EditorTheme.of(context).accent
                             : onPick == null
-                            ? EditorTheme.raised
-                            : EditorTheme.border,
+                            ? EditorTheme.of(context).raised
+                            : EditorTheme.of(context).border,
                         borderRadius: BorderRadius.circular(EditorMetrics.s2),
                       ),
                     ),
@@ -1470,12 +1499,12 @@ class EditorCard extends StatelessWidget {
   final bool dim;
   @override
   Widget build(BuildContext context) => DefaultTextStyle(
-    style: EditorTheme.text,
+    style: EditorTheme.of(context).text,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-      decoration: const BoxDecoration(
-        color: EditorTheme.panel,
-        border: Border(bottom: BorderSide(color: EditorTheme.line)),
+      decoration: BoxDecoration(
+        color: EditorTheme.of(context).panel,
+        border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1488,18 +1517,25 @@ class EditorCard extends StatelessWidget {
             onToggle: onToggle,
           ),
           if (expanded) ...[
+            // The head sits close to its rows; the rows are a step apart; the
+            // card ends a step past its last row, whatever that row is.
             const SizedBox(height: EditorMetrics.s2),
             if (dim)
               Opacity(
                 opacity: .4,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: EditorMetrics.s4,
                   children: children,
                 ),
               )
             else
-              ...children,
-            const SizedBox(height: EditorMetrics.s4),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: EditorMetrics.s4,
+                children: children,
+              ),
+            const SizedBox(height: EditorMetrics.s8),
           ],
         ],
       ),
@@ -1537,20 +1573,23 @@ class _SectionHead extends StatelessWidget {
                 child: Row(
                   children: [
                     if (onToggle != null)
-                      Icon(
-                        expanded ? Glyph.expand_more : Glyph.chevron_right,
-                        size: EditorMetrics.s14,
-                        color: EditorTheme.muted,
+                      Transform.translate(
+                        offset: const Offset(-1.5, 0),
+                        child: Icon(
+                          expanded ? Glyph.expand_more : Glyph.chevron_right,
+                          size: EditorMetrics.s14,
+                          color: EditorTheme.of(context).muted,
+                        ),
                       ),
                     Expanded(
                       child: Text(
                         title.toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: EditorMetrics.micro,
                           letterSpacing: 1,
-                          color: EditorTheme.muted,
+                          color: EditorTheme.of(context).muted,
                         ),
                       ),
                     ),
@@ -1699,11 +1738,12 @@ class _EditorPadState extends State<EditorPad>
             child: CustomPaint(
               size: Size.square(widget.size),
               painter: _PadPainter(
+                colors: EditorTheme.of(context),
                 _shown ?? Offset(widget.x, widget.y),
                 widget.span,
                 !widget.enabled
-                    ? EditorTheme.muted
-                    : widget.tint ?? EditorTheme.accent,
+                    ? EditorTheme.of(context).muted
+                    : widget.tint ?? EditorTheme.of(context).accent,
                 unit: widget.unit,
                 snaps: widget.snaps,
                 bars: widget.bars,
@@ -1717,10 +1757,13 @@ class _EditorPadState extends State<EditorPad>
 }
 
 class _PadPainter extends CustomPainter {
+  final EditorTheme colors;
+
   const _PadPainter(
     this.at,
     this.span,
     this.dot, {
+    this.colors = EditorTheme.chromatic,
     this.unit = false,
     this.snaps,
     this.bars,
@@ -1737,10 +1780,10 @@ class _PadPainter extends CustomPainter {
       Offset.zero & size,
       const Radius.circular(EditorMetrics.s3),
     );
-    canvas.drawRRect(r, Paint()..color = EditorTheme.app);
+    canvas.drawRRect(r, Paint()..color = colors.app);
     final c = size.center(Offset.zero);
     final hair = Paint()
-      ..color = EditorTheme.line
+      ..color = colors.line
       ..strokeWidth = 1;
     final half = size.width / 2 - EditorMetrics.s4;
     // A unit pad maps 0..1 onto the inner square; the snaps are its marks.
@@ -1754,7 +1797,7 @@ class _PadPainter extends CustomPainter {
             c.dy + (v.dy / span * half).clamp(-half, half),
           );
     if (snaps case final marks?) {
-      final mark = Paint()..color = EditorTheme.border;
+      final mark = Paint()..color = colors.border;
       for (final s in marks) {
         final q = place(s);
         if (bars == Axis.horizontal) {
@@ -1771,7 +1814,7 @@ class _PadPainter extends CustomPainter {
           // A cross, not a dot: nine of them have to read as places to land
           // at this size, and a one-pixel dot does not.
           final pen = Paint()
-            ..color = EditorTheme.muted
+            ..color = colors.muted
             ..strokeWidth = 1;
           canvas.drawLine(
             q - const Offset(EditorMetrics.s3, 0),
@@ -1790,18 +1833,19 @@ class _PadPainter extends CustomPainter {
       canvas.drawLine(Offset(0, c.dy), Offset(size.width, c.dy), hair);
     }
     final p = place(at);
-    if (!unit) canvas.drawLine(c, p, Paint()..color = EditorTheme.border);
+    if (!unit) canvas.drawLine(c, p, Paint()..color = colors.border);
     canvas.drawCircle(p, EditorMetrics.s4, Paint()..color = dot);
     canvas.drawRRect(
       r,
       Paint()
-        ..color = EditorTheme.border
+        ..color = colors.border
         ..style = PaintingStyle.stroke,
     );
   }
 
   @override
   bool shouldRepaint(_PadPainter old) =>
+      colors != old.colors ||
       old.at != at ||
       old.span != span ||
       old.dot != dot ||
@@ -1828,7 +1872,10 @@ enum TrackStyle {
 /// The amount behind a bounded number, in the family's hue, with a tick
 /// where the rest point is.
 class _TrackPainter extends CustomPainter {
+  final EditorTheme colors;
+
   const _TrackPainter({
+    this.colors = EditorTheme.chromatic,
     required this.value,
     required this.min,
     required this.max,
@@ -1897,7 +1944,7 @@ class _TrackPainter extends CustomPainter {
         Offset(x, 0),
         Offset(x, size.height),
         Paint()
-          ..color = EditorTheme.border
+          ..color = colors.border
           ..strokeWidth = 1,
       );
     }
@@ -1905,6 +1952,7 @@ class _TrackPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TrackPainter old) =>
+      colors != old.colors ||
       old.value != value ||
       old.min != min ||
       old.max != max ||
@@ -2020,6 +2068,11 @@ class EditorZoomBar extends StatelessWidget {
 
   /// Percent moved by one press of − or +.
   final int step;
+
+  /// The width at which the bar shows its slider: both presses, the percent
+  /// field, and a slider long enough to grab. Narrower, the field stands alone.
+  static const sliderRoom =
+      EditorMetrics.row * 2 + EditorMetrics.field + EditorMetrics.s48;
   @override
   Widget build(BuildContext context) {
     final low = (min / base * 100).ceilToDouble();
@@ -2032,13 +2085,17 @@ class EditorZoomBar extends StatelessWidget {
       onTap: () => change(percent.roundToDouble() + delta),
       child: SizedBox.square(
         dimension: EditorMetrics.row,
-        child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
+        child: Icon(
+          icon,
+          size: EditorMetrics.s14,
+          color: EditorTheme.of(context).muted,
+        ),
       ),
     );
     return Container(
       height: EditorMetrics.row,
-      foregroundDecoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: EditorTheme.line)),
+      foregroundDecoration: BoxDecoration(
+        border: Border(top: BorderSide(color: EditorTheme.of(context).line)),
       ),
       child: LayoutBuilder(
         builder: (context, box) {
@@ -2053,7 +2110,7 @@ class EditorZoomBar extends StatelessWidget {
           return Row(
             children: [
               step(Glyph.remove, -this.step, 'smaller'),
-              if (box.maxWidth >= EditorMetrics.cell) ...[
+              if (box.maxWidth >= sliderRoom) ...[
                 Expanded(
                   child: EditorSlider(
                     min: low,

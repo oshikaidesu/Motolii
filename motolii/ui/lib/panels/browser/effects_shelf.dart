@@ -49,8 +49,10 @@ class EffectsShelf extends BrowserShelf {
       key: const ValueKey('browser:effects:header'),
       height: EditorMetrics.control,
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: EditorTheme.line)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: EditorTheme.of(host.context).line),
+        ),
       ),
       child: Row(
         children: [
@@ -59,7 +61,7 @@ class EffectsShelf extends BrowserShelf {
             child: EditorIconButton(
               key: const ValueKey('browser:effects:reload'),
               iconSize: EditorMetrics.s14,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(host.context).muted,
               onPressed: () => host.controller.command('reloadEffects'),
               icon: const Icon(Glyph.refresh),
             ),
@@ -72,7 +74,7 @@ class EffectsShelf extends BrowserShelf {
                 notice,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: EditorTheme.error),
+                style: TextStyle(color: EditorTheme.of(host.context).error),
               ),
             ),
           ),

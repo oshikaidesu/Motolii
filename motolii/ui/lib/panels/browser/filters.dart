@@ -279,8 +279,10 @@ class FilterView extends StatelessWidget {
             children: [
               for (final group in groups)
                 Container(
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: EditorTheme.line)),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: EditorTheme.of(context).line),
+                    ),
                   ),
                   padding: const EdgeInsets.fromLTRB(
                     EditorMetrics.s6,
@@ -300,9 +302,9 @@ class FilterView extends StatelessWidget {
                             children: [
                               Text(
                                 group.name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: EditorMetrics.dense,
-                                  color: EditorTheme.ink,
+                                  color: EditorTheme.of(context).ink,
                                 ),
                               ),
                               const SizedBox(width: EditorMetrics.s4),
@@ -311,7 +313,7 @@ class FilterView extends StatelessWidget {
                                     ? Glyph.arrow_right
                                     : Glyph.arrow_drop_down,
                                 size: EditorMetrics.s12,
-                                color: EditorTheme.muted,
+                                color: EditorTheme.of(context).muted,
                               ),
                               if (folded.contains(group.name) &&
                                   (filter.groups[group.name]?.isNotEmpty ??
@@ -322,9 +324,9 @@ class FilterView extends StatelessWidget {
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: EditorMetrics.micro,
-                                    color: EditorTheme.accent,
+                                    color: EditorTheme.of(context).accent,
                                   ),
                                 ),
                             ],
@@ -370,14 +372,16 @@ class FilterView extends StatelessWidget {
       Container(
         height: EditorMetrics.row,
         padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-        color: filter.isEmpty ? EditorTheme.clear : EditorTheme.raised,
+        color: filter.isEmpty
+            ? EditorTheme.clear
+            : EditorTheme.of(context).raised,
         child: Row(
           children: [
             Text(
               'Results',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: EditorMetrics.dense,
-                color: EditorTheme.ink,
+                color: EditorTheme.of(context).ink,
               ),
             ),
             const SizedBox(width: EditorMetrics.s8),
@@ -387,7 +391,9 @@ class FilterView extends StatelessWidget {
                   : '$results · $active ${active == 1 ? 'filter' : 'filters'}',
               style: TextStyle(
                 fontSize: EditorMetrics.micro,
-                color: active == 0 ? EditorTheme.muted : EditorTheme.accent,
+                color: active == 0
+                    ? EditorTheme.of(context).muted
+                    : EditorTheme.of(context).accent,
               ),
             ),
             const Spacer(),
@@ -402,8 +408,8 @@ class FilterView extends StatelessWidget {
                   style: TextStyle(
                     fontSize: EditorMetrics.dense,
                     color: filter.isEmpty
-                        ? EditorTheme.disabledInk
-                        : EditorTheme.ink,
+                        ? EditorTheme.of(context).disabledInk
+                        : EditorTheme.of(context).ink,
                   ),
                 ),
               ),
@@ -417,8 +423,8 @@ class FilterView extends StatelessWidget {
                   Glyph.playlist_add,
                   size: EditorMetrics.s12,
                   color: filter.isEmpty
-                      ? EditorTheme.disabledInk
-                      : EditorTheme.ink,
+                      ? EditorTheme.of(context).disabledInk
+                      : EditorTheme.of(context).ink,
                 ),
               ),
             ),
@@ -455,7 +461,9 @@ class _TagChip extends StatelessWidget {
         vertical: EditorMetrics.s2,
       ),
       decoration: BoxDecoration(
-        color: chosen ? EditorTheme.accent : EditorTheme.raised,
+        color: chosen
+            ? EditorTheme.of(context).accent
+            : EditorTheme.of(context).raised,
         borderRadius: BorderRadius.circular(EditorMetrics.s2),
       ),
       child: Row(
@@ -465,7 +473,9 @@ class _TagChip extends StatelessWidget {
             tag,
             style: TextStyle(
               fontSize: EditorMetrics.micro,
-              color: chosen ? EditorTheme.app : EditorTheme.ink,
+              color: chosen
+                  ? EditorTheme.of(context).app
+                  : EditorTheme.of(context).ink,
             ),
           ),
           if (onRemove != null)
@@ -475,8 +485,10 @@ class _TagChip extends StatelessWidget {
                 padding: const EdgeInsets.only(left: EditorMetrics.s3),
                 child: Icon(
                   Glyph.close,
-                  size: EditorMetrics.micro,
-                  color: chosen ? EditorTheme.app : EditorTheme.muted,
+                  size: EditorMetrics.s10,
+                  color: chosen
+                      ? EditorTheme.of(context).app
+                      : EditorTheme.of(context).muted,
                 ),
               ),
             ),
@@ -521,9 +533,9 @@ class _RangeAdderState extends State<_RangeAdder> {
       key: key,
       controller: c,
       autofocus: c == lo,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: EditorMetrics.micro,
-        color: EditorTheme.ink,
+        color: EditorTheme.of(context).ink,
       ),
       hint: hint,
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
@@ -542,9 +554,9 @@ class _RangeAdderState extends State<_RangeAdder> {
             if (widget.unit.isNotEmpty)
               Text(
                 ' ${widget.unit}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: EditorMetrics.micro,
-                  color: EditorTheme.muted,
+                  color: EditorTheme.of(context).muted,
                 ),
               ),
           ],
@@ -555,13 +567,13 @@ class _RangeAdderState extends State<_RangeAdder> {
             height: EditorMetrics.s16,
             padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
             decoration: BoxDecoration(
-              border: Border.all(color: EditorTheme.line),
+              border: Border.all(color: EditorTheme.of(context).line),
               borderRadius: BorderRadius.circular(EditorMetrics.s2),
             ),
-            child: const Icon(
+            child: Icon(
               Glyph.add,
-              size: EditorMetrics.micro,
-              color: EditorTheme.muted,
+              size: EditorMetrics.s10,
+              color: EditorTheme.of(context).muted,
             ),
           ),
         );
@@ -637,9 +649,9 @@ class _RailCollectionsState extends State<RailCollections> {
             controller: field,
             focusNode: focus,
             autofocus: true,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: EditorMetrics.font,
-              color: EditorTheme.ink,
+              color: EditorTheme.of(context).ink,
             ),
             padding: const EdgeInsets.symmetric(
               horizontal: EditorMetrics.s4,
@@ -675,11 +687,11 @@ class _RailCollectionsState extends State<RailCollections> {
           }),
           child: Container(
             height: EditorMetrics.control,
-            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
             color: hovering.isNotEmpty
-                ? EditorTheme.spatial.withValues(alpha: .3)
+                ? EditorTheme.of(context).spatial.withValues(alpha: .3)
                 : chosen == i
-                ? EditorTheme.raised
+                ? EditorTheme.of(context).raised
                 : EditorTheme.clear,
             child: Row(
               children: [
@@ -699,7 +711,9 @@ class _RailCollectionsState extends State<RailCollections> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: EditorMetrics.font,
-                      color: chosen == i ? EditorTheme.accent : EditorTheme.ink,
+                      color: chosen == i
+                          ? EditorTheme.of(context).accent
+                          : EditorTheme.of(context).ink,
                     ),
                   ),
                 ),
@@ -732,12 +746,12 @@ class _RailCollectionsState extends State<RailCollections> {
               child: EditorPress(
                 key: ValueKey('browser:label:drop:${label['name']}'),
                 onTap: () => widget.onDropLabel('${label['name']}'),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(EditorMetrics.s4),
                   child: Icon(
                     Glyph.close,
                     size: EditorMetrics.s12,
-                    color: EditorTheme.muted,
+                    color: EditorTheme.of(context).muted,
                   ),
                 ),
               ),
@@ -754,7 +768,7 @@ class _RailTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(
-      EditorMetrics.s8,
+      EditorMetrics.s6,
       EditorMetrics.s8,
       EditorMetrics.s4,
       EditorMetrics.s4,
@@ -763,10 +777,10 @@ class _RailTitle extends StatelessWidget {
       text.toUpperCase(),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: EditorMetrics.micro,
         letterSpacing: 1,
-        color: EditorTheme.muted,
+        color: EditorTheme.of(context).muted,
       ),
     ),
   );
@@ -838,9 +852,9 @@ class _QuickTagsState extends State<QuickTags> {
         key: const ValueKey('browser:quicktags:add'),
         controller: widget.addController,
         focusNode: widget.addFocus,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: EditorMetrics.font,
-          color: EditorTheme.ink,
+          color: EditorTheme.of(context).ink,
         ),
         hint: 'Add…',
         padding: const EdgeInsets.symmetric(
@@ -860,11 +874,11 @@ class _QuickTagsState extends State<QuickTags> {
   Widget build(BuildContext context) => Container(
     key: const ValueKey('browser:quicktags'),
     padding: const EdgeInsets.symmetric(
-      horizontal: EditorMetrics.s8,
+      horizontal: EditorMetrics.s6,
       vertical: EditorMetrics.s4,
     ),
-    decoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: EditorTheme.line)),
+    decoration: BoxDecoration(
+      border: Border(top: BorderSide(color: EditorTheme.of(context).line)),
     ),
     child: Row(
       children: [
@@ -877,9 +891,9 @@ class _QuickTagsState extends State<QuickTags> {
                 widget.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: EditorMetrics.dense,
-                  color: EditorTheme.muted,
+                  color: EditorTheme.of(context).muted,
                 ),
               ),
             ),
@@ -903,7 +917,7 @@ class _Chip extends StatelessWidget {
     margin: const EdgeInsets.only(right: EditorMetrics.s4),
     padding: const EdgeInsets.only(left: EditorMetrics.s6),
     decoration: BoxDecoration(
-      border: Border.all(color: EditorTheme.line),
+      border: Border.all(color: EditorTheme.of(context).line),
       borderRadius: BorderRadius.circular(EditorMetrics.s2),
     ),
     child: Row(
@@ -913,18 +927,20 @@ class _Chip extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: EditorMetrics.dense,
-            color: muted ? EditorTheme.muted : EditorTheme.ink,
+            color: muted
+                ? EditorTheme.of(context).muted
+                : EditorTheme.of(context).ink,
           ),
         ),
         if (onRemove != null)
           EditorPress(
             onTap: onRemove,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(EditorMetrics.s3),
               child: Icon(
                 Glyph.close,
                 size: EditorMetrics.s12,
-                color: EditorTheme.muted,
+                color: EditorTheme.of(context).muted,
               ),
             ),
           )

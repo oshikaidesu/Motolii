@@ -90,24 +90,24 @@ class _DepthDeskState extends State<DepthDesk> {
             child: Row(
               children: [
                 const SizedBox(width: EditorMetrics.s6),
-                const Icon(
+                Icon(
                   Glyph.videocam_outlined,
                   size: EditorMetrics.s15,
-                  color: EditorTheme.muted,
+                  color: EditorTheme.of(context).muted,
                 ),
                 if (target != null) ...[
                   const SizedBox(width: EditorMetrics.s6),
-                  const Icon(
+                  Icon(
                     Glyph.gps_fixed,
                     size: EditorMetrics.s15,
-                    color: EditorTheme.muted,
+                    color: EditorTheme.of(context).muted,
                   ),
                   const SizedBox(width: EditorMetrics.s4),
                   Text(
                     '${target['name']}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: EditorMetrics.dense,
-                      color: EditorTheme.muted,
+                      color: EditorTheme.of(context).muted,
                     ),
                   ),
                 ],
@@ -229,6 +229,7 @@ class _DepthDeskState extends State<DepthDesk> {
                         Positioned.fill(
                           child: CustomPaint(
                             painter: _DepthGrid(
+                              colors: EditorTheme.of(context),
                               origin,
                               eye,
                               scale,
@@ -240,20 +241,21 @@ class _DepthDeskState extends State<DepthDesk> {
                         ),
                         for (final item in items)
                           Positioned(
-                            left: point(item).dx - EditorMetrics.micro,
-                            top: point(item).dy - EditorMetrics.micro,
+                            left: point(item).dx - EditorMetrics.s10,
+                            top: point(item).dy - EditorMetrics.s10,
                             child: EditorTooltip(
                               message: '${item['name']}',
                               child: Container(
                                 width: EditorMetrics.s18,
                                 height: EditorMetrics.s18,
                                 decoration: BoxDecoration(
-                                  color: EditorTheme.layerColor(item['id']),
+                                  color: EditorTheme.of(context)
+                                      .layerColor(item['id']),
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: c.selectedIds.contains(item['id'])
-                                        ? EditorTheme.ink
-                                        : EditorTheme.line,
+                                        ? EditorTheme.of(context).ink
+                                        : EditorTheme.of(context).line,
                                     width: c.selectedIds.contains(item['id'])
                                         ? EditorMetrics.s2
                                         : 1,
@@ -264,8 +266,8 @@ class _DepthDeskState extends State<DepthDesk> {
                                     Glyph.circle,
                                     size: EditorMetrics.s4,
                                     color: c.selectedIds.contains(item['id'])
-                                        ? EditorTheme.ink
-                                        : EditorTheme.line,
+                                        ? EditorTheme.of(context).ink
+                                        : EditorTheme.of(context).line,
                                   ),
                                 ),
                               ),
@@ -284,9 +286,9 @@ class _DepthDeskState extends State<DepthDesk> {
                                   '${item['name']}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: EditorMetrics.dense,
-                                    color: EditorTheme.ink,
+                                    color: EditorTheme.of(context).ink,
                                   ),
                                 ),
                               ),
@@ -306,12 +308,15 @@ class _DepthDeskState extends State<DepthDesk> {
 }
 
 class _DepthGrid extends CustomPainter {
+  final EditorTheme colors;
+
   _DepthGrid(
     this.origin,
     this.eye,
     this.scale,
     this.range,
     this.fov, {
+    this.colors = EditorTheme.chromatic,
     this.ink = EditorInk.dark,
   });
   final EditorInk ink;
@@ -321,9 +326,9 @@ class _DepthGrid extends CustomPainter {
   final double scale, range, fov;
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = EditorTheme.panel);
+    canvas.drawRect(Offset.zero & size, Paint()..color = colors.panel);
     final line = Paint()
-      ..color = EditorTheme.line
+      ..color = colors.line
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     for (final fraction in [.25, .5, .75, 1.0])
@@ -351,7 +356,7 @@ class _DepthGrid extends CustomPainter {
       Rect.fromCenter(
         center: Offset.zero,
         width: EditorMetrics.s14,
-        height: EditorMetrics.dense,
+        height: EditorMetrics.s11,
       ),
       Paint()..color = ink.camera,
     );
@@ -371,6 +376,7 @@ class _DepthGrid extends CustomPainter {
 
   @override
   bool shouldRepaint(_DepthGrid old) =>
+      colors != old.colors ||
       ink != old.ink ||
       origin != old.origin ||
       eye != old.eye ||

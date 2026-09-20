@@ -144,17 +144,19 @@ void main() {
 
   test('only the key accent flips its hue while Animate is on', () {
     EditorTheme.animating.value = false;
-    expect(EditorTheme.keyAccent, EditorTheme.accent);
+    final originalAccent = EditorTheme.chromatic.accent;
+    addTearDown(() => EditorTheme.animating.value = false);
+    expect(EditorTheme.chromatic.keyAccent, EditorTheme.chromatic.accent);
     EditorTheme.animating.value = true;
-    expect(EditorTheme.keyAccent, EditorTheme.animate);
-    expect(EditorTheme.accent, const Color(0xffffaa61));
+    expect(EditorTheme.chromatic.keyAccent, EditorTheme.chromatic.animate);
+    expect(EditorTheme.chromatic.accent, originalAccent);
     expect(
-      HSLColor.fromColor(EditorTheme.animate).lightness,
-      closeTo(HSLColor.fromColor(EditorTheme.accent).lightness, .01),
+      HSLColor.fromColor(EditorTheme.chromatic.animate).lightness,
+      closeTo(HSLColor.fromColor(EditorTheme.chromatic.accent).lightness, .01),
     );
     expect(
-      (HSLColor.fromColor(EditorTheme.animate).hue -
-              HSLColor.fromColor(EditorTheme.accent).hue)
+      (HSLColor.fromColor(EditorTheme.chromatic.animate).hue -
+              HSLColor.fromColor(EditorTheme.chromatic.accent).hue)
           .abs(),
       closeTo(180, 1),
     );

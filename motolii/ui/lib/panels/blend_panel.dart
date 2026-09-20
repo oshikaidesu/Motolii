@@ -334,7 +334,7 @@ class _BlendTile extends StatelessWidget {
         if (desk._hover == mode) desk._aim(null);
       },
       child: DecoratedBox(
-        decoration: const BoxDecoration(color: EditorTheme.panel),
+        decoration: BoxDecoration(color: EditorTheme.of(context).panel),
         child: ValueListenableBuilder<_Look>(
           valueListenable: look,
           builder: (context, look, _) => Semantics(
@@ -378,8 +378,8 @@ class _BlendTile extends StatelessWidget {
                               fontSize: EditorMetrics.dense,
                               height: 1,
                               color: look.current
-                                  ? EditorTheme.accent
-                                  : EditorTheme.muted,
+                                  ? EditorTheme.of(context).accent
+                                  : EditorTheme.of(context).muted,
                             ),
                           ),
                         ),
@@ -391,9 +391,9 @@ class _BlendTile extends StatelessWidget {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: look.current
-                              ? EditorTheme.accent
+                              ? EditorTheme.of(context).accent
                               : look.hovered
-                              ? EditorTheme.select
+                              ? EditorTheme.of(context).select
                               : EditorTheme.clear,
                           width: EditorMetrics.s2,
                         ),

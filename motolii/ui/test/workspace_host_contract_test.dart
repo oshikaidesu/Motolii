@@ -13,13 +13,13 @@ void main() {
     final layout = WorkspaceLayout();
     await tester.pumpWidget(
       WidgetsApp(
-        color: EditorTheme.app,
+        color: EditorTheme.chromatic.app,
         pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
           settings: settings,
           pageBuilder: (context, _, __) => builder(context),
         ),
         home: DefaultTextStyle(
-          style: const TextStyle(color: EditorTheme.ink),
+          style: TextStyle(color: EditorTheme.chromatic.ink),
           child: WorkspaceView(
             layout: layout.root,
             panelBuilder: (name) => Text('body:$name'),

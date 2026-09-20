@@ -208,7 +208,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   /// preview. Nothing else shares that line, so the name keeps the tile's
   /// whole width; format and status ride on the picture instead.
   static const double _gutter = EditorMetrics.s2,
-      _inset = EditorMetrics.s8,
+      _inset = EditorMetrics.s6,
       _captionHeight = EditorMetrics.control;
   int total = 0;
 
@@ -219,6 +219,8 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
   /// floor, below which a name stops being legible.
   @override
   double get tileScale => tile / BrowserSize.base;
+
+  @override
   double get captionHeight => _captionHeight * tileScale;
   double get rail =>
       railDrag ??
@@ -507,7 +509,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
       focusNode: panelFocus,
       onKeyEvent: key,
       child: ColoredBox(
-        color: EditorTheme.panel,
+        color: EditorTheme.of(context).panel,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -699,7 +701,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                                       : ColoredBox(
                                           color:
                                               custom?.ground ??
-                                              EditorTheme.line,
+                                              EditorTheme.of(context).line,
                                           child: GridView.builder(
                                             controller: scroll,
                                             padding: EdgeInsets.all(
@@ -787,17 +789,20 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
       horizontal: _inset,
       vertical: EditorMetrics.s4,
     ),
-    decoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: EditorTheme.line)),
+    decoration: BoxDecoration(
+      border: Border(top: BorderSide(color: EditorTheme.of(context).line)),
     ),
     child: LayoutBuilder(
       builder: (context, box) {
         // 譲る順は 件数 → 寸法棒。寸法棒は、棒が出る幅ならその分、
         // 出ない幅でも押し所 2 つ分を必ず残す。
-        final slider = box.maxWidth >= EditorMetrics.cell + EditorMetrics.s48;
+        final slider =
+            box.maxWidth >= EditorZoomBar.sliderRoom + EditorMetrics.s48;
         final countRoom =
             box.maxWidth -
-            (slider ? EditorMetrics.cell : _zoomFloor + EditorMetrics.s64) -
+            (slider
+                ? EditorZoomBar.sliderRoom
+                : _zoomFloor + EditorMetrics.s64) -
             EditorMetrics.s8;
         final compact = countRoom < EditorMetrics.s48;
         return Row(
@@ -819,9 +824,9 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: EditorMetrics.dense,
-                        color: EditorTheme.muted,
+                        color: EditorTheme.of(context).muted,
                       ),
                     ),
                   ),
@@ -876,7 +881,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
           '${item['name'] ?? item['hex'] ?? item['id']}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: EditorTheme.ink),
+          style: TextStyle(color: EditorTheme.of(context).ink),
         ),
       ),
       for (final fact in facts)
@@ -949,7 +954,10 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
               decoration: BoxDecoration(
                 color: BrowserLibrary.collectionColors[which - 1],
                 shape: BoxShape.circle,
-                border: Border.all(color: EditorTheme.app, width: 1),
+                border: Border.all(
+                  color: EditorTheme.of(context).app,
+                  width: 1,
+                ),
               ),
             ),
           ),
@@ -1005,8 +1013,8 @@ class _BrowserSearchBar extends StatelessWidget {
       horizontal: _BrowserPanelState._inset,
       vertical: EditorMetrics.s4,
     ),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: EditorTheme.line)),
+    decoration: BoxDecoration(
+      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
     ),
     child: Row(
       children: [
@@ -1017,19 +1025,19 @@ class _BrowserSearchBar extends StatelessWidget {
             child: EditorTextField(
               controller: search,
               focusNode: searchFocus,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: EditorMetrics.font,
-                color: EditorTheme.ink,
+                color: EditorTheme.of(context).ink,
               ),
               prefix: ConstrainedBox(
                 constraints: const BoxConstraints(
-                  minWidth: EditorMetrics.row,
+                  minWidth: EditorMetrics.control,
                   minHeight: EditorMetrics.row,
                 ),
-                child: const Icon(
+                child: Icon(
                   Glyph.search,
                   size: EditorMetrics.s14,
-                  color: EditorTheme.muted,
+                  color: EditorTheme.of(context).muted,
                 ),
               ),
               // The frame is one row tall: its border and one line are all
@@ -1045,7 +1053,7 @@ class _BrowserSearchBar extends StatelessWidget {
           tool,
         ],
         if (filterable) ...[
-          const SizedBox(width: EditorMetrics.s4),
+          const SizedBox(width: EditorMetrics.s6),
           EditorTooltip(
             message: 'Show filters',
             child: EditorPress(
@@ -1056,13 +1064,15 @@ class _BrowserSearchBar extends StatelessWidget {
                 child: Icon(
                   Glyph.filter_list,
                   size: EditorMetrics.s14,
-                  color: filtering ? EditorTheme.accent : EditorTheme.muted,
+                  color: filtering
+                      ? EditorTheme.of(context).accent
+                      : EditorTheme.of(context).muted,
                 ),
               ),
             ),
           ),
         ],
-        if (views != null) ...[const SizedBox(width: EditorMetrics.s4), views!],
+        if (views != null) ...[const SizedBox(width: EditorMetrics.s6), views!],
       ],
     ),
   );
@@ -1103,10 +1113,10 @@ class _BrowserRail extends StatelessWidget {
             tab.toUpperCase(),
             maxLines: 1,
             overflow: TextOverflow.clip,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: EditorMetrics.micro,
               letterSpacing: 1,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(context).muted,
             ),
           ),
         ),
@@ -1135,15 +1145,15 @@ class _BrowserRailTab extends StatelessWidget {
       key: const ValueKey('browser:rail-tab'),
       onTap: onTap,
       child: SizedBox(
-        width: EditorMetrics.s19,
+        width: EditorMetrics.row,
         child: Column(
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: EditorMetrics.s4),
               child: Icon(
                 Glyph.chevron_right,
                 size: EditorMetrics.s14,
-                color: EditorTheme.muted,
+                color: EditorTheme.of(context).muted,
               ),
             ),
             RotatedBox(
@@ -1151,9 +1161,9 @@ class _BrowserRailTab extends StatelessWidget {
               child: Text(
                 label,
                 maxLines: 1,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: EditorMetrics.micro,
-                  color: EditorTheme.accent,
+                  color: EditorTheme.of(context).accent,
                 ),
               ),
             ),
@@ -1169,11 +1179,14 @@ class _NoMatches extends StatelessWidget {
   const _NoMatches();
 
   @override
-  Widget build(BuildContext context) => const Padding(
+  Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.all(EditorMetrics.s8),
     child: Text(
       'No matches',
-      style: TextStyle(color: EditorTheme.muted, fontSize: EditorMetrics.dense),
+      style: TextStyle(
+        color: EditorTheme.of(context).muted,
+        fontSize: EditorMetrics.dense,
+      ),
     ),
   );
 }

@@ -5,7 +5,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 # Motolii UX 監査
 
-対象は **デスクトップのプロ道具**(Flutter / dark / 密。row 24 px、font 11、Material の語彙なし)。
+対象は **デスクトップのプロ道具**(Flutter / dark / 密。row 20 px、font 10、Material の語彙なし)。
 一般の web・スマホの物差し(44 pt の指、余白たっぷり、CTA、変換率)は**そのまま当てない** — 下の Motolii の物差しが優先。
 
 同梱の外部 skill を土台に使う:
@@ -25,11 +25,11 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 | R3 | **Layout は言葉を出さない** — 見えるのは数と pad と glyph だけ。CSS の語(flex / direction / justify)は裏(台本・書類・tooltip)へ | Inspector の Layout の行に英語の CSS 語が出ている |
 | R4 | **群だけ・格子だけ** — Layout の親の行は群のみ。並べ方は columns × rows の 2 つの数だけ(横一列 = rows 1) | 文字層や単体の物に Layout の行が出る、direction の選択肢が UI に在る |
 | R5 | **応えは 0.1 s 以内** — 入力 → 絵は 100 ms 以内。越えるなら代理表示、1 s 越えなら進捗。ドラッグ中にアニメを挟まない | 掴んで動かして絵が遅れる、panel の開閉が 100 ms を越す、drag 中に補間が入る |
-| R6 | **当たり判定 24 px 以上** — 下限 24、基準 28 pt、縁なしのハンドルは周り 24 pt | 見た目 6〜8 px のハンドルに padding が無い、密な帯の分割線 |
+| R6 | **当たり判定 20 px 以上** — 下限 20(Apple macOS の最小)、基準 28 pt、縁なしのハンドルは周り 24 pt。WCAG の 24 は密な帯では満たさない既知の逸脱(台帳「採用した寸法」) | 見た目 6〜8 px のハンドルに padding が無い、密な帯の分割線 |
 | R7 | **色は theme の token だけ** — `EditorTheme` / `EditorInk`。`Color(0x…)` を panel に直書きしない | `dart run bin/check.dart lib` の `raw_color` が clean でない |
 | R8 | **1 画面・page を切り替えない** — 所在は一覧で示す。panel は幅可変・全隠し可、ステージが主 | 全画面を覆う page・modal・wizard、戻らないと前が見えない造り |
-| R9 | **Material の語彙を使わない** — `package:flutter/material.dart` を lib で import しない。`Icons.*` / `Colors.*` は `Glyph` / theme へ | `material_import` が clean でない。Material の形(FAB・Snackbar・Card の影)が見える |
-| R10 | **EditorMetrics の密度** — row 24 / control 28 / section 30 / bar 32、font 11(micro 9 / dense 10 / title 13)。裸の数は `raw_dimension` が拒む | 行が 24 を越えて緩い、文字が 11 より大きい、`raw_dimension` が clean でない |
+| R9 | **Material の語彙を使わない** — Material の操作部品を lib で import しない。標準テーマの `show Theme, ThemeData, ThemeExtension, ColorScheme` のみ許可。`Icons.*` / `Colors.*` は `Glyph` / theme へ | `material_import` が clean でない。Material の形(FAB・Snackbar・Card の影)が見える |
+| R10 | **EditorMetrics の密度** — row 20 / control 24 / section 26 / bar 28、font 10(micro 8 / dense 9 / title 13)。裸の数は `raw_dimension` が拒む | 行が 20 を越えて緩い、本文が 10 より大きい、`raw_dimension` が clean でない |
 | R11 | **drag→preview→commit の契約** — 掴んでいる間の絵が確定値。Esc と focus 外れで取り消し、undo は 1 回で戻る | Esc が効かない、panel の外を押しても値が残る、1 つの drag で undo が 2 回要る |
 | R12 | **重なりは影でなく白 8〜16% の overlay**、純黒 #000 の地を使わない、文字は 4.5:1 | 影で浮かせた panel、真っ黒の地、読めない灰色の文字 |
 | R13 | **hover は色 1 段だけ** — 拡大・影・ばねを付けない。値の吹き出しは遅延 0 で出し、離れたら即消す | hover で部品が膨らむ、値に 500 ms の tooltip 待ちが掛かる |

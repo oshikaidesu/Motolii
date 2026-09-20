@@ -47,8 +47,20 @@ class MaterialImport extends AnalysisRule {
 }
 
 /// The directive when it imports one of [foreignImports].
-AstNode? materialImport(ImportDirective node) =>
-    foreignImports.contains(node.uri.stringValue) ? node : null;
+AstNode? materialImport(ImportDirective node) {
+  if (!foreignImports.contains(node.uri.stringValue)) return null;
+  if (node.uri.stringValue == 'package:flutter/material.dart' &&
+      node.combinators.length == 1 &&
+      node.combinators.single is ShowCombinator) {
+    const themeTypes = {'Theme', 'ThemeData', 'ThemeExtension', 'ColorScheme'};
+    final shown = (node.combinators.single as ShowCombinator).shownNames;
+    if (shown.isNotEmpty &&
+        shown.every((name) => themeTypes.contains(name.name))) {
+      return null;
+    }
+  }
+  return node;
+}
 
 class _Visitor extends SimpleAstVisitor<void> {
   _Visitor(this.rule);

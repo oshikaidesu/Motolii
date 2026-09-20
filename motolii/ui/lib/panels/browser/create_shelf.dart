@@ -97,18 +97,23 @@ class CreateShelf extends BrowserShelf {
       child: host.id(item) == 'camera'
           ? Icon(
               Glyph.videocam_outlined,
-              size: EditorMetrics.bar,
+              size: EditorMetrics.mark,
               color: identity,
             )
           : shape != null
           ? SizedBox(
-              width: EditorMetrics.bar,
-              height: EditorMetrics.bar,
+              width: EditorMetrics.mark,
+              height: EditorMetrics.mark,
               child: CustomPaint(painter: ShapeMark(shape, identity)),
             )
           : Text(
               '${item['glyph'] ?? 'ƒ'}',
-              style: TextStyle(fontSize: EditorMetrics.s23, color: identity),
+              style: TextStyle(
+                fontSize: EditorMetrics.mark,
+                height: 1,
+                fontWeight: FontWeight.w500,
+                color: identity,
+              ),
             ),
     );
   }
@@ -159,7 +164,7 @@ class ShapeMark extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final stroke = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 2
       ..color = color;
     final s = size.shortestSide;
     final c = Offset(size.width / 2, size.height / 2);

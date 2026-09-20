@@ -24,6 +24,10 @@ abstract class BrowserHost {
   /// Tile scale against the default tile: marks and type follow it.
   double get tileScale;
 
+  /// The caption band under a tile at this scale: one definition, for the
+  /// grid that reserves it and the tile that draws in it.
+  double get captionHeight;
+
   /// One tile's width at the shelf's current size.
   double get tileWidth;
 

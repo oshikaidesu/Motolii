@@ -250,19 +250,19 @@ class MediaShelf extends BrowserShelf {
           data: {'asset': item['id'], 'name': item['name']},
           dragAnchorStrategy: pointerDragAnchorStrategy,
           feedback: DefaultTextStyle(
-            style: EditorTheme.text,
+            style: EditorTheme.of(host.context).text,
             child: Container(
               height: EditorMetrics.row,
               padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
               decoration: BoxDecoration(
-                color: EditorTheme.panel,
-                border: Border.all(color: EditorTheme.accent),
+                color: EditorTheme.of(host.context).panel,
+                border: Border.all(color: EditorTheme.of(host.context).accent),
               ),
               child: Text(
                 '${item['name']}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: EditorMetrics.dense,
-                  color: EditorTheme.ink,
+                  color: EditorTheme.of(host.context).ink,
                 ),
               ),
             ),
@@ -283,18 +283,18 @@ class MediaShelf extends BrowserShelf {
           key: const ValueKey('browser:drop-hint'),
           margin: const EdgeInsets.all(EditorMetrics.s4),
           decoration: BoxDecoration(
-            color: EditorTheme.panel.withValues(alpha: .85),
+            color: EditorTheme.of(host.context).panel.withValues(alpha: .85),
             border: Border.all(
-              color: EditorTheme.accent,
+              color: EditorTheme.of(host.context).accent,
               width: EditorMetrics.s2,
             ),
           ),
           alignment: Alignment.center,
-          child: const Text(
+          child: Text(
             'Drop to import',
             style: TextStyle(
               fontSize: EditorMetrics.title,
-              color: EditorTheme.ink,
+              color: EditorTheme.of(host.context).ink,
             ),
           ),
         ),
@@ -399,56 +399,61 @@ final _dataUriCache = <String, Uint8List>{};
 
 /// The item's picture, else an icon of its family; a mesh draws the body its
 /// name says.
-Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) {
-  final path = item['thumbnail'] as String?;
-  final shape = item['missing'] == true || mediaFamily(item) != '3D'
-      ? null
-      : shapeOf('${item['name'] ?? item['id']}');
-  final fallback = Center(
-    child: shape != null
-        ? SizedBox(
-            width: EditorMetrics.s32 * tileScale,
-            height: EditorMetrics.s32 * tileScale,
-            child: CustomPaint(
-              key: ValueKey('browser:shape:${shape.name}'),
-              painter: ShapeMark(shape, EditorTheme.kindColor('3d')),
+Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) => Builder(
+  builder: (context) {
+    final path = item['thumbnail'] as String?;
+    final shape = item['missing'] == true || mediaFamily(item) != '3D'
+        ? null
+        : shapeOf('${item['name'] ?? item['id']}');
+    final fallback = Center(
+      child: shape != null
+          ? SizedBox(
+              width: EditorMetrics.s32 * tileScale,
+              height: EditorMetrics.s32 * tileScale,
+              child: CustomPaint(
+                key: ValueKey('browser:shape:${shape.name}'),
+                painter: ShapeMark(
+                  shape,
+                  EditorTheme.of(context).kindColor('3d'),
+                ),
+              ),
+            )
+          : Icon(
+              item['missing'] == true
+                  ? Glyph.broken_image_outlined
+                  : mediaFamily(item) == 'Audio'
+                  ? Glyph.audiotrack
+                  : mediaFamily(item) == '3D'
+                  ? Glyph.view_in_ar
+                  : Glyph.image_outlined,
+              size: EditorMetrics.s19 * tileScale,
+              color: EditorTheme.of(context).muted,
             ),
-          )
-        : Icon(
-            item['missing'] == true
-                ? Glyph.broken_image_outlined
-                : mediaFamily(item) == 'Audio'
-                ? Glyph.audiotrack
-                : mediaFamily(item) == '3D'
-                ? Glyph.view_in_ar
-                : Glyph.image_outlined,
-            size: EditorMetrics.s19 * tileScale,
-            color: EditorTheme.muted,
+    );
+    if (path == null || path.isEmpty) return fallback;
+    try {
+      if (path.startsWith('data:'))
+        return Image.memory(
+          // The same bytes each draw, so the image cache recognises them.
+          _dataUriCache.putIfAbsent(
+            path,
+            () => Uri.parse(path).data!.contentAsBytes(),
           ),
-  );
-  if (path == null || path.isEmpty) return fallback;
-  try {
-    if (path.startsWith('data:'))
-      return Image.memory(
-        // The same bytes each draw, so the image cache recognises them.
-        _dataUriCache.putIfAbsent(
-          path,
-          () => Uri.parse(path).data!.contentAsBytes(),
-        ),
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => fallback,
+        );
+      return Image.file(
+        File(path.startsWith('file:') ? Uri.parse(path).toFilePath() : path),
         fit: BoxFit.cover,
         gaplessPlayback: true,
         errorBuilder: (_, _, _) => fallback,
       );
-    return Image.file(
-      File(path.startsWith('file:') ? Uri.parse(path).toFilePath() : path),
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      errorBuilder: (_, _, _) => fallback,
-    );
-  } catch (_) {
-    return fallback;
-  }
-}
+    } catch (_) {
+      return fallback;
+    }
+  },
+);
 
 /// The plain path behind a card; the status may carry it as a file URI.
 String? filePath(Map<String, dynamic> item) {

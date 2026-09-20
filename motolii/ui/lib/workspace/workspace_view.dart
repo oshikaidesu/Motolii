@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart' show Icons;
+import '../foundation/glyphs.dart';
+
 import 'package:flutter/widgets.dart';
 
 import '../foundation/theme.dart';
@@ -112,7 +113,7 @@ class _SplitState extends State<_Split> {
             child: Container(
               width: horizontal ? EditorMetrics.s4 : null,
               height: horizontal ? null : EditorMetrics.s4,
-              color: EditorTheme.line,
+              color: EditorTheme.of(context).line,
             ),
           ),
         ),
@@ -209,7 +210,7 @@ class _LeafState extends State<_Leaf> {
         feedback: DefaultTextStyle(
           style: DefaultTextStyle.of(context).style,
           child: ColoredBox(
-            color: EditorTheme.raised,
+            color: EditorTheme.of(context).raised,
             child: Padding(
               padding: const EdgeInsets.all(EditorMetrics.s8),
               child: Text(name),
@@ -235,14 +236,14 @@ class _LeafState extends State<_Leaf> {
             child: Container(
               height: EditorMetrics.row,
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
               decoration: BoxDecoration(
                 color: widget.node.tabs.length > 1 && shown == name
-                    ? EditorTheme.tab
-                    : EditorTheme.app,
-                border: const Border(
+                    ? EditorTheme.of(context).tab
+                    : EditorTheme.of(context).app,
+                border: Border(
                   right: BorderSide(
-                    color: EditorTheme.line,
+                    color: EditorTheme.of(context).line,
                     width: EditorMetrics.s2,
                   ),
                 ),
@@ -253,7 +254,7 @@ class _LeafState extends State<_Leaf> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      panelSpec(name)?.icon ?? Icons.all_inbox_outlined,
+                      panelSpec(name)?.icon ?? Glyph.all_inbox_outlined,
                       size: EditorMetrics.title,
                     ),
                     if (!compact) ...[
@@ -262,8 +263,8 @@ class _LeafState extends State<_Leaf> {
                         name,
                         style: TextStyle(
                           color: widget.node.tabs.length > 1 && shown == name
-                              ? EditorTheme.tabInk
-                              : EditorTheme.ink,
+                              ? EditorTheme.of(context).tabInk
+                              : EditorTheme.of(context).ink,
                           fontWeight: FontWeight.w600,
                           fontSize: EditorMetrics.dense,
                         ),
@@ -310,10 +311,10 @@ class _LeafState extends State<_Leaf> {
               valueListenable: widget.focusedPanel,
               builder: (context, focused, child) => Container(
                 decoration: BoxDecoration(
-                  color: EditorTheme.panel,
+                  color: EditorTheme.of(context).panel,
                   border: candidates.isNotEmpty
                       ? Border.all(
-                          color: EditorTheme.accent,
+                          color: EditorTheme.of(context).accent,
                           width: EditorMetrics.s2,
                         )
                       : Border.all(
@@ -366,10 +367,12 @@ class _LeafState extends State<_Leaf> {
                   ),
                   Expanded(
                     child: node.tabs.isEmpty
-                        ? const Center(
+                        ? Center(
                             child: Text(
                               'Drop a panel here',
-                              style: TextStyle(color: EditorTheme.muted),
+                              style: TextStyle(
+                                color: EditorTheme.of(context).muted,
+                              ),
                             ),
                           )
                         : ValueListenableBuilder<String>(

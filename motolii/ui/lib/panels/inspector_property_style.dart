@@ -122,20 +122,21 @@ _Character _deriveCharacter(Map<String, dynamic> row) {
 }
 
 /// One hue per family, so a glance sorts the numbers before a word is read.
-Color? _tintOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
-  _Character.place ||
-  _Character.size ||
-  _Character.ratio ||
-  _Character.soft => EditorTheme.spatial,
-  _Character.amount ||
-  _Character.opacity ||
-  _Character.level => EditorTheme.amount,
-  _Character.time || _Character.delay => EditorTheme.time,
-  _Character.count || _Character.detail => EditorTheme.count,
-  _Character.seed => EditorTheme.seed,
-  _Character.angle => EditorTheme.angle,
-  _ => null,
-};
+Color? _tintOf(Map<String, dynamic> row, EditorTheme colors) =>
+    switch (_characterOf(row)) {
+      _Character.place ||
+      _Character.size ||
+      _Character.ratio ||
+      _Character.soft => colors.spatial,
+      _Character.amount ||
+      _Character.opacity ||
+      _Character.level => colors.amount,
+      _Character.time || _Character.delay => colors.time,
+      _Character.count || _Character.detail => colors.count,
+      _Character.seed => colors.seed,
+      _Character.angle => colors.angle,
+      _ => null,
+    };
 
 /// The track's grammar by family: a threshold lights its far side, a count
 /// shows whole steps, a length sits on a ruler, an amount fills.

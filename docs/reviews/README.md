@@ -28,6 +28,10 @@
 
 ## 全文書索引
 
+- [Chromatic Workshop — 実画面への反映と公開カラーテーマ](2026-09-20-chromatic-theme-implementation.md)
+
+- [UI の余白・整列・寸法関係 — Claude へのレビュー引き継ぎ](2026-09-20-ui-spacing-review-handoff.md)
+
 - [夜間に作る代表作品 — 光を受ける・届ける・空間に見せる](2026-09-09-expression-dogfood-night-plan.md)
 
 - [演出と実装を一緒に設計する — 複数社の画作りからの採用](2026-09-09-entertainment-rendering-adoption.md)

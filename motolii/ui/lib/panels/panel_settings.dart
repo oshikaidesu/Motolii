@@ -145,8 +145,8 @@ class PanelSettings extends StatelessWidget {
                             (controller.panePlaces.value[spec.name] ??
                                     (spec.drawer ? 'drawer' : 'hidden')) ==
                                 place
-                            ? EditorTheme.accent
-                            : EditorTheme.muted,
+                            ? EditorTheme.of(context).accent
+                            : EditorTheme.of(context).muted,
                         onPressed: () =>
                             controller.placePanel(spec.name, place),
                         icon: Icon(switch (place) {

@@ -119,7 +119,7 @@ class ColorsShelf extends BrowserShelf {
         extent: tile * .55,
         gap: EditorMetrics.s4,
         padding: EditorMetrics.s6,
-        ground: EditorTheme.panel,
+        ground: EditorTheme.of(host.context).panel,
       );
 
   @override
@@ -176,9 +176,9 @@ class ColorsShelf extends BrowserShelf {
               _targetTitle(c, target),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: EditorMetrics.dense,
-                color: EditorTheme.ink,
+                color: EditorTheme.of(host.context).ink,
               ),
             ),
           ),
@@ -615,6 +615,7 @@ class _ColorPickerState extends State<_ColorPicker>
                     height: wheel.side,
                     child: CustomPaint(
                       painter: ColorWheelPainter(
+                        colors: EditorTheme.of(context),
                         color,
                         wheel,
                         hue: rememberedHue,
@@ -624,13 +625,13 @@ class _ColorPickerState extends State<_ColorPicker>
                 ),
                 Container(
                   width: wheel.side,
-                  height: EditorMetrics.row,
+                  height: EditorMetrics.s23,
                   margin: const EdgeInsets.only(top: EditorMetrics.s6),
                   padding: const EdgeInsets.symmetric(
                     horizontal: EditorMetrics.s5,
                   ),
                   decoration: BoxDecoration(
-                    color: EditorTheme.line,
+                    color: EditorTheme.of(context).line,
                     borderRadius: BorderRadius.circular(EditorMetrics.s5),
                   ),
                   child: Row(
@@ -676,9 +677,11 @@ class _ColorPickerState extends State<_ColorPicker>
                             onTap: () =>
                                 widget.controller.eyedropper.value = !on,
                             child: Container(
-                              padding: const EdgeInsets.all(EditorMetrics.s5),
+                              padding: const EdgeInsets.all(EditorMetrics.s3),
                               decoration: BoxDecoration(
-                                color: on ? EditorTheme.hover : null,
+                                color: on
+                                    ? EditorTheme.of(context).hover
+                                    : null,
                                 borderRadius: BorderRadius.circular(
                                   EditorMetrics.s3,
                                 ),
@@ -687,8 +690,8 @@ class _ColorPickerState extends State<_ColorPicker>
                                 Glyph.colorize,
                                 size: EditorMetrics.s14,
                                 color: on
-                                    ? EditorTheme.accent
-                                    : EditorTheme.muted,
+                                    ? EditorTheme.of(context).accent
+                                    : EditorTheme.of(context).muted,
                               ),
                             ),
                           ),
@@ -712,9 +715,9 @@ class _ColorPickerState extends State<_ColorPicker>
                             ),
                             child: Text(
                               shape == 'square' ? 'Square' : 'Triangle',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: EditorMetrics.micro,
-                                color: EditorTheme.muted,
+                                color: EditorTheme.of(context).muted,
                               ),
                             ),
                           ),
@@ -734,7 +737,9 @@ class _ColorPickerState extends State<_ColorPicker>
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: EditorMetrics.micro,
-                        color: on ? EditorTheme.accent : EditorTheme.muted,
+                        color: on
+                            ? EditorTheme.of(context).accent
+                            : EditorTheme.of(context).muted,
                       ),
                     ),
                   ),
@@ -746,10 +751,10 @@ class _ColorPickerState extends State<_ColorPicker>
                     height: EditorMetrics.s23,
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Glyph.opacity,
                           size: EditorMetrics.s14,
-                          color: EditorTheme.muted,
+                          color: EditorTheme.of(context).muted,
                         ),
                         Expanded(
                           child: EditorSlider(
@@ -826,7 +831,9 @@ class _FillDefinitions extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               border: Border.all(
-                color: on ? EditorTheme.accent : EditorTheme.line,
+                color: on
+                    ? EditorTheme.of(context).accent
+                    : EditorTheme.of(context).line,
                 width: on ? EditorMetrics.s2 : 1,
               ),
               borderRadius: BorderRadius.circular(EditorMetrics.s2),
@@ -848,9 +855,9 @@ class _FillDefinitions extends StatelessWidget {
         children: [
           Text(
             '$label · $current'.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: EditorMetrics.micro,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(context).muted,
             ),
           ),
           const SizedBox(height: EditorMetrics.s2),
