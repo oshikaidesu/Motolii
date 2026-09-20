@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/stage.dart';
 import 'support/editor_test_theme.dart';
+import 'support/painters.dart';
 
 /// 3D レイヤーの 3 軸ギズモと、2D の平面ケージは別物。
 /// 掴む所は、native が当たり判定に使うのと同じ三角形。
@@ -77,8 +78,8 @@ Map<String, dynamic> _doc({required String projection, bool mesh = true}) => {
 
 /// comp 座標 → 画面。Stage はタブいっぱいに描くので、合成の矩形は overlay が持つ枠から取る。
 Offset Function(double, double) _screen(WidgetTester tester) {
-  final overlay = find.byWidgetPredicate(
-    (w) => w is CustomPaint && '${w.painter.runtimeType}' == '_StageOverlay',
+  final overlay = painterCarrying(
+    (p) => p.viewport is Rect && p.dimOutside is bool,
   );
   final frame =
       (tester.widget<CustomPaint>(overlay).painter as dynamic).viewport as Rect;
@@ -192,8 +193,8 @@ void main() {
         'selectedIds': [1],
       };
     await _mount(tester, c);
-    final overlay = find.byWidgetPredicate(
-      (w) => w is CustomPaint && '${w.painter.runtimeType}' == '_StageOverlay',
+    final overlay = painterCarrying(
+      (p) => p.viewport is Rect && p.dimOutside is bool,
     );
     dynamic painter() => tester.widget<CustomPaint>(overlay).painter;
     // Hovering the child under the selected group: no cage on the group.

@@ -30,6 +30,22 @@ HOUSES = [
 ]
 
 
+TEST_PATH = re.compile(
+    r"(^|/)tests?/|_tests?\.rs$|_test\.dart$|_contracts?\.rs$|_regressions?\.rs$|_probe\.rs$|_diagnostic\.rs$|/fixture\.rs$"
+)
+
+
+def is_test(path):
+    """test の file は結合の証拠にならない。
+
+    inline の `#[cfg(test)]` は path では見分けられないが、2026-09-20 に長い file の
+    test を隣の file へ出したので、以後 test だけの commit は実装 file を触らない。
+    それ以前の履歴では、実装と test の共変化がそのまま結合として出る(M の調査で
+    block_program ↔ blocks が 86% → production だけなら 60% だった例)。
+    """
+    return bool(TEST_PATH.search(path))
+
+
 def house_of(path):
     for name, prefix, color in HOUSES:
         if path.startswith(prefix):
@@ -52,7 +68,7 @@ def co_changes(commits, ceiling):
             cur = []
         elif line.strip():
             p = line.strip()
-            if house_of(p)[0] and (p.endswith(".rs") or p.endswith(".dart")):
+            if house_of(p)[0] and (p.endswith(".rs") or p.endswith(".dart")) and not is_test(p):
                 cur.append(p)
     if cur:
         batches.append(cur)
