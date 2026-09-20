@@ -55,6 +55,11 @@ pub struct RecordCache {
     pub attrs: HashMap<LayerId, Option<super::LayerAttrs>>,
     pub meta: HashMap<LayerId, Option<super::LayerMeta>>,
     pub clipping: Option<HashMap<LayerId, Option<LayerId>>>,
+    /// 書類の寸法・fps・尺。track で持つので時刻も鍵に要るが、**1 コマの中では不変**。
+    /// 毎回引くと latest_at + JSON parse が 1 コマに千回単位で走る(2026-09-21 の標本で 16%)。
+    pub composition: Option<(i64, Option<super::Composition>)>,
+    /// 居る層の一覧。書類の entity path を全部舐めて latest_at するので、1 コマ 1 回に畳む。
+    pub layers: Option<(i64, std::sync::Arc<Vec<LayerId>>)>,
 }
 
 impl RecordCache {
@@ -63,6 +68,8 @@ impl RecordCache {
             self.attrs.clear();
             self.meta.clear();
             self.clipping = None;
+            self.composition = None;
+            self.layers = None;
             self.revision = Some(current.clone());
         }
     }

@@ -23,6 +23,18 @@ fn font_system() -> std::sync::MutexGuard<'static, FontSystem> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
+/// 字形の輪郭の cache。cosmic-text では `FontSystem` と対で、同じく**一度だけ共有する**物
+/// (`SwashCache::get_outline_commands` は cache_key ごとに 1 度だけ輪郭を取り出す)。
+/// 呼ぶたびに作り直すと、同じ字を毎コマ取り出し直すことになる。鍵は倍率 1.0 に正規化した
+/// `cache_key` なので、大きさを変えても増えない。
+fn swash_cache() -> std::sync::MutexGuard<'static, SwashCache> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<SwashCache>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| std::sync::Mutex::new(SwashCache::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 /// Families available to the same database used to shape the document.
 pub fn font_families() -> &'static [String] {
     static FAMILIES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
@@ -89,7 +101,7 @@ pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<
     buffer.set_rich_text(spans.iter().zip(attributes.iter()).map(|(span, attrs)| (span.text, attrs.clone())), &default_attrs, Shaping::Advanced, Some(align));
     buffer.shape_until_scroll(font_system, false);
 
-    let mut swash_cache = SwashCache::new();
+    let mut swash_cache = swash_cache();
     let mut out = ShapedText::default();
     let mut glyph_ordinal = 0usize;
     let content: String = spans.iter().map(|s| s.text).collect();
@@ -135,7 +147,7 @@ pub fn shape_rich_text_around(
     let default_attrs = attributes.first().cloned().unwrap_or_else(Attrs::new);
     let line_height = layout.line_height.unwrap_or(layout.size * 1.2);
 
-    let mut swash_cache = SwashCache::new();
+    let mut swash_cache = swash_cache();
     let mut out = ShapedText::default();
     let mut glyph_ordinal = 0usize;
     let mut start = 0usize;
