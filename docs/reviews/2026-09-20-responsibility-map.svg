@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1000" width="1500" height="1000">
+<rect width="1500" height="1000" fill="#141414"/>
+<style>text{font-family:-apple-system,"Helvetica Neue",sans-serif}</style>
+<text x="28" y="40" fill="#e8e8e8" font-size="19">Motolii — 責任の地図</text>
+<text x="28" y="62" fill="#8a8a8a" font-size="12">線 = 同じ commit で一緒に変わった割合（参照ではなく振る舞い）。丸の大きさ = 行数、濃い縁 = test の割合。直近 303 commit。</text>
+<line x1="573" y1="785" x2="345" y2="930" stroke="#ffd9a0" stroke-opacity="0.16" stroke-width="0.7"/>
+<line x1="867" y1="516" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.7"/>
+<line x1="459" y1="244" x2="494" y2="70" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.7"/>
+<line x1="90" y1="70" x2="338" y2="70" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.7"/>
+<line x1="90" y1="70" x2="459" y2="244" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.7"/>
+<line x1="1410" y1="541" x2="1410" y2="751" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.8"/>
+<line x1="958" y1="930" x2="219" y2="930" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.8"/>
+<line x1="573" y1="785" x2="720" y2="671" stroke="#ffd9a0" stroke-opacity="0.17" stroke-width="0.8"/>
+<line x1="1088" y1="70" x2="1284" y2="221" stroke="#ffd9a0" stroke-opacity="0.22" stroke-width="0.9"/>
+<line x1="1410" y1="541" x2="1109" y2="357" stroke="#ffd9a0" stroke-opacity="0.22" stroke-width="0.9"/>
+<line x1="459" y1="244" x2="1109" y2="357" stroke="#ffd9a0" stroke-opacity="0.22" stroke-width="0.9"/>
+<line x1="487" y1="593" x2="90" y2="462" stroke="#ffd9a0" stroke-opacity="0.24" stroke-width="1.1"/>
+<line x1="958" y1="930" x2="1228" y2="930" stroke="#ffd9a0" stroke-opacity="0.24" stroke-width="1.1"/>
+<line x1="573" y1="785" x2="612" y2="930" stroke="#ffd9a0" stroke-opacity="0.25" stroke-width="1.1"/>
+<line x1="573" y1="785" x2="423" y2="727" stroke="#ffd9a0" stroke-opacity="0.25" stroke-width="1.1"/>
+<line x1="423" y1="727" x2="612" y2="930" stroke="#ffd9a0" stroke-opacity="0.25" stroke-width="1.1"/>
+<line x1="338" y1="70" x2="802" y2="70" stroke="#ffd9a0" stroke-opacity="0.25" stroke-width="1.1"/>
+<line x1="459" y1="244" x2="648" y2="70" stroke="#ffd9a0" stroke-opacity="0.26" stroke-width="1.1"/>
+<line x1="867" y1="516" x2="904" y2="279" stroke="#ffd9a0" stroke-opacity="0.28" stroke-width="1.2"/>
+<line x1="423" y1="727" x2="90" y2="930" stroke="#ffd9a0" stroke-opacity="0.28" stroke-width="1.2"/>
+<line x1="423" y1="727" x2="676" y2="504" stroke="#ffd9a0" stroke-opacity="0.29" stroke-width="1.3"/>
+<line x1="90" y1="244" x2="338" y2="70" stroke="#ffd9a0" stroke-opacity="0.30" stroke-width="1.3"/>
+<line x1="612" y1="930" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.32" stroke-width="1.4"/>
+<line x1="1410" y1="70" x2="1410" y2="309" stroke="#ffd9a0" stroke-opacity="0.33" stroke-width="1.4"/>
+<line x1="1276" y1="70" x2="1284" y2="221" stroke="#ffd9a0" stroke-opacity="0.35" stroke-width="1.5"/>
+<line x1="1410" y1="930" x2="1228" y2="930" stroke="#ffd9a0" stroke-opacity="0.36" stroke-width="1.6"/>
+<line x1="1410" y1="751" x2="1410" y2="930" stroke="#ffd9a0" stroke-opacity="0.36" stroke-width="1.6"/>
+<line x1="487" y1="593" x2="676" y2="504" stroke="#ffd9a0" stroke-opacity="0.36" stroke-width="1.6"/>
+<line x1="90" y1="244" x2="459" y2="244" stroke="#ffd9a0" stroke-opacity="0.38" stroke-width="1.7"/>
+<line x1="260" y1="746" x2="90" y2="671" stroke="#ffd9a0" stroke-opacity="0.38" stroke-width="1.7"/>
+<line x1="423" y1="727" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.38" stroke-width="1.7"/>
+<line x1="573" y1="785" x2="474" y2="930" stroke="#ffd9a0" stroke-opacity="0.40" stroke-width="1.8"/>
+<line x1="612" y1="930" x2="474" y2="930" stroke="#ffd9a0" stroke-opacity="0.40" stroke-width="1.8"/>
+<line x1="1410" y1="70" x2="1284" y2="221" stroke="#ffd9a0" stroke-opacity="0.42" stroke-width="1.9"/>
+<line x1="867" y1="516" x2="949" y2="695" stroke="#ffd9a0" stroke-opacity="0.42" stroke-width="1.9"/>
+<line x1="949" y1="695" x2="676" y2="504" stroke="#ffd9a0" stroke-opacity="0.43" stroke-width="1.9"/>
+<line x1="1276" y1="70" x2="1410" y2="70" stroke="#ffd9a0" stroke-opacity="0.43" stroke-width="1.9"/>
+<line x1="1284" y1="221" x2="1410" y2="309" stroke="#ffd9a0" stroke-opacity="0.44" stroke-width="1.9"/>
+<line x1="345" y1="930" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.44" stroke-width="1.9"/>
+<line x1="573" y1="785" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.44" stroke-width="1.9"/>
+<line x1="1109" y1="357" x2="1284" y2="221" stroke="#ffd9a0" stroke-opacity="0.50" stroke-width="2.2"/>
+<line x1="867" y1="516" x2="676" y2="504" stroke="#ffd9a0" stroke-opacity="0.50" stroke-width="2.2"/>
+<line x1="867" y1="516" x2="720" y2="671" stroke="#ffd9a0" stroke-opacity="0.52" stroke-width="2.3"/>
+<line x1="949" y1="695" x2="720" y2="671" stroke="#ffd9a0" stroke-opacity="0.52" stroke-width="2.3"/>
+<line x1="720" y1="671" x2="487" y2="593" stroke="#ffd9a0" stroke-opacity="0.52" stroke-width="2.3"/>
+<line x1="720" y1="671" x2="423" y2="727" stroke="#ffd9a0" stroke-opacity="0.52" stroke-width="2.3"/>
+<line x1="338" y1="70" x2="201" y2="70" stroke="#ffd9a0" stroke-opacity="0.53" stroke-width="2.3"/>
+<line x1="720" y1="671" x2="676" y2="504" stroke="#ffd9a0" stroke-opacity="0.61" stroke-width="2.7"/>
+<line x1="748" y1="930" x2="260" y2="746" stroke="#ffd9a0" stroke-opacity="0.62" stroke-width="2.7"/>
+<circle cx="1410" cy="541" r="20.7" fill="#7fb3d5" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="1410" y="574" fill="#d8d8d8" font-size="11" text-anchor="middle">store.rs</text>
+<text x="1410" y="586" fill="#7a7a7a" font-size="9" text-anchor="middle">486行 · 30回</text>
+<circle cx="1410" cy="751" r="17.0" fill="#7fb3d5" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="1410" y="781" fill="#d8d8d8" font-size="11" text-anchor="middle">kind.rs</text>
+<text x="1410" y="793" fill="#7a7a7a" font-size="9" text-anchor="middle">258行 · 13回</text>
+<circle cx="958" cy="930" r="19.6" fill="#7fb3d5" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="958" y="963" fill="#d8d8d8" font-size="11" text-anchor="middle">layout.rs</text>
+<text x="958" y="975" fill="#7a7a7a" font-size="9" text-anchor="middle">412行 · 61回</text>
+<circle cx="1410" cy="930" r="12.9" fill="#7fb3d5" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="1410" y="956" fill="#d8d8d8" font-size="11" text-anchor="middle">recording.rs</text>
+<text x="1410" y="968" fill="#7a7a7a" font-size="9" text-anchor="middle">92行 · 8回</text>
+<circle cx="1228" cy="930" r="24.0" fill="#7fb3d5" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="1228" y="967" fill="#d8d8d8" font-size="11" text-anchor="middle">view.rs</text>
+<text x="1228" y="979" fill="#7a7a7a" font-size="9" text-anchor="middle">751行 · 21回</text>
+<circle cx="573" cy="785" r="24.0" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="2.5"/>
+<text x="573" y="822" fill="#d8d8d8" font-size="11" text-anchor="middle">compositor.rs</text>
+<text x="573" y="834" fill="#7a7a7a" font-size="9" text-anchor="middle">748行 · 20回</text>
+<circle cx="748" cy="930" r="14.6" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.6"/>
+<text x="748" y="958" fill="#d8d8d8" font-size="11" text-anchor="middle">block_program.rs</text>
+<text x="748" y="970" fill="#7a7a7a" font-size="9" text-anchor="middle">149行 · 14回</text>
+<circle cx="867" cy="516" r="22.1" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="867" y="551" fill="#d8d8d8" font-size="11" text-anchor="middle">catalog.rs</text>
+<text x="867" y="563" fill="#7a7a7a" font-size="9" text-anchor="middle">596行 · 22回</text>
+<circle cx="949" cy="695" r="23.9" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.9"/>
+<text x="949" y="732" fill="#d8d8d8" font-size="11" text-anchor="middle">mod.rs</text>
+<text x="949" y="744" fill="#7a7a7a" font-size="9" text-anchor="middle">744行 · 19回</text>
+<circle cx="720" cy="671" r="17.7" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="720" y="702" fill="#d8d8d8" font-size="11" text-anchor="middle">mod.rs</text>
+<text x="720" y="714" fill="#7a7a7a" font-size="9" text-anchor="middle">296行 · 13回</text>
+<circle cx="423" cy="727" r="23.0" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.1"/>
+<text x="423" y="763" fill="#d8d8d8" font-size="11" text-anchor="middle">render_effects.rs</text>
+<text x="423" y="775" fill="#7a7a7a" font-size="9" text-anchor="middle">665行 · 17回</text>
+<circle cx="612" cy="930" r="10.8" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="612" y="954" fill="#d8d8d8" font-size="11" text-anchor="middle">sequential.rs</text>
+<text x="612" y="966" fill="#7a7a7a" font-size="9" text-anchor="middle">38行 · 17回</text>
+<circle cx="474" cy="930" r="24.3" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.6"/>
+<text x="474" y="967" fill="#d8d8d8" font-size="11" text-anchor="middle">surface_scene.rs</text>
+<text x="474" y="979" fill="#7a7a7a" font-size="9" text-anchor="middle">776行 · 9回</text>
+<circle cx="345" cy="930" r="21.5" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="3.0"/>
+<text x="345" y="964" fill="#d8d8d8" font-size="11" text-anchor="middle">engine.rs</text>
+<text x="345" y="976" fill="#7a7a7a" font-size="9" text-anchor="middle">546行 · 20回</text>
+<circle cx="219" cy="930" r="20.9" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="219" y="964" fill="#d8d8d8" font-size="11" text-anchor="middle">analysis.rs</text>
+<text x="219" y="976" fill="#7a7a7a" font-size="9" text-anchor="middle">505行 · 26回</text>
+<circle cx="260" cy="746" r="24.3" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="260" y="783" fill="#d8d8d8" font-size="11" text-anchor="middle">blocks.rs</text>
+<text x="260" y="795" fill="#7a7a7a" font-size="9" text-anchor="middle">782行 · 36回</text>
+<circle cx="90" cy="930" r="17.9" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="5.4"/>
+<text x="90" y="961" fill="#d8d8d8" font-size="11" text-anchor="middle">material.rs</text>
+<text x="90" y="973" fill="#7a7a7a" font-size="9" text-anchor="middle">311行 · 9回</text>
+<circle cx="90" cy="671" r="22.6" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="90" y="707" fill="#d8d8d8" font-size="11" text-anchor="middle">physics.rs</text>
+<text x="90" y="719" fill="#7a7a7a" font-size="9" text-anchor="middle">637行 · 14回</text>
+<circle cx="487" cy="593" r="24.0" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.1"/>
+<text x="487" y="630" fill="#d8d8d8" font-size="11" text-anchor="middle">render.rs</text>
+<text x="487" y="642" fill="#7a7a7a" font-size="9" text-anchor="middle">752行 · 37回</text>
+<circle cx="90" cy="462" r="21.1" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="1.3"/>
+<text x="90" y="496" fill="#d8d8d8" font-size="11" text-anchor="middle">texture.rs</text>
+<text x="90" y="508" fill="#7a7a7a" font-size="9" text-anchor="middle">519行 · 23回</text>
+<circle cx="676" cy="504" r="17.5" fill="#e8a87c" fill-opacity="0.82" stroke="#141414" stroke-width="2.5"/>
+<text x="676" y="534" fill="#d8d8d8" font-size="11" text-anchor="middle">translate.rs</text>
+<text x="676" y="546" fill="#7a7a7a" font-size="9" text-anchor="middle">285行 · 16回</text>
+<circle cx="90" cy="244" r="9.9" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="90" y="267" fill="#d8d8d8" font-size="11" text-anchor="middle">panel_controls.dart</text>
+<text x="90" y="279" fill="#7a7a7a" font-size="9" text-anchor="middle">22行 · 14回</text>
+<circle cx="90" cy="70" r="23.5" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="90" y="106" fill="#d8d8d8" font-size="11" text-anchor="middle">theme.dart</text>
+<text x="90" y="118" fill="#7a7a7a" font-size="9" text-anchor="middle">704行 · 11回</text>
+<circle cx="338" cy="70" r="22.8" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="338" y="106" fill="#d8d8d8" font-size="11" text-anchor="middle">browser.dart</text>
+<text x="338" y="118" fill="#7a7a7a" font-size="9" text-anchor="middle">649行 · 43回</text>
+<circle cx="201" cy="70" r="9.1" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="201" y="92" fill="#d8d8d8" font-size="11" text-anchor="middle">filters.dart</text>
+<text x="201" y="104" fill="#7a7a7a" font-size="9" text-anchor="middle">12行 · 9回</text>
+<circle cx="459" cy="244" r="19.1" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="459" y="276" fill="#d8d8d8" font-size="11" text-anchor="middle">inspector.dart</text>
+<text x="459" y="288" fill="#7a7a7a" font-size="9" text-anchor="middle">384行 · 26回</text>
+<circle cx="494" cy="70" r="12.6" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="494" y="96" fill="#d8d8d8" font-size="11" text-anchor="middle">stage.dart</text>
+<text x="494" y="108" fill="#7a7a7a" font-size="9" text-anchor="middle">82行 · 11回</text>
+<circle cx="648" cy="70" r="20.4" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="648" y="103" fill="#d8d8d8" font-size="11" text-anchor="middle">timeline.dart</text>
+<text x="648" y="115" fill="#7a7a7a" font-size="9" text-anchor="middle">467行 · 13回</text>
+<circle cx="802" cy="70" r="14.9" fill="#85c1a1" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="802" y="98" fill="#d8d8d8" font-size="11" text-anchor="middle">editor_session.dart</text>
+<text x="802" y="110" fill="#7a7a7a" font-size="9" text-anchor="middle">161行 · 15回</text>
+<circle cx="904" cy="279" r="16.3" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="7.3"/>
+<text x="904" y="309" fill="#d8d8d8" font-size="11" text-anchor="middle">effect_sample.rs</text>
+<text x="904" y="321" fill="#7a7a7a" font-size="9" text-anchor="middle">225行 · 9回</text>
+<circle cx="1109" cy="357" r="19.5" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="1.0"/>
+<text x="1109" y="390" fill="#d8d8d8" font-size="11" text-anchor="middle">read.rs</text>
+<text x="1109" y="402" fill="#7a7a7a" font-size="9" text-anchor="middle">406行 · 8回</text>
+<circle cx="1088" cy="70" r="18.1" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="6.1"/>
+<text x="1088" y="101" fill="#d8d8d8" font-size="11" text-anchor="middle">script.rs</text>
+<text x="1088" y="113" fill="#7a7a7a" font-size="9" text-anchor="middle">323行 · 8回</text>
+<circle cx="1276" cy="70" r="19.6" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="1.7"/>
+<text x="1276" y="103" fill="#d8d8d8" font-size="11" text-anchor="middle">lib.rs</text>
+<text x="1276" y="115" fill="#7a7a7a" font-size="9" text-anchor="middle">415行 · 13回</text>
+<circle cx="1410" cy="70" r="21.2" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="3.2"/>
+<text x="1410" y="104" fill="#d8d8d8" font-size="11" text-anchor="middle">port.rs</text>
+<text x="1410" y="116" fill="#7a7a7a" font-size="9" text-anchor="middle">528行 · 22回</text>
+<circle cx="1284" cy="221" r="21.8" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="1.8"/>
+<text x="1284" y="256" fill="#d8d8d8" font-size="11" text-anchor="middle">snapshot.rs</text>
+<text x="1284" y="268" fill="#7a7a7a" font-size="9" text-anchor="middle">566行 · 32回</text>
+<circle cx="1410" cy="309" r="19.4" fill="#c39bd3" fill-opacity="0.82" stroke="#141414" stroke-width="4.8"/>
+<text x="1410" y="342" fill="#d8d8d8" font-size="11" text-anchor="middle">snapshot_cache.rs</text>
+<text x="1410" y="354" fill="#7a7a7a" font-size="9" text-anchor="middle">398行 · 10回</text>
+<circle cx="28" cy="966" r="7" fill="#7fb3d5" fill-opacity="0.82"/>
+<text x="41" y="970" fill="#9a9a9a" font-size="11">doc</text>
+<circle cx="77" cy="966" r="7" fill="#e8a87c" fill-opacity="0.82"/>
+<text x="90" y="970" fill="#9a9a9a" font-size="11">render</text>
+<circle cx="153" cy="966" r="7" fill="#c39bd3" fill-opacity="0.82"/>
+<text x="166" y="970" fill="#9a9a9a" font-size="11">ui/native</text>
+<circle cx="256" cy="966" r="7" fill="#85c1a1" fill-opacity="0.82"/>
+<text x="269" y="970" fill="#9a9a9a" font-size="11">ui/lib</text>
+<circle cx="332" cy="966" r="7" fill="#d98880" fill-opacity="0.82"/>
+<text x="345" y="970" fill="#9a9a9a" font-size="11">extensions</text>
+</svg>

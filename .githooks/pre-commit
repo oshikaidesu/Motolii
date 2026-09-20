@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# file の長さは commit の瞬間に鳴る。閾値は motolii/reference/hygiene-budget.tsv。
+exec "$(dirname "$0")/../scripts/check-hygiene.sh" staged
