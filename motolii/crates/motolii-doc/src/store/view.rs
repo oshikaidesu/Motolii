@@ -34,8 +34,8 @@ pub struct StoreView<'a> {
     record_cache: &'a RefCell<RecordCache>,
     /// host が描いた絵から解いた値(Blob の塊など)。無ければ解析を読む配置は空。
     analysis: Option<&'a super::analysis::AnalysisInputs>,
-    layout_memo: super::layout::Memo,
-    layout_cache: &'a RefCell<super::layout::LayoutCache>,
+    layout_memo: super::scratch::Memo,
+    layout_cache: &'a RefCell<super::scratch::LayoutCache>,
     programs: super::kind::Programs,
     placement_programs: Option<&'a [super::kind::PlacementProgram]>,
 }
@@ -51,7 +51,7 @@ impl<'a> StoreView<'a> {
         revision: Revision,
         track_cache: &'a RefCell<TrackCache>,
         record_cache: &'a RefCell<RecordCache>,
-        layout_cache: &'a RefCell<super::layout::LayoutCache>,
+        layout_cache: &'a RefCell<super::scratch::LayoutCache>,
         programs: super::kind::Programs,
     ) -> Self {
         Self {
@@ -71,12 +71,12 @@ impl<'a> StoreView<'a> {
         }
     }
 
-    pub(crate) fn layout_memo(&self) -> &super::layout::Memo {
+    pub(crate) fn layout_memo(&self) -> &super::scratch::Memo {
         &self.layout_memo
     }
 
     /// コマをまたぐ配置の覚えを使ってよい view か(解析・仮の編集・一時の値のどれも読まない)。
-    pub(crate) fn shared_layout_cache(&self) -> Option<(&RefCell<super::layout::LayoutCache>, &Revision)> {
+    pub(crate) fn shared_layout_cache(&self) -> Option<(&RefCell<super::scratch::LayoutCache>, &Revision)> {
         (self.placement_programs.is_none() && self.analysis.is_none() && (self.ignore_transients || (self.preview_edits.is_empty() && self.transient.is_empty()))).then_some((self.layout_cache, &self.revision))
     }
 

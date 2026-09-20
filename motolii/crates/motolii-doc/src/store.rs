@@ -23,6 +23,7 @@ pub mod shape_props;
 pub mod names;
 mod slot;
 mod text;
+pub mod scratch;
 pub mod view;
 mod read;
 mod ids;

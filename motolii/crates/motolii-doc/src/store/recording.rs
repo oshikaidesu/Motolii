@@ -20,7 +20,7 @@ pub struct Recording {
     overlay: ReadOverlay,
     tracks: RefCell<TrackCache>,
     records: RefCell<RecordCache>,
-    layout: RefCell<super::layout::LayoutCache>,
+    layout: RefCell<super::scratch::LayoutCache>,
     /// この作品で使える効果。読み込む側が渡す。
     programs: super::kind::Programs,
 }

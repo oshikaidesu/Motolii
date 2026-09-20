@@ -156,7 +156,7 @@ pub struct Document {
     track_cache: RefCell<TrackCache>,
     record_cache: RefCell<RecordCache>,
     /// 並べた結果をコマをまたいで覚える(書類の版と時刻で。解析・仮の編集・一時の値を読まない view だけ)。
-    layout_cache: RefCell<super::layout::LayoutCache>,
+    layout_cache: RefCell<super::scratch::LayoutCache>,
     /// 見た目を保つための「どこに見えているか」。開く側が渡す。
     geometry: super::kind::Geometry,
     /// この書類で使える効果。開く側が渡す — コアは誰が何を実装しているか知らない。
