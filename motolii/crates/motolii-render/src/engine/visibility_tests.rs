@@ -1,3 +1,4 @@
+use motolii_edit::{Document, Intent};
 use super::environment_tests::file_layer;
 use super::reflection_tests::{effect, set};
 use super::*;

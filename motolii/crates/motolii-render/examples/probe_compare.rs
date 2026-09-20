@@ -1,7 +1,9 @@
 //! Same document, receiver moved through a few poses: receiver-following probes (current) beside
 //! the scene-fixed probe (Arm's local cubemap). Writes PNGs and prints captures per frame.
+use motolii_edit::{Document, Intent};
+use motolii_render::picture::resolve::resolved_layers;
 use motolii_render::{
-    doc::store::{Document, Intent, PropertyId, RationalTime, Value},
+    doc::store::{PropertyId, RationalTime, Value},
     engine::Engine,
 };
 
@@ -15,9 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comp = doc.view().composition()?.ok_or("no composition")?;
     let out = std::path::PathBuf::from(&args[2]);
     std::fs::create_dir_all(&out)?;
-    let receiver = doc
-        .view()
-        .resolved_layers(RationalTime::ZERO)?
+    let receiver = resolved_layers(&doc.view(), RationalTime::ZERO)?
         .iter()
         .find(|l| l.effects.iter().any(|e| e.plugin_id == "motolii.glass"))
         .ok_or("no glass receiver")?

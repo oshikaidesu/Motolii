@@ -1,4 +1,5 @@
 //! 調査用: 平らな円に Glass(透過 100%・粗さ最大)を載せ、下の赤い角の縁がぼけるか。
+use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, doc::vector::*, engine::Engine};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = Engine::new()?;

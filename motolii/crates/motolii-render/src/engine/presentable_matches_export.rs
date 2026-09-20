@@ -1,3 +1,4 @@
+use motolii_edit::{Document, Intent};
 use super::*;
 use crate::doc::store::{Composition, Fps, RationalTime};
 

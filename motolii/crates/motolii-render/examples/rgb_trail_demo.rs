@@ -1,5 +1,6 @@
 //! 使い捨ての見本: 実写の上に群(動く 3 つの形)、群に Whole で RGB Trail、その上に Background Delay の形。
 //! 96 コマを順に描いて PNG 列に、ffmpeg で mp4 に。`cargo run --example rgb_trail_demo -- <clip> <out dir>`
+use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, doc::vector::*, engine::Engine};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     re_log::setup_logging();

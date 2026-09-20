@@ -50,6 +50,7 @@ mod tests {
 /// 板・点群・網が同じ平面で切れる(実 GPU)。z=0 の板は特別扱いしない。
 #[cfg(test)]
 mod contract {
+    use motolii_edit::{Document, Intent};
     use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 

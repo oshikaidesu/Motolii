@@ -1,5 +1,6 @@
 //! 見せる絵。1 つの場が点群の絹を流し、同じ場で歪んだガラスがその向こうを透かす。
 //! `cargo run -p motolii-render --example field_gallery -- <out_dir>`
+use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, engine::Engine};
 
 const W: u32 = 1920;

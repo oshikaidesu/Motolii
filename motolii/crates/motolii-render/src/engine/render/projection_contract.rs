@@ -1,5 +1,6 @@
 //! 3 つの札の法(2026-09-12): 2D は世界に居ない(深度に参加せず積み順だけ)、2.5D は z で並ぶ、
 //! 既定カメラでは 3 つの札が同じ場所に映る。
+use motolii_edit::{Document, Intent};
 use super::*;
 use crate::doc::store::*;
 use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape};

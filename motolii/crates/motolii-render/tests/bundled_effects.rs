@@ -2,6 +2,7 @@
 //! (コアは誰が何を実装しているか知らないので、コアの検査には書けない)。
 
 
+use motolii_edit::{blank_project, Document, Intent};
 use motolii_doc::store::{
     property, Composition, EffectScope, Fps, Interp, Keyframe, KeyframeTrack, PropertyId,
     StoreView, Value,

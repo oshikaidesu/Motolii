@@ -1,3 +1,4 @@
+use motolii_edit::{Document, Intent};
 use super::reflection_tests::set;
 use super::*;
 use crate::doc::store::{LayerId, LayerSource, Value};

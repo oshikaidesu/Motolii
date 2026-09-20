@@ -1,6 +1,7 @@
 //! 保存した作品を 1 フレーム描いて PNG に落とす(実窓が黒い時の切り分け用)。
 //! `cargo run -p motolii-render --example render_doc -- <doc.rrd> <frame> <out.png>`
-use motolii_render::{doc::store::*, engine::Engine};
+use motolii_edit::{Document, Intent};
+use motolii_render::{doc::store::*, engine::Engine, picture::resolve::resolved_layers};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     re_log::setup_logging();
     let mut args = std::env::args().skip(1);
@@ -12,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let only: Option<u64> = std::env::var("MOTOLII_ONLY").ok().and_then(|v| v.parse().ok());
     let strip: Option<u64> = std::env::var("MOTOLII_STRIP").ok().and_then(|v| v.parse().ok());
     if only.is_some() || strip.is_some() {
-        let layers: Vec<(LayerId, bool)> = doc.view().resolved_layers(RationalTime::ZERO)?.iter().map(|l| (l.id, matches!(l.source, LayerSource::Camera))).collect();
+        let layers: Vec<(LayerId, bool)> = resolved_layers(&doc.view(), RationalTime::ZERO)?.iter().map(|l| (l.id, matches!(l.source, LayerSource::Camera))).collect();
         for (id, camera) in layers {
             if only.is_some_and(|o| o != u64::from(id.0)) && !camera {
                 doc.apply(Intent::SetAttrs { layer: id, patch: LayerAttrsPatch { hidden: Some(true), ..Default::default() } })?;

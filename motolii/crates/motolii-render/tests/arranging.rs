@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use motolii_edit::{Animate, Document, Intent};
+    use motolii_edit::{blank_project, Animate, Document, Intent};
     use motolii_doc::store::*;
     use motolii_doc::store::layout::*;
     use motolii_render::picture::*;

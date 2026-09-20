@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod move_layer_tests {
 
-    use motolii_edit::{Animate, Document, Intent};
+    use motolii_edit::{blank_project, Animate, Document, Intent};
     /// この検査は「見た目を保つ」補正を見るので、答える口を自分で登録する
     /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。
     fn placed() -> Document {
@@ -468,6 +468,7 @@ mod move_layer_tests {
 
 #[cfg(test)]
 mod projection_switch_tests {
+    use motolii_edit::{blank_project, Document, Intent};
 
     /// この検査は「見た目を保つ」補正を見るので、答える口を自分で登録する
     /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。

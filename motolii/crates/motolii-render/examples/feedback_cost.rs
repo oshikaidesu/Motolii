@@ -1,5 +1,6 @@
 //! 実測: 1080p で feedback(RGB Trail)と別時刻の合成(Background Delay)の重さ。
 //! `cargo run --release -p motolii-render --example feedback_cost -- <clip>`
+use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, doc::vector::*, engine::Engine};
 use std::time::Instant;
 fn main() -> Result<(), Box<dyn std::error::Error>> {

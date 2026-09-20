@@ -1,3 +1,4 @@
+use motolii_edit::{Document, Intent, blank_project};
 use super::*;
 use crate::doc::store::*;
 use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape};

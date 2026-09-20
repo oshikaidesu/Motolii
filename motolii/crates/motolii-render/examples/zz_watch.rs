@@ -4,6 +4,7 @@
 //! `--release` だと棚は焼き込みで、shader の保存は次の build まで載らない)。
 //! `motolii/target/watch/examples/zz_watch <doc.rrd> <out_dir>`、`MOTOLII_LAST` / `MOTOLII_STEP` / `MOTOLII_SHRINK`。
 //! 手順と計測は docs/reviews/2026-09-17-build-placement.md。
+use motolii_edit::Document;
 use motolii_render::{doc::store::*, engine::Engine};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
