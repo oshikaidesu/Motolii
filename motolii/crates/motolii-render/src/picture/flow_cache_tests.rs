@@ -30,6 +30,12 @@ fn a_timed_size_updates_the_reused_taffy_node() {
     let at2 = RationalTime::try_new(2, 1).unwrap();
     let view0 = doc.view().with_layout_solver(cache.clone());
     crate::picture::resolve::resolved_layers(&view0, at0).unwrap();
+    let structure = {
+        let (layout, _) = view0.shared_layout_cache().unwrap();
+        layout.borrow().structure.clone().unwrap()
+    };
+    assert!(structure.dynamic_layers.contains(&group));
+    assert!(!structure.layout_topology_dynamic);
     let first = crate::picture::frame::layout_frame(&view0, at0).unwrap();
     let node = cache.roots.borrow()[&group].root.id;
     let view1 = doc.view().with_layout_solver(cache.clone());
@@ -44,4 +50,30 @@ fn a_timed_size_updates_the_reused_taffy_node() {
     assert_eq!(second.sizes[&group], [240.0, 70.0], "a changed width must dirty Taffy rather than freeze the old layout");
     assert_eq!(third.sizes[&group], [240.0, 70.0]);
     assert_eq!(cache.layout_passes.get(), 2, "once the evaluated style is unchanged, do not run Taffy again");
+}
+
+#[test]
+fn a_static_layout_does_not_rebuild_its_plan_each_frame() {
+    let mut doc = Document::new();
+    let fps = Fps::try_new(30, 1).unwrap();
+    let group = LayerId(1);
+    doc.apply(Intent::SetComposition(Composition { width: 640, height: 480, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply_all([
+        Intent::AddLayer(group),
+        Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
+        Intent::SetConstant { layer: group, property: PropertyId::new(layout::DISPLAY).unwrap(), value: Value::Enum(1) },
+        Intent::SetConstant { layer: group, property: PropertyId::new(layout::HORIZONTAL_SIZING).unwrap(), value: Value::Enum(2) },
+        Intent::SetConstant { layer: group, property: PropertyId::new(layout::VERTICAL_SIZING).unwrap(), value: Value::Enum(2) },
+        Intent::SetConstant { layer: group, property: PropertyId::new(layout::WIDTH).unwrap(), value: Value::F64(120.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::new(layout::HEIGHT).unwrap(), value: Value::F64(70.0) },
+    ]).unwrap();
+
+    let cache = std::rc::Rc::new(FlowCache::default());
+    for at in [RationalTime::ZERO, RationalTime::try_new(1, 1).unwrap()] {
+        let view = doc.view().with_layout_solver(cache.clone());
+        crate::picture::resolve::resolved_layers(&view, at).unwrap();
+        assert_eq!(crate::picture::frame::layout_frame(&view, at).unwrap().sizes[&group], [120.0, 70.0]);
+    }
+    assert_eq!(cache.plan_builds.get(), 1, "static branches must not recreate PlanNode trees each frame");
+    assert_eq!(cache.layout_passes.get(), 1, "static branches must not call Taffy each frame");
 }

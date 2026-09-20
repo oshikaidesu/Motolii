@@ -105,6 +105,18 @@ pub struct Structure {
     pub children: HashMap<crate::doc::store::LayerId, Vec<(i16, crate::doc::store::LayerId)>>,
     pub parents: HashMap<crate::doc::store::LayerId, Option<crate::doc::store::LayerId>>,
     pub groups: std::collections::HashSet<crate::doc::store::LayerId>,
+    /// At least one stored property can vary with time (track, slot or link).
+    /// This is classified once per document revision; render-side caches use
+    /// it to leave static subtrees alone between frames.
+    pub dynamic_layers: std::collections::HashSet<crate::doc::store::LayerId>,
+    /// Exact time-varying property identities. A dynamic Grid Columns value,
+    /// for example, does not force its children's Flex Direction to refresh.
+    pub dynamic_properties: std::collections::HashSet<(crate::doc::store::LayerId, crate::doc::store::PropertyId)>,
+    /// Dynamic layers and every ancestor that contains one.
+    pub dynamic_subtrees: std::collections::HashSet<crate::doc::store::LayerId>,
+    /// A time-varying display or position type can change the Taffy tree's
+    /// shape, so it must take the conservative rebuild path.
+    pub layout_topology_dynamic: bool,
 }
 
 impl LayoutCache {

@@ -15,7 +15,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
 
 use crate::doc::store::{
-    property, LayerId, LayerPlacement, PropertyId, StoreError, TextDocument,
+    layout, property, LayerId, LayerPlacement, PropertyBase, PropertyId, StoreError, TextDocument,
 };
 
 use super::StoreView;
@@ -330,6 +330,9 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             let mut children = HashMap::new();
             let mut parents = HashMap::new();
             let mut groups = HashSet::new();
+            let mut dynamic_layers = HashSet::new();
+            let mut dynamic_properties = HashSet::new();
+            let mut layout_topology_dynamic = false;
             for &layer in &layers {
                 let Some(meta) = view.meta(layer)? else { continue };
                 if meta.source == crate::doc::store::LayerSource::Group {
@@ -340,14 +343,39 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
                 if let Some(parent) = parent {
                     children.entry(parent).or_insert_with(Vec::new).push((meta.order, layer));
                 }
+                for property in view.properties(layer) {
+                    let Some(source) = view.property_source(layer, &property)? else { continue };
+                    let dynamic = !source.modulators.is_empty() || match source.base {
+                        Some(PropertyBase::Track(ref track)) => track.keys().len() > 1,
+                        Some(PropertyBase::Slot(_)) | None => true,
+                        Some(PropertyBase::Constant(_)) => false,
+                    };
+                    if dynamic {
+                        dynamic_layers.insert(layer);
+                        dynamic_properties.insert((layer, property.clone()));
+                        layout_topology_dynamic |= matches!(property.name(), layout::DISPLAY | layout::POSITION_TYPE);
+                    }
+                }
             }
             for list in children.values_mut() { list.sort(); }
+            let mut dynamic_subtrees = dynamic_layers.clone();
+            for &layer in &dynamic_layers {
+                let mut parent = parents.get(&layer).copied().flatten();
+                while let Some(next) = parent {
+                    if !dynamic_subtrees.insert(next) { break; }
+                    parent = parents.get(&next).copied().flatten();
+                }
+            }
             let built = std::sync::Arc::new(crate::doc::store::scratch::Structure {
                 layers,
                 present,
                 children,
                 parents,
                 groups,
+                dynamic_layers,
+                dynamic_properties,
+                dynamic_subtrees,
+                layout_topology_dynamic,
             });
             if let Some((cache, revision)) = shared.as_ref() {
                 let mut cache = cache.borrow_mut();
