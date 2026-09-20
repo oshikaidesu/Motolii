@@ -283,6 +283,35 @@ private final class ProbeRuntime {
     return (buffers, try request(String(decoding: data, as: UTF8.self)), rendered)
   }
 
+  /// Still-frame channel path. The host owns these surfaces too, so Flutter
+  /// never obtains a raw runtime pointer. This is intentionally synchronous:
+  /// exact scrub/stop may wait, unlike playback.
+  fileprivate func renderInto(
+    _ targets: [PlaybackTarget], known: Any? = nil, references: Any? = nil
+  ) throws -> ([String: Any], Int) {
+    try onRenderQueue {
+      guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
+      for target in targets {
+        _ = target.keepAlive
+        var code = target.view.withCString { renderFunction(context, target.surface, $0) }
+        // Playback may drop a busy surface. A still frame is exact: wait for
+        // that prior submission, then submit this requested frame once.
+        if code == 1 {
+          _ = finishFunction?(context)
+          code = target.view.withCString { renderFunction(context, target.surface, $0) }
+        }
+        guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(target.view): \(code)") }
+      }
+      _ = finishFunction?(context)
+      rendered += 1
+      var query: [String: Any] = ["op": "status"]
+      if let known { query["knownSnapshotId"] = known }
+      if let references { query["knownReferenceId"] = references }
+      let data = try JSONSerialization.data(withJSONObject: query)
+      return (try requestOnRenderQueue(String(decoding: data, as: UTF8.self)), rendered)
+    }
+  }
+
   static func makeSurface(width: Int, height: Int) throws -> (id: UInt32, buffer: CVPixelBuffer) {
     let properties: [String: Any] = [
       kIOSurfaceWidth as String: width,
@@ -425,6 +454,15 @@ final class ProbeSession {
     return ["surfaces": reply]
   }
 
+  fileprivate func targets(for views: [[String: Any]], flip: Bool = false) -> [ProbeRuntime.PlaybackTarget] {
+    views.compactMap { entry in
+      guard let view = entry["view"] as? String,
+            let surface = surfaces[view], !surface.entries.isEmpty else { return nil }
+      let entry = surface.entries[flip ? 1 % surface.entries.count : 0]
+      return ProbeRuntime.PlaybackTarget(view: view, surface: entry.id, keepAlive: entry.buffer)
+    }
+  }
+
   fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameReady: Bool = false, frameOnly: Bool = false, effectsReloaded: Bool = false) {
     precondition(Thread.isMainThread)
     self.state.merge(state) { _, next in next }
@@ -478,11 +516,8 @@ final class ProbeSession {
   private func playbackPulse() {
     precondition(Thread.isMainThread)
     playbackSurfaceFlip.toggle()
-    let targets = surfaces.compactMap { view, surface -> ProbeRuntime.PlaybackTarget? in
-      guard !surface.entries.isEmpty else { return nil }
-      let entry = surface.entries[playbackSurfaceFlip ? 1 % surface.entries.count : 0]
-      return ProbeRuntime.PlaybackTarget(view: view, surface: entry.id, keepAlive: entry.buffer)
-    }
+    let views: [[String: Any]] = surfaces.keys.map { ["view": $0] }
+    let targets = self.targets(for: views, flip: playbackSurfaceFlip)
     guard !targets.isEmpty else { return }
     _ = runtime.enqueuePlayback(targets: targets) { [weak self] outcome in
       guard let self else { return }
@@ -840,9 +875,20 @@ final class ProbeHost: NSObject {
         } else if let frame = args["frame"] as? NSNumber {
           _ = try self.session.runtime.request("{\"op\":\"seek\",\"quiet\":true,\"frame\":\(frame.int64Value)}")
         }
-        return try self.session.runtime.render(known: args["knownSnapshotId"], references: args["knownReferenceId"])
-      }) { buffers, status, rendered in
-        self.session.broadcast(status, buffers: buffers, origin: self, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
+        return try self.session.runtime.request("{\"op\":\"renderInfo\"}")
+      }) { info in
+        guard let views = info["views"] as? [[String: Any]], !views.isEmpty else {
+          throw ProbeFailure.message("Document dimensions missing")
+        }
+        for view in views { if let name = view["view"] as? String { try self.ensureTexture(name) } }
+        _ = try self.session.ensureSurfaces(views)
+        let targets = self.session.targets(for: views)
+        guard !targets.isEmpty else { throw ProbeFailure.message("No render surface") }
+        let (status, rendered) = try self.session.runtime.renderInto(
+          targets, known: args["knownSnapshotId"], references: args["knownReferenceId"]
+        )
+        let buffers = Dictionary(uniqueKeysWithValues: targets.map { ($0.view, $0.keepAlive) })
+        self.session.broadcast(status, buffers: buffers, origin: self, frameReady: true, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
         var reply = self.envelope(status, frameReady: true)
         reply["renderedFrames"] = rendered
         reply["frameOnly"] = args["frame"] != nil || args["playing"] as? Bool == true

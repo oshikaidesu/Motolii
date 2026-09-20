@@ -31,21 +31,11 @@ mixin SessionNative on SessionCore {
   }
 
   void _bindFrames(Map<String, dynamic> envelope) {
-    final library = envelope['library'], context = envelope['context'];
-    if (library is! String || context is! int || windowInfo['main'] == false)
-      return;
-    try {
-      final held = _frames;
-      if (held == null) {
-        _frames = FfiFrames(library, context);
-      } else if (held.context != context) {
-        held.context = context;
-        _clearSurfaces();
-      }
-    } catch (e) {
-      debugPrint('PROBE room=bridge verdict=channel-fallback reason=$e');
-      _frames = null;
-    }
+    // The native actor owns the context for both still and playback work.
+    // Flutter receives textures and compact snapshots through the channel; it
+    // must not retain a second FFI writer into Document/Rerun.
+    _frames?.dispose();
+    _frames = null;
   }
 
   void _flushDeferred() {
