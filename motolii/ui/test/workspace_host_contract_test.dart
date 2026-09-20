@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/foundation/panel_catalog.dart';
 import '../lib/foundation/theme.dart';
 import '../lib/workspace/layout.dart';
 import '../lib/workspace/workspace_view.dart';
@@ -31,7 +32,9 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Media'));
+    // A strip too short for every word keeps the word only on the tab in
+    // front, so the others are found by their icon.
+    await tester.tap(find.byIcon(panelSpec('Media')!.icon));
     await tester.pump();
     expect(find.text('body:Media'), findsOneWidget);
     expect(find.text('body:Create'), findsNothing);

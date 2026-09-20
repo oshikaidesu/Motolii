@@ -768,7 +768,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   Widget _slot([Widget? child, bool center = false]) => SizedBox(
     width: _wellWidth,
-    height: EditorMetrics.s22,
+    height: EditorMetrics.row,
     child: child == null
         ? null
         : center
@@ -777,7 +777,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
   );
   Widget _tail([Widget? child]) => SizedBox(
     width: EditorMetrics.s22,
-    height: EditorMetrics.s22,
+    height: EditorMetrics.row,
     child: child == null ? null : Center(child: child),
   );
 

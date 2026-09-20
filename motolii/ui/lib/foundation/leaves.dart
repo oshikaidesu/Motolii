@@ -587,6 +587,7 @@ class _SliderPainter extends CustomPainter {
         text: TextSpan(
           text: label,
           style: const TextStyle(
+            fontFamily: EditorTheme.fontFamily,
             fontSize: EditorMetrics.font,
             color: EditorTheme.tabInk,
           ),

@@ -789,21 +789,30 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                 : dragging
                                 ? EditorTheme.hover
                                 : EditorTheme.app,
-                            border: Border.all(color: EditorTheme.line),
+                            // The family's rule down the left edge: a flat
+                            // colour the eye can follow down a column of wells,
+                            // drawn by the well's own border.
+                            border: widget.tint != null && widget.enabled
+                                ? Border(
+                                    left: BorderSide(
+                                      color: widget.tint!,
+                                      width: EditorMetrics.s3,
+                                    ),
+                                    top: const BorderSide(
+                                      color: EditorTheme.line,
+                                    ),
+                                    right: const BorderSide(
+                                      color: EditorTheme.line,
+                                    ),
+                                    bottom: const BorderSide(
+                                      color: EditorTheme.line,
+                                    ),
+                                  )
+                                : Border.all(color: EditorTheme.line),
                           ),
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              // The family's rule down the left edge: a flat
-                              // colour the eye can follow down a column of wells.
-                              if (widget.tint != null && widget.enabled)
-                                Positioned(
-                                  left: 0,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: EditorMetrics.s3,
-                                  child: ColoredBox(color: widget.tint!),
-                                ),
                               if (widget.fill &&
                                   widget.min != null &&
                                   widget.max != null)
@@ -1516,27 +1525,30 @@ class _SectionHead extends StatelessWidget {
             expanded: expanded,
             child: EditorPress(
               onTap: onToggle,
-              child: Row(
-                children: [
-                  if (onToggle != null)
-                    Icon(
-                      expanded ? Glyph.expand_more : Glyph.chevron_right,
-                      size: EditorMetrics.s14,
-                      color: EditorTheme.muted,
-                    ),
-                  Expanded(
-                    child: Text(
-                      title.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: EditorMetrics.micro,
-                        letterSpacing: 1,
+              child: SizedBox(
+                height: EditorMetrics.row,
+                child: Row(
+                  children: [
+                    if (onToggle != null)
+                      Icon(
+                        expanded ? Glyph.expand_more : Glyph.chevron_right,
+                        size: EditorMetrics.s14,
                         color: EditorTheme.muted,
                       ),
+                    Expanded(
+                      child: Text(
+                        title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: EditorMetrics.micro,
+                          letterSpacing: 1,
+                          color: EditorTheme.muted,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
