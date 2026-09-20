@@ -62,7 +62,7 @@ pub(crate) fn build_text_data(
     let mut last: Option<serde_json::Value> = None;
     for frame in 0..frame_count {
         let t = RationalTime::try_from_frame(frame, ctx.fps)?;
-        let resolved = crate::doc::store::view::resolve::text::resolved_text_document(&ctx.view, layer, t)?
+        let resolved = crate::picture::resolve::text::resolved_text_document(&ctx.view, layer, t)?
             .unwrap_or_else(|| static_document.clone());
         let content = resolved.content.eval(t).to_owned();
         let doc_json = text_document_json(&resolved, resolved.styles.first(), &content);

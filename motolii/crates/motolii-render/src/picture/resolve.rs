@@ -25,14 +25,14 @@ pub fn resolve(
     t: RationalTime,
 ) -> Result<Option<ResolvedLayer>, StoreError> {
     let any_solo = any_solo(view, t)?;
-    let world_transforms = crate::doc::store::view::resolve::transform::world_transforms3d(view, t)?;
+    let world_transforms = crate::picture::resolve::transform::world_transforms3d(view, t)?;
     let present: HashSet<LayerId> = view.layers().into_iter().collect();
     let mut memo = HashMap::new();
     let mut visiting = HashSet::new();
     resolve_with_solo(view, layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)
 }
 
-pub(crate) fn resolve_with_solo(
+pub fn resolve_with_solo(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -98,9 +98,9 @@ pub(crate) fn resolve_with_solo(
         }
     };
 
-    let transform = crate::doc::store::view::resolve::transform::world_affine(view, layer, t, present, memo, visiting)?;
-    let mut effects = crate::doc::store::view::resolve::effects::resolved_effects(view, layer, t)?;
-    let (handed, plate) = crate::doc::store::view::resolve::effects::handed_down(view, layer, t, present)?;
+    let transform = crate::picture::resolve::transform::world_affine(view, layer, t, present, memo, visiting)?;
+    let mut effects = crate::picture::resolve::effects::resolved_effects(view, layer, t)?;
+    let (handed, plate) = crate::picture::resolve::effects::handed_down(view, layer, t, present)?;
     effects.extend(handed);
 
     Ok(Some(ResolvedLayer {
@@ -110,9 +110,9 @@ pub(crate) fn resolve_with_solo(
             world_transform: world_transforms.get(&layer).copied(),
             opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
             order: i32::from(meta.order),
-            z: scalar(property::POSITION_Z, 0.0)? + crate::doc::store::layout::frame::laid_out(view, layer, t)?.map_or(0.0, |slot| slot.z),
-            rotation_x: scalar(property::ROTATION_X, 0.0)? + crate::doc::store::layout::frame::laid_out(view, layer, t)?.map_or(0.0, |slot| slot.rotation[0]),
-            rotation_y: scalar(property::ROTATION_Y, 0.0)? as f32 + crate::doc::store::layout::frame::laid_out(view, layer, t)?.map_or(0.0, |slot| slot.rotation[1]),
+            z: scalar(property::POSITION_Z, 0.0)? + crate::picture::frame::laid_out(view, layer, t)?.map_or(0.0, |slot| slot.z),
+            rotation_x: scalar(property::ROTATION_X, 0.0)? + crate::picture::frame::laid_out(view, layer, t)?.map_or(0.0, |slot| slot.rotation[0]),
+            rotation_y: scalar(property::ROTATION_Y, 0.0)? as f32 + crate::picture::frame::laid_out(view, layer, t)?.map_or(0.0, |slot| slot.rotation[1]),
             plane: None,
         },
         declared_size: size,
@@ -120,7 +120,7 @@ pub(crate) fn resolve_with_solo(
         source_frame,
         source_time: RationalTime::try_from_frame(source_frame, composition.fps)
             .map_err(|e| StoreError::Property(e.to_string()))?,
-        masks: crate::doc::store::view::resolve::mask::masks_of(view, layer, t, present, memo, visiting)?,
+        masks: crate::picture::resolve::mask::masks_of(view, layer, t, present, memo, visiting)?,
         effects,
         blend_mode: resolved_blend_mode(view, layer, t, attrs.blend_mode)?,
         matte: if attrs.clip_to_below {
@@ -142,9 +142,9 @@ pub(crate) fn resolve_with_solo(
         after_effects: plate.as_ref().map(|(_, effects)| effects.clone()).unwrap_or_default(),
         plate: plate.map(|(group, _)| group),
         averaged: 0,
-        shape_stretch: crate::doc::store::layout::frame::laid_out(view, layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch),
-        glyph_offsets: crate::doc::store::layout::text::glyph_offsets(view, layer, t)?,
-        flow_around: crate::doc::store::layout::text::flow_around(view, layer, t)?,
+        shape_stretch: crate::picture::frame::laid_out(view, layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch),
+        glyph_offsets: crate::picture::text::glyph_offsets(view, layer, t)?,
+        flow_around: crate::picture::text::flow_around(view, layer, t)?,
     }))
 }
 
@@ -166,8 +166,8 @@ pub fn overlay_scope(view: &StoreView<'_>, overlay: LayerId, resolved: &[Resolve
             continue;
         }
         let b = match layer.source {
-            crate::doc::store::LayerSource::Shape => crate::doc::store::layout::stretched_shape_box(&view.shapes_at(layer.id, t)?, layer.shape_stretch),
-            _ => crate::doc::store::layout::boxes::layer_box(view, layer.id, t)?,
+            crate::doc::store::LayerSource::Shape => crate::picture::boxes::stretched_shape_box(&crate::picture::shapes::shapes_at(view, layer.id, t)?, layer.shape_stretch),
+            _ => crate::picture::boxes::layer_box(view, layer.id, t)?,
         };
         let Some(b) = b else { continue };
         let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| layer.placement.transform.transform_point2(glam::Vec2::from(c)));
@@ -184,7 +184,7 @@ pub fn overlay_scope(view: &StoreView<'_>, overlay: LayerId, resolved: &[Resolve
 
 
 /// 直下の子を重ね順で。
-pub(crate) fn children_in_order(view: &StoreView<'_>, group: LayerId, present: &HashSet<LayerId>) -> Result<Vec<LayerId>, StoreError> {
+pub fn children_in_order(view: &StoreView<'_>, group: LayerId, present: &HashSet<LayerId>) -> Result<Vec<LayerId>, StoreError> {
     let mut children = Vec::new();
     for id in present {
         if view.attrs(*id)?.unwrap_or_default().parent == Some(group) {
@@ -196,7 +196,7 @@ pub(crate) fn children_in_order(view: &StoreView<'_>, group: LayerId, present: &
 }
 
 /// 層とその子孫(自分が先)。
-pub(crate) fn subtree(view: &StoreView<'_>, root: LayerId, present: &HashSet<LayerId>) -> Result<Vec<LayerId>, StoreError> {
+pub fn subtree(view: &StoreView<'_>, root: LayerId, present: &HashSet<LayerId>) -> Result<Vec<LayerId>, StoreError> {
     let mut out = vec![root];
     let mut i = 0;
     while i < out.len() {
@@ -212,12 +212,12 @@ pub(crate) fn subtree(view: &StoreView<'_>, root: LayerId, present: &HashSet<Lay
 }
 
 /// 配置効果を持つグループの子孫。単独では描かず、配置を通してだけ出る。
-pub(crate) fn handed_out_by_a_group(view: &StoreView<'_>, present: &HashSet<LayerId>, t: RationalTime) -> Result<HashSet<LayerId>, StoreError> {
+pub fn handed_out_by_a_group(view: &StoreView<'_>, present: &HashSet<LayerId>, t: RationalTime) -> Result<HashSet<LayerId>, StoreError> {
     let mut hidden = HashSet::new();
     for id in present {
         if !view.meta(*id)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group) { continue; }
         for effect in view.effects(*id)? {
-            if view.placement_program(&effect.plugin_id).is_some() && crate::doc::store::view::resolve::effects::effect_enabled(view, *id, effect.id, t)? {
+            if view.placement_program(&effect.plugin_id).is_some() && crate::picture::resolve::effects::effect_enabled(view, *id, effect.id, t)? {
                 hidden.extend(subtree(view, *id, present)?.into_iter().skip(1));
                 break;
             }
@@ -226,7 +226,7 @@ pub(crate) fn handed_out_by_a_group(view: &StoreView<'_>, present: &HashSet<Laye
     Ok(hidden)
 }
 
-pub(crate) fn any_solo(view: &StoreView<'_>, t: RationalTime) -> Result<bool, StoreError> {
+pub fn any_solo(view: &StoreView<'_>, t: RationalTime) -> Result<bool, StoreError> {
     for layer in view.layers() {
         if view.meta(layer)?.is_some_and(|m| matches!(m.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage)) { continue; }
         let static_solo = view.attrs(layer)?.unwrap_or_default().solo;
@@ -237,7 +237,7 @@ pub(crate) fn any_solo(view: &StoreView<'_>, t: RationalTime) -> Result<bool, St
     Ok(false)
 }
 
-pub(crate) fn resolved_solo(
+pub fn resolved_solo(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -252,7 +252,7 @@ pub(crate) fn resolved_solo(
     }
 }
 
-pub(crate) fn resolved_hidden(
+pub fn resolved_hidden(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -267,7 +267,7 @@ pub(crate) fn resolved_hidden(
     }
 }
 
-pub(crate) fn resolved_blend_mode(
+pub fn resolved_blend_mode(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -286,7 +286,7 @@ pub(crate) fn resolved_blend_mode(
     }
 }
 
-pub(crate) fn resolved_matte(
+pub fn resolved_matte(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -315,7 +315,7 @@ pub(crate) fn resolved_matte(
 
 pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
     let any_solo = any_solo(view, t)?;
-    let world_transforms = crate::doc::store::view::resolve::transform::world_transforms3d(view, t)?;
+    let world_transforms = crate::picture::resolve::transform::world_transforms3d(view, t)?;
     let layers = view.layers();
     let present: HashSet<LayerId> = layers.iter().copied().collect();
     let mut memo = HashMap::new();
@@ -327,13 +327,13 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             continue;
         }
         // ゴーストは元より先に積む(同じ重ね順なら後の物が上に描かれるので、元が手前に来る)。
-        crate::doc::store::view::resolve::copies::push_ghosts(view, layer, t, any_solo, &present, &mut out)?;
+        crate::picture::resolve::copies::push_ghosts(view, layer, t, any_solo, &present, &mut out)?;
         if let Some(resolved) =
             resolve_with_solo(view, layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)?
         {
-            crate::doc::store::view::resolve::copies::push_copies(view, resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
+            crate::picture::resolve::copies::push_copies(view, resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
         }
     }
-    crate::doc::store::view::resolve::settle::settle(view, &mut out, t)?;
+    crate::picture::resolve::settle::settle(view, &mut out, t)?;
     Ok(out)
 }

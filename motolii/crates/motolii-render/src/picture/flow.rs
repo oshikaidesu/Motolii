@@ -12,7 +12,7 @@ enum Sizing { Hug, Fill, Fixed }
 
 /// 幅で高さが決まる子(横が Fill の文字)。taffy が幅を決めてから問う。
 #[derive(Clone, Copy)]
-pub(super) struct Measure {
+pub struct Measure {
     pub(super) layer: LayerId,
     pub(super) scale: f32,
 }
@@ -29,7 +29,7 @@ struct Leaf {
 }
 
 /// Grid の Group の明示の升目(素材座標、CANVAS_MARGIN と padding 込み)。Grid でなければ None。
-fn grid_fields(tree: &TaffyTree<Measure>, node: NodeId) -> Option<(Vec<(f32, f32)>, Vec<(f32, f32)>)> {
+pub fn grid_fields(tree: &TaffyTree<Measure>, node: NodeId) -> Option<(Vec<(f32, f32)>, Vec<(f32, f32)>)> {
     let taffy::tree::DetailedLayoutInfo::Grid(info) = tree.detailed_layout_info(node) else { return None };
     let padding = tree.layout(node).ok()?.padding;
     let lines = |tracks: &taffy::compute::detailed_info::DetailedGridTracksInfo, start: f32| {
@@ -46,7 +46,7 @@ fn grid_fields(tree: &TaffyTree<Measure>, node: NodeId) -> Option<(Vec<(f32, f32
     Some((lines(&info.columns, padding.left + CANVAS_MARGIN), lines(&info.rows, padding.top + CANVAS_MARGIN)))
 }
 
-pub(super) fn compute_layout(view: &StoreView<'_>, t: RationalTime) -> Result<Frame, StoreError> {
+pub fn compute_layout(view: &StoreView<'_>, t: RationalTime) -> Result<Frame, StoreError> {
     let mut frame = Frame::default();
     let layers = view.layers();
     let mut children: HashMap<LayerId, Vec<(i16, LayerId)>> = HashMap::new();
@@ -132,7 +132,7 @@ pub(super) fn compute_layout(view: &StoreView<'_>, t: RationalTime) -> Result<Fr
         }
         // 奥行きの揃えは内の Group から(外の Group は内の奥行きを子の奥行きとして読む)。
         for (_, group, _) in groups_order {
-            crate::doc::store::layout::boxes::align_depth(view, group, t, &children, &mut frame)?;
+            crate::picture::boxes::align_depth(view, group, t, &children, &mut frame)?;
         }
     }
     push_apart(view, t, &displayed, &mut frame)?;
@@ -141,7 +141,7 @@ pub(super) fn compute_layout(view: &StoreView<'_>, t: RationalTime) -> Result<Fr
 
 /// 容器の外の兄弟同士の押し合い(間合いの法 2・3): Margin を宣言した物の箱(親の空間、間合いで広げる)の重なりを、
 /// 決まった回数だけ押し戻す。中心から中心への向きへ、Flex Shrink の比で分ける。その瞬間の宣言だけから解く。
-pub(crate) fn push_apart(view: &StoreView<'_>, t: RationalTime, displayed: &[LayerId], frame: &mut Frame) -> Result<(), StoreError> {
+pub fn push_apart(view: &StoreView<'_>, t: RationalTime, displayed: &[LayerId], frame: &mut Frame) -> Result<(), StoreError> {
     const ROUNDS: usize = 32;
     // (層, 箱の最小, 箱の最大, 譲る比, 奥行きを持つか)。2D の物は奥行きの向きに押さない。
     let mut families: HashMap<Option<LayerId>, Vec<(LayerId, glam::Vec3, glam::Vec3, f32, bool)>> = HashMap::new();
@@ -154,13 +154,13 @@ pub(crate) fn push_apart(view: &StoreView<'_>, t: RationalTime, displayed: &[Lay
         let parent = attrs.parent;
         // 並ぶ子と、付いて置く物(流れの外)と、箱をつなぐ線・なぞる形(Margin は箱からの間合い)は押し合わない。
         if parent.is_some_and(|p| displayed.contains(&p)) || view.choice(layer, POSITION_AREA, t)? > 0
-            || crate::doc::store::connect::connection(view, layer, t)?.is_some() || crate::doc::store::connect::tracing(view, layer, t)?.is_some() {
+            || crate::picture::connect::connection(view, layer, t)?.is_some() || crate::picture::connect::tracing(view, layer, t)?.is_some() {
             continue;
         }
         // 並べる Group の箱は今解いた大きさ(覚えにはまだ入っていない)。
         let b = match frame.sizes.get(&layer) {
             Some(size) => [CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]],
-            None => match crate::doc::store::layout::boxes::layer_box(view, layer, t)? { Some(b) => b, None => continue },
+            None => match crate::picture::boxes::layer_box(view, layer, t)? { Some(b) => b, None => continue },
         };
         // 押し合いの出発点は書いた位置(鍵・親)。ずれを含めた変換を読むと、前の時刻のずれを辿って巡る。
         let local = authored_local(view, layer, t)?;
@@ -170,7 +170,7 @@ pub(crate) fn push_apart(view: &StoreView<'_>, t: RationalTime, displayed: &[Lay
         let spatial = attrs.projection != crate::doc::store::LayerProjection::TwoD;
         let (z0, z1) = if spatial {
             let z = view.number(layer, property::POSITION_Z, 0.0, t)? as f32;
-            let range = crate::doc::store::layout::boxes::depth_range(view, layer, t, frame)?;
+            let range = crate::picture::boxes::depth_range(view, layer, t, frame)?;
             ((z + range[0].min(range[1])) - margin, (z + range[0].max(range[1])) + margin)
         } else {
             (0.0, 0.0)
@@ -234,10 +234,10 @@ pub(crate) fn push_apart(view: &StoreView<'_>, t: RationalTime, displayed: &[Lay
 }
 
 /// 書いた値だけの層の変換(並べた結果・押し合いのずれを含まない)。
-pub(super) fn authored_local(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
+pub fn authored_local(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
     Ok(crate::doc::core::LayerPlacement::from_transform(
-        crate::doc::store::layout::boxes::free_anchor(view, layer, t)?,
-        crate::doc::store::view::resolve::transform::resolve_position(view, layer, t)?,
+        crate::picture::boxes::free_anchor(view, layer, t)?,
+        crate::picture::resolve::transform::resolve_position(view, layer, t)?,
         view.pair(layer, property::SCALE, [1.0, 1.0], t)?,
         view.number(layer, property::ROTATION, 0.0, t)? as f32 + super::path::offset_rotation(view, layer, t)?,
         view.number(layer, property::SKEW, 0.0, t)? as f32,
@@ -246,7 +246,7 @@ pub(super) fn authored_local(view: &StoreView<'_>, layer: LayerId, t: RationalTi
 }
 
 /// 流れの外の子の、親の箱への制約で付いていった置き場所(Figma の Constraints)。制約が Left / Top だけなら None(書いたまま)。
-pub(crate) fn constrained(view: &StoreView<'_>, child: LayerId, parent: LayerId, t: RationalTime, size: [f32; 2]) -> Result<Option<Slot>, StoreError> {
+pub fn constrained(view: &StoreView<'_>, child: LayerId, parent: LayerId, t: RationalTime, size: [f32; 2]) -> Result<Option<Slot>, StoreError> {
     if view.choice(child, POSITION_TYPE, t)? != 1 {
         return Ok(None);
     }
@@ -256,11 +256,11 @@ pub(crate) fn constrained(view: &StoreView<'_>, child: LayerId, parent: LayerId,
         return Ok(None);
     }
     // 基準は時刻 0 の親の箱。
-    let design = if t == RationalTime::ZERO { size } else { crate::doc::store::layout::frame::layout_frame(view, RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
-    let Some(b) = crate::doc::store::layout::boxes::layer_box(view, child, t)? else { return Ok(None) };
+    let design = if t == RationalTime::ZERO { size } else { crate::picture::frame::layout_frame(view, RationalTime::ZERO)?.sizes.get(&parent).copied().unwrap_or(size) };
+    let Some(b) = crate::picture::boxes::layer_box(view, child, t)? else { return Ok(None) };
     let scale = view.pair(child, property::SCALE, [1.0, 1.0], t)?;
-    let position = crate::doc::store::view::resolve::transform::resolve_position(view, child, t)?;
-    let anchor = crate::doc::store::layout::boxes::free_anchor(view, child, t)?;
+    let position = crate::picture::resolve::transform::resolve_position(view, child, t)?;
+    let anchor = crate::picture::boxes::free_anchor(view, child, t)?;
     let mut out_position = position;
     let mut out_scale = scale;
     for axis in 0..2 {
@@ -290,13 +290,13 @@ pub(crate) fn constrained(view: &StoreView<'_>, child: LayerId, parent: LayerId,
     Ok(Some(Slot { position: out_position, scale: out_scale, stretch: [1.0, 1.0], wrap: None, z: 0.0, scale_z: 1.0, rotation: [0.0; 3], anchor }))
 }
 
-pub(crate) fn sizing(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[Sizing; 2], StoreError> {
+pub fn sizing(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[Sizing; 2], StoreError> {
     let of = |v: i64| match v { 1 => Sizing::Fill, 2 => Sizing::Fixed, _ => Sizing::Hug };
     Ok([of(view.choice(layer, HORIZONTAL_SIZING, t)?), of(view.choice(layer, VERTICAL_SIZING, t)?)])
 }
 
 /// 子としての style(並ぶ側の欄)。`natural` は Hug の時の大きさ。
-pub(crate) fn item_style(view: &StoreView<'_>, layer: LayerId, t: RationalTime, natural: [f32; 2], style: &mut Style) -> Result<[Sizing; 2], StoreError> {
+pub fn item_style(view: &StoreView<'_>, layer: LayerId, t: RationalTime, natural: [f32; 2], style: &mut Style) -> Result<[Sizing; 2], StoreError> {
     let sizing = sizing(view, layer, t)?;
     let fixed = [view.number(layer, WIDTH, 100.0, t)? as f32, view.number(layer, HEIGHT, 100.0, t)? as f32];
     let dimension = |axis: usize| match sizing[axis] {
@@ -351,7 +351,7 @@ pub(crate) fn item_style(view: &StoreView<'_>, layer: LayerId, t: RationalTime, 
     Ok(sizing)
 }
 
-pub(crate) fn choice_of_parent(view: &StoreView<'_>, layer: LayerId, name: &str, t: RationalTime) -> Result<i64, StoreError> {
+pub fn choice_of_parent(view: &StoreView<'_>, layer: LayerId, name: &str, t: RationalTime) -> Result<i64, StoreError> {
     match view.attrs(layer)?.unwrap_or_default().parent {
         Some(parent) => view.choice(parent, name, t),
         None => Ok(0),
@@ -359,7 +359,7 @@ pub(crate) fn choice_of_parent(view: &StoreView<'_>, layer: LayerId, name: &str,
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn container(
+pub fn container(
     view: &StoreView<'_>,
     tree: &mut TaffyTree<Measure>,
     group: LayerId,
@@ -423,9 +423,9 @@ pub(crate) fn container(
             nodes.push(container(view, tree, child, t, children, displayed, false, leaves, groups)?);
             continue;
         }
-        let bounds = crate::doc::store::layout::boxes::layer_box(view, child, t)?.unwrap_or([0.0; 4]);
+        let bounds = crate::picture::boxes::layer_box(view, child, t)?.unwrap_or([0.0; 4]);
         let scale = view.pair(child, property::SCALE, [1.0, 1.0], t)?;
-        let extent = crate::doc::store::layout::boxes::natural_extent(view, child, t, bounds, scale)?;
+        let extent = crate::picture::boxes::natural_extent(view, child, t, bounds, scale)?;
         let natural = [extent.hi[0] - extent.lo[0], extent.hi[1] - extent.lo[1]];
         let mut item = Style::default();
         let sizing = item_style(view, child, t, natural, &mut item)?;
@@ -453,9 +453,9 @@ pub(crate) fn container(
 }
 
 /// 置かれた枠へ、層の箱を合わせる Position と Scale(と形の輪郭の伸び)。Position の値はずれとして足す。
-pub(crate) fn slot(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], sizing: [Sizing; 2], fit: i64, placed: taffy::Layout) -> Result<Slot, StoreError> {
+pub fn slot(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], sizing: [Sizing; 2], fit: i64, placed: taffy::Layout) -> Result<Slot, StoreError> {
     let scale = view.pair(layer, property::SCALE, [1.0, 1.0], t)?;
-    let offset = crate::doc::store::view::resolve::transform::resolve_position(view, layer, t)?;
+    let offset = crate::picture::resolve::transform::resolve_position(view, layer, t)?;
     let cell = [placed.size.width, placed.size.height];
     let natural = [(bounds[2] - bounds[0]) * scale[0].abs(), (bounds[3] - bounds[1]) * scale[1].abs()];
     let mut factor = [1.0f32; 2];
@@ -473,11 +473,11 @@ pub(crate) fn slot(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds
     };
     let is_shape = view.meta(layer)?.is_some_and(|m| m.source == LayerSource::Shape);
     let (stretch, bounds, scale) = if is_shape && factor != [1.0, 1.0] {
-        (factor, stretched_shape_box(&view.shapes_at(layer, t)?, factor).unwrap_or(bounds), scale)
+        (factor, crate::picture::boxes::stretched_shape_box(&crate::picture::shapes::shapes_at(view, layer, t)?, factor).unwrap_or(bounds), scale)
     } else {
         ([1.0, 1.0], bounds, [scale[0] * factor[0], scale[1] * factor[1]])
     };
-    let Extent { lo, hi, anchor, rotation } = crate::doc::store::layout::boxes::placed_extent(view, layer, t, bounds, scale)?;
+    let Extent { lo, hi, anchor, rotation } = crate::picture::boxes::placed_extent(view, layer, t, bounds, scale)?;
     let shown = [hi[0] - lo[0], hi[1] - lo[1]];
     let mut position = [0.0; 2];
     for axis in 0..2 {
@@ -491,7 +491,7 @@ pub(crate) fn slot(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds
 
 /// Exclusions: 格子の Group が指す Blob Track の塊が重なる枠へ、見えない子を明示の位置で置く。自動の子は残りの枠へ流れる。
 /// 塊は comp の px なので、Group の素材座標へ戻してから枠と比べる。置いたら true(並べ直す)。
-pub(crate) fn exclude_blobs(view: &StoreView<'_>, tree: &mut TaffyTree<Measure>, groups: &[(NodeId, LayerId, bool)], t: RationalTime) -> Result<bool, StoreError> {
+pub fn exclude_blobs(view: &StoreView<'_>, tree: &mut TaffyTree<Measure>, groups: &[(NodeId, LayerId, bool)], t: RationalTime) -> Result<bool, StoreError> {
     let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
     let mut changed = false;
     for &(node, group, _) in groups {
@@ -521,7 +521,7 @@ pub(crate) fn exclude_blobs(view: &StoreView<'_>, tree: &mut TaffyTree<Measure>,
         let rows = lines(&info.rows, padding.top + CANVAS_MARGIN);
         let (skip_c, skip_r) = (info.columns.negative_implicit_tracks as usize, info.rows.negative_implicit_tracks as usize);
         let (n_c, n_r) = (info.columns.explicit_tracks as usize, info.rows.explicit_tracks as usize);
-        let to_local = crate::doc::store::layout::boxes::world_2d(view, group, t)?.inverse();
+        let to_local = crate::picture::boxes::world_2d(view, group, t)?.inverse();
         let mut taken = std::collections::BTreeSet::new();
         for mark in marks {
             let half = glam::Vec2::from(mark.size) * 0.5;

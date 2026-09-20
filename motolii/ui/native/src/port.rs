@@ -138,7 +138,7 @@ impl EditorRuntime{
             if j["reset"].as_bool()==Some(true) { self.viewer.user_camera=Default::default(); }
             if j["fit"].as_bool()==Some(true) {
                 let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
-                let [x,y,w,h]=motolii_doc::store::view::resolve::camera::resolve_stage_extent(&view, self.time()?).map_err(e)?.rect(comp);
+                let [x,y,w,h]=motolii_render::picture::resolve::camera::resolve_stage_extent(&view, self.time()?).map_err(e)?.rect(comp);
                 self.viewer.user_camera=crate::doc::core::ResolvedCamera { center:[x+w*0.5-comp.width as f32*0.5,y+h*0.5-comp.height as f32*0.5], distance_scale:(w/comp.width as f32).max(h/comp.height as f32), ..Default::default() };
             }
             return Ok(());
@@ -179,7 +179,7 @@ impl EditorRuntime{
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
                 if patch.projection.is_some(){
                     let at=self.time()?;
-                    let centers:Vec<_>={let view=self.doc.view();let resolved=crate::doc::store::view::resolve::resolved_layers(&view, at).map_err(e)?;
+                    let centers:Vec<_>={let view=self.doc.view();let resolved=crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?;
                         layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
@@ -770,7 +770,7 @@ mod path_effect_tests {
         assert_eq!(rt.doc.view().effects(rect).unwrap().iter().map(|e|e.plugin_id.as_str()).collect::<Vec<_>>(),vec![crate::render::extensions::pathop::ROUNDED_CORNERS]);
         rt.request(json!({"op":"applyEffect","pluginId":crate::render::extensions::pathop::PUCKER_BLOAT})).unwrap();
         let view=rt.doc.view();
-        let effects=crate::doc::store::view::resolve::effects::resolved_effects(&view, rect,crate::doc::core::RationalTime::ZERO).unwrap();
+        let effects=crate::render::picture::resolve::effects::resolved_effects(&view, rect,crate::doc::core::RationalTime::ZERO).unwrap();
         let shown=crate::render::extensions::pathop::with_effects(&view.shapes(rect).unwrap(),&effects);
         let crate::doc::store::ShapeNode::Leaf(leaf)=&shown[0] else { panic!("葉") };
         assert_eq!(leaf.ops.iter().map(|o|std::mem::discriminant(&o.kind)).collect::<Vec<_>>().len(),2);
@@ -790,7 +790,7 @@ mod path_effect_tests {
         rt.request(json!({"op":"setProperty","layer":star.0,"property":"shape.points","value":8.0})).unwrap();
         let view=rt.doc.view();
         let at=crate::doc::core::RationalTime::ZERO;
-        let crate::doc::store::ShapeNode::Leaf(shown)=&view.shapes_at(star,at).unwrap()[0] else { panic!("葉") };
+        let crate::doc::store::ShapeNode::Leaf(shown)=&crate::render::picture::shapes::shapes_at(&view, star,at).unwrap()[0] else { panic!("葉") };
         assert!(matches!(shown.source,crate::doc::vector::PathSource::PolyStar{points,..} if points==8.0));
         let crate::doc::store::ShapeNode::Leaf(stored)=&view.shapes(star).unwrap()[0] else { panic!("葉") };
         assert!(matches!(stored.source,crate::doc::vector::PathSource::PolyStar{points,..} if points==5.0),"書類の形は既定のまま");
@@ -883,7 +883,7 @@ mod poster_probe {
             let i=((y*comp.width+x)*4) as usize;
             eprintln!("({x},{y}) = {:?}",&pixels[i..i+4]);
         }
-        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&crate::doc::store::view::resolve::resolved_layers(&view, time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
+        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&crate::render::picture::resolve::resolved_layers(&view, time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
     }
 }
 

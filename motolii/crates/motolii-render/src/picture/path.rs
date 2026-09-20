@@ -4,7 +4,7 @@
 use super::*;
 
 /// 角丸の矩形の閉じた道(時計回り、角は 3 次 Bézier の円弧近似)。`to` で各点を写す(接線は向きだけ写す)。
-pub(crate) fn rounded_rect_path(b: [f32; 4], radius: f32, to: glam::Affine2) -> crate::doc::eval::Path {
+pub fn rounded_rect_path(b: [f32; 4], radius: f32, to: glam::Affine2) -> crate::doc::eval::Path {
     use crate::doc::eval::{Path, PathVertex};
     let r = radius.min((b[2] - b[0]) * 0.5).min((b[3] - b[1]) * 0.5).max(0.0);
     let k = r * 0.552_284_8;
@@ -27,7 +27,7 @@ pub(crate) fn rounded_rect_path(b: [f32; 4], radius: f32, to: glam::Affine2) -> 
 }
 
 /// Offset Path が Border Box なら、親の箱の輪郭の上の点(親の素材座標)と、その向き(度)。
-pub(crate) fn on_offset_path(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<([f32; 2], f32)>, StoreError> {
+pub fn on_offset_path(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<([f32; 2], f32)>, StoreError> {
     if view.choice(layer, OFFSET_PATH, t)? != 1 {
         return Ok(None);
     }
@@ -36,7 +36,7 @@ pub(crate) fn on_offset_path(view: &StoreView<'_>, layer: LayerId, t: RationalTi
             if view.display(parent, t)? == 0 {
                 return Ok(None);
             }
-            let Some(size) = crate::doc::store::layout::boxes::group_size(view, parent, t)? else { return Ok(None) };
+            let Some(size) = crate::picture::boxes::group_size(view, parent, t)? else { return Ok(None) };
             ([CANVAS_MARGIN, CANVAS_MARGIN, CANVAS_MARGIN + size[0], CANVAS_MARGIN + size[1]], view.number(parent, BORDER_RADIUS, 0.0, t)?.max(0.0) as f32)
         }
         None => {
@@ -77,7 +77,7 @@ pub(crate) fn on_offset_path(view: &StoreView<'_>, layer: LayerId, t: RationalTi
 }
 
 /// 道の向きに回る分(Offset Rotate = Auto)。
-pub(crate) fn offset_rotation(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
+pub fn offset_rotation(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
     if view.choice(layer, OFFSET_ROTATE, t)? != 0 {
         return Ok(0.0);
     }

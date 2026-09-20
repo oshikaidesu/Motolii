@@ -23,7 +23,7 @@ pub(super) fn shape_location(slot: &ColorSlot) -> Option<(LayerId, &[usize])> {
     }
 }
 pub(super) fn gradient_axis(source: &PathSource) -> (Point, Point) {
-    let b = crate::doc::store::shape_props::source_bounds(source);
+    let b = crate::render::picture::shape_props::source_bounds(source);
     (Point { x: b[0], y: (b[1] + b[3]) * 0.5 }, Point { x: b[2], y: (b[1] + b[3]) * 0.5 })
 }
 fn endpoint_color(gradient: &Gradient, end: bool) -> Option<Rgb> {
@@ -84,7 +84,7 @@ pub(crate) fn set_shape_gradient(
         return Ok(());
     };
     let shown = {
-        let mut shapes = doc.view().shapes_at(layer, at)?;
+        let mut shapes = crate::render::picture::shapes::shapes_at(&doc.view(), layer, at)?;
         leaf_mut(&mut shapes, path)
             .and_then(|shape| shape.fill.as_ref())
             .and_then(|fill| match &fill.brush {

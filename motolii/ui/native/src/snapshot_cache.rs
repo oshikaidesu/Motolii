@@ -70,7 +70,7 @@ impl EditorRuntime {
             if let Some(parent) = attrs.as_ref().and_then(|a| a.parent) { children.entry(parent).or_default().push(id); }
             let text = view.text_document(id).map_err(|x| e(&x))?;
             keyed |= text.as_ref().is_some_and(|t| !t.content.keys().is_empty());
-            let resolved_text = match &text { Some(_) => motolii_doc::store::view::resolve::text::resolved_text_document(view, id, at).map_err(|x| e(&x))?, None => None };
+            let resolved_text = match &text { Some(_) => motolii_render::picture::resolve::text::resolved_text_document(view, id, at).map_err(|x| e(&x))?, None => None };
             let row = json!([
                 id.0, attrs, view.meta(id).map_err(|x| e(&x))?, properties,
                 text.as_ref().map(|t| t.content.eval(at)), text, resolved_text,
@@ -237,7 +237,7 @@ mod tests {
         let at = rt.time().unwrap();
         let keys = |rt: &EditorRuntime| {
             let view = rt.doc.view();
-            let resolved = crate::doc::store::view::resolve::resolved_layers(&view, at).unwrap();
+            let resolved = crate::render::picture::resolve::resolved_layers(&view, at).unwrap();
             let clipping = view.clipping_bases().unwrap();
             rt.layer_keys(&view, at, &resolved, &clipping, false).unwrap()
         };

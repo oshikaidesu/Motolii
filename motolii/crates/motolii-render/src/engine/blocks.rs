@@ -277,7 +277,7 @@ impl Engine {
             if matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Shape)) {
                 continue;
             }
-            let extent = match crate::doc::store::layout::boxes::layer_box(view, layer.id, t).map_err(store)? {
+            let extent = match crate::picture::boxes::layer_box(view, layer.id, t).map_err(store)? {
                 Some(own) => Some(own),
                 // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
                 None => match view.meta(layer.id).map_err(store)?.map(|m| m.source) {
@@ -317,7 +317,7 @@ impl Engine {
             state.field_rooms.insert(parent.map_or(0, |p| p.0 as u32));
         }
         let field_rooms = state.field_rooms.clone();
-        let solved = crate::doc::store::layout::frame::layout_frame(view, t).map_err(store)?;
+        let solved = crate::picture::frame::layout_frame(view, t).map_err(store)?;
         // 部屋 = 場の立っている一番近い先祖の箱(提案 2026-09-16「場のある箱が部屋」)。入れ子の中の字も、
         // ポスター全体に立った場で散れる。箱(Group)そのものは物にならず、中の葉が物。
         let room_ancestor = lies.room_ancestor;
@@ -340,11 +340,11 @@ impl Engine {
         // つなぐ線の両端は、ブロックを持たなくても物として並べる(線は両端の motion を読むので、動かない端にも項が要る)。
         let mut needed: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if let Some((from, to)) = crate::doc::store::connect::connection(view, layer.id, t).map_err(store)? {
+            if let Some((from, to)) = crate::picture::connect::connection(view, layer.id, t).map_err(store)? {
                 needed.insert(from);
                 needed.insert(to);
             }
-            if let Some((target, _)) = crate::doc::store::connect::tracing(view, layer.id, t).map_err(store)? {
+            if let Some((target, _)) = crate::picture::connect::tracing(view, layer.id, t).map_err(store)? {
                 needed.insert(target);
             }
         }
@@ -402,7 +402,7 @@ impl Engine {
                 None => view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent,
             };
             let room = match parent {
-                Some(parent) => match (resolved.iter().find(|l| l.id == parent && l.copy == 0 && !l.ghost), crate::doc::store::layout::boxes::layer_box(view, parent, t).map_err(store)?) {
+                Some(parent) => match (resolved.iter().find(|l| l.id == parent && l.copy == 0 && !l.ghost), crate::picture::boxes::layer_box(view, parent, t).map_err(store)?) {
                     (Some(owner), Some(b)) => {
                         let m = owner.placement.transform;
                         let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
@@ -420,17 +420,17 @@ impl Engine {
             };
             // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
             // 箱の無い相手(null の層)は置き方の点 1 つ。
-            let Some(own) = crate::doc::store::layout::boxes::layer_box(view, layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()).or_else(|| named.contains(&layer.id).then_some([0.0; 4])) else { continue };
+            let Some(own) = crate::picture::boxes::layer_box(view, layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()).or_else(|| named.contains(&layer.id).then_some([0.0; 4])) else { continue };
             // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
             // 当たりが元の形の大きさのままになる。
             let stretch = solved.slots.get(&layer.id).map_or([1.0, 1.0], |slot| slot.stretch);
             let outline = match view.meta(layer.id).map_err(store)?.map(|m| m.source) {
                 Some(crate::doc::store::LayerSource::Shape) => {
-                    let shapes = view.shapes_at(layer.id, t).map_err(store)?;
+                    let shapes = crate::picture::shapes::shapes_at(view, layer.id, t).map_err(store)?;
                     outline_of(&shapes, stretch).map(std::sync::Arc::new)
                 }
                 // 文字はベクター: 字形の輪郭を形の層と同じ道で(絵の透過は読まない)。
-                Some(crate::doc::store::LayerSource::Text) => crate::doc::store::layout::text::text_outline(view, layer.id, t).map_err(store)?.and_then(|contours| {
+                Some(crate::doc::store::LayerSource::Text) => crate::picture::text::text_outline(view, layer.id, t).map_err(store)?.and_then(|contours| {
                     let mut points = Vec::new();
                     flatten_contours(&contours, [0.0, 0.0], &mut points);
                     (points.len() >= 3).then(|| std::sync::Arc::new(points))
@@ -471,7 +471,7 @@ impl Engine {
             if state.placed.contains_key(&target) {
                 state.follows.insert(layer.id, target);
                 if !state.placed.contains_key(&layer.id) {
-                    let own = crate::doc::store::layout::boxes::layer_box(view, layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
+                    let own = crate::picture::boxes::layer_box(view, layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
                     state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0, hardness: 0.5, outline: None });
                 }
             }
@@ -555,7 +555,7 @@ impl Engine {
         // つなぐ線となぞる形は物にならないが、相手の motion を描く側で読む(利用者 2026-09-18「位置は毎コマ変わるのに
         // GPU じゃないの変すぎ」)。CPU の道は動く前の箱から引き、動いた分は頂点で足す。
         for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if let Some((from, to)) = crate::doc::store::connect::connection(view, layer.id, t).map_err(store)? {
+            if let Some((from, to)) = crate::picture::connect::connection(view, layer.id, t).map_err(store)? {
                 if let (Some(&a), Some(&b)) = (state.slots.get(&from), state.slots.get(&to)) {
                     let path = view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::LINE_PATH).map_err(store)?, t).map_err(store)?;
                     if matches!(path, Some(Value::Enum(4))) {
@@ -567,7 +567,7 @@ impl Engine {
                     continue;
                 }
             }
-            if let Some((target, _)) = crate::doc::store::connect::tracing(view, layer.id, t).map_err(store)? {
+            if let Some((target, _)) = crate::picture::connect::tracing(view, layer.id, t).map_err(store)? {
                 if let Some(&k) = state.slots.get(&target) {
                     state.traces.insert(layer.id, k);
                 }
@@ -1137,12 +1137,12 @@ mod tests {
         };
         let (plain, pushed) = (place(false), place(true));
         let t = RationalTime::ZERO;
-        let frame = pushed.view().layout_frame(t).unwrap();
+        let frame = crate::picture::frame::layout_frame(&pushed.view(), t).unwrap();
         let view = plain.view();
         let items: Vec<BlockItem> = (1..=6).map(|i| {
             let id = LayerId(i);
-            let b = view.layer_box(id, t).unwrap().unwrap();
-            let m = crate::doc::store::view::resolve::transform::local_transform(&view, id, t).unwrap();
+            let b = crate::picture::boxes::layer_box(&view, id, t).unwrap().unwrap();
+            let m = crate::picture::resolve::transform::local_transform(&view, id, t).unwrap();
             let (lo, hi) = (m.transform_point2(glam::vec2(b[0], b[1])), m.transform_point2(glam::vec2(b[2], b[3])));
             BlockItem { lo: lo.to_array(), hi: hi.to_array(), room_lo: [0.0; 2], room_size: [W as f32, H as f32], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }
         }).collect();

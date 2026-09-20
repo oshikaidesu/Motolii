@@ -237,7 +237,7 @@ mod expand_contract {
             assert_eq!(view.meta(*id).unwrap().unwrap().timing.start, 30 * k as i64);
         }
         // 1.5 秒: 元(0-2s)と 1 秒遅れの複製(1-3s)が居て、2 秒遅れの複製はまだ出ない。
-        let visible = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::try_new(3, 2).unwrap()).unwrap();
+        let visible = crate::render::picture::resolve::resolved_layers(&doc.view(), RationalTime::try_new(3, 2).unwrap()).unwrap();
         assert_eq!(visible.iter().map(|l| l.id).collect::<Vec<_>>(), made[..2]);
         assert!(visible.iter().all(|l| l.copy == 0 && l.after_effects.is_empty()));
     }

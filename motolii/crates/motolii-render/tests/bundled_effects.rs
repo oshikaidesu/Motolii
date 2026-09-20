@@ -103,7 +103,7 @@ fn motion_sampling_preserves_read_authority_and_effect_order() {
     let revision = doc.revision();
     let history = doc.history_depth();
     let time = RationalTime::try_new(1, 2).unwrap();
-    let samples = doc.view().resolved_layers(time).unwrap();
+    let samples = motolii_render::picture::resolve::resolved_layers(&doc.view(), time).unwrap();
     assert_eq!(samples.len(), 7);
     assert!(samples
         .iter()
@@ -127,7 +127,7 @@ fn motion_sampling_preserves_read_authority_and_effect_order() {
         value: Value::F64(0.0),
     })
     .unwrap();
-    let still = doc.view().resolved_layers(time).unwrap();
+    let still = motolii_render::picture::resolve::resolved_layers(&doc.view(), time).unwrap();
     assert_eq!(still.len(), 1);
     assert_eq!(still[0].averaged, 0);
     assert_eq!(still[0].placement.opacity, 1.0);
@@ -202,15 +202,10 @@ fn blob_group_uses_sparse_identity_without_drawing_unplaced_children() {
             },
         ],
     );
-    assert!(doc
-        .view()
-        .resolved_layers(RationalTime::ZERO)
+    assert!(motolii_render::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO)
         .unwrap()
         .is_empty());
-    let placed = doc
-        .view()
-        .with_analysis(&analysis)
-        .resolved_layers(RationalTime::ZERO)
+    let placed = motolii_render::picture::resolve::resolved_layers(&doc.view().with_analysis(&analysis), RationalTime::ZERO)
         .unwrap();
     assert_eq!(placed.len(), 2);
     assert!(placed.iter().all(|copy| copy.id == child));
@@ -225,10 +220,7 @@ fn blob_group_uses_sparse_identity_without_drawing_unplaced_children() {
         value: motolii_doc::store::Value::Bool(false),
     })
     .unwrap();
-    let disabled = doc
-        .view()
-        .with_analysis(&analysis)
-        .resolved_layers(RationalTime::ZERO)
+    let disabled = motolii_render::picture::resolve::resolved_layers(&doc.view().with_analysis(&analysis), RationalTime::ZERO)
         .unwrap();
     let children: Vec<_> = disabled.iter().filter(|copy| copy.id == child).collect();
     assert_eq!(children.len(), 1);
@@ -259,7 +251,7 @@ fn a_placement_effect_multiplies_the_layer_and_delays_later_copies() {
     .unwrap();
 
     // 層は 30f から居る。90f では全部の配置が出ていて、番号順に右へ 20 ずつずれる。
-    let copies = doc.view().resolved_layers(at(90)).unwrap();
+    let copies = motolii_render::picture::resolve::resolved_layers(&doc.view(), at(90)).unwrap();
     assert_eq!(copies.iter().map(|c| (c.id, c.copy)).collect::<Vec<_>>(), [(paper, 0), (paper, 1), (paper, 2)]);
     let origins: Vec<[f32; 2]> = copies.iter().map(|c| c.placement.transform.translation.to_array()).collect();
     assert_eq!(origins, [[100.0, 50.0], [120.0, 50.0], [140.0, 50.0]]);
@@ -269,7 +261,7 @@ fn a_placement_effect_multiplies_the_layer_and_delays_later_copies() {
     assert!(copies.iter().all(|c| c.after_effects.iter().map(|e| e.plugin_id.as_str()).eq(["motolii.blur"])));
 
     // 45f では 2 番目(1 秒遅れ)はまだ 15f の姿 = 層の始まる前なので出ない。
-    let early = doc.view().resolved_layers(at(45)).unwrap();
+    let early = motolii_render::picture::resolve::resolved_layers(&doc.view(), at(45)).unwrap();
     assert_eq!(early.iter().map(|c| c.copy).collect::<Vec<_>>(), [0]);
 }
 
@@ -292,7 +284,7 @@ fn a_repeaters_transform_turns_each_copy_or_the_whole_arrangement() {
             Intent::SetConstant { layer: paper, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(90.0) },
         ])
         .unwrap();
-        doc.view().resolved_layers(at(90)).unwrap().iter().map(|c| c.placement.transform.translation.to_array().map(|v| v.round())).collect::<Vec<_>>()
+        motolii_render::picture::resolve::resolved_layers(&doc.view(), at(90)).unwrap().iter().map(|c| c.placement.transform.translation.to_array().map(|v| v.round())).collect::<Vec<_>>()
     };
     assert_eq!(origins(f64::from(placement::TRANSFORM_EACH)), [[100.0, 50.0], [120.0, 50.0]], "each copy turns in place; the row stays");
     assert_eq!(origins(f64::from(placement::TRANSFORM_WHOLE)), [[100.0, 50.0], [100.0, 70.0]], "the row turns with the layer");
@@ -321,7 +313,7 @@ fn a_repeater_on_a_group_hands_out_the_children_instead_of_the_group() {
     ])
     .unwrap();
     // Iterate: 4 placements alternate circle, square, circle, square. The children are not drawn on their own.
-    let out = doc.view().resolved_layers(at(60)).unwrap();
+    let out = motolii_render::picture::resolve::resolved_layers(&doc.view(), at(60)).unwrap();
     let mut seen: Vec<(LayerId, u32, [f32; 2])> = out.iter().map(|c| (c.id, c.copy, c.placement.transform.translation.to_array())).collect();
     seen.sort_by_key(|(id, copy, _)| (id.0, *copy));
     assert_eq!(seen, [
@@ -335,12 +327,12 @@ fn a_repeater_on_a_group_hands_out_the_children_instead_of_the_group() {
         Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "share.2").unwrap(), value: Value::F64(0.0) },
     ])
     .unwrap();
-    let out = doc.view().resolved_layers(at(60)).unwrap();
+    let out = motolii_render::picture::resolve::resolved_layers(&doc.view(), at(60)).unwrap();
     assert_eq!(out.len(), 4);
     assert!(out.iter().all(|c| c.id == square));
     // Whole group: every placement carries both children.
     doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_scope(repeat), value: Value::Enum(EffectScope::Whole.enum_value()) }).unwrap();
-    let out = doc.view().resolved_layers(at(60)).unwrap();
+    let out = motolii_render::picture::resolve::resolved_layers(&doc.view(), at(60)).unwrap();
     assert_eq!(out.len(), 8);
     assert_eq!(out.iter().filter(|c| c.id == circle).count(), 4);
     assert_eq!(out.iter().filter(|c| c.id == square && c.copy == 3).map(|c| c.placement.transform.translation.to_array()).next(), Some([250.0, 110.0]));

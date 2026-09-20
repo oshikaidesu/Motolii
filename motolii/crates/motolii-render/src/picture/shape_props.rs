@@ -30,7 +30,7 @@ pub fn source_bounds(source: &PathSource) -> [f64; 4] {
 /// 線形の広がり 100% は、その向きで bounds を端から端まで。放射の 100% は bounds の大きい方の半分を半径に。
 pub struct GradientAxis { pub angle: f64, pub center: [f64; 2], pub spread: f64 }
 
-fn half_extent(bounds: [f64; 4], angle: f64) -> f64 {
+pub fn half_extent(bounds: [f64; 4], angle: f64) -> f64 {
     let (w, h) = (bounds[2] - bounds[0], bounds[3] - bounds[1]);
     let (s, c) = angle.to_radians().sin_cos();
     (c.abs() * w + s.abs() * h) * 0.5
@@ -76,7 +76,7 @@ pub struct ShapeRow {
     pub range: Option<(f64, f64)>,
 }
 
-fn first_leaf(shapes: &[ShapeNode]) -> Option<&crate::doc::vector::Shape> {
+pub fn first_leaf(shapes: &[ShapeNode]) -> Option<&crate::doc::vector::Shape> {
     shapes.iter().find_map(|n| match n {
         ShapeNode::Leaf(s) => Some(s),
         ShapeNode::Group(g) => first_leaf(&g.children),
@@ -84,7 +84,7 @@ fn first_leaf(shapes: &[ShapeNode]) -> Option<&crate::doc::vector::Shape> {
 }
 
 /// 開いた 1 本の Bezier(Line・Bezier の recipe)の横幅。Length の既定。
-fn open_width(source: &PathSource) -> Option<f64> {
+pub fn open_width(source: &PathSource) -> Option<f64> {
     let PathSource::Bezier(path) = source else { return None };
     let [contour] = path.as_slice() else { return None };
     if contour.closed || contour.vertices.len() < 2 { return None; }

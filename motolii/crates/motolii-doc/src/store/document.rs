@@ -241,6 +241,11 @@ impl Document {
         )
     }
 
+    /// 書類が今持っている塊の数。読みが書類を太らせていないことを確かめる口。
+    pub fn stored_chunks(&self) -> usize {
+        self.db.storage_engine().store().iter_physical_chunks().count()
+    }
+
     pub fn edit_head(&self) -> i64 {
         self.head
     }

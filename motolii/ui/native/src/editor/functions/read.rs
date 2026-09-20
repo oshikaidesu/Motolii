@@ -282,7 +282,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     // 形の元の値(星の頂点数・半径、矩形と楕円の大きさ)。書類の値が既定で、property が上書きする。
     let mut text = text;
     if let Ok(shapes) = view.shapes(layer) {
-        for row in crate::doc::store::shape_props::rows(&shapes) {
+        for row in crate::render::picture::shape_props::rows(&shapes) {
             let Ok(prop) = PropertyId::new(row.name) else { continue };
             let value = view.value_at(layer, &prop, t).ok().flatten().unwrap_or(row.value);
             let (cells, vec2) = match value {

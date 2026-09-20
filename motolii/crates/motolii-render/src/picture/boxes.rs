@@ -5,11 +5,11 @@
 use super::*;
 
 /// 形の層の素材座標の箱(伸ばした後)。
-pub(crate) fn stretched_shape_box(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<[f32; 4]> {
+pub fn stretched_shape_box(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<[f32; 4]> {
     if stretch == [1.0, 1.0] { shape_box(shapes) } else { shape_box(&crate::doc::vector::stretch_outline(shapes, stretch)) }
 }
 
-fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
+pub fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
     let canvas = crate::doc::vector::content_canvas(shapes).ok().flatten()?;
     let b = crate::doc::vector::content_bounds(shapes).ok().flatten()?;
     let (ox, oy) = (canvas.origin_x as f64, canvas.origin_y as f64);
@@ -18,7 +18,7 @@ fn shape_box(shapes: &[crate::doc::vector::ShapeNode]) -> Option<[f32; 4]> {
 
 /// 箱(素材座標の x, y と奥行き z)を、アンカーのまわりで拡縮・回した時の軸に沿った範囲。回し方は層の変換と同じ
 /// (Tilt X・Tilt Y の後に Rotation と Scale)。回転が 0 なら拡縮した箱そのもの。
-fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3], rotation: [f32; 3]) -> ([f32; 3], [f32; 3]) {
+pub fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3], rotation: [f32; 3]) -> ([f32; 3], [f32; 3]) {
     let turn = glam::Quat::from_rotation_x(rotation[0].to_radians()) * glam::Quat::from_rotation_y(rotation[1].to_radians()) * glam::Quat::from_rotation_z(rotation[2].to_radians());
     let (mut lo, mut hi) = (glam::Vec3::splat(f32::INFINITY), glam::Vec3::splat(f32::NEG_INFINITY));
     for x in [bounds[0], bounds[2]] {
@@ -35,7 +35,7 @@ fn footprint(bounds: [f32; 4], depth: [f32; 2], anchor: [f32; 2], scale: [f32; 3
 
 /// 並べる側へ返す、層が親の空間で占める場所。枠へ合わせるのに要る物を 1 度に渡す
 /// (部品で訊くと、奥行き・回し方・アンカーの読み方が呼ぶ側ごとにずれる)。
-pub(super) struct Extent {
+pub struct Extent {
     pub lo: [f32; 3],
     pub hi: [f32; 3],
     pub anchor: [f32; 2],
@@ -43,39 +43,39 @@ pub(super) struct Extent {
 }
 
 /// アンカーを原点に置いた時の範囲。子の素の大きさを測る時に使う(まだ枠が無い)。
-pub(super) fn natural_extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2]) -> Result<Extent, StoreError> {
+pub fn natural_extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2]) -> Result<Extent, StoreError> {
     extent(view, layer, t, bounds, scale, [0.0, 0.0])
 }
 
 /// 層が書いたアンカーで置いた時の範囲。決まった枠へ合わせる時に使う。
-pub(super) fn placed_extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2]) -> Result<Extent, StoreError> {
+pub fn placed_extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2]) -> Result<Extent, StoreError> {
     let anchor = item_anchor(view, layer, t, bounds)?;
     extent(view, layer, t, bounds, scale, anchor)
 }
 
-pub(crate) fn extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2], anchor: [f32; 2]) -> Result<Extent, StoreError> {
+pub fn extent(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4], scale: [f32; 2], anchor: [f32; 2]) -> Result<Extent, StoreError> {
     let rotation = layout_rotation(view, layer, t)?;
     let (lo, hi) = footprint(bounds, raw_depth(view, layer, t)?, anchor, [scale[0], scale[1], 1.0], rotation);
     Ok(Extent { lo, hi, anchor, rotation })
 }
 
 /// 押し合いの奥行きのずれ(移り方を混ぜた後)。
-pub(crate) fn nudge_z(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
-    let now = crate::doc::store::layout::frame::layout_frame(view, t)?.nudges_z.get(&layer).copied().unwrap_or(0.0);
-    let samples = view.transition_samples(layer, t)?;
+pub fn nudge_z(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<f32, StoreError> {
+    let now = crate::picture::frame::layout_frame(view, t)?.nudges_z.get(&layer).copied().unwrap_or(0.0);
+    let samples = crate::picture::motion_time::transition_samples(view, layer, t)?;
     if samples.is_empty() {
         return Ok(now);
     }
     let (mut acc, mut total) = (0.0f32, 0.0f32);
     for (at, weight) in samples {
-        acc += crate::doc::store::layout::frame::layout_frame(view, at)?.nudges_z.get(&layer).copied().unwrap_or(0.0) * weight;
+        acc += crate::picture::frame::layout_frame(view, at)?.nudges_z.get(&layer).copied().unwrap_or(0.0) * weight;
         total += weight;
     }
     Ok(if total > 1e-6 { acc / total } else { now })
 }
 
 /// 付いて置く物の、書いた位置からのずれ(親の空間)。Position Area が None か、相手が居なければ None。
-pub(crate) fn anchored(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+pub fn anchored(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
     let area = view.choice(layer, POSITION_AREA, t)?;
     if area <= 0 {
         return Ok(None);
@@ -100,16 +100,16 @@ pub(crate) fn anchored(view: &StoreView<'_>, layer: LayerId, t: RationalTime) ->
 
 /// `target` の画面の上の箱を、`from` の親の空間で(軸に沿った箱)。Blob Track の層は ID の一番小さい塊。
 /// 並べて伸ばした形は伸ばした後の箱。付いて置く札とつなぐ線が、相手の箱を読む口。
-pub(crate) fn box_seen_from(view: &StoreView<'_>, target: LayerId, from: LayerId, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
+pub fn box_seen_from(view: &StoreView<'_>, target: LayerId, from: LayerId, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
     let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
     let marks = view.analysis().and_then(|a| a.blobs(target, crate::doc::store::EffectId(0), t)).filter(|m| !m.is_empty());
     let (lo, hi) = if let Some(mark) = marks.and_then(|m| m.iter().min_by_key(|m| m.id)) {
         let (c, h) = (glam::Vec2::from(mark.center), glam::Vec2::from(mark.size) * 0.5);
         (c - h, c + h)
     } else {
-        let stretch = crate::doc::store::layout::frame::laid_out(view, target, t)?.map(|s| s.stretch).filter(|s| *s != [1.0, 1.0]);
+        let stretch = crate::picture::frame::laid_out(view, target, t)?.map(|s| s.stretch).filter(|s| *s != [1.0, 1.0]);
         let b = match (stretch, view.meta(target)?.map(|m| m.source)) {
-            (Some(stretch), Some(LayerSource::Shape)) => shape_box(&crate::doc::vector::stretch_outline(&view.shapes_at(target, t)?, stretch)),
+            (Some(stretch), Some(LayerSource::Shape)) => shape_box(&crate::doc::vector::stretch_outline(&crate::picture::shapes::shapes_at(view, target, t)?, stretch)),
             _ => layer_box(view, target, t)?,
         };
         let Some(b) = b else { return Ok(None) };
@@ -126,7 +126,7 @@ pub(crate) fn box_seen_from(view: &StoreView<'_>, target: LayerId, from: LayerId
     }))
 }
 
-pub(crate) fn anchored_inner(view: &StoreView<'_>, layer: LayerId, anchor: LayerId, area: i64, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+pub fn anchored_inner(view: &StoreView<'_>, layer: LayerId, anchor: LayerId, area: i64, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
     let bound = |points: &[glam::Vec2]| points.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(lo, hi), p| (lo.min(*p), hi.max(*p)));
     let Some((mut a_lo, mut a_hi)) = box_seen_from(view, anchor, layer, t)? else { return Ok(None) };
     let second = match view.value_at(layer, &PropertyId::new(POSITION_ANCHOR_2)?, t)? {
@@ -145,8 +145,8 @@ pub(crate) fn anchored_inner(view: &StoreView<'_>, layer: LayerId, anchor: Layer
     }
     // 自分の箱の、位置からの広がり(親の空間)。
     let Some(b) = layer_box(view, layer, t)? else { return Ok(None) };
-    let authored = crate::doc::store::view::resolve::transform::resolve_position(view, layer, t)?;
-    let local = crate::doc::store::layout::flow::authored_local(view, layer, t)?;
+    let authored = crate::picture::resolve::transform::resolve_position(view, layer, t)?;
+    let local = crate::picture::flow::authored_local(view, layer, t)?;
     let (o_lo, o_hi) = bound(&[[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| local.transform_point2(glam::Vec2::from(c)) - glam::Vec2::from(authored)));
     let margin = view.number(layer, MARGIN, 0.0, t)? as f32;
     let (col, row) = ((area - 1) % 3, (area - 1) / 3);
@@ -160,12 +160,12 @@ pub(crate) fn anchored_inner(view: &StoreView<'_>, layer: LayerId, anchor: Layer
 }
 
 /// 並べる Group の箱の大きさ(移り方を混ぜた後)。背景・切り抜き・層の箱が読む。
-pub(crate) fn group_size(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
-    let Some(now) = crate::doc::store::layout::frame::layout_frame(view, t)?.sizes.get(&group).copied() else { return Ok(None) };
+pub fn group_size(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<[f32; 2]>, StoreError> {
+    let Some(now) = crate::picture::frame::layout_frame(view, t)?.sizes.get(&group).copied() else { return Ok(None) };
     let mut acc = [0.0f32; 2];
     let mut total = 0.0f32;
-    for (at, weight) in view.transition_samples(group, t)? {
-        if let Some(past) = crate::doc::store::layout::frame::layout_frame(view, at)?.sizes.get(&group) {
+    for (at, weight) in crate::picture::motion_time::transition_samples(view, group, t)? {
+        if let Some(past) = crate::picture::frame::layout_frame(view, at)?.sizes.get(&group) {
             acc[0] += past[0] * weight;
             acc[1] += past[1] * weight;
             total += weight;
@@ -175,14 +175,14 @@ pub(crate) fn group_size(view: &StoreView<'_>, group: LayerId, t: RationalTime) 
 }
 
 /// 容器の外で押し合ったずれ(移り方を混ぜた後)。
-pub(crate) fn nudge(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+pub fn nudge(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
     let shift = |at: RationalTime| -> Result<[f32; 2], StoreError> {
-        let pushed = crate::doc::store::layout::frame::layout_frame(view, at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
+        let pushed = crate::picture::frame::layout_frame(view, at)?.nudges.get(&layer).copied().unwrap_or([0.0; 2]);
         let anchored = anchored(view, layer, at)?.unwrap_or([0.0; 2]);
         Ok([pushed[0] + anchored[0], pushed[1] + anchored[1]])
     };
     let now = shift(t)?;
-    let samples = view.transition_samples(layer, t)?;
+    let samples = crate::picture::motion_time::transition_samples(view, layer, t)?;
     if samples.is_empty() {
         return Ok(now);
     }
@@ -202,7 +202,7 @@ pub(crate) fn nudge(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Re
 pub fn layer_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<[f32; 4]>, StoreError> {
     let Some(meta) = view.meta(layer)? else { return Ok(None) };
     Ok(match meta.source {
-        LayerSource::Shape => shape_box(&view.shapes_at(layer, t)?),
+        LayerSource::Shape => shape_box(&crate::picture::shapes::shapes_at(view, layer, t)?),
         LayerSource::Text => super::text::text_box(view, layer, t, None)?,
         LayerSource::File { path, .. } => view.analysis().and_then(|a| a.extent(&path)).filter(|e| e[0] > 0.0 && e[1] > 0.0).map(|e| [0.0, 0.0, e[0], e[1]]),
         LayerSource::Group => {
@@ -216,7 +216,7 @@ pub fn layer_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Resul
                     continue;
                 }
                 let Some(b) = layer_box(view, child, t)? else { continue };
-                let local = crate::doc::store::view::resolve::transform::local_transform(view, child, t)?;
+                let local = crate::picture::resolve::transform::local_transform(view, child, t)?;
                 for corner in [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]] {
                     let p = local.transform_point2(glam::Vec2::from(corner));
                     acc = Some(match acc {
@@ -232,7 +232,7 @@ pub fn layer_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Resul
 }
 
 /// Shape Outside が宣言する形(comp の多角形)。Margin Box = 箱 + Margin、Content = 輪郭か Blob の塊の箱。
-pub(super) fn declared_shape(view: &StoreView<'_>, layer: LayerId, mode: i64, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
+pub fn declared_shape(view: &StoreView<'_>, layer: LayerId, mode: i64, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
     let rect = |b: [f32; 4]| vec![glam::vec2(b[0], b[1]), glam::vec2(b[2], b[1]), glam::vec2(b[2], b[3]), glam::vec2(b[0], b[3])];
     if mode == 2 {
         if let Some(marks) = view.analysis().and_then(|a| a.blobs(layer, crate::doc::store::EffectId(0), t)) {
@@ -256,11 +256,11 @@ pub(super) fn declared_shape(view: &StoreView<'_>, layer: LayerId, mode: i64, t:
 }
 
 /// 層の輪郭(素材座標の多角形)。形は曲線を刻んだ輪郭(並べた伸びを込み)、他は層の箱。
-pub(crate) fn outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
+pub fn outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Vec<Vec<glam::Vec2>>, StoreError> {
     let Some(meta) = view.meta(layer)? else { return Ok(Vec::new()) };
     if meta.source == LayerSource::Shape {
-        let stretch = crate::doc::store::layout::frame::laid_out(view, layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch);
-        let shapes = crate::doc::vector::stretch_outline(&view.shapes_at(layer, t)?, stretch);
+        let stretch = crate::picture::frame::laid_out(view, layer, t)?.map_or([1.0, 1.0], |slot| slot.stretch);
+        let shapes = crate::doc::vector::stretch_outline(&crate::picture::shapes::shapes_at(view, layer, t)?, stretch);
         let Ok(Some(canvas)) = crate::doc::vector::content_canvas(&shapes) else { return Ok(Vec::new()) };
         let origin = glam::vec2(canvas.origin_x as f32, canvas.origin_y as f32);
         let mut out = Vec::new();
@@ -352,19 +352,19 @@ pub fn background_shapes(view: &StoreView<'_>, group: LayerId, t: RationalTime) 
 }
 
 /// 層の 2D の world(親を辿る)。塊を Group の素材座標へ戻す時。
-pub(crate) fn world_2d(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
-    let mut world = crate::doc::store::view::resolve::transform::local_transform(view, layer, t)?;
+pub fn world_2d(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
+    let mut world = crate::picture::resolve::transform::local_transform(view, layer, t)?;
     let mut seen = std::collections::HashSet::from([layer]);
     let mut next = view.attrs(layer)?.unwrap_or_default().parent;
     while let Some(parent) = next.filter(|p| seen.insert(*p)) {
-        world = crate::doc::store::view::resolve::transform::local_transform(view, parent, t)? * world;
+        world = crate::picture::resolve::transform::local_transform(view, parent, t)? * world;
         next = view.attrs(parent)?.unwrap_or_default().parent;
     }
     Ok(world)
 }
 
 /// Overflow が Clip の並べる Group なら、その箱(素材座標)と角の丸み。
-pub(crate) fn clip_box(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<([f32; 4], f32)>, StoreError> {
+pub fn clip_box(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<([f32; 4], f32)>, StoreError> {
     if view.display(group, t)? == 0 || view.choice(group, OVERFLOW, t)? != 1 {
         return Ok(None);
     }
@@ -375,7 +375,7 @@ pub(crate) fn clip_box(view: &StoreView<'_>, group: LayerId, t: RationalTime) ->
 
 /// `clip-path: inset()`: 4 辺のどれかが 0 でない並べる Group なら、削った箱(素材座標)と角の丸み(Clip Radius)。
 /// 辺が向かい合う辺を越えたら空の箱(CSS と同じ、何も見えない)。
-pub(crate) fn clip_inset(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<([f32; 4], f32)>, StoreError> {
+pub fn clip_inset(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<Option<([f32; 4], f32)>, StoreError> {
     if view.display(group, t)? == 0 {
         return Ok(None);
     }
@@ -395,7 +395,7 @@ pub(crate) fn clip_inset(view: &StoreView<'_>, group: LayerId, t: RationalTime) 
 
 /// 層の奥行きの範囲(素材座標の z、[手前, 奥])。平らな物は [0, 0]、押し出しは [0, Depth]、網・点群は bounds の
 /// 奥行きを中心に、並べる Group は [-奥行き, 0]。Scale Z(と 3D の Object Fit)を掛ける。
-pub(super) fn depth_range(view: &StoreView<'_>, layer: LayerId, t: RationalTime, frame: &Frame) -> Result<[f32; 2], StoreError> {
+pub fn depth_range(view: &StoreView<'_>, layer: LayerId, t: RationalTime, frame: &Frame) -> Result<[f32; 2], StoreError> {
     let Some(meta) = view.meta(layer)? else { return Ok([0.0; 2]) };
     let scale_z = view.number(layer, property::SCALE_Z, 1.0, t)? as f32 * frame.slots.get(&layer).map_or(1.0, |s| s.scale_z);
     let range = match &meta.source {
@@ -426,7 +426,7 @@ pub(super) fn depth_range(view: &StoreView<'_>, layer: LayerId, t: RationalTime,
 }
 
 /// Transform Origin が Anchor 以外なら、箱の中のその点(素材座標)。
-pub(crate) fn origin_in(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<Option<[f32; 2]>, StoreError> {
+pub fn origin_in(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<Option<[f32; 2]>, StoreError> {
     let origin = view.choice(layer, TRANSFORM_ORIGIN, t)?;
     if origin <= 0 {
         return Ok(None);
@@ -437,7 +437,7 @@ pub(crate) fn origin_in(view: &StoreView<'_>, layer: LayerId, t: RationalTime, b
 }
 
 /// 並ばない層の中心: Transform Origin があれば箱から、無ければ Anchor の値。
-pub(crate) fn free_anchor(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+pub fn free_anchor(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
     if view.choice(layer, TRANSFORM_ORIGIN, t)? > 0 {
         if let Some(b) = layer_box(view, layer, t)? {
             if let Some(origin) = origin_in(view, layer, t, b)? {
@@ -449,7 +449,7 @@ pub(crate) fn free_anchor(view: &StoreView<'_>, layer: LayerId, t: RationalTime)
 }
 
 /// 並ぶ子の拡縮・回転の中心。Transform Origin があれば箱の中のその点、Anchor を書いた層はその値、書いていなければ箱の中心(CSS の transform-origin)。
-pub(crate) fn item_anchor(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<[f32; 2], StoreError> {
+pub fn item_anchor(view: &StoreView<'_>, layer: LayerId, t: RationalTime, bounds: [f32; 4]) -> Result<[f32; 2], StoreError> {
     if let Some(origin) = origin_in(view, layer, t, bounds)? {
         return Ok(origin);
     }
@@ -460,18 +460,18 @@ pub(crate) fn item_anchor(view: &StoreView<'_>, layer: LayerId, t: RationalTime,
 }
 
 /// 並べる前の奥行きの範囲(Scale Z 込み、Object Fit と回転は無し)。葉の箱を測る時。
-pub(crate) fn raw_depth(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+pub fn raw_depth(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
     depth_range(view, layer, t, &Frame::default())
 }
 
 /// 回転の欄(Tilt X・Tilt Y・Rotation)。
-pub(crate) fn layout_rotation(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 3], StoreError> {
+pub fn layout_rotation(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 3], StoreError> {
     Ok([view.number(layer, LAYOUT_TILT_X, 0.0, t)? as f32, view.number(layer, LAYOUT_TILT_Y, 0.0, t)? as f32, view.number(layer, LAYOUT_ROTATION, 0.0, t)? as f32])
 }
 
 /// Depth Alignment: 子の奥行きの最大が Group の奥行き。Back = 子の奥を面(z = 0)に、Front = 子の手前を
 /// Group の手前(-奥行き)に、Center = 中心を揃える(visionOS の depthAlignment)。
-pub(super) fn align_depth(view: &StoreView<'_>, group: LayerId, t: RationalTime, children: &HashMap<LayerId, Vec<(i16, LayerId)>>, frame: &mut Frame) -> Result<(), StoreError> {
+pub fn align_depth(view: &StoreView<'_>, group: LayerId, t: RationalTime, children: &HashMap<LayerId, Vec<(i16, LayerId)>>, frame: &mut Frame) -> Result<(), StoreError> {
     let alignment = view.choice(group, DEPTH_ALIGNMENT, t)?;
     let mut ranges = Vec::new();
     for &(_, child) in children.get(&group).map(Vec::as_slice).unwrap_or(&[]) {

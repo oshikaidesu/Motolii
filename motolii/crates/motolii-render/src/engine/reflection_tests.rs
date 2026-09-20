@@ -11,7 +11,7 @@ use crate::extensions::{placement};
 fn gallery_near_contact_continuity() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut doc = Document::load(root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd")).unwrap().with_programs(crate::extensions::bundled());
-    let ball = doc.view().resolved_layers(RationalTime::ZERO).unwrap().into_iter()
+    let ball = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap().into_iter()
         .filter(|l| matches!(&l.source, LayerSource::File { path, .. } if path.ends_with("sphere.obj")))
         .last().unwrap().id;
     let out = std::path::PathBuf::from(std::env::var("MOTOLII_CONTACT_DIR").unwrap());

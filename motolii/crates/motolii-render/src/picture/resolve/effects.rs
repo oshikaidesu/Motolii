@@ -4,8 +4,8 @@
 
 use super::*;
 
-pub(super) fn effect_enabled(view: &StoreView<'_>, layer: LayerId, effect: crate::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
-    match view.value_at(layer, &crate::store::PropertyId::effect_enabled(effect), t)? {
+pub fn effect_enabled(view: &StoreView<'_>, layer: LayerId, effect: crate::doc::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
+    match view.value_at(layer, &crate::doc::store::PropertyId::effect_enabled(effect), t)? {
         Some(Value::Bool(value)) => Ok(value),
         Some(other) => Err(StoreError::Property(format!("effect {effect} の enabled に真偽でない値が入っている: {other:?}"))),
         None => Ok(true),
@@ -62,7 +62,7 @@ pub fn resolved_effects(
 
 /// グループが子へ配る効果と、子を 1 枚にしてから掛ける効果。配置効果は数える側なので入らない。
 /// Whole が 1 つ現れた所から下は、もう子が無い(板)ので全部 Whole 扱い。
-pub(crate) fn group_effects(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
+pub fn group_effects(view: &StoreView<'_>, group: LayerId, t: RationalTime) -> Result<(Vec<ResolvedEffect>, Vec<ResolvedEffect>), StoreError> {
     let (mut each, mut whole) = (Vec::new(), Vec::new());
     for effect in resolved_effects(view, group, t)? {
         if view.placement_program(&effect.plugin_id).is_some() {
@@ -81,7 +81,7 @@ pub(crate) fn group_effects(view: &StoreView<'_>, group: LayerId, t: RationalTim
 /// ここで解く(裁定 2026-09-11)。返すのは (自分に足す効果, 板になる最寄りのグループとその効果)。
 
 /// 板のグループへ祖先から配られた効果は、板の絵に掛かる。
-pub(super) fn handed_down(view: &StoreView<'_>, layer: LayerId, t: RationalTime, present: &HashSet<LayerId>) -> Result<(Vec<ResolvedEffect>, Option<(LayerId, Vec<ResolvedEffect>)>), StoreError> {
+pub fn handed_down(view: &StoreView<'_>, layer: LayerId, t: RationalTime, present: &HashSet<LayerId>) -> Result<(Vec<ResolvedEffect>, Option<(LayerId, Vec<ResolvedEffect>)>), StoreError> {
     let mut each = Vec::new();
     let mut seen = HashSet::from([layer]);
     let mut next = view.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
@@ -141,7 +141,7 @@ mod group_scope_contract {
         effect(&mut doc, leaf, 0, "leaf.own", false);
         effect(&mut doc, inner, 0, "inner.each", false);
         effect(&mut doc, outer, 0, "outer.each", false);
-        let out = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
+        let out = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         let plugins = |l: &ResolvedLayer| l.effects.iter().map(|e| e.plugin_id.clone()).collect::<Vec<_>>();
         assert_eq!(plugins(find(&out, leaf)), ["leaf.own", "inner.each", "outer.each"], "own first, then nearest group, then the one above");
         assert_eq!(plugins(find(&out, sibling)), ["outer.each"]);
@@ -150,7 +150,7 @@ mod group_scope_contract {
         // inner に Whole を積む: leaf は inner の板の一部。板には inner の Whole と、outer から inner へ配られた効果が掛かる。
         effect(&mut doc, inner, 1, "inner.whole", true);
         effect(&mut doc, inner, 2, "inner.after", false);
-        let out = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
+        let out = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         let leaf_r = find(&out, leaf);
         assert_eq!(plugins(leaf_r), ["leaf.own", "inner.each"], "the outer group's Each now lands on the plate, not the leaf");
         assert_eq!(leaf_r.plate, Some(inner));
@@ -159,7 +159,7 @@ mod group_scope_contract {
 
         // 単層の scope は無意味: 値を書いても板にはならない。
         doc.apply(Intent::SetConstant { layer: sibling, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(1) }).unwrap();
-        let out = crate::doc::store::view::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
+        let out = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap();
         assert!(find(&out, sibling).plate.is_none());
     }
 }

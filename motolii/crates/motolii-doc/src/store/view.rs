@@ -1,4 +1,3 @@
-pub mod resolve;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -71,12 +70,12 @@ impl<'a> StoreView<'a> {
         }
     }
 
-    pub(crate) fn layout_memo(&self) -> &super::scratch::Memo {
+    pub fn layout_memo(&self) -> &super::scratch::Memo {
         &self.layout_memo
     }
 
     /// コマをまたぐ配置の覚えを使ってよい view か(解析・仮の編集・一時の値のどれも読まない)。
-    pub(crate) fn shared_layout_cache(&self) -> Option<(&RefCell<super::scratch::LayoutCache>, &Revision)> {
+    pub fn shared_layout_cache(&self) -> Option<(&RefCell<super::scratch::LayoutCache>, &Revision)> {
         (self.placement_programs.is_none() && self.analysis.is_none() && (self.ignore_transients || (self.preview_edits.is_empty() && self.transient.is_empty()))).then_some((self.layout_cache, &self.revision))
     }
 
@@ -88,26 +87,26 @@ impl<'a> StoreView<'a> {
     }
 
     /// 1 コマの中で層を取り直す効果の取っ手。無ければその効果はぼかさない。
-    pub(crate) fn shutter_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Shutter> {
+    pub fn shutter_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Shutter> {
         ((self.programs.sampling)(plugin_id)?.shutter)(params)
     }
 
     /// 見つけた格子へ寄せる効果の取っ手。寄せない効果なら None。
-    pub(crate) fn snapping_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Snapping> {
+    pub fn snapping_of(&self, plugin_id: &str, params: &[(String, crate::doc::eval::Value)]) -> Option<super::kind::Snapping> {
         let program = (self.programs.snap)(plugin_id)?;
         (program.snapping)(program.plugin_id, params)
     }
 
     /// 見つけた格子へ寄せる気のある効果か(寄せるかどうかは取っ手次第)。
-    pub(crate) fn is_snap_effect(&self, plugin_id: &str) -> bool {
+    pub fn is_snap_effect(&self, plugin_id: &str) -> bool {
         (self.programs.snap)(plugin_id).is_some()
     }
 
-    pub(crate) fn is_sampling_effect(&self, plugin_id: &str) -> bool {
+    pub fn is_sampling_effect(&self, plugin_id: &str) -> bool {
         (self.programs.sampling)(plugin_id).is_some()
     }
 
-    pub(crate) fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {
+    pub fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {
         match self.placement_programs {
             Some(programs) => programs.iter().find(|program| program.plugin_id == plugin_id).copied(),
             None => (self.programs.placement)(plugin_id),
@@ -703,14 +702,6 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
-    /// 時刻 t の形: 書類の形に `shape.*` の property を重ねた姿。描画・枠・出力はこれを読む。
-    pub fn shapes_at(&self, layer: LayerId, t: RationalTime) -> Result<Vec<ShapeNode>, StoreError> {
-        let shapes = self.shapes(layer)?;
-        if shapes.is_empty() { return Ok(shapes); }
-        let get = |name: &str| PropertyId::new(name).ok().and_then(|p| self.value_at(layer, &p, t).ok().flatten());
-        // つなぐ線は輪郭を 2 つの箱から解いた道に差し替える。
-        crate::doc::store::connect::connect_shapes(self, layer, t, crate::doc::store::shape_props::apply(&shapes, &get))
-    }
 
     pub fn shapes(&self, layer: LayerId) -> Result<Vec<ShapeNode>, StoreError> {
         if !self.ignore_transients {

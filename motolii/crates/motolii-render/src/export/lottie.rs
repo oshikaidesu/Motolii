@@ -267,8 +267,8 @@ fn build_layer(
         }
         LayerSource::Shape => {
             out["ty"] = serde_json::json!(4);
-            let effects = crate::doc::store::view::resolve::effects::resolved_effects(view, layer, crate::doc::core::RationalTime::ZERO)?;
-            let shapes = crate::extensions::pathop::with_effects(&view.shapes_at(layer, crate::doc::core::RationalTime::ZERO)?, &effects);
+            let effects = crate::picture::resolve::effects::resolved_effects(view, layer, crate::doc::core::RationalTime::ZERO)?;
+            let shapes = crate::extensions::pathop::with_effects(&crate::picture::shapes::shapes_at(view, layer, crate::doc::core::RationalTime::ZERO)?, &effects);
             out["shapes"] =
                 serde_json::Value::Array(shapes.iter().map(shape_node_to_json).collect::<Vec<_>>());
         }

@@ -8,7 +8,7 @@ use crate::doc::store::{property, LayerId, LayerPlacement, PropertyId, StoreErro
 
 use super::super::StoreView;
 
-pub(super) fn local_placement_transform(
+pub fn local_placement_transform(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -17,7 +17,7 @@ pub(super) fn local_placement_transform(
 }
 
 /// `sample` があれば、位置・大きさ・角度のうち印の付いた物だけをその時刻で取る(Motion Blur)。他は t。
-pub(super) fn local_placement_transform_sampled(
+pub fn local_placement_transform_sampled(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -45,22 +45,22 @@ pub(super) fn local_placement_transform_sampled(
         }
     };
     // つなぐ線は道を親の空間で解いてある: 回さず伸ばさず、素材座標の原点のずれだけ戻して置く。
-    if let Some(position) = crate::doc::store::connect::connector_position(view, layer, t)? {
+    if let Some(position) = crate::picture::connect::connector_position(view, layer, t)? {
         return Ok(LayerPlacement::from_transform([0.0, 0.0], position, [1.0, 1.0], 0.0, 0.0, 0.0));
     }
-    let slot = crate::doc::store::layout::frame::laid_out(view, layer, when(0))?;
+    let slot = crate::picture::frame::laid_out(view, layer, when(0))?;
     let (position, scale) = match slot {
         Some(slot) => (slot.position, slot.scale),
         None => {
-            let (p, d) = (resolve_position(view, layer, when(0))?, crate::doc::store::layout::boxes::nudge(view, layer, when(0))?);
+            let (p, d) = (resolve_position(view, layer, when(0))?, crate::picture::boxes::nudge(view, layer, when(0))?);
             ([p[0] + d[0], p[1] + d[1]], vec2(property::SCALE, [1.0, 1.0], when(1))?)
         }
     };
     Ok(LayerPlacement::from_transform(
-        match slot { Some(slot) => slot.anchor, None => crate::doc::store::layout::boxes::free_anchor(view, layer, t)? },
+        match slot { Some(slot) => slot.anchor, None => crate::picture::boxes::free_anchor(view, layer, t)? },
         position,
         scale,
-        scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]) + crate::doc::store::layout::path_offset_rotation(view, layer, when(2))?,
+        scalar(property::ROTATION, 0.0, when(2))? + slot.map_or(0.0, |s| s.rotation[2]) + crate::picture::path::offset_rotation(view, layer, when(2))?,
         scalar(property::SKEW, 0.0, t)?,
         scalar(property::SKEW_AXIS, 0.0, t)?,
     ))
@@ -76,13 +76,13 @@ pub fn local_transform3d(
     t: RationalTime,
 ) -> Result<glam::Affine3A, StoreError> {
     let xy = local_placement_transform(view, layer, t)?;
-    let slot = crate::doc::store::layout::frame::laid_out(view, layer, t)?;
-    let connector = crate::doc::store::connect::connector_position(view, layer, t)?;
+    let slot = crate::picture::frame::laid_out(view, layer, t)?;
+    let connector = crate::picture::connect::connector_position(view, layer, t)?;
     let position = match slot {
         _ if connector.is_some() => connector.unwrap_or_default(),
         Some(slot) => slot.position,
         None => {
-            let (p, d) = (resolve_position(view, layer, t)?, crate::doc::store::layout::boxes::nudge(view, layer, t)?);
+            let (p, d) = (resolve_position(view, layer, t)?, crate::picture::boxes::nudge(view, layer, t)?);
             [p[0] + d[0], p[1] + d[1]]
         }
     };
@@ -90,7 +90,7 @@ pub fn local_transform3d(
     Ok(LayerPlacement::spatial_from_transform(
         xy,
         position,
-        scalar(property::POSITION_Z)? + match slot { Some(s) => s.z, None => crate::doc::store::layout::boxes::nudge_z(view, layer, t)? },
+        scalar(property::POSITION_Z)? + match slot { Some(s) => s.z, None => crate::picture::boxes::nudge_z(view, layer, t)? },
         scalar(property::ROTATION_X)? + slot.map_or(0.0, |s| s.rotation[0]),
         scalar(property::ROTATION_Y)? + slot.map_or(0.0, |s| s.rotation[1]),
         split_position_component(view, layer, property::SCALE_Z, t)?.unwrap_or(1.0) * slot.map_or(1.0, |s| s.scale_z),
@@ -123,7 +123,7 @@ pub fn world_transforms3d(
 }
 
 /// 1 つの層とその祖先だけの 3D world。全層を回さないので、配置の時刻ずらしで層ごとに呼べる。
-pub(super) fn world_transform3d_chain(
+pub fn world_transform3d_chain(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -136,7 +136,7 @@ pub(super) fn world_transform3d_chain(
     Ok(memo)
 }
 
-pub(super) fn world_affine(
+pub fn world_affine(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -148,7 +148,7 @@ pub(super) fn world_affine(
         |layer| local_placement_transform(view, layer, t))
 }
 
-pub(crate) fn inherited_transform<T: Copy + std::ops::Mul<Output = T>>(
+pub fn inherited_transform<T: Copy + std::ops::Mul<Output = T>>(
     view: &StoreView<'_>,
     layer: LayerId,
     present: &HashSet<LayerId>,
@@ -169,9 +169,9 @@ pub(crate) fn inherited_transform<T: Copy + std::ops::Mul<Output = T>>(
     Ok(world)
 }
 
-pub(crate) fn resolve_position(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+pub fn resolve_position(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
     // 箱の輪郭を道にする物は、道の上の点が Position の代わり。
-    if let Some((point, _)) = crate::doc::store::layout::path_on_offset_path(view, layer, t)? {
+    if let Some((point, _)) = crate::picture::path::on_offset_path(view, layer, t)? {
         return Ok(point);
     }
     let position = PropertyId::new(property::POSITION)?;
@@ -191,7 +191,7 @@ pub(crate) fn resolve_position(view: &StoreView<'_>, layer: LayerId, t: Rational
     Ok([x.unwrap_or(0.0), y.unwrap_or(0.0)])
 }
 
-pub(super) fn split_position_component(
+pub fn split_position_component(
     view: &StoreView<'_>,
     layer: LayerId,
     name: &str,
@@ -253,7 +253,7 @@ mod spatial_tests {
                 (property::SKEW, case["skew"].as_f64().unwrap()),
                 (property::SKEW_AXIS, case["axis"].as_f64().unwrap()),
             ] { set(&mut doc, layer, property, Value::F64(value)); }
-            let transform = crate::doc::store::view::resolve::transform::local_transform3d(&doc.view(), layer, RationalTime::ZERO).unwrap();
+            let transform = crate::picture::resolve::transform::local_transform3d(&doc.view(), layer, RationalTime::ZERO).unwrap();
             for sample in case["samples"].as_array().unwrap() {
                 let point = |name: &str| Vec3::from_array(std::array::from_fn(|i| sample[name][i].as_f64().unwrap() as f32));
                 let actual = transform.transform_point3(point("point"));
@@ -266,17 +266,17 @@ mod spatial_tests {
     #[test]
     fn empty_projection_and_missing_layer_queries_are_explicit() {
         let doc = Document::new();
-        assert!(crate::doc::store::view::resolve::transform::world_transforms3d(&doc.view(), RationalTime::ZERO).unwrap().is_empty());
-        assert!(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), LayerId(9), RationalTime::ZERO).is_err());
+        assert!(crate::picture::resolve::transform::world_transforms3d(&doc.view(), RationalTime::ZERO).unwrap().is_empty());
+        assert!(crate::picture::resolve::transform::world_transform3d(&doc.view(), LayerId(9), RationalTime::ZERO).is_err());
         let (doc, _, _) = pair();
         let revision = doc.revision();
         let head = doc.edit_head();
-        let chunk_count = doc.view().db.storage_engine().store().iter_physical_chunks().count();
-        assert_eq!(crate::doc::store::view::resolve::transform::world_transforms3d(&doc.view(), RationalTime::ZERO).unwrap().len(), 2);
-        assert!(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), LayerId(9), RationalTime::ZERO).is_err());
+        let chunk_count = doc.stored_chunks();
+        assert_eq!(crate::picture::resolve::transform::world_transforms3d(&doc.view(), RationalTime::ZERO).unwrap().len(), 2);
+        assert!(crate::picture::resolve::transform::world_transform3d(&doc.view(), LayerId(9), RationalTime::ZERO).is_err());
         assert_eq!(doc.revision(), revision);
         assert_eq!(doc.edit_head(), head);
-        assert_eq!(doc.view().db.storage_engine().store().iter_physical_chunks().count(), chunk_count);
+        assert_eq!(doc.stored_chunks(), chunk_count);
     }
 
     #[test]
@@ -297,13 +297,13 @@ mod spatial_tests {
         set(&mut doc, parent, property::ROTATION_Y, Value::F64(90.0));
         set(&mut doc, child, property::POSITION, Value::Vec2([10.0, 0.0]));
         let view = doc.view();
-        let poses = crate::doc::store::view::resolve::transform::world_transforms3d(&view, RationalTime::ZERO).unwrap();
-        let layers = crate::doc::store::view::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap();
+        let poses = crate::picture::resolve::transform::world_transforms3d(&view, RationalTime::ZERO).unwrap();
+        let layers = crate::picture::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap();
         let resolved = layers.iter().find(|layer| layer.id == child).unwrap();
         let world = resolved.placement.world_transform.unwrap();
         assert_eq!(world, poses[&child]);
         close(world.transform_point3(Vec3::ZERO), Vec3::new(0.0, 0.0, 15.0));
-        assert_eq!(crate::doc::store::view::resolve::resolve(&view, child, RationalTime::ZERO).unwrap().unwrap().placement.world_transform, Some(world));
+        assert_eq!(crate::picture::resolve::resolve(&view, child, RationalTime::ZERO).unwrap().unwrap().placement.world_transform, Some(world));
     }
 
     #[test]
@@ -316,8 +316,8 @@ mod spatial_tests {
         set(&mut doc, child, property::POSITION, Value::Vec2([15.0, 20.0]));
         set(&mut doc, child, property::POSITION_Z, Value::F64(4.0));
         let view = doc.view();
-        close(crate::doc::store::view::resolve::transform::local_transform3d(&view, parent, RationalTime::ZERO).unwrap().transform_point3(Vec3::new(10.0, 20.0, 0.0)), Vec3::new(100.0, 200.0, 30.0));
-        close(crate::doc::store::view::resolve::transform::world_transform3d(&view, child, RationalTime::ZERO).unwrap().transform_point3(Vec3::ZERO), Vec3::new(104.0, 200.0, 25.0));
+        close(crate::picture::resolve::transform::local_transform3d(&view, parent, RationalTime::ZERO).unwrap().transform_point3(Vec3::new(10.0, 20.0, 0.0)), Vec3::new(100.0, 200.0, 30.0));
+        close(crate::picture::resolve::transform::world_transform3d(&view, child, RationalTime::ZERO).unwrap().transform_point3(Vec3::ZERO), Vec3::new(104.0, 200.0, 25.0));
     }
 
     #[test]
@@ -336,11 +336,11 @@ mod spatial_tests {
         }
         let view = doc.view();
         let present = view.layers().into_iter().collect();
-        let xy = crate::doc::store::view::resolve::transform::world_affine(&view, child, RationalTime::ZERO, &present, &mut HashMap::new(), &mut HashSet::new()).unwrap();
-        let spatial = crate::doc::store::view::resolve::transform::world_transform3d(&view, child, RationalTime::ZERO).unwrap();
+        let xy = crate::picture::resolve::transform::world_affine(&view, child, RationalTime::ZERO, &present, &mut HashMap::new(), &mut HashSet::new()).unwrap();
+        let spatial = crate::picture::resolve::transform::world_transform3d(&view, child, RationalTime::ZERO).unwrap();
         for point in [Vec2::ZERO, Vec2::new(2.0, 5.0), Vec2::new(-4.0, 8.0)] {
             close(spatial.transform_point3(point.extend(0.0)), xy.transform_point2(point).extend(0.0));
-            close(crate::doc::store::view::resolve::transform::local_transform3d(&view, child, RationalTime::ZERO).unwrap().transform_point3(point.extend(0.0)), crate::doc::store::view::resolve::transform::local_transform(&view, child, RationalTime::ZERO).unwrap().transform_point2(point).extend(0.0));
+            close(crate::picture::resolve::transform::local_transform3d(&view, child, RationalTime::ZERO).unwrap().transform_point3(point.extend(0.0)), crate::picture::resolve::transform::local_transform(&view, child, RationalTime::ZERO).unwrap().transform_point2(point).extend(0.0));
         }
     }
 
@@ -349,11 +349,11 @@ mod spatial_tests {
         let (mut doc, parent, child) = pair();
         set(&mut doc, parent, property::SCALE, Value::Vec2([2.0, 3.0]));
         set(&mut doc, child, property::ROTATION_Y, Value::F64(90.0));
-        close(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::X), Vec3::new(0.0, 0.0, -1.0));
+        close(crate::picture::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::X), Vec3::new(0.0, 0.0, -1.0));
         doc.set_transient(parent, PropertyId::new(property::ROTATION_X).unwrap(), Value::F64(90.0));
         doc.set_transient(parent, PropertyId::new(property::POSITION_Z).unwrap(), Value::F64(7.0));
-        close(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::X), Vec3::new(0.0, 1.0, 7.0));
-        close(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view().without_transients(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::X), Vec3::new(0.0, 0.0, -1.0));
+        close(crate::picture::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::X), Vec3::new(0.0, 1.0, 7.0));
+        close(crate::picture::resolve::transform::world_transform3d(&doc.view().without_transients(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::X), Vec3::new(0.0, 0.0, -1.0));
     }
 
     #[test]
@@ -365,11 +365,11 @@ mod spatial_tests {
             layer: parent,
             patch: LayerAttrsPatch { parent: Some(Some(child)), ..Default::default() },
         }).is_err());
-        close(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::ZERO), Vec3::new(0.0, 0.0, 10.0));
+        close(crate::picture::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::ZERO), Vec3::new(0.0, 0.0, 10.0));
         doc.apply(Intent::RemoveLayer(parent)).unwrap();
         assert!(!doc.view().has_layer(child));
-        assert!(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).is_err());
+        assert!(crate::picture::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).is_err());
         assert!(doc.undo());
-        close(crate::doc::store::view::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::ZERO), Vec3::new(0.0, 0.0, 10.0));
+        close(crate::picture::resolve::transform::world_transform3d(&doc.view(), child, RationalTime::ZERO).unwrap().transform_point3(Vec3::ZERO), Vec3::new(0.0, 0.0, 10.0));
     }
 }

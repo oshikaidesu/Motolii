@@ -452,7 +452,7 @@ mod camera_tests {
             let layer = LayerId(1);
             doc.apply_all(new_layer_intents(layer, 0, 0, 90, fps, comp, kind, None)).unwrap();
             doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(73.0) }).unwrap();
-            let world = motolii_doc::store::view::resolve::transform::world_transform3d(&doc.view(), layer, RationalTime::ZERO).unwrap();
+            let world = motolii_render::picture::resolve::transform::world_transform3d(&doc.view(), layer, RationalTime::ZERO).unwrap();
             let actual = world.transform_point3(centre.extend(0.0));
             assert!((actual - glam::vec3(960.0, 540.0, 0.0)).length() < 0.001, "{actual:?}");
         }
@@ -502,12 +502,12 @@ mod camera_tests {
         doc.apply_all(new_layer_intents(layer,0,0,60,fps,(1920.0,1080.0),NewKind::Camera,None)).unwrap();
         let property = PropertyId::new(property::CAMERA_ZOOM).unwrap();
         doc.apply(Intent::SetConstant { layer, property:property.clone(), value:Value::F64(2.0) }).unwrap();
-        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,2.0);
-        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::from_seconds(3)).unwrap().zoom,1.0);
+        assert_eq!(motolii_render::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,2.0);
+        assert_eq!(motolii_render::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::from_seconds(3)).unwrap().zoom,1.0);
         doc.apply(Intent::RemoveLayer(layer)).unwrap();
-        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,1.0);
+        assert_eq!(motolii_render::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,1.0);
         assert!(doc.undo());
-        assert_eq!(motolii_doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,2.0);
+        assert_eq!(motolii_render::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap().zoom,2.0);
     }
 }
 

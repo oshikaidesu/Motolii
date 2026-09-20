@@ -148,7 +148,7 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
-        let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).ok()?;
+        let resolved = crate::picture::resolve::resolved_layers(view, t).ok()?;
         self.selected_layer_size_in(view, &resolved, layer_id, t)
     }
 
@@ -172,11 +172,11 @@ impl Engine {
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        let mut camera = crate::doc::store::view::resolve::camera::camera_of_layer(view, id, t).map_err(store)?;
-        let Some(target) = crate::doc::store::view::resolve::camera::camera_target_layer(view, id, t).map_err(store)? else { return Ok(camera) };
+        let mut camera = crate::picture::resolve::camera::camera_of_layer(view, id, t).map_err(store)?;
+        let Some(target) = crate::picture::resolve::camera::camera_target_layer(view, id, t).map_err(store)? else { return Ok(camera) };
         let (Some(bounds), Some(comp)) = (self.selected_layer_bounds_in(view, resolved, target, t), view.composition().map_err(store)?) else { return Ok(camera) };
         let comp = comp.spec();
-        let point = crate::doc::store::view::resolve::transform::world_transform3d(view, target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
+        let point = crate::picture::resolve::transform::world_transform3d(view, target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
         camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
         camera.target_z = point.z;
         Ok(camera)
@@ -190,9 +190,9 @@ impl Engine {
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        match crate::doc::store::view::resolve::camera::active_camera_layer(view, t).map_err(store)? {
+        match crate::picture::resolve::camera::active_camera_layer(view, t).map_err(store)? {
             Some(id) => self.camera_of_layer_in(view, resolved, id, t),
-            None => crate::doc::store::view::resolve::camera::resolve_camera(view, t).map_err(store),
+            None => crate::picture::resolve::camera::resolve_camera(view, t).map_err(store),
         }
     }
 
@@ -203,9 +203,9 @@ impl Engine {
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
         let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        let Some(id) = crate::doc::store::view::resolve::camera::active_camera_layer(view, t).map_err(store)? else { return crate::doc::store::view::resolve::camera::resolve_camera(view, t).map_err(store) };
-        if crate::doc::store::view::resolve::camera::camera_target_layer(view, id, t).map_err(store)?.is_none() { return crate::doc::store::view::resolve::camera::camera_of_layer(view, id, t).map_err(store) }
-        let resolved = crate::doc::store::view::resolve::resolved_layers(view, t).map_err(store)?;
+        let Some(id) = crate::picture::resolve::camera::active_camera_layer(view, t).map_err(store)? else { return crate::picture::resolve::camera::resolve_camera(view, t).map_err(store) };
+        if crate::picture::resolve::camera::camera_target_layer(view, id, t).map_err(store)?.is_none() { return crate::picture::resolve::camera::camera_of_layer(view, id, t).map_err(store) }
+        let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(store)?;
         self.camera_of_layer_in(view, &resolved, id, t)
     }
 
@@ -279,15 +279,15 @@ impl Engine {
         };
         match &layer.source {
             LayerSource::Text => {
-                let document = crate::doc::store::view::resolve::text::resolved_text_document(view, layer_id, t).ok().flatten()?;
+                let document = crate::picture::resolve::text::resolved_text_document(view, layer_id, t).ok().flatten()?;
                 let partner = crate::extensions::text::morph(&layer.effects)
-                    .and_then(|(target, amount)| crate::doc::store::view::resolve::text::resolved_text_document(view, target, t).ok().flatten().map(|d| (d, amount)));
+                    .and_then(|(target, amount)| crate::picture::resolve::text::resolved_text_document(view, target, t).ok().flatten().map(|d| (d, amount)));
                 let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height).moving(text::Flow::of(layer));
                 let cached = self.text_textures.get(&key)?;
                 planar(cached.bounds?, [comp.width as f32, comp.height as f32])
             }
             LayerSource::Shape => {
-                let shapes = super::render::shown_shapes(&view.shapes_at(layer_id, t).ok()?, layer);
+                let shapes = super::render::shown_shapes(&crate::picture::shapes::shapes_at(view, layer_id, t).ok()?, layer);
                 let canvas = content_canvas(&shapes).ok().flatten()?;
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
                 let _cached = self.shape_textures.get(&key)?;
@@ -1246,7 +1246,7 @@ mod tests {
             ]).unwrap();
         }
         let view = doc.view();
-        let mut resolved = view.resolved_layers(RationalTime::ZERO).unwrap();
+        let mut resolved = crate::picture::resolve::resolved_layers(&view, RationalTime::ZERO).unwrap();
         let leaf = |layer: &ResolvedLayer| Some(if layer.id == LayerId(4) {
             crate::render::media::SpatialBounds { min: [1.0, 2.0, -1.0], max: [3.0, 4.0, 1.0] }
         } else {

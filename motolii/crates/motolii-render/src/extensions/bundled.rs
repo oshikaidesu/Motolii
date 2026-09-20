@@ -21,7 +21,7 @@ pub fn bundled() -> crate::doc::store::kind::Programs {
 /// 「どこに見えているか」を答える口。束ねを解く・親を移す・札を変える時、
 /// コアはこの答えを使って書いた値を補正する(コアは解き方を知らない)。
 pub fn geometry() -> crate::doc::store::kind::Geometry {
-    use crate::doc::store::view::resolve::{camera, transform};
+    use crate::picture::resolve::{camera, transform};
     crate::doc::store::kind::Geometry {
         local: transform::local_transform,
         local3d: transform::local_transform3d,

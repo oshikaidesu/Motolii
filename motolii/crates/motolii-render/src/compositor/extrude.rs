@@ -320,7 +320,7 @@ mod tests {
         let mut engine = crate::render::engine::Engine::new().unwrap();
         let flat = engine.render_frame(&rectangle_document(0.0, 0.0).view(), t).unwrap();
         let deep_doc = rectangle_document(24.0, 0.0);
-        assert_eq!(deep_doc.view().resolved_layers(t).unwrap()[0].depth, 24.0);
+        assert_eq!(crate::picture::resolve::resolved_layers(&deep_doc.view(), t).unwrap()[0].depth, 24.0);
         let deep = engine.render_frame(&deep_doc.view(), t).unwrap();
         assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
         if let Ok(dir) = std::env::var("MOTOLII_EXTRUDE_DUMP") {

@@ -110,7 +110,7 @@ fn selection_geom_in(
     layer: LayerId,
     rt: RationalTime,
 ) -> Option<SelGeom> {
-    let resolved = crate::doc::store::view::resolve::resolved_layers(view, rt).ok()?;
+    let resolved = crate::render::picture::resolve::resolved_layers(view, rt).ok()?;
     selection_geom_resolved(engine, view, &resolved, layer, rt)
 }
 fn selection_geom_resolved(
@@ -640,7 +640,7 @@ impl CageDrag {
         if mode == GizmoMode::Move {
             for (id, g) in std::iter::once((layer, &geom)).chain(drag.others.iter().map(|(id, g)| (*id, g))) {
                 let parent = match view.attrs(id).map_err(|e| e.to_string())?.and_then(|a| a.parent) {
-                    Some(id) => motolii_doc::store::view::resolve::transform::world_transform3d(&view, id, at).map_err(|e| e.to_string())?,
+                    Some(id) => motolii_render::picture::resolve::transform::world_transform3d(&view, id, at).map_err(|e| e.to_string())?,
                     None => glam::Affine3A::IDENTITY,
                 };
                 let mapping = translation_map(&fit, g, parent, start);
@@ -653,7 +653,7 @@ impl CageDrag {
         if mode == GizmoMode::Move && geom.rotation_x == 0.0 && geom.rotation_y == 0.0 {
             let comp = fit.comp;
             snap_targets.push([0.0, 0.0, comp.width as f64, comp.height as f64]);
-            if let Ok(resolved) = crate::doc::store::view::resolve::resolved_layers(&view, at) {
+            if let Ok(resolved) = crate::render::picture::resolve::resolved_layers(&view, at) {
                 let related = |a: LayerId, b: LayerId| -> bool {
                     let mut up = Some(a);
                     let mut guard = 0;

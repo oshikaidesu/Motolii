@@ -116,7 +116,7 @@ mod tests {
             Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: super::BLOB_TRACK.into() }] },
         ]).unwrap();
         let t = RationalTime::ZERO;
-        let copies = |view: crate::doc::store::StoreView<'_>| view.resolved_layers(t).unwrap().into_iter().filter(|l| l.id == layer).collect::<Vec<_>>();
+        let copies = |view: crate::doc::store::StoreView<'_>| crate::picture::resolve::resolved_layers(&view, t).unwrap().into_iter().filter(|l| l.id == layer).collect::<Vec<_>>();
         assert!(copies(doc.view()).is_empty(), "解析の入力が無ければ置かれない");
         let mut inputs = AnalysisInputs::default();
         inputs.set_blobs(layer, EffectId(0), t, vec![

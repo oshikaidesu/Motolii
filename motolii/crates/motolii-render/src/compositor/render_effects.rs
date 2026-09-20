@@ -756,7 +756,7 @@ mod tests {
         image::save_buffer(&source, &pixels, size, size, image::ColorType::Rgba8).unwrap();
         let doc = if let Ok(path) = std::env::var("MOTOLII_RADIANCE_BENCH_DOCUMENT") {
             let mut doc = Document::load(path).unwrap().with_programs(crate::extensions::bundled());
-            let ids = doc.view().resolved_layers(RationalTime::ZERO).unwrap().iter().map(|l| l.id).collect::<Vec<_>>();
+            let ids = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap().iter().map(|l| l.id).collect::<Vec<_>>();
             for layer in ids { for effect in doc.view().effects(layer).unwrap() { doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_enabled(effect.id), value: Value::Bool(true) }).unwrap(); } }
             doc
         } else {

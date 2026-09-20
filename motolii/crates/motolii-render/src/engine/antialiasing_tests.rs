@@ -96,9 +96,7 @@ fn antialiasing_cost_comparison() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let source = root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd");
     let mut doc = Document::load(&source).unwrap().with_programs(crate::extensions::bundled());
-    let ring = doc
-        .view()
-        .resolved_layers(RationalTime::ZERO)
+    let ring = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO)
         .unwrap()
         .into_iter()
         .find(
@@ -170,9 +168,7 @@ fn lightweight_antialiasing_comparison() {
             .unwrap().with_programs(crate::extensions::bundled());
     let out = std::path::PathBuf::from(std::env::var("MOTOLII_LIGHTWEIGHT_AA_DIR").unwrap());
     std::fs::create_dir_all(&out).unwrap();
-    let ring = doc
-        .view()
-        .resolved_layers(RationalTime::ZERO)
+    let ring = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO)
         .unwrap()
         .into_iter()
         .find(
@@ -366,7 +362,7 @@ fn filtered_surfaces_refresh_on_edit_undo_camera_and_cache_eviction() {
     );
     let camera = crate::doc::core::ResolvedCamera {
         orbit_degrees: [15.0, 20.0],
-        ..crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap()
+        ..crate::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap()
     };
     engine
         .render_with_camera_override(&doc.view(), RationalTime::ZERO, true, Some(camera))

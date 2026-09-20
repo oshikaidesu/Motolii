@@ -10,21 +10,21 @@ pub struct Point {
 impl Point {
     pub const ZERO: Point = Point { x: 0.0, y: 0.0 };
 
-    pub(crate) fn add(self, o: Point) -> Point {
+    pub fn add(self, o: Point) -> Point {
         Point {
             x: self.x + o.x,
             y: self.y + o.y,
         }
     }
 
-    pub(crate) fn sub(self, o: Point) -> Point {
+    pub fn sub(self, o: Point) -> Point {
         Point {
             x: self.x - o.x,
             y: self.y - o.y,
         }
     }
 
-    pub(crate) fn scale(self, s: f64) -> Point {
+    pub fn scale(self, s: f64) -> Point {
         Point {
             x: self.x * s,
             y: self.y * s,
@@ -35,7 +35,7 @@ impl Point {
         self.x * o.x + self.y * o.y
     }
 
-    pub(crate) fn length(self) -> f64 {
+    pub fn length(self) -> f64 {
         self.dot(self).sqrt()
     }
 

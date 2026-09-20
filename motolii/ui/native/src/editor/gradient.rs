@@ -30,7 +30,7 @@ pub(crate) fn edit(doc:&Document, slot:&ColorSlot, j:&J, at:crate::doc::store::R
     let (layer,path)=shape_location(slot).ok_or("Select a shape fill")?;
     let view=doc.view().without_transients();
     if view.attrs(layer).map_err(|e|e.to_string())?.ok_or("Layer not found")?.locked { return Err("Layer is locked".into()); }
-    let mut evaluated=view.shapes_at(layer,at).map_err(|e|e.to_string())?;
+    let mut evaluated=crate::render::picture::shapes::shapes_at(&view, layer,at).map_err(|e|e.to_string())?;
     let shown=leaf_mut(&mut evaluated,path).and_then(|s|s.fill.as_ref()).map(|f|f.brush.clone()).unwrap_or_default();
     let mut shapes=view.shapes(layer).map_err(|e|e.to_string())?;
     let shape=leaf_mut(&mut shapes,path).ok_or("Shape not found")?;
@@ -85,7 +85,7 @@ pub(crate) fn edit(doc:&Document, slot:&ColorSlot, j:&J, at:crate::doc::store::R
 
 pub(crate) fn model(doc:&Document, slot:&ColorSlot, time:crate::doc::store::RationalTime) -> Option<J> {
     let (layer,path)=shape_location(slot)?;
-    let mut shapes=doc.view().shapes_at(layer,time).ok()?;
+    let mut shapes=crate::render::picture::shapes::shapes_at(&doc.view(), layer,time).ok()?;
     let fill=leaf_mut(&mut shapes,path)?.fill.as_ref()?;
     let slot=ColorSlot::ShapeFill{layer,path:path.to_vec()};
     Some(match &fill.brush {
@@ -119,7 +119,7 @@ mod tests {
         track.insert(Keyframe{t:later,value:Value::Color([0.0,1.0,0.0,1.0]),interp:Interp::Linear,spatial:None});
         doc.apply(Intent::SetTrack{layer,property:p.clone(),track:track.clone()}).unwrap();
         let before=doc.view().shapes(layer).unwrap();
-        let mut evaluated=doc.view().shapes_at(layer,at).unwrap();
+        let mut evaluated=crate::render::picture::shapes::shapes_at(&doc.view(), layer,at).unwrap();
         let Brush::Gradient(g)=&leaf_mut(&mut evaluated,&[0]).unwrap().fill.as_ref().unwrap().brush else{panic!()};
         let expected=g.color_at(0.25);
         doc.apply(edit(&doc,&slot,&json!({"addStop":0.25}),at).unwrap()).unwrap();

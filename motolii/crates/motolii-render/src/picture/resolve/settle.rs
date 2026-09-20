@@ -6,7 +6,7 @@ use super::*;
 
 /// 解いた列を、決まった順で整える。並べ替えと描き順の番号付けまでが一組。
 /// 解く側はこの一口だけ使う(手を 1 つずつ呼ばせると、順番が呼ぶ側の記憶になる)。
-pub(super) fn settle(view: &StoreView<'_>, out: &mut Vec<ResolvedLayer>, t: RationalTime) -> Result<(), StoreError> {
+pub fn settle(view: &StoreView<'_>, out: &mut Vec<ResolvedLayer>, t: RationalTime) -> Result<(), StoreError> {
     put_backgrounds_behind(view, out, t)?;
     put_on_planes(view, out, t)?;
     put_connectors_in_front(view, out, t)?;
@@ -23,7 +23,7 @@ pub(super) fn settle(view: &StoreView<'_>, out: &mut Vec<ResolvedLayer>, t: Rati
 }
 
 /// Field(C4D の Fields の Box): 指した層の箱からの距離で、画面の上の大きさ・不透明度・押し出しを変える。写しは 1 枚ずつ。
-pub(crate) fn apply_fields(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+pub fn apply_fields(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     use crate::doc::store::layout::{FIELD, FIELD_FALLOFF, FIELD_OPACITY, FIELD_PUSH, FIELD_SCALE};
     let mut field_boxes: HashMap<LayerId, Option<(glam::Vec2, glam::Vec2)>> = HashMap::new();
     for i in 0..out.len() {
@@ -74,8 +74,8 @@ pub(crate) fn apply_fields(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: R
 }
 
 /// 層の箱を、与えた画面の変換で画面の上に(軸に沿った箱)。形は伸ばす前の輪郭。
-pub(crate) fn screen_box_of(view: &StoreView<'_>, layer: LayerId, transform: glam::Affine2, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
-    let Some(b) = crate::doc::store::layout::boxes::layer_box(view, layer, t)? else { return Ok(None) };
+pub fn screen_box_of(view: &StoreView<'_>, layer: LayerId, transform: glam::Affine2, t: RationalTime) -> Result<Option<(glam::Vec2, glam::Vec2)>, StoreError> {
+    let Some(b) = crate::picture::boxes::layer_box(view, layer, t)? else { return Ok(None) };
     let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| transform.transform_point2(glam::Vec2::from(c)));
     Ok(Some((corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p)), corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p)))))
 }
@@ -83,14 +83,14 @@ pub(crate) fn screen_box_of(view: &StoreView<'_>, layer: LayerId, transform: gla
 /// 見つけた格子へ寄せる(2026-09-15 利用者「ものは動かします。グリッドが動的に動くと Tracery のような効果になる」):
 /// 寄せる気のある効果に、拾った物の箱の辺を渡して線を立ててもらい、その線へ画面の上で寄せる。
 /// 線は寄せる前の箱から立てる(寄せた結果を読み直さない)。どの辺が同じ線に乗るかはコアの知る所ではない。
-pub(crate) fn snap_to_found_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+pub fn snap_to_found_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     // 相手を拾う効果は層に 1 つ(最初の 1 つ)。それが寄せる気でなければ、この層は寄せない。
     let snappers: Vec<(LayerId, crate::doc::store::kind::Snapping)> = out.iter().filter(|l| !l.ghost && l.copy == 0).filter_map(|l| {
         let effect = l.effects.iter().find(|e| view.is_snap_effect(&e.plugin_id))?;
         Some((l.id, view.snapping_of(&effect.plugin_id, &effect.params)?))
     }).collect();
     for (overlay_layer, snap) in snappers {
-        let scope = crate::doc::store::view::resolve::overlay_scope(view, overlay_layer, out, t)?;
+        let scope = crate::picture::resolve::overlay_scope(view, overlay_layer, out, t)?;
         if scope.is_empty() {
             continue;
         }
@@ -116,7 +116,7 @@ pub(crate) fn snap_to_found_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer
 /// 格子へ吸い付く(2026-09-15 利用者「無作為の配置も、グリッドで整えると意図した物という観点が付与される」):
 /// Grid の Group の子(流れの外の子、Repeater の写しは 1 枚ずつ)の箱の左上を、一番近い升目の角へ Snap to Grid の強さで寄せる。
 /// Snap Size が Fields なら、右下も一番近い升目の終わりへ(大きさを升目の倍数に)。寄せるのは画面の変換だけ(書類の値は変えない)。
-pub(crate) fn snap_to_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+pub fn snap_to_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     use crate::doc::store::layout::{SNAP_SIZE, SNAP_TO_GRID};
     let mut frame = None;
     for layer in out.iter_mut() {
@@ -131,17 +131,17 @@ pub(crate) fn snap_to_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
         if view.display(parent, t)? != 2 {
             continue;
         }
-        let frame = match &frame { Some(f) => f, None => { frame = Some(crate::doc::store::layout::frame::layout_frame(view, t)?); frame.as_ref().unwrap() } };
+        let frame = match &frame { Some(f) => f, None => { frame = Some(crate::picture::frame::layout_frame(view, t)?); frame.as_ref().unwrap() } };
         let Some((columns, rows)) = frame.fields.get(&parent) else { continue };
         if columns.is_empty() || rows.is_empty() {
             continue;
         }
         let b = match layer.source {
-            crate::doc::store::LayerSource::Shape => crate::doc::store::layout::stretched_shape_box(&view.shapes_at(layer.id, t)?, layer.shape_stretch),
-            _ => crate::doc::store::layout::boxes::layer_box(view, layer.id, t)?,
+            crate::doc::store::LayerSource::Shape => crate::picture::boxes::stretched_shape_box(&crate::picture::shapes::shapes_at(view, layer.id, t)?, layer.shape_stretch),
+            _ => crate::picture::boxes::layer_box(view, layer.id, t)?,
         };
         let Some(b) = b else { continue };
-        let group = crate::doc::store::layout::boxes::world_2d(view, parent, t)?;
+        let group = crate::picture::boxes::world_2d(view, parent, t)?;
         let to_local = group.inverse() * layer.placement.transform;
         let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| to_local.transform_point2(glam::Vec2::from(c)));
         let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
@@ -162,7 +162,7 @@ pub(crate) fn snap_to_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
         let adjust = glam::Affine2::from_translation(at) * glam::Affine2::from_scale(scale) * glam::Affine2::from_translation(-lo);
         layer.placement.transform = group * adjust * group.inverse() * layer.placement.transform;
         if let Some(world) = layer.placement.world_transform {
-            let group3 = crate::doc::store::view::resolve::transform::world_transform3d(view, parent, t).unwrap_or(glam::Affine3A::IDENTITY);
+            let group3 = crate::picture::resolve::transform::world_transform3d(view, parent, t).unwrap_or(glam::Affine3A::IDENTITY);
             let adjust3 = glam::Affine3A::from_translation(at.extend(0.0)) * glam::Affine3A::from_scale(scale.extend(1.0)) * glam::Affine3A::from_translation((-lo).extend(0.0));
             layer.placement.world_transform = Some(group3 * adjust3 * group3.inverse() * world);
         }
@@ -174,7 +174,7 @@ pub(crate) fn snap_to_grids(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
 /// 範囲は clip していれば自分のクリップの土台(束の上の層は土台の形で切られるので一緒に切れる)、していなければ
 /// 同じ Group の中で自分より下の層(と、その子孫)。自分の matte(clip の土台)は外す — 土台を切る側なので巡る。
 /// 1 つの層に matte は 1 つ: 既に track matte を持つ層は切らない。複数の Stencil が重なる層は、一番近い(order の低い)物。
-pub(crate) fn hand_out_stencils(view: &StoreView<'_>, out: &mut [ResolvedLayer]) -> Result<(), StoreError> {
+pub fn hand_out_stencils(view: &StoreView<'_>, out: &mut [ResolvedLayer]) -> Result<(), StoreError> {
     let mut stencils: Vec<(LayerId, i16, bool, crate::doc::store::MatteMode, Option<LayerId>)> = Vec::new();
     for layer in out.iter().filter(|l| l.blend_mode.is_stencil() && !l.ghost && l.copy == 0) {
         let Some(meta) = view.meta(layer.id)? else { continue };
@@ -247,7 +247,7 @@ pub(crate) fn hand_out_stencils(view: &StoreView<'_>, out: &mut [ResolvedLayer])
 
 /// 並べる Group の面に乗る物へ、その面の基準点を付ける(箱の奥行きの法 3)。面は、z・Tilt・Depth の無い層を
 /// 親へ辿って届く一番外の Display の Group(面の Group 自身は傾いてよい)。
-pub(crate) fn put_on_planes(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+pub fn put_on_planes(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     let flat: HashMap<LayerId, (bool, Option<glam::Affine3A>)> = out
         .iter()
         .filter(|l| !l.ghost && l.copy == 0)
@@ -258,7 +258,7 @@ pub(crate) fn put_on_planes(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
         .collect();
     // 面の基準点は面の箱の中心(角だと、傾いた面同士で奥の面の角の方が camera に近くなる)。
     let centre = |id: LayerId, world: glam::Affine3A| {
-        let b = crate::doc::store::layout::boxes::layer_box(view, id, t).ok().flatten().unwrap_or([0.0; 4]);
+        let b = crate::picture::boxes::layer_box(view, id, t).ok().flatten().unwrap_or([0.0; 4]);
         world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0)).to_array()
     };
     let mut planes = HashMap::new();
@@ -293,11 +293,11 @@ pub(crate) fn put_on_planes(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: 
 
 /// つなぐ線となぞる形は、結ぶ相手の奥行きを継ぐ(関係の線は相手より手前。2.5D では線は面を持たず既定の奥に落ち、
 /// 部屋の背景の下に隠れていた — 2026-09-16 の穴、利用者の裁定 2026-09-18)。面は相手の面、描き順は相手の 1 つ上。
-pub(crate) fn put_connectors_in_front(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+pub fn put_connectors_in_front(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     let ends: Vec<(usize, LayerId, Option<LayerId>)> = out.iter().enumerate().filter(|(_, l)| l.copy == 0).filter_map(|(i, l)| {
-        match crate::doc::store::connect::connection(view, l.id, t) {
+        match crate::picture::connect::connection(view, l.id, t) {
             Ok(Some((from, to))) => Some((i, from, Some(to))),
-            _ => match crate::doc::store::connect::tracing(view, l.id, t) { Ok(Some((target, _))) => Some((i, target, None)), _ => None },
+            _ => match crate::picture::connect::tracing(view, l.id, t) { Ok(Some((target, _))) => Some((i, target, None)), _ => None },
         }
     }).collect();
     for (i, from, to) in ends {
@@ -314,7 +314,7 @@ pub(crate) fn put_connectors_in_front(view: &StoreView<'_>, out: &mut [ResolvedL
 }
 
 /// 並べる Group の背景は子孫の一番奥の、さらに 1 つ下に積む(同じ番号だと描き順の鍵が同点になる)。
-pub(crate) fn put_backgrounds_behind(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
+pub fn put_backgrounds_behind(view: &StoreView<'_>, out: &mut [ResolvedLayer], t: RationalTime) -> Result<(), StoreError> {
     let mut deepest: HashMap<LayerId, i32> = HashMap::new();
     for layer in out.iter() {
         let mut seen = HashSet::from([layer.id]);

@@ -13,7 +13,7 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
             let family=j["family"].as_str().ok_or("Missing family")?;
             // 層が無ければ書体名を自分で組む(何も選んでいない Fonts 棚): 押せばその書体の文字の層になる。
             let mut text=match j["layer"].as_u64(){
-                Some(id)=>motolii_doc::store::view::resolve::text::resolved_text_document(&doc.view(), LayerId(id),time).map_err(|e|e.to_string())?.ok_or("Select a Text layer")?,
+                Some(id)=>motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), LayerId(id),time).map_err(|e|e.to_string())?.ok_or("Select a Text layer")?,
                 None=>{
                     let mut content=ContentTrack::new();content.insert(ContentKeyframe{t:RationalTime::ZERO,content:family.to_owned()});
                     crate::doc::store::TextDocument{content,justify:TextJustify::Left,wrap_size:None,styles:vec![crate::doc::store::TextDocumentStyle{id:crate::doc::store::TextStyleId(0),font:Default::default(),size:40.0,fill:[1.0;4],line_height:None,tracking:0.0,axes:Vec::new(),features:Vec::new()}],slot_id:None,ranges:Vec::new(),alignment:Default::default(),runs:Vec::new()}

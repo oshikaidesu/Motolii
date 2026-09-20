@@ -21,7 +21,7 @@ pub fn layout_frame(view: &StoreView<'_>, t: RationalTime) -> Result<std::sync::
     view.layout_memo().borrow_mut().frames.insert(t, std::sync::Arc::new(Frame::default()));
     // 解いている途中の内側の時刻は、巡り止めの空の結果を読んでいるかもしれない。コマをまたいで覚えるのは一番外側だけ。
     let outermost = view.layout_memo().borrow_mut().enter();
-    let computed = crate::doc::store::layout::flow::compute_layout(view, t);
+    let computed = crate::picture::flow::compute_layout(view, t);
     view.layout_memo().borrow_mut().leave();
     let frame = std::sync::Arc::new(computed?);
     view.layout_memo().borrow_mut().frames.insert(t, frame.clone());
@@ -37,7 +37,7 @@ pub fn layout_frame(view: &StoreView<'_>, t: RationalTime) -> Result<std::sync::
 }
 
 /// 並ぶ子なら、層の Position と Scale の代わりに使う値。
-pub(crate) fn laid_out(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Slot>, StoreError> {
+pub fn laid_out(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Slot>, StoreError> {
     let Some(parent) = view.attrs(layer)?.unwrap_or_default().parent else { return Ok(None) };
     if view.display(parent, t)? == 0 {
         return Ok(None);
@@ -46,7 +46,7 @@ pub(crate) fn laid_out(view: &StoreView<'_>, layer: LayerId, t: RationalTime) ->
     // 移り方: 少し前の行き先を、区間の重みで混ぜる(位置と大きさ)。
     let mut acc = [[0.0f32; 2]; 4];
     let mut total = 0.0f32;
-    for (at, weight) in view.transition_samples(layer, t)? {
+    for (at, weight) in crate::picture::motion_time::transition_samples(view, layer, t)? {
         if let Some(past) = layout_frame(view, at)?.slots.get(&layer) {
             for (sum, value) in acc.iter_mut().zip([past.position, past.scale, past.stretch, past.anchor]) {
                 for axis in 0..2 {

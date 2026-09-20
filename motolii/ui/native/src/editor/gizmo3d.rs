@@ -225,7 +225,7 @@ pub(crate) fn spatial_targets(
             continue;
         }
         let parent = match attrs.parent {
-            Some(id) => motolii_doc::store::view::resolve::transform::world_transform3d(view, id, at).map_err(e)?,
+            Some(id) => motolii_render::picture::resolve::transform::world_transform3d(view, id, at).map_err(e)?,
             None => glam::Affine3A::IDENTITY,
         };
         if !is_similarity(parent) {
@@ -238,7 +238,7 @@ pub(crate) fn spatial_targets(
             return Err("Rejoin the separate Position axes before using the 3D gizmo".into());
         }
         let anchor = vec2_at(view, layer, property::ANCHOR, at, [0.0, 0.0]);
-        let local = motolii_doc::store::view::resolve::transform::local_transform3d(view, layer, at).map_err(e)?;
+        let local = motolii_render::picture::resolve::transform::local_transform3d(view, layer, at).map_err(e)?;
         // 値 → 行列 → 値 が閉じない層は、掴んだ瞬間に飛ぶ。先に断る。
         let Some(back) = decompose(local, anchor) else {
             return Err("This layer is flattened along an axis; the 3D gizmo cannot write it back".into());

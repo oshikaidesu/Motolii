@@ -103,7 +103,7 @@ pub(crate) fn anchor_point_plan(
     let original_position = position(&view, layer, &position_property, at)?;
     let delta = glam::Vec2::from_array(next.map(|value| value as f32))
         - glam::Vec2::from_array(anchor.map(|value| value as f32));
-    let compensation = motolii_doc::store::view::resolve::transform::local_transform3d(&view, layer, at)?.transform_vector3(delta.extend(0.0));
+    let compensation = motolii_render::picture::resolve::transform::local_transform3d(&view, layer, at)?.transform_vector3(delta.extend(0.0));
     if !compensation.is_finite() {
         return Err(StoreError::Property(
             "The anchor transform must be finite".into(),

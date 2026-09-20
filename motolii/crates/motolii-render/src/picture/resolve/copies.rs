@@ -7,7 +7,7 @@ use super::*;
 /// 解けた 1 枚を、写しに展開して積む。Split の単位になるならそちらだけ、
 /// ならなければ配置効果の数だけ(その中で Motion Blur の写しも)。
 #[allow(clippy::too_many_arguments)]
-pub(super) fn push_copies(
+pub fn push_copies(
     view: &StoreView<'_>,
     resolved: ResolvedLayer,
     t: RationalTime,
@@ -28,7 +28,7 @@ pub(super) fn push_copies(
 /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
 /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn push_placements(
+pub fn push_placements(
     view: &StoreView<'_>,
     base: ResolvedLayer,
     t: RationalTime,
@@ -52,13 +52,13 @@ pub(crate) fn push_placements(
     // 形の素材は輪郭を伸ばし(線は太らない)、それ以外は置き場所で伸ばす。
     let stretch_outline = base.source == crate::doc::store::LayerSource::Shape;
     let program = view.placement_program(&base.effects[first].plugin_id).expect("matched placement program");
-    let placements = (program.evaluate)(&crate::store::kind::PlacementInput {
+    let placements = (program.evaluate)(&crate::doc::store::kind::PlacementInput {
         params, layer, time: t, stretch_outline, analysis: view.analysis(),
-        position: if program.needs_position { crate::doc::store::view::resolve::transform::resolve_position(view, layer, t)? } else { [0.0; 2] },
+        position: if program.needs_position { crate::picture::resolve::transform::resolve_position(view, layer, t)? } else { [0.0; 2] },
     });
     let parent = view.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
     let is_group = base.source == crate::doc::store::LayerSource::Group;
-    let children = if is_group { crate::doc::store::view::resolve::children_in_order(view, layer, present)? } else { Vec::new() };
+    let children = if is_group { crate::picture::resolve::children_in_order(view, layer, present)? } else { Vec::new() };
     if is_group && children.is_empty() {
         return Ok(());
     }
@@ -76,9 +76,9 @@ pub(crate) fn push_placements(
         let Ok(at) = t.try_sub(placement.time_offset) else { continue };
         let shifted = at != t;
         let subjects: Vec<LayerId> = if whole {
-            crate::doc::store::view::resolve::subtree(view, layer, present)?.into_iter().skip(1).collect()
+            crate::picture::resolve::subtree(view, layer, present)?.into_iter().skip(1).collect()
         } else if is_group {
-            crate::doc::store::view::resolve::subtree(view, children[picks[ordinal]], present)?
+            crate::picture::resolve::subtree(view, children[picks[ordinal]], present)?
         } else {
             vec![layer]
         };
@@ -86,21 +86,21 @@ pub(crate) fn push_placements(
         let (mut memo_at, mut visiting_at) = (HashMap::new(), HashSet::new());
         if shifted {
             for subject in &subjects {
-                worlds_at.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(view, *subject, at, present)?);
+                worlds_at.extend(crate::picture::resolve::transform::world_transform3d_chain(view, *subject, at, present)?);
             }
             if let Some(p) = parent {
-                worlds_at.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(view, p, at, present)?);
+                worlds_at.extend(crate::picture::resolve::transform::world_transform3d_chain(view, p, at, present)?);
             }
             if whole_transform {
-                worlds_at.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(view, layer, at, present)?);
+                worlds_at.extend(crate::picture::resolve::transform::world_transform3d_chain(view, layer, at, present)?);
             }
         }
         let worlds = if shifted { &worlds_at } else { world_transforms };
         let memo = if shifted { &mut memo_at } else { &mut *memo };
         let visiting = if shifted { &mut visiting_at } else { &mut *visiting };
-        let parent2 = parent.map(|p| crate::doc::store::view::resolve::transform::world_affine(view, p, at, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+        let parent2 = parent.map(|p| crate::picture::resolve::transform::world_affine(view, p, at, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
         let parent3 = parent.and_then(|p| worlds.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
-        let pivot = glam::Vec2::from(crate::doc::store::view::resolve::transform::resolve_position(view, layer, at)?);
+        let pivot = glam::Vec2::from(crate::picture::resolve::transform::resolve_position(view, layer, at)?);
         // Each: ずれは親の空間、回転と大きさは層の位置が中心(複製 1 つずつ)。
         // Whole: ずれは層自身の空間、中心は層のアンカー — 層を回すと並びごと回る。
         let (frame2, frame3, around) = if whole_transform {
@@ -108,7 +108,7 @@ pub(crate) fn push_placements(
                 Some(crate::doc::store::Value::Vec2(v)) => glam::Vec2::new(v[0] as f32, v[1] as f32),
                 _ => glam::Vec2::ZERO,
             };
-            (crate::doc::store::view::resolve::transform::world_affine(view, layer, at, present, memo, visiting)?, worlds.get(&layer).copied().unwrap_or(glam::Affine3A::IDENTITY), anchor)
+            (crate::picture::resolve::transform::world_affine(view, layer, at, present, memo, visiting)?, worlds.get(&layer).copied().unwrap_or(glam::Affine3A::IDENTITY), anchor)
         } else {
             (parent2, parent3, pivot)
         };
@@ -116,7 +116,7 @@ pub(crate) fn push_placements(
             let mut copy = if !is_group && !shifted {
                 base.clone()
             } else {
-                let Some(copy) = crate::doc::store::view::resolve::resolve_with_solo(view, subject, at, any_solo, present, worlds, memo, visiting)? else { continue };
+                let Some(copy) = crate::picture::resolve::resolve_with_solo(view, subject, at, any_solo, present, worlds, memo, visiting)? else { continue };
                 copy
             };
             if !is_group {
@@ -151,7 +151,7 @@ pub(crate) fn push_placements(
 /// Motion Blur: 1 コマの中のずらした時刻で位置・大きさ・角度だけを取り直した写しを、平均する枚数の印を付けて並べる。
 /// Motion Blur より下の効果は、平均した 1 枚に掛かる(`after_effects`)。
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn push_motion_blur(
+pub fn push_motion_blur(
     view: &StoreView<'_>,
     mut base: ResolvedLayer,
     at_index: usize,
@@ -175,11 +175,11 @@ pub(crate) fn push_motion_blur(
     };
     let layer = base.id;
     let parent = view.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
-    let parent2 = parent.map(|p| crate::doc::store::view::resolve::transform::world_affine(view, p, t, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+    let parent2 = parent.map(|p| crate::picture::resolve::transform::world_affine(view, p, t, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
     let parent3 = parent.and_then(|p| world_transforms.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
-    let now_inverse = crate::doc::store::view::resolve::transform::local_placement_transform(view, layer, t)?.inverse();
+    let now_inverse = crate::picture::resolve::transform::local_placement_transform(view, layer, t)?.inverse();
     let local_delta = |at: RationalTime| -> Result<glam::Affine2, StoreError> {
-        Ok(crate::doc::store::view::resolve::transform::local_placement_transform_sampled(view, layer, t, Some((at, shutter.channels)))? * now_inverse)
+        Ok(crate::picture::resolve::transform::local_placement_transform_sampled(view, layer, t, Some((at, shutter.channels)))? * now_inverse)
     };
     let samples = shutter.deltas(t, frame_seconds, base.declared_size, base.placement.transform, parent2, local_delta)?;
     let count = samples.len() as u32;
@@ -206,7 +206,7 @@ pub(crate) fn push_motion_blur(
 /// 文字の Split(GSAP SplitText / CSS `sibling-index()`): 字・語・行の単位を、その文字の層の Stagger でずれた時刻に解いた
 /// 写しとして積む。書類に子の層は作らない — 写し = 層全体をずれた時刻で解き、単位の箱を Intersect の mask で切り、
 /// 拡縮・回転の中心を単位の箱の中心へ移す(SplitText の char が自分の中心で回るのと同じ)。時刻の純関数。
-pub(crate) fn push_split(
+pub fn push_split(
     view: &StoreView<'_>,
     base: &ResolvedLayer,
     t: RationalTime,
@@ -218,7 +218,7 @@ pub(crate) fn push_split(
     if base.source != crate::doc::store::LayerSource::Text || view.number(base.id, STAGGER, 0.0, t)? <= 0.0 {
         return Ok(false);
     }
-    let units = crate::doc::store::layout::text::text_units(view, base.id, t)?;
+    let units = crate::picture::text::text_units(view, base.id, t)?;
     if units.len() < 2 {
         return Ok(false);
     }
@@ -228,12 +228,12 @@ pub(crate) fn push_split(
     for (k, b) in units.into_iter().enumerate() {
         let at = view.schedule_shift(layer, k, n, t)?;
         let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
-        let worlds = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, layer, at, present)?;
-        let Some(mut copy) = crate::doc::store::view::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
+        let worlds = crate::picture::resolve::transform::world_transform3d_chain(view, layer, at, present)?;
+        let Some(mut copy) = crate::picture::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
         // 中心を単位の箱の中心へ: 親の空間で T(c − a) を局所の変換に共役で掛ける(a = 層のアンカー、c = 箱の中心)。
-        let anchor = glam::Vec2::from(crate::doc::store::layout::boxes::free_anchor(view, layer, at)?);
+        let anchor = glam::Vec2::from(crate::picture::boxes::free_anchor(view, layer, at)?);
         let shift = glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5) - anchor;
-        let parent2 = parent.map(|p| crate::doc::store::view::resolve::transform::world_affine(view, p, at, present, &mut memo, &mut visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+        let parent2 = parent.map(|p| crate::picture::resolve::transform::world_affine(view, p, at, present, &mut memo, &mut visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
         let shift2 = glam::Affine2::from_translation(shift);
         copy.placement.transform = parent2 * shift2 * parent2.inverse() * copy.placement.transform * shift2.inverse();
         if let Some(world) = copy.placement.world_transform {
@@ -247,7 +247,7 @@ pub(crate) fn push_split(
             inverted: false,
             opacity: 1.0,
             expansion: 0.0,
-            shape: crate::doc::store::layout::rounded_rect_path(b, 0.0, glam::Affine2::IDENTITY),
+            shape: crate::picture::path::rounded_rect_path(b, 0.0, glam::Affine2::IDENTITY),
             frame: crate::doc::store::MaskFrame::Layer,
         });
         out.push(copy);
@@ -257,7 +257,7 @@ pub(crate) fn push_split(
 
 /// ゴースト: 層を遅れ d だけ後に見た姿を 1 枚、同じ id で `ghost = true` にして積む。
 /// 層に Repeater が掛かっていれば、その時刻の配置がそのまま増える。
-pub(super) fn push_ghosts(
+pub fn push_ghosts(
     view: &StoreView<'_>,
     layer: LayerId,
     t: RationalTime,
@@ -274,12 +274,12 @@ pub(super) fn push_ghosts(
         let Ok(shift) = RationalTime::try_from_frame(delay.abs(), fps) else { continue };
         let at = if delay >= 0 { t.try_sub(shift) } else { t.try_add(shift) };
         let Ok(at) = at else { continue };
-        let mut worlds = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, layer, at, present)?;
+        let mut worlds = crate::picture::resolve::transform::world_transform3d_chain(view, layer, at, present)?;
         if let Some(parent) = parent {
-            worlds.extend(crate::doc::store::view::resolve::transform::world_transform3d_chain(view, parent, at, present)?);
+            worlds.extend(crate::picture::resolve::transform::world_transform3d_chain(view, parent, at, present)?);
         }
         let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
-        let Some(resolved) = crate::doc::store::view::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {
+        let Some(resolved) = crate::picture::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {
             continue;
         };
         let mut placed = Vec::new();
@@ -305,7 +305,7 @@ mod ghost_contract {
 
     fn xs(doc: &Document, id: LayerId, frame: i64, fps: Fps) -> Vec<(bool, f32)> {
         let t = RationalTime::try_from_frame(frame, fps).unwrap();
-        crate::doc::store::view::resolve::resolved_layers(&doc.view(), t).unwrap().into_iter().filter(|l| l.id == id).map(|l| (l.ghost, l.placement.transform.translation.x)).collect()
+        crate::picture::resolve::resolved_layers(&doc.view(), t).unwrap().into_iter().filter(|l| l.id == id).map(|l| (l.ghost, l.placement.transform.translation.x)).collect()
     }
 
     /// ゴーストは同じ層を d だけ遅れて見た姿が 1 枚。行は増えず同じ id で、元より先に積まれ(奥)、元は ghost = false。

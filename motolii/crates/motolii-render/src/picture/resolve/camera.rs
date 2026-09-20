@@ -5,7 +5,7 @@
 use super::*;
 
 /// Camera と同じ規則で active な非描画層を選ぶ: 区間内・可視・solo が優先・最上位。
-pub(crate) fn active_guide(view: &StoreView<'_>, source: crate::doc::store::LayerSource, t: RationalTime) -> Result<Option<LayerId>, StoreError> {
+pub fn active_guide(view: &StoreView<'_>, source: crate::doc::store::LayerSource, t: RationalTime) -> Result<Option<LayerId>, StoreError> {
     let frame = view.composition()?.map(|c| t.try_to_frame_floor(c.fps)).transpose()
         .map_err(|e| StoreError::Property(e.to_string()))?.unwrap_or(0);
     let mut guides = Vec::new();
@@ -13,7 +13,7 @@ pub(crate) fn active_guide(view: &StoreView<'_>, source: crate::doc::store::Laye
         if let Some(meta) = view.meta(id)? {
             if meta.source == source && meta.timing.covers(frame) {
                 let attrs = view.attrs(id)?.unwrap_or_default();
-                if !crate::doc::store::view::resolve::resolved_hidden(view, id, t, attrs.hidden)? { guides.push((crate::doc::store::view::resolve::resolved_solo(view, id, t, attrs.solo)?, meta.order, id)); }
+                if !crate::picture::resolve::resolved_hidden(view, id, t, attrs.hidden)? { guides.push((crate::picture::resolve::resolved_solo(view, id, t, attrs.solo)?, meta.order, id)); }
             }
         }
     }
@@ -51,7 +51,7 @@ pub fn camera_of_layer(view: &StoreView<'_>, id: LayerId, t: RationalTime) -> Re
         if let Some(comp) = view.composition()? {
             let comp = comp.spec();
             let present = view.layers().into_iter().collect();
-            if let Some(world) = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target) {
+            if let Some(world) = crate::picture::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target) {
                 let point = world.transform_point3(glam::Vec3::ZERO);
                 camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
                 camera.target_z = point.z;
@@ -63,13 +63,13 @@ pub fn camera_of_layer(view: &StoreView<'_>, id: LayerId, t: RationalTime) -> Re
 
 /// Framing Size が 0 より大きく Target があれば、箱を画面に収めたカメラ。Camera 層の Transition があれば、少し前の時刻の
 /// 収め方(注視点・奥行き・Distance の対数)を区間の重みで混ぜる(Target を替えると箱から箱へ滑る)。
-pub(crate) fn framed_camera(view: &StoreView<'_>, id: LayerId, t: RationalTime, authored: crate::doc::core::ResolvedCamera) -> Result<Option<crate::doc::core::ResolvedCamera>, StoreError> {
+pub fn framed_camera(view: &StoreView<'_>, id: LayerId, t: RationalTime, authored: crate::doc::core::ResolvedCamera) -> Result<Option<crate::doc::core::ResolvedCamera>, StoreError> {
     let framing = match view.value_at(id, &PropertyId::new(property::CAMERA_FRAMING)?, t)? {
         Some(Value::F64(v)) if v > 0.0 => v as f32,
         _ => return Ok(None),
     };
     let Some(now) = frame_of(view, id, t, framing, authored)? else { return Ok(None) };
-    let samples = view.transition_samples(id, t)?;
+    let samples = crate::picture::motion_time::transition_samples(view, id, t)?;
     if samples.is_empty() {
         return Ok(Some(now));
     }
@@ -88,12 +88,12 @@ pub(crate) fn framed_camera(view: &StoreView<'_>, id: LayerId, t: RationalTime, 
 }
 
 /// その時刻の Target の箱(世界、軸に沿った箱)を画面の `framing` の割合に収めるカメラ。
-pub(crate) fn frame_of(view: &StoreView<'_>, id: LayerId, t: RationalTime, framing: f32, authored: crate::doc::core::ResolvedCamera) -> Result<Option<crate::doc::core::ResolvedCamera>, StoreError> {
+pub fn frame_of(view: &StoreView<'_>, id: LayerId, t: RationalTime, framing: f32, authored: crate::doc::core::ResolvedCamera) -> Result<Option<crate::doc::core::ResolvedCamera>, StoreError> {
     let Some(target) = camera_target_layer(view, id, t)? else { return Ok(None) };
     let Some(comp) = view.composition()? else { return Ok(None) };
     let present = view.layers().into_iter().collect();
-    let Some(world) = crate::doc::store::view::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target).copied() else { return Ok(None) };
-    let Some(b) = crate::doc::store::layout::boxes::layer_box(view, target, t)? else { return Ok(None) };
+    let Some(world) = crate::picture::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target).copied() else { return Ok(None) };
+    let Some(b) = crate::picture::boxes::layer_box(view, target, t)? else { return Ok(None) };
     let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| world.transform_point3(glam::vec3(c[0], c[1], 0.0)));
     let lo = corners.iter().fold(glam::Vec3::MAX, |a, p| a.min(*p));
     let hi = corners.iter().fold(glam::Vec3::MIN, |a, p| a.max(*p));
@@ -191,10 +191,10 @@ mod stage_extent_contract {
             doc.apply_all(intents).unwrap();
         }
         let view = doc.view();
-        assert_eq!(crate::doc::store::view::resolve::camera::resolve_stage_extent(&view, at(3)).unwrap().rect(comp), [-100.0, 0.0, comp.width as f32 + 200.0, comp.height as f32]);
-        assert_eq!(crate::doc::store::view::resolve::camera::resolve_stage_extent(&view, at(12)).unwrap().rect(comp), [0.0, -400.0, comp.width as f32, comp.height as f32 + 800.0]);
-        assert_eq!(crate::doc::store::view::resolve::camera::resolve_stage_extent(&view, at(25)).unwrap(), StageExtent::default());
-        assert_eq!(crate::doc::store::view::resolve::camera::resolve_camera(&view, at(3)).unwrap(), crate::doc::core::ResolvedCamera::default(), "a stage layer is not a camera");
+        assert_eq!(crate::picture::resolve::camera::resolve_stage_extent(&view, at(3)).unwrap().rect(comp), [-100.0, 0.0, comp.width as f32 + 200.0, comp.height as f32]);
+        assert_eq!(crate::picture::resolve::camera::resolve_stage_extent(&view, at(12)).unwrap().rect(comp), [0.0, -400.0, comp.width as f32, comp.height as f32 + 800.0]);
+        assert_eq!(crate::picture::resolve::camera::resolve_stage_extent(&view, at(25)).unwrap(), StageExtent::default());
+        assert_eq!(crate::picture::resolve::camera::resolve_camera(&view, at(3)).unwrap(), crate::doc::core::ResolvedCamera::default(), "a stage layer is not a camera");
     }
 }
 
@@ -234,11 +234,11 @@ mod camera_target_contract {
         put(&mut doc, camera, property::CAMERA_FRAMING, Value::F64(0.5));
         let on_screen = |doc: &Document| {
             let view = doc.view();
-            let resolved = crate::doc::store::view::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
+            let resolved = crate::picture::resolve::camera::resolve_camera(&view, RationalTime::ZERO).unwrap();
             let projection = camera_projection(comp, resolved);
             let matrix = projection.projection_matrix() * projection.view_matrix();
-            let world = crate::doc::store::view::resolve::transform::world_transform3d(&view, card, RationalTime::ZERO).unwrap();
-            let b = crate::doc::store::layout::boxes::layer_box(&view, card, RationalTime::ZERO).unwrap().unwrap();
+            let world = crate::picture::resolve::transform::world_transform3d(&view, card, RationalTime::ZERO).unwrap();
+            let b = crate::picture::boxes::layer_box(&view, card, RationalTime::ZERO).unwrap().unwrap();
             let ndc: Vec<glam::Vec2> = [[b[0], b[1]], [b[2], b[3]]].iter().map(|c| {
                 let clip = matrix * world.transform_point3(glam::vec3(c[0], c[1], 0.0)).extend(1.0);
                 glam::vec2(clip.x / clip.w, clip.y / clip.w)
@@ -264,7 +264,7 @@ mod camera_target_contract {
         put(&mut doc, camera, property::CAMERA_TARGET_Z, Value::F64(300.0));
         put(&mut doc, camera, property::CAMERA_ORBIT, Value::Vec2([-20.0, 35.0]));
         put(&mut doc, camera, property::CAMERA_DISTANCE, Value::F64(2.0));
-        let resolved = crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap();
+        let resolved = crate::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap();
         assert_eq!(resolved, ResolvedCamera { center: [120.0, -40.0], target_z: 300.0, orbit_degrees: [-20.0, 35.0], distance_scale: 2.0, ..Default::default() });
         let target = resolved.target(comp);
         assert!(centred(comp, resolved, target), "the point of interest sits under the frame centre");
@@ -292,7 +292,7 @@ mod camera_target_contract {
         }
         doc.apply(Intent::SetTrack { layer: null, property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
         for (frame, expect) in [(0, glam::vec3(100.0, 200.0, 250.0)), (5, glam::vec3(200.0, 300.0, 250.0)), (10, glam::vec3(300.0, 400.0, 250.0))] {
-            let resolved = crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), at(frame)).unwrap();
+            let resolved = crate::picture::resolve::camera::resolve_camera(&doc.view(), at(frame)).unwrap();
             assert!(resolved.target(comp).distance(expect) < 1e-3, "frame {frame}: {:?} != {expect:?}", resolved.target(comp));
             assert!(centred(comp, resolved, expect));
         }
@@ -300,13 +300,13 @@ mod camera_target_contract {
         let parent = add(&mut doc, 3, LayerSource::Null);
         put(&mut doc, parent, property::POSITION, Value::Vec2([1000.0, 0.0]));
         doc.apply(Intent::SetAttrs { layer: null, patch: LayerAttrsPatch { parent: Some(Some(parent)), ..Default::default() } }).unwrap();
-        assert!(crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), at(0)).unwrap().target(comp).distance(glam::vec3(1100.0, 200.0, 250.0)) < 1e-3);
+        assert!(crate::picture::resolve::camera::resolve_camera(&doc.view(), at(0)).unwrap().target(comp).distance(glam::vec3(1100.0, 200.0, 250.0)) < 1e-3);
         for dead in [Value::LayerId(0), Value::LayerId(1), Value::LayerId(99)] {
             put(&mut doc, camera, property::CAMERA_TARGET, dead.clone());
-            assert_eq!(crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), at(0)).unwrap().center, [500.0, 500.0], "{dead:?} falls back to center");
+            assert_eq!(crate::picture::resolve::camera::resolve_camera(&doc.view(), at(0)).unwrap().center, [500.0, 500.0], "{dead:?} falls back to center");
         }
         put(&mut doc, camera, property::CAMERA_TARGET, Value::LayerId(2));
         doc.apply(Intent::RemoveLayer(null)).unwrap();
-        assert_eq!(crate::doc::store::view::resolve::camera::resolve_camera(&doc.view(), at(0)).unwrap().center, [500.0, 500.0], "a removed target falls back to center");
+        assert_eq!(crate::picture::resolve::camera::resolve_camera(&doc.view(), at(0)).unwrap().center, [500.0, 500.0], "a removed target falls back to center");
     }
 }
