@@ -30,7 +30,7 @@ pub fn resolve(
     let present: HashSet<LayerId> = view.layers().into_iter().collect();
     let mut memo = HashMap::new();
     let mut visiting = HashSet::new();
-    resolve_with_solo(view, layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)
+    resolve_with_solo(view, layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, None)
 }
 
 pub fn resolve_with_solo(
@@ -42,12 +42,19 @@ pub fn resolve_with_solo(
     world_transforms: &HashMap<LayerId, glam::Affine3A>,
     memo: &mut HashMap<LayerId, glam::Affine2>,
     visiting: &mut HashSet<LayerId>,
+    structure: Option<&crate::doc::store::scratch::Structure>,
 ) -> Result<Option<ResolvedLayer>, StoreError> {
-    let Some(meta) = view.meta(layer)? else {
+    let meta = match structure.and_then(|s| s.metas.get(&layer).cloned()) {
+        Some(meta) => Some(meta),
+        None => view.meta(layer)?,
+    };
+    let Some(meta) = meta else {
         return Ok(None);
     };
-
-    let attrs = view.attrs(layer)?.unwrap_or_default();
+    let attrs = match structure.and_then(|s| s.attrs.get(&layer).cloned()) {
+        Some(attrs) => attrs,
+        None => view.attrs(layer)?.unwrap_or_default(),
+    };
     let hidden = resolved_hidden(view, layer, t, attrs.hidden)?;
     if hidden {
         return Ok(None);
@@ -423,7 +430,7 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
         // ゴーストは元より先に積む(同じ重ね順なら後の物が上に描かれるので、元が手前に来る)。
         crate::picture::resolve::copies::push_ghosts(view, layer, t, any_solo, present, &mut out)?;
         if let Some(resolved) =
-            resolve_with_solo(view, layer, t, any_solo, present, &world_transforms, &mut memo, &mut visiting)?
+            resolve_with_solo(view, layer, t, any_solo, present, &world_transforms, &mut memo, &mut visiting, Some(&structure))?
         {
             crate::picture::resolve::copies::push_copies(view, resolved, t, any_solo, present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
         }

@@ -117,7 +117,7 @@ pub fn push_placements(
             let mut copy = if !is_group && !shifted {
                 base.clone()
             } else {
-                let Some(copy) = crate::picture::resolve::resolve_with_solo(view, subject, at, any_solo, present, worlds, memo, visiting)? else { continue };
+                let Some(copy) = crate::picture::resolve::resolve_with_solo(view, subject, at, any_solo, present, worlds, memo, visiting, None)? else { continue };
                 copy
             };
             if !is_group {
@@ -230,7 +230,7 @@ pub fn push_split(
         let at = view.schedule_shift(layer, k, n, t)?;
         let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
         let worlds = crate::picture::resolve::transform::world_transform3d_chain(view, layer, at, present)?;
-        let Some(mut copy) = crate::picture::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else { continue };
+        let Some(mut copy) = crate::picture::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting, None)? else { continue };
         // 中心を単位の箱の中心へ: 親の空間で T(c − a) を局所の変換に共役で掛ける(a = 層のアンカー、c = 箱の中心)。
         let anchor = glam::Vec2::from(crate::picture::boxes::free_anchor(view, layer, at)?);
         let shift = glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5) - anchor;
@@ -280,7 +280,7 @@ pub fn push_ghosts(
             worlds.extend(crate::picture::resolve::transform::world_transform3d_chain(view, parent, at, present)?);
         }
         let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
-        let Some(resolved) = crate::picture::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {
+        let Some(resolved) = crate::picture::resolve::resolve_with_solo(view, layer, at, any_solo, present, &worlds, &mut memo, &mut visiting, None)? else {
             continue;
         };
         let mut placed = Vec::new();
