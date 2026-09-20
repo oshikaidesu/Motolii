@@ -9,16 +9,17 @@ pub mod frame;
 pub mod motion_time;
 pub mod path;
 pub mod resolve;
+pub mod resolved;
 pub mod shape_props;
 pub mod shapes;
 pub mod text;
+pub mod text_frame;
 
 pub(crate) use crate::doc::core::RationalTime;
 pub(crate) use crate::doc::eval::Value;
 pub(crate) use crate::doc::store::layout::*;
-pub(crate) use crate::doc::store::scratch::{Frame, LayoutCache, Memo, Scratch, Slot};
+pub(crate) use crate::doc::store::scratch::{Frame, LayoutCache, Slot};
 pub(crate) use crate::doc::store::{
-    property, EffectScope, LayerId, LayerProjection, LayerSource, PropertyId, ResolvedEffect,
-    ResolvedLayer, ResolvedMask, StoreError, StoreView,
+    property, LayerId, LayerSource, PropertyId, StoreError, StoreView,
 };
-pub(crate) use std::collections::{HashMap, HashSet};
+pub(crate) use std::collections::HashMap;

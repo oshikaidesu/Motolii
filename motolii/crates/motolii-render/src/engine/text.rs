@@ -1,5 +1,5 @@
 use crate::doc::store::{RationalTime, TextDocument, TextDocumentStyle};
-use crate::doc::store::text_frame::{shape_document, shape_document_around, Obstacle};
+use crate::picture::text_frame::{shape_document, shape_document_around, Obstacle};
 use crate::doc::vector::text::TextShapeError;
 use crate::doc::store::ShapeNode;
 use crate::doc::vector::{
@@ -55,7 +55,7 @@ pub struct Flow<'a> {
 }
 
 impl<'a> Flow<'a> {
-    pub fn of(layer: &'a crate::doc::store::ResolvedLayer) -> Self {
+    pub fn of(layer: &'a crate::picture::resolved::ResolvedLayer) -> Self {
         Self {
             offsets: layer.glyph_offsets.as_deref().map(Vec::as_slice),
             around: layer.flow_around.as_deref().map_or(&[], Vec::as_slice),
@@ -110,7 +110,7 @@ pub fn text_shapes_moving(
 
 /// 層に積まれた Text Morph の相手(組んである文字書類)と混合率。相手が無ければ効かない。
 pub(crate) fn morph_partner<'a>(
-    layer: &crate::doc::store::ResolvedLayer,
+    layer: &crate::picture::resolved::ResolvedLayer,
     documents: &'a std::collections::HashMap<crate::doc::store::LayerId, TextDocument>,
 ) -> Option<(&'a TextDocument, f64)> {
     let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();

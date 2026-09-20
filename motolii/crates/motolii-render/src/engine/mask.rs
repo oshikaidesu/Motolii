@@ -1,4 +1,6 @@
-use crate::doc::store::{MaskMode, Path as EvalPath, ResolvedMask};
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
+use crate::doc::store::{MaskMode, Path as EvalPath, };
 use crate::doc::vector::coverage::{self, Coverage};
 use crate::doc::vector::{
     Brush, Canvas, Fill, FillRule, LineJoin, OpKind, PathSource, Raster, Rgb, Shape, ShapeOp,

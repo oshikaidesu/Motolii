@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::render::engine::EngineError;
 
 pub(crate) fn translate_blend_mode(
@@ -42,7 +44,7 @@ pub(crate) fn translate_matte_mode(
 }
 
 pub(crate) fn translate_effect_passes(
-    effects: &[crate::doc::store::ResolvedEffect],
+    effects: &[crate::picture::resolved::ResolvedEffect],
 ) -> Vec<crate::render::compositor::EffectPass> {
     translate_image_effects(effects, crate::render::compositor::EffectStage::Pass)
 }
@@ -57,7 +59,7 @@ pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass
     }
 }
 
-pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffect], stage: crate::render::compositor::EffectStage) -> Vec<crate::render::compositor::EffectPass> {
+pub(crate) fn translate_image_effects(effects: &[crate::picture::resolved::ResolvedEffect], stage: crate::render::compositor::EffectStage) -> Vec<crate::render::compositor::EffectPass> {
     let catalog = known_effects();
     effects
         .iter()
@@ -126,7 +128,7 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
         .collect()
 }
 
-pub(crate) fn translate_plate_passes(effects: &[crate::doc::store::ResolvedEffect]) -> Vec<crate::render::compositor::EffectPass> {
+pub(crate) fn translate_plate_passes(effects: &[crate::picture::resolved::ResolvedEffect]) -> Vec<crate::render::compositor::EffectPass> {
     let catalog = known_effects();
     effects.iter().flat_map(|effect| {
         match catalog.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
@@ -140,7 +142,7 @@ pub use crate::render::compositor::{EffectDescriptor, EffectParamDescriptor};
 
 /// Turbulent Displace の欄を点群用の CPU の写しへ。既定は棚の宣言から。
 pub(crate) fn translate_point_displace(
-    effects: &[crate::doc::store::ResolvedEffect],
+    effects: &[crate::picture::resolved::ResolvedEffect],
 ) -> crate::render::compositor::PointDisplace {
     const ID: &str = "motolii.turbulent_displace";
     let catalog = known_effects();
@@ -165,7 +167,7 @@ pub(crate) fn translate_point_displace(
 }
 
 /// Clip の欄 → 層の枠での切断。平面を世界へ写すのは描く側(枠が決まる所)。
-pub(crate) fn translate_clip(effects: &[crate::doc::store::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
+pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
     const ID: &str = "motolii.clip";
     let effect = effects.iter().rev().find(|e| e.plugin_id == ID)?;
     let catalog = known_effects();
@@ -195,12 +197,13 @@ pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
 
 #[cfg(test)]
 mod shelf_tests {
+    use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use crate::render::compositor::EffectStage;
 
     /// 点・色・真偽は成分ごとに 1 つの f32 で運ぶ(鍵は effects::component_key)。F64 以外を捨てない。
     #[test]
     fn every_component_of_a_field_travels() {
-        use crate::doc::store::{ResolvedEffect, Value};
+        use crate::doc::store::{Value};
         let effect = ResolvedEffect { plugin_id: "motolii.blur".into(), params: vec![
             ("center".into(), Value::Vec2([3.0, 4.0])),
             ("tint".into(), Value::Color([0.1, 0.2, 0.3, 0.4])),
@@ -217,7 +220,7 @@ mod shelf_tests {
     /// 層を指す欄(LayerId)は、その効果の 2 枚目の image が読む層になる。0 と無指定は「無し」。
     #[test]
     fn a_layer_field_names_the_layer_the_second_image_reads() {
-        use crate::doc::store::{ResolvedEffect, Value};
+        use crate::doc::store::{Value};
         let picked = ResolvedEffect { plugin_id: "motolii.set_matte".into(), params: vec![("layer".into(), Value::LayerId(7))], ..Default::default() };
         let none = ResolvedEffect { plugin_id: "motolii.set_matte".into(), params: vec![("layer".into(), Value::LayerId(0))], ..Default::default() };
         assert_eq!(super::translate_effect_passes(&[picked])[0].image_layers(), &[crate::doc::store::LayerId(7)]);
@@ -227,7 +230,7 @@ mod shelf_tests {
     /// 別の時刻のずれは、欄の値(無ければ欄の既定)で決まる — 作者が固定するのではなく利用者が回す。
     #[test]
     fn a_time_offset_named_after_a_field_takes_the_field_value() {
-        use crate::doc::store::{ResolvedEffect, Value};
+        use crate::doc::store::{Value};
         let dialed = ResolvedEffect { plugin_id: "motolii.time_difference".into(), params: vec![("offset".into(), Value::F64(-1.5))], ..Default::default() };
         let untouched = ResolvedEffect { plugin_id: "motolii.time_difference".into(), params: vec![], ..Default::default() };
         assert_eq!(super::translate_effect_passes(&[dialed])[0].image_time_offsets(), &[-1.5]);
@@ -245,17 +248,17 @@ mod shelf_tests {
         assert_eq!(turbulence.stage, EffectStage::Field);
         assert_eq!(turbulence.params.iter().find(|p| p.name == "along").and_then(|p| p.choices.clone()), Some(["Normal", "XYZ", "XY", "X", "Y", "Z"].map(str::to_owned).to_vec()));
         for id in ["motolii.glass", "motolii.turbulent_displace"] {
-            let effect = crate::doc::store::ResolvedEffect { plugin_id: id.into(), params: vec![], ..Default::default() };
+            let effect = crate::picture::resolved::ResolvedEffect { plugin_id: id.into(), params: vec![], ..Default::default() };
             assert!(super::translate_effect_passes(std::slice::from_ref(&effect)).is_empty());
         }
-        let effect = crate::doc::store::ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![], ..Default::default() };
+        let effect = crate::picture::resolved::ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![], ..Default::default() };
         assert_eq!(super::translate_point_displace(std::slice::from_ref(&effect)).amount, 50.0);
     }
 }
 
 /// 立体を作る族(Extrude・Bevel)の読み取り。どちらも無ければ None。depth 0 で Bevel だけなら
 /// 「縁だけ丸い板」(奥行きは丸みの半径)。
-pub(crate) fn translate_solid(effects: &[crate::doc::store::ResolvedEffect]) -> Option<crate::render::compositor::extrude::Solid> {
+pub(crate) fn translate_solid(effects: &[crate::picture::resolved::ResolvedEffect]) -> Option<crate::render::compositor::extrude::Solid> {
     use crate::extensions::solid::{BEVEL, EXTRUDE};
     let catalog = known_effects();
     let read = |id: &str, name: &str| -> Option<f32> {

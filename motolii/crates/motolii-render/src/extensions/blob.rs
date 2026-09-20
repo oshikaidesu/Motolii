@@ -126,7 +126,7 @@ mod tests {
         let placed = copies(doc.view().with_analysis(&inputs));
         assert_eq!(placed.iter().map(|l| l.copy).collect::<Vec<_>>(), vec![7, 9]);
         // 素材 100 × 100 の左上(0, 0)と右下(100, 100)が、箱の左上と右下へ。
-        let box_of = |l: &crate::doc::store::ResolvedLayer| (l.placement.transform.transform_point2(glam::Vec2::ZERO), l.placement.transform.transform_point2(glam::vec2(100.0, 100.0)));
+        let box_of = |l: &crate::picture::resolved::ResolvedLayer| (l.placement.transform.transform_point2(glam::Vec2::ZERO), l.placement.transform.transform_point2(glam::vec2(100.0, 100.0)));
         let (lo, hi) = box_of(&placed[0]);
         assert!(lo.distance(glam::vec2(75.0, 90.0)) < 1e-3 && hi.distance(glam::vec2(125.0, 110.0)) < 1e-3, "{lo} {hi}");
         let (lo, hi) = box_of(&placed[1]);

@@ -332,7 +332,7 @@ impl PlaybackController {
     }
 
     pub fn now_sec(&self) -> f64 {
-        let mut state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap();
         let now = Instant::now();
         let duration = state.duration;
         // 尺の終わりでは止めない・戻さない。止めるのは人だけで、尺は後から伸ばせる(Ableton と同じ、利用者 2026-09-07)。

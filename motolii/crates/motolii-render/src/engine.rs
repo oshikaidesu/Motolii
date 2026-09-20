@@ -25,7 +25,6 @@ mod physics;
 mod frozen;
 
 use crate::doc::core::ResolvedCamera;
-use crate::render::compositor::GpuTexture2D;
 use crate::render::compositor::{Compositor, CompositorError};
 
 use crate::doc::store::{LayerId, Matte, RationalTime, StoreView};

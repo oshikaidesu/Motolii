@@ -1,9 +1,11 @@
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::{
-    LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
+    LayerId, LayerSource, RationalTime, ShapeNode, StoreView, TextDocument,
 };
 use crate::render::compositor::LayerContent;
 use crate::render::media::{is_point_cloud_path, load_point_cloud, probe};
@@ -156,7 +158,7 @@ impl Engine {
     pub fn selected_layer_size_in(
         &self,
         view: &StoreView<'_>,
-        resolved: &[crate::doc::store::ResolvedLayer],
+        resolved: &[crate::picture::resolved::ResolvedLayer],
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
@@ -236,7 +238,7 @@ impl Engine {
         let layer = resolved.iter().find(|layer| layer.id == layer_id && !layer.ghost)?;
         let bounds = self.leaf_local_bounds(view, layer, t)?;
         let spatial = match &layer.source {
-            LayerSource::File { path, .. } if crate::render::media::is_mesh_path(path) => {
+            LayerSource::File { path, .. } if crate::render::media::is_mesh_path(&path) => {
                 let model = self.models.get(path)?;
                 Some((model.bounds(), model.vertices.iter().copied().collect::<Vec<_>>()))
             }
@@ -301,7 +303,7 @@ impl Engine {
             LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group => None,
             LayerSource::Particles => self.particle_frames.get(&layer_id).map(|frame| frame.bounds),
             LayerSource::File { path, .. } => {
-                let spatial = if crate::render::media::is_mesh_path(path) {
+                let spatial = if crate::render::media::is_mesh_path(&path) {
                     Some(self.models.get(path)?.bounds())
                 } else if is_point_cloud_path(path) {
                     Some(self.point_clouds.get(path)?.bounds())
@@ -868,7 +870,7 @@ impl Engine {
             );
             self.videos.insert(path.to_owned(), (bytes, video));
         }
-        let (bytes, video) = self.videos.get(path).expect("直前に insert した");
+        let (_bytes, video) = self.videos.get(path).expect("直前に insert した");
 
         let Some(timescale) = video.data_descr().timescale else {
             self.layer_failures
@@ -1175,6 +1177,7 @@ const DEFAULT_POINT_SIZE: f32 = 2.0;
 
 #[cfg(test)]
 mod tests {
+    use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use super::*;
 
     /// Display P3 の ICC が埋まった PNG は、Finder / Preview と同じく

@@ -2,9 +2,11 @@
 //! 語彙は Lottie の shape modifier(`vector::OpKind`)そのもの。棚の欄は配置効果と同じ契約(`kind.rs`)。
 //! 値は層の property なので、他の効果と同じにキーが打てる。
 
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::eval::Value;
 use crate::doc::store::kind::Param;
-use crate::doc::store::{ResolvedEffect, ShapeNode};
+use crate::doc::store::{ShapeNode};
 use crate::doc::vector::{LineJoin, OpKind, Point, PointType, ShapeOp, TrimMultiple};
 
 pub struct PathOpKind {
@@ -206,6 +208,7 @@ pub fn with_effects(shapes: &[ShapeNode], effects: &[ResolvedEffect]) -> Vec<Sha
 
 #[cfg(test)]
 mod tests {
+    use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use super::*;
     use crate::doc::vector::{PathSource, Point, Shape};
 

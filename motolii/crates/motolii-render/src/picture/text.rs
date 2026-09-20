@@ -20,7 +20,7 @@ pub fn glyph_offsets(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> R
     let glyphs = |at: RationalTime| -> Result<Vec<(usize, [f32; 2])>, StoreError> {
         let Some(document) = crate::picture::resolve::text::resolved_text_document(view, layer, at)? else { return Ok(Vec::new()) };
         let around = flow_around(view, layer, at)?;
-        let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document_around(&document, at, &canvas, around.as_deref().map_or(&[], Vec::as_slice)) else { return Ok(Vec::new()) };
+        let Ok(Some(shaped)) = crate::picture::text_frame::shape_document_around(&document, at, &canvas, around.as_deref().map_or(&[], Vec::as_slice)) else { return Ok(Vec::new()) };
         Ok(shaped.lines.iter().flat_map(|line| line.glyph_bytes.iter().zip(&line.glyph_xs).map(move |(b, x)| (*b, [*x, line.baseline_y]))).collect())
     };
     let now = glyphs(t)?;
@@ -48,13 +48,13 @@ pub fn text_units(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Resu
     }
     let (Some(document), Some(comp)) = (crate::picture::resolve::text::resolved_text_document(view, layer, t)?, view.composition()?) else { return Ok(Vec::new()) };
     let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
-    let Some(shaped) = crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten() else { return Ok(Vec::new()) };
-    Ok(crate::doc::store::text_frame::split_boxes(&document, &shaped, &canvas, document.content.eval(t), split))
+    let Some(shaped) = crate::picture::text_frame::shape_document(&document, t, &canvas).ok().flatten() else { return Ok(Vec::new()) };
+    Ok(crate::picture::text_frame::split_boxes(&document, &shaped, &canvas, document.content.eval(t), split))
 }
 
 /// 折り返す文字が避ける物(同じ親で Shape Outside を持つ兄弟)を、文字の枠の座標の多角形で。無ければ None。
 /// 物が Transition を持てば、少し前の時刻の形も重みつきで渡す(文字の組みは重みの過半が覆う所を避ける)。
-pub fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) -> Result<Option<std::sync::Arc<Vec<crate::doc::store::text_frame::Obstacle>>>, StoreError> {
+pub fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) -> Result<Option<std::sync::Arc<Vec<crate::picture::text_frame::Obstacle>>>, StoreError> {
     if !view.meta(text)?.is_some_and(|m| m.source == LayerSource::Text) {
         return Ok(None);
     }
@@ -84,7 +84,7 @@ pub fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) -> Resu
         for (at, weight) in samples {
             for poly in crate::picture::boxes::declared_shape(view, layer, mode, at)? {
                 if poly.len() >= 3 {
-                    out.push(crate::doc::store::text_frame::Obstacle { margin, weight, points: poly.into_iter().map(|p| to_text.transform_point2(p).to_array()).collect() });
+                    out.push(crate::picture::text_frame::Obstacle { margin, weight, points: poly.into_iter().map(|p| to_text.transform_point2(p).to_array()).collect() });
                 }
             }
         }
@@ -98,7 +98,7 @@ pub fn flow_around(view: &StoreView<'_>, text: LayerId, t: RationalTime) -> Resu
 pub fn text_outline(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<Option<Vec<crate::doc::vector::Contour>>, StoreError> {
     let (Some(document), Some(comp)) = (crate::picture::resolve::text::authored_text_document(view, layer, t)?, view.composition()?) else { return Ok(None) };
     let canvas = crate::doc::vector::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
-    Ok(crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten().map(|shaped| shaped.contours))
+    Ok(crate::picture::text_frame::shape_document(&document, t, &canvas).ok().flatten().map(|shaped| shaped.contours))
 }
 
 pub fn text_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime, wrap: Option<f32>) -> Result<Option<[f32; 4]>, StoreError> {
@@ -107,8 +107,8 @@ pub fn text_box(view: &StoreView<'_>, layer: LayerId, t: RationalTime, wrap: Opt
     if let Some(width) = wrap {
         document.wrap_size = Some([width.max(1.0), comp.height as f32]);
     }
-    let shaped = crate::doc::store::text_frame::shape_document(&document, t, &canvas).ok().flatten();
-    Ok(shaped.and_then(|shaped| crate::doc::store::text_frame::line_box(&document, &shaped, &canvas)).map(|b| match wrap {
+    let shaped = crate::picture::text_frame::shape_document(&document, t, &canvas).ok().flatten();
+    Ok(shaped.and_then(|shaped| crate::picture::text_frame::line_box(&document, &shaped, &canvas)).map(|b| match wrap {
         Some(width) => [0.0, b[1], width.max(1.0), b[3]],
         None => b,
     }))

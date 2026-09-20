@@ -46,12 +46,6 @@ impl EffectScope {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ResolvedEffect {
-    pub plugin_id: String,
-    pub params: Vec<(String, crate::doc::store::Value)>,
-    pub scope: EffectScope,
-}
 
 pub(crate) fn validate_unique_ids(effects: &[EffectInstance]) -> Result<(), StoreError> {
     for (i, effect) in effects.iter().enumerate() {

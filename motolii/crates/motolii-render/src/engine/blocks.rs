@@ -1,10 +1,12 @@
 //! 箱のブロック(`STAGE: block`)を 1 コマに掛ける: 層を組む時に物の箱を集め、組み終えたら GPU で効果の順に解いて
 //! 描く側の motion の buffer に書く。読み戻さない(利用者 2026-09-15「この天井を作るべきでない」)。
 
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::collections::HashMap;
 
 use crate::doc::core::CompSpec;
-use crate::doc::store::{LayerId, MaskFrame, PropertyId, RationalTime, ResolvedLayer, ResolvedMask, StoreView, Value};
+use crate::doc::store::{LayerId, MaskFrame, PropertyId, RationalTime, StoreView, Value};
 use crate::render::compositor::effects::block_program::{BlockItem, BlockProgram, BlockWorld, FollowPass, WorldPass};
 use crate::render::compositor::effects::isf::IsfStage;
 use crate::render::compositor::Layer;
@@ -720,7 +722,7 @@ impl Engine {
     }
 
     /// 集めた物を GPU で効果の順に解き、world のずれにして描く側へ渡す。ブロックが無ければ外す。
-    pub(super) fn run_blocks(&mut self, t: RationalTime, fps: f64) {
+    pub(super) fn run_blocks(&mut self, t: RationalTime, _fps: f64) {
         let state = &mut self.blocks;
         if state.objects.is_empty() {
             self.compositor.motion = None;

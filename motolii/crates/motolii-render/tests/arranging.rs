@@ -870,8 +870,8 @@ mod tests {
                 let (a, b) = c.vertices.iter().fold((glam::Vec2::MAX, glam::Vec2::MIN), |(a, b), v| (a.min(glam::vec2(v.point.x as f32, v.point.y as f32)), b.max(glam::vec2(v.point.x as f32, v.point.y as f32))));
                 a.x < hi.x && b.x > lo.x && a.y < hi.y && b.y > lo.y
             }).count();
-            let plain = motolii_doc::store::text_frame::shape_document(&document, T, &canvas).unwrap().unwrap();
-            let flowed = motolii_doc::store::text_frame::shape_document_around(&document, T, &canvas, &around).unwrap().unwrap();
+            let plain = motolii_render::picture::text_frame::shape_document(&document, T, &canvas).unwrap().unwrap();
+            let flowed = motolii_render::picture::text_frame::shape_document_around(&document, T, &canvas, &around).unwrap().unwrap();
             let right_of = flowed.contours.iter().any(|c| c.vertices.iter().all(|v| v.point.x as f32 > hi.x && (v.point.y as f32) > lo.y && (v.point.y as f32) < hi.y));
             (count(&plain), count(&flowed), plain.contours.len() == flowed.contours.len(), right_of)
         };

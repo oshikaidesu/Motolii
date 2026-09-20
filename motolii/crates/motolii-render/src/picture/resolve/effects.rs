@@ -3,6 +3,8 @@
 //! Motion Blur の写しと、その下に残る効果。掛ける仕事は描く側で、ここは列を組むだけ。
 
 use super::*;
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 
 pub fn effect_enabled(view: &StoreView<'_>, layer: LayerId, effect: crate::doc::store::EffectId, t: RationalTime) -> Result<bool, StoreError> {
     match view.value_at(layer, &crate::doc::store::PropertyId::effect_enabled(effect), t)? {
@@ -104,6 +106,7 @@ pub fn handed_down(view: &StoreView<'_>, layer: LayerId, t: RationalTime, presen
 
 #[cfg(test)]
 mod group_scope_contract {
+    use crate::picture::resolved::ResolvedLayer;
     use crate::doc::store::*;
 
     fn add(doc: &mut Document, id: u64, order: i16, source: LayerSource, parent: Option<LayerId>) -> LayerId {

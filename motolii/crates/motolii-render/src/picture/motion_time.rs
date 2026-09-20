@@ -1,7 +1,6 @@
 //! 移り方 — 値が新しい所へ移るまでの、前のコマの姿を覗く窓。
 //! 順番の札が距離でずらす規則は**並べた結果**を読むので、時刻の背骨ではなくこちら側。
 
-use std::collections::HashMap;
 
 use crate::doc::core::RationalTime;
 use crate::doc::store::layout::*;

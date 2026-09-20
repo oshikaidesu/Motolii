@@ -1,4 +1,6 @@
 
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 pub mod camera;
 pub mod copies;
 pub mod settle;
@@ -13,8 +15,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
 
 use crate::doc::store::{
-    property, LayerId, LayerPlacement, PropertyId, ResolvedEffect, ResolvedLayer,
-    ResolvedMask, StoreError, TextDocument,
+    property, LayerId, LayerPlacement, PropertyId, StoreError, TextDocument,
 };
 
 use super::StoreView;

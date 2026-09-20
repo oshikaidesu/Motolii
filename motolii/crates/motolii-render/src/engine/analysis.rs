@@ -2,11 +2,13 @@
 //! 層を本物で組んで読み戻し(Freeze と同じ道)、Blob Track の塊をコマごとに解いて `AnalysisInputs` に置く。
 //! ID を持続する・動きで拾う時は入点から 1 コマずつ解き、解いたコマは書類の版が変わるまで持つ(飛んでも辿っても同じ塊)。
 
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::collections::BTreeMap;
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
-use crate::doc::store::{EffectId, LayerId, RationalTime, ResolvedLayer, StoreView};
+use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
 use crate::extensions::{blob, overlay};
 use crate::render::compositor::LayerContent;
 use crate::render::engine::render::{collect_shape_documents, collect_text_documents};
@@ -116,7 +118,7 @@ impl Engine {
             if layer.source == crate::doc::store::LayerSource::Text {
                 if let Some(document) = crate::picture::resolve::text::resolved_text_document(&view, layer.id, t).map_err(store)? {
                     let content = document.content.eval(t).to_owned();
-                    if let Ok(Some(shaped)) = crate::doc::store::text_frame::shape_document_around(&document, t, &canvas, layer.flow_around.as_deref().map_or(&[], Vec::as_slice)) {
+                    if let Ok(Some(shaped)) = crate::picture::text_frame::shape_document_around(&document, t, &canvas, layer.flow_around.as_deref().map_or(&[], Vec::as_slice)) {
                         let mut n = 0;
                         for line in &shaped.lines {
                             // 字は元の文字の byte で名付ける(組み直しても同じ字の軌跡)。空白は見えないので数えない。
@@ -236,7 +238,7 @@ impl Engine {
                 if source.0 == 0 || source == layer { continue; }
                 (effect.params.clone(), Source::Layer(source), settings_of(&effect.params), blob::number_of(&effect.params, "detail"), false, false)
             } else if let Some(found) = effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id)) {
-                let effect = &crate::doc::store::ResolvedEffect { plugin_id: found.plugin_id.clone(), params: overlay::with_defaults(&found.plugin_id, &found.params), scope: found.scope };
+                let effect = &crate::picture::resolved::ResolvedEffect { plugin_id: found.plugin_id.clone(), params: overlay::with_defaults(&found.plugin_id, &found.params), scope: found.scope };
                 // Layers: 絵を読まず、下の層の箱をそのまま塊にする(同じ親で自分より下。Repeater の写しは 1 枚ずつ)。
                 if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
                     let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(store)?;

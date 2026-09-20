@@ -1,9 +1,11 @@
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::{
-    LayerId, LayerSource, RationalTime, ResolvedLayer, ResolvedMask, ShapeNode, StoreView,
+    LayerId, LayerSource, RationalTime, ShapeNode, StoreView,
     TextDocument,
 };
 use crate::render::compositor::{
@@ -1304,6 +1306,7 @@ pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
 mod placement_contract {
     //! 配置効果(motolii.repeat)は他の効果と同じ口から入り、素材を N 個置く。
     //! 既定は通り抜け。配置効果の**下**に効果を積んだ時だけ、配置を 1 枚に合わせてから掛かる。
+    use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use crate::doc::store::{
         property, Composition, Document, EffectId, EffectInstance, EffectScope, Fps, Intent,
         LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
@@ -1598,7 +1601,7 @@ impl Engine {
     fn media_screen_rect(&self, comp: CompSpec, camera: ResolvedCamera, layer: &ResolvedLayer) -> Option<(ScreenRect, bool)> {
         let LayerSource::File { path, .. } = &layer.source else { return None };
         if crate::render::media::is_still_image_path(path)
-            || crate::render::media::is_mesh_path(path)
+            || crate::render::media::is_mesh_path(&path)
             || crate::render::media::is_point_cloud_path(path)
         {
             return None;
@@ -1703,12 +1706,12 @@ impl Engine {
             let LayerSource::File { path, .. } = &layer.source else { continue };
             if crate::render::media::is_still_image_path(path)
                 || crate::render::media::is_audio_path(path)
-                || crate::render::media::is_mesh_path(path)
+                || crate::render::media::is_mesh_path(&path)
                 || crate::render::media::is_point_cloud_path(path)
             {
                 continue;
             }
-            let _ = self.media_texture_for(path, layer.source_time, layer.id);
+            let _ = self.media_texture_for(&path, layer.source_time, layer.id);
         }
         self.realtime = was_realtime;
         self.layer_failures = failures;

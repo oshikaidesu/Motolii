@@ -83,7 +83,7 @@ impl EditorRuntime{
         self.viewer.stage_window=next;
         Ok(changed)
     }
-    fn depth_layout(&self,resolved:&[crate::doc::store::ResolvedLayer])->Result<Json,String>{
+    fn depth_layout(&self,resolved:&[crate::render::picture::resolved::ResolvedLayer])->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
         let seen=self.engine.resolve_camera_in(&view,resolved,time).map_err(e)?;
@@ -208,7 +208,7 @@ impl EditorRuntime{
             self.viewer.selection_bounds.insert(seen,found.into_iter().map(|(id,[x0,y0,x1,y1])|(id,[x+x0*sx,y+y0*sy,x+x1*sx,y+y1*sy])).collect());
         }
     }
-    fn bounds_from(&self,eye:&Eye,resolved:&[crate::doc::store::ResolvedLayer],layer:LayerId,seen:View)->Option<Json>{
+    fn bounds_from(&self,eye:&Eye,resolved:&[crate::render::picture::resolved::ResolvedLayer],layer:LayerId,seen:View)->Option<Json>{
         let view=self.doc.view();let Eye{time,comp,camera,observer,document}=*eye;
         let r=resolved.iter().find(|r|r.id==layer&&!r.ghost)?;
         // 2D は箱に貼り付いているので、どの view でも作中カメラで置く。
@@ -232,7 +232,7 @@ impl EditorRuntime{
     }
     /// 今の姿 —— 観測者と時刻で動く物。cache した行の上へ毎回これを載せる。
     /// `bounds` は Camera(出力)、`stageBounds` は Stage(観測者)で見た枠。
-    fn overlay_geometry(&self,row:&mut Json,eyes:&(Eye,Eye),resolved:&[crate::doc::store::ResolvedLayer],id:LayerId,live:bool)->Result<(),String>{
+    fn overlay_geometry(&self,row:&mut Json,eyes:&(Eye,Eye),resolved:&[crate::render::picture::resolved::ResolvedLayer],id:LayerId,live:bool)->Result<(),String>{
         let position=self.position(id)?;let bounds=self.bounds_from(&eyes.0,resolved,id,View::Camera);
         row["corners"]=json!(bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|if c.len()==8{vec![c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]}else{c.clone()}));
         row["x"]=json!(position[0]);row["y"]=json!(position[1]);

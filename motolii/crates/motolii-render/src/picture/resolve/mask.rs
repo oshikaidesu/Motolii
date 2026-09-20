@@ -2,6 +2,8 @@
 //! Overflow が Clip の祖先の箱。どれも「どの形で、どの枠に付いて、どう足すか」の 3 つで決まる。
 
 use super::*;
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 
 /// この層に掛かる切りを全部: 自分の書いたマスク・行列の Matte に、祖先の箱の切りを足したもの。
 /// 解く側はこの一口だけ使う(順番を間違えると、祖先の箱が自分のマスクの前に掛かる)。

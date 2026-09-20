@@ -143,8 +143,8 @@ pub fn shape_document_around(
     if document.runs.is_empty() {
         pieces.push((content.to_owned(), 0));
     } else {
-        let ids = super::text_read::style_ids(document, content);
-        for (g,id) in super::text_read::graphemes(content).into_iter().zip(ids) {
+        let ids = crate::doc::store::text_read::style_ids(document, content);
+        for (g,id) in crate::doc::store::text_read::graphemes(content).into_iter().zip(ids) {
             let index = document.styles.iter().position(|s| s.id == id).unwrap_or(0);
             if let Some((text, _)) = pieces.last_mut().filter(|(_,i)|*i==index) { text.push_str(g); }
             else { pieces.push((g.to_owned(), index)); }

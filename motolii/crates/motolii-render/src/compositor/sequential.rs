@@ -406,7 +406,7 @@ impl Compositor {
 
     fn stack_over(
         &mut self,
-        comp: CompSpec,
+        _comp: CompSpec,
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         canvas: AccumulatorBacking,
         mode: u32,
@@ -453,7 +453,7 @@ impl Compositor {
 
     fn backdrop_pyramid(
         &mut self,
-        comp: CompSpec,
+        _comp: CompSpec,
         backing: &wgpu::Texture,
         batch: &mut Vec<wgpu::CommandBuffer>,
         max_roughness: f32,
@@ -527,7 +527,7 @@ impl Compositor {
 
     pub(crate) fn finalize_readback(
         &mut self,
-        comp: CompSpec,
+        _comp: CompSpec,
         camera: ResolvedCamera,
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
@@ -644,7 +644,7 @@ impl Compositor {
     pub(crate) fn finalize_into(
         &mut self,
         target: &wgpu::Texture,
-        comp: CompSpec,
+        _comp: CompSpec,
         camera: ResolvedCamera,
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],

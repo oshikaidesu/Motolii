@@ -3,6 +3,8 @@
 //! 格子へ寄せる → 見つけた格子へ寄せる → Field を掛ける)。ここを入れ替えると絵が変わる。
 
 use super::*;
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 
 /// 解いた列を、決まった順で整える。並べ替えと描き順の番号付けまでが一組。
 /// 解く側はこの一口だけ使う(手を 1 つずつ呼ばせると、順番が呼ぶ側の記憶になる)。

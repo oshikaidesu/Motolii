@@ -1,7 +1,8 @@
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::sync::Arc;
 
-use crate::doc::core::CompSpec;
-use crate::doc::store::{LayerId, LayerProjection, ResolvedLayer};
+use crate::doc::store::LayerProjection;
 use crate::render::compositor::{BlendMode, Compositor, CompositorError, EffectStage, GpuModelData, GpuTexture2D, Layer, LayerContent, LayerWithPasses};
 use crate::render::compositor::effects::vism::ImageFrame;
 use super::{Engine, EngineError};

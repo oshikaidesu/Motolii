@@ -100,7 +100,7 @@ pub fn compute_layout(view: &StoreView<'_>, t: RationalTime) -> Result<Frame, St
         }
         let taffy = |e: taffy::TaffyError| StoreError::Property(format!("layout: {e}"));
         let shifted = |mut placed: taffy::Layout| { placed.location.x += CANVAS_MARGIN; placed.location.y += CANVAS_MARGIN; placed };
-        let mut groups_order = groups.clone();
+        let groups_order = groups.clone();
         for (node, layer, is_root) in groups {
             let placed = shifted(*tree.layout(node).map_err(taffy)?);
             frame.sizes.insert(layer, [placed.size.width, placed.size.height]);

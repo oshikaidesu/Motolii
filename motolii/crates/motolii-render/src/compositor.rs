@@ -324,7 +324,7 @@ pub struct LayerWithPasses {
     pub pass_sources: Vec<Vec<GpuTexture2D>>,
     /// 祖先の箱の切り(comp の px)。ブロックのずれで動く層は、ずれを書いた後に comp 大へ焼いてからこれで切る —
     /// 切りは箱の枠に留まり、ずれは中身だけを動かす。空なら何もしない。
-    pub cut: Vec<crate::doc::store::ResolvedMask>,
+    pub cut: Vec<crate::picture::resolved::ResolvedMask>,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -2,10 +2,12 @@
 //! 棚の欄は配置効果・パス効果と同じ契約(`kind.rs`)。値は層の property なのでキーが打てる。
 //! 文字の層にだけ掛かる(裁定 2026-09-13: 書体を跨ぐ morph は核でなく効果)。
 
+#[allow(unused_imports)]
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::eval::Value;
 pub mod morph;
 use crate::doc::store::kind::Param;
-use crate::doc::store::{LayerId, ResolvedEffect};
+use crate::doc::store::{LayerId, };
 
 pub struct TextOpKind {
     pub plugin_id: &'static str,
@@ -39,6 +41,7 @@ pub fn morph(effects: &[ResolvedEffect]) -> Option<(LayerId, f64)> {
 
 #[cfg(test)]
 mod tests {
+    use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use super::*;
 
     fn effect(params: &[(&str, Value)]) -> ResolvedEffect {

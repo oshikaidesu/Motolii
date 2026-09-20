@@ -116,7 +116,7 @@ fn selection_geom_in(
 fn selection_geom_resolved(
     engine: &Engine,
     view: &StoreView<'_>,
-    resolved: &[crate::doc::store::ResolvedLayer],
+    resolved: &[crate::render::picture::resolved::ResolvedLayer],
     layer: LayerId,
     rt: RationalTime,
 ) -> Option<SelGeom> {

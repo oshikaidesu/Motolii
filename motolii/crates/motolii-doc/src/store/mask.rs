@@ -86,15 +86,6 @@ pub enum MaskFrame {
     Box,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ResolvedMask {
-    pub mode: MaskMode,
-    pub inverted: bool,
-    pub opacity: f32,
-    pub expansion: f64,
-    pub shape: crate::doc::eval::Path,
-    pub frame: MaskFrame,
-}
 
 pub(crate) fn validate_unique_ids(masks: &[Mask]) -> Result<(), StoreError> {
     for (i, mask) in masks.iter().enumerate() {

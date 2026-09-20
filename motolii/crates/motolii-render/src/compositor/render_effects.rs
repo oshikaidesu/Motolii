@@ -84,7 +84,7 @@ impl Compositor {
         let mut effective_textures = Vec::with_capacity(layers.len());
         let mut effective_paddings = Vec::with_capacity(layers.len());
         let mut effective_spills: Vec<LayerSpill> = Vec::with_capacity(layers.len());
-        let mut checked_out = Vec::new();
+        let checked_out = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
         // 同じ素材に同じ効果列が続く(配置効果の複製)なら、鎖は 1 回だけ流して結果を配る。
         let mut previous: Option<(GpuTexture2D, &[EffectPass], LayerContent, u32, LayerSpill)> = None;

@@ -3,6 +3,7 @@
 //! どれも「元をずらした時刻・切り方で解き直して積む」で、書類に子の層は作らない。
 
 use super::*;
+use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 
 /// 解けた 1 枚を、写しに展開して積む。Split の単位になるならそちらだけ、
 /// ならなければ配置効果の数だけ(その中で Motion Blur の写しも)。

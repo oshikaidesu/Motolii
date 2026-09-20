@@ -10,7 +10,7 @@ use re_renderer::renderer::{SurfaceProgram, SurfaceProgramDesc};
 
 use super::catalog::EffectStage;
 use super::VismDefinition;
-use crate::doc::store::ResolvedEffect;
+use crate::picture::resolved::ResolvedEffect;
 
 /// instance が hook へ渡せる float の数(頂点属性 16 か所の上限、法線行列を shader で出して 6 本)(fork の `GpuMeshInstance::params`)。
 /// 最後の 1 個は箱のブロックの motion の番号(fork が頂点の段で読む)なので、hook の欄は `HOOK_SLOTS` まで。
@@ -133,6 +133,7 @@ pub(crate) fn params(effects: &[ResolvedEffect], field: Option<&VismDefinition>,
 
 #[cfg(test)]
 mod tests {
+    use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use super::*;
 
     #[test]
@@ -153,11 +154,11 @@ mod tests {
 
 impl crate::render::compositor::Compositor {
     /// 効果列の hook(field / surface)から共有プログラムを組む。変種は catalog の世代ごとに覚える。
-    pub(crate) fn surface_shading(&mut self, effects: &[crate::doc::store::ResolvedEffect]) -> Result<SurfaceShading, String> {
+    pub(crate) fn surface_shading(&mut self, effects: &[crate::picture::resolved::ResolvedEffect]) -> Result<SurfaceShading, String> {
         self.surface_shading_for(effects, false)
     }
 
-    pub(crate) fn surface_shading_for(&mut self, effects: &[crate::doc::store::ResolvedEffect], unlit: bool) -> Result<SurfaceShading, String> {
+    pub(crate) fn surface_shading_for(&mut self, effects: &[crate::picture::resolved::ResolvedEffect], unlit: bool) -> Result<SurfaceShading, String> {
         self.refresh_catalog_programs();
         let catalog = self.catalog.clone();
         let (field, surface) = hooks(effects, &catalog.definitions);
@@ -195,7 +196,7 @@ impl crate::render::compositor::Compositor {
 
 #[cfg(test)]
 mod program_contract {
-    use crate::doc::store::ResolvedEffect;
+    use crate::picture::resolved::ResolvedEffect;
 
     fn compiled_without_validation_error(compositor: &mut crate::render::compositor::Compositor, effects: &[ResolvedEffect]) {
         let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
