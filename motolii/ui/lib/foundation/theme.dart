@@ -273,10 +273,15 @@ abstract final class EditorTheme {
   static const caret = accent;
   static const selection = Color(0x66ffaa61);
 
+  /// The window's one typeface, bundled (assets/fonts, SIL OFL): the same
+  /// face on every platform, none of them the platform's own.
+  static const fontFamily = 'Inter';
+
   /// What the window's text is when nothing says otherwise: the body size
-  /// in ink, without a font family (the platform's UI face).
+  /// in ink.
   static const text = TextStyle(
     inherit: false,
+    fontFamily: fontFamily,
     fontSize: EditorMetrics.font,
     fontWeight: FontWeight.w400,
     color: ink,
