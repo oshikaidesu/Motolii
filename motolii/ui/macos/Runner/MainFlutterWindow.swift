@@ -150,6 +150,9 @@ private final class ProbeRuntime {
       }
       let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)"
       playbackLog.info("\(message, privacy: .public)")
+      // Diagnostics are one line on pause, never a per-frame disk write. The
+      // file is intentionally in tmp: it is not authored state or telemetry.
+      try? (message + "\n").data(using: .utf8)?.write(to: URL(fileURLWithPath: "/tmp/motolii-playback-native.txt"), options: .atomic)
     }
   }
 
