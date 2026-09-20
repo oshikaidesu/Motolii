@@ -610,7 +610,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
                   decimals ??
                   (percent || slotWidth < EditorMetrics.field ? 0 : 2),
               defaultValue: _restOf(row, axis, shownScale),
-              tint: _tintOf(row),
+              tint: _tintOf(row, EditorTheme.of(context)),
               track: _trackOf(row),
               enabled: _canEdit(layer),
               onBegin: _begin,
@@ -720,16 +720,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
             child: Icon(
               icon,
               size: EditorMetrics.s14,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(context).muted,
             ),
           )
         : Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: EditorMetrics.dense,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(context).muted,
             ),
           ),
   );
@@ -756,7 +756,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         EditorMetrics.s6 * 2 +
         EditorMetrics.s18 +
         EditorMetrics.s4 * 3 +
-        EditorMetrics.row;
+        EditorMetrics.s22;
     var free = panelWidth - fixed - EditorMetrics.s48;
     _wordWidth = EditorMetrics.s48;
     if (free / 3 < EditorMetrics.s44) {
@@ -768,7 +768,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   Widget _slot([Widget? child, bool center = false]) => SizedBox(
     width: _wellWidth,
-    height: EditorMetrics.row,
+    height: EditorMetrics.s22,
     child: child == null
         ? null
         : center
@@ -776,15 +776,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
         : child,
   );
   Widget _tail([Widget? child]) => SizedBox(
-    width: EditorMetrics.row,
-    height: EditorMetrics.row,
+    width: EditorMetrics.s22,
+    height: EditorMetrics.s22,
     child: child == null ? null : Center(child: child),
   );
 
-  Widget _line(List<Widget> children) => Padding(
-    padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
-    child: Row(children: children),
-  );
+  Widget _line(List<Widget> children) => Row(children: children);
 
   // ---- Transform ---------------------------------------------------------
 
@@ -884,7 +881,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
       alignment: Alignment.centerLeft,
       child: EditorTooltip(
         message: css,
-        child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
+        child: Icon(
+          icon,
+          size: EditorMetrics.s14,
+          color: EditorTheme.of(context).muted,
+        ),
       ),
     ),
   );
@@ -899,9 +900,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
         message: css,
         child: Text(
           letter,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: EditorMetrics.font,
-            color: EditorTheme.muted,
+            color: EditorTheme.of(context).muted,
           ),
         ),
       ),
@@ -1028,10 +1029,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
         _gap(),
         _tail(
-          const Icon(
+          Icon(
             Glyph.padding,
             size: EditorMetrics.s14,
-            color: EditorTheme.muted,
+            color: EditorTheme.of(context).muted,
           ),
         ),
       ]),
@@ -1086,7 +1087,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         unit: true,
         snaps: _nineSnaps,
         enabled: _canEdit(layer),
-        tint: EditorTheme.spatial,
+        tint: EditorTheme.of(context).spatial,
         // Two rows tall, not three: the nine places read at this size and
         // the card keeps its density (the craft ledger's 24 px floor, 28
         // base — a 44 px box holds both with room for the marks).
@@ -1195,7 +1196,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ('layout.row_span', 'grid-row span'),
       ];
       used.addAll([for (final (id, _) in cell) id]);
-      final w = (_wellWidth * 3 + EditorMetrics.row) / 4;
+      final w = (_wellWidth * 3 + EditorMetrics.s22) / 4;
       lines.add(
         _layoutLine('cell', [
           _mark(Glyph.grid_on, 'grid-area'),
@@ -1281,7 +1282,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _gap(),
           _slot(),
           _gap(),
-          _tail(_dial(layer, 'camera.roll', EditorTheme.angle)),
+          _tail(_dial(layer, 'camera.roll', EditorTheme.of(context).angle)),
         ]),
     ];
   }
@@ -1360,19 +1361,22 @@ class _InspectorPanelState extends State<InspectorPanel> {
             height: EditorMetrics.row,
             padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
             decoration: BoxDecoration(
-              color: EditorTheme.app,
-              border: Border.all(color: EditorTheme.line),
+              color: EditorTheme.of(context).app,
+              border: Border.all(color: EditorTheme.of(context).line),
             ),
             child: Row(
               children: [
-                const Text('Font', style: TextStyle(color: EditorTheme.muted)),
+                Text(
+                  'Font',
+                  style: TextStyle(color: EditorTheme.of(context).muted),
+                ),
                 const Spacer(),
                 Flexible(
                   child: Text(
                     family,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: EditorTheme.ink),
+                    style: TextStyle(color: EditorTheme.of(context).ink),
                   ),
                 ),
               ],
@@ -1399,14 +1403,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
         )
         .toList();
     return [
-      Padding(
-        padding: const EdgeInsets.only(bottom: EditorMetrics.s8),
-        child: GradientInspector(
-          key: ValueKey('fill:${layer['id']}'),
-          controller: c,
-          layer: layer,
-          fill: panelMap(layer['fill']),
-        ),
+      GradientInspector(
+        key: ValueKey('fill:${layer['id']}'),
+        controller: c,
+        layer: layer,
+        fill: panelMap(layer['fill']),
       ),
       if (fillRows.isNotEmpty)
         _cells([
@@ -1553,7 +1554,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _named(Glyph.opacity, 'opacity'),
           SizedBox(
             width: _wellWidth * 2 + EditorMetrics.s4,
-            height: EditorMetrics.row,
+            height: EditorMetrics.s22,
             child: _well(
               layer,
               'opacity',
@@ -2025,7 +2026,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               x: (xRow['value'] as num).toDouble(),
               y: (yRow['value'] as num).toDouble(),
               enabled: _canEdit(layer),
-              tint: EditorTheme.spatial,
+              tint: EditorTheme.of(context).spatial,
               size: EditorMetrics.s60,
               onBegin: _begin,
               onPreview: (x, y) => _writeMany(layer, {
@@ -2143,7 +2144,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             EditorDial(
               degrees: (row['value'] as num? ?? 0).toDouble(),
               enabled: _canEdit(layer),
-              tint: EditorTheme.angle,
+              tint: EditorTheme.of(context).angle,
               onBegin: _begin,
               onPreview: (d) => _write(layer, row, d, preview: true),
               onFinish: () => _finish(false),
@@ -2154,7 +2155,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               layer,
               row,
               0,
-              width: _cellWidth - EditorMetrics.row - EditorMetrics.s4,
+              width: _cellWidth - EditorMetrics.s22 - EditorMetrics.s4,
             ),
           ],
         );
@@ -2247,8 +2248,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
     // The layer's own colour as a flat block, as its bar wears it in the
     // Timeline: what the panel edits is told by the panel's head.
     decoration: BoxDecoration(
-      color: EditorTheme.layerColor(layer['id']),
-      border: const Border(bottom: BorderSide(color: EditorTheme.line)),
+      color: EditorTheme.of(context).layerColor(layer['id']),
+      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
     ),
     child: Row(
       children: [
@@ -2264,7 +2265,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             _ => Glyph.image_outlined,
           },
           size: EditorMetrics.s14,
-          color: EditorTheme.tabInk,
+          color: EditorTheme.of(context).tabInk,
         ),
         const SizedBox(width: EditorMetrics.s6),
         Expanded(
@@ -2274,10 +2275,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
               _multiple ? '${c.selectedIds.length} layers' : '${layer['name']}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: EditorMetrics.title,
                 fontWeight: FontWeight.w600,
-                color: EditorTheme.tabInk,
+                color: EditorTheme.of(context).tabInk,
               ),
             ),
           ),
@@ -2299,13 +2300,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 }
               });
             },
-            ink: EditorTheme.tabInk,
+            ink: EditorTheme.of(context).tabInk,
           ),
         EditorSwitch(
           on: c.animating,
           glyph: Glyph.diamond_outlined,
-          tint: EditorTheme.keyAccent,
-          ink: EditorTheme.tabInk,
+          tint: EditorTheme.of(context).keyAccent,
+          ink: EditorTheme.of(context).tabInk,
           label: c.animateFrom
               ? 'Animate (A): values you touch become keys at this frame, '
                     'and at the frame Animate was turned on'
@@ -2323,14 +2324,14 @@ class _InspectorPanelState extends State<InspectorPanel> {
   Widget build(BuildContext context) {
     final layer = _active;
     if (layer == null) {
-      return const ColoredBox(
-        color: EditorTheme.app,
+      return ColoredBox(
+        color: EditorTheme.of(context).app,
         child: Center(
           child: Text(
             'Select a layer',
             style: TextStyle(
               fontSize: EditorMetrics.title,
-              color: EditorTheme.muted,
+              color: EditorTheme.of(context).muted,
             ),
           ),
         ),
@@ -2343,7 +2344,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       builder: (context, box) {
         _fit(box.maxWidth);
         return ColoredBox(
-          color: EditorTheme.app,
+          color: EditorTheme.of(context).app,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -2405,7 +2406,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           ),
                           child: Text(
                             'Frozen — effects are baked. Unfreeze to edit.',
-                            style: TextStyle(color: EditorTheme.muted),
+                            style: TextStyle(
+                              color: EditorTheme.of(context).muted,
+                            ),
                           ),
                         ),
                       ),
@@ -2479,15 +2482,15 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     alignment: Alignment.bottomLeft,
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: EditorTheme.line)),
+    decoration: BoxDecoration(
+      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
     ),
     child: Text(
       text.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: EditorMetrics.micro,
         letterSpacing: 1,
-        color: EditorTheme.muted,
+        color: EditorTheme.of(context).muted,
       ),
     ),
   );
@@ -2530,8 +2533,8 @@ class _HeadGlyph extends StatelessWidget {
           icon,
           size: EditorMetrics.s12,
           color: onTap == null
-              ? EditorTheme.disabledInk
-              : ink ?? EditorTheme.muted,
+              ? EditorTheme.of(context).disabledInk
+              : ink ?? EditorTheme.of(context).muted,
         ),
       ),
     ),
@@ -2552,7 +2555,9 @@ class _CellLabel extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: EditorMetrics.micro,
-        color: hero ? EditorTheme.ink : EditorTheme.muted,
+        color: hero
+            ? EditorTheme.of(context).ink
+            : EditorTheme.of(context).muted,
       ),
     ),
   );
@@ -2565,7 +2570,7 @@ class _EffectGrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ReorderableDragStartListener(
     index: index,
-    child: const EditorTooltip(
+    child: EditorTooltip(
       message: 'Drag to reorder',
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
@@ -2574,7 +2579,7 @@ class _EffectGrip extends StatelessWidget {
           child: Icon(
             Glyph.drag_indicator,
             size: EditorMetrics.s12,
-            color: EditorTheme.muted,
+            color: EditorTheme.of(context).muted,
           ),
         ),
       ),
@@ -2623,10 +2628,10 @@ class _SeedRoll extends StatelessWidget {
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: const Icon(
+      child: Icon(
         Glyph.casino_outlined,
         size: EditorMetrics.s16,
-        color: EditorTheme.muted,
+        color: EditorTheme.of(context).muted,
       ),
     ),
   );

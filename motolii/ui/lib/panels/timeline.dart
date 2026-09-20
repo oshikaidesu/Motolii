@@ -1010,7 +1010,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
     focusNode: focus,
     onKeyEvent: key,
     child: ColoredBox(
-      color: EditorTheme.panel,
+      color: EditorTheme.of(context).panel,
       child: LayoutBuilder(
         builder: (context, bounds) {
           viewportWidth = bounds.maxWidth;
@@ -1048,6 +1048,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                           ]),
                           builder: (context, _) => CustomPaint(
                             painter: _TimelinePainter(
+                              colors: EditorTheme.of(context),
                               ink: EditorInk.of(context),
                               labelWidth: labelWidth,
                               rows: const [],
@@ -1115,6 +1116,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                     child: CustomPaint(
                                       key: const ValueKey('timeline-lanes'),
                                       painter: _TimelinePainter(
+                                        colors: EditorTheme.of(context),
                                         ink: EditorInk.of(context),
                                         labelWidth: labelWidth,
                                         rows: tracks,
@@ -1323,6 +1325,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                           child: CustomPaint(
                             size: Size(overview.maxWidth, EditorMetrics.s18),
                             painter: _ArrangementOverview(
+                              colors: EditorTheme.of(context),
                               layers: widget.controller.layers,
                               duration: duration,
                               extent: overviewExtent,
@@ -1463,7 +1466,10 @@ Paint _stroke(Color color, [double width = 0]) => _strokePaint
   ..strokeWidth = width;
 
 class _TimelinePainter extends CustomPainter {
+  final EditorTheme colors;
+
   _TimelinePainter({
+    this.colors = EditorTheme.chromatic,
     required this.rows,
     required this.selected,
     required this.keys,
@@ -1509,27 +1515,28 @@ class _TimelinePainter extends CustomPainter {
     Canvas canvas,
     String text,
     Offset at, {
-    Color color = EditorTheme.ink,
+    Color? color,
     double width = 200,
     double size = 11,
     bool centered = false,
-    FontWeight weight = FontWeight.w400,
+    FontWeight weight = FontWeight.w500,
   }) {
     if (_labels.length >= 512) _labels.clear();
-    final p = _labels[(text, color, width, size, weight)] ??= TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: size,
-          fontFamily: EditorTheme.fontFamily,
-          fontWeight: weight,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-      ellipsis: '…',
-    )..layout(maxWidth: math.max(0, width));
+    final p = _labels[(text, color ?? colors.ink, width, size, weight)] ??=
+        TextPainter(
+          text: TextSpan(
+            text: text,
+            style: TextStyle(
+              color: color ?? colors.ink,
+              fontSize: size,
+              fontFamily: EditorTheme.fontFamily,
+              fontWeight: weight,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+          ellipsis: '…',
+        )..layout(maxWidth: math.max(0, width));
     final aligned = ruler
         ? at
         : Offset(
@@ -1583,7 +1590,7 @@ class _TimelinePainter extends CustomPainter {
           Rect.fromLTWH(label, rows[i].bounds.top, size.width - label, h),
           _fill(
             laneSelected(rows[i])
-                ? EditorTheme.hover
+                ? colors.hover
                 : rows[i].property != null
                 ? ink.lane
                 : (i.isEven ? ink.laneAlt : ink.lane),
@@ -1640,7 +1647,7 @@ class _TimelinePainter extends CustomPainter {
           Offset(x + 4, 17),
           width: EditorMetrics.s78,
           size: EditorMetrics.micro,
-          color: EditorTheme.muted,
+          color: colors.muted,
         );
       }
     }
@@ -1665,8 +1672,8 @@ class _TimelinePainter extends CustomPainter {
               ),
               _fill(
                 row.groupOpen
-                    ? EditorTheme.border
-                    : EditorTheme.layerColor(child['id']),
+                    ? colors.border
+                    : colors.timelineColor(child['id']),
               ),
             );
           }
@@ -1678,7 +1685,7 @@ class _TimelinePainter extends CustomPainter {
               offset;
           final width = (timing['duration'] as num? ?? 1).toDouble() * scale;
           final rect = Rect.fromLTWH(x, y + 2, math.max(1, width), h - 4);
-          final own = EditorTheme.layerColor(row.id);
+          final own = colors.timelineColor(row.id);
           // ゴースト: 同じ行に、遅れの分だけずれた帯が 1 つ。掴めない。
           // 実物と重なる区間は実物の帯がそのまま語る(両方が鳴る)。描くのは
           // はみ出し = 実物の時間の外でゴーストだけが評価される区間で、それをグレーにする。
@@ -1700,10 +1707,7 @@ class _TimelinePainter extends CustomPainter {
                     ghost.bottom,
                   );
             if (only.width > 0) {
-              canvas.drawRect(
-                only,
-                _fill(EditorTheme.muted.withValues(alpha: .28)),
-              );
+              canvas.drawRect(only, _fill(colors.muted.withValues(alpha: .28)));
               canvas.drawRect(
                 only.deflate(.5),
                 _stroke(own.withValues(alpha: .55), 1),
@@ -1724,7 +1728,7 @@ class _TimelinePainter extends CustomPainter {
             rect,
             _fill(
               row.layer['hidden'] == true
-                  ? EditorTheme.raised
+                  ? colors.raised
                   : chosen
                   ? Color.lerp(own, EditorTheme.white, EditorTheme.lift)!
                   : own,
@@ -1755,10 +1759,10 @@ class _TimelinePainter extends CustomPainter {
                   .length;
               if (gripped > 0 &&
                   gripped < row.allKeys.where((k) => k['frame'] == f).length)
-                diamond(label + f * scale - offset, EditorTheme.ink);
+                diamond(label + f * scale - offset, colors.ink);
               diamond(
                 label + (f + (gripped > 0 ? delta : 0)) * scale - offset,
-                at(keys) ? EditorTheme.keyAccent : EditorTheme.ink,
+                at(keys) ? colors.keyAccent : colors.ink,
               );
             }
         } else {
@@ -1780,9 +1784,7 @@ class _TimelinePainter extends CustomPainter {
             final chosen =
                 selectedKey(row, a, keys) && selectedKey(row, b, keys);
             final paint = _line(
-              chosen
-                  ? EditorTheme.keyAccent
-                  : EditorTheme.muted.withValues(alpha: .6),
+              chosen ? colors.keyAccent : colors.muted.withValues(alpha: .6),
               chosen ? 2 : 1,
             );
             if (a['interp']?['kind'] == 'Linear') {
@@ -1809,9 +1811,7 @@ class _TimelinePainter extends CustomPainter {
             canvas.drawPath(
               path,
               _fill(
-                selectedKey(row, key, keys)
-                    ? EditorTheme.keyAccent
-                    : EditorTheme.ink,
+                selectedKey(row, key, keys) ? colors.keyAccent : colors.ink,
               ),
             );
           }
@@ -1822,20 +1822,20 @@ class _TimelinePainter extends CustomPainter {
         canvas.drawLine(
           Offset(label, y),
           Offset(size.width, y),
-          _line(EditorTheme.line, 2),
+          _line(colors.line, 2),
         );
       }
     }
     canvas.drawLine(
       Offset(label, 0),
       Offset(size.width, 0),
-      _line(EditorTheme.line, 2),
+      _line(colors.line, 2),
     );
     if (ruler)
       canvas.drawLine(
         Offset(label, size.height - 1),
         Offset(size.width, size.height - 1),
-        _line(EditorTheme.line, 2),
+        _line(colors.line, 2),
       );
     for (final marker in markers) {
       final x =
@@ -1843,9 +1843,9 @@ class _TimelinePainter extends CustomPainter {
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
-        _line(EditorTheme.muted.withValues(alpha: .4)),
+        _line(colors.muted.withValues(alpha: .4)),
       );
-      if (ruler) canvas.drawCircle(Offset(x, 3), 3, _fill(EditorTheme.accent));
+      if (ruler) canvas.drawCircle(Offset(x, 3), 3, _fill(colors.accent));
     }
     final playX = label + frame * scale - offset;
     if (ruler)
@@ -1856,24 +1856,21 @@ class _TimelinePainter extends CustomPainter {
           ..lineTo(playX + 5, 0)
           ..lineTo(playX, 6)
           ..close(),
-        _fill(EditorTheme.keyAccent),
+        _fill(colors.keyAccent),
       );
     canvas.drawLine(
       Offset(playX, 0),
       Offset(playX, size.height),
-      _line(EditorTheme.keyAccent, 1.5),
+      _line(colors.keyAccent, 1.5),
     );
     if (marquee != null) {
-      canvas.drawRect(
-        marquee!,
-        _fill(EditorTheme.accent.withValues(alpha: .15)),
-      );
-      canvas.drawRect(marquee!, _stroke(EditorTheme.accent));
+      canvas.drawRect(marquee!, _fill(colors.accent.withValues(alpha: .15)));
+      canvas.drawRect(marquee!, _stroke(colors.accent));
     }
     canvas.restore();
     canvas.drawRect(
       Rect.fromLTWH(0, 0, math.min(label, size.width), size.height),
-      _fill(EditorTheme.panel),
+      _fill(colors.panel),
     );
     if (!ruler) {
       canvas.save();
@@ -1881,11 +1878,11 @@ class _TimelinePainter extends CustomPainter {
       void surface(_LaneContainer node) {
         final row = node.row;
         final background = row.property == null
-            ? EditorTheme.layerColor(row.id)
-            : (laneSelected(row) ? EditorTheme.raised : EditorTheme.panel);
+            ? colors.timelineColor(row.id)
+            : (laneSelected(row) ? colors.raised : colors.panel);
         canvas.drawRect(node.bounds, _fill(background));
         for (final child in node.children) surface(child);
-        canvas.drawRect(node.bounds.deflate(.5), _stroke(EditorTheme.line, 1));
+        canvas.drawRect(node.bounds.deflate(.5), _stroke(colors.line, 1));
       }
 
       for (final root in containers) surface(root);
@@ -1896,7 +1893,7 @@ class _TimelinePainter extends CustomPainter {
         canvas,
         'Layers',
         const Offset(6, 16),
-        color: EditorTheme.muted,
+        color: colors.muted,
         size: EditorMetrics.dense,
         weight: FontWeight.w600,
       );
@@ -1905,7 +1902,7 @@ class _TimelinePainter extends CustomPainter {
         canvas,
         '$frame / $duration',
         Offset(label - 82, 16),
-        color: EditorTheme.muted,
+        color: colors.muted,
         size: EditorMetrics.dense,
       );
     } else
@@ -1919,7 +1916,7 @@ class _TimelinePainter extends CustomPainter {
               label - (row.property == null ? label - 82 : row.bounds.left),
               h,
             ),
-            _fill(EditorTheme.raised),
+            _fill(colors.raised),
           );
         // Chosen rows read as one lit surface from the name cell to the
         // time field; nothing is outlined, the selection is a region.
@@ -1948,7 +1945,7 @@ class _TimelinePainter extends CustomPainter {
           final keysOpen = row.lanesOpen;
           canvas.drawRect(
             Rect.fromLTWH(label - 81, y + 2, 14, h - 4),
-            _fill(keysOpen ? EditorTheme.accent : EditorTheme.line),
+            _fill(keysOpen ? colors.accent : colors.line),
           );
           text(
             canvas,
@@ -1957,7 +1954,7 @@ class _TimelinePainter extends CustomPainter {
             width: EditorMetrics.s14,
             size: EditorMetrics.dense,
             centered: true,
-            color: keysOpen ? ink.headerInk : EditorTheme.ink,
+            color: keysOpen ? ink.headerInk : colors.ink,
           );
           final states = [
             row.layer['hidden'] == true,
@@ -1971,7 +1968,7 @@ class _TimelinePainter extends CustomPainter {
             final on = states[column];
             canvas.drawRect(
               Rect.fromLTWH(x, y + 2, 14, h - 4),
-              _fill(on ? EditorTheme.accent : EditorTheme.line),
+              _fill(on ? colors.accent : colors.line),
             );
             text(
               canvas,
@@ -1981,7 +1978,7 @@ class _TimelinePainter extends CustomPainter {
               size: EditorMetrics.micro,
               centered: true,
               weight: FontWeight.w600,
-              color: on ? ink.headerInk : EditorTheme.muted,
+              color: on ? ink.headerInk : colors.muted,
             );
           }
         } else {
@@ -1990,24 +1987,24 @@ class _TimelinePainter extends CustomPainter {
             '${row.property!['label'] ?? row.property!['id'] ?? 'Content'}',
             Offset(row.bounds.left + 6, y + 3),
             width: EditorMetrics.s160,
-            color: EditorTheme.muted,
+            color: colors.muted,
           );
           text(
             canvas,
             row.property!['keyedNow'] == true ? '◆' : '◇',
             Offset(label - 21, y + 3),
             width: EditorMetrics.s17,
-            color: EditorTheme.keyAccent,
+            color: colors.keyAccent,
           );
         }
         canvas.drawLine(
           Offset(row.bounds.left, y + h),
           Offset(size.width, y + h),
-          _line(EditorTheme.line, 2),
+          _line(colors.line, 2),
         );
       }
     if (rowDropGuide case final Rect guide) {
-      final paint = _stroke(EditorTheme.select, 2);
+      final paint = _stroke(colors.select, 2);
       if (rowDropInside)
         canvas.drawRect(
           Rect.fromLTRB(
@@ -2027,7 +2024,7 @@ class _TimelinePainter extends CustomPainter {
         canvas.drawCircle(
           Offset(guide.left + 3, guide.top),
           3,
-          _fill(EditorTheme.select),
+          _fill(colors.select),
         );
       }
     }
@@ -2035,17 +2032,18 @@ class _TimelinePainter extends CustomPainter {
       canvas.drawLine(
         Offset(0, size.height - 1),
         Offset(size.width, size.height - 1),
-        _line(EditorTheme.line, 2),
+        _line(colors.line, 2),
       );
     canvas.drawLine(
       Offset(label, 0),
       Offset(label, size.height),
-      _line(EditorTheme.line),
+      _line(colors.line),
     );
   }
 
   @override
   bool shouldRepaint(covariant _TimelinePainter old) =>
+      colors != old.colors ||
       ink != old.ink ||
       !identical(rows, old.rows) ||
       !listEquals(selected, old.selected) ||
@@ -2069,7 +2067,10 @@ class _TimelinePainter extends CustomPainter {
 }
 
 class _ArrangementOverview extends CustomPainter {
+  final EditorTheme colors;
+
   const _ArrangementOverview({
+    this.colors = EditorTheme.chromatic,
     required this.layers,
     required this.duration,
     required this.extent,
@@ -2083,7 +2084,7 @@ class _ArrangementOverview extends CustomPainter {
   final double offset, scale, viewportWidth;
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, _fill(EditorTheme.app));
+    canvas.drawRect(Offset.zero & size, _fill(colors.app));
     final unit = size.width / math.max(1, extent);
     final lane = 12 / math.max(1, layers.length);
     canvas.save();
@@ -2098,9 +2099,7 @@ class _ArrangementOverview extends CustomPainter {
           math.max(1, lane - 1),
         ),
         _fill(
-          l['hidden'] == true
-              ? EditorTheme.border
-              : EditorTheme.layerColor(l['id']),
+          l['hidden'] == true ? colors.border : colors.timelineColor(l['id']),
         ),
       );
     }
@@ -2118,24 +2117,25 @@ class _ArrangementOverview extends CustomPainter {
         Rect.fromLTRB(left, 1, right, 17),
         const Radius.circular(EditorMetrics.s3),
       ),
-      _stroke(EditorTheme.tab, 1.5),
+      _stroke(colors.tab, 1.5),
     );
     // 尺の印(壁ではない)と、今のコマ。
     if (extent > duration) {
       final x = duration * unit;
-      canvas.drawLine(Offset(x, 1), Offset(x, 17), _line(EditorTheme.muted, 1));
+      canvas.drawLine(Offset(x, 1), Offset(x, 17), _line(colors.muted, 1));
     }
     final now = frame * unit;
     canvas.drawLine(
       Offset(now, 0),
       Offset(now, size.height),
-      _line(EditorTheme.keyAccent, 1.5),
+      _line(colors.keyAccent, 1.5),
     );
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _ArrangementOverview old) =>
+      colors != old.colors ||
       !identical(layers, old.layers) ||
       duration != old.duration ||
       extent != old.extent ||

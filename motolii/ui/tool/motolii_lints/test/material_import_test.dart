@@ -46,4 +46,28 @@ Widgets? a;
 Services? b;
 ''');
   }
+
+  void test_theme_types_only_pass() async {
+    newFile(
+      '/package/flutter/lib/material.dart',
+      'class Theme {} class ThemeData {} class ThemeExtension {} class ColorScheme {}',
+    );
+    await assertNoDiagnostics(r'''
+import 'package:flutter/material.dart' show Theme, ThemeData, ThemeExtension, ColorScheme;
+Theme? a;
+ThemeData? b;
+ThemeExtension? c;
+ColorScheme? d;
+''');
+  }
+
+  void test_theme_does_not_allow_controls() async {
+    newFile(
+      '/package/flutter/lib/material.dart',
+      'class Theme {} class Button {}',
+    );
+    const source =
+        "import 'package:flutter/material.dart' show Theme, Button;\nTheme? a; Button? b;";
+    await assertDiagnostics(source, [lint(0, source.indexOf(';') + 1)]);
+  }
 }

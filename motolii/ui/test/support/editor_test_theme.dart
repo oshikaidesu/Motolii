@@ -7,28 +7,37 @@ import 'package:motolii_stage5/foundation/theme.dart';
 /// density the app's ThemeData once carried, so a test's layout stays what it
 /// measured before.
 final editorTestTheme = ThemeData.dark(useMaterial3: true).copyWith(
-  scaffoldBackgroundColor: EditorTheme.app,
-  canvasColor: EditorTheme.panel,
-  colorScheme: const ColorScheme.dark(
-    primary: EditorTheme.accent,
-    secondary: EditorTheme.accent,
-    surface: EditorTheme.panel,
+  scaffoldBackgroundColor: EditorTheme.chromatic.app,
+  canvasColor: EditorTheme.chromatic.panel,
+  colorScheme: ColorScheme.dark(
+    primary: EditorTheme.chromatic.accent,
+    secondary: EditorTheme.chromatic.accent,
+    surface: EditorTheme.chromatic.panel,
   ),
-  textTheme: const TextTheme(
-    bodyLarge: TextStyle(fontSize: EditorMetrics.font, color: EditorTheme.ink),
-    bodyMedium: TextStyle(fontSize: EditorMetrics.font, color: EditorTheme.ink),
+  textTheme: TextTheme(
+    bodyLarge: TextStyle(
+      fontSize: EditorMetrics.font,
+      color: EditorTheme.chromatic.ink,
+    ),
+    bodyMedium: TextStyle(
+      fontSize: EditorMetrics.font,
+      color: EditorTheme.chromatic.ink,
+    ),
     bodySmall: TextStyle(
       fontSize: EditorMetrics.dense,
-      color: EditorTheme.muted,
+      color: EditorTheme.chromatic.muted,
     ),
     titleMedium: TextStyle(
       fontSize: EditorMetrics.font,
-      color: EditorTheme.ink,
+      color: EditorTheme.chromatic.ink,
     ),
-    labelLarge: TextStyle(fontSize: EditorMetrics.font, color: EditorTheme.ink),
+    labelLarge: TextStyle(
+      fontSize: EditorMetrics.font,
+      color: EditorTheme.chromatic.ink,
+    ),
   ),
   visualDensity: VisualDensity.compact,
   typography: Typography.material2014(platform: TargetPlatform.macOS),
   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-  iconTheme: EditorTheme.icon,
+  iconTheme: EditorTheme.chromatic.icon,
 );

@@ -583,6 +583,10 @@ class EditorSession {
         final state = map(call.arguments);
         panePlaces.value = map(state['places']);
         deskDrawer.value = state['drawer'] as String?;
+        if (state.containsKey('theme') &&
+            !sameValue(deskWork.value['theme'], state['theme'])) {
+          deskWork.value = {...deskWork.value, 'theme': typed(state['theme'])};
+        }
       }
       if (call.method == 'documentChanged') {
         final envelope = map(call.arguments);

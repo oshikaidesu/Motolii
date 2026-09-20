@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart'
+    show Theme, ThemeData, ThemeExtension, ColorScheme;
 
 import 'leaves.dart';
 import 'metrics.dart';
 
 /// Colours of what is drawn rather than laid out — lanes, grids, ticks,
 /// gizmos, the transparency grid, the ease desk's paper — carried by
-/// [EditorLook] above the window so a painter's colours come from the theme
+/// [EditorTheme] above the window so a painter's colours come from the theme
 /// the way a widget's do. A widget passes [of] into the painter it builds;
 /// code with no context reads [dark], the one look the window has today.
 @immutable
@@ -51,19 +54,57 @@ class EditorInk {
   /// The Browser's collections, one hue each.
   final List<Color> collectionColors;
 
+  Map<String, Color> get namedColors => {
+    'laneGround': laneGround,
+    'lane': lane,
+    'laneAlt': laneAlt,
+    'grid': grid,
+    'gridMinor': gridMinor,
+    'tick': tick,
+    'tickMinor': tickMinor,
+    'headerInk': headerInk,
+    'camera': camera,
+    'focusRing': focusRing,
+    'easePaper': easePaper,
+    'easeInk': easeInk,
+    'easeTime': easeTime,
+    'checkerLight': checkerLight,
+    'checkerDark': checkerDark,
+  };
+
+  EditorInk withColors(Map<String, Color> colors, List<Color> collections) =>
+      copyWith(
+        laneGround: colors['laneGround'],
+        lane: colors['lane'],
+        laneAlt: colors['laneAlt'],
+        grid: colors['grid'],
+        gridMinor: colors['gridMinor'],
+        tick: colors['tick'],
+        tickMinor: colors['tickMinor'],
+        headerInk: colors['headerInk'],
+        camera: colors['camera'],
+        focusRing: colors['focusRing'],
+        easePaper: colors['easePaper'],
+        easeInk: colors['easeInk'],
+        easeTime: colors['easeTime'],
+        checkerLight: colors['checkerLight'],
+        checkerDark: colors['checkerDark'],
+        collectionColors: collections,
+      );
+
   static const dark = EditorInk(
-    laneGround: Color(0xff3c3c3c),
-    lane: Color(0xff383838),
-    laneAlt: Color(0xff3d3d3d),
-    grid: Color(0xff262626),
-    gridMinor: Color(0xff303030),
-    tick: Color(0xff9b9b9b),
-    tickMinor: Color(0xff929292),
-    headerInk: Color(0xff202020),
+    laneGround: Color(0xff2c2c2c),
+    lane: Color(0xff2b2b2b),
+    laneAlt: Color(0xff323232),
+    grid: Color(0xff1c1c1c),
+    gridMinor: Color(0xff272727),
+    tick: Color(0xffbababa),
+    tickMinor: Color(0xffaaaaaa),
+    headerInk: Color(0xff1d1d1d),
     camera: Color(0xff8ed9e6),
     focusRing: Color(0xffacacac),
-    easePaper: Color(0xffb7d8d1),
-    easeInk: Color(0xff203f39),
+    easePaper: Color(0xffd2d2d2),
+    easeInk: Color(0xff333333),
     easeTime: Color(0xff854515),
     checkerLight: Color(0xff8c8c8c),
     checkerDark: Color(0xff666666),
@@ -78,7 +119,7 @@ class EditorInk {
     ],
   );
 
-  static EditorInk of(BuildContext context) => EditorLook.of(context).ink;
+  static EditorInk of(BuildContext context) => EditorTheme.of(context).drawing;
 
   EditorInk copyWith({
     Color? laneGround,
@@ -145,158 +186,355 @@ class EditorInk {
   }
 }
 
-/// What the window looks like, set once above it: the painters' ink and
-/// whether tooltips show. Panels read it through [EditorInk.of] and
-/// [EditorTooltip]; where nothing is set (a test that mounts one control) the
-/// window's one look applies and tooltips are on.
+/// Whether tooltips show; color inheritance belongs to [EditorTheme].
 class EditorLook extends InheritedWidget {
-  const EditorLook({
-    super.key,
-    this.ink = EditorInk.dark,
-    this.tooltips = true,
-    required super.child,
-  });
-  final EditorInk ink;
+  const EditorLook({super.key, this.tooltips = true, required super.child});
   final bool tooltips;
   static const _none = EditorLook(child: SizedBox.shrink());
   static EditorLook of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<EditorLook>() ?? _none;
   @override
-  bool updateShouldNotify(EditorLook old) =>
-      old.ink != ink || old.tooltips != tooltips;
+  bool updateShouldNotify(EditorLook old) => old.tooltips != tooltips;
 }
 
-abstract final class EditorTheme {
-  // Lifts are Material 3 state layers: white over the surface at the M3
-  // opacities (reference/ui-lift.tsv). Every rise in the window is one of
-  // these, and the grey ladder below is `app` lifted by one hover step
-  // per rung, so a hover, a chosen row and a panel edge all climb the
-  // same stair.
-  static const hoverLift = .08, pressedLift = .10, draggedLift = .16;
+@immutable
+class EditorTheme extends ThemeExtension<EditorTheme> {
+  const EditorTheme._({
+    required this.name,
+    required this.colors,
+    required this.identityColors,
+    required this.drawing,
+  });
+  final String name;
+  final Map<String, Color> colors;
+  final List<Color> identityColors;
+  final EditorInk drawing;
 
-  /// A chosen surface: two hover steps, the M3 dragged layer.
-  static const lift = draggedLift;
-  static const app = Color(0xff292929),
-      panel = Color(0xff3a3a3a),
-      raised = Color(0xff4a4a4a),
-      hover = Color(0xff585858);
-  static const line = Color(0xff242424),
-      border = Color(0xff666666),
-      ink = Color(0xffdddddd),
-      muted = Color(0xffaaaaaa),
-      accent = Color(0xffffaa61);
+  static const chromatic = EditorTheme._(
+    name: 'Chromatic Workshop',
+    colors: {
+      'app': Color(0xff252525),
+      'panel': Color(0xff323232),
+      'raised': Color(0xff414141),
+      'hover': Color(0xff4e4e4e),
+      'line': Color(0xff1b1b1b),
+      'border': Color(0xff676767),
+      'ink': Color(0xfff0f0f0),
+      'muted': Color(0xffbdbdbd),
+      'accent': Color(0xffffbc53),
+      'animate': Color(0xff5396ff),
+      'tab': Color(0xff59c9df),
+      'tabInk': Color(0xff202020),
+      'menu': Color(0xff252525),
+      'menuEdge': Color(0xff7e7e7e),
+      'select': Color(0xffb0e3ef),
+      'selectInk': Color(0xff202020),
+      'disabledInk': Color(0xff929292),
+      'error': Color(0xffff8899),
+      'spatial': Color(0xff819fff),
+      'amount': Color(0xfff5ad79),
+      'time': Color(0xffc08ee4),
+      'count': Color(0xff60cedb),
+      'seed': Color(0xffffdf56),
+      'angle': Color(0xffa0d292),
+      'scrim': Color(0x8a000000),
+      'scrimLight': Color(0x73000000),
+      'hoverWash': Color(0x0affffff),
+      'focusWash': Color(0x1fffffff),
+      'inkDisabled': Color(0x61ffffff),
+      'washDisabled': Color(0x1fffffff),
+      'scrollThumb': Color(0x4dffffff),
+      'scrollThumbHovered': Color(0xa6ffffff),
+      'scrollThumbDragged': Color(0xbfffffff),
+      'tickActive': Color(0x61000000),
+      'tickInactive': Color(0x61ffffff),
+      'tooltip': Color(0xe6ffffff),
+      'selection': Color(0x6659c9df),
+      'kindText': Color(0xffffdf56),
+      'kindShape': Color(0xff819fff),
+      'kindPath': Color(0xff60cedb),
+      'kindVideo': Color(0xffef87ae),
+      'kindAudio': Color(0xffa0d292),
+      'kind3d': Color(0xffcf8eef),
+      'kindHdr': Color(0xffffdf78),
+      'kindImage': Color(0xff819fff),
+      'kindOther': Color(0xffc08ee4),
+      'caret': Color(0xffffbc53),
+      'timelineWash': Color(0x4d606060),
+    },
+    identityColors: [
+      Color(0xff819fff),
+      Color(0xffffdf56),
+      Color(0xffc08ee4),
+      Color(0xff60cedb),
+      Color(0xfff5ad79),
+      Color(0xffa0d292),
+      Color(0xffef87ae),
+    ],
+    drawing: EditorInk.dark,
+  );
 
-  /// Where a touch lands as a key — key lamps, the Animate switch, the
-  /// playhead and keys — the accent turns to its hue complement while
-  /// Animate is on. Everything else keeps the accent for "chosen".
-  static const animate = Color(0xff61b6ff);
+  /// Standalone controls use the same complete palette as the application.
+  static EditorTheme of(BuildContext context) =>
+      Theme.of(context).extension<EditorTheme>() ?? chromatic;
+
+  Color get app => colors['app']!;
+  Color get panel => colors['panel']!;
+  Color get raised => colors['raised']!;
+  Color get hover => colors['hover']!;
+  Color get line => colors['line']!;
+  Color get border => colors['border']!;
+  Color get ink => colors['ink']!;
+  Color get muted => colors['muted']!;
+  Color get accent => colors['accent']!;
+  Color get animate => colors['animate']!;
+  Color get tab => colors['tab']!;
+  Color get tabInk => colors['tabInk']!;
+  Color get menu => colors['menu']!;
+  Color get menuEdge => colors['menuEdge']!;
+  Color get select => colors['select']!;
+  Color get selectInk => colors['selectInk']!;
+  Color get disabledInk => colors['disabledInk']!;
+  Color get error => colors['error']!;
+  Color get spatial => colors['spatial']!;
+  Color get amount => colors['amount']!;
+  Color get time => colors['time']!;
+  Color get count => colors['count']!;
+  Color get seed => colors['seed']!;
+  Color get angle => colors['angle']!;
+  Color get scrim => colors['scrim']!;
+  Color get scrimLight => colors['scrimLight']!;
+  Color get hoverWash => colors['hoverWash']!;
+  Color get focusWash => colors['focusWash']!;
+  Color get inkDisabled => colors['inkDisabled']!;
+  Color get washDisabled => colors['washDisabled']!;
+  Color get scrollThumb => colors['scrollThumb']!;
+  Color get scrollThumbHovered => colors['scrollThumbHovered']!;
+  Color get scrollThumbDragged => colors['scrollThumbDragged']!;
+  Color get tickActive => colors['tickActive']!;
+  Color get tickInactive => colors['tickInactive']!;
+  Color get tooltip => colors['tooltip']!;
+  Color get selection => colors['selection']!;
+  Color get kindText => colors['kindText']!;
+  Color get kindShape => colors['kindShape']!;
+  Color get kindPath => colors['kindPath']!;
+  Color get kindVideo => colors['kindVideo']!;
+  Color get kindAudio => colors['kindAudio']!;
+  Color get kind3d => colors['kind3d']!;
+  Color get kindHdr => colors['kindHdr']!;
+  Color get kindImage => colors['kindImage']!;
+  Color get kindOther => colors['kindOther']!;
+  Color get caret => colors['caret']!;
+  Color get timelineWash => colors['timelineWash']!;
+  static const white = Color(0xffffffff),
+      black = Color(0xff000000),
+      clear = Color(0x00000000);
+  static const hoverLift = .08,
+      pressedLift = .10,
+      draggedLift = .16,
+      lift = draggedLift;
+  static const fontFamily = 'Inter';
   static final animating = ValueNotifier<bool>(false);
-  static Color get keyAccent => animating.value ? animate : accent;
-  static const tab = Color(0xffb7b7b7), tabInk = Color(0xff262626);
-  // Menus: a darker sheet, a pale edge, a pale hover row with dark ink.
-  static const menu = Color(0xff222222),
-      menuEdge = Color(0xffbbbbbb),
-      select = Color(0xffaedce8),
-      selectInk = Color(0xff172126),
-      disabledInk = Color(0xff888888),
-      error = Color(0xffcf6679);
-  // Character families: what a number is for, told by hue (the OP-1 rule:
-  // one colour per family, on the glyph, the track and the handle alike).
-  static const spatial = Color(0xff93a5f5),
-      amount = Color(0xffe6a275),
-      time = Color(0xffc18bd3),
-      count = Color(0xff79c4ca),
-      seed = Color(0xffeedb73),
-      angle = Color(0xff95c78b);
-  static const identityColors = [
-    Color(0xff93a5f5),
-    Color(0xffeedb73),
-    Color(0xffc18bd3),
-    Color(0xff79c4ca),
-    Color(0xffe6a275),
-    Color(0xff95c78b),
-    Color(0xffdd879e),
-  ];
-  static Color layerColor(dynamic id) =>
+  Color get keyAccent => animating.value ? animate : accent;
+  Color layerColor(dynamic id) =>
       identityColors[(id is num ? id.toInt() : 0).abs() %
           identityColors.length];
-  static Color kindColor(String kind) => switch (kind.toLowerCase()) {
-    'text' => const Color(0xffeedb73),
+  static final _timelinePalettes = Expando<List<Color>>();
+  Color timelineColor(dynamic id) {
+    final palette = _timelinePalettes[this] ??= List<Color>.unmodifiable(
+      identityColors.map((color) => Color.alphaBlend(timelineWash, color)),
+    );
+    return palette[(id is num ? id.toInt() : 0).abs() % palette.length];
+  }
+
+  Color kindColor(String kind) => switch (kind.toLowerCase()) {
+    'text' => kindText,
     'rectangle' ||
     'roundedrectangle' ||
     'ellipse' ||
     'star' ||
     'polygon' ||
-    'shape' => const Color(0xff93a5f5),
-    'bezier' || 'line' || 'path' => const Color(0xff79c4ca),
-    'video' => const Color(0xffdd879e),
-    'audio' => const Color(0xff95c78b),
-    '3d' => const Color(0xffe6a275),
-    'hdr' => const Color(0xffe6c96a),
-    '2d' || 'images' => const Color(0xff93a5f5),
-    _ => const Color(0xffc18bd3),
+    'shape' => kindShape,
+    'bezier' || 'line' || 'path' => kindPath,
+    'video' => kindVideo,
+    'audio' => kindAudio,
+    '3d' => kind3d,
+    'hdr' => kindHdr,
+    '2d' || 'images' => kindImage,
+    _ => kindOther,
   };
-
-  /// The two ends of the scale and no colour at all: named so a painter's
-  /// white wash or a clear drag feedback reads as a token, not a literal.
-  static const white = Color(0xffffffff),
-      black = Color(0xff000000),
-      clear = Color(0x00000000);
-
-  /// Black at the two opacities the picture editors' scrims use: under a
-  /// dialog, and around the colour wheel's cursor.
-  static const scrim = Color(0x8a000000), scrimLight = Color(0x73000000);
-
-  /// Lifts Material drew under a hovered, pressed or keyboard-focused
-  /// surface: white at the M3 state-layer opacities (hover 4%, focus 12%),
-  /// and the pressed lift at [hover].
-  static const hoverWash = Color(0x0affffff), focusWash = Color(0x1fffffff);
-
-  /// What cannot be pressed: ink at the M3 disabled 38%, a filled ground at
-  /// 12%.
-  static const inkDisabled = Color(0x61ffffff),
-      washDisabled = Color(0x1fffffff);
-
-  /// The scrollbar's thumb: white at 30%, 65% under the pointer, 75% while
-  /// dragged (the dark theme's desktop scrollbar).
-  static const scrollThumb = Color(0x4dffffff),
-      scrollThumbHovered = Color(0xa6ffffff),
-      scrollThumbDragged = Color(0xbfffffff);
-
-  /// A slider's division marks: black and white at 38%.
-  static const tickActive = Color(0x61000000), tickInactive = Color(0x61ffffff);
-
-  /// The tooltip's sheet: white at 90%.
-  static const tooltip = Color(0xe6ffffff);
-
-  /// Where the text is read and written: the caret and the selection.
-  static const caret = accent;
-  static const selection = Color(0x66ffaa61);
-
-  /// The window's one typeface, bundled (assets/fonts, SIL OFL): the same
-  /// face on every platform, none of them the platform's own.
-  static const fontFamily = 'Inter';
-
-  /// What the window's text is when nothing says otherwise: the body size
-  /// in ink.
-  static const text = TextStyle(
+  TextStyle get text => TextStyle(
     inherit: false,
     fontFamily: fontFamily,
     fontSize: EditorMetrics.font,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w500,
     color: ink,
     textBaseline: TextBaseline.alphabetic,
   );
-  static const icon = IconThemeData(size: 14, color: ink);
-
-  /// The menu sheet: a darker ground, a pale edge, rows [EditorMetrics.row]
-  /// high, a pale hover row with dark ink. Both the choice and the context
-  /// menu draw from these.
+  IconThemeData get icon => IconThemeData(size: EditorMetrics.s14, color: ink);
   static const menuPadding = EdgeInsets.symmetric(vertical: EditorMetrics.s2);
   static const menuMinWidth = 112.0;
   static const menuRowPadding = EdgeInsets.symmetric(
     horizontal: EditorMetrics.s8,
   );
+
+  factory EditorTheme.fromJson(Object? source) {
+    if (source is! Map || source.keys.any((key) => key is! String))
+      throw const FormatException('Theme must be a JSON object');
+    final value = Map<String, dynamic>.from(source);
+    const fields = {
+      'schemaVersion',
+      'name',
+      'colors',
+      'identityColors',
+      'drawing',
+      'collectionColors',
+    };
+    for (final key in value.keys) {
+      if (!fields.contains(key))
+        throw FormatException('Unknown theme field: $key');
+    }
+    if (value['schemaVersion'] != 1)
+      throw const FormatException('Theme schemaVersion must be 1');
+    final name = value['name'];
+    if (name is! String || name.trim().isEmpty || name.length > 80) {
+      throw const FormatException('Theme name must contain 1 to 80 characters');
+    }
+    Map<String, Color> group(String name, Map<String, Color> defaults) {
+      if (!value.containsKey(name)) return defaults;
+      final raw = value[name];
+      if (raw is! Map) throw FormatException('$name must be an object');
+      final result = Map<String, Color>.of(defaults);
+      for (final entry in raw.entries) {
+        if (!defaults.containsKey(entry.key))
+          throw FormatException('Unknown $name token: ${entry.key}');
+        result[entry.key] = _readColor(entry.value, '$name.${entry.key}');
+      }
+      return Map.unmodifiable(result);
+    }
+
+    List<Color> palette(String name, List<Color> defaults, {int? count}) {
+      if (!value.containsKey(name)) return defaults;
+      final raw = value[name];
+      if (raw is! List ||
+          raw.isEmpty ||
+          raw.length > 64 ||
+          (count != null && raw.length != count)) {
+        throw FormatException(
+          '$name must contain ${count ?? "1 to 64"} colors',
+        );
+      }
+      return List.unmodifiable([
+        for (var i = 0; i < raw.length; i++) _readColor(raw[i], '$name[$i]'),
+      ]);
+    }
+
+    return EditorTheme._(
+      name: name.trim(),
+      colors: group('colors', chromatic.colors),
+      identityColors: palette('identityColors', chromatic.identityColors),
+      drawing: chromatic.drawing.withColors(
+        group('drawing', chromatic.drawing.namedColors),
+        palette(
+          'collectionColors',
+          chromatic.drawing.collectionColors,
+          count: 7,
+        ),
+      ),
+    );
+  }
+
+  static Color _readColor(Object? value, String token) {
+    if (value is! String ||
+        !RegExp(r'^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$').hasMatch(value)) {
+      throw FormatException('$token must be #RRGGBB or #RRGGBBAA');
+    }
+    final number = int.parse(value.substring(1), radix: 16);
+    return Color(
+      value.length == 7
+          ? 0xff000000 | number
+          : ((number & 0xff) << 24) | (number >> 8),
+    );
+  }
+
+  Map<String, Object> toJson() {
+    String hex(Color color) {
+      final argb = color.toARGB32();
+      final rgb = (argb & 0xffffff).toRadixString(16).padLeft(6, '0');
+      final alpha = argb >> 24;
+      return '#$rgb${alpha == 255 ? "" : alpha.toRadixString(16).padLeft(2, "0")}';
+    }
+
+    return {
+      'schemaVersion': 1,
+      'name': name,
+      'colors': colors.map((key, value) => MapEntry(key, hex(value))),
+      'identityColors': identityColors.map(hex).toList(),
+      'drawing': drawing.namedColors.map(
+        (key, value) => MapEntry(key, hex(value)),
+      ),
+      'collectionColors': drawing.collectionColors.map(hex).toList(),
+    };
+  }
+
+  String get json => const JsonEncoder.withIndent('  ').convert(toJson());
+
+  Widget wrap(Widget child) => Theme(
+    data: ThemeData(
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.dark(
+        primary: accent,
+        secondary: spatial,
+        surface: panel,
+        onSurface: ink,
+        onPrimary: tabInk,
+        error: error,
+      ),
+      extensions: [this],
+    ),
+    child: child,
+  );
+
+  @override
+  EditorTheme copyWith({
+    String? name,
+    Map<String, Color>? colors,
+    List<Color>? identityColors,
+    EditorInk? drawing,
+  }) => EditorTheme._(
+    name: name ?? this.name,
+    colors: Map.unmodifiable({...this.colors, ...?colors}),
+    identityColors: List.unmodifiable(identityColors ?? this.identityColors),
+    drawing: drawing ?? this.drawing,
+  );
+  @override
+  EditorTheme lerp(covariant EditorTheme? other, double t) {
+    if (other == null) return this;
+    return copyWith(
+      name: t < .5 ? name : other.name,
+      colors: {
+        for (final key in colors.keys)
+          key: Color.lerp(colors[key], other.colors[key], t)!,
+      },
+      identityColors: identityColors.length == other.identityColors.length
+          ? [
+              for (var i = 0; i < identityColors.length; i++)
+                Color.lerp(identityColors[i], other.identityColors[i], t)!,
+            ]
+          : (t < .5 ? identityColors : other.identityColors),
+      drawing: drawing.lerp(other.drawing, t),
+    );
+  }
+}
+
+class EditorAppearance extends InheritedNotifier<ValueNotifier<EditorTheme>> {
+  const EditorAppearance({
+    super.key,
+    required super.notifier,
+    required super.child,
+  });
+  static ValueNotifier<EditorTheme>? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<EditorAppearance>()?.notifier;
 }
 
 /// A tooltip where tooltips are shown, and nothing at all where they are not.
@@ -342,8 +580,12 @@ class EditorButton extends StatelessWidget {
         height: EditorMetrics.row - 2,
         child: EditorTextButton(
           onPressed: onPressed,
-          background: selected ? EditorTheme.accent : EditorTheme.panel,
-          foreground: selected ? EditorTheme.tabInk : EditorTheme.ink,
+          background: selected
+              ? EditorTheme.of(context).accent
+              : EditorTheme.of(context).panel,
+          foreground: selected
+              ? EditorTheme.of(context).tabInk
+              : EditorTheme.of(context).ink,
           child: Text(label, maxLines: 1),
         ),
       ),
@@ -365,19 +607,21 @@ class EditorSection extends StatelessWidget {
     children: [
       Container(
         height: EditorMetrics.section,
-        decoration: const BoxDecoration(
-          color: EditorTheme.raised,
-          border: Border(bottom: BorderSide(color: EditorTheme.line)),
+        decoration: BoxDecoration(
+          color: EditorTheme.of(context).raised,
+          border: Border(
+            bottom: BorderSide(color: EditorTheme.of(context).line),
+          ),
         ),
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Text(
           title.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: .5,
-            color: EditorTheme.ink,
+            color: EditorTheme.of(context).ink,
           ),
         ),
       ),

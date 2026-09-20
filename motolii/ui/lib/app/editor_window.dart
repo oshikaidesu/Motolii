@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'theme_settings.dart';
+
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
@@ -64,6 +66,8 @@ class _EditorWindowState extends State<EditorWindow> {
   late final uiScale = EditorScale.of(context) ?? ValueNotifier(1.0);
   String? sheet;
   bool ready = false;
+  Object? _themeSource;
+  bool _themeReady = false;
   final detached = <String, List<String>>{};
   final hiddenPanels = <String>{};
   @override
@@ -75,6 +79,7 @@ class _EditorWindowState extends State<EditorWindow> {
         .slice('animationAppearance', const ['animate'])
         .addListener(_syncAnimationAppearance);
     c.deskDefault.addListener(persist);
+    c.deskWork.addListener(_syncAppearance);
     c.confirmClose = confirmReplacement;
     c.panelPlacementRequested = _placePanel;
     c.windowClosed = (info) {
@@ -102,6 +107,8 @@ class _EditorWindowState extends State<EditorWindow> {
   void reassemble() {
     super.reassemble();
     dock = DockNode.read(dock.json());
+    _themeReady = false;
+    _syncAppearance();
   }
 
   Future<void> _initialize() async {
@@ -159,6 +166,7 @@ class _EditorWindowState extends State<EditorWindow> {
     c
         .slice('animationAppearance', const ['animate'])
         .removeListener(_syncAnimationAppearance);
+    c.deskWork.removeListener(_syncAppearance);
     workspace.dispose();
     saveTimer?.cancel();
     if (_ownsController) c.dispose();
@@ -166,6 +174,20 @@ class _EditorWindowState extends State<EditorWindow> {
   }
 
   void _syncAnimationAppearance() => EditorTheme.animating.value = c.animating;
+
+  void _syncAppearance() {
+    final raw = c.deskWork.value['theme'];
+    if (_themeReady && identical(raw, _themeSource)) return;
+    _themeReady = true;
+    _themeSource = raw;
+    try {
+      EditorAppearance.of(context)?.value = raw == null
+          ? EditorTheme.chromatic
+          : EditorTheme.fromJson(EditorSession.map(raw)['data']);
+    } catch (error) {
+      c.error.value = 'Saved theme could not be loaded: $error';
+    }
+  }
 
   void persist() {
     if (c.windowInfo['main'] == false) return;
@@ -221,6 +243,7 @@ class _EditorWindowState extends State<EditorWindow> {
     await c.native('setPaneState', {
       'places': places,
       'drawer': c.deskDrawer.value,
+      'theme': c.deskWork.value['theme'],
     });
   }
 
@@ -427,12 +450,9 @@ class _EditorWindowState extends State<EditorWindow> {
     autofocus: true,
     onKeyEvent: shortcuts.handle,
     child: ColoredBox(
-      color: EditorTheme.app,
+      color: EditorTheme.of(context).app,
       child: DefaultTextStyle(
-        style: const TextStyle(
-          fontSize: EditorMetrics.font,
-          color: EditorTheme.ink,
-        ),
+        style: EditorTheme.of(context).text,
         child: Stack(
           children: [
             Column(
@@ -440,7 +460,7 @@ class _EditorWindowState extends State<EditorWindow> {
                 if (c.windowInfo['main'] != false)
                   Container(
                     height: EditorMetrics.control,
-                    color: EditorTheme.app,
+                    color: EditorTheme.of(context).app,
                     child: Row(
                       children: [
                         topMenu('File', [
@@ -515,7 +535,7 @@ class _EditorWindowState extends State<EditorWindow> {
                           padding: const EdgeInsets.symmetric(
                             horizontal: EditorMetrics.s6,
                           ),
-                          color: EditorTheme.app,
+                          color: EditorTheme.of(context).app,
                           child: Text(
                             // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
                             message ?? freezeNotice(doc) ?? effectsNotice(doc),
@@ -542,14 +562,14 @@ class _EditorWindowState extends State<EditorWindow> {
                     : EditorMetrics.s200,
                 top: EditorMetrics.control,
                 child: PhysicalModel(
-                  color: EditorTheme.panel,
+                  color: EditorTheme.of(context).panel,
                   elevation: 4,
                   child: Container(
                     width: sheet == 'Settings'
                         ? EditorMetrics.sheetWide
                         : EditorMetrics.sheet,
                     decoration: BoxDecoration(
-                      border: Border.all(color: EditorTheme.border),
+                      border: Border.all(color: EditorTheme.of(context).border),
                     ),
                     child: sheet == 'Composition'
                         ? CompositionControls(controller: c)
@@ -562,6 +582,7 @@ class _EditorWindowState extends State<EditorWindow> {
                                 height: EditorMetrics.sheet,
                                 child: PanelSettings(controller: c),
                               ),
+                              ThemeSettings(controller: c),
                               const EditorSection('View', SizedBox.shrink()),
                               Row(
                                 children: [

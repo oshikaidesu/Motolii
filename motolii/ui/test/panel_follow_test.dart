@@ -68,13 +68,13 @@ void main() {
     await _mount(tester, 'Blend', c, const Size(300, 400));
     await tester.pumpAndSettle();
     const normal = ValueKey('blend:Normal'), screen = ValueKey('blend:Screen');
-    expect(_inkOf(tester, normal, 'Normal'), EditorTheme.accent);
-    expect(_inkOf(tester, screen, 'Screen'), EditorTheme.muted);
+    expect(_inkOf(tester, normal, 'Normal'), EditorTheme.chromatic.accent);
+    expect(_inkOf(tester, screen, 'Screen'), EditorTheme.chromatic.muted);
 
     c.document.value = snapshot('Screen');
     await tester.pump();
-    expect(_inkOf(tester, screen, 'Screen'), EditorTheme.accent);
-    expect(_inkOf(tester, normal, 'Normal'), EditorTheme.muted);
+    expect(_inkOf(tester, screen, 'Screen'), EditorTheme.chromatic.accent);
+    expect(_inkOf(tester, normal, 'Normal'), EditorTheme.chromatic.muted);
   });
 
   testWidgets('the Desk follows the selection to the tool it needs', (

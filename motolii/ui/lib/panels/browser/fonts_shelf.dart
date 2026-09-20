@@ -162,7 +162,7 @@ class FontsShelf extends BrowserShelf {
         extent: EditorMetrics.s48,
         gap: 0,
         padding: 0,
-        ground: EditorTheme.app,
+        ground: EditorTheme.of(host.context).app,
       );
 
   Map<String, dynamic>? _layer(EditorSession c) {
@@ -206,9 +206,11 @@ class FontsShelf extends BrowserShelf {
         border: Border(
           left: BorderSide(
             width: EditorMetrics.s3,
-            color: chosen ? EditorTheme.accent : EditorTheme.clear,
+            color: chosen
+                ? EditorTheme.of(host.context).accent
+                : EditorTheme.clear,
           ),
-          bottom: const BorderSide(color: EditorTheme.line),
+          bottom: BorderSide(color: EditorTheme.of(host.context).line),
         ),
       ),
       child: Column(
@@ -224,7 +226,9 @@ class FontsShelf extends BrowserShelf {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: EditorMetrics.dense,
-                    color: chosen ? EditorTheme.ink : EditorTheme.muted,
+                    color: chosen
+                        ? EditorTheme.of(host.context).ink
+                        : EditorTheme.of(host.context).muted,
                   ),
                 ),
               ),
@@ -239,7 +243,7 @@ class FontsShelf extends BrowserShelf {
               fontFamily: name,
               fontSize: EditorMetrics.s22,
               height: 1.1,
-              color: EditorTheme.ink,
+              color: EditorTheme.of(host.context).ink,
             ),
           ),
         ],
@@ -313,11 +317,11 @@ class FontsShelf extends BrowserShelf {
       builder: (context, _, _) {
         final layer = _layer(c);
         if (layer == null) {
-          return const Padding(
+          return Padding(
             padding: EdgeInsets.all(EditorMetrics.s6),
             child: Text(
               'Double-click a face to add a text layer',
-              style: TextStyle(color: EditorTheme.muted),
+              style: TextStyle(color: EditorTheme.of(host.context).muted),
             ),
           );
         }
@@ -339,7 +343,7 @@ class FontsShelf extends BrowserShelf {
                 '${layer['name']} · ${text['content'] ?? ''}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: EditorTheme.muted),
+                style: TextStyle(color: EditorTheme.of(host.context).muted),
               ),
               const SizedBox(height: EditorMetrics.s6),
               Row(
@@ -412,8 +416,8 @@ class _Justify extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: EditorMetrics.row,
     decoration: BoxDecoration(
-      color: EditorTheme.app,
-      border: Border.all(color: EditorTheme.line),
+      color: EditorTheme.of(context).app,
+      border: Border.all(color: EditorTheme.of(context).line),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -431,8 +435,8 @@ class _Justify extends StatelessWidget {
               isSelected: value == entry.key,
               icon: Icon(entry.value.$1, size: EditorMetrics.s14),
               color: value == entry.key
-                  ? EditorTheme.accent
-                  : EditorTheme.muted,
+                  ? EditorTheme.of(context).accent
+                  : EditorTheme.of(context).muted,
               onPressed: enabled ? () => onPick(entry.key) : null,
             ),
           ),
@@ -451,14 +455,14 @@ class _FactChip extends StatelessWidget {
     margin: const EdgeInsets.only(left: EditorMetrics.s4),
     padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
     decoration: BoxDecoration(
-      border: Border.all(color: EditorTheme.line),
+      border: Border.all(color: EditorTheme.of(context).line),
       borderRadius: BorderRadius.circular(EditorMetrics.s2),
     ),
     child: Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: EditorMetrics.micro,
-        color: EditorTheme.muted,
+        color: EditorTheme.of(context).muted,
         letterSpacing: .3,
       ),
     ),

@@ -85,10 +85,15 @@ void main() {
         ],
       ),
     );
-    // The Material button under the compact density measured 19 × 12. The
-    // switch is its 22 × 12 track and the glyph beside it, and a row tall to
-    // press: WCAG 2.2 SC 2.5.8 asks 24 px, Material's 48 dp is what is refused.
-    expect(tester.getSize(find.byType(EditorTextButton)), const Size(19, 12));
+    // The label plus its horizontal padding determines the compact button;
+    // theme changes must not introduce Material's 48 dp touch target.
+    expect(
+      tester.getSize(find.byType(EditorTextButton)),
+      Size(
+        tester.getSize(find.text('x')).width + EditorMetrics.s8,
+        EditorMetrics.s12,
+      ),
+    );
     expect(tester.getSize(find.byType(EditorSwitch)).height, EditorMetrics.row);
   });
 
@@ -157,7 +162,20 @@ void main() {
     );
     expect(tester.getSize(find.byType(EditorRule)).height, 1);
     final rule = tester.widget<EditorRule>(find.byType(EditorRule));
-    expect(rule.color, EditorTheme.line);
+    final decoration =
+        tester
+                .widget<Container>(
+                  find.descendant(
+                    of: find.byType(EditorRule),
+                    matching: find.byType(Container),
+                  ),
+                )
+                .decoration
+            as BoxDecoration;
+    expect(
+      (decoration.border as Border).bottom.color,
+      EditorTheme.chromatic.line,
+    );
     expect(rule.thickness, 0);
   });
 }

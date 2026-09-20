@@ -35,21 +35,23 @@ class ShelfTile extends StatelessWidget {
       EditorMetrics.micro,
       EditorMetrics.font * tileScale,
     );
-    final captionHeight = EditorMetrics.control * tileScale;
+    final captionHeight = host.captionHeight;
     // A mark grows slower than the picture it marks: by the square root, so
     // at twice the tile it is 1.4× and stays a mark beside the name.
     final markScale = math.sqrt(tileScale);
     final supported = shelf.supported(host, item);
     final bare = shelf.bare;
     final twice = shelf.doubleClick(host, item);
-    final identityColor = EditorTheme.kindColor(shelf.identity(host, item));
+    final identityColor = EditorTheme.of(context)
+        .kindColor(shelf.identity(host, item));
     final missing = item['missing'] == true;
     final name = '${item['name'] ?? item['id']}';
     final format = shelf.format(host, item);
     Widget preview = shelf.preview(host, item, identityColor);
     // Every preview sits in the same ground so light and dark pictures read
     // as separate tiles; colours are their own ground.
-    if (!bare) preview = ColoredBox(color: EditorTheme.app, child: preview);
+    if (!bare)
+      preview = ColoredBox(color: EditorTheme.of(context).app, child: preview);
     // Marks ride on the picture, never on the frame: the frame is only ever
     // the selection. A pale dot means the item already sits in a layer; the
     // warning means its file is gone.
@@ -62,17 +64,17 @@ class ShelfTile extends StatelessWidget {
             left: EditorMetrics.s4,
             top: EditorMetrics.s4,
             child: missing
-                ? const Icon(
+                ? Icon(
                     Glyph.error_outline,
-                    size: EditorMetrics.dense,
-                    color: EditorTheme.accent,
+                    size: EditorMetrics.s11,
+                    color: EditorTheme.of(context).accent,
                   )
                 : Container(
                     key: const ValueKey('browser:used'),
                     width: EditorMetrics.s5,
                     height: EditorMetrics.s5,
-                    decoration: const BoxDecoration(
-                      color: EditorTheme.ink,
+                    decoration: BoxDecoration(
+                      color: EditorTheme.of(context).ink,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -102,14 +104,14 @@ class ShelfTile extends StatelessWidget {
                 fontSize: EditorMetrics.micro * markScale,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5,
-                color: EditorTheme.tabInk,
+                color: EditorTheme.of(context).tabInk,
               ),
             ),
           );
+    final air = EditorMetrics.s4 * tileScale;
     final badgeRoom = badge == null
         ? 0.0
         : (_badgeWidth(format) + EditorMetrics.s4) * markScale;
-    final air = EditorMetrics.s4 * tileScale;
     final caption = SizedBox(
       key: ValueKey('browser:name:${host.id(item)}'),
       height: captionHeight,
@@ -169,9 +171,11 @@ class ShelfTile extends StatelessWidget {
                   : null,
               child: Container(
                 decoration: BoxDecoration(
-                  color: EditorTheme.panel,
+                  color: EditorTheme.of(context).panel,
                   border: Border.all(
-                    color: isSelected ? EditorTheme.spatial : EditorTheme.clear,
+                    color: isSelected
+                        ? EditorTheme.of(context).spatial
+                        : EditorTheme.clear,
                   ),
                 ),
                 child: Stack(
@@ -202,9 +206,8 @@ class ShelfTile extends StatelessWidget {
                                         right: badgeRoom + air,
                                       ),
                                       alignment: Alignment.centerLeft,
-                                      color: EditorTheme.app.withValues(
-                                        alpha: .75,
-                                      ),
+                                      color: EditorTheme.of(context).app
+                                          .withValues(alpha: .75),
                                       child: FittedName(
                                         displayName(host, item),
                                         host.tileWidth - air * 2 - badgeRoom,
@@ -310,20 +313,22 @@ class BrowserDrag {
   final Set<String> ids;
 }
 
-Widget dragFeedback(String label) => DefaultTextStyle(
-  style: EditorTheme.text,
-  child: Container(
-    height: EditorMetrics.row,
-    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-    decoration: BoxDecoration(
-      color: EditorTheme.panel,
-      border: Border.all(color: EditorTheme.border),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        fontSize: EditorMetrics.font,
-        color: EditorTheme.ink,
+Widget dragFeedback(String label) => Builder(
+  builder: (context) => DefaultTextStyle(
+    style: EditorTheme.of(context).text,
+    child: Container(
+      height: EditorMetrics.row,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+      decoration: BoxDecoration(
+        color: EditorTheme.of(context).panel,
+        border: Border.all(color: EditorTheme.of(context).border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: EditorMetrics.font,
+          color: EditorTheme.of(context).ink,
+        ),
       ),
     ),
   ),

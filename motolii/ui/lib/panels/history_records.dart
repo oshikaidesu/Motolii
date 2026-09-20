@@ -71,13 +71,13 @@ class _HistoryRecordsState extends State<HistoryRecords> {
     final entries = panelRows(history['entries']);
     final at = history['head'] is num ? (history['head'] as num).toInt() : 0;
     if (entries.isEmpty) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.all(EditorMetrics.s8),
         child: Text(
           'No history',
           style: TextStyle(
             fontSize: EditorMetrics.font,
-            color: EditorTheme.muted,
+            color: EditorTheme.of(context).muted,
           ),
         ),
       );
@@ -149,6 +149,7 @@ class _HistoryRow extends StatelessWidget {
           height: EditorMetrics.row,
           child: CustomPaint(
             painter: _RailPainter(
+              colors: EditorTheme.of(context),
               reached: reached,
               current: current,
               record: mark != null,
@@ -160,8 +161,10 @@ class _HistoryRow extends StatelessWidget {
         if (mark != null) ...[
           Icon(
             mark,
-            size: EditorMetrics.dense,
-            color: reached ? EditorTheme.muted : EditorTheme.border,
+            size: EditorMetrics.s11,
+            color: reached
+                ? EditorTheme.of(context).muted
+                : EditorTheme.of(context).border,
           ),
           const SizedBox(width: EditorMetrics.s3),
         ],
@@ -173,10 +176,10 @@ class _HistoryRow extends StatelessWidget {
             style: TextStyle(
               fontSize: EditorMetrics.font,
               color: current
-                  ? EditorTheme.accent
+                  ? EditorTheme.of(context).accent
                   : reached
-                  ? EditorTheme.ink
-                  : EditorTheme.muted,
+                  ? EditorTheme.of(context).ink
+                  : EditorTheme.of(context).muted,
             ),
           ),
         ),
@@ -185,9 +188,9 @@ class _HistoryRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
             child: Text(
               time,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: EditorMetrics.micro,
-                color: EditorTheme.muted,
+                color: EditorTheme.of(context).muted,
               ),
             ),
           ),
@@ -199,7 +202,10 @@ class _HistoryRow extends StatelessWidget {
 /// One cell of the vertical line: the run of the line through this row and the
 /// point on it. Reached rows keep the bright line; the redo tail stays dim.
 class _RailPainter extends CustomPainter {
+  final EditorTheme colors;
+
   const _RailPainter({
+    this.colors = EditorTheme.chromatic,
     required this.reached,
     required this.current,
     required this.record,
@@ -212,15 +218,15 @@ class _RailPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final x = size.width / 2, y = size.height / 2;
     final line = Paint()
-      ..color = reached ? EditorTheme.border : EditorTheme.line
+      ..color = reached ? colors.border : colors.line
       ..strokeWidth = 1;
     if (!first) canvas.drawLine(Offset(x, 0), Offset(x, y), line);
     if (!last) canvas.drawLine(Offset(x, y), Offset(x, size.height), line);
     final ink = current
-        ? EditorTheme.accent
+        ? colors.accent
         : reached
-        ? EditorTheme.muted
-        : EditorTheme.border;
+        ? colors.muted
+        : colors.border;
     final fill = Paint()..color = ink;
     if (record) {
       canvas.drawRect(
@@ -253,7 +259,7 @@ class _RailPainter extends CustomPainter {
         Offset(x, y),
         EditorMetrics.s6,
         Paint()
-          ..color = EditorTheme.accent
+          ..color = colors.accent
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1,
       );
@@ -262,6 +268,7 @@ class _RailPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RailPainter old) =>
+      colors != old.colors ||
       old.reached != reached ||
       old.current != current ||
       old.record != record ||

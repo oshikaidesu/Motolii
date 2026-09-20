@@ -115,7 +115,14 @@ class ColorWheel {
 }
 
 class ColorWheelPainter extends CustomPainter {
-  ColorWheelPainter(this.color, this.wheel, {this.hue});
+  final EditorTheme colors;
+
+  ColorWheelPainter(
+    this.color,
+    this.wheel, {
+    this.colors = EditorTheme.chromatic,
+    this.hue,
+  });
   final Color color;
   final ColorWheel wheel;
   final double? hue;
@@ -144,12 +151,12 @@ class ColorWheelPainter extends CustomPainter {
     final rim = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = EditorTheme.line;
+      ..color = colors.line;
     canvas.drawCircle(wheel.center, wheel.side / 2 - ColorWheel.ring, rim);
     canvas.drawCircle(wheel.center, wheel.side / 2 - .5, rim);
 
     final shadow = Paint()
-      ..color = EditorTheme.scrimLight
+      ..color = colors.scrimLight
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
     if (wheel.shape == 'triangle') {
       final t = wheel.triangle(hsv.hue);
@@ -198,7 +205,7 @@ class ColorWheelPainter extends CustomPainter {
       at.translate(0, 1),
       5,
       Paint()
-        ..color = EditorTheme.scrim
+        ..color = colors.scrim
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
     );
     canvas.drawCircle(at, 5, Paint()..color = EditorTheme.white);
@@ -207,6 +214,7 @@ class ColorWheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ColorWheelPainter oldDelegate) =>
+      colors != oldDelegate.colors ||
       color != oldDelegate.color ||
       hue != oldDelegate.hue ||
       wheel.side != oldDelegate.wheel.side ||

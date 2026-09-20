@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/theme.dart';
+import '../lib/foundation/metrics.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/panels/browser.dart';
 
@@ -124,7 +125,10 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     // The frame marks the selection; the dot stays where it was, on the
     // picture of the item that a layer uses.
-    expect(frame(tester, 'a0').border!.top.color, EditorTheme.spatial);
+    expect(
+      frame(tester, 'a0').border!.top.color,
+      EditorTheme.chromatic.spatial,
+    );
     expect(frame(tester, 'a3').border!.top.color, Colors.transparent);
     expect(find.byKey(const ValueKey('browser:used')), findsOneWidget);
   });
@@ -184,7 +188,7 @@ void main() {
     final name = find.text('a very long name that will not fit in one tile');
     expect(name, findsOneWidget);
     final style = tester.widget<Text>(name).style!;
-    expect(style.fontSize, 11);
+    expect(style.fontSize, EditorMetrics.font);
     final before = tester.getTopLeft(name).dx;
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);

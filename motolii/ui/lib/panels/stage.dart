@@ -262,12 +262,15 @@ class _StagePanelState extends State<StagePanel> {
   /// Native sends the same map object until the gizmo changes, so identity
   /// is the cache key: the mesh is parsed once per status, not once per build.
   Object? _meshRaw;
+  EditorTheme? _meshTheme;
   _SpatialMesh? _meshParsed;
   _SpatialMesh? get _mesh {
     final raw = _state[_userStage ? 'stageSpatialGizmo' : 'spatialGizmo'];
-    if (!identical(raw, _meshRaw)) {
+    final colors = EditorTheme.of(context);
+    if (!identical(raw, _meshRaw) || colors != _meshTheme) {
+      _meshTheme = colors;
       _meshRaw = raw;
-      _meshParsed = _SpatialMesh.parse(raw);
+      _meshParsed = _SpatialMesh.parse(raw, colors);
       _screenMeshKey = null;
     }
     return _meshParsed;
@@ -1160,9 +1163,11 @@ class _StagePanelState extends State<StagePanel> {
             AnimatedBuilder(
               animation: _chrome,
               builder: (context, _) => EditorBar(
-                decoration: const BoxDecoration(
-                  color: EditorTheme.panel,
-                  border: Border(bottom: BorderSide(color: EditorTheme.line)),
+                decoration: BoxDecoration(
+                  color: EditorTheme.of(context).panel,
+                  border: Border(
+                    bottom: BorderSide(color: EditorTheme.of(context).line),
+                  ),
                 ),
                 children: [
                   const SizedBox(width: EditorMetrics.s8),
@@ -1265,7 +1270,7 @@ class _StagePanelState extends State<StagePanel> {
                         },
                         child: ClipRect(
                           child: ColoredBox(
-                            color: EditorTheme.app,
+                            color: EditorTheme.of(context).app,
                             // What moves with the frame, the selection and the
                             // zoom is built here; the chrome above is built once
                             // per layout.
@@ -1297,9 +1302,9 @@ class _StagePanelState extends State<StagePanel> {
                 children: [
                   Text(
                     '${_width.toInt()} × ${_height.toInt()}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: EditorMetrics.dense,
-                      color: EditorTheme.muted,
+                      color: EditorTheme.of(context).muted,
                     ),
                   ),
                   Padding(
@@ -1333,20 +1338,20 @@ class _StagePanelState extends State<StagePanel> {
                     valueListenable: c.frame,
                     builder: (context, frame, _) => Text(
                       'Frame $frame',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: EditorMetrics.dense,
-                        color: EditorTheme.muted,
+                        color: EditorTheme.of(context).muted,
                       ),
                     ),
                   ),
                   if (!c.supports('stageGesture'))
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(left: EditorMetrics.s8),
                       child: Text(
                         'Transform gestures unavailable',
                         style: TextStyle(
                           fontSize: EditorMetrics.dense,
-                          color: EditorTheme.muted,
+                          color: EditorTheme.of(context).muted,
                         ),
                       ),
                     ),
@@ -1432,6 +1437,7 @@ class _StagePanelState extends State<StagePanel> {
             child: RepaintBoundary(
               child: CustomPaint(
                 painter: _StageOverlay(
+                  colors: EditorTheme.of(context),
                   ink: EditorInk.of(context),
                   dimOutside: _userStage,
                   anchorPreview: anchorPreview,
@@ -1509,12 +1515,12 @@ class _StageTexture extends StatelessWidget {
       ValueListenableBuilder<Map<String, int>>(
         valueListenable: textureIds,
         builder: (context, ids, _) => switch (ids[view]) {
-          null => const Center(
+          null => Center(
             child: Text(
               'No rendered texture',
               style: TextStyle(
                 fontSize: EditorMetrics.font,
-                color: EditorTheme.muted,
+                color: EditorTheme.of(context).muted,
               ),
             ),
           ),
@@ -1526,7 +1532,10 @@ class _StageTexture extends StatelessWidget {
 }
 
 class _StageOverlay extends CustomPainter {
+  final EditorTheme colors;
+
   const _StageOverlay({
+    this.colors = EditorTheme.chromatic,
     this.dimOutside = false,
     this.cameras = const [],
     this.cameraEyes = const [],
@@ -1581,7 +1590,7 @@ class _StageOverlay extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final framePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..color = EditorTheme.line
+      ..color = colors.line
       ..strokeWidth = 1;
     final framePath = frame.length == 4
         ? (Path()..addPolygon(frame, true))
@@ -1592,13 +1601,13 @@ class _StageOverlay extends CustomPainter {
           ..fillType = PathFillType.evenOdd
           ..addRect(Offset.zero & size)
           ..addPath(framePath, Offset.zero),
-        Paint()..color = EditorTheme.app.withValues(alpha: .55),
+        Paint()..color = colors.app.withValues(alpha: .55),
       );
     }
     canvas.drawPath(framePath, framePaint);
     final line = Paint()
       ..style = PaintingStyle.stroke
-      ..color = EditorTheme.accent
+      ..color = colors.accent
       ..strokeWidth = 1;
     if (anchorPreview case final at?) {
       _cross(canvas, at, EditorMetrics.s8, line);
@@ -1609,7 +1618,7 @@ class _StageOverlay extends CustomPainter {
         Path()..addPolygon(extent, true),
         Paint()
           ..style = PaintingStyle.stroke
-          ..color = extendable ? EditorTheme.ink : EditorTheme.muted
+          ..color = extendable ? colors.ink : colors.muted
           ..strokeWidth = extendable ? 2 : 1,
       );
     }
@@ -1626,7 +1635,7 @@ class _StageOverlay extends CustomPainter {
     }
     for (final entry in cameraHandles.entries) {
       if (entry.key == 'roll') {
-        canvas.drawCircle(entry.value, 4, Paint()..color = EditorTheme.app);
+        canvas.drawCircle(entry.value, 4, Paint()..color = colors.app);
         canvas.drawCircle(entry.value, 4, cameraLine);
       } else {
         final rect = Rect.fromCenter(
@@ -1634,7 +1643,7 @@ class _StageOverlay extends CustomPainter {
           width: EditorMetrics.s6,
           height: EditorMetrics.s6,
         );
-        canvas.drawRect(rect, Paint()..color = EditorTheme.app);
+        canvas.drawRect(rect, Paint()..color = colors.app);
         canvas.drawRect(rect, cameraLine);
       }
     }
@@ -1681,7 +1690,7 @@ class _StageOverlay extends CustomPainter {
     }
     for (final entry in handles.entries) {
       if (entry.key == 'rotation') {
-        canvas.drawCircle(entry.value, 4, Paint()..color = EditorTheme.app);
+        canvas.drawCircle(entry.value, 4, Paint()..color = colors.app);
         canvas.drawCircle(entry.value, 4, line);
       } else {
         final rect = Rect.fromCenter(
@@ -1689,7 +1698,7 @@ class _StageOverlay extends CustomPainter {
           width: EditorMetrics.s6,
           height: EditorMetrics.s6,
         );
-        canvas.drawRect(rect, Paint()..color = EditorTheme.app);
+        canvas.drawRect(rect, Paint()..color = colors.app);
         canvas.drawRect(rect, line);
       }
     }
@@ -1699,7 +1708,7 @@ class _StageOverlay extends CustomPainter {
     if (marquee != null) {
       canvas.drawRect(
         marquee!,
-        Paint()..color = EditorTheme.accent.withValues(alpha: .12),
+        Paint()..color = colors.accent.withValues(alpha: .12),
       );
       canvas.drawRect(marquee!, line);
     }
@@ -1707,6 +1716,7 @@ class _StageOverlay extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _StageOverlay old) =>
+      colors != old.colors ||
       old.ink != ink ||
       !_samePolylines(old.cameras, cameras) ||
       !_samePolylines(old.cameraFrustums, cameraFrustums) ||
@@ -1746,7 +1756,7 @@ class _SpatialMesh {
   final List<Color> colors;
   final Uint16List indices;
 
-  static _SpatialMesh? parse(dynamic raw) {
+  static _SpatialMesh? parse(dynamic raw, EditorTheme theme) {
     if (raw is! Map) return null;
     final v = raw['vertices'], c = raw['colors'], i = raw['indices'];
     if (v is! List || c is! List || i is! List) return null;
@@ -1770,10 +1780,8 @@ class _SpatialMesh {
       final alpha = (_StagePanelState._num(rgba[3], 1).clamp(0.0, 1.0) * 255)
           .round();
       final rgb = [for (var k = 0; k < 3; k++) _StagePanelState._num(rgba[k])];
-      if (rgb.every((v) => v >= 0.999))
-        return EditorTheme.muted.withAlpha(alpha);
-      if (rgb.every((v) => v <= 0.001))
-        return EditorTheme.accent.withAlpha(alpha);
+      if (rgb.every((v) => v >= 0.999)) return theme.muted.withAlpha(alpha);
+      if (rgb.every((v) => v <= 0.001)) return theme.accent.withAlpha(alpha);
       return Color.fromARGB(alpha, byte(rgb[0]), byte(rgb[1]), byte(rgb[2]));
     }
 

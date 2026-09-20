@@ -258,8 +258,8 @@ class _NotesPanelState extends State<NotesPanel> {
                                 });
                             },
                             foreground: p['id'] == page?['id']
-                                ? EditorTheme.accent
-                                : EditorTheme.muted,
+                                ? EditorTheme.of(context).accent
+                                : EditorTheme.of(context).muted,
                             child: Text(
                               '${p['title']}',
                               style: const TextStyle(
@@ -366,11 +366,11 @@ class _NotesPanelState extends State<NotesPanel> {
                 padding: const EdgeInsets.all(EditorMetrics.s8),
                 child: Column(
                   children: [
-                    const Text(
+                    Text(
                       'Click anywhere to write',
                       style: TextStyle(
                         fontSize: EditorMetrics.font,
-                        color: EditorTheme.muted,
+                        color: EditorTheme.of(context).muted,
                       ),
                     ),
                     if (c.deskWork.value['note'] != null ||
@@ -407,7 +407,9 @@ class _NotesPanelState extends State<NotesPanel> {
                               _insertion = e.localPosition;
                               _text(_insertion);
                             },
-                            child: const ColoredBox(color: EditorTheme.panel),
+                            child: ColoredBox(
+                              color: EditorTheme.of(context).panel,
+                            ),
                           ),
                         ),
                         for (final b in blocks)
@@ -577,13 +579,13 @@ class _NoteCardState extends State<_NoteCard> {
               .clamp(60, 5000)
               .toDouble(),
           child: ColoredBox(
-            color: EditorTheme.raised,
+            color: EditorTheme.of(context).raised,
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
                   color: widget.selected
-                      ? EditorTheme.accent
-                      : EditorTheme.line,
+                      ? EditorTheme.of(context).accent
+                      : EditorTheme.of(context).line,
                 ),
               ),
               child: Column(
@@ -601,11 +603,11 @@ class _NoteCardState extends State<_NoteCard> {
                             onPanEnd: (_) => _end(),
                             onPanCancel: () => setState(() => _delta = null),
                             onTap: widget.onSelect,
-                            child: const Center(
+                            child: Center(
                               child: Icon(
                                 Glyph.drag_handle,
                                 size: EditorMetrics.s14,
-                                color: EditorTheme.muted,
+                                color: EditorTheme.of(context).muted,
                               ),
                             ),
                           ),
@@ -663,9 +665,9 @@ class _NoteCardState extends State<_NoteCard> {
                           focusNode: _focus,
                           maxLines: null,
                           expands: true,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: EditorMetrics.title,
-                            color: EditorTheme.ink,
+                            color: EditorTheme.of(context).ink,
                           ),
                           hint: 'Write a note',
                           onTap: widget.onSelect,
@@ -689,13 +691,13 @@ class _NoteCardState extends State<_NoteCard> {
                       onPanUpdate: _move,
                       onPanEnd: (_) => _end(),
                       onPanCancel: () => setState(() => _delta = null),
-                      child: const SizedBox(
+                      child: SizedBox(
                         width: EditorMetrics.s18,
                         height: EditorMetrics.s16,
                         child: Icon(
                           Glyph.south_east,
                           size: EditorMetrics.s12,
-                          color: EditorTheme.muted,
+                          color: EditorTheme.of(context).muted,
                         ),
                       ),
                     ),

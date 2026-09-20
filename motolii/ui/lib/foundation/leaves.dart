@@ -33,9 +33,9 @@ class EditorPress extends StatefulWidget {
     this.canRequestFocus = true,
     this.focusNode,
     this.autofocus = false,
-    this.hoverColor = EditorTheme.hoverWash,
-    this.pressColor = EditorTheme.hover,
-    this.focusColor = EditorTheme.focusWash,
+    this.hoverColor,
+    this.pressColor,
+    this.focusColor,
     this.mouseCursor,
     required this.child,
   });
@@ -45,7 +45,7 @@ class EditorPress extends StatefulWidget {
   final BorderRadius? borderRadius;
   final bool canRequestFocus, autofocus;
   final FocusNode? focusNode;
-  final Color hoverColor, pressColor, focusColor;
+  final Color? hoverColor, pressColor, focusColor;
   final MouseCursor? mouseCursor;
   final Widget child;
 
@@ -77,11 +77,11 @@ class _EditorPressState extends State<EditorPress> {
         _focus &&
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final wash = _down
-        ? widget.pressColor
+        ? (widget.pressColor ?? EditorTheme.of(context).hover)
         : _hover && enabled
-        ? widget.hoverColor
+        ? (widget.hoverColor ?? EditorTheme.of(context).hoverWash)
         : showFocus
-        ? widget.focusColor
+        ? (widget.focusColor ?? EditorTheme.of(context).focusWash)
         : null;
     return Semantics(
       onTap: widget.onTap,
@@ -164,8 +164,8 @@ class _WashPainter extends CustomPainter {
 }
 
 /// The icon is the button: exactly [iconSize] square (the icon theme's size
-/// when unset), the panel's [EditorTheme.hover] under it while hovered or
-/// pressed, ink or [EditorTheme.disabledInk] on the glyph.
+/// when unset), the panel's [EditorTheme.of(context).hover] under it while hovered or
+/// pressed, ink or [EditorTheme.of(context).disabledInk] on the glyph.
 class EditorIconButton extends StatelessWidget {
   const EditorIconButton({
     super.key,
@@ -196,8 +196,8 @@ class EditorIconButton extends StatelessWidget {
       child: EditorPress(
         onTap: onPressed,
         focusNode: focusNode,
-        hoverColor: EditorTheme.hover,
-        pressColor: EditorTheme.hover,
+        hoverColor: EditorTheme.of(context).hover,
+        pressColor: EditorTheme.of(context).hover,
         focusColor: EditorTheme.clear,
         child: SizedBox.square(
           dimension: math.max(size, EditorMetrics.row),
@@ -205,8 +205,8 @@ class EditorIconButton extends StatelessWidget {
             data: IconThemeData(
               size: size,
               color: enabled
-                  ? color ?? EditorTheme.ink
-                  : EditorTheme.disabledInk,
+                  ? color ?? EditorTheme.of(context).ink
+                  : EditorTheme.of(context).disabledInk,
             ),
             child: Center(child: icon),
           ),
@@ -228,20 +228,21 @@ class EditorTextButton extends StatefulWidget {
     super.key,
     required this.onPressed,
     required this.child,
-    this.foreground = EditorTheme.accent,
+    this.foreground,
     this.background = EditorTheme.clear,
-    this.disabledForeground = EditorTheme.inkDisabled,
+    this.disabledForeground,
     this.disabledBackground = EditorTheme.clear,
-    this.border = const BorderSide(color: EditorTheme.line),
+    this.border,
     this.radius = BorderRadius.zero,
     this.padding = const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-    this.minimumSize = const Size(EditorMetrics.dense, EditorMetrics.s12),
+    this.minimumSize = const Size(EditorMetrics.s11, EditorMetrics.s12),
     this.textStyle,
   });
   final VoidCallback? onPressed;
   final Widget child;
-  final Color foreground, background, disabledForeground, disabledBackground;
-  final BorderSide border;
+  final Color? foreground, disabledForeground;
+  final Color background, disabledBackground;
+  final BorderSide? border;
   final BorderRadius radius;
   final EdgeInsets padding;
   final Size minimumSize;
@@ -261,7 +262,11 @@ class _EditorTextButtonState extends State<EditorTextButton> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
-    final fg = enabled ? widget.foreground : widget.disabledForeground;
+    final fg = enabled
+        ? (widget.foreground ?? EditorTheme.of(context).accent)
+        : (widget.disabledForeground ?? EditorTheme.of(context).inkDisabled);
+    final border =
+        widget.border ?? BorderSide(color: EditorTheme.of(context).line);
     final bg = enabled ? widget.background : widget.disabledBackground;
     final showFocus =
         _focus &&
@@ -302,9 +307,9 @@ class _EditorTextButtonState extends State<EditorTextButton> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: bg,
-                  border: widget.border.style == BorderStyle.none
+                  border: border.style == BorderStyle.none
                       ? null
-                      : Border.fromBorderSide(widget.border),
+                      : Border.fromBorderSide(border),
                   borderRadius: widget.radius,
                 ),
                 child: CustomPaint(
@@ -344,17 +349,17 @@ class _EditorTextButtonState extends State<EditorTextButton> {
   }
 }
 
-/// A horizontal rule in [EditorTheme.line], [thickness] thick (0 = a
+/// A horizontal rule in [EditorTheme.of(context).line], [thickness] thick (0 = a
 /// hairline) centred in [height] — what Material's Divider drew here.
 class EditorRule extends StatelessWidget {
   const EditorRule({
     super.key,
     this.height = EditorMetrics.s16,
     this.thickness = 0,
-    this.color = EditorTheme.line,
+    this.color,
   });
   final double height, thickness;
-  final Color color;
+  final Color? color;
   @override
   Widget build(BuildContext context) => SizedBox(
     height: height,
@@ -363,7 +368,10 @@ class EditorRule extends StatelessWidget {
         height: thickness,
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(color: color, width: thickness),
+            bottom: BorderSide(
+              color: color ?? EditorTheme.of(context).line,
+              width: thickness,
+            ),
           ),
         ),
       ),
@@ -404,10 +412,10 @@ class _EditorScrollbarState extends State<EditorScrollbar> {
       minThumbLength: EditorMetrics.s48,
       interactive: true,
       thumbColor: _drag && _hover
-          ? EditorTheme.scrollThumbDragged
+          ? EditorTheme.of(context).scrollThumbDragged
           : _hover
-          ? EditorTheme.scrollThumbHovered
-          : EditorTheme.scrollThumb,
+          ? EditorTheme.of(context).scrollThumbHovered
+          : EditorTheme.of(context).scrollThumb,
       child: MouseRegion(
         opaque: false,
         onEnter: (_) => setState(() => _hover = true),
@@ -418,8 +426,8 @@ class _EditorScrollbarState extends State<EditorScrollbar> {
   );
 }
 
-/// A value on a flat 2 px track between [min] and [max]: [EditorTheme.muted]
-/// up to the thumb, [EditorTheme.line] after, a 5 px ink thumb with a 1 dp
+/// A value on a flat 2 px track between [min] and [max]: [EditorTheme.of(context).muted]
+/// up to the thumb, [EditorTheme.of(context).line] after, a 5 px ink thumb with a 1 dp
 /// shadow (6 while pressed); with [divisions] the value snaps and a label of
 /// it stands above the thumb while it is dragged.
 class EditorSlider extends StatefulWidget {
@@ -503,6 +511,7 @@ class _EditorSliderState extends State<EditorSlider> {
               box.hasBoundedHeight ? box.maxHeight : EditorMetrics.row,
             ),
             painter: _SliderPainter(
+              colors: EditorTheme.of(context),
               t: t,
               enabled: enabled,
               pressed: _down,
@@ -519,7 +528,10 @@ class _EditorSliderState extends State<EditorSlider> {
 }
 
 class _SliderPainter extends CustomPainter {
+  final EditorTheme colors;
+
   const _SliderPainter({
+    this.colors = EditorTheme.chromatic,
     required this.t,
     required this.enabled,
     required this.pressed,
@@ -538,9 +550,8 @@ class _SliderPainter extends CustomPainter {
     final x = left + (right - left) * t;
     final track = Rect.fromLTRB(left, cy - _track / 2, right, cy + _track / 2);
     const r = Radius.circular(_track / 2);
-    final active = Paint()
-      ..color = enabled ? EditorTheme.muted : EditorTheme.inkDisabled;
-    final inactive = Paint()..color = EditorTheme.line;
+    final active = Paint()..color = enabled ? colors.muted : colors.inkDisabled;
+    final inactive = Paint()..color = colors.line;
     canvas.drawRRect(
       RRect.fromRectAndCorners(
         Rect.fromLTRB(track.left, track.top, x, track.bottom),
@@ -566,10 +577,7 @@ class _SliderPainter extends CustomPainter {
           canvas.drawCircle(
             Offset(tx, cy),
             tick / 2,
-            Paint()
-              ..color = tx <= x
-                  ? EditorTheme.tickActive
-                  : EditorTheme.tickInactive,
+            Paint()..color = tx <= x ? colors.tickActive : colors.tickInactive,
           );
         }
       }
@@ -580,16 +588,16 @@ class _SliderPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(x, cy),
       _thumb,
-      Paint()..color = enabled ? EditorTheme.ink : EditorTheme.inkDisabled,
+      Paint()..color = enabled ? colors.ink : colors.inkDisabled,
     );
     if (label != null) {
       final text = TextPainter(
         text: TextSpan(
           text: label,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: EditorTheme.fontFamily,
             fontSize: EditorMetrics.font,
-            color: EditorTheme.tabInk,
+            color: colors.tabInk,
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -603,7 +611,7 @@ class _SliderPainter extends CustomPainter {
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(box, const Radius.circular(EditorMetrics.s4)),
-        Paint()..color = EditorTheme.accent,
+        Paint()..color = colors.accent,
       );
       text.paint(
         canvas,
@@ -614,6 +622,7 @@ class _SliderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SliderPainter old) =>
+      colors != old.colors ||
       old.t != t ||
       old.enabled != enabled ||
       old.pressed != pressed ||
@@ -623,7 +632,7 @@ class _SliderPainter extends CustomPainter {
 
 /// Text and a caret, nothing more — the box is [EditorFieldFrame]'s. The
 /// pointer places the caret and drags a selection, the right button opens
-/// Cut / Copy / Paste / Select all, [hint] shows in [EditorTheme.muted]
+/// Cut / Copy / Paste / Select all, [hint] shows in [EditorTheme.of(context).muted]
 /// while empty, Enter submits a single line.
 class EditorTextField extends StatefulWidget {
   const EditorTextField({
@@ -673,14 +682,8 @@ class EditorTextField extends StatefulWidget {
 
   /// What Material's field wrote with under the editor's theme: body size,
   /// ink, medium weight.
-  static const defaultStyle = TextStyle(
-    inherit: false,
-    fontFamily: EditorTheme.fontFamily,
-    fontSize: EditorMetrics.font,
-    fontWeight: FontWeight.w500,
-    color: EditorTheme.ink,
-    textBaseline: TextBaseline.alphabetic,
-  );
+  static TextStyle defaultStyle(BuildContext context) =>
+      EditorTheme.of(context).text;
   @override
   State<EditorTextField> createState() => _EditorTextFieldState();
 }
@@ -739,7 +742,7 @@ class _EditorTextFieldState extends State<EditorTextField>
 
   @override
   Widget build(BuildContext context) {
-    final style = EditorTextField.defaultStyle.merge(widget.style);
+    final style = EditorTextField.defaultStyle(context).merge(widget.style);
     final enabled = widget.enabled;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final field = EditableText(
@@ -747,9 +750,9 @@ class _EditorTextFieldState extends State<EditorTextField>
       controller: _controller,
       focusNode: _focus,
       style: style,
-      cursorColor: widget.cursorColor ?? EditorTheme.caret,
-      backgroundCursorColor: EditorTheme.muted,
-      selectionColor: EditorTheme.selection,
+      cursorColor: widget.cursorColor ?? EditorTheme.of(context).caret,
+      backgroundCursorColor: EditorTheme.of(context).muted,
+      selectionColor: EditorTheme.of(context).selection,
       cursorWidth: widget.cursorWidth,
       cursorRadius: const Radius.circular(EditorMetrics.s2),
       cursorOffset: Offset(-2 / dpr, 0),
@@ -796,7 +799,7 @@ class _EditorTextFieldState extends State<EditorTextField>
                 maxLines: widget.maxLines,
                 textAlign: widget.textAlign,
                 overflow: TextOverflow.ellipsis,
-                style: style.copyWith(color: EditorTheme.muted),
+                style: style.copyWith(color: EditorTheme.of(context).muted),
               ),
             ),
           ),
@@ -850,8 +853,8 @@ class EditorTooltipSheet extends StatelessWidget {
       horizontal: EditorMetrics.s8,
       vertical: EditorMetrics.s4,
     ),
-    decoration: const BoxDecoration(
-      color: EditorTheme.tooltip,
+    decoration: BoxDecoration(
+      color: EditorTheme.of(context).tooltip,
       borderRadius: BorderRadius.all(Radius.circular(EditorMetrics.s4)),
     ),
     child: Center(
@@ -871,7 +874,7 @@ class EditorTooltipSheet extends StatelessWidget {
 /// The menu's sheet, placed in the overlay at [anchor]: below it, flipped
 /// above when the window's bottom is nearer, kept inside the window. Esc and
 /// a tap outside close it; ↑ ↓ walk the rows and Enter presses one. The
-/// sheet is [EditorTheme.menu] with a [EditorTheme.menuEdge] edge and
+/// sheet is [EditorTheme.of(context).menu] with a [EditorTheme.of(context).menuEdge] edge and
 /// [EditorTheme.menuPadding], as wide as its widest row and no narrower
 /// than [minWidth].
 class EditorMenuSheet extends StatefulWidget {
@@ -966,16 +969,16 @@ class _EditorMenuSheetState extends State<EditorMenuSheet> {
           node: _scope,
           onKeyEvent: _key,
           child: DefaultTextStyle(
-            style: EditorTheme.text,
+            style: EditorTheme.of(context).text,
             child: ConstrainedBox(
               constraints: BoxConstraints(minWidth: widget.minWidth),
               child: IntrinsicWidth(
                 child: Container(
                   padding: EditorTheme.menuPadding,
-                  decoration: const BoxDecoration(
-                    color: EditorTheme.menu,
+                  decoration: BoxDecoration(
+                    color: EditorTheme.of(context).menu,
                     border: Border.fromBorderSide(
-                      BorderSide(color: EditorTheme.menuEdge),
+                      BorderSide(color: EditorTheme.of(context).menuEdge),
                     ),
                   ),
                   child: widget.child,
@@ -1014,8 +1017,8 @@ class _MenuLayout extends SingleChildLayoutDelegate {
 }
 
 /// One row of a menu: [EditorMetrics.row] high, [EditorTheme.menuRowPadding]
-/// across, ink on the sheet, [EditorTheme.selectInk] on [EditorTheme.select]
-/// while hovered or focused, [EditorTheme.disabledInk] when it cannot be
+/// across, ink on the sheet, [EditorTheme.of(context).selectInk] on [EditorTheme.of(context).select]
+/// while hovered or focused, [EditorTheme.of(context).disabledInk] when it cannot be
 /// pressed.
 class EditorMenuRow extends StatefulWidget {
   const EditorMenuRow({
@@ -1063,16 +1066,16 @@ class _EditorMenuRowState extends State<EditorMenuRow> {
               child: Container(
                 height: EditorMetrics.row,
                 padding: EditorTheme.menuRowPadding,
-                color: lit ? EditorTheme.select : EditorTheme.clear,
+                color: lit ? EditorTheme.of(context).select : EditorTheme.clear,
                 alignment: Alignment.centerLeft,
                 child: DefaultTextStyle.merge(
                   style: TextStyle(
                     fontSize: EditorMetrics.font,
                     color: !enabled
-                        ? EditorTheme.disabledInk
+                        ? EditorTheme.of(context).disabledInk
                         : lit
-                        ? EditorTheme.selectInk
-                        : EditorTheme.ink,
+                        ? EditorTheme.of(context).selectInk
+                        : EditorTheme.of(context).ink,
                   ),
                   child: widget.child,
                 ),
@@ -1175,8 +1178,8 @@ class EditorMenuChoiceRow extends StatelessWidget {
   );
 }
 
-/// A modal sheet over a black scrim, faded in over 150 ms: [EditorTheme.panel]
-/// with a [EditorTheme.border] edge, a title, a body and a row of actions at
+/// A modal sheet over a black scrim, faded in over 150 ms: [EditorTheme.of(context).panel]
+/// with a [EditorTheme.of(context).border] edge, a title, a body and a row of actions at
 /// the end — the dialog Material drew under the editor's theme.
 Future<T?> showEditorDialog<T>({
   required BuildContext context,
@@ -1185,7 +1188,7 @@ Future<T?> showEditorDialog<T>({
   context: context,
   barrierDismissible: true,
   barrierLabel: 'Dismiss',
-  barrierColor: EditorTheme.scrim,
+  barrierColor: EditorTheme.of(context).scrim,
   transitionDuration: const Duration(milliseconds: 150),
   transitionBuilder: (context, animation, secondary, child) => FadeTransition(
     opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
@@ -1214,10 +1217,10 @@ class EditorDialog extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: EditorMetrics.s280),
           child: Container(
-            decoration: const BoxDecoration(
-              color: EditorTheme.panel,
+            decoration: BoxDecoration(
+              color: EditorTheme.of(context).panel,
               border: Border.fromBorderSide(
-                BorderSide(color: EditorTheme.border),
+                BorderSide(color: EditorTheme.of(context).border),
               ),
             ),
             child: IntrinsicWidth(
@@ -1234,9 +1237,9 @@ class EditorDialog extends StatelessWidget {
                         0,
                       ),
                       child: DefaultTextStyle(
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: EditorMetrics.title,
-                          color: EditorTheme.ink,
+                          color: EditorTheme.of(context).ink,
                         ),
                         child: Semantics(namesRoute: true, child: title),
                       ),
@@ -1250,9 +1253,9 @@ class EditorDialog extends StatelessWidget {
                         EditorMetrics.control,
                       ),
                       child: DefaultTextStyle(
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: EditorMetrics.font,
-                          color: EditorTheme.ink,
+                          color: EditorTheme.of(context).ink,
                         ),
                         child: content!,
                       ),
@@ -1307,12 +1310,17 @@ class _EditorSpinnerState extends State<EditorSpinner>
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: EditorMetrics.s36,
-    child: CustomPaint(painter: _SpinnerPainter(_turn)),
+    child: CustomPaint(
+      painter: _SpinnerPainter(colors: EditorTheme.of(context), _turn),
+    ),
   );
 }
 
 class _SpinnerPainter extends CustomPainter {
-  _SpinnerPainter(this.turn) : super(repaint: turn);
+  final EditorTheme colors;
+
+  _SpinnerPainter(this.turn, {this.colors = EditorTheme.chromatic})
+    : super(repaint: turn);
   final Animation<double> turn;
   @override
   void paint(Canvas canvas, Size size) {
@@ -1326,7 +1334,7 @@ class _SpinnerPainter extends CustomPainter {
       sweep,
       false,
       Paint()
-        ..color = EditorTheme.accent
+        ..color = colors.accent
         ..style = PaintingStyle.stroke
         ..strokeWidth = EditorMetrics.s4
         ..strokeCap = StrokeCap.butt,
@@ -1334,7 +1342,8 @@ class _SpinnerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SpinnerPainter old) => old.turn != turn;
+  bool shouldRepaint(_SpinnerPainter old) =>
+      colors != old.colors || old.turn != turn;
 }
 
 /// The one value out of a short list, drawn as before: the current label in
@@ -1370,9 +1379,11 @@ class EditorChoice<T> extends StatelessWidget {
           height: EditorMetrics.row,
           padding: const EdgeInsets.only(left: EditorMetrics.s4),
           decoration: BoxDecoration(
-            color: EditorTheme.app,
+            color: EditorTheme.of(context).app,
             border: Border.all(
-              color: enabled ? EditorTheme.border : EditorTheme.line,
+              color: enabled
+                  ? EditorTheme.of(context).border
+                  : EditorTheme.of(context).line,
             ),
           ),
           child: Row(
@@ -1384,14 +1395,16 @@ class EditorChoice<T> extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: EditorMetrics.font,
-                    color: enabled ? EditorTheme.ink : EditorTheme.muted,
+                    color: enabled
+                        ? EditorTheme.of(context).ink
+                        : EditorTheme.of(context).muted,
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Glyph.arrow_drop_down,
                 size: EditorMetrics.s16,
-                color: EditorTheme.muted,
+                color: EditorTheme.of(context).muted,
               ),
             ],
           ),

@@ -10,18 +10,18 @@ import 'support/window_fixture.dart';
 
 /// Every panel, at the pixels the default dock gives it, held against the two
 /// guidelines Flutter ships (docs/reviews/2026-09-19-design-craft-ledger.md
-/// 4-4 and 3-1): a target of at least 24 px, and text at 4.5:1.
+/// 4-1 and 3-1): a target of at least 20 px (Apple's macOS minimum), and text
+/// at 4.5:1. WCAG 2.2's 24 px is not asked of the dense strips.
 ///
 /// All three are held at none. Every panel is judged before any is reported,
 /// so one run names them all.
 void main() {
-  const tapTarget24 = MinimumTapTargetGuideline(
-    size: Size(24, 24),
-    link:
-        'https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html',
+  const tapTarget20 = MinimumTapTargetGuideline(
+    size: Size(20, 20),
+    link: 'https://developer.apple.com/design/human-interface-guidelines/accessibility',
   );
   final guidelines = <String, AccessibilityGuideline>{
-    'target 24': tapTarget24,
+    'target 20': tapTarget20,
     'contrast 4.5': textContrastGuideline,
     'text fits': const TextFitsGuideline(),
   };

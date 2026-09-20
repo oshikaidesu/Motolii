@@ -153,8 +153,8 @@ class _DeskPanelState extends State<DeskPanel> {
                     child: EditorIconButton(
                       iconSize: EditorMetrics.s14,
                       color: _name(c.deskDefault.value) == spec.name
-                          ? EditorTheme.accent
-                          : EditorTheme.muted,
+                          ? EditorTheme.of(context).accent
+                          : EditorTheme.of(context).muted,
                       icon: Icon(
                         _name(c.deskDefault.value) == spec.name
                             ? Glyph.star
@@ -195,7 +195,7 @@ class _DeskPanelState extends State<DeskPanel> {
           canRequestFocus: false,
           onFocusChange: (focused) => _inside = focused,
           child: ColoredBox(
-            color: EditorTheme.panel,
+            color: EditorTheme.of(context).panel,
             child: Column(
               children: [
                 if (!inlineTools)

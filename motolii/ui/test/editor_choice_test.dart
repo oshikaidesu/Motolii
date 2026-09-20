@@ -42,13 +42,13 @@ void main() {
     // The sheet and its type are the app's menu, not Material 3's.
     final grid = tester.renderObject<RenderParagraph>(find.text('Grid'));
     expect(grid.text.style?.fontSize, EditorMetrics.font);
-    expect(grid.text.style?.color, EditorTheme.ink);
+    expect(grid.text.style?.color, EditorTheme.chromatic.ink);
     final sheet = tester
         .widgetList<Container>(find.byType(Container))
         .map((c) => c.decoration)
         .whereType<BoxDecoration>()
-        .firstWhere((d) => d.color == EditorTheme.menu);
-    expect(sheet.border?.top.color, EditorTheme.menuEdge);
+        .firstWhere((d) => d.color == EditorTheme.chromatic.menu);
+    expect(sheet.border?.top.color, EditorTheme.chromatic.menuEdge);
     await tester.tap(find.text('Grid'));
     await tester.pumpAndSettle();
     expect(picked, 2);

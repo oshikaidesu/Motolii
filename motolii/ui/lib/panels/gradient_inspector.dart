@@ -229,7 +229,7 @@ class _GradientInspectorState extends State<GradientInspector>
                         horizontal: _handle / 2,
                       ),
                       decoration: BoxDecoration(
-                        border: Border.all(color: EditorTheme.line),
+                        border: Border.all(color: EditorTheme.of(context).line),
                         borderRadius: BorderRadius.circular(EditorMetrics.s2),
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -309,8 +309,8 @@ class _GradientInspectorState extends State<GradientInspector>
                                     color: color(rows[i]),
                                     border: Border.all(
                                       color: selected == i
-                                          ? EditorTheme.accent
-                                          : EditorTheme.ink,
+                                          ? EditorTheme.of(context).accent
+                                          : EditorTheme.of(context).ink,
                                       width: EditorMetrics.s2,
                                     ),
                                     borderRadius: BorderRadius.circular(

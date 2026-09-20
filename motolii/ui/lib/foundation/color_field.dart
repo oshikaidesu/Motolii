@@ -58,7 +58,7 @@ class Swatch extends StatelessWidget {
     clipBehavior: Clip.antiAlias,
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(EditorMetrics.s4),
-      border: Border.all(color: EditorTheme.border),
+      border: Border.all(color: EditorTheme.of(context).border),
     ),
     child: CustomPaint(
       painter: const CheckerPainter(cell: EditorMetrics.s4),

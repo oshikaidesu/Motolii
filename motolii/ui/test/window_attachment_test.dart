@@ -130,8 +130,8 @@ void main() {
       await session.initialize();
       await tester.pumpWidget(
         WidgetsApp(
-          color: EditorTheme.app,
-          textStyle: EditorTheme.text,
+          color: EditorTheme.chromatic.app,
+          textStyle: EditorTheme.chromatic.text,
           pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
             settings: settings,
             pageBuilder: (context, _, __) => builder(context),

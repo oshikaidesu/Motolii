@@ -29,12 +29,12 @@ class _EaseIcon extends StatefulWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
-    this.color = EditorTheme.muted,
+    this.color,
   });
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
-  final Color color;
+  final Color? color;
   @override
   State<_EaseIcon> createState() => _EaseIconState();
 }
@@ -58,13 +58,15 @@ class _EaseIconState extends State<_EaseIcon> {
             constraints: _easeIconBox,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: _over ? EditorTheme.hover : EditorTheme.clear,
+              color: _over ? EditorTheme.of(context).hover : EditorTheme.clear,
               borderRadius: BorderRadius.circular(EditorMetrics.s4),
             ),
             child: Icon(
               widget.icon,
               size: EditorMetrics.s16,
-              color: _over ? EditorTheme.ink : widget.color,
+              color: _over
+                  ? EditorTheme.of(context).ink
+                  : widget.color ?? EditorTheme.of(context).muted,
             ),
           ),
         ),
@@ -527,6 +529,7 @@ class _EaseDeskState extends State<EaseDesk>
     double? playhead,
   }) => CustomPaint(
     painter: EaseCurvePainter(
+      colors: EditorTheme.of(context),
       shape: shape,
       handles: handles,
       selected: selected,
@@ -633,6 +636,7 @@ class _EaseDeskState extends State<EaseDesk>
             child: LayoutBuilder(
               builder: (context, box) {
                 final painter = EaseCurvePainter(
+                  colors: EditorTheme.of(context),
                   shape: _shape,
                   handles: true,
                   free: _free,
@@ -876,9 +880,9 @@ class _EaseDeskState extends State<EaseDesk>
                           : '${EditorSession.maps(c.state['selectedKeys']).length} keys selected'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: EditorMetrics.dense,
-                    color: EditorTheme.muted,
+                    color: EditorTheme.of(context).muted,
                   ),
                 ),
               ),
@@ -901,7 +905,7 @@ class _EaseDeskState extends State<EaseDesk>
             child: Row(children: [...savedActions, ...applyActions]),
           );
           return ColoredBox(
-            color: EditorTheme.app,
+            color: EditorTheme.of(context).app,
             child: Padding(
               padding: const EdgeInsets.all(EditorMetrics.s8),
               child: Column(
@@ -1011,8 +1015,8 @@ class _PresetTile extends StatelessWidget {
                 color: selected
                     ? EditorInk.dark.easePaper
                     : hovered
-                    ? EditorTheme.hover
-                    : EditorTheme.panel,
+                    ? EditorTheme.of(context).hover
+                    : EditorTheme.of(context).panel,
                 borderRadius: BorderRadius.circular(EditorMetrics.s4),
                 border: Border.all(
                   color: focused ? EditorInk.dark.easePaper : EditorTheme.clear,
@@ -1028,6 +1032,7 @@ class _PresetTile extends StatelessWidget {
                           dimension: EditorMetrics.s44,
                           child: CustomPaint(
                             painter: EaseCurvePainter(
+                              colors: EditorTheme.of(context),
                               shape: preset,
                               selected: selected,
                               free: free,
@@ -1046,7 +1051,7 @@ class _PresetTile extends StatelessWidget {
                         fontSize: EditorMetrics.font,
                         color: selected
                             ? EditorInk.dark.easeInk
-                            : EditorTheme.ink,
+                            : EditorTheme.of(context).ink,
                       ),
                     ),
                   ],
@@ -1092,9 +1097,9 @@ class _EaseParamField extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: EditorMetrics.dense,
-                  color: EditorTheme.muted,
+                  color: EditorTheme.of(context).muted,
                 ),
               ),
             ),
@@ -1177,9 +1182,9 @@ class _EaseInfo extends StatelessWidget {
           key: const ValueKey('ease-meaning'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: EditorMetrics.font,
-            color: EditorTheme.muted,
+            color: EditorTheme.of(context).muted,
           ),
         ),
         const SizedBox(height: EditorMetrics.s6),
@@ -1190,7 +1195,7 @@ class _EaseInfo extends StatelessWidget {
               _EaseIcon(
                 tooltip: 'Preview motion',
                 icon: Glyph.play_arrow_outlined,
-                color: EditorTheme.ink,
+                color: EditorTheme.of(context).ink,
                 onPressed: onPlay,
               ),
               const SizedBox(width: EditorMetrics.s4),
@@ -1202,6 +1207,7 @@ class _EaseInfo extends StatelessWidget {
                     child: CustomPaint(
                       key: const ValueKey('ease-motion'),
                       painter: EaseMotionPainter(
+                        colors: EditorTheme.of(context),
                         shape: shown,
                         time: motion.value,
                         free: free,
@@ -1248,9 +1254,9 @@ class _EaseTargetRow extends StatelessWidget {
               key: const ValueKey('ease-interval-target'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: EditorMetrics.dense,
-                color: EditorTheme.ink,
+                color: EditorTheme.of(context).ink,
               ),
             ),
           ),
@@ -1271,8 +1277,8 @@ class _EaseTargetRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: EditorMetrics.dense,
                   color: u != null && (u < 0 || u > 1)
-                      ? EditorTheme.muted
-                      : EditorTheme.accent,
+                      ? EditorTheme.of(context).muted
+                      : EditorTheme.of(context).accent,
                 ),
               );
             },
@@ -1311,6 +1317,7 @@ class _EaseRail extends StatelessWidget {
           child: CustomPaint(
             key: const ValueKey('ease-interval-rail'),
             painter: EaseIntervalPainter(
+              colors: EditorTheme.of(context),
               segments: segments,
               active: active,
               frame: frame.value,
@@ -1336,7 +1343,9 @@ class _OvershootToggle extends StatelessWidget {
   Widget build(BuildContext context) => EditorTooltip(
     message: 'Overshoot',
     child: EditorTextButton(
-      foreground: free ? EditorInk.dark.easePaper : EditorTheme.muted,
+      foreground: free
+          ? EditorInk.dark.easePaper
+          : EditorTheme.of(context).muted,
       minimumSize: Size.zero,
       onPressed: onPressed,
       child: Semantics(
@@ -1373,7 +1382,7 @@ class _ApplyButton extends StatelessWidget {
     child: EditorTextButton(
       background: EditorInk.dark.easePaper,
       foreground: EditorInk.dark.easeInk,
-      disabledBackground: EditorTheme.washDisabled,
+      disabledBackground: EditorTheme.of(context).washDisabled,
       border: BorderSide.none,
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
       // The compact density Material took 8 off the declared 52 × 24.
@@ -1393,7 +1402,10 @@ class _ApplyButton extends StatelessWidget {
 }
 
 class EaseCurvePainter extends CustomPainter {
+  final EditorTheme colors;
+
   const EaseCurvePainter({
+    this.colors = EditorTheme.chromatic,
     required this.shape,
     this.handles = false,
     this.selected = false,
@@ -1474,7 +1486,7 @@ class EaseCurvePainter extends CustomPainter {
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..color = handles || selected ? EditorInk.dark.easeInk : EditorTheme.ink
+        ..color = handles || selected ? EditorInk.dark.easeInk : colors.ink
         ..strokeWidth = handles ? 2.5 : 1.5
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
@@ -1484,7 +1496,7 @@ class EaseCurvePainter extends CustomPainter {
         canvas.drawCircle(
           p(x, easeValueAt(shape, x)),
           3.5,
-          Paint()..color = EditorTheme.accent,
+          Paint()..color = colors.accent,
         );
       }
     }
@@ -1539,7 +1551,7 @@ class EaseCurvePainter extends CustomPainter {
           Paint()
             ..color = handles || selected
                 ? EditorInk.dark.easeInk
-                : EditorTheme.ink.withValues(alpha: .25),
+                : colors.ink.withValues(alpha: .25),
         );
         canvas.drawCircle(q, 5, Paint()..color = EditorInk.dark.easeInk);
         canvas.drawCircle(q, 2, Paint()..color = EditorInk.dark.easePaper);
@@ -1575,6 +1587,7 @@ class EaseCurvePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EaseCurvePainter old) =>
+      colors != old.colors ||
       !sameValue(old.shape, shape) ||
       old.free != free ||
       old.handles != handles ||
@@ -1585,7 +1598,10 @@ class EaseCurvePainter extends CustomPainter {
 }
 
 class EaseMotionPainter extends CustomPainter {
+  final EditorTheme colors;
+
   const EaseMotionPainter({
+    this.colors = EditorTheme.chromatic,
     required this.shape,
     required this.time,
     this.free = false,
@@ -1596,7 +1612,12 @@ class EaseMotionPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final range = EaseCurvePainter(shape: shape, handles: true, free: free);
+    final range = EaseCurvePainter(
+      colors: colors,
+      shape: shape,
+      handles: true,
+      free: free,
+    );
     final half = EditorMetrics.s6;
     double x(double value) =>
         half +
@@ -1607,12 +1628,12 @@ class EaseMotionPainter extends CustomPainter {
     canvas.drawLine(
       Offset(x(0), y),
       Offset(x(1), y),
-      Paint()..color = EditorTheme.border,
+      Paint()..color = colors.border,
     );
     canvas.drawLine(
       Offset(x(1), y - EditorMetrics.s4),
       Offset(x(1), y + EditorMetrics.s4),
-      Paint()..color = EditorTheme.muted,
+      Paint()..color = colors.muted,
     );
     canvas.drawCircle(
       Offset(x(easeValueAt(shape, time)), y),
@@ -1623,14 +1644,20 @@ class EaseMotionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EaseMotionPainter old) =>
-      time != old.time || free != old.free || !sameValue(shape, old.shape);
+      colors != old.colors ||
+      time != old.time ||
+      free != old.free ||
+      !sameValue(shape, old.shape);
 }
 
 /// どの区間を走っているか、を形で言う帯。選んだキー区間を時間軸のまま並べ、
 /// 今のカーブが効いている区間だけを塗り、再生位置をその上に刺す。
 /// グラフの縦線が「区間の中のどこ」なら、この帯は「どの区間」。
 class EaseIntervalPainter extends CustomPainter {
+  final EditorTheme colors;
+
   const EaseIntervalPainter({
+    this.colors = EditorTheme.chromatic,
     required this.segments,
     required this.active,
     required this.frame,
@@ -1648,7 +1675,7 @@ class EaseIntervalPainter extends CustomPainter {
     final inset = EditorMetrics.s4;
     final width = math.max(1.0, size.width - inset * 2);
     final rail = Paint()
-      ..color = EditorTheme.border
+      ..color = colors.border
       ..strokeWidth = 1;
     if (segments.isEmpty) {
       canvas.drawLine(Offset(inset, y), Offset(inset + width, y), rail);
@@ -1678,7 +1705,7 @@ class EaseIntervalPainter extends CustomPainter {
         Paint()
           ..color = chosen
               ? EditorInk.dark.easePaper
-              : EditorTheme.muted.withValues(alpha: .35),
+              : colors.muted.withValues(alpha: .35),
       );
       if (chosen) {
         canvas.drawRRect(
@@ -1694,7 +1721,7 @@ class EaseIntervalPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(x(f), y),
           chosen ? 2.5 : 1.5,
-          Paint()..color = chosen ? EditorInk.dark.easeInk : EditorTheme.border,
+          Paint()..color = chosen ? EditorInk.dark.easeInk : colors.border,
         );
       }
     }
@@ -1716,6 +1743,7 @@ class EaseIntervalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EaseIntervalPainter old) =>
+      colors != old.colors ||
       old.frame != frame ||
       old.active != active ||
       !identical(old.segments, segments) &&

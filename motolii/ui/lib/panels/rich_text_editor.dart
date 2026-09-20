@@ -74,8 +74,8 @@ class StyledTextController extends TextEditingController {
           style: TextStyle(
             fontFamily: known.contains(family) ? family : null,
             fontSize: EditorMetrics.title * size / (unit < 1 ? 1 : unit),
-            backgroundColor: lit ? EditorTheme.select : null,
-            color: lit ? EditorTheme.selectInk : null,
+            backgroundColor: lit ? EditorTheme.of(context).select : null,
+            color: lit ? EditorTheme.of(context).selectInk : null,
           ),
         ),
       );
@@ -358,10 +358,10 @@ class _RichTextEditorState extends State<RichTextEditor> {
             focusNode: _focus,
             enabled: widget.layer['locked'] != true,
             maxLines: null,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: EditorMetrics.title,
               height: 1.3,
-              color: EditorTheme.ink,
+              color: EditorTheme.of(context).ink,
             ),
             hint: 'Type here',
             onChanged: _typed,

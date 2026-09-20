@@ -88,7 +88,7 @@ class FilesShelf extends BrowserShelf {
           child: Icon(
             Glyph.folder,
             size: EditorMetrics.s32 * host.tileScale,
-            color: EditorTheme.tab,
+            color: EditorTheme.of(host.context).tab,
           ),
         )
       : mediaThumbnail(item, host.tileScale);
@@ -175,7 +175,9 @@ class FilesShelf extends BrowserShelf {
           message: label,
           child: EditorIconButton(
             iconSize: EditorMetrics.s14,
-            color: press == null ? EditorTheme.disabledInk : EditorTheme.muted,
+            color: press == null
+                ? EditorTheme.of(host.context).disabledInk
+                : EditorTheme.of(host.context).muted,
             onPressed: press,
             icon: Icon(icon),
           ),
@@ -184,8 +186,10 @@ class FilesShelf extends BrowserShelf {
       key: const ValueKey('browser:path'),
       height: EditorMetrics.control,
       padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: EditorTheme.line)),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: EditorTheme.of(host.context).line),
+        ),
       ),
       child: Row(
         children: [
@@ -209,9 +213,11 @@ class FilesShelf extends BrowserShelf {
                 children: [
                   for (var i = 0; i < crumbs.length; i++) ...[
                     if (i > 0)
-                      const Text(
+                      Text(
                         '›',
-                        style: TextStyle(color: EditorTheme.muted),
+                        style: TextStyle(
+                          color: EditorTheme.of(host.context).muted,
+                        ),
                       ),
                     EditorPress(
                       onTap: i == crumbs.length - 1
@@ -226,8 +232,8 @@ class FilesShelf extends BrowserShelf {
                           style: TextStyle(
                             fontSize: EditorMetrics.font,
                             color: i == crumbs.length - 1
-                                ? EditorTheme.ink
-                                : EditorTheme.muted,
+                                ? EditorTheme.of(host.context).ink
+                                : EditorTheme.of(host.context).muted,
                           ),
                         ),
                       ),

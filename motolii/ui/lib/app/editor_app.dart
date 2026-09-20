@@ -21,44 +21,57 @@ class EditorApp extends StatefulWidget {
 
 class _EditorAppState extends State<EditorApp> {
   final scale = ValueNotifier(1.0);
+  late final appearance = ValueNotifier(EditorTheme.chromatic);
   @override
   void dispose() {
     scale.dispose();
+    appearance.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ScrollConfiguration(
-    behavior: const EditorScrollBehavior(),
-    child: WidgetsApp(
-      debugShowCheckedModeBanner: false,
-      color: EditorTheme.app,
-      textStyle: EditorTheme.text,
-      pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) =>
-          PageRouteBuilder<T>(
-            settings: settings,
-            pageBuilder: (context, _, _) => builder(context),
-          ),
-      builder: (context, child) => IconTheme(
-        data: EditorTheme.icon,
-        child: DefaultSelectionStyle(
-          cursorColor: EditorTheme.caret,
-          selectionColor: EditorTheme.selection,
-          child: EditorScale(
-            notifier: scale,
-            child: ValueListenableBuilder(
-              valueListenable: scale,
-              builder: (context, s, _) => EditorScaledViewport(
-                scale: s,
-                child: EditorApp.noHover(context, child),
+  Widget build(BuildContext context) => EditorAppearance(
+    notifier: appearance,
+    child: ValueListenableBuilder(
+      valueListenable: appearance,
+      builder: (context, theme, _) => theme.wrap(
+        Builder(
+          builder: (context) => ScrollConfiguration(
+            behavior: const EditorScrollBehavior(),
+            child: WidgetsApp(
+              debugShowCheckedModeBanner: false,
+              color: EditorTheme.of(context).app,
+              textStyle: EditorTheme.of(context).text,
+              pageRouteBuilder:
+                  <T>(RouteSettings settings, WidgetBuilder builder) =>
+                      PageRouteBuilder<T>(
+                        settings: settings,
+                        pageBuilder: (context, _, _) => builder(context),
+                      ),
+              builder: (context, child) => IconTheme(
+                data: EditorTheme.of(context).icon,
+                child: DefaultSelectionStyle(
+                  cursorColor: EditorTheme.of(context).caret,
+                  selectionColor: EditorTheme.of(context).selection,
+                  child: EditorScale(
+                    notifier: scale,
+                    child: ValueListenableBuilder(
+                      valueListenable: scale,
+                      builder: (context, s, _) => EditorScaledViewport(
+                        scale: s,
+                        child: EditorApp.noHover(context, child),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              home: EditorWindow(
+                controller: widget.controller,
+                initialize: widget.initialize,
               ),
             ),
           ),
         ),
-      ),
-      home: EditorWindow(
-        controller: widget.controller,
-        initialize: widget.initialize,
       ),
     ),
   );
