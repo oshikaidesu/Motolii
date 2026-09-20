@@ -1,5 +1,6 @@
+use crate::edit::Animate;
 use crate::doc::core::ResolvedCamera;
-use crate::doc::store::{Animate, Revision, StoreView};
+use crate::doc::store::{Revision, StoreView};
 use crate::doc::store::{LayerId, PropertyId};
 use crate::render::{engine::Window, playback::Clock};
 use std::collections::HashMap;
@@ -136,12 +137,13 @@ impl ColorSlot {
 
 #[cfg(test)]
 mod tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
-    use crate::doc::store::{blank_project, Intent};
+    use crate::doc::store::{};
 
     #[test]
     fn independent_viewers_do_not_duplicate_or_edit_the_document() {
-        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         doc.apply_all([Intent::AddLayer(LayerId(1)), Intent::AddLayer(LayerId(2))])
             .unwrap();
         let revision = doc.revision();
@@ -170,7 +172,7 @@ mod tests {
 
     #[test]
     fn primary_selection_is_derived_not_a_second_copy() {
-        let doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         let mut viewer = ViewerState::new(&doc.view(), doc.revision());
         viewer.selected_ids = vec![LayerId(1), LayerId(2)];
         assert_eq!(viewer.selected(), Some(LayerId(2)));

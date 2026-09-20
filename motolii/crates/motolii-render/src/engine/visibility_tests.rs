@@ -2,7 +2,7 @@ use super::environment_tests::file_layer;
 use super::reflection_tests::{effect, set};
 use super::*;
 use crate::doc::store::{
-    BlendMode, Document, EffectId, EffectInstance, Intent, LayerAttrsPatch, LayerId, Value,
+    BlendMode, EffectId, EffectInstance, LayerAttrsPatch, LayerId, Value,
 };
 
 #[test]

@@ -1,0 +1,35 @@
+[package]
+name = "motolii-edit"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+motolii-doc = { path = "../../../crates/motolii-doc", default-features = false }
+glam = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+re_chunk = { workspace = true }
+re_chunk_store = { workspace = true }
+re_entity_db = { workspace = true }
+re_log_encoding = { workspace = true }
+re_log_types = { workspace = true }
+re_types_core = { workspace = true }
+arrow = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+re_query = { workspace = true }
+re_byte_size = { workspace = true }
+re_build_info = { workspace = true }
+unicode-segmentation = "=1.13.3"
+unicode-script = "=0.5.8"
+
+[dev-dependencies]
+motolii-edit = { path = "." }
+
+[features]
+default = ["fixture"]
+fixture = []
+
+[lints]
+workspace = true

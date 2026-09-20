@@ -1177,6 +1177,7 @@ const DEFAULT_POINT_SIZE: f32 = 2.0;
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use super::*;
 
@@ -1226,8 +1227,8 @@ mod tests {
 
     #[test]
     fn group_bounds_use_offset_descendants_in_group_space_and_empty_groups_have_no_box() {
-        use crate::doc::store::{Intent, LayerMeta, LayerTiming, LayerAttrsPatch, PropertyId, Value};
-        let mut doc = crate::doc::store::blank_project();
+        use crate::doc::store::{LayerMeta, LayerTiming, LayerAttrsPatch, PropertyId, Value};
+        let mut doc = motolii_edit::blank_project();
         for (id, source, parent, position) in [
             (1, LayerSource::Group, None, [100.0, 200.0]),
             (2, LayerSource::Shape, Some(1), [10.0, 20.0]),
@@ -1291,7 +1292,7 @@ mod rich_text_cache_tests {
 #[cfg(test)]
 mod media_time_contract {
     use crate::doc::store::{
-        Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
+        Composition, Fps, LayerId, LayerMeta, LayerSource, LayerTiming,
         RationalTime,
     };
     use crate::render::engine::Engine;

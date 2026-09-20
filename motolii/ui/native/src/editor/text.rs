@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 pub(crate) fn write_content(doc: &mut Document, layer: LayerId, t: RationalTime, content: String) -> Result<(), StoreError> {
     let edit = content_intent(doc, layer, t, content)?;
@@ -9,7 +11,7 @@ pub(crate) fn content_intent(doc: &Document, layer: LayerId, t: RationalTime, co
     };
     // 文字は時間を開けていない限り 1 つ。キーが 1 つ以下なら差し替え、2 つ以上なら今の時刻に足す。
     let previous = document.content.eval(t).to_owned();
-    crate::doc::store::text_edit::preserve_replacement(&mut document, &previous, &content);
+    crate::edit::text_edit::preserve_replacement(&mut document, &previous, &content);
     let keys = document.content.keys();
     if keys.len() <= 1 {
         let at = keys.first().map_or(t, |k| k.t);
@@ -86,10 +88,11 @@ pub(crate) fn font_intent(doc: &Document, layer: LayerId, family: &str) -> Resul
 
 #[cfg(test)]
 mod font_tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     #[test]
     fn font_family_change_preserves_text_and_undo_restores_it() {
-        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         let id = LayerId(1);
         doc.apply_all(crate::editor::create::new_layer_intents(id, 0, 0, 60,
             Fps::try_new(30, 1).unwrap(), (1920.0,1080.0), crate::editor::create::NewKind::Text, None)).unwrap();

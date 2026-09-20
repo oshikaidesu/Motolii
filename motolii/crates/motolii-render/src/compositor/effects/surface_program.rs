@@ -133,6 +133,7 @@ pub(crate) fn params(effects: &[ResolvedEffect], field: Option<&VismDefinition>,
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use super::*;
 
@@ -235,7 +236,7 @@ mod program_contract {
 /// 出られない実装(拾う場所をずらすだけ)だと、外の画素は必ず 0 のままになる。
 #[cfg(test)]
 mod field_leaves_the_rectangle {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;

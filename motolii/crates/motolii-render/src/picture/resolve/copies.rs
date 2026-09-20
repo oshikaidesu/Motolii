@@ -295,6 +295,7 @@ pub fn push_ghosts(
 
 #[cfg(test)]
 mod ghost_contract {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::doc::store::*;
 
     fn document() -> (Document, Fps) {

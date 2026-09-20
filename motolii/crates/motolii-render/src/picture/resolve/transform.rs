@@ -209,8 +209,9 @@ pub fn split_position_component(
 
 #[cfg(test)]
 mod spatial_tests {
+    use motolii_edit::{Animate, Document, Intent};
     use super::*;
-    use crate::doc::store::{Document, Intent, LayerAttrsPatch};
+    use crate::doc::store::{LayerAttrsPatch};
     use glam::{Vec2, Vec3};
 
     fn set(doc: &mut Document, layer: LayerId, name: &str, value: Value) {

@@ -1,6 +1,6 @@
 use super::reflection_tests::set;
 use super::*;
-use crate::doc::store::{Document, LayerId, LayerSource, Value};
+use crate::doc::store::{LayerId, LayerSource, Value};
 
 #[test]
 #[ignore = "paired spatial reflection candidate experiment"]
@@ -178,7 +178,7 @@ fn default_reflection_response_has_no_receiver_crossing_pop() {
 #[test]
 fn coincident_receivers_keep_the_same_capture_budget() {
     use super::environment_tests::{SIZE, file_layer, scene, sky_png};
-    use crate::doc::store::{EffectId, EffectInstance, Intent};
+    use crate::doc::store::{EffectId, EffectInstance, };
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "sky.png", 255, 64);
     let mut doc = scene(dir.path(), &sky, true);

@@ -3,7 +3,7 @@
 
 
 use motolii_doc::store::{
-    property, Composition, Document, EffectScope, Fps, Interp, Keyframe, KeyframeTrack, PropertyId,
+    property, Composition, EffectScope, Fps, Interp, Keyframe, KeyframeTrack, PropertyId,
     StoreView, Value,
 };
 
@@ -43,7 +43,7 @@ fn put(doc: &mut Document, layer: LayerId, value: [f64; 2]) {
     doc.apply(Intent::SetConstant { layer, property: position(), value: Value::Vec2(value) }).unwrap();
 }
 use motolii_doc::store::{
-    blank_project, EffectId, EffectInstance, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
+    EffectId, EffectInstance, LayerId, LayerMeta, LayerSource, LayerTiming,
     Placement, RationalTime,
 };
 #[test]

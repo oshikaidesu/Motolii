@@ -1,15 +1,15 @@
-mod apply;
-mod edit;
-mod group;
-mod projection;
-mod validate;
+pub mod apply;
+pub mod edit;
+pub mod group;
+pub mod projection;
+pub mod validate;
 
 pub use edit::Animate;
-use super::ids::{LayerId, PropertyId};
-use super::read::{DisplayRevision, Revision};
+use motolii_doc::store::ids::{LayerId, PropertyId};
+use motolii_doc::store::read::{DisplayRevision, Revision};
 
 use std::cell::RefCell;
-use super::read::{ReadOverlay, RecordCache, TrackCache, TransientKey};
+use motolii_doc::store::read::{ReadOverlay, RecordCache, TrackCache, TransientKey};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -20,12 +20,12 @@ use re_log_types::{
 };
 use re_types_core::{Component, SerializedComponentBatch};
 
-use crate::doc::eval::Value;
+use motolii_doc::eval::Value;
 
-use crate::doc::store::components::TrackJson;
-use crate::doc::store::slot::PropertyLink;
-use crate::doc::store::view::StoreView;
-use crate::doc::store::{LayerAttrsPatch, Mask, Slot, SlotId, StoreError, EDIT_TIMELINE};
+use motolii_doc::store::components::TrackJson;
+use motolii_doc::store::slot::PropertyLink;
+use motolii_doc::store::view::StoreView;
+use motolii_doc::store::{LayerAttrsPatch, Mask, Slot, SlotId, StoreError, EDIT_TIMELINE};
 
 #[derive(Clone, Debug)]
 pub enum Intent {
@@ -34,14 +34,14 @@ pub enum Intent {
     SetTrack {
         layer: LayerId,
         property: PropertyId,
-        track: crate::doc::eval::KeyframeTrack,
+        track: motolii_doc::eval::KeyframeTrack,
     },
     /// **動かない値**を置く。キーは作らない —— 利用者が ◇ を押すまで
     /// 時間の世界へ入れない(根底3)。
     SetConstant {
         layer: LayerId,
         property: PropertyId,
-        value: crate::doc::eval::Value,
+        value: motolii_doc::eval::Value,
     },
     SetPropertySlot {
         layer: LayerId,
@@ -64,11 +64,11 @@ pub enum Intent {
     },
     SetMeta {
         layer: LayerId,
-        meta: crate::doc::store::LayerMeta,
+        meta: motolii_doc::store::LayerMeta,
     },
     SetSource {
         layer: LayerId,
-        source: crate::doc::store::LayerSource,
+        source: motolii_doc::store::LayerSource,
     },
     SetOrder {
         layer: LayerId,
@@ -76,16 +76,16 @@ pub enum Intent {
     },
     SetMasks {
         layer: LayerId,
-        masks: Vec<crate::doc::store::Mask>,
+        masks: Vec<motolii_doc::store::Mask>,
     },
     AddMask {
         layer: LayerId,
         mask: Mask,
-        shape: crate::doc::eval::KeyframeTrack,
+        shape: motolii_doc::eval::KeyframeTrack,
     },
     SetTiming {
         layer: LayerId,
-        timing: crate::doc::store::LayerTiming,
+        timing: motolii_doc::store::LayerTiming,
     },
     SetAttrs {
         layer: LayerId,
@@ -93,20 +93,20 @@ pub enum Intent {
     },
     SetEffects {
         layer: LayerId,
-        effects: Vec<crate::doc::store::EffectInstance>,
+        effects: Vec<motolii_doc::store::EffectInstance>,
     },
     SetShapes {
         layer: LayerId,
-        shapes: Vec<crate::doc::store::ShapeNode>,
+        shapes: Vec<motolii_doc::store::ShapeNode>,
     },
     SetTextDocument {
         layer: LayerId,
-        document: crate::doc::store::TextDocument,
+        document: motolii_doc::store::TextDocument,
     },
-    SetComposition(crate::doc::store::Composition),
-    SetNotebook { notebook: crate::doc::store::Notebook },
+    SetComposition(motolii_doc::store::Composition),
+    SetNotebook { notebook: motolii_doc::store::Notebook },
     SetMarkers {
-        markers: Vec<crate::doc::store::Marker>,
+        markers: Vec<motolii_doc::store::Marker>,
     },
     /// カメラの属性へ**素の値**を置く。層側の `SetConstant` と同じ意味で、
     /// 置き場が composition なだけ。
@@ -116,7 +116,7 @@ pub enum Intent {
     },
     SetCameraTrack {
         property: PropertyId,
-        track: crate::doc::eval::KeyframeTrack,
+        track: motolii_doc::eval::KeyframeTrack,
     },
     SetCameraPropertySlot {
         property: PropertyId,
@@ -126,13 +126,13 @@ pub enum Intent {
         slots: Vec<Slot>,
     },
     AdmitAsset {
-        draft: crate::doc::store::AssetDraft,
+        draft: motolii_doc::store::AssetDraft,
     },
     RemoveAsset {
-        asset: crate::doc::store::AssetId,
+        asset: motolii_doc::store::AssetId,
     },
     RelinkAsset {
-        asset: crate::doc::store::AssetId,
+        asset: motolii_doc::store::AssetId,
         path_absolute: String,
         project_root: Option<String>,
     },
@@ -156,12 +156,12 @@ pub struct Document {
     track_cache: RefCell<TrackCache>,
     record_cache: RefCell<RecordCache>,
     /// 並べた結果をコマをまたいで覚える(書類の版と時刻で。解析・仮の編集・一時の値を読まない view だけ)。
-    layout_cache: RefCell<super::scratch::LayoutCache>,
+    layout_cache: RefCell<motolii_doc::store::scratch::LayoutCache>,
     /// 見た目を保つための「どこに見えているか」。開く側が渡す。
-    geometry: super::geometry::Geometry,
+    geometry: motolii_doc::store::geometry::Geometry,
     /// この書類で使える効果。開く側が渡す — コアは誰が何を実装しているか知らない。
     /// 渡さなければ効果は 1 つも無い(読んで並べて描くだけの書類)。
-    programs: super::kind::Programs,
+    programs: motolii_doc::store::kind::Programs,
 }
 
 impl Default for Document {
@@ -177,23 +177,23 @@ impl Document {
 
     /// 開く側が、見た目を答える口を渡す。
     #[must_use]
-    pub fn with_geometry(mut self, geometry: super::geometry::Geometry) -> Self {
+    pub fn with_geometry(mut self, geometry: motolii_doc::store::geometry::Geometry) -> Self {
         self.geometry = geometry;
         self
     }
 
-    pub fn geometry(&self) -> super::geometry::Geometry {
+    pub fn geometry(&self) -> motolii_doc::store::geometry::Geometry {
         self.geometry
     }
 
     /// 開く側が、この書類で使える効果の表を渡す。
     #[must_use]
-    pub fn with_programs(mut self, programs: super::kind::Programs) -> Self {
+    pub fn with_programs(mut self, programs: motolii_doc::store::kind::Programs) -> Self {
         self.programs = programs;
         self
     }
 
-    pub fn programs(&self) -> super::kind::Programs {
+    pub fn programs(&self) -> motolii_doc::store::kind::Programs {
         self.programs
     }
 
@@ -210,13 +210,13 @@ impl Document {
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
             layout_cache: RefCell::new(Default::default()),
-            geometry: super::geometry::Geometry::NONE,
-            programs: super::kind::Programs::NONE,
+            geometry: motolii_doc::store::geometry::Geometry::NONE,
+            programs: motolii_doc::store::kind::Programs::NONE,
         }
     }
 
     pub(crate) fn composition_path() -> EntityPath {
-        super::read::composition_path()
+        motolii_doc::store::read::composition_path()
     }
 
     fn timeline() -> Timeline {
@@ -251,12 +251,12 @@ impl Document {
     }
 
     /// Consume editing authority, retaining the committed edit head without previews.
-    pub fn into_recording(self) -> super::Recording {
-        super::Recording::new(self.db, self.head).with_programs(self.programs)
+    pub fn into_recording(self) -> motolii_doc::store::Recording {
+        motolii_doc::store::Recording::new(self.db, self.head).with_programs(self.programs)
     }
 
     pub(crate) fn rebuild_head_from_store(&mut self) {
-        let head = super::recording::edit_head(&self.db);
+        let head = motolii_doc::store::recording::edit_head(&self.db);
         self.head = head;
         self.tip = head;
         self.floor = head;
@@ -459,7 +459,7 @@ impl Document {
         layer: LayerId,
         property: &PropertyId,
         value: Value,
-        t: crate::doc::store::RationalTime,
+        t: motolii_doc::store::RationalTime,
     ) -> Intent {
         match self.view().track(layer, property).ok().flatten() {
             None => Intent::SetConstant {
@@ -468,10 +468,10 @@ impl Document {
                 value,
             },
             Some(mut track) => {
-                track.insert(crate::doc::store::Keyframe {
+                track.insert(motolii_doc::store::Keyframe {
                     t,
                     value,
-                    interp: crate::doc::store::Interp::Linear,
+                    interp: motolii_doc::store::Interp::Linear,
                     spatial: None,
                 });
                 Intent::SetTrack {
@@ -488,7 +488,7 @@ impl Document {
         &self,
         property: &PropertyId,
         value: Value,
-        t: crate::doc::store::RationalTime,
+        t: motolii_doc::store::RationalTime,
     ) -> Intent {
         match self.view().camera_track(property).ok().flatten() {
             None => Intent::SetCameraConstant {
@@ -496,10 +496,10 @@ impl Document {
                 value,
             },
             Some(mut track) => {
-                track.insert(crate::doc::store::Keyframe {
+                track.insert(motolii_doc::store::Keyframe {
                     t,
                     value,
-                    interp: crate::doc::store::Interp::Linear,
+                    interp: motolii_doc::store::Interp::Linear,
                     spatial: None,
                 });
                 Intent::SetCameraTrack {

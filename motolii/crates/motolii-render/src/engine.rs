@@ -483,9 +483,10 @@ impl Engine {
 
 #[cfg(test)]
 mod spatial_cache_tests {
+    use motolii_edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::{
-        property, Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource,
+        property, Composition, Fps, LayerId, LayerMeta, LayerSource,
         LayerTiming, PropertyId, Value,
     };
 
@@ -584,7 +585,7 @@ mod spatial_cache_tests {
 mod environment_tests {
     use super::*;
     use crate::doc::store::{
-        property, Composition, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta,
+        property, Composition, Fps, LayerAttrsPatch, LayerId, LayerMeta,
         LayerSource, LayerTiming, PropertyId, Value,
     };
 
@@ -1029,7 +1030,7 @@ mod environment_tests {
 /// `srgb_from_linear` と hardware で二重に encode され、窓だけ白く浮く(2026-09-07)。
 #[cfg(test)]
 mod presentable_matches_export {
-    use crate::doc::store::{Composition, Document, Fps, Intent, RationalTime};
+    use crate::doc::store::{Composition, Fps, RationalTime};
 
     #[test]
     fn the_window_target_holds_the_same_bytes_as_the_export_readback() {

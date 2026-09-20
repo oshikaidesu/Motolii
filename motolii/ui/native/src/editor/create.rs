@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 use crate::doc::vector::{Brush,Contour,Fill,FillRule,Rgb,Vertex};
 use crate::editor::fixture;
@@ -436,6 +438,7 @@ pub(crate) fn new_layer_intents(
 
 #[cfg(test)]
 mod camera_tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     #[test]
     fn new_shape_centres_stay_fixed_when_rotated() {
@@ -448,7 +451,7 @@ mod camera_tests {
             let canvas = crate::render::engine::content_canvas(&shapes).unwrap().unwrap();
             let centre = glam::vec2(((b[0] + b[2]) * 0.5 + canvas.origin_x as f64) as f32,
                 ((b[1] + b[3]) * 0.5 + canvas.origin_y as f64) as f32);
-            let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+            let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
             let layer = LayerId(1);
             doc.apply_all(new_layer_intents(layer, 0, 0, 90, fps, comp, kind, None)).unwrap();
             doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(73.0) }).unwrap();
@@ -480,7 +483,7 @@ mod camera_tests {
     /// 尺の無い物は見えている幅の 3/4、尺のある物と、幅を渡さない時は従来どおり。
     #[test]
     fn unbounded_layers_take_three_quarters_of_the_visible_span() {
-        use crate::doc::store::{Document, Fps, Intent, LayerId, LayerMeta, Composition};
+        use crate::doc::store::{Fps, LayerId, LayerMeta, Composition};
         assert_eq!(super::unbounded_frames(Some(120)), Some(90));
         assert_eq!(super::unbounded_frames(Some(1)), Some(1));
         assert_eq!(super::unbounded_frames(None), None);
@@ -496,7 +499,7 @@ mod camera_tests {
 
     #[test]
     fn camera_layer_uses_normal_properties_lifetime_and_undo() {
-        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         let layer = LayerId(1);
         let fps = Fps::try_new(30,1).unwrap();
         doc.apply_all(new_layer_intents(layer,0,0,60,fps,(1920.0,1080.0),NewKind::Camera,None)).unwrap();
@@ -513,6 +516,7 @@ mod camera_tests {
 
 #[cfg(test)]
 mod environment_media {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
 
     /// `.hdr` / `.exr` を置くと最初から環境層。普通の画は板のまま。
@@ -573,6 +577,7 @@ mod environment_media {
 
 #[cfg(test)]
 mod english_names {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
 
     /// 置いた層が持つ属性は全部、窓とスクリプトの名前の表に載っている(内部 id を窓に出さない)。

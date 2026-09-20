@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::{EditorRuntime,editor,snapshot};
 use crate::doc::store::*;
 use serde_json::{Value as J,json};
@@ -67,7 +69,7 @@ impl EditorRuntime{
     fn property_edits(&self,j:&J)->Result<Vec<Intent>,String>{
         let layer=layer(j)?;let name=string(j,"property")?;let p=PropertyId::new(name).map_err(e)?;
         let view=self.doc.view().without_transients();
-        let current=view.value_at(layer,&p,self.time()?).map_err(e)?.or(view.default_value(layer,&p).map_err(e)?);
+        let current=view.value_at(layer,&p,self.time()?).map_err(e)?.or(motolii_edit::document::edit::default_value(&view, layer,&p).map_err(e)?);
         let catalog=crate::render::engine::known_effects();let data=editor::functions::read::inspector_data_from_doc(&view,layer,self.time()?,&catalog);
         let rows=data.text.iter().chain(data.transform.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter()));
         let row=rows.filter(|r|r.property.as_deref()==Some(name)).next();
@@ -206,7 +208,7 @@ impl EditorRuntime{
                 if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
                 else{let p=PropertyId::new(name).map_err(e)?;editor::functions::lens::require_local_source(&self.doc.view(),id,&p).map_err(e)?;let track=self.doc.view().track(id,&p).map_err(e)?.unwrap_or_default();
                     if track.keys().iter().any(|k|k.t.try_to_frame_round(editor::keyframe_edit::document_fps(&self.doc).unwrap()).ok()==Some(self.viewer.frame)){let edits=editor::timeline_edit::delete_key_selection_intents(&self.doc,&[(id,Some(p),at.as_seconds_f64())],at).map_err(e)?;self.apply(edits)?;}
-                    else{let data=editor::functions::read::inspector_data_from_doc(&self.doc.view(),id,at,&crate::render::engine::known_effects());let fallback=data.transform.iter().chain(data.text.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter())).find(|r|r.property.as_deref()==Some(name)).map(|r|r.value.clone());let value=self.doc.view().value_at(id,&p,at).map_err(e)?.or(self.doc.view().default_value(id,&p).map_err(e)?).or(fallback).ok_or("No keyframe value")?;let mut track=track;track.insert(Keyframe{t:at,value,interp:Interp::Linear,spatial:None});self.apply([Intent::SetTrack{layer:id,property:p,track}])?;}
+                    else{let data=editor::functions::read::inspector_data_from_doc(&self.doc.view(),id,at,&crate::render::engine::known_effects());let fallback=data.transform.iter().chain(data.text.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter())).find(|r|r.property.as_deref()==Some(name)).map(|r|r.value.clone());let value=self.doc.view().value_at(id,&p,at).map_err(e)?.or(crate::edit::document::edit::default_value(&self.doc.view(),id,&p).map_err(e)?).or(fallback).ok_or("No keyframe value")?;let mut track=track;track.insert(Keyframe{t:at,value,interp:Interp::Linear,spatial:None});self.apply([Intent::SetTrack{layer:id,property:p,track}])?;}
                 }
             }
             "moveKeys"=>{if self.viewer.selected_keys.is_empty(){return Err("Select keyframes".into())}let keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|(k.layer,k.property.clone(),k.at_sec)).collect();let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let delta=editor::keyframe_edit::clamped_key_delta(&keys,fps,integer(&j,"deltaFrames")?);let edits=editor::keyframe_edit::key_selection_move_intents(&self.doc,&keys,delta).map_err(e)?;self.apply(edits)?;for k in &mut self.viewer.selected_keys{k.at_sec+=delta as f64/fps;}}
@@ -497,6 +499,7 @@ mod hot_reload_probe {
 /// Freeze の口: 旗が立ち、裏で入点〜出点が焼かれ、status に進みが出る。Unfreeze で cache が消える。
 #[cfg(test)]
 mod freeze_op {
+    use crate::edit::{Animate, Document, Intent};
     use crate::doc::store::*;
     use serde_json::json;
 
@@ -535,6 +538,7 @@ mod freeze_op {
 
 #[cfg(test)]
 mod sequence_preview {
+    use crate::edit::{Animate, Document, Intent};
     use crate::doc::store::*;
 
     /// Ease(Sequence)を掴んでいる間の下書き: previewSequence で status のゴーストが変わり、
@@ -567,7 +571,7 @@ mod sequence_preview {
     /// status は `ghostable` で知らせ、sequence はその層を飛ばし、setAttrs は断る。
     #[test]
     fn layers_without_a_look_cannot_carry_a_ghost() {
-        use crate::doc::store::{Intent, LayerId, LayerMeta, LayerSource, LayerTiming};
+        use crate::doc::store::{LayerId, LayerMeta, LayerSource, LayerTiming};
         let mut rt = crate::EditorRuntime::open("").unwrap();
         let sources = [
             (21u64, LayerSource::Shape),
@@ -868,6 +872,7 @@ mod poster {
 
 #[cfg(test)]
 mod poster_probe {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     #[test]
     #[ignore]
@@ -889,6 +894,7 @@ mod poster_probe {
 
 #[cfg(test)]
 mod swiss {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     /// スイス風の下地: 白い地と黒い活字 2 つ。図形はアプリで置く。
     #[test]

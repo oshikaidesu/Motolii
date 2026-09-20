@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::{EditorRuntime, editor};
 use crate::doc::store::*;
 use serde_json::{json,Value as Json};
@@ -450,7 +452,7 @@ impl EditorRuntime{
                 properties.push(row);
             }
             let s=resolved.styles.first();
-            json!({"classes":crate::doc::store::text_edit::classifications(t.content.eval(at)),"styles":resolved.styles,"runs":resolved.runs,"fontFamily":s.map(|s|&s.font.family),"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})
+            json!({"classes":crate::edit::text_edit::classifications(t.content.eval(at)),"styles":resolved.styles,"runs":resolved.runs,"fontFamily":s.map(|s|&s.font.family),"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})
         }else{Json::Null};
         // 色の行は property。Browser の輪へ焦点を渡す slot を添える。
         for row in properties.iter_mut(){if row["kind"]=="color"{if let Some(slot)=row["id"].as_str().and_then(|name|editor::color::slot_of(&self.doc,id,name)){row["alpha"]=json!(matches!(slot,crate::viewer::ColorSlot::TextFill{..}|crate::viewer::ColorSlot::Property{..}));row["slot"]=json!(slot);}}}
@@ -500,6 +502,7 @@ impl EditorRuntime{
 
 #[cfg(test)]
 mod frame_cost_probe {
+    use crate::edit::{Animate, Document, Intent};
     use crate::doc::store::*;
 
     fn runtime(layers: u32, copies: f64) -> crate::EditorRuntime {

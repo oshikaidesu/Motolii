@@ -1,4 +1,6 @@
-use crate::doc::store::{Document,LayerId,PropertyId,ShapeNode,StoreView,Value};
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
+use crate::doc::store::{LayerId,PropertyId,ShapeNode,StoreView,Value};
 use crate::viewer::ColorSlot;
 use crate::editor::functions::read::{hex_of,asset_family};
 pub(crate) const LABEL_PALETTE: [&str; 12] = [
@@ -214,7 +216,7 @@ pub(crate) fn prepare_path(
     Ok(draft)
 }
 pub(crate) fn admit_draft(
-    doc: &mut crate::doc::store::Document,
+    doc: &mut crate::edit::Document,
     draft: crate::doc::store::AssetDraft,
 ) -> Result<bool, String> {
     let known = doc
@@ -226,7 +228,7 @@ pub(crate) fn admit_draft(
     if known {
         return Ok(false);
     }
-    doc.apply(crate::doc::store::Intent::AdmitAsset { draft })
+    doc.apply(crate::edit::Intent::AdmitAsset { draft })
         .map(|_| true)
         .map_err(|error| error.to_string())
 }

@@ -1306,10 +1306,10 @@ pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
 mod placement_contract {
     //! 配置効果(motolii.repeat)は他の効果と同じ口から入り、素材を N 個置く。
     //! 既定は通り抜け。配置効果の**下**に効果を積んだ時だけ、配置を 1 枚に合わせてから掛かる。
+    use motolii_edit::{Animate, Document, Intent};
     use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
     use crate::doc::store::{
-        property, Composition, Document, EffectId, EffectInstance, EffectScope, Fps, Intent,
-        LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
+        property, Composition, EffectId, EffectInstance, EffectScope, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
 use crate::extensions::{placement};
     use crate::render::engine::{known_effects, Engine};
@@ -1897,7 +1897,7 @@ fn lookbehind_layer_id(layer: LayerId, key: i64) -> LayerId {
 /// ホストが時刻を渡す形なら、同じ時刻は何度描いても、どの順で描いても同じ絵になる。
 #[cfg(test)]
 mod time_reference_is_deterministic {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;
@@ -1977,7 +1977,7 @@ mod time_reference_is_deterministic {
 /// 同じ時刻は何度描いても、どの順で描いても同じ絵(実 GPU)。
 #[cfg(test)]
 mod feedback_is_a_recurrence_from_the_in_point {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;
@@ -2107,7 +2107,7 @@ mod feedback_is_a_recurrence_from_the_in_point {
 /// 飛んでも辿っても同じ(`docs/plugin-resources.md` §6-1 CompLookbehind、非再帰)。
 #[cfg(test)]
 mod composite_at_another_time {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;
@@ -2206,7 +2206,7 @@ mod composite_at_another_time {
 /// Freeze(docs/freeze-and-flatten.md §2-6): 凍っても絵は変わらない、飛んでも辿っても同じ、Unfreeze で戻る。
 #[cfg(test)]
 mod freeze_keeps_the_picture {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;

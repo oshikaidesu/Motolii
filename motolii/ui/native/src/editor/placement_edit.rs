@@ -1,8 +1,10 @@
 //! 配置効果を**展開**する — 配置を N 層に切る(⌘D と同じく独立)。1 回の undo で戻る。
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use std::collections::{HashMap, HashSet};
 
 use crate::doc::store::{
-    property, Document, EffectId, Intent, KeyframeTrack, LayerId, LayerTiming,
+    property, EffectId, KeyframeTrack, LayerId, LayerTiming,
     Placement, PropertyId, RationalTime, StoreError, StoreView, Value,
 };
 use crate::render::extensions::{placement};
@@ -175,6 +177,7 @@ fn mapped(
 
 #[cfg(test)]
 mod expand_contract {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::{
         Composition, EffectInstance, Fps, LayerAttrsPatch, LayerMeta, LayerSource,

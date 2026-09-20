@@ -1,10 +1,12 @@
-use crate::doc::core::RationalTime;
-use crate::doc::eval::{Interp, Keyframe, KeyframeTrack, Value};
+#[allow(unused_imports)]
+use crate::document::{Animate, Document, Intent};
+use motolii_doc::core::RationalTime;
+use motolii_doc::eval::{Interp, Keyframe, KeyframeTrack, Value};
 
-use crate::doc::store::view::StoreView;
-use crate::doc::store::{LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming, StoreError};
+use motolii_doc::store::view::StoreView;
+use motolii_doc::store::{LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming, StoreError};
 
-use super::{Document, Intent, LayerId, PropertyId};
+use motolii_doc::store::{LayerId, PropertyId};
 
 impl Document {
     pub fn group_layers(&mut self, layers: &[LayerId]) -> Result<Option<LayerId>, StoreError> {
@@ -113,7 +115,7 @@ impl Document {
                     let anchor = read_vec2(
                         &view,
                         child,
-                        crate::doc::store::property::ANCHOR,
+                        motolii_doc::store::property::ANCHOR,
                         [0.0, 0.0],
                         t,
                     )?;
@@ -182,14 +184,14 @@ fn common_parent(view: &StoreView<'_>, layers: &[LayerId]) -> Result<Option<Laye
 }
 
 const TRANSFORM_PROPERTIES: &[&str] = &[
-    crate::doc::store::property::ANCHOR,
-    crate::doc::store::property::POSITION,
-    crate::doc::store::property::POSITION_X,
-    crate::doc::store::property::POSITION_Y,
-    crate::doc::store::property::SCALE,
-    crate::doc::store::property::ROTATION,
-    crate::doc::store::property::SKEW,
-    crate::doc::store::property::SKEW_AXIS,
+    motolii_doc::store::property::ANCHOR,
+    motolii_doc::store::property::POSITION,
+    motolii_doc::store::property::POSITION_X,
+    motolii_doc::store::property::POSITION_Y,
+    motolii_doc::store::property::SCALE,
+    motolii_doc::store::property::ROTATION,
+    motolii_doc::store::property::SKEW,
+    motolii_doc::store::property::SKEW_AXIS,
 ];
 
 fn reject_animated_transform(
@@ -225,27 +227,27 @@ impl BakedChildTransform {
         Ok(vec![
             Intent::SetTrack {
                 layer,
-                property: PropertyId::new(crate::doc::store::property::POSITION)?,
+                property: PropertyId::new(motolii_doc::store::property::POSITION)?,
                 track: still(Value::Vec2(self.position)),
             },
             Intent::SetTrack {
                 layer,
-                property: PropertyId::new(crate::doc::store::property::ROTATION)?,
+                property: PropertyId::new(motolii_doc::store::property::ROTATION)?,
                 track: still(Value::F64(self.rotation_degrees)),
             },
             Intent::SetTrack {
                 layer,
-                property: PropertyId::new(crate::doc::store::property::SCALE)?,
+                property: PropertyId::new(motolii_doc::store::property::SCALE)?,
                 track: still(Value::Vec2(self.scale)),
             },
             Intent::SetTrack {
                 layer,
-                property: PropertyId::new(crate::doc::store::property::SKEW)?,
+                property: PropertyId::new(motolii_doc::store::property::SKEW)?,
                 track: still(Value::F64(self.skew_degrees)),
             },
             Intent::SetTrack {
                 layer,
-                property: PropertyId::new(crate::doc::store::property::SKEW_AXIS)?,
+                property: PropertyId::new(motolii_doc::store::property::SKEW_AXIS)?,
                 track: still(Value::F64(self.skew_axis_degrees)),
             },
         ])
@@ -501,8 +503,8 @@ fn move_editable(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError>
             layer.0
         )));
     }
-    super::validate::check_not_locked(view, layer)?;
-    super::validate::check_not_frozen(view, layer)?;
+    crate::document::validate::check_not_locked(view, layer)?;
+    crate::document::validate::check_not_frozen(view, layer)?;
     if view.attrs(layer)?.unwrap_or_default().frozen {
         return Err(StoreError::Property(format!("Layer {} is frozen", layer.0)));
     }
@@ -511,8 +513,8 @@ fn move_editable(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError>
 
 pub(super) fn refuse_split_position(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError> {
     for name in [
-        crate::doc::store::property::POSITION_X,
-        crate::doc::store::property::POSITION_Y,
+        motolii_doc::store::property::POSITION_X,
+        motolii_doc::store::property::POSITION_Y,
     ] {
         if view
             .property_source(layer, &PropertyId::new(name)?)?
@@ -528,15 +530,15 @@ pub(super) fn refuse_split_position(view: &StoreView<'_>, layer: LayerId) -> Res
 
 pub(super) fn move_static_transform(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError> {
     for name in TRANSFORM_PROPERTIES.iter().copied().chain([
-        crate::doc::store::property::POSITION_Z,
-        crate::doc::store::property::ROTATION_X,
-        crate::doc::store::property::ROTATION_Y,
-        crate::doc::store::property::SCALE_Z,
+        motolii_doc::store::property::POSITION_Z,
+        motolii_doc::store::property::ROTATION_X,
+        motolii_doc::store::property::ROTATION_Y,
+        motolii_doc::store::property::SCALE_Z,
     ]) {
         let property = PropertyId::new(name)?;
         if let Some(source) = view.property_source(layer, &property)? {
             if !source.modulators.is_empty()
-                || matches!(source.base, Some(crate::doc::store::PropertyBase::Slot(_)))
+                || matches!(source.base, Some(motolii_doc::store::PropertyBase::Slot(_)))
             {
                 return Err(StoreError::Property(format!(
                     "Cannot preserve driven transform {name} while changing parent"
@@ -579,7 +581,7 @@ pub(super) fn move_translation_values(
     layer: LayerId,
     delta: [f64; 3],
 ) -> Result<Vec<Intent>, StoreError> {
-    use crate::doc::store::property;
+    use motolii_doc::store::property;
     let position = PropertyId::new(property::POSITION)?;
     let split = if view.property_source(layer, &position)?.is_none() {
         view.property_source(layer, &PropertyId::new(property::POSITION_X)?)?
@@ -608,7 +610,7 @@ pub(super) fn move_translation_values(
     }
     let mut intents = Vec::new();
     for (property, offset) in offsets {
-        if let Some(reason) = view.property_write_rejection(layer, &property)? {
+        if let Some(reason) = crate::document::edit::property_write_rejection(&view, layer, &property)? {
             return Err(StoreError::Property(reason.into()));
         }
         let add = |value: Value| -> Result<Value, StoreError> {
@@ -664,7 +666,7 @@ pub(super) fn move_translation_values(
 
 fn move_parent_compensation(
     view: &StoreView<'_>,
-    geometry: crate::doc::store::geometry::Geometry,
+    geometry: motolii_doc::store::geometry::Geometry,
     layer: LayerId,
     old_parent: Option<LayerId>,
     new_parent: Option<LayerId>,
@@ -713,12 +715,12 @@ fn move_parent_compensation(
     let anchor = read_vec2(
         view,
         layer,
-        crate::doc::store::property::ANCHOR,
+        motolii_doc::store::property::ANCHOR,
         [0.0, 0.0],
         at,
     )?;
     let baked = bake_child_local(correction, local, anchor);
-    let rebuilt = crate::doc::core::LayerPlacement::from_transform(
+    let rebuilt = motolii_doc::core::LayerPlacement::from_transform(
         anchor,
         baked.position.map(|v| v as f32),
         baked.scale.map(|v| v as f32),
@@ -741,11 +743,11 @@ fn move_parent_compensation(
         layer,
         at,
         [
-            (crate::doc::store::property::POSITION, Value::Vec2(baked.position)),
-            (crate::doc::store::property::SCALE, Value::Vec2(baked.scale)),
-            (crate::doc::store::property::ROTATION, Value::F64(baked.rotation_degrees)),
-            (crate::doc::store::property::SKEW, Value::F64(baked.skew_degrees)),
-            (crate::doc::store::property::SKEW_AXIS, Value::F64(baked.skew_axis_degrees)),
+            (motolii_doc::store::property::POSITION, Value::Vec2(baked.position)),
+            (motolii_doc::store::property::SCALE, Value::Vec2(baked.scale)),
+            (motolii_doc::store::property::ROTATION, Value::F64(baked.rotation_degrees)),
+            (motolii_doc::store::property::SKEW, Value::F64(baked.skew_degrees)),
+            (motolii_doc::store::property::SKEW_AXIS, Value::F64(baked.skew_axis_degrees)),
         ],
     )
 }
@@ -763,7 +765,7 @@ pub(super) fn write_transform_values(
         let property = PropertyId::new(name)?;
         let current = view
             .value_at(layer, &property, at)?
-            .or(view.default_value(layer, &property)?);
+            .or(crate::document::edit::default_value(&view, layer, &property)?);
         if current.as_ref() == Some(&value) {
             continue;
         }

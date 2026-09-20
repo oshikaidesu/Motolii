@@ -42,7 +42,7 @@ pub struct StoreView<'a> {
 const MAX_LINK_DEPTH: u32 = 64;
 
 impl<'a> StoreView<'a> {
-    pub(crate) fn new(
+    pub fn new(
         db: &'a EntityDb,
         at: i64,
         transient: &'a HashMap<TransientKey, Value>,
@@ -223,7 +223,7 @@ impl<'a> StoreView<'a> {
         out
     }
 
-    pub(crate) fn track_json_components(
+    pub fn track_json_components(
         &self,
         path: &EntityPath,
     ) -> Result<Vec<(re_types_core::ComponentIdentifier, String)>, StoreError> {
@@ -510,7 +510,7 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
-    pub(crate) fn assets_table(&self) -> Result<AssetTable, StoreError> {
+    pub fn assets_table(&self) -> Result<AssetTable, StoreError> {
         let descriptor = descriptor_assets();
         let path = composition_path();
         let results = self

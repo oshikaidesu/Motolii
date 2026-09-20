@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 motolii-doc = { path = "../../crates/motolii-doc" }
+motolii-edit = { path = "../extensions/edit" }
 motolii-render = { path = "../../crates/motolii-render", features = ["shared-bgra-output"] }
 wgpu = { workspace = true }
 serde_json = { workspace = true }

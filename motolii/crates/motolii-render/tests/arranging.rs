@@ -2,11 +2,12 @@
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use motolii_doc::store::*;
     use motolii_doc::store::layout::*;
     use motolii_render::picture::*;
     use motolii_doc::store::{
-        blank_project, rect_shape, ContentKeyframe, ContentTrack, Document, FontRef, Intent, LayerAttrsPatch, LayerMeta, LayerTiming, TextDocument, TextDocumentStyle,
+        rect_shape, ContentKeyframe, ContentTrack, FontRef, LayerAttrsPatch, LayerMeta, LayerTiming, TextDocument, TextDocumentStyle,
         TextJustify, TextStyleId,
     };
 

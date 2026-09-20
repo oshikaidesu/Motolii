@@ -415,8 +415,9 @@ pub fn hang(p0: glam::Vec2, p1: glam::Vec2, length: f32) -> Vec<[glam::Vec2; 3]>
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use super::*;
-    use crate::doc::store::{blank_project, property, rect_shape, Document, Intent, LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming};
+    use crate::doc::store::{property, rect_shape, LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming};
 
     const T: RationalTime = RationalTime::ZERO;
 

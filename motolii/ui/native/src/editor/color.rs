@@ -1,5 +1,7 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::eval::Value;
-use crate::doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, ShapeNode, StoreError, TextStyleId};
+use crate::doc::store::{property, LayerId, PropertyId, RationalTime, ShapeNode, StoreError, TextStyleId};
 use crate::editor::functions::read;
 use crate::doc::vector::{Brush,Fill,Gradient,GradientStop,GradientType,PathSource,Point,Rgb};
 use crate::viewer::ColorSlot;

@@ -247,7 +247,7 @@ pub struct TextDocument {
     pub runs: Vec<TextRun>,
 }
 
-pub(crate) fn validate(document: &TextDocument) -> Result<(), crate::doc::store::StoreError> {
+pub fn validate(document: &TextDocument) -> Result<(), crate::doc::store::StoreError> {
     validate_unique_range_ids(&document.ranges)?;
     validate_unique_style_ids(&document.styles)?;
     for range in &document.ranges {

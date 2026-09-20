@@ -422,8 +422,9 @@ fn position_of(state: &PlaybackState, now: Instant, duration: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use super::*;
-    use crate::doc::store::{Composition, Document, Intent};
+    use crate::doc::store::{Composition, };
 
     fn document_at(fps_num: i64, fps_den: i64, duration_frames: i64) -> Document {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());

@@ -644,8 +644,9 @@ pub(crate) fn sequential_inputs<'a>(
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::doc::store::{
-        Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta,
+        Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta,
         LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
     use crate::render::engine::Engine;
@@ -868,7 +869,7 @@ mod tests {
 /// 届かない実装(素材の texture が無ければ効果を捨てる)だと、網の外はいつまでも 0 のまま。
 #[cfg(test)]
 mod passes_reach_every_material {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;
@@ -916,7 +917,7 @@ mod passes_reach_every_material {
 /// その絵に掛かる(実 GPU)。読めていなければ自分の絵(赤)が残るか、下(青)と同じままになる。
 #[cfg(test)]
 mod passes_can_read_what_is_beneath {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;
@@ -1031,7 +1032,7 @@ mod passes_can_read_what_is_beneath {
 /// 層を指す欄(LAYER)。Set Matte が、利用者が選んだ層の α で自分を切る(実 GPU)。
 #[cfg(test)]
 mod passes_can_read_a_picked_layer {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;
@@ -1086,7 +1087,7 @@ mod passes_can_read_a_picked_layer {
 /// 機械学習の代わりの静的な 3 本(Depth Map / Kuwahara / XDoG)が、それぞれの手掛かりどおりに振る舞う(実 GPU)。
 #[cfg(test)]
 mod stylize_without_machine_learning {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 96;

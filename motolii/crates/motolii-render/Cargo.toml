@@ -55,7 +55,7 @@ wesl = { version = "=0.4.2", default-features = false }
 re_build_tools = { workspace = true }
 
 [dev-dependencies]
-motolii-doc = { path = "../motolii-doc", features = ["editing"] }
+motolii-edit = { path = "../../ui/extensions/edit" }
 tempfile = { workspace = true }
 
 [lints]

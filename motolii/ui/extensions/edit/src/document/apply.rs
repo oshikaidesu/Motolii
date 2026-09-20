@@ -1,18 +1,20 @@
+#[allow(unused_imports)]
+use crate::document::{Animate, Document, Intent};
 use re_types_core::SerializedComponentBatch;
 
-use crate::doc::store::components::{
+use motolii_doc::store::components::{
     descriptor_assets, descriptor_attrs, descriptor_composition, descriptor_effects,
     descriptor_notebook, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
     descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
-use crate::doc::store::slot::PropertySource;
-use crate::doc::store::StoreError;
+use motolii_doc::store::slot::PropertySource;
+use motolii_doc::store::StoreError;
 
-use super::validate::{
+use crate::document::validate::{
     check_not_frozen, check_not_frozen_inside, check_not_locked, freeze_attrs_batch, is_frozen_or_within_frozen, property_is_inside,
     validate_masks_have_shapes, validate_no_link_cycle, validate_no_parent_cycle,
 };
-use super::{Document, Intent};
+use motolii_doc::store::{};
 
 impl Document {
     pub(crate) fn write(&mut self, intent: Intent, at: i64) -> Result<(), StoreError> {
@@ -75,7 +77,7 @@ impl Document {
             Intent::SetMasks { layer, masks } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen_inside(&self.view(), layer, "its masks")?;
-                crate::doc::store::mask::validate_unique_ids(&masks)?;
+                motolii_doc::store::mask::validate_unique_ids(&masks)?;
                 validate_masks_have_shapes(&self.view(), layer, &masks)?;
                 let json = serde_json::to_string(&masks)?;
                 (
@@ -92,9 +94,9 @@ impl Document {
                 check_not_frozen_inside(&self.view(), layer, "its masks")?;
                 let mut masks = self.view().masks(layer)?;
                 masks.push(mask);
-                crate::doc::store::mask::validate_unique_ids(&masks)?;
+                motolii_doc::store::mask::validate_unique_ids(&masks)?;
                 let masks_json = serde_json::to_string(&masks)?;
-                let shape_property = crate::doc::store::PropertyId::mask_shape(mask.id);
+                let shape_property = motolii_doc::store::PropertyId::mask_shape(mask.id);
                 let shape_json = serde_json::to_string(&PropertySource::track(shape))?;
                 (
                     layer.entity_path(),
@@ -257,7 +259,7 @@ impl Document {
             Intent::SetEffects { layer, effects } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen_inside(&self.view(), layer, "its effects")?;
-                crate::doc::store::effect::validate_unique_ids(&effects)?;
+                motolii_doc::store::effect::validate_unique_ids(&effects)?;
                 let json = serde_json::to_string(&effects)?;
                 (
                     layer.entity_path(),
@@ -284,7 +286,7 @@ impl Document {
             Intent::SetTextDocument { layer, document } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen_inside(&self.view(), layer, "its text")?;
-                crate::doc::store::text::validate(&document)?;
+                motolii_doc::store::text::validate(&document)?;
                 let json = serde_json::to_string(&document)?;
                 (
                     layer.entity_path(),
@@ -456,7 +458,7 @@ impl Document {
                 )
             }
             Intent::SetSlots { slots } => {
-                crate::doc::store::slot::validate_unique_ids(&slots)?;
+                motolii_doc::store::slot::validate_unique_ids(&slots)?;
                 let json = serde_json::to_string(&slots)?;
                 (
                     Self::composition_path(),

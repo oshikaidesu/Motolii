@@ -1,4 +1,6 @@
-use crate::doc::store::{Document, Intent};
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
+use crate::doc::store::{};
 use crate::doc::vector::{Brush, Fill, Gradient, GradientBlend, GradientStop, GradientType, Point, Rgb};
 use super::color::{leaf_mut, shape_location, gradient_axis};
 use crate::viewer::ColorSlot;
@@ -99,12 +101,13 @@ pub(crate) fn model(doc:&Document, slot:&ColorSlot, time:crate::doc::store::Rati
 
 #[cfg(test)]
 mod tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::*;
     #[test]
     fn stop_identity_survives_insert_remove_undo_and_serialization() {
         use crate::doc::eval::{Value, KeyframeTrack, Keyframe, Interp};
-        let mut doc=blank_project().with_programs(crate::render::extensions::bundled());let layer=LayerId(1);
+        let mut doc=crate::edit::blank_project().with_programs(crate::render::extensions::bundled());let layer=LayerId(1);
         doc.apply_all(crate::editor::create::new_layer_intents(layer,0,0,60,Fps::try_new(30,1).unwrap(),(1920.0,1080.0),crate::editor::create::NewKind::Rectangle,None)).unwrap();
         let slot=ColorSlot::ShapeFill{layer,path:vec![0]};
         let at=RationalTime::ZERO;
@@ -142,7 +145,7 @@ mod tests {
     }
     #[test]
     fn stops_direction_preview_and_undo_share_document_shapes() {
-        let mut doc=blank_project().with_programs(crate::render::extensions::bundled());let layer=LayerId(1);
+        let mut doc=crate::edit::blank_project().with_programs(crate::render::extensions::bundled());let layer=LayerId(1);
         doc.apply_all(crate::editor::create::new_layer_intents(layer,0,0,60,Fps::try_new(30,1).unwrap(),(1920.0,1080.0),crate::editor::create::NewKind::Rectangle,None)).unwrap();
         let slot=ColorSlot::ShapeFill{layer,path:vec![0]};
         let before=doc.view().shapes(layer).unwrap();let history=doc.history_depth();

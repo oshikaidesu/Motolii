@@ -133,15 +133,15 @@ impl Component for LayerPresent {
     }
 }
 
-pub(crate) fn archetype_layer() -> &'static str {
+pub fn archetype_layer() -> &'static str {
     "motolii.archetypes.Layer"
 }
 
-pub(crate) fn archetype_composition() -> &'static str {
+pub fn archetype_composition() -> &'static str {
     "motolii.archetypes.Composition"
 }
 
-pub(crate) fn descriptor_track(property: &crate::doc::store::PropertyId) -> ComponentDescriptor {
+pub fn descriptor_track(property: &crate::doc::store::PropertyId) -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: property.component(),
@@ -149,7 +149,7 @@ pub(crate) fn descriptor_track(property: &crate::doc::store::PropertyId) -> Comp
     }
 }
 
-pub(crate) fn descriptor_meta() -> ComponentDescriptor {
+pub fn descriptor_meta() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:meta".into(),
@@ -157,7 +157,7 @@ pub(crate) fn descriptor_meta() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_masks() -> ComponentDescriptor {
+pub fn descriptor_masks() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:masks".into(),
@@ -165,7 +165,7 @@ pub(crate) fn descriptor_masks() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_composition() -> ComponentDescriptor {
+pub fn descriptor_composition() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:settings".into(),
@@ -173,7 +173,7 @@ pub(crate) fn descriptor_composition() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_markers() -> ComponentDescriptor {
+pub fn descriptor_markers() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:markers".into(),
@@ -181,7 +181,7 @@ pub(crate) fn descriptor_markers() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_slots() -> ComponentDescriptor {
+pub fn descriptor_slots() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:slots".into(),
@@ -189,7 +189,7 @@ pub(crate) fn descriptor_slots() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_assets() -> ComponentDescriptor {
+pub fn descriptor_assets() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:assets".into(),
@@ -197,7 +197,7 @@ pub(crate) fn descriptor_assets() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_present() -> ComponentDescriptor {
+pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:present".into(),
@@ -205,7 +205,7 @@ pub(crate) fn descriptor_present() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_attrs() -> ComponentDescriptor {
+pub fn descriptor_attrs() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:attrs".into(),
@@ -213,7 +213,7 @@ pub(crate) fn descriptor_attrs() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_effects() -> ComponentDescriptor {
+pub fn descriptor_effects() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:effects".into(),
@@ -221,7 +221,7 @@ pub(crate) fn descriptor_effects() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_shapes() -> ComponentDescriptor {
+pub fn descriptor_shapes() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:shapes".into(),
@@ -229,7 +229,7 @@ pub(crate) fn descriptor_shapes() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_text() -> ComponentDescriptor {
+pub fn descriptor_text() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:text".into(),
@@ -237,6 +237,6 @@ pub(crate) fn descriptor_text() -> ComponentDescriptor {
     }
 }
 
-pub(crate) fn descriptor_notebook() -> ComponentDescriptor {
+pub fn descriptor_notebook() -> ComponentDescriptor {
     ComponentDescriptor { archetype: Some(archetype_composition().into()), component: "Composition:notebook".into(), component_type: Some(TrackJson::name()) }
 }

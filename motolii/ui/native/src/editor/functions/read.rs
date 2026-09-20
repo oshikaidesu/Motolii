@@ -9,7 +9,7 @@ pub(crate) fn property_value(
     property: &PropertyId,
     at: RationalTime,
 ) -> Result<Option<Value>, StoreError> {
-    Ok(view.value_at(layer, property, at)?.or(view.default_value(layer, property)?))
+    Ok(view.value_at(layer, property, at)?.or(motolii_edit::document::edit::default_value(&view, layer, property)?))
 }
 
 pub(crate) fn label_rgb(ix: u8) -> [u8; 3] {

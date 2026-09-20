@@ -105,8 +105,9 @@ impl Engine {
 mod clipping_contract {
     //! クリッピング(↳)は下地の局所座標で**絵だけ**を合わせる。下地の配置(z・回転・projection)は
     //! Document でも render でも畳まないので、点群や他の 3D 層との前後は普通の層として解ける。
+    use motolii_edit::{Animate, Document, Intent};
     use crate::doc::store::{
-        property, Composition, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta,
+        property, Composition, Fps, LayerAttrsPatch, LayerId, LayerMeta,
         LayerProjection, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
     use crate::render::engine::Engine;

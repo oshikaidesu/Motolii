@@ -1,5 +1,7 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::{
-    Animate, Document, Intent, LayerId, PropertyId, RationalTime, StoreError, StoreView, Value,
+    LayerId, PropertyId, RationalTime, StoreError, StoreView, Value,
 };
 
 pub(crate) fn edit_rejection(
@@ -32,7 +34,7 @@ pub(crate) fn require_local_source(
     layer: LayerId,
     property: &PropertyId,
 ) -> Result<(), StoreError> {
-    if let Some(reason) = view.property_write_rejection(layer, property)? {
+    if let Some(reason) = motolii_edit::document::edit::property_write_rejection(&view, layer, property)? {
         return Err(StoreError::Property(reason.into()));
     }
     Ok(())

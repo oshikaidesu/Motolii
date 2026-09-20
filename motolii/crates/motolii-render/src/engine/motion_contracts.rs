@@ -2,7 +2,7 @@
 /// Pixel Motion Blur(光学フロー)の審判: 横に動く白い四角の縁の傾きが、1 コマの動き × シャッター角 / 360 の幅になる。
 /// 隣のコマは `TIME_OFFSET_FRAMES` で読むので、fps を変えても「1 コマの動き」で測れる。飛んでも辿っても同じ絵。
 mod pixel_motion_blur_follows_the_motion {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const W: u32 = 320;
@@ -74,7 +74,7 @@ mod pixel_motion_blur_follows_the_motion {
 /// Motion Blur(層の動き、Alight Motion の型)の審判: キーで 1 コマに 20 px 動く形の縁が、Tune 1 で 1 コマぶん(20 px)の傾きになる。
 /// 真ん中は写しを足しても元の明るさのまま、止まった層と Position を切った層はぼけない、飛んでも辿っても同じ絵。
 mod motion_blur_follows_the_keyframes {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp, Keyframe, KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, Interp, Keyframe, KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode};
     use crate::render::engine::Engine;
 
@@ -156,7 +156,7 @@ mod motion_blur_follows_the_keyframes {
 
 /// 粒子の層(形の族、点の billboard)。閉じた式なので飛んでも辿っても同じ絵、跳ね返りは床の上に留まる(実 GPU)。
 mod particles_are_a_closed_form {
-    use crate::doc::store::{particles, property, Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{particles, property, Composition, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const W: u32 = 320;

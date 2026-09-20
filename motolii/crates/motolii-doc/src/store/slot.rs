@@ -221,7 +221,7 @@ pub struct PropertyLink {
     pub params: Vec<(String, crate::doc::eval::Value)>,
 }
 
-pub(crate) fn translate_link(
+pub fn translate_link(
     plugin_id: &str,
     params: &[(String, crate::doc::eval::Value)],
     value: crate::doc::eval::Value,
@@ -278,7 +278,7 @@ pub(crate) fn translate_link(
     }
 }
 
-pub(crate) fn validate_unique_ids(slots: &[Slot]) -> Result<(), StoreError> {
+pub fn validate_unique_ids(slots: &[Slot]) -> Result<(), StoreError> {
     for (i, slot) in slots.iter().enumerate() {
         if slots[..i].iter().any(|other| other.id == slot.id) {
             return Err(StoreError::Property(format!(

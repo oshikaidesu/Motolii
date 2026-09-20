@@ -1,6 +1,9 @@
 #![recursion_limit = "256"]
 pub use motolii_doc as doc;
+pub use motolii_edit as edit;
 pub use motolii_render as render;
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 mod editor;
 mod viewer;
 mod port;
@@ -11,7 +14,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use motolii_doc::store::{property, Document, Intent, LayerId, PropertyId, RationalTime, Value};
+use motolii_doc::store::{property, LayerId, PropertyId, RationalTime, Value};
 use motolii_render::engine::{Engine, Window};
 use viewer::View;
 use objc2_io_surface::IOSurfaceRef;
@@ -70,7 +73,7 @@ impl Drop for EditorRuntime {
 /// (コアの既定は効果ゼロなので、別の道で作った作品は効果が黙って効かない)。
 pub(crate) fn work(path: Option<&str>) -> Result<Document, String> {
     let doc = match path {
-        None => doc::store::blank_project(),
+        None => crate::edit::blank_project(),
         Some(path) => Document::load(path).map_err(|e| e.to_string())?,
     };
     Ok(doc.with_programs(render::extensions::bundled()).with_geometry(render::extensions::geometry()))

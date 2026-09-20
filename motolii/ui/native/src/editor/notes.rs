@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::{EditorRuntime, doc::store::*};
 use serde_json::Value as J;
 use base64::Engine;

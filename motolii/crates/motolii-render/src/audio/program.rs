@@ -364,8 +364,9 @@ pub fn program_from_sources(
 /// 置いた瞬間は絵だけで走り、音は裏で復号して後から付く。書き出しは揃うまで待つ。
 #[cfg(test)]
 mod background_decode {
+    use motolii_edit::{Animate, Document, Intent};
     use super::{AudioProgram, AudioProgramCache};
-    use crate::doc::store::{Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming};
+    use crate::doc::store::{Composition, Fps, LayerId, LayerMeta, LayerSource, LayerTiming};
 
     fn ffmpeg_available() -> bool {
         crate::render::media::test_encoders_available(&[])

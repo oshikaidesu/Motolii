@@ -114,6 +114,7 @@ impl Engine {
 
 #[cfg(test)]
 mod domain_contract {
+    use motolii_edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::*;
     use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape};

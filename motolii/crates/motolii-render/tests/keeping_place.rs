@@ -4,6 +4,7 @@
 #[cfg(test)]
 mod move_layer_tests {
 
+    use motolii_edit::{Animate, Document, Intent};
     /// この検査は「見た目を保つ」補正を見るので、答える口を自分で登録する
     /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。
     fn placed() -> Document {
@@ -17,7 +18,7 @@ mod move_layer_tests {
         })
     }
     use motolii_doc::store::*;
-    use motolii_doc::store::{blank_project, property};
+    use motolii_doc::store::{property};
 
     fn add(doc: &mut Document, id: u64, group: bool, parent: Option<LayerId>) -> LayerId {
         let layer = LayerId(id);
@@ -484,7 +485,7 @@ mod projection_switch_tests {
     use motolii_doc::store::PropertyId;
     use motolii_doc::core::{projected_screen_corners, ResolvedCamera};
     use motolii_doc::eval::{Interp, Keyframe, KeyframeTrack};
-    use motolii_doc::store::{blank_project, LayerMeta, LayerSource, LayerTiming};
+    use motolii_doc::store::{LayerMeta, LayerSource, LayerTiming};
 
     const MIN: [f32; 3] = [-12.0, -20.0, 0.0];
     const MAX: [f32; 3] = [212.0, 140.0, 0.0];

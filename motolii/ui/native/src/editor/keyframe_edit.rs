@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 pub(crate) fn document_fps(doc: &Document) -> Result<Fps, StoreError> {
     doc.view()

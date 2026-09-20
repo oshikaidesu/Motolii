@@ -1,7 +1,7 @@
 //! GSAP の `stagger` の配り方(MIT、`src/gsap-core.js` 452 `distribute`)を式のまま写す。
 //! `{each, amount, from, grid, axis, ease}` — 升目の上の起点からの距離を正規化し、ease に通し、幅(amount か each × 列)を掛ける。
 //! `from: "random"` は GSAP が `Math.random` で並べ替える所を、台本の `random(seed)` と同じ生成器で並べ替える(時刻の純関数)。
-use crate::doc::eval::Interp;
+use motolii_doc::eval::Interp;
 
 /// GSAP の `_bigNum`。升目が無ければ 1 行(列数 = 無限)。
 pub const BIG: f64 = 1e8;
@@ -128,6 +128,7 @@ pub fn distribute(v: &Stagger, l: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_doc::store::*;
 
     fn grid(rows_cols: [f64; 2], from: From, amount: f64, each: f64) -> Stagger {
         Stagger { amount, each, from, wrap_at: rows_cols[1], axis: Axis::None, ease: None, seed: 0.0 }
@@ -136,7 +137,7 @@ mod tests {
     /// 参照値は本物の GSAP(node、`gsap.utils.distribute(vars)(i, a[i], a)`)。
     #[test]
     fn distribute_matches_gsap() {
-        let ease = |name: &str| Some(crate::doc::eval::gsap::interp_for(name).unwrap());
+        let ease = |name: &str| Some(motolii_doc::eval::gsap::interp_for(name).unwrap());
         let cases: Vec<(&str, Stagger, usize, Vec<f64>)> = vec![
             ("3x3 center amount 1", grid([3.0, 3.0], From::Center, 1.0, 0.0), 9, vec![1.0, 0.7071068, 1.0, 0.7071068, 0.0, 0.7071068, 1.0, 0.7071068, 1.0]),
             ("3x3 edges amount 1", grid([3.0, 3.0], From::Edges, 1.0, 0.0), 9, vec![0.0, 0.2928932, 0.0, 0.2928932, 1.0, 0.2928932, 0.0, 0.2928932, 0.0]),

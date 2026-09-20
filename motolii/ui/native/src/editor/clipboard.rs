@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use std::sync::{Arc, Mutex};
 
 use crate::doc::store::{
-    ContentKeyframe, Document, Intent, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime,
+    ContentKeyframe, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime,
     StoreError, TextDocument,
 };
 use crate::viewer::KeySel;
@@ -273,9 +275,10 @@ fn paste_keys(
 
 #[cfg(test)]
 mod tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::{
-        property, Intent, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
+        property, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
 
     #[test]
@@ -693,12 +696,13 @@ mod tests {
 
 #[cfg(test)]
 mod key_ownership_regressions {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::*;
 
     #[test]
     fn content_only_copy_and_paste_keep_explicit_content_identity() {
-        let mut doc = crate::doc::fixture::build().doc;
+        let mut doc = crate::edit::fixture::build().doc;
         let layer = doc
             .view()
             .layers()
@@ -766,7 +770,7 @@ mod key_ownership_regressions {
 
     #[test]
     fn missing_multi_layer_sources_cannot_merge_onto_one_fallback() {
-        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         for id in [1, 2, 3] {
             doc.apply_all([
                 Intent::AddLayer(LayerId(id)),
@@ -808,11 +812,12 @@ mod key_ownership_regressions {
 
 #[cfg(test)]
 mod document_identity_regressions {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::*;
 
     fn document() -> Document {
-        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         for id in [1, 2] {
             let mut track = KeyframeTrack::new();
             track.insert(Keyframe {

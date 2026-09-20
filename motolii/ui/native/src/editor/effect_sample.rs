@@ -1,4 +1,6 @@
 //! 効果の札 = 作者の snapshot 画像(VST3 の Plug-in Snapshot と同じ置き方)。
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use base64::Engine as _;
 use serde_json::{json, Value as J};
 
@@ -17,8 +19,9 @@ pub(crate) fn reply(j: &J) -> Result<J, String> {
 /// 同梱効果の絵の出所。
 #[cfg(test)]
 mod snapshots {
+    use crate::edit::{Document, Intent};
     use crate::doc::store::{
-        Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp, Keyframe, KeyframeTrack, LayerId,
+        Composition, EffectId, EffectInstance, Fps, Interp, Keyframe, KeyframeTrack, LayerId,
         PropertyId, RationalTime, Value, property,
     };
     use crate::editor::create::{self, NewKind};

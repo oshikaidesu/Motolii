@@ -1,16 +1,12 @@
 
-mod asset;
-mod attrs;
-mod components;
-#[cfg(feature = "editing")]
-mod document;
-mod effect;
-mod fingerprint;
-mod marker;
-mod mask;
-#[cfg(feature = "editing")]
-mod persist;
-mod recording;
+pub mod asset;
+pub mod attrs;
+pub mod components;
+pub mod effect;
+pub mod fingerprint;
+pub mod marker;
+pub mod mask;
+pub mod recording;
 pub use recording::Recording;
 pub mod kind;
 pub mod analysis;
@@ -18,20 +14,18 @@ pub mod particles;
 pub mod text_read;
 pub mod layout;
 pub mod names;
-mod slot;
+pub mod slot;
 pub mod text;
 pub mod geometry;
 pub mod scratch;
 pub mod view;
-mod read;
-mod ids;
+pub mod read;
+pub mod ids;
 
 pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
-#[cfg(feature = "editing")]
-pub use document::{Animate, Document, Intent};
 pub use ids::{LayerId, PropertyId};
-pub use read::{DisplayRevision, Revision};
+pub use read::{DisplayRevision, ReadOverlay, Revision, TransientKey};
 pub use effect::{EffectId, EffectInstance, EffectScope};
 pub use kind::Placement;
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
@@ -39,8 +33,6 @@ pub use marker::Marker;
 mod notebook;
 pub use notebook::{Notebook, NotePage, NoteBlock, NoteContent};
 pub use mask::{Mask, MaskFrame, MaskId, MaskMode};
-#[cfg(feature = "editing")]
-pub use persist::AutoSaveConfig;
 pub use slot::{PropertyBase, PropertyLink, PropertySource, Slot, SlotId};
 pub use text::{
     ContentKeyframe, ContentTrack, FontRef, TextAlignmentOptions, TextBasedOn, TextDocument,
@@ -491,25 +483,3 @@ pub struct LayerMeta {
     pub order: i16,
     pub timing: LayerTiming,
 }
-
-
-/// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
-/// 大きさは既定の 1920x1080 30fps 60秒。
-#[cfg(feature = "editing")]
-pub fn blank_project() -> Document {
-    use crate::doc::store::{Composition, Document, Fps, Intent};
-    // 効果は 1 つも登録しない見本。効果を使う検査は自分で `with_programs` する。
-    let mut doc = Document::new();
-    let comp = Composition {
-        width: 1920,
-        height: 1080,
-        fps: Fps::try_new(30, 1).expect("30fps"),
-        duration_frames: 1800,
-        background: [0.0, 0.0, 0.0, 1.0],
-    };
-    let _ = doc.apply(Intent::SetComposition(comp));
-    doc
-}
-
-#[cfg(feature = "editing")]
-pub mod text_edit;

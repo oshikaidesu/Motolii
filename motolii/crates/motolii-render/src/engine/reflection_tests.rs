@@ -1,7 +1,7 @@
 use super::environment_tests::{file_layer, scene, sky_png, MESH_X, MESH_Y, SIZE};
 use super::*;
 use crate::doc::store::{
-    property, Document, EffectId, EffectInstance, Intent, LayerId, LayerSource,
+    property, EffectId, EffectInstance, LayerId, LayerSource,
     PropertyId, Value,
 };
 use crate::extensions::{placement};

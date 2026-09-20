@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 use serde_json::Value as J;
 use std::collections::BTreeMap;
@@ -11,17 +13,17 @@ pub(crate) fn edits(doc:&Document, layer:LayerId, time:RationalTime, j:&J) -> Re
     let text=document.content.eval(time).to_owned();
     if j["text"].as_str().is_some_and(|t|t!=text) { return Err("Text changed; select the characters again".into()); }
     let scope=j["scope"].as_str().unwrap_or("all");
-    if !text_edit::SCOPES.contains(&scope) { return Err("Unknown character selection".into()); }
+    if !crate::edit::text_edit::SCOPES.contains(&scope) { return Err("Unknown character selection".into()); }
     let start=j["start"].as_u64().unwrap_or(0) as usize;
     let end=j["end"].as_u64().unwrap_or(0) as usize;
     if scope=="selection" && (start>=end || end>text.encode_utf16().count()) { return Err("Select some characters".into()); }
-    let selected=text_edit::selected(&text,start,end,scope);
+    let selected=crate::edit::text_edit::selected(&text,start,end,scope);
     if !selected.iter().any(|v|*v) && !(text.is_empty() && scope=="all") { return Err("No matching characters".into()); }
     let family=j["family"].as_str();
     if family.is_some_and(|f|!crate::render::picture::shaping::font_families().iter().any(|n|n==f)) { return Err("Font family is not installed".into()); }
     let size=if j.get("size").is_some() {Some(j["size"].as_f64().filter(|v|v.is_finite()&&(1.0..=1000.0).contains(v)).ok_or("Size must be between 1 and 1000")?)} else {None};
     if family.is_none() && size.is_none() { return Err("Choose a font or size".into()); }
-    let mut ids=text_edit::style_ids(&document,&text);
+    let mut ids=crate::edit::text_edit::style_ids(&document,&text);
     let mut counts:BTreeMap<TextStyleId,(usize,usize)>=BTreeMap::new();
     for (id,yes) in ids.iter().zip(&selected) { let count=counts.entry(*id).or_default();count.0+=1;if *yes {count.1+=1;} }
     if ids.is_empty() { let id=document.styles.first().ok_or("Text style missing")?.id;counts.insert(id,(1,1)); }
@@ -60,9 +62,9 @@ pub(crate) fn edits(doc:&Document, layer:LayerId, time:RationalTime, j:&J) -> Re
         else {document.styles.push(style);}
     }
     for (id,yes) in ids.iter_mut().zip(selected) {if yes {*id=changed[id];}}
-    text_edit::set_runs(&mut document,&ids);
+    crate::edit::text_edit::set_runs(&mut document,&ids);
     if !ids.is_empty(){document.styles.retain(|s|ids.contains(&s.id));}
-    text_edit::set_runs(&mut document,&ids);
+    crate::edit::text_edit::set_runs(&mut document,&ids);
     if edits.is_empty() && document==original_document {return Ok(Vec::new());}
     edits.insert(0,Intent::SetTextDocument{layer,document});
     Ok(edits)
@@ -70,10 +72,11 @@ pub(crate) fn edits(doc:&Document, layer:LayerId, time:RationalTime, j:&J) -> Re
 
 #[cfg(test)]
 mod tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use serde_json::json;
     fn project() -> Document {
-        let mut doc=blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc=crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         doc.apply_all(crate::editor::create::new_layer_intents(LayerId(1),0,0,60,Fps::try_new(30,1).unwrap(),(1920.0,1080.0),crate::editor::create::NewKind::Text,None)).unwrap();
         crate::editor::text::write_content(&mut doc,LayerId(1),RationalTime::ZERO,"あカ漢か\u{3099}😀ab".into()).unwrap();
         doc.apply(Intent::SetConstant{layer:LayerId(1),property:PropertyId::text_style_size(TextStyleId(0)),value:Value::F64(40.0)}).unwrap();doc
@@ -121,7 +124,7 @@ mod tests {
         let changes=edits(&doc,layer,RationalTime::ZERO,&json!({"scope":"hiragana","size":80.0})).unwrap();
         doc.apply_all(changes).unwrap();
         let formatted=motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), layer,RationalTime::ZERO).unwrap().unwrap();
-        let ids=text_edit::style_ids(&formatted,formatted.content.eval(RationalTime::ZERO));
+        let ids=crate::edit::text_edit::style_ids(&formatted,formatted.content.eval(RationalTime::ZERO));
         let sizes:Vec<_>=ids.iter().map(|id|formatted.styles.iter().find(|s|s.id==*id).unwrap().size).collect();
         assert_eq!(sizes,vec![80.0,40.0,40.0,80.0,40.0,40.0,40.0]);
         let path=std::env::temp_dir().join(format!("motolii-rich-text-{}.rrd",std::process::id()));
@@ -138,11 +141,11 @@ mod tests {
         let family=crate::render::picture::shaping::font_families().iter().find(|f|f.as_str()=="Georgia").unwrap();
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"selection","start":7,"end":8,"size":120.0,"family":family})).unwrap()).unwrap();
         let after=motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();
-        let ids=text_edit::style_ids(&after,after.content.eval(time));
+        let ids=crate::edit::text_edit::style_ids(&after,after.content.eval(time));
         let selected=after.styles.iter().find(|s|s.id==ids[5]).unwrap();assert_eq!(selected.size,120.0);assert_eq!(&selected.font.family,family);
         let b=crate::render::engine::text::text_shapes(&after,time,&canvas).unwrap().unwrap();assert_ne!(a,b,"級数と書体の変更が輪郭に届く");
         crate::editor::text::write_content(&mut doc,layer,time,"あカ漢か\u{3099}😀a!b".into()).unwrap();
-        let changed=doc.view().text_document(layer).unwrap().unwrap();let new_ids=text_edit::style_ids(&changed,changed.content.eval(time));
+        let changed=doc.view().text_document(layer).unwrap().unwrap();let new_ids=crate::edit::text_edit::style_ids(&changed,changed.content.eval(time));
         assert_eq!(new_ids[5],ids[5]);assert_eq!(new_ids[6],ids[5]);assert_eq!(new_ids[7],ids[6]);
         assert!(edits(&doc,layer,time,&json!({"scope":"selection","start":1,"end":2,"text":"outdated","size":50})).is_err());
     }
@@ -150,7 +153,7 @@ mod tests {
     fn kana_mark_is_one_selection_and_empty_text_can_choose_size() {
         let mut doc=project();let layer=LayerId(1);let time=RationalTime::ZERO;
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"selection","start":4,"end":5,"size":90})).unwrap()).unwrap();
-        let d=motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();let ids=text_edit::style_ids(&d,d.content.eval(time));
+        let d=motolii_render::picture::resolve::text::resolved_text_document(&doc.view(), layer,time).unwrap().unwrap();let ids=crate::edit::text_edit::style_ids(&d,d.content.eval(time));
         assert_eq!(d.styles.iter().find(|s|s.id==ids[3]).unwrap().size,90.0);
         crate::editor::text::write_content(&mut doc,layer,time,String::new()).unwrap();
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"all","size":55})).unwrap()).unwrap();

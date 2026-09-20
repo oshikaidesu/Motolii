@@ -193,7 +193,8 @@ impl Compositor {
 
 #[cfg(test)]
 mod tests {
-    use crate::doc::store::{Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime, ShapeNode};
+    use motolii_edit::{Animate, Document, Intent};
+    use crate::doc::store::{Composition, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime, ShapeNode};
     use crate::doc::vector::{Brush, Fill, FillRule, PathSource, Point, Rgb, Shape, Stroke, LineCap, LineJoin};
 
     fn pixel(rgba: &[u8], w: usize, x: usize, y: usize) -> [u8; 4] {

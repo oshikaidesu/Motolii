@@ -1,11 +1,13 @@
 
+#[allow(unused_imports)]
+use crate::document::{Animate, Document, Intent};
 use re_log_types::EntityPath;
 use re_types_core::SerializedComponentBatch;
 
-use crate::doc::store::components::{descriptor_attrs, TrackJson};
-use crate::doc::store::slot::PropertyLink;
-use crate::doc::store::view::StoreView;
-use crate::doc::store::{LayerId, LayerSource, Mask, PropertyId, StoreError};
+use motolii_doc::store::components::{descriptor_attrs, TrackJson};
+use motolii_doc::store::slot::PropertyLink;
+use motolii_doc::store::view::StoreView;
+use motolii_doc::store::{LayerId, LayerSource, Mask, PropertyId, StoreError};
 
 pub(super) fn validate_no_parent_cycle(
     view: &StoreView,
@@ -78,13 +80,13 @@ pub(super) fn validate_masks_have_shapes(
     layer: LayerId,
     masks: &[Mask],
 ) -> Result<(), StoreError> {
-    let existing_ids: std::collections::HashSet<crate::doc::store::MaskId> =
+    let existing_ids: std::collections::HashSet<motolii_doc::store::MaskId> =
         view.masks(layer)?.iter().map(|m| m.id).collect();
     for mask in masks {
         if existing_ids.contains(&mask.id) {
             continue;
         }
-        let shape_property = crate::doc::store::PropertyId::mask_shape(mask.id);
+        let shape_property = motolii_doc::store::PropertyId::mask_shape(mask.id);
         if view.property_source(layer, &shape_property)?.is_none() {
             return Err(StoreError::Property(format!(
                 "マスク {} を追加しようとしたが `mask.{}.shape` がまだ無い — 先に \
@@ -133,7 +135,7 @@ pub(super) fn check_not_frozen_inside(view: &StoreView, layer: LayerId, what: &s
 
 /// 欄の名前が「中」の物か(効果の欄・マスク)。それ以外(位置・不透明度など)は凍っていても回せる。
 pub(super) fn property_is_inside(name: &str) -> bool {
-    name.starts_with(crate::doc::store::property::EFFECT_PREFIX) || name.starts_with(crate::doc::store::property::MASK_PREFIX)
+    name.starts_with(motolii_doc::store::property::EFFECT_PREFIX) || name.starts_with(motolii_doc::store::property::MASK_PREFIX)
 }
 
 pub(super) fn is_frozen_or_within_frozen(view: &StoreView, candidate: LayerId) -> Result<bool, StoreError> {

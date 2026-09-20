@@ -1,6 +1,6 @@
 use motolii_doc::store::kind::{PlacementInput, PlacementOutput, PlacementProgram};
 use motolii_doc::store::{
-    blank_project, EffectId, EffectInstance, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
+    EffectId, EffectInstance, LayerId, LayerMeta, LayerSource, LayerTiming,
     Placement, RationalTime,
 };
 

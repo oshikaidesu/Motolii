@@ -1,6 +1,8 @@
 //! Blend の札の絵。W3C Compositing and Blending の式を **CPU で 1 画素**解く。
 //! 空の四角(C4)を、実際にその式で混ざった色にする。GPU を回すほどの物ではない。
 
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::BlendMode;
 
 /// 下地(bottom)の上に top をその mode で置いた色。線形光(0..1)。
@@ -125,6 +127,7 @@ pub(crate) fn css(c: [f32; 3]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
 
     #[test]

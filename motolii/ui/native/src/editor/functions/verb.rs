@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use super::atom;
 use crate::doc::store::{
-    Document, EffectId, EffectInstance, Intent, KeyframeTrack, LayerId, LayerSource, LayerTiming,
+    EffectId, EffectInstance, KeyframeTrack, LayerId, LayerSource, LayerTiming,
     RationalTime, ShapeNode, StoreError,
 };
 use crate::render::extensions::{placement};
@@ -298,8 +300,9 @@ pub(crate) fn retime_layer(
 
 #[cfg(test)]
 mod effect_insert_position {
+    use crate::edit::{Animate, Document, Intent};
     use super::effect_batch_intents;
-    use crate::doc::store::{Document, EffectId, EffectInstance, Intent, LayerId};
+    use crate::doc::store::{EffectId, EffectInstance, LayerId};
 use crate::render::extensions::{placement};
 
     fn with_effects(plugins: &[&str]) -> Document {

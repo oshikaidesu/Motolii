@@ -1,6 +1,6 @@
 //! 解析の入力の審判(実 GPU): Blob Track が元の層の絵から塊を拾い、素材を塊ごとに置く。
 
-use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
 use crate::extensions::{blob};
 use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape, ShapeNode, Stroke};
 use crate::render::engine::Engine;

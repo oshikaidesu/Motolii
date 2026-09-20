@@ -1,6 +1,8 @@
-use super::{validate, Document, Intent, LayerId, PropertyId};
-use crate::doc::store::names;
-use crate::doc::store::{
+#[allow(unused_imports)]
+use crate::document::{Document, Intent};
+use motolii_doc::store::{LayerId, PropertyId};
+use motolii_doc::store::names;
+use motolii_doc::store::{
     property, Interp, Keyframe, PropertyBase, RationalTime, StoreError, Value,
 };
 
@@ -47,15 +49,15 @@ impl Document {
                 layer.0
             )));
         }
-        validate::check_not_locked(&view, layer)?;
-        validate::check_not_frozen(&view, layer)?;
+        crate::document::validate::check_not_locked(&view, layer)?;
+        crate::document::validate::check_not_frozen(&view, layer)?;
         let source = view.property_source(layer, property)?;
-        if let Some(reason) = view.property_write_rejection(layer, property)? {
+        if let Some(reason) = crate::document::edit::property_write_rejection(&view, layer, property)? {
             return Err(StoreError::Property(reason.into()));
         }
         let current = view
             .value_at(layer, property, at)?
-            .or(view.default_value(layer, property)?);
+            .or(crate::document::edit::default_value(&view, layer, property)?);
         if let Some(current) = &current {
             if std::mem::discriminant(current) != std::mem::discriminant(&value) {
                 return Err(StoreError::Property(format!(
@@ -76,7 +78,7 @@ impl Document {
                     if from == value {
                         return Ok(None);
                     }
-                    let mut moved = crate::doc::eval::KeyframeTrack::new();
+                    let mut moved = motolii_doc::eval::KeyframeTrack::new();
                     for key in track.keys() {
                         moved.insert(Keyframe { value: shifted(&key.value, &from, &value), ..key.clone() });
                     }
@@ -107,7 +109,7 @@ impl Document {
             }
             Some(PropertyBase::Constant(_)) | None => {
                 if animate != Animate::Off {
-                    let mut track = crate::doc::eval::KeyframeTrack::new();
+                    let mut track = motolii_doc::eval::KeyframeTrack::new();
                     if let (Animate::From { origin, interp }, Some(from)) = (animate, &current) {
                         if origin != at {
                             track.insert(Keyframe { t: origin, value: from.clone(), interp, spatial: None });
@@ -170,7 +172,7 @@ impl Document {
                     *layer
                 }
                 Intent::SetTextDocument { layer, document } => {
-                    crate::doc::store::text::validate(document)?;
+                    motolii_doc::store::text::validate(document)?;
                     *layer
                 }
                 Intent::SetConstant { layer, .. } | Intent::SetShapes { layer, .. } => *layer,
@@ -188,13 +190,13 @@ impl Document {
                     layer.0
                 )));
             }
-            validate::check_not_locked(&view, layer)?;
-            validate::check_not_frozen(&view, layer)?;
+            crate::document::validate::check_not_locked(&view, layer)?;
+            crate::document::validate::check_not_frozen(&view, layer)?;
         }
-        let mut projected = super::ReadOverlay::default();
+        let mut projected = motolii_doc::store::ReadOverlay::default();
         for edit in edits {
-            use super::TransientKey;
-            use crate::doc::store::PropertySource;
+            use motolii_doc::store::TransientKey;
+            use motolii_doc::store::PropertySource;
             match edit {
                 Intent::SetTrack { layer, property, track } => { projected.sources.insert(TransientKey::Layer(*layer, property.clone()), PropertySource::track(track.clone())); }
                 Intent::SetConstant { layer, property, value } => { projected.sources.insert(TransientKey::Layer(*layer, property.clone()), PropertySource::constant(value.clone())); }
@@ -229,44 +231,42 @@ impl Document {
     }
 }
 
-impl crate::doc::store::StoreView<'_> {
-    pub fn property_write_rejection(&self, layer: LayerId, id: &PropertyId) -> Result<Option<&'static str>, StoreError> {
-        let source = self.clone().without_transients().property_source(layer, id)?;
-        Ok(match source {
-            Some(source) if !source.modulators.is_empty() => Some("Edit the driver before changing a driven value"),
-            Some(source) if matches!(source.base, Some(PropertyBase::Slot(_))) => Some("Edit the shared slot explicitly"),
-            _ => None,
-        })
-    }
+pub fn property_write_rejection(view: &motolii_doc::store::StoreView<'_>, layer: LayerId, id: &PropertyId) -> Result<Option<&'static str>, StoreError> {
+    let source = view.clone().without_transients().property_source(layer, id)?;
+    Ok(match source {
+        Some(source) if !source.modulators.is_empty() => Some("Edit the driver before changing a driven value"),
+        Some(source) if matches!(source.base, Some(PropertyBase::Slot(_))) => Some("Edit the shared slot explicitly"),
+        _ => None,
+    })
+}
 
-    pub fn default_value(
-        &self,
-        _layer: LayerId,
-        id: &PropertyId,
-    ) -> Result<Option<Value>, StoreError> {
-        Ok(match id.name() {
-            property::POSITION | property::ANCHOR => Some(Value::Vec2([0.0, 0.0])),
-            property::SCALE => Some(Value::Vec2([1.0, 1.0])),
-            property::SCALE_Z => Some(Value::F64(1.0)),
-            property::OPACITY => Some(Value::F64(1.0)),
-            property::ROTATION
-            | property::ROTATION_X
-            | property::ROTATION_Y
-            | property::POSITION_X
-            | property::POSITION_Y
-            | property::POSITION_Z
-            | property::DEPTH
-            | property::SKEW
-            | property::SKEW_AXIS
-            | property::PAN
-            | property::FADE_IN
-            | property::FADE_OUT => Some(Value::F64(0.0)),
-            // 段落の選択肢(文字組みの 3 法)。既定は CSS の初期値 = 選択肢の 0 番。
-            names::TEXT_AUTOSPACE | names::TEXT_SPACING_TRIM | names::HANGING_PUNCTUATION | names::TEXT_SPLIT => Some(Value::Enum(0)),
-            name => property::CAMERA_ROWS.iter().find(|row| row.0 == name).map(|row| row.2.clone())
-                .or_else(|| crate::doc::store::particles::default_of(name)),
-        })
-    }
+pub fn default_value(
+    view: &motolii_doc::store::StoreView<'_>,
+    _layer: LayerId,
+    id: &PropertyId,
+) -> Result<Option<Value>, StoreError> {
+    Ok(match id.name() {
+        property::POSITION | property::ANCHOR => Some(Value::Vec2([0.0, 0.0])),
+        property::SCALE => Some(Value::Vec2([1.0, 1.0])),
+        property::SCALE_Z => Some(Value::F64(1.0)),
+        property::OPACITY => Some(Value::F64(1.0)),
+        property::ROTATION
+        | property::ROTATION_X
+        | property::ROTATION_Y
+        | property::POSITION_X
+        | property::POSITION_Y
+        | property::POSITION_Z
+        | property::DEPTH
+        | property::SKEW
+        | property::SKEW_AXIS
+        | property::PAN
+        | property::FADE_IN
+        | property::FADE_OUT => Some(Value::F64(0.0)),
+        // 段落の選択肢(文字組みの 3 法)。既定は CSS の初期値 = 選択肢の 0 番。
+        names::TEXT_AUTOSPACE | names::TEXT_SPACING_TRIM | names::HANGING_PUNCTUATION | names::TEXT_SPLIT => Some(Value::Enum(0)),
+        name => property::CAMERA_ROWS.iter().find(|row| row.0 == name).map(|row| row.2.clone())
+            .or_else(|| motolii_doc::store::particles::default_of(name)),
+    })
 }
 
 /// `from` を `to` へ動かした差を `key` に足す。足せない型は `to` に置き換える。

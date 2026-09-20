@@ -157,6 +157,7 @@ pub fn clipped_masks(
 
 #[cfg(test)]
 mod clipping_contract {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::doc::store::*;
 
     fn add(doc: &mut Document, id: u64, order: i16, parent: Option<LayerId>, clipped: bool) -> LayerId {

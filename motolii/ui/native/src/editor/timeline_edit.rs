@@ -1,6 +1,8 @@
 //! 層をいじる手(複製・分割)。timeline_widget.rs が 1737 行の天井を越えたので分けた。
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::{
-    Document, Intent, KeyframeTrack, LayerAttrs, LayerAttrsPatch, LayerId, LayerSource, LayerTiming,
+    KeyframeTrack, LayerAttrs, LayerAttrsPatch, LayerId, LayerSource, LayerTiming,
     PropertyBase, PropertyId, RationalTime, Slot, SlotId, StoreError, StoreView,
 };
 use crate::editor::functions::atom;
@@ -971,12 +973,13 @@ pub(crate) fn delete_key_selection_intents(
 
 #[cfg(test)]
 mod hierarchy_clipboard_regressions {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::{LayerMeta, LayerSource};
 
     #[test]
     fn copied_group_contains_descendants_through_non_group_parents() {
-        let mut doc = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         for (id, source, parent) in [
             (1, LayerSource::Group, None),
             (2, LayerSource::Null, Some(LayerId(1))),
@@ -1030,7 +1033,7 @@ mod hierarchy_clipboard_regressions {
 
     #[test]
     fn content_selection_does_not_delete_or_move_other_property_keys() {
-        let mut doc = crate::doc::fixture::build().doc;
+        let mut doc = crate::edit::fixture::build().doc;
         let layer = doc
             .view()
             .layers()

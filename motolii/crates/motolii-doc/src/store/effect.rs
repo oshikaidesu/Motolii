@@ -47,7 +47,7 @@ impl EffectScope {
 }
 
 
-pub(crate) fn validate_unique_ids(effects: &[EffectInstance]) -> Result<(), StoreError> {
+pub fn validate_unique_ids(effects: &[EffectInstance]) -> Result<(), StoreError> {
     for (i, effect) in effects.iter().enumerate() {
         if effects[..i].iter().any(|other| other.id == effect.id) {
             return Err(StoreError::Property(format!(

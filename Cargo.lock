@@ -3158,10 +3158,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-edit"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "glam 0.30.10",
+ "motolii-doc",
+ "motolii-edit",
+ "re_build_info",
+ "re_byte_size",
+ "re_chunk",
+ "re_chunk_store",
+ "re_entity_db",
+ "re_log_encoding",
+ "re_log_types",
+ "re_query",
+ "re_types_core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+ "unicode-script",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "motolii-jobs"
 version = "0.1.0"
 dependencies = [
  "motolii-doc",
+ "motolii-edit",
  "motolii-render",
  "serde_json",
 ]
@@ -3181,6 +3207,7 @@ dependencies = [
  "macaw",
  "memmap2",
  "motolii-doc",
+ "motolii-edit",
  "moxcms",
  "naga",
  "notify",
@@ -3232,6 +3259,7 @@ dependencies = [
  "glam 0.30.10",
  "image",
  "motolii-doc",
+ "motolii-edit",
  "motolii-jobs",
  "motolii-render",
  "motolii-script",

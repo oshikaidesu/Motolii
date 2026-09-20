@@ -167,7 +167,7 @@ impl PropertyId {
         &self.name
     }
 
-    pub(crate) fn component(&self) -> re_types_core::ComponentIdentifier {
+    pub fn component(&self) -> re_types_core::ComponentIdentifier {
         self.component
     }
 }

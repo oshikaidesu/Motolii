@@ -6,6 +6,21 @@ version = 1
 
 [[violations]]
 rule = "no cycles"
+from = "motolii-edit::document::edit"
+to = "motolii-edit::document::validate"
+symbols = [
+    "check_not_frozen",
+    "check_not_locked",
+]
+
+[[violations]]
+rule = "no cycles"
+from = "motolii-edit::document::validate"
+to = "motolii-edit::document::edit"
+symbols = ["Animate"]
+
+[[violations]]
+rule = "no cycles"
 from = "motolii-render::compositor"
 to = "motolii-render::compositor::reflection_cache"
 symbols = ["ReflectionEntry"]

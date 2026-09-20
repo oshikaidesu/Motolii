@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use super::{atom, compose, lens, read};
 use crate::doc::store::{
-    property, Document, Intent, LayerId, PropertyId, RationalTime, StoreError, StoreView, Value,
+    property, LayerId, PropertyId, RationalTime, StoreError, StoreView, Value,
 };
 
 fn vec2(

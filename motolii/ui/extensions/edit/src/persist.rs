@@ -1,8 +1,10 @@
 
+#[allow(unused_imports)]
+use crate::document::{Animate, Document, Intent};
 use std::path::{Path, PathBuf};
 
-use crate::doc::store::components::{archetype_composition, archetype_layer};
-use crate::doc::store::{Document, Intent, Revision, StoreError};
+use motolii_doc::store::components::{archetype_composition, archetype_layer};
+use motolii_doc::store::{Revision, StoreError};
 
 impl Document {
     pub fn flattened(&self) -> Result<Self, StoreError> {
@@ -74,7 +76,7 @@ impl Document {
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        let db = super::recording::load_db(path.as_ref())?;
+        let db = motolii_doc::store::recording::load_db(path.as_ref())?;
         let mut out = Self::with_store_id(db.store_id().clone());
         out.db = db;
         out.rebuild_head_from_store();

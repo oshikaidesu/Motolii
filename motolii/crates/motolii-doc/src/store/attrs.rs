@@ -264,7 +264,7 @@ pub struct LayerAttrsPatch {
 }
 
 impl LayerAttrsPatch {
-    pub(crate) fn apply_to(self, mut current: LayerAttrs) -> LayerAttrs {
+    pub fn apply_to(self, mut current: LayerAttrs) -> LayerAttrs {
         if let Some(v) = self.hidden {
             current.hidden = v;
         }

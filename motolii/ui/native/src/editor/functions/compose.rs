@@ -1,4 +1,6 @@
-use crate::doc::store::{Document, Intent, LayerId, StoreError};
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
+use crate::doc::store::{LayerId, StoreError};
 
 pub(crate) fn independent_layers(
     baseline: &Document,

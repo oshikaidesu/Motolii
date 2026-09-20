@@ -10,7 +10,7 @@ motolii-render = { path = "../../../crates/motolii-render" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-motolii-doc = { path = "../../../crates/motolii-doc", features = ["editing"] }
+motolii-edit = { path = "../../../ui/extensions/edit" }
 
 [lints]
 workspace = true

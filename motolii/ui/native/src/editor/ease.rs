@@ -1,4 +1,6 @@
-use crate::doc::store::{Intent, Interp, KeyframeTrack, PropertyId};
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
+use crate::doc::store::{Interp, KeyframeTrack, PropertyId};
 use crate::viewer::KeySel;
 /// 選んだキーから作る区間。同じ層・同じ属性で時刻が隣り合う2つが1区間。
 /// 1つしか選んでいない時は「そのキーから次まで」を区間とみなす。
@@ -34,14 +36,14 @@ pub(crate) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
     out
 }
 
-pub(crate) fn apply(doc: &mut crate::doc::store::Document, starts: &[KeySel], shape: Interp) -> Result<usize, String> {
+pub(crate) fn apply(doc: &mut crate::edit::Document, starts: &[KeySel], shape: Interp) -> Result<usize, String> {
     apply_at(doc, starts, EaseEdit::Preset(shape))
 }
 
 /// AE の F9 一族。Easy Ease In(⇧F9)は**キーへ入る側** = 前の区間の終わりを寝かせる。
 /// Easy Ease Out(⌘F9)はキーから出る側 = この区間の始まり。形はキーが持つので、In は前のキーへ書く。
 pub(crate) fn apply_easy(
-    doc: &mut crate::doc::store::Document,
+    doc: &mut crate::edit::Document,
     starts: &[KeySel],
     side: crate::editor::keymap::EaseSide,
 ) -> Result<usize, String> {
@@ -55,7 +57,7 @@ enum EaseEdit {
 }
 
 fn apply_at(
-    doc: &mut crate::doc::store::Document,
+    doc: &mut crate::edit::Document,
     starts: &[KeySel],
     edit: EaseEdit,
 ) -> Result<usize, String> {
@@ -150,11 +152,12 @@ fn ease_endpoints(shape: Interp, endpoints: u8) -> Interp {
 
 #[cfg(test)]
 mod tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
     use crate::doc::store::*;
     #[test]
     fn legacy_interval_application_is_one_undo_and_has_no_terminal_interval() {
-        let mut doc = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         let layer = LayerId(1);
         let fps = Fps::try_new(30, 1).unwrap();
         doc.apply_all(crate::editor::create::new_layer_intents(layer, 0, 0, 60, fps, (1920.0,1080.0), crate::editor::create::NewKind::Rectangle, None)).unwrap();

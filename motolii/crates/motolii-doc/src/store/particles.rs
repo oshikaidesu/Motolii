@@ -116,11 +116,11 @@ struct Params {
     seed: u64,
 }
 
-pub(crate) fn particle_value(view: &StoreView<'_>, layer: LayerId, name: &str, t: RationalTime) -> Result<Value, StoreError> {
+pub fn particle_value(view: &StoreView<'_>, layer: LayerId, name: &str, t: RationalTime) -> Result<Value, StoreError> {
     Ok(view.value_at(layer, &PropertyId::new(name)?, t)?.or_else(|| default_of(name)).unwrap_or(Value::F64(0.0)))
 }
 
-pub(crate) fn particle_number(view: &StoreView<'_>, layer: LayerId, name: &str, t: RationalTime) -> Result<f64, StoreError> {
+pub fn particle_number(view: &StoreView<'_>, layer: LayerId, name: &str, t: RationalTime) -> Result<f64, StoreError> {
     Ok(match particle_value(view, layer, name, t)? { Value::F64(v) if v.is_finite() => v, _ => 0.0 })
 }
 
@@ -173,7 +173,7 @@ pub fn particles_at(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Re
 }
 
 /// 入点から t までに生まれた粒: (番号, 生まれた comp の秒)。率はコマごとにその時刻の値で積む。
-pub(crate) fn births(view: &StoreView<'_>, layer: LayerId, start_frame: i64, t: RationalTime, fps: Fps) -> Result<Vec<(u32, f64)>, StoreError> {
+pub fn births(view: &StoreView<'_>, layer: LayerId, start_frame: i64, t: RationalTime, fps: Fps) -> Result<Vec<(u32, f64)>, StoreError> {
     let frame_seconds = fps.den() as f64 / fps.num() as f64;
     let Ok(now_frame) = t.try_to_frame_floor(fps) else { return Ok(Vec::new()) };
     let now = t.as_seconds_f64();

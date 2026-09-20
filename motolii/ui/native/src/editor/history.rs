@@ -3,6 +3,8 @@
 //! 段の位置は Document の edit_head。点の id は走行ごとに一度きりの連番で、
 //! 段が捨てられても再利用しない。点は親を指すので、将来の分岐は
 //! 「同じ親を持つ 2 本目」で足せる(合流はこの版の外)。
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use serde_json::{Value as J, json};
 use std::path::PathBuf;
 

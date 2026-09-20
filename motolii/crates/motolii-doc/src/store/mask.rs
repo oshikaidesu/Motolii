@@ -87,7 +87,7 @@ pub enum MaskFrame {
 }
 
 
-pub(crate) fn validate_unique_ids(masks: &[Mask]) -> Result<(), StoreError> {
+pub fn validate_unique_ids(masks: &[Mask]) -> Result<(), StoreError> {
     for (i, mask) in masks.iter().enumerate() {
         if masks[..i].iter().any(|other| other.id == mask.id) {
             return Err(StoreError::Property(format!(

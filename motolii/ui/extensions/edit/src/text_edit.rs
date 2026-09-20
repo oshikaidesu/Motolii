@@ -1,8 +1,8 @@
-use super::{TextDocument, TextRun, TextStyleId};
+use motolii_doc::store::{TextDocument, TextRun, TextStyleId};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_script::{UnicodeScript, Script};
 
-pub use super::text_read::{graphemes, style_ids};
+pub use motolii_doc::store::text_read::{graphemes, style_ids};
 
 pub fn set_runs(document:&mut TextDocument, ids:&[TextStyleId]) {
     let mut runs:Vec<TextRun>=Vec::new();
@@ -66,6 +66,7 @@ pub fn selected(text:&str, start:usize, end:usize, scope:&str) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_doc::store::*;
     #[test]
     fn scripts_and_utf16_ranges_never_split_a_grapheme() {
         let text="か\u{3099}カ漢😀a";

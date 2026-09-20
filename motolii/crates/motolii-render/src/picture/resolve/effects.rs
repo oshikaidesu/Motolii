@@ -106,6 +106,7 @@ pub fn handed_down(view: &StoreView<'_>, layer: LayerId, t: RationalTime, presen
 
 #[cfg(test)]
 mod group_scope_contract {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::picture::resolved::ResolvedLayer;
     use crate::doc::store::*;
 

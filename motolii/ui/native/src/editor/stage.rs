@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 use crate::render::engine::Engine;
 type PropertyEdit=(LayerId,PropertyId,Value);

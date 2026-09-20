@@ -779,8 +779,9 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::doc::eval::Keyframe;
-    use crate::doc::store::{layout, property, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming, PathSource, PropertyId, RationalTime, Shape, ShapeNode, Value};
+    use crate::doc::store::{layout, property, Composition, EffectId, EffectInstance, Fps, Interp, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming, PathSource, PropertyId, RationalTime, Shape, ShapeNode, Value};
     use crate::doc::vector::{Brush, Fill, Point, Rgb};
     use crate::render::engine::Engine;
 

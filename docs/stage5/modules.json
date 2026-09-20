@@ -25,6 +25,7 @@
     "motolii/ui/extensions/jobs/src"
   ],
   "coreProcessState": {"root": "motolii/crates/motolii-doc/src", "owners": {"vector/text.rs": ["SYSTEM", "KNOWN"]}},
+  "editingHouse": "motolii/ui/extensions/edit",
   "effectRegistration": {"root": "motolii/ui/native/src", "owner": "lib.rs", "calls": ["blank_project", "Document::load"]},
   "coreSolvers": {"root": "motolii/crates/motolii-render/src", "owners": {"taffy": "picture/flow.rs"}},
   "isolatedExtensions": {

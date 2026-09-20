@@ -213,8 +213,9 @@ impl Compositor {
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use super::*;
-    use crate::doc::store::{property, Composition, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming, PropertyId, RationalTime, ShapeNode, Value};
+    use crate::doc::store::{property, Composition, Fps, LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming, PropertyId, RationalTime, ShapeNode, Value};
     use crate::doc::vector::{Brush, Fill, FillRule, PathSource, Point, Rgb, Shape};
 
     fn square(size: f32) -> (Vec<PathContour>, PathFillRule) {

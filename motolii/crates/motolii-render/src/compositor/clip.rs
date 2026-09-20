@@ -31,6 +31,7 @@ impl ClipSpec {
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use super::ClipSpec;
 
     #[test]
@@ -49,7 +50,7 @@ mod tests {
 /// 板・点群・網が同じ平面で切れる(実 GPU)。z=0 の板は特別扱いしない。
 #[cfg(test)]
 mod contract {
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value};
     use crate::render::engine::Engine;
 
     const SIZE: u32 = 64;

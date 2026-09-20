@@ -1,6 +1,8 @@
 //! 3D レイヤーの 3 軸ギズモ。`transform-gizmo` に当たり判定と描画頂点を任せ、
 //! こちらは Motolii のカメラ規約との差だけを埋めて、結果を Document の値へ戻す。
 //! 2D の平面ケージ(`stage.rs` の `CageDrag`)とは経路を共有しない。
+#[allow(unused_imports)]
+use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 use transform_gizmo::math::Transform as GizmoTransform;
 use transform_gizmo::{
@@ -484,6 +486,7 @@ fn transform_values(view: &StoreView<'_>, layer: LayerId, at: RationalTime) -> V
 
 #[cfg(test)]
 mod spatial_gizmo_tests {
+    use crate::edit::{Animate, Document, Intent};
     use super::*;
 
     fn comp() -> crate::doc::core::CompSpec {
@@ -494,7 +497,7 @@ mod spatial_gizmo_tests {
     /// 立てると掴んでも何も届かない札が世界の別の場所に出る。
     #[test]
     fn guide_layers_get_no_three_axis_handle() {
-        let mut doc = blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         let fps = doc.view().composition().unwrap().unwrap().fps;
         let at = RationalTime::ZERO;
         let mut make = |id: u64, source: LayerSource| {
@@ -568,7 +571,7 @@ mod spatial_gizmo_tests {
     }
 
     fn document() -> (Document, LayerId) {
-        let mut doc = crate::doc::store::blank_project().with_programs(crate::render::extensions::bundled());
+        let mut doc = crate::edit::blank_project().with_programs(crate::render::extensions::bundled());
         let layer = LayerId(41);
         doc.apply_all([
             Intent::AddLayer(layer),

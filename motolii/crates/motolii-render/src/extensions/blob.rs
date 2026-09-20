@@ -99,9 +99,10 @@ pub fn vec2_of(params: &[(String, Value)], name: &str) -> [f64; 2] {
 
 #[cfg(test)]
 mod tests {
+    use motolii_edit::{Animate, Document, Intent};
     use crate::doc::core::RationalTime;
     use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
-    use crate::doc::store::{property, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, Value};
+    use crate::doc::store::{property, Composition, EffectId, EffectInstance, Fps, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, Value};
 
     /// 塊は解析の入力から来る: 入力が無ければ置かれず、あれば素材を塊ごとに置き、Box なら箱の大きさへ伸ばす(左上が層の位置の素材)。
     #[test]

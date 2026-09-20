@@ -1,7 +1,7 @@
 use super::environment_tests::{SIZE, scene, sky_png};
 use super::reflection_tests::set;
 use super::*;
-use crate::doc::store::{Document, Intent, LayerId, LayerSource, Value, property};
+use crate::doc::store::{LayerId, LayerSource, Value, property};
 
 /// MSAA samples geometry coverage; it must not blur fully covered image interiors.
 #[test]

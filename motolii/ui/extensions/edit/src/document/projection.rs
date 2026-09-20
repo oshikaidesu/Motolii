@@ -1,10 +1,12 @@
-use crate::doc::core::{projection_switch_world, RationalTime};
-use crate::doc::eval::Value;
-use crate::doc::store::view::StoreView;
-use crate::doc::store::{property, LayerAttrsPatch, LayerProjection, StoreError};
+#[allow(unused_imports)]
+use crate::document::{Animate, Document, Intent};
+use motolii_doc::core::{projection_switch_world, RationalTime};
+use motolii_doc::eval::Value;
+use motolii_doc::store::view::StoreView;
+use motolii_doc::store::{property, LayerAttrsPatch, LayerProjection, StoreError};
 
-use super::group::move_translation_values;
-use super::{Document, Intent, LayerId};
+use crate::document::group::move_translation_values;
+use motolii_doc::store::{LayerId};
 
 impl Document {
     /// Applies `patch` to each layer. A projection change keeps the picture seen at `at`
@@ -32,7 +34,7 @@ impl Document {
 
 fn projection_compensation(
     view: &StoreView<'_>,
-    geometry: crate::doc::store::geometry::Geometry,
+    geometry: motolii_doc::store::geometry::Geometry,
     layer: LayerId,
     local_center: [f32; 3],
     to: LayerProjection,

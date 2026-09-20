@@ -1,7 +1,9 @@
 
-use crate::doc::store::{
-    property, AssetDraft, Composition, ContentKeyframe, ContentTrack, Document, EffectId,
-    EffectInstance, Fps, FontRef, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch,
+#[allow(unused_imports)]
+use crate::document::{Animate, Document, Intent};
+use motolii_doc::store::{
+    property, AssetDraft, Composition, ContentKeyframe, ContentTrack, EffectId,
+    EffectInstance, Fps, FontRef, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, Marker, PropertyId, RationalTime,
     SourceFingerprintV1, Speed, TextAlignmentOptions, TextDocument, TextDocumentStyle,
     TextJustify, TextStyleId, Value,
@@ -160,7 +162,7 @@ pub fn build() -> Fixture {
         });
         intents.push(Intent::SetShapes {
             layer: id,
-            shapes: vec![crate::doc::store::rect_shape(spec.rgba, [320.0, 180.0])],
+            shapes: vec![motolii_doc::store::rect_shape(spec.rgba, [320.0, 180.0])],
         });
         // 動かない初期値は**キーではなく値**で置く。キーで置くと、
         // 利用者が何も触っていないのに菱形が並ぶ。
@@ -178,7 +180,7 @@ pub fn build() -> Fixture {
             layer: id,
             patch: LayerAttrsPatch {
                 name: Some(spec.name.to_owned()),
-                label_color: Some(Some((id.0 % crate::doc::store::LABEL_PALETTE_LEN as u64) as u8)),
+                label_color: Some(Some((id.0 % motolii_doc::store::LABEL_PALETTE_LEN as u64) as u8)),
                 ..Default::default()
             },
         });
@@ -388,7 +390,7 @@ pub fn build() -> Fixture {
         patch: LayerAttrsPatch {
             name: Some("歌詞テキスト".to_owned()),
             label_color: Some(Some(
-                (text_id.0 % crate::doc::store::LABEL_PALETTE_LEN as u64) as u8,
+                (text_id.0 % motolii_doc::store::LABEL_PALETTE_LEN as u64) as u8,
             )),
             ..Default::default()
         },

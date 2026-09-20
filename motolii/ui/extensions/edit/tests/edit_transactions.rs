@@ -3,9 +3,10 @@
 //! in group_command.rs. No renderer, external tools, or generated golden is involved.
 
 use motolii_doc as motolii;
+use motolii_edit::{Animate, Document, Intent};
 
 use motolii::doc::store::{
-    property, Animate, Composition, ContentKeyframe, ContentTrack, Document, EffectScope, FontRef, Fps, Intent, Interp, Keyframe, KeyframeTrack,
+    property, Composition, ContentKeyframe, ContentTrack, EffectScope, FontRef, Fps, Interp, Keyframe, KeyframeTrack,
     LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, PropertyLink, RationalTime, Slot, SlotId, SpatialTangent,
     StoreView, TextDocument, TextDocumentStyle, TextJustify, TextStyleId, Value,
 };

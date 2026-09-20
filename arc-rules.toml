@@ -14,11 +14,19 @@ version = 1
 [[rules]]
 type = "layers"
 name = "家の段"
-layers = [["motolii-ui"], ["motolii-jobs", "motolii-script"], ["motolii-render"], ["motolii-doc"]]
+layers = [["motolii-ui"], ["motolii-jobs", "motolii-script", "motolii-edit"], ["motolii-render"], ["motolii-doc"]]
 direction = "top-down"
 exhaustive = true
 
-# コアは描く側を知らない。これが破れた時が「コアが太り始めた」瞬間。
+# コアは「保存された作品を開いて、ある時刻の値を答える」所まで(2026-09-20 利用者裁定)。
+# 描く側も、変える側も知らない。これが破れた時が「コアが太り始めた」瞬間。
+[[rules]]
+type = "forbidden-dependency"
+name = "コアは編集を知らない"
+from = "motolii-doc"
+to = "motolii-edit"
+
+
 [[rules]]
 type = "forbidden-dependency"
 name = "コアは絵を知らない"
