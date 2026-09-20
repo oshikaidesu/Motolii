@@ -202,24 +202,27 @@ impl FlowCache {
         }
 
         let mut frame = Frame::default();
-        let layers = view.layers();
-        let mut children: HashMap<LayerId, Vec<(i16, LayerId)>> = HashMap::new();
-        let mut displayed = Vec::new();
-        for &layer in &layers {
-            let Some(meta) = view.meta(layer)? else { continue };
-            if meta.source == LayerSource::Group && view.display(layer, t)? != 0 { displayed.push(layer); }
-            if let Some(parent) = view.attrs(layer)?.unwrap_or_default().parent {
-                if view.here(layer, t)? { children.entry(parent).or_default().push((meta.order, layer)); }
+        let structure = document_cache.borrow().structure.clone();
+        let Some(structure) = structure else { return compute_layout(view, t) };
+        let mut children = HashMap::new();
+        for (&parent, ordered) in &structure.children {
+            let mut here = Vec::new();
+            for &(order, child) in ordered {
+                if view.here(child, t)? { here.push((order, child)); }
             }
+            if !here.is_empty() { children.insert(parent, here); }
+        }
+        let mut displayed = Vec::new();
+        for &group in &structure.groups {
+            if view.display(group, t)? != 0 { displayed.push(group); }
         }
         if displayed.is_empty() {
             push_apart(view, t, &displayed, &mut frame)?;
             self.roots.borrow_mut().clear();
             return Ok(frame);
         }
-        for list in children.values_mut() { list.sort(); }
         let roots: Vec<_> = displayed.iter().copied().filter(|root| {
-            view.attrs(*root).ok().flatten().and_then(|attrs| attrs.parent).is_none_or(|parent| !displayed.contains(&parent))
+            structure.parents.get(root).copied().flatten().is_none_or(|parent| !displayed.contains(&parent))
         }).collect();
         for root in roots.iter().copied() {
             let plan = plan_container(view, root, t, &children, &displayed, true)?;
