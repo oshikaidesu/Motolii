@@ -18,109 +18,10 @@ pub struct Measure {
     pub(super) scale: f32,
 }
 
-/// Renderer state for the borrowed Taffy solver.  It is deliberately held by
-/// `Engine`, not by `Document`: the tree is GPU-adjacent preparation state and
-/// must never become authored/Undo state.
-#[derive(Default)]
-pub struct FlowCache {
-    document: std::cell::RefCell<Option<usize>>,
-    roots: std::cell::RefCell<HashMap<LayerId, CachedTree>>,
-    #[cfg(test)]
-    layout_passes: std::cell::Cell<usize>,
-}
-
-struct CachedTree {
-    tree: TaffyTree<Measure>,
-    root: CachedNode,
-    blockers: Vec<NodeId>,
-}
-
-struct CachedNode {
-    id: NodeId,
-    key: PlanKey,
-    measure: Option<Measure>,
-    children: Vec<CachedNode>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PlanKey {
-    Group(LayerId),
-    Leaf(LayerId, bool),
-    GridPlaceholder,
-}
-
-struct PlanNode {
-    key: PlanKey,
-    style: Style,
-    measure: Option<Measure>,
-    leaf: Option<LeafSpec>,
-    group: Option<(LayerId, bool)>,
-    children: Vec<PlanNode>,
-}
-
-#[derive(Clone, Copy)]
-struct LeafSpec {
-    text_fill: bool,
-    layer: LayerId,
-    bounds: [f32; 4],
-    sizing: [Sizing; 2],
-    fit: i64,
-}
-
-impl PlanNode {
-    fn same_shape(&self, cached: &CachedNode) -> bool {
-        self.key == cached.key
-            && self.children.len() == cached.children.len()
-            && self.children.iter().zip(&cached.children).all(|(next, held)| next.same_shape(held))
-    }
-
-    fn create(&self, tree: &mut TaffyTree<Measure>) -> Result<CachedNode, StoreError> {
-        let children: Result<Vec<_>, _> = self.children.iter().map(|child| child.create(tree)).collect();
-        let children = children?;
-        let ids: Vec<_> = children.iter().map(|child| child.id).collect();
-        let id = match self.measure {
-            Some(measure) if ids.is_empty() => tree.new_leaf_with_context(self.style.clone(), measure),
-            Some(_) => tree.new_with_children(self.style.clone(), &ids),
-            None if ids.is_empty() => tree.new_leaf(self.style.clone()),
-            None => tree.new_with_children(self.style.clone(), &ids),
-        }
-        .map_err(layout_error)?;
-        Ok(CachedNode { id, key: self.key, measure: self.measure, children })
-    }
-
-    /// Taffy marks an ancestor dirty only when style or measurement context
-    /// changes. Preserve that distinction so a paint/transform frame does not
-    /// ask the CSS solver to lay out the unchanged tree again.
-    fn update(&self, tree: &mut TaffyTree<Measure>, cached: &mut CachedNode) -> Result<bool, StoreError> {
-        debug_assert!(self.same_shape(cached));
-        let mut dirty = false;
-        if tree.style(cached.id).map_err(layout_error)? != &self.style {
-            tree.set_style(cached.id, self.style.clone()).map_err(layout_error)?;
-            dirty = true;
-        }
-        if cached.measure != self.measure {
-            tree.set_node_context(cached.id, self.measure).map_err(layout_error)?;
-            cached.measure = self.measure;
-            dirty = true;
-        }
-        for (next, held) in self.children.iter().zip(&mut cached.children) {
-            dirty |= next.update(tree, held)?;
-        }
-        Ok(dirty)
-    }
-
-    fn collect(&self, cached: &CachedNode, leaves: &mut Vec<Leaf>, groups: &mut Vec<(NodeId, LayerId, bool)>) {
-        if let Some(group) = self.group {
-            groups.push((cached.id, group.0, group.1));
-        }
-        if let Some(leaf) = self.leaf {
-            leaves.push(Leaf { node: cached.id, text_fill: leaf.text_fill, layer: leaf.layer, bounds: leaf.bounds, sizing: leaf.sizing, fit: leaf.fit });
-        }
-        for (next, held) in self.children.iter().zip(&cached.children) {
-            next.collect(held, leaves, groups);
-        }
-    }
-}
+#[path = "flow_cache.rs"]
+mod flow_cache;
+pub use flow_cache::FlowCache;
+use flow_cache::{CachedTree, LeafSpec, PlanKey, PlanNode};
 
 fn layout_error(error: taffy::TaffyError) -> StoreError {
     StoreError::Property(format!("layout: {error}"))
@@ -233,23 +134,36 @@ impl FlowCache {
             structure.parents.get(root).copied().flatten().is_none_or(|parent| !displayed.contains(&parent))
         }).collect();
         for root in roots.iter().copied() {
-            let plan = plan_container(view, root, t, &children, &displayed, true)?;
             // Do not hold the cache borrow while a layout query recursively asks
             // for a neighbouring time (motion/box evaluation can do that).
             let mut cached = self.roots.borrow_mut().remove(&root);
-            let layout_dirty = match &mut cached {
-                Some(held) if plan.same_shape(&held.root) => plan.update(&mut held.tree, &mut held.root)?,
-                _ => {
-                    let mut tree = TaffyTree::new();
-                    tree.disable_rounding();
-                    let root_node = plan.create(&mut tree)?;
-                    cached = Some(CachedTree { tree, root: root_node, blockers: Vec::new() });
-                    true
-                }
+            let static_tree = !structure.layout_topology_dynamic && !structure.dynamic_subtrees.contains(&root);
+            let mut plan = None;
+            let layout_dirty = if static_tree && cached.is_some() {
+                false
+            } else {
+                #[cfg(test)]
+                self.plan_builds.set(self.plan_builds.get() + 1);
+                let next = plan_container(view, root, t, &children, &displayed, true)?;
+                let dirty = match &mut cached {
+                    Some(held) if next.same_shape(&held.root) => next.update(&mut held.tree, &mut held.root)?,
+                    _ => {
+                        let mut tree = TaffyTree::new();
+                        tree.disable_rounding();
+                        let root_node = next.create(&mut tree)?;
+                        cached = Some(CachedTree { tree, root: root_node, blockers: Vec::new() });
+                        true
+                    }
+                };
+                plan = Some(next);
+                dirty
             };
             let mut cached = cached.expect("a plan always creates a Taffy tree");
             let (mut leaves, mut groups) = (Vec::new(), Vec::new());
-            plan.collect(&cached.root, &mut leaves, &mut groups);
+            match plan {
+                Some(plan) => plan.collect(&cached.root, &mut leaves, &mut groups),
+                None => cached.root.collect(&mut leaves, &mut groups),
+            }
             let node = cached.root.id;
             #[cfg(test)]
             let computed = solve_root(view, t, root, &children, &mut frame, &mut cached.tree, node, &mut leaves, &mut groups, &mut cached.blockers, layout_dirty)?;
