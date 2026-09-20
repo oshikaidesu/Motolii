@@ -92,7 +92,7 @@ pub struct LayoutCache {
     pub revision: Option<crate::doc::store::Revision>,
     pub frames: HashMap<RationalTime, std::sync::Arc<Frame>>,
     /// 版が変わらない限り同じ物。時刻では変わらないので、コマごとに作り直さない。
-    /// (層の並び, グループに引き取られた層, solo が 1 つでもあるか)
+    /// (層の並び, 親子, Group 判定)。時刻で動く solo/effect enabled はここに置かない。
     pub structure: Option<std::sync::Arc<Structure>>,
 }
 
@@ -105,8 +105,6 @@ pub struct Structure {
     pub children: HashMap<crate::doc::store::LayerId, Vec<(i16, crate::doc::store::LayerId)>>,
     pub parents: HashMap<crate::doc::store::LayerId, Option<crate::doc::store::LayerId>>,
     pub groups: std::collections::HashSet<crate::doc::store::LayerId>,
-    pub handed_out: std::collections::HashSet<crate::doc::store::LayerId>,
-    pub any_solo: bool,
 }
 
 impl LayoutCache {
