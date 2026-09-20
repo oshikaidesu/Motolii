@@ -674,6 +674,7 @@ class EditorTextField extends StatefulWidget {
   /// ink, medium weight.
   static const defaultStyle = TextStyle(
     inherit: false,
+    fontFamily: EditorTheme.fontFamily,
     fontSize: EditorMetrics.font,
     fontWeight: FontWeight.w500,
     color: EditorTheme.ink,
