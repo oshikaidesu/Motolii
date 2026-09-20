@@ -32,7 +32,7 @@ impl Document {
 
 fn projection_compensation(
     view: &StoreView<'_>,
-    geometry: crate::doc::store::kind::Geometry,
+    geometry: crate::doc::store::geometry::Geometry,
     layer: LayerId,
     local_center: [f32; 3],
     to: LayerProjection,

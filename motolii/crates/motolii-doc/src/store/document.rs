@@ -158,7 +158,7 @@ pub struct Document {
     /// 並べた結果をコマをまたいで覚える(書類の版と時刻で。解析・仮の編集・一時の値を読まない view だけ)。
     layout_cache: RefCell<super::scratch::LayoutCache>,
     /// 見た目を保つための「どこに見えているか」。開く側が渡す。
-    geometry: super::kind::Geometry,
+    geometry: super::geometry::Geometry,
     /// この書類で使える効果。開く側が渡す — コアは誰が何を実装しているか知らない。
     /// 渡さなければ効果は 1 つも無い(読んで並べて描くだけの書類)。
     programs: super::kind::Programs,
@@ -177,12 +177,12 @@ impl Document {
 
     /// 開く側が、見た目を答える口を渡す。
     #[must_use]
-    pub fn with_geometry(mut self, geometry: super::kind::Geometry) -> Self {
+    pub fn with_geometry(mut self, geometry: super::geometry::Geometry) -> Self {
         self.geometry = geometry;
         self
     }
 
-    pub fn geometry(&self) -> super::kind::Geometry {
+    pub fn geometry(&self) -> super::geometry::Geometry {
         self.geometry
     }
 
@@ -210,7 +210,7 @@ impl Document {
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
             layout_cache: RefCell::new(Default::default()),
-            geometry: super::kind::Geometry::NONE,
+            geometry: super::geometry::Geometry::NONE,
             programs: super::kind::Programs::NONE,
         }
     }

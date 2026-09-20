@@ -20,6 +20,7 @@ pub mod layout;
 pub mod names;
 mod slot;
 pub mod text;
+pub mod geometry;
 pub mod scratch;
 pub mod view;
 mod read;

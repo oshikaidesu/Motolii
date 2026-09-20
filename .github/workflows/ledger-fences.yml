@@ -14,5 +14,9 @@ jobs:
         run: |
           python3 scripts/check-stage5.py --self-test
           python3 scripts/check-stage5.py
+      - name: Architecture rules (the core does not know the picture)
+        run: |
+          cargo install cargo-arc --locked
+          cargo arc check
       - name: Documentation index and link consistency
         run: bash scripts/check-docs.sh

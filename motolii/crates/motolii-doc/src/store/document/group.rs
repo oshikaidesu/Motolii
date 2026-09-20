@@ -664,7 +664,7 @@ pub(super) fn move_translation_values(
 
 fn move_parent_compensation(
     view: &StoreView<'_>,
-    geometry: crate::doc::store::kind::Geometry,
+    geometry: crate::doc::store::geometry::Geometry,
     layer: LayerId,
     old_parent: Option<LayerId>,
     new_parent: Option<LayerId>,

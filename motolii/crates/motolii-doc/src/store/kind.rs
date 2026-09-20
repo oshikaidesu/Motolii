@@ -111,32 +111,6 @@ impl Programs {
     pub const NONE: Self = Self { placement: |_| None, sampling: |_| None, snap: |_| None };
 }
 
-/// 「見えている所」を答える口。作品を編集する時、見た目を保つために必要になる
-/// (束ねを解く・親を移す・札を変える)。解くのは絵の側で、コアは答えだけ受け取る。
-#[derive(Clone, Copy)]
-pub struct Geometry {
-    /// 層の、親の空間での変換。
-    pub local: fn(&super::StoreView<'_>, super::LayerId, RationalTime) -> Result<glam::Affine2, super::StoreError>,
-    /// 層の、親の空間での変換(奥行き込み)。
-    pub local3d: fn(&super::StoreView<'_>, super::LayerId, RationalTime) -> Result<glam::Affine3A, super::StoreError>,
-    /// 層の、世界の変換(奥行き込み)。
-    pub world: fn(&super::StoreView<'_>, super::LayerId, RationalTime) -> Result<glam::Affine3A, super::StoreError>,
-    /// その時刻の全層の世界の変換。
-    pub worlds: fn(&super::StoreView<'_>, RationalTime) -> Result<std::collections::HashMap<super::LayerId, glam::Affine3A>, super::StoreError>,
-    /// その時刻に効いている観測の姿勢。
-    pub camera: fn(&super::StoreView<'_>, RationalTime) -> Result<crate::doc::core::ResolvedCamera, super::StoreError>,
-}
-
-impl Geometry {
-    /// 誰も答えない書類。見た目の補正は起きず、書いた値がそのまま残る。
-    pub const NONE: Self = Self {
-        local: |_, _, _| Ok(glam::Affine2::IDENTITY),
-        local3d: |_, _, _| Ok(glam::Affine3A::IDENTITY),
-        world: |_, _, _| Ok(glam::Affine3A::IDENTITY),
-        worlds: |_, _| Ok(std::collections::HashMap::new()),
-        camera: |_, _| Ok(crate::doc::core::ResolvedCamera::default()),
-    };
-}
 
 /// 子を引かない効果の既定: `k` 番目の写しは `k` 番目の子。
 pub fn pick_in_turn(_params: &[(String, Value)], children: &[u64], count: usize) -> Vec<usize> {

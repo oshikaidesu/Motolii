@@ -8,7 +8,7 @@ mod move_layer_tests {
     /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。
     fn placed() -> Document {
         use motolii_render::picture::resolve::{camera, transform};
-        blank_project().with_geometry(motolii_doc::store::kind::Geometry {
+        blank_project().with_geometry(motolii_doc::store::geometry::Geometry {
             local: transform::local_transform,
             local3d: transform::local_transform3d,
             world: transform::world_transform3d,
@@ -472,7 +472,7 @@ mod projection_switch_tests {
     /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。
     fn placed() -> Document {
         use motolii_render::picture::resolve::{camera, transform};
-        blank_project().with_geometry(motolii_doc::store::kind::Geometry {
+        blank_project().with_geometry(motolii_doc::store::geometry::Geometry {
             local: transform::local_transform,
             local3d: transform::local_transform3d,
             world: transform::world_transform3d,
