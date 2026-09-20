@@ -40,15 +40,21 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
+        let mut stage = std::time::Instant::now();
         let resolved = self.resolved_with_analysis(view, t)?;
+        self.compositor.measurement.resolve_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let camera = match camera_override {
             Some(camera) => camera,
             None => self.resolve_camera_in(view, &resolved, t)?,
         };
-
+        self.compositor.measurement.camera_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let text_documents = collect_text_documents(view, &resolved, t)?;
+        self.compositor.measurement.text_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.compositor.measurement.resolve_us = frame_start.elapsed().as_micros() as u64;
+        self.compositor.measurement.shape_us = stage.elapsed().as_micros() as u64;
         let layer_start = std::time::Instant::now();
         let layers = self.layers_from_resolved(
             view,
@@ -550,6 +556,8 @@ impl Engine {
         outline: &[LayerId],
         window: Window,
     ) -> Result<(), EngineError> {
+        let frame_start = std::time::Instant::now();
+        self.compositor.measurement = Default::default();
         self.outline_layers = outline.iter().copied().take(255).collect();
         self.outline_order = self.outline_layers.clone();
         let composition = view
@@ -557,12 +565,21 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
+        let mut stage = std::time::Instant::now();
         let resolved = self.resolved_with_analysis(view, t)?;
+        self.compositor.measurement.resolve_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let text_documents = collect_text_documents(view, &resolved, t)?;
+        self.compositor.measurement.text_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let shape_documents = collect_shape_documents(view, &resolved, t)?;
+        self.compositor.measurement.shape_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let document_camera = self.resolve_camera_in(view, &resolved, t)?;
+        self.compositor.measurement.camera_us = stage.elapsed().as_micros() as u64;
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
         self.feedback_window = Some(window);
+        stage = std::time::Instant::now();
         let built = self.layers_from_resolved(
             view,
             comp,
@@ -573,6 +590,7 @@ impl Engine {
             &text_documents,
             &shape_documents,
         );
+        self.compositor.measurement.layer_build_us = stage.elapsed().as_micros() as u64;
         self.feedback_window = None;
         let mut layers = built?;
         // 2D は出力の画面の物: どの窓でも作中カメラの箱に貼り付き、箱と一緒に動く(Boxcam)。
@@ -589,6 +607,7 @@ impl Engine {
         };
         let drawn = self.compositor.render_into_window(target, comp, camera, &layers, background_color, window);
         self.outline_layers.clear();
+        self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
         Ok(drawn?)
     }
 

@@ -67,9 +67,8 @@ impl Compositor {
 
         self.pending.push(command_buffer);
         let gpu_measurement = self.measure_pending_gpu();
-        let submit_start = std::time::Instant::now();
+        // submit の時計は `flush_pending` が持つ(1 コマに何度も出るため)。
         self.flush_pending();
-        self.measurement.submit_us = submit_start.elapsed().as_micros() as u64;
         let wait_start = std::time::Instant::now();
         self.ctx
             .device

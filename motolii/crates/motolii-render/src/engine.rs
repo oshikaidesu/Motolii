@@ -119,6 +119,10 @@ pub struct Engine {
     /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
     /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
     resolved_memo: std::cell::RefCell<Option<(u64, RationalTime, Vec<crate::picture::resolved::ResolvedLayer>)>>,
+    /// 直前に**実際に解いた**拍の中身(相ごと・層の種類ごと)。memo に当たった面では空。
+    resolve_tally: Vec<(&'static str, String, u64, u32)>,
+    /// その拍で重かった層(µs, 層番号, 種類)。
+    resolve_worst: Vec<(u64, u64, &'static str)>,
     /// Taffy is renderer preparation state, so it survives playback without
     /// becoming Document/Undo state.
     layout_flow: std::rc::Rc<crate::picture::flow::FlowCache>,
@@ -229,6 +233,8 @@ impl Engine {
         let _gpu = GpuLease::take();
         Ok(Self {
             resolved_memo: Default::default(),
+            resolve_tally: Vec::new(),
+            resolve_worst: Vec::new(),
             layout_flow: Default::default(),
             #[cfg(test)]
             _gpu,
@@ -317,6 +323,8 @@ impl Engine {
         let _gpu = GpuLease::take();
         Ok(Self {
             resolved_memo: Default::default(),
+            resolve_tally: Vec::new(),
+            resolve_worst: Vec::new(),
             layout_flow: Default::default(),
             #[cfg(test)]
             _gpu,
@@ -390,6 +398,12 @@ impl Engine {
     pub fn set_render_measurement_enabled(&mut self, enabled: bool) {
         self.compositor.measurement_enabled = enabled;
     }
+
+    /// 直前のコマの resolve を、回したデータで割った行。層の種類が増えれば行が増える。
+    pub fn resolve_tally(&self) -> &[(&'static str, String, u64, u32)] { &self.resolve_tally }
+
+    /// 直前のコマで重かった層。
+    pub fn resolve_worst(&self) -> &[(u64, u64, &'static str)] { &self.resolve_worst }
 
     pub fn frame_measurement(&self) -> crate::render::compositor::FrameMeasurement {
         self.compositor.measurement

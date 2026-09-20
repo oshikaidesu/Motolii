@@ -38,18 +38,28 @@ impl Compositor {
         check_presentable_target(target, window)?;
         self.window = window;
 
+        let mut stage = std::time::Instant::now();
         let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
+        self.measurement.textures_us = stage.elapsed().as_micros() as u64;
 
+        stage = std::time::Instant::now();
         let inputs = crate::render::compositor::render_effects::sequential_inputs(
             layers,
             &effective_textures,
             &effective_paddings,
             &effective_spills,
         );
+        self.measurement.inputs_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
+        self.measurement.accumulate_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         let outline = self.outline_view(comp, camera, &inputs)?;
+        self.measurement.outline_us = stage.elapsed().as_micros() as u64;
+        stage = std::time::Instant::now();
         self.finalize_into(target, comp, camera, background, background_color, outline)?;
+        self.measurement.finalize_us = stage.elapsed().as_micros() as u64;
 
         for (width, height, format, scratch_texture) in checked_out {
             self.effect_scratch

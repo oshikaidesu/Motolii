@@ -78,16 +78,29 @@ impl Engine {
 
     /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
+        use crate::picture::resolve::tally;
         let view = view.clone().with_layout_solver(self.layout_solver());
         let inputs = self.analysis_inputs(&view, t)?;
         let resolve = |view: StoreView<'_>| crate::picture::resolve::resolved_layers(&view, t).map_err(|e| EngineError::Store(e.to_string()));
-        if !inputs.is_empty() { return resolve(view.clone().with_analysis(&inputs)) }
+        // 解いた拍だけ中を割る。memo に当たった面は空のまま(= 払っていない証拠)。
+        self.resolve_tally.clear();
+        self.resolve_worst.clear();
+        if !inputs.is_empty() {
+            tally::begin();
+            let out = resolve(view.clone().with_analysis(&inputs));
+            self.resolve_tally = tally::take();
+            self.resolve_worst = tally::take_worst();
+            return out;
+        }
         // 解析が無い時は、この後 status が同じ (版, 時刻) を訊く。1 コマに 2 度解かない。
         let key = view.revision_key();
         if let Some((k, at, layers)) = self.resolved_memo.borrow().as_ref() {
             if *k == key && *at == t { return Ok(layers.clone()) }
         }
+        tally::begin();
         let layers = resolve(view.clone())?;
+        self.resolve_tally = tally::take();
+        self.resolve_worst = tally::take_worst();
         *self.resolved_memo.borrow_mut() = Some((key, t, layers.clone()));
         Ok(layers)
     }
