@@ -65,7 +65,10 @@ import CoreVideo
 import Darwin
 import FlutterMacOS
 import IOSurface
+import OSLog
 import UniformTypeIdentifiers
+
+private let playbackLog = Logger(subsystem: "dev.motolii.stage5", category: "playback")
 
 private enum ProbeFailure: Error {
   case message(String)
@@ -145,7 +148,8 @@ private final class ProbeRuntime {
         guard !sorted.isEmpty else { return 0 }
         return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded(.up)))]
       }
-      print("PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)")
+      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)"
+      playbackLog.info("\(message, privacy: .public)")
     }
   }
 
