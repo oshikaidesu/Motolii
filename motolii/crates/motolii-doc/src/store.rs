@@ -238,6 +238,21 @@ pub enum LayerSource {
 }
 
 impl LayerSource {
+    /// 種類の名前。**数える側はこれを読む** — 新しい種類を足すとこの `match` が落ちるので、
+    /// 名乗らずに増やせない(計器の側は何も直さなくてよい)。
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::File { .. } => "File",
+            Self::Null => "Null",
+            Self::Camera => "Camera",
+            Self::Stage => "Stage",
+            Self::Shape => "Shape",
+            Self::Text => "Text",
+            Self::Group => "Group",
+            Self::Particles => "Particles",
+        }
+    }
+
     pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
             Self::File { .. }

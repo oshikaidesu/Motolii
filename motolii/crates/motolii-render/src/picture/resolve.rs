@@ -2,6 +2,7 @@
 #[allow(unused_imports)]
 use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 pub mod camera;
+pub mod tally;
 pub mod copies;
 pub mod settle;
 pub mod effects;
@@ -337,11 +338,13 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
     // 層の並び・親子・Group 判定だけは時刻では変わらない。
     // solo と placement effect の有効状態は keyframe で変わり得るので、ここへ
     // 混ぜて固定してはいけない。
+    let structure_span = tally::span("phase", "structure");
     let shared = view.shared_layout_cache();
     let cached = shared.as_ref().and_then(|(cache, revision)| {
         let cache = cache.borrow();
         (cache.revision.as_ref() == Some(*revision)).then(|| cache.structure.clone()).flatten()
     });
+    let cached_hit = cached.is_some();
     let structure = match cached {
         Some(hit) => hit,
         None => {
@@ -415,18 +418,34 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             built
         }
     };
-    let any_solo = any_solo_in_structure(view, t, &structure)?;
-    let handed_out = handed_out_by_a_group(view, &structure.present, t)?;
+    // 版 cache に当たったかどうかも行にする(当たっていないのに速いと思い込まないため)。
+    tally::add("phase", if cached_hit { "structure (cache hit)" } else { "structure (rebuilt)" }, 0);
+    drop(structure_span);
+    let any_solo = {
+        let _s = tally::span("phase", "solo");
+        any_solo_in_structure(view, t, &structure)?
+    };
+    let handed_out = {
+        let _s = tally::span("phase", "handed out");
+        handed_out_by_a_group(view, &structure.present, t)?
+    };
     let present = &structure.present;
     let layers = structure.layers.clone();
-    let world_transforms = crate::picture::resolve::transform::world_transforms3d(view, t)?;
+    let world_transforms = {
+        let _s = tally::span("phase", "world transforms");
+        crate::picture::resolve::transform::world_transforms3d(view, t)?
+    };
     let mut memo = HashMap::new();
     let mut visiting = HashSet::new();
     let mut out = Vec::new();
+    let counting = tally::counting();
     for layer in layers {
         if handed_out.contains(&layer) {
             continue;
         }
+        // 種類の名前は層そのものが持つ。種類が増えれば行が増える — ここは何も直さない。
+        let kind = structure.metas.get(&layer).map_or("?", |meta| meta.source.kind());
+        let started = counting.then(std::time::Instant::now);
         // ゴーストは元より先に積む(同じ重ね順なら後の物が上に描かれるので、元が手前に来る)。
         crate::picture::resolve::copies::push_ghosts(view, layer, t, any_solo, present, &mut out)?;
         if let Some(resolved) =
@@ -434,7 +453,15 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
         {
             crate::picture::resolve::copies::push_copies(view, resolved, t, any_solo, present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
         }
+        if let Some(started) = started {
+            let us = started.elapsed().as_micros() as u64;
+            tally::add("layer", kind, us);
+            tally::worst(layer, kind, us);
+        }
     }
-    crate::picture::resolve::settle::settle(view, &mut out, t)?;
+    {
+        let _s = tally::span("phase", "settle");
+        crate::picture::resolve::settle::settle(view, &mut out, t)?;
+    }
     Ok(out)
 }

@@ -6,6 +6,7 @@ pub use motolii_render as render;
 use crate::edit::{Animate, Document, Intent};
 mod editor;
 mod frames;
+mod owners;
 mod viewer;
 mod port;
 mod snapshot;
@@ -46,6 +47,8 @@ pub struct EditorRuntime {
     last_script: Option<(String, i64, i64)>,
     /// 出したコマの列。再生中は「出して返る」ので、描き終わりはここが次の拍で拾う。
     frames: frames::Frames,
+    /// 再生中の 1 コマを持ち主ごとに畳む。▶ で空にし、Ⅱ で 1 度だけ出す。
+    owners: owners::FrameOwners,
     /// host の再生 pulse が既に提出した時刻。Flutter の vsync ではなく native
     /// の時計がこれを進め、同じ作中コマを二度 CPU で解かない。
     playback_rendered_frame: Option<i64>,
@@ -94,6 +97,7 @@ impl EditorRuntime {
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
             flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
             history, effects_watch: None, last_script: None, frames,
+            owners: Default::default(),
             playback_rendered_frame: None,
         })
     }
@@ -230,6 +234,11 @@ impl EditorRuntime {
         }
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
+        // 再生中だけ畳む。止まっている 1 枚は待つ道なので、同じ物差しに混ぜない。
+        if self.viewer.clock.playing() {
+            self.owners.push(view.name(), self.engine.frame_measurement());
+            self.owners.push_inside(view.name(), self.engine.resolve_tally(), self.engine.resolve_worst());
+        }
         self.error = if self.engine.layer_failures().is_empty() { None } else { Some(self.engine.layer_failures().join("; ")) };
         Ok(true)
     }

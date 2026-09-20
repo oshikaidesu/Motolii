@@ -28,12 +28,15 @@ impl Compositor {
         if self.pending.is_empty() {
             return;
         }
+        let submit_start = std::time::Instant::now();
         self.ctx.before_submit();
         let batch: Vec<wgpu::CommandBuffer> = self.pending.drain(..).collect();
         self.last_submission = Some(self.ctx.queue.submit(batch));
         self.sequential_submits += 1;
         // staging buffer の回収は submit の**後**に一度だけ。
         self.ctx.begin_frame();
+        // 1 コマで何度でも出るので足す。段の時計はこれを含んだままで、内訳として別に出す。
+        self.measurement.submit_us += submit_start.elapsed().as_micros() as u64;
     }
 }
 
