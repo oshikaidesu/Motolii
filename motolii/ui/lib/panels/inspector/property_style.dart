@@ -1,4 +1,4 @@
-part of 'inspector.dart';
+part of '../inspector.dart';
 
 /// What a control is, decided from the declaration, never from the label.
 enum _Kind { bounded, scalar, angle, vec2, scale, color, choice, text, layer }
