@@ -36,15 +36,19 @@ impl Compositor {
         environment: Option<&GpuEnvironmentData>,
         shared: Option<&SharedMeshScene>,
     ) -> Result<Option<re_renderer::environment::SunLight>, CompositorError> {
-        if !inputs.iter().any(|i| i.blocks_light) {
+        if !inputs.iter().any(|i| i.shadow > 0.0) {
             return Ok(None);
         }
         // 嘘(2026-09-15): 2.5D の影は既定カメラで置いた形から落とす。見えている形はカメラごとに違うが、
         // 影までカメラで揺れると「カメラを動かしたら影が動いた」になる。Stage(既定カメラ)と出力で影は同じ。
+        let flatten = inputs.iter().any(|i| i.shadow > 0.0 && i.projection == crate::doc::store::LayerProjection::TwoPointFiveD && ResolvedCamera { near_fade: 0.0, ..i.projection_camera } != ResolvedCamera::default());
+        // Cast Shadow の Strength は型紙の濃さ: 遮る層をその分だけ薄く描く。
+        let faded = inputs.iter().any(|i| i.shadow > 0.0 && i.shadow < 1.0);
         let placed: Vec<SequentialInput<'_>>;
-        let (inputs, shared) = if inputs.iter().any(|i| i.blocks_light && i.projection == crate::doc::store::LayerProjection::TwoPointFiveD && ResolvedCamera { near_fade: 0.0, ..i.projection_camera } != ResolvedCamera::default()) {
+        let (inputs, shared) = if flatten || faded {
             placed = inputs.iter().map(|i| SequentialInput {
-                projection_camera: if i.projection == crate::doc::store::LayerProjection::TwoPointFiveD { ResolvedCamera::default() } else { i.projection_camera },
+                projection_camera: if flatten && i.projection == crate::doc::store::LayerProjection::TwoPointFiveD { ResolvedCamera::default() } else { i.projection_camera },
+                opacity: if i.shadow > 0.0 { i.opacity * i.shadow.clamp(0.0, 1.0) } else { i.opacity },
                 ..i.clone()
             }).collect();
             (&placed[..], None)
@@ -86,7 +90,7 @@ impl Compositor {
                 LightCookieResources { texture, imported }
             }
         };
-        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| !inputs[layer].blocks_light, shared, 0)?;
+        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| inputs[layer].shadow <= 0.0, shared, 0)?;
         let config = TargetConfiguration {
             name: "light-cookie".into(),
             render_mode: RenderMode::Deterministic,

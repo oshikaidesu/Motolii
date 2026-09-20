@@ -25,7 +25,7 @@ fn decoded_value(raw:&J,expected:Option<&Value>)->Result<Value,String>{
 fn attrs_patch(j:&J)->Result<LayerAttrsPatch,String>{
     let mut p=LayerAttrsPatch::default();
     macro_rules! boolean {($key:literal,$field:ident)=>{if !j[$key].is_null(){p.$field=Some(j[$key].as_bool().ok_or(concat!("Invalid ",$key))?);}}}
-    boolean!("hidden",hidden);boolean!("solo",solo);boolean!("locked",locked);boolean!("flatten",flatten);boolean!("environment",environment);boolean!("blocksLight",blocks_light);boolean!("clipToBelow",clip_to_below);boolean!("autoOrient",auto_orient);
+    boolean!("hidden",hidden);boolean!("solo",solo);boolean!("locked",locked);boolean!("flatten",flatten);boolean!("environment",environment);boolean!("clipToBelow",clip_to_below);boolean!("autoOrient",auto_orient);
     if let Some(s)=j["name"].as_str(){p.name=Some(s.into());}
     if j.get("parent").is_some(){p.parent=Some(if j["parent"].is_null(){None}else{Some(LayerId(j["parent"].as_u64().ok_or("Invalid parent")?))});}
     if j.get("blendMode").is_some(){p.blend_mode=Some(serde_json::from_value(j["blendMode"].clone()).map_err(e)?);}
@@ -253,10 +253,10 @@ impl EditorRuntime{
                 if self.doc.edit_head()!=target{return Err("That history point is no longer reachable".into())}
                 self.viewer.selected_keys.clear();
             }
-            "play"=>{if !self.viewer.clock.playing(){self.viewer.clock.toggle();}self.clock_frame();}
-            "pause"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.clock_frame();}
+            "play"=>{if !self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.clock_frame();}
+            "pause"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.clock_frame();}
             "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;self.viewer.picked_color=Some([px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0));self.viewer.pick_serial+=1;}
-            "seek"=>{self.viewer.frame=integer(&j,"frame")?.max(0);self.viewer.clock.seek_frame(self.viewer.frame);}
+            "seek"=>{self.viewer.frame=integer(&j,"frame")?.max(0);self.viewer.clock.seek_frame(self.viewer.frame);self.playback_rendered_frame=None;}
             "anchor"=>{let id=layer(&j)?;let b=self.bounds(id).ok_or("Bounds unavailable until rendered")?;let min:[f64;3]=serde_json::from_value(b["localMin"].clone()).map_err(e)?;let max:[f64;3]=serde_json::from_value(b["localMax"].clone()).map_err(e)?;let point=[min[0]+(max[0]-min[0])*num(&j,"xFraction")?,min[1]+(max[1]-min[1])*num(&j,"yFraction")?];let intents=editor::functions::placement::anchor_point_plan(&self.doc,id,self.time()?,point).map_err(e)?;self.apply(intents)?;}
             "freeze"=>{
                 let id=layer(&j)?;
@@ -286,7 +286,7 @@ impl EditorRuntime{
         }
         let live=self.doc.view().layers();self.viewer.selected_ids.retain(|id|live.contains(id));self.viewer.selected_keys.retain(|key|live.contains(&key.layer));if self.viewer.color_target.as_ref().is_some_and(|slot|slot.layer().is_some_and(|id|!live.contains(&id))){self.viewer.color_target=None;}if self.viewer.color_target.as_ref().is_none_or(|slot|editor::color::read_color(&self.doc,slot,self.time().unwrap_or(RationalTime::ZERO)).is_none()){self.viewer.color_target=self.viewer.selected().and_then(|id|editor::color::default_target(&self.doc,id));}self.error=None;Ok(())
     }
-    fn clock_frame(&mut self){
+    pub(crate) fn clock_frame(&mut self){
         // 尺は上限ではない: 再生は越えて進み、越えた先の層は帯の外なので描かれないだけ。
         self.viewer.frame=self.viewer.clock.current_frame().max(0);
     }

@@ -30,6 +30,7 @@ if [ "${1-}" = staged ]; then
     while IFS= read -r path; do
         case "$path" in
             motolii/crates/*/src/*.rs|motolii/ui/native/src/*.rs|motolii/ui/extensions/*.rs|motolii/ui/lib/*.dart) ;;
+            motolii/crates/motolii-render/vism/*.wgsl|motolii/crates/motolii-render/vism/*.fs|motolii/crates/motolii-render/vism/*.frag) ;;
             *) continue ;;
         esac
         set -- $(git show ":$path" 2>/dev/null | counts)
@@ -40,14 +41,14 @@ if [ "${1-}" = staged ]; then
         note=""
         [ "$tl" -gt 0 ] && note=" — うち test $tl 行"
         if [ "$now" -gt "$soft" ] && [ "$now" -gt "$was" ]; then
-            echo "NG: $path = $now 行 (HEAD $was、天井 $soft)$note"
+            echo "NG: $path = $now 行 (HEAD ${was}、天井 $soft)$note"
             fail=1
         elif [ "$now" -gt "$warn" ] && [ "$now" -gt "$was" ]; then
-            echo "warn: $path = $now 行 (HEAD $was、目安 $warn)$note"
+            echo "warn: $path = $now 行 (HEAD ${was}、目安 $warn)$note"
         fi
     done < <(git diff --cached --name-only --diff-filter=ACMR)
-    over_warn=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v w="$warn" '$1>w' | wc -l | tr -d ' ')
-    over_soft=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v l="$soft" '$1>l' | wc -l | tr -d ' ')
+    over_warn=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; find motolii/crates/motolii-render/vism \( -name '*.wgsl' -o -name '*.fs' -o -name '*.frag' \) -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v w="$warn" '$1>w' | wc -l | tr -d ' ')
+    over_soft=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; find motolii/crates/motolii-render/vism \( -name '*.wgsl' -o -name '*.fs' -o -name '*.frag' \) -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v l="$soft" '$1>l' | wc -l | tr -d ' ')
     echo "いま ${warn}行超 $over_warn 本 / ${soft}行超 $over_soft 本"
     if [ "$fail" -ne 0 ]; then
         cat <<'MSG'
@@ -78,7 +79,7 @@ fi
 incr=$( [ -d target/debug/incremental ] && ls target/debug/incremental | wc -l | tr -d ' ' || echo 0 )
 check incremental_sessions "$incr"
 # 生きている家とその拡張を数える。退役した実装はGit履歴にある。
-sizes() { find crates/*/src ui/native/src ui/extensions -name '*.rs' -exec wc -l {} + ; find ui/lib -name '*.dart' -exec wc -l {} + ; }
+sizes() { find crates/*/src ui/native/src ui/extensions -name '*.rs' -exec wc -l {} + ; find ui/lib -name '*.dart' -exec wc -l {} + ; find crates/motolii-render/vism \( -name '*.wgsl' -o -name '*.fs' -o -name '*.frag' \) -exec wc -l {} + ; }
 longest=$(sizes | grep -v ' total$' | sort -rn | head -1 | awk '{print $1}')
 check longest_file_lines "$longest"
 files_over=$(sizes | grep -v ' total$' | awk -v l="$(val file_lines_soft)" '$1>l' | wc -l | tr -d ' ')

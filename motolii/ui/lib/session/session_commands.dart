@@ -54,7 +54,11 @@ mixin SessionCommands on SessionCore {
   /// means the request went the ordinary way and the picture follows later.
   bool commandNow(String op, [Map<String, dynamic> args = const {}]) {
     final frames = _frames;
-    if (frames == null || _disposed || _pendingWork > 0 || _deferred != null) {
+    if (frames == null ||
+        playing.value ||
+        _disposed ||
+        _pendingWork > 0 ||
+        _deferred != null) {
       command(op, args);
       return false;
     }

@@ -41,7 +41,7 @@ pub use text::{
     TextStyleId, TextVariationAxis,
 };
 pub use text::{HangingPunctuation, TextAutospace, TextSpacingTrim};
-pub use view::StoreView;
+pub use view::{LayoutSolver, StoreView};
 
 pub use crate::doc::core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};
 pub use crate::doc::eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, SpatialTangent, Value};

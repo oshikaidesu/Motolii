@@ -171,6 +171,7 @@ impl EditorRuntime {
         reply["animate"] = json!(self.viewer.animate != Animate::Off); reply["error"] = json!(self.error);
         reply["preview"] = json!(self.preview.is_some()); reply["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         reply["renderCount"] = json!(self.render_count); reply["renderMs"] = json!(self.render_ms);
+        reply["framesSkipped"] = json!(self.frames.skipped());
         reply["pickedColor"] = json!(self.viewer.picked_color); reply["pickSerial"] = json!(self.viewer.pick_serial);
         reply["export"] = self.exporter.status();
         Ok(reply)

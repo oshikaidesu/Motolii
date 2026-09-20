@@ -26,8 +26,6 @@ pub struct ResolvedLayer {
     pub environment: bool,
     /// 押し出しの奥行き(px、素の値)。0 なら板。
     pub depth: f32,
-    /// 光を遮る(影と透過の色を落とす)。
-    pub blocks_light: bool,
     /// ゴースト(同じ層を遅れて見た姿)なら true。掴めない・枠に入らない(裁定 2026-09-07)。
     pub ghost: bool,
     /// 配置効果が増やした何番目か。増やしていなければ 0。

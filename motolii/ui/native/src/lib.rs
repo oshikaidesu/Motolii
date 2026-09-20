@@ -5,13 +5,13 @@ pub use motolii_render as render;
 #[allow(unused_imports)]
 use crate::edit::{Animate, Document, Intent};
 mod editor;
+mod frames;
 mod viewer;
 mod port;
 mod snapshot;
 mod snapshot_cache;
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use motolii_doc::store::{property, LayerId, PropertyId, RationalTime, Value};
@@ -44,27 +44,18 @@ pub struct EditorRuntime {
     pub(crate) history: editor::history::Ledger,
     effects_watch: Option<motolii_render::engine::CatalogWatcher>,
     last_script: Option<(String, i64, i64)>,
-    frame_ready: Arc<Mutex<Option<FrameTarget>>>,
+    /// 出したコマの列。再生中は「出して返る」ので、描き終わりはここが次の拍で拾う。
+    frames: frames::Frames,
+    /// host の再生 pulse が既に提出した時刻。Flutter の vsync ではなく native
+    /// の時計がこれを進め、同じ作中コマを二度 CPU で解かない。
+    playback_rendered_frame: Option<i64>,
 }
 
-/// `(user, view, surface_id)`: この IOSurface にこの view の絵が入った。
-pub type FrameReady = unsafe extern "C" fn(*mut std::ffi::c_void, *const c_char, u32);
-
-struct FrameTarget { ready: FrameReady, user: usize }
-/// C の callback を別 thread へ渡すための包み。中身は host が渡した関数と不透明な user。
-struct Signal { target: Arc<Mutex<Option<FrameTarget>>>, view: CString, surface: u32 }
-impl Signal {
-    fn fire(self) {
-        let target = self.target.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(target) = &*target {
-            unsafe { (target.ready)(target.user as *mut std::ffi::c_void, self.view.as_ptr(), self.surface) }
-        }
-    }
-}
+pub use frames::FrameReady;
 
 impl Drop for EditorRuntime {
     fn drop(&mut self) {
-        *self.frame_ready.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        self.frames.finish();
         let _ = self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely());
     }
 }
@@ -91,6 +82,7 @@ impl EditorRuntime {
             .ok_or("Engine did not create a Metal device")?.raw_device().registryID();
         let saved_signature = snapshot::authored_signature(&doc)?;
         let viewer = viewer::ViewerState::new(&doc.view(), doc.revision());
+        let frames = frames::Frames::new(engine.gpu_device());
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self {
@@ -101,7 +93,8 @@ impl EditorRuntime {
             preview: None, preview_tag: None, stage_drag: None,
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
             flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
-            history, effects_watch: None, last_script: None, frame_ready: Default::default(),
+            history, effects_watch: None, last_script: None, frames,
+            playback_rendered_frame: None,
         })
     }
 
@@ -119,7 +112,11 @@ impl EditorRuntime {
     }
 
     fn position(&self, layer: LayerId) -> Result<[f64; 2], String> {
-        let view = self.doc.view();
+        self.position_in(&self.doc.view(), layer)
+    }
+
+    /// 層ごとに view を作り直さない形。status は 1 コマに層の数だけ呼ぶ。
+    fn position_in(&self, view: &crate::doc::store::StoreView<'_>, layer: LayerId) -> Result<[f64; 2], String> {
         let time = self.time()?;
         let id = PropertyId::new(property::POSITION).map_err(|e| e.to_string())?;
         let mut point = match view.value_at(layer, &id, time).map_err(|e| e.to_string())? {
@@ -160,13 +157,17 @@ impl EditorRuntime {
 
 
 
-    fn render(&mut self, surface_id: u32, view: View) -> Result<(), String> {
+    /// `Ok(false)` = 番人が止めた(この surface はまだ描かれている最中)。
+    fn render(&mut self, surface_id: u32, view: View) -> Result<bool, String> {
+        // 前の拍で出した物のうち、GPU が終えている物をここで拾って鳴らす(待たない)。
+        self.frames.collect();
         let window = self.window(view)?;
         let surface = IOSurfaceRef::lookup(surface_id).ok_or("IOSurface lookup failed")?;
         if surface.width() != window.width as usize || surface.height() != window.height as usize {
             return Err(format!("IOSurface dimensions differ from the {} window", view.name()));
         }
         if surface.pixel_format() != u32::from_be_bytes(*b"BGRA") { return Err("IOSurface must be BGRA".into()); }
+        if !self.frames.claim(surface_id) { return Ok(false); }
         let device = self.engine.gpu_device();
         let descriptor = MTLTextureDescriptor::new();
         unsafe {
@@ -200,10 +201,10 @@ impl EditorRuntime {
     /// 窓を持たない道(試験)。合図の surface は 0。
     #[cfg(test)]
     fn render_into(&mut self, texture: &wgpu::Texture, view: View, window: Window) -> Result<(), String> {
-        self.render_into_surface(texture, view, window, 0)
+        self.render_into_surface(texture, view, window, 0).map(|_| ())
     }
 
-    fn render_into_surface(&mut self, texture: &wgpu::Texture, view: View, window: Window, surface_id: u32) -> Result<(), String> {
+    fn render_into_surface(&mut self, texture: &wgpu::Texture, view: View, window: Window, surface_id: u32) -> Result<bool, String> {
         let started = Instant::now();
         let time = self.time()?;
         let view_camera = self.view_camera(view)?;
@@ -211,20 +212,20 @@ impl EditorRuntime {
         // 再生中はギズモを出さないので、選択の mask も焼かない。
         let outline: &[LayerId] = if self.viewer.clock.playing() { &[] } else { &self.viewer.selected_ids };
         self.engine.render_frame_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window).map_err(|e|e.to_string())?;
+        // 出した束の番号。これが終われば、この surface に絵が入っている。
+        let submission = self.engine.last_submission();
         if self.viewer.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
-        let signal = Signal {
-            target: Arc::clone(&self.frame_ready), surface: surface_id,
-            view: CString::new(view.name()).unwrap_or_default(),
-        };
-        self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).map_err(|e|e.to_string())?;
+        self.frames.submitted(submission, view.name(), surface_id);
+        // 止まっている 1 枚は、絵と窓(roi)が同じコマで揃っていないといけないので、ここで待つ
+        // (掴む・伸ばす・Fit の道)。再生中だけは待たない —— UI thread を GPU に明け渡さない。
+        if !self.viewer.clock.playing() { self.frames.finish(); }
+        // 籠は読み戻し: 選択がある時だけ、その読み戻しが自分で待つ。
         self.take_selection_bounds(view, window);
-        // 描き終わった所で、呼んだ thread のままその場で鳴る。
-        signal.fire();
         self.snapshot_cache.borrow_mut().invalidate_geometry();
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
         self.error = if self.engine.layer_failures().is_empty() { None } else { Some(self.engine.layer_failures().join("; ")) };
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -333,22 +334,52 @@ pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_i
     let probe = unsafe { &mut *ctx };
     let view = (!view.is_null()).then(|| unsafe { CStr::from_ptr(view) }.to_str().ok()).flatten().unwrap_or("Camera");
     match catch_unwind(AssertUnwindSafe(|| View::parse(view).and_then(|view| probe.render(surface_id, view)))) {
-        Ok(Ok(())) => 0,
+        Ok(Ok(true)) => 0,
+        // 1 = 番人が止めた。頼んだ surface はまだ前のコマを描いている。
+        Ok(Ok(false)) => 1,
         Ok(Err(error)) => { probe.error=Some(error); -1 },
         Err(_) => { probe.error=Some("Rust render panic".into()); -2 },
     }
 }
 
-/// Register `ready(user, view, surface_id)` for completed renders. The render is
-/// synchronous, so the callback runs on the calling thread inside `motolii_probe_render`.
+/// Native host の再生 pulse。Dart の `Ticker` は時計もレンダラも駆動しない。
+///
+/// 新しい作中コマならその番号、同じコマ/停止中なら -1 を返す。host は番号を
+/// 受けた時だけ、手元にある IOSurface へ `motolii_probe_render` を出す。
+#[no_mangle]
+pub unsafe extern "C" fn motolii_probe_playback_tick(ctx: *mut EditorRuntime) -> i64 {
+    if ctx.is_null() { return -2; }
+    let probe = unsafe { &mut *ctx };
+    if !probe.viewer.clock.playing() { return -1; }
+    probe.frames.collect();
+    probe.viewer.clock.poll_audio(&probe.doc.view());
+    probe.clock_frame();
+    let frame = probe.viewer.frame;
+    if probe.playback_rendered_frame == Some(frame) { return -1; }
+    probe.playback_rendered_frame = Some(frame);
+    frame
+}
+
+/// Register `ready(user, view, surface_id)` for completed renders. It always runs
+/// on the calling thread: a still frame is waited for inside `motolii_probe_render`,
+/// a playing one is picked up at the head of the next `motolii_probe_render` (or by
+/// `motolii_probe_finish_frames`), once the GPU has it.
 /// Removing/replacing the registration cancels old signals. A callback must not
 /// re-enter this setter; `user` must live until unregister returns.
 #[no_mangle]
 pub unsafe extern "C" fn motolii_probe_set_frame_ready(ctx: *mut EditorRuntime, ready: Option<FrameReady>, user: *mut std::ffi::c_void) -> i32 {
     if ctx.is_null() { return -1; }
     let probe = unsafe { &mut *ctx };
-    *probe.frame_ready.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    probe.frame_ready = Arc::new(Mutex::new(ready.map(|ready| FrameTarget { ready, user: user as usize })));
+    probe.frames.set_ready(ready, user);
+    0
+}
+
+/// 出した絵が GPU から出て来るまで待つ、同期の口。合図(`FrameReady`)を使わない道
+/// —— channel 越しの `render`(毎回その場で作った IOSurface を返す)—— はこれを挟む。
+#[no_mangle]
+pub unsafe extern "C" fn motolii_probe_finish_frames(ctx: *mut EditorRuntime) -> i32 {
+    if ctx.is_null() { return -1; }
+    unsafe { &mut *ctx }.frames.finish();
     0
 }
 
@@ -388,6 +419,7 @@ mod frame_ready_tests {
     }
 
     /// 描くたびに合図が 1 回、描いた view と surface を持って、同じ thread で来る。外せば来ない。
+    /// 止まっている 1 枚は描画の中で待つので、`finish` はその念押し(再生中の道と同じ形で書く)。
     #[test]
     fn the_frame_ready_signal_fires_once_per_render() {
         let mut rt = EditorRuntime::open("").unwrap();
@@ -402,13 +434,22 @@ mod frame_ready_tests {
         assert_eq!(unsafe { motolii_probe_set_frame_ready(&mut rt, Some(count), user) }, 0);
         for _ in 0..2 {
             assert_eq!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Camera".as_ptr()) }, 0, "{:?}", rt.error);
+            rt.frames.finish();
         }
         assert_eq!(seen, vec![("Camera".to_owned(), surface.id()); 2]);
         // 失敗した描画は合図しない。
         assert_ne!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Nowhere".as_ptr()) }, 0);
+        rt.frames.finish();
         assert_eq!(seen.len(), 2);
         assert_eq!(unsafe { motolii_probe_set_frame_ready(&mut rt, None, std::ptr::null_mut()) }, 0);
         assert_eq!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Camera".as_ptr()) }, 0);
+        rt.frames.finish();
         assert_eq!(seen.len(), 2);
+        // 番人: まだ合図の来ていない面には描かない(描画はこれを見て 1 を返す)。飛ばした数だけ増える。
+        rt.frames.submitted(None, "Camera", surface.id());
+        assert!(!rt.frames.claim(surface.id()), "同じ面には描かない");
+        assert!(rt.frames.claim(surface.id() + 1), "もう 1 枚の面は空いている");
+        assert_eq!(rt.frames.skipped(), 1);
+        rt.frames.finish();
     }
 }

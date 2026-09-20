@@ -21,7 +21,10 @@ pub fn layout_frame(view: &StoreView<'_>, t: RationalTime) -> Result<std::sync::
     view.layout_memo().borrow_mut().frames.insert(t, std::sync::Arc::new(Frame::default()));
     // 解いている途中の内側の時刻は、巡り止めの空の結果を読んでいるかもしれない。コマをまたいで覚えるのは一番外側だけ。
     let outermost = view.layout_memo().borrow_mut().enter();
-    let computed = crate::picture::flow::compute_layout(view, t);
+    let computed = match view.layout_solver() {
+        Some(solver) => solver.compute(view, t),
+        None => crate::picture::flow::compute_layout(view, t),
+    };
     view.layout_memo().borrow_mut().leave();
     let frame = std::sync::Arc::new(computed?);
     view.layout_memo().borrow_mut().frames.insert(t, frame.clone());

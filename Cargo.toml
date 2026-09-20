@@ -57,6 +57,7 @@ rquickjs = "0.13"
 thiserror = "2"
 quick_cache = "0.7.0"
 tempfile = "3"
+rtsan-standalone = "=0.3.0"
 memmap2 = "0.9"
 re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
 

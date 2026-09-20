@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 5716" width="1180" height="5716">
-<rect width="1180" height="5716" fill="#151515"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 7756" width="1180" height="7756">
+<rect width="1180" height="7756" fill="#151515"/>
 <style>text{font-family:ui-monospace,"SF Mono",Menlo,monospace}</style>
 <text x="26" y="38" fill="#ececec" font-size="17" font-family="-apple-system,sans-serif">Motolii — file 構造に描いた責任</text>
 <text x="26" y="60" fill="#8c8c8c" font-size="11" font-family="-apple-system,sans-serif">棒 = 行数（暗い方は test）・600 行で黄・800 行で赤。右の ● の数 = その file を触ると一緒に変わる file の本数（直近 400 commit の振る舞い、参照ではない）。</text>
@@ -221,17 +221,17 @@
 <circle cx="886" cy="677" r="3.1" fill="#d0a06a"/>
 <circle cx="895" cy="677" r="3.1" fill="#d0a06a"/>
 <circle cx="904" cy="677" r="3.1" fill="#d0a06a"/>
-<circle cx="913" cy="677" r="3.1" fill="#d0a06a"/>
 <text x="982" y="681" fill="#6e6e6e" font-size="8.5">62% recording.rs</text>
 <text x="37" y="696" fill="#cfcfcf" font-size="10.5">store.rs</text>
 <text x="418" y="696" fill="#6e6e6e" font-size="9" text-anchor="end">486</text>
 <rect x="430" y="688" width="80.2" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="687" x2="529" y2="698" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="687" x2="562" y2="698" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="692" r="3.1" fill="#d0a06a"/>
-<circle cx="895" cy="692" r="3.1" fill="#d0a06a"/>
-<circle cx="904" cy="692" r="3.1" fill="#d0a06a"/>
-<circle cx="913" cy="692" r="3.1" fill="#d0a06a"/>
+<circle cx="886" cy="692" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="692" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="692" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="692" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="692" r="3.1" fill="#ff9d4d"/>
 <text x="982" y="696" fill="#6e6e6e" font-size="8.5">80% text_frame.rs</text>
 <text x="37" y="711" fill="#9a9a9a" font-size="10.5">vector/</text>
 <text x="418" y="711" fill="#5e5e5e" font-size="9" text-anchor="end">823</text>
@@ -267,7 +267,7 @@
 <line x1="562" y1="792" x2="562" y2="803" stroke="#4a4a4a" stroke-width="0.6"/>
 <rect x="20" y="820" width="1140" height="15" fill="#e8a87c" fill-opacity="0.09"/>
 <text x="26" y="831" fill="#e8a87c" font-size="12" font-family="-apple-system,sans-serif">render — 描く側</text>
-<text x="418" y="831" fill="#8c8c8c" font-size="10" text-anchor="end">38778 行</text>
+<text x="418" y="831" fill="#8c8c8c" font-size="10" text-anchor="end">38782 行</text>
 <text x="37" y="846" fill="#9a9a9a" font-size="10.5">audio/</text>
 <text x="418" y="846" fill="#5e5e5e" font-size="9" text-anchor="end">2632</text>
 <text x="48" y="861" fill="#cfcfcf" font-size="10.5">cache.rs</text>
@@ -354,7 +354,7 @@
 <line x1="529" y1="1077" x2="529" y2="1088" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="1077" x2="562" y2="1088" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="37" y="1101" fill="#9a9a9a" font-size="10.5">compositor/</text>
-<text x="418" y="1101" fill="#5e5e5e" font-size="9" text-anchor="end">10306</text>
+<text x="418" y="1101" fill="#5e5e5e" font-size="9" text-anchor="end">10310</text>
 <text x="48" y="1116" fill="#cfcfcf" font-size="10.5">clip.rs</text>
 <text x="418" y="1116" fill="#6e6e6e" font-size="9" text-anchor="end">107</text>
 <rect x="430" y="1108" width="17.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
@@ -539,25 +539,25 @@
 <line x1="529" y1="1572" x2="529" y2="1583" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="1572" x2="562" y2="1583" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="48" y="1596" fill="#9a9a9a" font-size="10.5">render_effects/</text>
-<text x="418" y="1596" fill="#5e5e5e" font-size="9" text-anchor="end">554</text>
+<text x="418" y="1596" fill="#5e5e5e" font-size="9" text-anchor="end">558</text>
 <text x="59" y="1611" fill="#cfcfcf" font-size="10.5">passes_can_read_a_picked_layer.rs</text>
-<text x="418" y="1611" fill="#6e6e6e" font-size="9" text-anchor="end">52</text>
-<rect x="430" y="1603" width="8.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<text x="418" y="1611" fill="#6e6e6e" font-size="9" text-anchor="end">53</text>
+<rect x="430" y="1603" width="8.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="1602" x2="529" y2="1613" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="1602" x2="562" y2="1613" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="59" y="1626" fill="#cfcfcf" font-size="10.5">passes_can_read_what_is_beneath.rs</text>
-<text x="418" y="1626" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
-<rect x="430" y="1618" width="18.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<text x="418" y="1626" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
+<rect x="430" y="1618" width="18.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="1617" x2="529" y2="1628" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="1617" x2="562" y2="1628" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="59" y="1641" fill="#cfcfcf" font-size="10.5">passes_reach_every_material.rs</text>
-<text x="418" y="1641" fill="#6e6e6e" font-size="9" text-anchor="end">44</text>
-<rect x="430" y="1633" width="7.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<text x="418" y="1641" fill="#6e6e6e" font-size="9" text-anchor="end">45</text>
+<rect x="430" y="1633" width="7.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="1632" x2="529" y2="1643" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="1632" x2="562" y2="1643" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="59" y="1656" fill="#cfcfcf" font-size="10.5">stylize_without_machine_learning.rs</text>
-<text x="418" y="1656" fill="#6e6e6e" font-size="9" text-anchor="end">125</text>
-<rect x="430" y="1648" width="20.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<text x="418" y="1656" fill="#6e6e6e" font-size="9" text-anchor="end">126</text>
+<rect x="430" y="1648" width="20.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="1647" x2="529" y2="1658" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="1647" x2="562" y2="1658" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="59" y="1671" fill="#cfcfcf" font-size="10.5">tests.rs</text>
@@ -1191,7 +1191,7 @@
 <line x1="562" y1="3372" x2="562" y2="3383" stroke="#4a4a4a" stroke-width="0.6"/>
 <rect x="20" y="3400" width="1140" height="15" fill="#85c1a1" fill-opacity="0.09"/>
 <text x="26" y="3411" fill="#85c1a1" font-size="12" font-family="-apple-system,sans-serif">ui/lib — 窓</text>
-<text x="418" y="3411" fill="#8c8c8c" font-size="10" text-anchor="end">26373 行</text>
+<text x="418" y="3411" fill="#8c8c8c" font-size="10" text-anchor="end">27132 行</text>
 <text x="37" y="3426" fill="#9a9a9a" font-size="10.5">app/</text>
 <text x="418" y="3426" fill="#5e5e5e" font-size="9" text-anchor="end">891</text>
 <text x="48" y="3441" fill="#cfcfcf" font-size="10.5">editor_app.dart</text>
@@ -1228,7 +1228,7 @@
 <line x1="529" y1="3522" x2="529" y2="3533" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3522" x2="562" y2="3533" stroke="#4a4a4a" stroke-width="0.6"/>
 <text x="37" y="3546" fill="#9a9a9a" font-size="10.5">foundation/</text>
-<text x="418" y="3546" fill="#5e5e5e" font-size="9" text-anchor="end">4914</text>
+<text x="418" y="3546" fill="#5e5e5e" font-size="9" text-anchor="end">5064</text>
 <text x="48" y="3561" fill="#cfcfcf" font-size="10.5">color_field.dart</text>
 <text x="418" y="3561" fill="#6e6e6e" font-size="9" text-anchor="end">69</text>
 <rect x="430" y="3553" width="11.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
@@ -1239,718 +1239,1383 @@
 <rect x="430" y="3568" width="65.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3567" x2="529" y2="3578" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3567" x2="562" y2="3578" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3591" fill="#e05b5b" font-size="10.5">leaves.dart</text>
-<text x="418" y="3591" fill="#6e6e6e" font-size="9" text-anchor="end">1416</text>
-<rect x="430" y="3583" width="233.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="3582" x2="529" y2="3593" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="3582" x2="562" y2="3593" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3606" fill="#cfcfcf" font-size="10.5">metrics.dart</text>
-<text x="418" y="3606" fill="#6e6e6e" font-size="9" text-anchor="end">39</text>
-<rect x="430" y="3598" width="6.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3591" fill="#9a9a9a" font-size="10.5">leaves/</text>
+<text x="418" y="3591" fill="#5e5e5e" font-size="9" text-anchor="end">1459</text>
+<text x="59" y="3606" fill="#cfcfcf" font-size="10.5">choice.dart</text>
+<text x="418" y="3606" fill="#6e6e6e" font-size="9" text-anchor="end">77</text>
+<rect x="430" y="3598" width="12.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3597" x2="529" y2="3608" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3597" x2="562" y2="3608" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3621" fill="#cfcfcf" font-size="10.5">panel_catalog.dart</text>
-<text x="418" y="3621" fill="#6e6e6e" font-size="9" text-anchor="end">133</text>
-<rect x="430" y="3613" width="21.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3621" fill="#cfcfcf" font-size="10.5">dialog.dart</text>
+<text x="418" y="3621" fill="#6e6e6e" font-size="9" text-anchor="end">178</text>
+<rect x="430" y="3613" width="29.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3612" x2="529" y2="3623" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3612" x2="562" y2="3623" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3636" fill="#e05b5b" font-size="10.5">panel_controls.dart</text>
-<text x="418" y="3636" fill="#6e6e6e" font-size="9" text-anchor="end">2157</text>
-<rect x="430" y="3628" width="355.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3636" fill="#cfcfcf" font-size="10.5">field.dart</text>
+<text x="418" y="3636" fill="#6e6e6e" font-size="9" text-anchor="end">222</text>
+<rect x="430" y="3628" width="36.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3627" x2="529" y2="3638" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3627" x2="562" y2="3638" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="3632" r="3.1" fill="#d0a06a"/>
-<circle cx="895" cy="3632" r="3.1" fill="#d0a06a"/>
-<circle cx="904" cy="3632" r="3.1" fill="#d0a06a"/>
-<circle cx="913" cy="3632" r="3.1" fill="#d0a06a"/>
-<text x="982" y="3636" fill="#6e6e6e" font-size="8.5">71% ease_desk.dart</text>
-<text x="48" y="3651" fill="#e8b45b" font-size="10.5">theme.dart</text>
-<text x="418" y="3651" fill="#6e6e6e" font-size="9" text-anchor="end">704</text>
-<rect x="430" y="3643" width="116.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3651" fill="#cfcfcf" font-size="10.5">floating.dart</text>
+<text x="418" y="3651" fill="#6e6e6e" font-size="9" text-anchor="end">348</text>
+<rect x="430" y="3643" width="57.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3642" x2="529" y2="3653" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3642" x2="562" y2="3653" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="3647" r="3.1" fill="#d0a06a"/>
-<circle cx="895" cy="3647" r="3.1" fill="#d0a06a"/>
-<circle cx="904" cy="3647" r="3.1" fill="#d0a06a"/>
-<text x="982" y="3651" fill="#6e6e6e" font-size="8.5">80% panel_settings.dart</text>
-<text x="37" y="3666" fill="#9a9a9a" font-size="10.5">input/</text>
-<text x="418" y="3666" fill="#5e5e5e" font-size="9" text-anchor="end">317</text>
-<text x="48" y="3681" fill="#cfcfcf" font-size="10.5">editor_shortcuts.dart</text>
-<text x="418" y="3681" fill="#6e6e6e" font-size="9" text-anchor="end">209</text>
-<rect x="430" y="3673" width="34.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3666" fill="#cfcfcf" font-size="10.5">press.dart</text>
+<text x="418" y="3666" fill="#6e6e6e" font-size="9" text-anchor="end">345</text>
+<rect x="430" y="3658" width="56.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3657" x2="529" y2="3668" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3657" x2="562" y2="3668" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3681" fill="#cfcfcf" font-size="10.5">track.dart</text>
+<text x="418" y="3681" fill="#6e6e6e" font-size="9" text-anchor="end">289</text>
+<rect x="430" y="3673" width="47.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3672" x2="529" y2="3683" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3672" x2="562" y2="3683" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3696" fill="#cfcfcf" font-size="10.5">viewport_motion.dart</text>
-<text x="418" y="3696" fill="#6e6e6e" font-size="9" text-anchor="end">108</text>
-<rect x="430" y="3688" width="17.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3696" fill="#cfcfcf" font-size="10.5">leaves.dart</text>
+<text x="418" y="3696" fill="#6e6e6e" font-size="9" text-anchor="end">20</text>
+<rect x="430" y="3688" width="3.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3687" x2="529" y2="3698" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3687" x2="562" y2="3698" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="3711" fill="#cfcfcf" font-size="10.5">main.dart</text>
-<text x="418" y="3711" fill="#6e6e6e" font-size="9" text-anchor="end">6</text>
-<rect x="430" y="3703" width="1.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3711" fill="#cfcfcf" font-size="10.5">metrics.dart</text>
+<text x="418" y="3711" fill="#6e6e6e" font-size="9" text-anchor="end">39</text>
+<rect x="430" y="3703" width="6.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3702" x2="529" y2="3713" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3702" x2="562" y2="3713" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="3726" fill="#9a9a9a" font-size="10.5">panels/</text>
-<text x="418" y="3726" fill="#5e5e5e" font-size="9" text-anchor="end">18238</text>
-<text x="48" y="3741" fill="#cfcfcf" font-size="10.5">blend_panel.dart</text>
-<text x="418" y="3741" fill="#6e6e6e" font-size="9" text-anchor="end">430</text>
-<rect x="430" y="3733" width="71.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="3732" x2="529" y2="3743" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="3732" x2="562" y2="3743" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3756" fill="#9a9a9a" font-size="10.5">browser/</text>
-<text x="418" y="3756" fill="#5e5e5e" font-size="9" text-anchor="end">4792</text>
-<text x="59" y="3771" fill="#cfcfcf" font-size="10.5">color_wheel.dart</text>
-<text x="418" y="3771" fill="#6e6e6e" font-size="9" text-anchor="end">223</text>
-<rect x="430" y="3763" width="36.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3726" fill="#cfcfcf" font-size="10.5">panel_catalog.dart</text>
+<text x="418" y="3726" fill="#6e6e6e" font-size="9" text-anchor="end">133</text>
+<rect x="430" y="3718" width="21.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3717" x2="529" y2="3728" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3717" x2="562" y2="3728" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3741" fill="#9a9a9a" font-size="10.5">panel_controls/</text>
+<text x="418" y="3741" fill="#5e5e5e" font-size="9" text-anchor="end">2222</text>
+<text x="59" y="3756" fill="#cfcfcf" font-size="10.5">dials.dart</text>
+<text x="418" y="3756" fill="#6e6e6e" font-size="9" text-anchor="end">414</text>
+<rect x="430" y="3748" width="68.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3747" x2="529" y2="3758" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3747" x2="562" y2="3758" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3771" fill="#cfcfcf" font-size="10.5">drag.dart</text>
+<text x="418" y="3771" fill="#6e6e6e" font-size="9" text-anchor="end">114</text>
+<rect x="430" y="3763" width="18.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3762" x2="529" y2="3773" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3762" x2="562" y2="3773" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3786" fill="#e05b5b" font-size="10.5">colors_shelf.dart</text>
-<text x="418" y="3786" fill="#6e6e6e" font-size="9" text-anchor="end">1020</text>
-<rect x="430" y="3778" width="168.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3786" fill="#cfcfcf" font-size="10.5">fields.dart</text>
+<text x="418" y="3786" fill="#6e6e6e" font-size="9" text-anchor="end">167</text>
+<rect x="430" y="3778" width="27.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3777" x2="529" y2="3788" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3777" x2="562" y2="3788" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="3782" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="3782" r="3.1" fill="#7d7d7d"/>
-<text x="59" y="3801" fill="#cfcfcf" font-size="10.5">create_shelf.dart</text>
-<text x="418" y="3801" fill="#6e6e6e" font-size="9" text-anchor="end">246</text>
-<rect x="430" y="3793" width="40.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3801" fill="#cfcfcf" font-size="10.5">frames.dart</text>
+<text x="418" y="3801" fill="#6e6e6e" font-size="9" text-anchor="end">292</text>
+<rect x="430" y="3793" width="48.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3792" x2="529" y2="3803" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3792" x2="562" y2="3803" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3816" fill="#cfcfcf" font-size="10.5">effects_shelf.dart</text>
-<text x="418" y="3816" fill="#6e6e6e" font-size="9" text-anchor="end">206</text>
-<rect x="430" y="3808" width="34.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3816" fill="#e8b45b" font-size="10.5">numeric.dart</text>
+<text x="418" y="3816" fill="#6e6e6e" font-size="9" text-anchor="end">618</text>
+<rect x="430" y="3808" width="102.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3807" x2="529" y2="3818" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3807" x2="562" y2="3818" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3831" fill="#cfcfcf" font-size="10.5">files_shelf.dart</text>
-<text x="418" y="3831" fill="#6e6e6e" font-size="9" text-anchor="end">338</text>
-<rect x="430" y="3823" width="55.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3831" fill="#cfcfcf" font-size="10.5">numeric_paint.dart</text>
+<text x="418" y="3831" fill="#6e6e6e" font-size="9" text-anchor="end">161</text>
+<rect x="430" y="3823" width="26.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3822" x2="529" y2="3833" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3822" x2="562" y2="3833" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3846" fill="#e05b5b" font-size="10.5">filters.dart</text>
-<text x="418" y="3846" fill="#6e6e6e" font-size="9" text-anchor="end">953</text>
-<rect x="430" y="3838" width="157.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3846" fill="#cfcfcf" font-size="10.5">scale.dart</text>
+<text x="418" y="3846" fill="#6e6e6e" font-size="9" text-anchor="end">202</text>
+<rect x="430" y="3838" width="33.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3837" x2="529" y2="3848" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3837" x2="562" y2="3848" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="3842" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="3842" r="3.1" fill="#7d7d7d"/>
-<text x="59" y="3861" fill="#cfcfcf" font-size="10.5">fonts_shelf.dart</text>
-<text x="418" y="3861" fill="#6e6e6e" font-size="9" text-anchor="end">471</text>
-<rect x="430" y="3853" width="77.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="3861" fill="#cfcfcf" font-size="10.5">toggles.dart</text>
+<text x="418" y="3861" fill="#6e6e6e" font-size="9" text-anchor="end">254</text>
+<rect x="430" y="3853" width="41.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3852" x2="529" y2="3863" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3852" x2="562" y2="3863" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3876" fill="#cfcfcf" font-size="10.5">media_shelf.dart</text>
-<text x="418" y="3876" fill="#6e6e6e" font-size="9" text-anchor="end">488</text>
-<rect x="430" y="3868" width="80.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3876" fill="#cfcfcf" font-size="10.5">panel_controls.dart</text>
+<text x="418" y="3876" fill="#6e6e6e" font-size="9" text-anchor="end">22</text>
+<rect x="430" y="3868" width="3.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3867" x2="529" y2="3878" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3867" x2="562" y2="3878" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3891" fill="#cfcfcf" font-size="10.5">parts.dart</text>
-<text x="418" y="3891" fill="#6e6e6e" font-size="9" text-anchor="end">304</text>
-<rect x="430" y="3883" width="50.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<circle cx="886" cy="3872" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="3872" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="3872" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="3872" r="3.1" fill="#d0a06a"/>
+<text x="982" y="3876" fill="#6e6e6e" font-size="8.5">71% ease_desk.dart</text>
+<text x="48" y="3891" fill="#e8b45b" font-size="10.5">theme.dart</text>
+<text x="418" y="3891" fill="#6e6e6e" font-size="9" text-anchor="end">704</text>
+<rect x="430" y="3883" width="116.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3882" x2="529" y2="3893" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3882" x2="562" y2="3893" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3906" fill="#cfcfcf" font-size="10.5">shelf.dart</text>
-<text x="418" y="3906" fill="#6e6e6e" font-size="9" text-anchor="end">207</text>
-<rect x="430" y="3898" width="34.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="3897" x2="529" y2="3908" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="3897" x2="562" y2="3908" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="3921" fill="#cfcfcf" font-size="10.5">tile.dart</text>
-<text x="418" y="3921" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
-<rect x="430" y="3913" width="55.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<circle cx="886" cy="3887" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="3887" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="3887" r="3.1" fill="#d0a06a"/>
+<text x="982" y="3891" fill="#6e6e6e" font-size="8.5">80% panel_settings.dart</text>
+<text x="37" y="3906" fill="#9a9a9a" font-size="10.5">input/</text>
+<text x="418" y="3906" fill="#5e5e5e" font-size="9" text-anchor="end">317</text>
+<text x="48" y="3921" fill="#cfcfcf" font-size="10.5">editor_shortcuts.dart</text>
+<text x="418" y="3921" fill="#6e6e6e" font-size="9" text-anchor="end">209</text>
+<rect x="430" y="3913" width="34.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3912" x2="529" y2="3923" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3912" x2="562" y2="3923" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3936" fill="#e05b5b" font-size="10.5">browser.dart</text>
-<text x="418" y="3936" fill="#6e6e6e" font-size="9" text-anchor="end">1193</text>
-<rect x="430" y="3928" width="196.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3936" fill="#cfcfcf" font-size="10.5">viewport_motion.dart</text>
+<text x="418" y="3936" fill="#6e6e6e" font-size="9" text-anchor="end">108</text>
+<rect x="430" y="3928" width="17.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3927" x2="529" y2="3938" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3927" x2="562" y2="3938" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="895" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="904" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="913" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="922" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="931" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="940" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="949" cy="3932" r="3.1" fill="#ff9d4d"/>
-<circle cx="958" cy="3932" r="3.1" fill="#ff9d4d"/>
-<text x="982" y="3936" fill="#6e6e6e" font-size="8.5">100% browser_tile_test.dart</text>
-<text x="48" y="3951" fill="#cfcfcf" font-size="10.5">composition_controls.dart</text>
-<text x="418" y="3951" fill="#6e6e6e" font-size="9" text-anchor="end">141</text>
-<rect x="430" y="3943" width="23.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="37" y="3951" fill="#cfcfcf" font-size="10.5">main.dart</text>
+<text x="418" y="3951" fill="#6e6e6e" font-size="9" text-anchor="end">6</text>
+<rect x="430" y="3943" width="1.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3942" x2="529" y2="3953" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3942" x2="562" y2="3953" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3966" fill="#cfcfcf" font-size="10.5">depth_desk.dart</text>
-<text x="418" y="3966" fill="#6e6e6e" font-size="9" text-anchor="end">387</text>
-<rect x="430" y="3958" width="63.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="3957" x2="529" y2="3968" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="3957" x2="562" y2="3968" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3981" fill="#cfcfcf" font-size="10.5">desk.dart</text>
-<text x="418" y="3981" fill="#6e6e6e" font-size="9" text-anchor="end">239</text>
-<rect x="430" y="3973" width="39.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="37" y="3966" fill="#9a9a9a" font-size="10.5">panels/</text>
+<text x="418" y="3966" fill="#5e5e5e" font-size="9" text-anchor="end">18709</text>
+<text x="48" y="3981" fill="#cfcfcf" font-size="10.5">blend_panel.dart</text>
+<text x="418" y="3981" fill="#6e6e6e" font-size="9" text-anchor="end">430</text>
+<rect x="430" y="3973" width="71.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="3972" x2="529" y2="3983" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="3972" x2="562" y2="3983" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="3996" fill="#e05b5b" font-size="10.5">ease_desk.dart</text>
-<text x="418" y="3996" fill="#6e6e6e" font-size="9" text-anchor="end">1759</text>
-<rect x="430" y="3988" width="290.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="3987" x2="529" y2="3998" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="3987" x2="562" y2="3998" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="3992" r="3.1" fill="#d0a06a"/>
-<circle cx="895" cy="3992" r="3.1" fill="#d0a06a"/>
-<circle cx="904" cy="3992" r="3.1" fill="#d0a06a"/>
-<text x="982" y="3996" fill="#6e6e6e" font-size="8.5">71% panel_controls.dart</text>
-<text x="48" y="4011" fill="#cfcfcf" font-size="10.5">export_controls.dart</text>
-<text x="418" y="4011" fill="#6e6e6e" font-size="9" text-anchor="end">103</text>
-<rect x="430" y="4003" width="17.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="3996" fill="#9a9a9a" font-size="10.5">browser/</text>
+<text x="418" y="3996" fill="#5e5e5e" font-size="9" text-anchor="end">5434</text>
+<text x="59" y="4011" fill="#cfcfcf" font-size="10.5">color_palette.dart</text>
+<text x="418" y="4011" fill="#6e6e6e" font-size="9" text-anchor="end">88</text>
+<rect x="430" y="4003" width="14.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4002" x2="529" y2="4013" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4002" x2="562" y2="4013" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4026" fill="#cfcfcf" font-size="10.5">gradient_inspector.dart</text>
-<text x="418" y="4026" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
-<rect x="430" y="4018" width="55.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4026" fill="#cfcfcf" font-size="10.5">color_picker.dart</text>
+<text x="418" y="4026" fill="#6e6e6e" font-size="9" text-anchor="end">396</text>
+<rect x="430" y="4018" width="65.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4017" x2="529" y2="4028" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4017" x2="562" y2="4028" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4022" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="4022" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4041" fill="#cfcfcf" font-size="10.5">history_records.dart</text>
-<text x="418" y="4041" fill="#6e6e6e" font-size="9" text-anchor="end">278</text>
-<rect x="430" y="4033" width="45.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4041" fill="#cfcfcf" font-size="10.5">color_values.dart</text>
+<text x="418" y="4041" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
+<rect x="430" y="4033" width="6.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4032" x2="529" y2="4043" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4032" x2="562" y2="4043" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4056" fill="#e05b5b" font-size="10.5">inspector.dart</text>
-<text x="418" y="4056" fill="#6e6e6e" font-size="9" text-anchor="end">2655</text>
-<rect x="430" y="4048" width="430.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4056" fill="#cfcfcf" font-size="10.5">color_wheel.dart</text>
+<text x="418" y="4056" fill="#6e6e6e" font-size="9" text-anchor="end">223</text>
+<rect x="430" y="4048" width="36.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4047" x2="529" y2="4058" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4047" x2="562" y2="4058" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="895" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="904" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="913" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="922" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="931" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="940" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="949" cy="4052" r="3.1" fill="#ff9d4d"/>
-<circle cx="958" cy="4052" r="3.1" fill="#ff9d4d"/>
-<text x="982" y="4056" fill="#6e6e6e" font-size="8.5">80% gradient_inspector.dart</text>
-<text x="48" y="4071" fill="#cfcfcf" font-size="10.5">inspector_property_style.dart</text>
-<text x="418" y="4071" fill="#6e6e6e" font-size="9" text-anchor="end">183</text>
-<rect x="430" y="4063" width="30.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4071" fill="#cfcfcf" font-size="10.5">colors_shelf.dart</text>
+<text x="418" y="4071" fill="#6e6e6e" font-size="9" text-anchor="end">378</text>
+<rect x="430" y="4063" width="62.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4062" x2="529" y2="4073" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4062" x2="562" y2="4073" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4086" fill="#cfcfcf" font-size="10.5">native_visual_sample.dart</text>
-<text x="418" y="4086" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
-<rect x="430" y="4078" width="28.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<circle cx="886" cy="4067" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4067" r="3.1" fill="#7d7d7d"/>
+<text x="59" y="4086" fill="#cfcfcf" font-size="10.5">create_shelf.dart</text>
+<text x="418" y="4086" fill="#6e6e6e" font-size="9" text-anchor="end">246</text>
+<rect x="430" y="4078" width="40.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4077" x2="529" y2="4088" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4077" x2="562" y2="4088" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4101" fill="#e8b45b" font-size="10.5">notes_desk.dart</text>
-<text x="418" y="4101" fill="#6e6e6e" font-size="9" text-anchor="end">714</text>
-<rect x="430" y="4093" width="117.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4101" fill="#cfcfcf" font-size="10.5">effects_shelf.dart</text>
+<text x="418" y="4101" fill="#6e6e6e" font-size="9" text-anchor="end">206</text>
+<rect x="430" y="4093" width="34.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4092" x2="529" y2="4103" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4092" x2="562" y2="4103" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4097" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4116" fill="#cfcfcf" font-size="10.5">panel_settings.dart</text>
-<text x="418" y="4116" fill="#6e6e6e" font-size="9" text-anchor="end">168</text>
-<rect x="430" y="4108" width="27.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4116" fill="#cfcfcf" font-size="10.5">files_shelf.dart</text>
+<text x="418" y="4116" fill="#6e6e6e" font-size="9" text-anchor="end">338</text>
+<rect x="430" y="4108" width="55.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4107" x2="529" y2="4118" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4107" x2="562" y2="4118" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4112" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4131" fill="#cfcfcf" font-size="10.5">registry.dart</text>
-<text x="418" y="4131" fill="#6e6e6e" font-size="9" text-anchor="end">69</text>
-<rect x="430" y="4123" width="11.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4131" fill="#cfcfcf" font-size="10.5">fill_definitions.dart</text>
+<text x="418" y="4131" fill="#6e6e6e" font-size="9" text-anchor="end">154</text>
+<rect x="430" y="4123" width="25.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4122" x2="529" y2="4133" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4122" x2="562" y2="4133" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4146" fill="#cfcfcf" font-size="10.5">rich_text_editor.dart</text>
-<text x="418" y="4146" fill="#6e6e6e" font-size="9" text-anchor="end">374</text>
-<rect x="430" y="4138" width="61.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4146" fill="#cfcfcf" font-size="10.5">filter_library.dart</text>
+<text x="418" y="4146" fill="#6e6e6e" font-size="9" text-anchor="end">221</text>
+<rect x="430" y="4138" width="36.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4137" x2="529" y2="4148" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4137" x2="562" y2="4148" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4161" fill="#e05b5b" font-size="10.5">stage.dart</text>
-<text x="418" y="4161" fill="#6e6e6e" font-size="9" text-anchor="end">1868</text>
-<rect x="430" y="4153" width="308.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4161" fill="#cfcfcf" font-size="10.5">filter_view.dart</text>
+<text x="418" y="4161" fill="#6e6e6e" font-size="9" text-anchor="end">361</text>
+<rect x="430" y="4153" width="59.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4152" x2="529" y2="4163" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4152" x2="562" y2="4163" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4157" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4176" fill="#e05b5b" font-size="10.5">timeline.dart</text>
-<text x="418" y="4176" fill="#6e6e6e" font-size="9" text-anchor="end">2147</text>
-<rect x="430" y="4168" width="354.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4176" fill="#cfcfcf" font-size="10.5">filters.dart</text>
+<text x="418" y="4176" fill="#6e6e6e" font-size="9" text-anchor="end">12</text>
+<rect x="430" y="4168" width="2.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4167" x2="529" y2="4178" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4167" x2="562" y2="4178" stroke="#4a4a4a" stroke-width="0.6"/>
 <circle cx="886" cy="4172" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="4172" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4191" fill="#cfcfcf" font-size="10.5">timeline_layout.dart</text>
-<text x="418" y="4191" fill="#6e6e6e" font-size="9" text-anchor="end">179</text>
-<rect x="430" y="4183" width="29.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4191" fill="#cfcfcf" font-size="10.5">fonts_shelf.dart</text>
+<text x="418" y="4191" fill="#6e6e6e" font-size="9" text-anchor="end">471</text>
+<rect x="430" y="4183" width="77.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4182" x2="529" y2="4193" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4182" x2="562" y2="4193" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4206" fill="#cfcfcf" font-size="10.5">web_panel.dart</text>
-<text x="418" y="4206" fill="#6e6e6e" font-size="9" text-anchor="end">53</text>
-<rect x="430" y="4198" width="8.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4206" fill="#cfcfcf" font-size="10.5">frame_bars.dart</text>
+<text x="418" y="4206" fill="#6e6e6e" font-size="9" text-anchor="end">212</text>
+<rect x="430" y="4198" width="35.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4197" x2="529" y2="4208" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4197" x2="562" y2="4208" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="4221" fill="#9a9a9a" font-size="10.5">session/</text>
-<text x="418" y="4221" fill="#5e5e5e" font-size="9" text-anchor="end">1145</text>
-<text x="48" y="4236" fill="#e05b5b" font-size="10.5">editor_session.dart</text>
-<text x="418" y="4236" fill="#6e6e6e" font-size="9" text-anchor="end">1135</text>
-<rect x="430" y="4228" width="187.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4221" fill="#cfcfcf" font-size="10.5">frame_filters.dart</text>
+<text x="418" y="4221" fill="#6e6e6e" font-size="9" text-anchor="end">143</text>
+<rect x="430" y="4213" width="23.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4212" x2="529" y2="4223" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4212" x2="562" y2="4223" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4236" fill="#cfcfcf" font-size="10.5">frame_grid.dart</text>
+<text x="418" y="4236" fill="#6e6e6e" font-size="9" text-anchor="end">144</text>
+<rect x="430" y="4228" width="23.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4227" x2="529" y2="4238" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4227" x2="562" y2="4238" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4232" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="4232" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4251" fill="#cfcfcf" font-size="10.5">read_model.dart</text>
-<text x="418" y="4251" fill="#6e6e6e" font-size="9" text-anchor="end">10</text>
-<rect x="430" y="4243" width="1.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4251" fill="#cfcfcf" font-size="10.5">frame_keys.dart</text>
+<text x="418" y="4251" fill="#6e6e6e" font-size="9" text-anchor="end">77</text>
+<rect x="430" y="4243" width="12.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4242" x2="529" y2="4253" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4242" x2="562" y2="4253" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="4266" fill="#9a9a9a" font-size="10.5">workspace/</text>
-<text x="418" y="4266" fill="#5e5e5e" font-size="9" text-anchor="end">622</text>
-<text x="48" y="4281" fill="#cfcfcf" font-size="10.5">layout.dart</text>
-<text x="418" y="4281" fill="#6e6e6e" font-size="9" text-anchor="end">223</text>
-<rect x="430" y="4273" width="36.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4266" fill="#cfcfcf" font-size="10.5">media_shelf.dart</text>
+<text x="418" y="4266" fill="#6e6e6e" font-size="9" text-anchor="end">488</text>
+<rect x="430" y="4258" width="80.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4257" x2="529" y2="4268" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4257" x2="562" y2="4268" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4281" fill="#cfcfcf" font-size="10.5">parts.dart</text>
+<text x="418" y="4281" fill="#6e6e6e" font-size="9" text-anchor="end">304</text>
+<rect x="430" y="4273" width="50.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4272" x2="529" y2="4283" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4272" x2="562" y2="4283" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4296" fill="#cfcfcf" font-size="10.5">panel_ids.dart</text>
-<text x="418" y="4296" fill="#6e6e6e" font-size="9" text-anchor="end">4</text>
-<rect x="430" y="4288" width="0.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4296" fill="#cfcfcf" font-size="10.5">quick_tags.dart</text>
+<text x="418" y="4296" fill="#6e6e6e" font-size="9" text-anchor="end">174</text>
+<rect x="430" y="4288" width="28.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4287" x2="529" y2="4298" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4287" x2="562" y2="4298" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4311" fill="#cfcfcf" font-size="10.5">workspace_view.dart</text>
-<text x="418" y="4311" fill="#6e6e6e" font-size="9" text-anchor="end">395</text>
-<rect x="430" y="4303" width="65.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4311" fill="#cfcfcf" font-size="10.5">rail_collections.dart</text>
+<text x="418" y="4311" fill="#6e6e6e" font-size="9" text-anchor="end">217</text>
+<rect x="430" y="4303" width="35.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4302" x2="529" y2="4313" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4302" x2="562" y2="4313" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4307" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="4307" r="3.1" fill="#7d7d7d"/>
-<rect x="20" y="4330" width="1140" height="15" fill="#c39bd3" fill-opacity="0.09"/>
-<text x="26" y="4341" fill="#c39bd3" font-size="12" font-family="-apple-system,sans-serif">ui/native — 接続</text>
-<text x="418" y="4341" fill="#8c8c8c" font-size="10" text-anchor="end">11464 行</text>
-<text x="37" y="4356" fill="#9a9a9a" font-size="10.5">editor/</text>
-<text x="418" y="4356" fill="#5e5e5e" font-size="9" text-anchor="end">8536</text>
-<text x="48" y="4371" fill="#cfcfcf" font-size="10.5">blend_preview.rs</text>
-<text x="418" y="4371" fill="#6e6e6e" font-size="9" text-anchor="end">208</text>
-<rect x="430" y="4363" width="34.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="456.2" y="4363" width="8.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4326" fill="#cfcfcf" font-size="10.5">shelf.dart</text>
+<text x="418" y="4326" fill="#6e6e6e" font-size="9" text-anchor="end">207</text>
+<rect x="430" y="4318" width="34.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4317" x2="529" y2="4328" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4317" x2="562" y2="4328" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4341" fill="#cfcfcf" font-size="10.5">tile.dart</text>
+<text x="418" y="4341" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
+<rect x="430" y="4333" width="55.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4332" x2="529" y2="4343" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4332" x2="562" y2="4343" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4356" fill="#e8b45b" font-size="10.5">browser.dart</text>
+<text x="418" y="4356" fill="#6e6e6e" font-size="9" text-anchor="end">649</text>
+<rect x="430" y="4348" width="107.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4347" x2="529" y2="4358" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4347" x2="562" y2="4358" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4352" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="4352" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="4352" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="4352" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="4352" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="4352" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="4352" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="4356" fill="#6e6e6e" font-size="8.5">86% colors_shelf.dart</text>
+<text x="48" y="4371" fill="#cfcfcf" font-size="10.5">composition_controls.dart</text>
+<text x="418" y="4371" fill="#6e6e6e" font-size="9" text-anchor="end">141</text>
+<rect x="430" y="4363" width="23.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4362" x2="529" y2="4373" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4362" x2="562" y2="4373" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4386" fill="#9a9a9a" font-size="10.5">clipboard/</text>
-<text x="418" y="4386" fill="#5e5e5e" font-size="9" text-anchor="end">651</text>
-<text x="59" y="4401" fill="#cfcfcf" font-size="10.5">document_identity_regressions.rs</text>
-<text x="418" y="4401" fill="#6e6e6e" font-size="9" text-anchor="end">120</text>
-<rect x="430" y="4393" width="19.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="4386" fill="#cfcfcf" font-size="10.5">depth_desk.dart</text>
+<text x="418" y="4386" fill="#6e6e6e" font-size="9" text-anchor="end">387</text>
+<rect x="430" y="4378" width="63.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4377" x2="529" y2="4388" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4377" x2="562" y2="4388" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4401" fill="#cfcfcf" font-size="10.5">desk.dart</text>
+<text x="418" y="4401" fill="#6e6e6e" font-size="9" text-anchor="end">239</text>
+<rect x="430" y="4393" width="39.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4392" x2="529" y2="4403" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4392" x2="562" y2="4403" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4416" fill="#cfcfcf" font-size="10.5">key_ownership_regressions.rs</text>
-<text x="418" y="4416" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
-<rect x="430" y="4408" width="18.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="4407" x2="529" y2="4418" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="4407" x2="562" y2="4418" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4431" fill="#cfcfcf" font-size="10.5">tests.rs</text>
-<text x="418" y="4431" fill="#6e6e6e" font-size="9" text-anchor="end">418</text>
-<rect x="430" y="4423" width="69.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="4416" fill="#9a9a9a" font-size="10.5">ease_desk/</text>
+<text x="418" y="4416" fill="#5e5e5e" font-size="9" text-anchor="end">1328</text>
+<text x="59" y="4431" fill="#cfcfcf" font-size="10.5">painters.dart</text>
+<text x="418" y="4431" fill="#6e6e6e" font-size="9" text-anchor="end">358</text>
+<rect x="430" y="4423" width="59.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4422" x2="529" y2="4433" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4422" x2="562" y2="4433" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4446" fill="#cfcfcf" font-size="10.5">clipboard.rs</text>
-<text x="418" y="4446" fill="#6e6e6e" font-size="9" text-anchor="end">284</text>
-<rect x="430" y="4438" width="46.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="475.9" y="4438" width="1.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4446" fill="#cfcfcf" font-size="10.5">parts.dart</text>
+<text x="418" y="4446" fill="#6e6e6e" font-size="9" text-anchor="end">435</text>
+<rect x="430" y="4438" width="71.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4437" x2="529" y2="4448" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4437" x2="562" y2="4448" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4461" fill="#cfcfcf" font-size="10.5">color.rs</text>
-<text x="418" y="4461" fill="#6e6e6e" font-size="9" text-anchor="end">258</text>
-<rect x="430" y="4453" width="42.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4461" fill="#cfcfcf" font-size="10.5">state.dart</text>
+<text x="418" y="4461" fill="#6e6e6e" font-size="9" text-anchor="end">442</text>
+<rect x="430" y="4453" width="72.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4452" x2="529" y2="4463" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4452" x2="562" y2="4463" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4476" fill="#e8b45b" font-size="10.5">create.rs</text>
-<text x="418" y="4476" fill="#6e6e6e" font-size="9" text-anchor="end">605</text>
-<rect x="430" y="4468" width="99.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="502.8" y="4468" width="27.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4476" fill="#cfcfcf" font-size="10.5">values.dart</text>
+<text x="418" y="4476" fill="#6e6e6e" font-size="9" text-anchor="end">93</text>
+<rect x="430" y="4468" width="15.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4467" x2="529" y2="4478" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4467" x2="562" y2="4478" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4491" fill="#cfcfcf" font-size="10.5">ease.rs</text>
-<text x="418" y="4491" fill="#6e6e6e" font-size="9" text-anchor="end">179</text>
-<rect x="430" y="4483" width="29.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="455.2" y="4483" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="4491" fill="#cfcfcf" font-size="10.5">ease_desk.dart</text>
+<text x="418" y="4491" fill="#6e6e6e" font-size="9" text-anchor="end">455</text>
+<rect x="430" y="4483" width="75.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4482" x2="529" y2="4493" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4482" x2="562" y2="4493" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4506" fill="#cfcfcf" font-size="10.5">ease_kinds.rs</text>
-<text x="418" y="4506" fill="#6e6e6e" font-size="9" text-anchor="end">325</text>
-<rect x="430" y="4498" width="53.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="479.3" y="4498" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<circle cx="886" cy="4487" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="4487" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="4487" r="3.1" fill="#d0a06a"/>
+<text x="982" y="4491" fill="#6e6e6e" font-size="8.5">71% panel_controls.dart</text>
+<text x="48" y="4506" fill="#cfcfcf" font-size="10.5">export_controls.dart</text>
+<text x="418" y="4506" fill="#6e6e6e" font-size="9" text-anchor="end">103</text>
+<rect x="430" y="4498" width="17.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4497" x2="529" y2="4508" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4497" x2="562" y2="4508" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4521" fill="#cfcfcf" font-size="10.5">effect_sample.rs</text>
-<text x="418" y="4521" fill="#6e6e6e" font-size="9" text-anchor="end">225</text>
-<rect x="430" y="4513" width="37.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="433.5" y="4513" width="33.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="4521" fill="#cfcfcf" font-size="10.5">gradient_inspector.dart</text>
+<text x="418" y="4521" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
+<rect x="430" y="4513" width="55.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4512" x2="529" y2="4523" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4512" x2="562" y2="4523" stroke="#4a4a4a" stroke-width="0.6"/>
 <circle cx="886" cy="4517" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4536" fill="#cfcfcf" font-size="10.5">fixture.rs</text>
-<text x="418" y="4536" fill="#6e6e6e" font-size="9" text-anchor="end">235</text>
-<rect x="430" y="4528" width="38.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<circle cx="895" cy="4517" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4536" fill="#cfcfcf" font-size="10.5">history_records.dart</text>
+<text x="418" y="4536" fill="#6e6e6e" font-size="9" text-anchor="end">278</text>
+<rect x="430" y="4528" width="45.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4527" x2="529" y2="4538" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4527" x2="562" y2="4538" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4551" fill="#9a9a9a" font-size="10.5">functions/</text>
-<text x="418" y="4551" fill="#5e5e5e" font-size="9" text-anchor="end">1059</text>
-<text x="59" y="4566" fill="#cfcfcf" font-size="10.5">atom.rs</text>
-<text x="418" y="4566" fill="#6e6e6e" font-size="9" text-anchor="end">80</text>
-<rect x="430" y="4558" width="13.2" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="4551" fill="#9a9a9a" font-size="10.5">inspector/</text>
+<text x="418" y="4551" fill="#5e5e5e" font-size="9" text-anchor="end">2562</text>
+<text x="59" y="4566" fill="#cfcfcf" font-size="10.5">content_cards.dart</text>
+<text x="418" y="4566" fill="#6e6e6e" font-size="9" text-anchor="end">146</text>
+<rect x="430" y="4558" width="24.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4557" x2="529" y2="4568" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4557" x2="562" y2="4568" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4581" fill="#cfcfcf" font-size="10.5">compose.rs</text>
-<text x="418" y="4581" fill="#6e6e6e" font-size="9" text-anchor="end">46</text>
-<rect x="430" y="4573" width="7.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4581" fill="#cfcfcf" font-size="10.5">controls.dart</text>
+<text x="418" y="4581" fill="#6e6e6e" font-size="9" text-anchor="end">222</text>
+<rect x="430" y="4573" width="36.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4572" x2="529" y2="4583" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4572" x2="562" y2="4583" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4596" fill="#cfcfcf" font-size="10.5">lens.rs</text>
-<text x="418" y="4596" fill="#6e6e6e" font-size="9" text-anchor="end">42</text>
-<rect x="430" y="4588" width="6.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4596" fill="#cfcfcf" font-size="10.5">effects_card.dart</text>
+<text x="418" y="4596" fill="#6e6e6e" font-size="9" text-anchor="end">215</text>
+<rect x="430" y="4588" width="35.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4587" x2="529" y2="4598" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4587" x2="562" y2="4598" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4611" fill="#cfcfcf" font-size="10.5">mod.rs</text>
-<text x="418" y="4611" fill="#6e6e6e" font-size="9" text-anchor="end">3</text>
-<rect x="430" y="4603" width="0.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4611" fill="#cfcfcf" font-size="10.5">folds.dart</text>
+<text x="418" y="4611" fill="#6e6e6e" font-size="9" text-anchor="end">43</text>
+<rect x="430" y="4603" width="7.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4602" x2="529" y2="4613" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4602" x2="562" y2="4613" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4626" fill="#cfcfcf" font-size="10.5">placement.rs</text>
-<text x="418" y="4626" fill="#6e6e6e" font-size="9" text-anchor="end">138</text>
-<rect x="430" y="4618" width="22.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4626" fill="#cfcfcf" font-size="10.5">grid.dart</text>
+<text x="418" y="4626" fill="#6e6e6e" font-size="9" text-anchor="end">90</text>
+<rect x="430" y="4618" width="14.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4617" x2="529" y2="4628" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4617" x2="562" y2="4628" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4641" fill="#cfcfcf" font-size="10.5">read.rs</text>
-<text x="418" y="4641" fill="#6e6e6e" font-size="9" text-anchor="end">406</text>
-<rect x="430" y="4633" width="67.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4641" fill="#cfcfcf" font-size="10.5">layout_card.dart</text>
+<text x="418" y="4641" fill="#6e6e6e" font-size="9" text-anchor="end">353</text>
+<rect x="430" y="4633" width="58.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4632" x2="529" y2="4643" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4632" x2="562" y2="4643" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4637" r="3.1" fill="#7d7d7d"/>
-<text x="59" y="4656" fill="#cfcfcf" font-size="10.5">verb.rs</text>
-<text x="418" y="4656" fill="#6e6e6e" font-size="9" text-anchor="end">344</text>
-<rect x="430" y="4648" width="56.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="479.7" y="4648" width="7.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4656" fill="#cfcfcf" font-size="10.5">parts.dart</text>
+<text x="418" y="4656" fill="#6e6e6e" font-size="9" text-anchor="end">192</text>
+<rect x="430" y="4648" width="31.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4647" x2="529" y2="4658" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4647" x2="562" y2="4658" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4671" fill="#e8b45b" font-size="10.5">gizmo3d.rs</text>
-<text x="418" y="4671" fill="#6e6e6e" font-size="9" text-anchor="end">676</text>
-<rect x="430" y="4663" width="111.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="510.4" y="4663" width="31.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4671" fill="#cfcfcf" font-size="10.5">property_style.dart</text>
+<text x="418" y="4671" fill="#6e6e6e" font-size="9" text-anchor="end">183</text>
+<rect x="430" y="4663" width="30.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4662" x2="529" y2="4673" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4662" x2="562" y2="4673" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4686" fill="#cfcfcf" font-size="10.5">gradient.rs</text>
-<text x="418" y="4686" fill="#6e6e6e" font-size="9" text-anchor="end">175</text>
-<rect x="430" y="4678" width="28.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="446.8" y="4678" width="12.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4686" fill="#cfcfcf" font-size="10.5">reading.dart</text>
+<text x="418" y="4686" fill="#6e6e6e" font-size="9" text-anchor="end">218</text>
+<rect x="430" y="4678" width="36.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4677" x2="529" y2="4688" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4677" x2="562" y2="4688" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4701" fill="#cfcfcf" font-size="10.5">history.rs</text>
-<text x="418" y="4701" fill="#6e6e6e" font-size="9" text-anchor="end">282</text>
-<rect x="430" y="4693" width="46.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="461.5" y="4693" width="15.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4701" fill="#cfcfcf" font-size="10.5">transform_card.dart</text>
+<text x="418" y="4701" fill="#6e6e6e" font-size="9" text-anchor="end">308</text>
+<rect x="430" y="4693" width="50.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4692" x2="529" y2="4703" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4692" x2="562" y2="4703" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4716" fill="#cfcfcf" font-size="10.5">keyframe_edit.rs</text>
-<text x="418" y="4716" fill="#6e6e6e" font-size="9" text-anchor="end">192</text>
-<rect x="430" y="4708" width="31.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4716" fill="#cfcfcf" font-size="10.5">wells.dart</text>
+<text x="418" y="4716" fill="#6e6e6e" font-size="9" text-anchor="end">384</text>
+<rect x="430" y="4708" width="63.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4707" x2="529" y2="4718" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4707" x2="562" y2="4718" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4731" fill="#cfcfcf" font-size="10.5">keymap.rs</text>
-<text x="418" y="4731" fill="#6e6e6e" font-size="9" text-anchor="end">2</text>
-<rect x="430" y="4723" width="0.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4731" fill="#cfcfcf" font-size="10.5">writing.dart</text>
+<text x="418" y="4731" fill="#6e6e6e" font-size="9" text-anchor="end">208</text>
+<rect x="430" y="4723" width="34.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4722" x2="529" y2="4733" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4722" x2="562" y2="4733" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4746" fill="#cfcfcf" font-size="10.5">mod.rs</text>
-<text x="418" y="4746" fill="#6e6e6e" font-size="9" text-anchor="end">16</text>
-<rect x="430" y="4738" width="2.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="4746" fill="#cfcfcf" font-size="10.5">inspector.dart</text>
+<text x="418" y="4746" fill="#6e6e6e" font-size="9" text-anchor="end">384</text>
+<rect x="430" y="4738" width="63.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4737" x2="529" y2="4748" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4737" x2="562" y2="4748" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4761" fill="#cfcfcf" font-size="10.5">notes.rs</text>
-<text x="418" y="4761" fill="#6e6e6e" font-size="9" text-anchor="end">50</text>
-<rect x="430" y="4753" width="8.2" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<circle cx="886" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="958" cy="4742" r="3.1" fill="#ff9d4d"/>
+<circle cx="967" cy="4742" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="4746" fill="#6e6e6e" font-size="8.5">100% shape_props.rs</text>
+<text x="48" y="4761" fill="#cfcfcf" font-size="10.5">native_visual_sample.dart</text>
+<text x="418" y="4761" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="4753" width="28.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4752" x2="529" y2="4763" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4752" x2="562" y2="4763" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4776" fill="#cfcfcf" font-size="10.5">placement_edit.rs</text>
-<text x="418" y="4776" fill="#6e6e6e" font-size="9" text-anchor="end">248</text>
-<rect x="430" y="4768" width="40.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="459.4" y="4768" width="11.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="4776" fill="#e8b45b" font-size="10.5">notes_desk.dart</text>
+<text x="418" y="4776" fill="#6e6e6e" font-size="9" text-anchor="end">714</text>
+<rect x="430" y="4768" width="117.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4767" x2="529" y2="4778" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4767" x2="562" y2="4778" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4791" fill="#9a9a9a" font-size="10.5">script/</text>
-<text x="418" y="4791" fill="#5e5e5e" font-size="9" text-anchor="end">152</text>
-<text x="59" y="4806" fill="#cfcfcf" font-size="10.5">sweep.rs</text>
-<text x="418" y="4806" fill="#6e6e6e" font-size="9" text-anchor="end">152</text>
-<rect x="430" y="4798" width="25.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<circle cx="886" cy="4772" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4791" fill="#cfcfcf" font-size="10.5">panel_settings.dart</text>
+<text x="418" y="4791" fill="#6e6e6e" font-size="9" text-anchor="end">168</text>
+<rect x="430" y="4783" width="27.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4782" x2="529" y2="4793" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4782" x2="562" y2="4793" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4787" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4806" fill="#cfcfcf" font-size="10.5">registry.dart</text>
+<text x="418" y="4806" fill="#6e6e6e" font-size="9" text-anchor="end">69</text>
+<rect x="430" y="4798" width="11.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4797" x2="529" y2="4808" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4797" x2="562" y2="4808" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4821" fill="#cfcfcf" font-size="10.5">script.rs</text>
-<text x="418" y="4821" fill="#6e6e6e" font-size="9" text-anchor="end">323</text>
-<rect x="430" y="4813" width="53.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="444.7" y="4813" width="38.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="4821" fill="#cfcfcf" font-size="10.5">rich_text_editor.dart</text>
+<text x="418" y="4821" fill="#6e6e6e" font-size="9" text-anchor="end">374</text>
+<rect x="430" y="4813" width="61.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4812" x2="529" y2="4823" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4812" x2="562" y2="4823" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4817" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4836" fill="#e8b45b" font-size="10.5">stage.rs</text>
-<text x="418" y="4836" fill="#6e6e6e" font-size="9" text-anchor="end">761</text>
-<rect x="430" y="4828" width="125.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="548.3" y="4828" width="7.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
-<line x1="529" y1="4827" x2="529" y2="4838" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="4827" x2="562" y2="4838" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4832" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="4832" r="3.1" fill="#7d7d7d"/>
-<text x="48" y="4851" fill="#cfcfcf" font-size="10.5">text.rs</text>
-<text x="418" y="4851" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
-<rect x="430" y="4843" width="18.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="444.7" y="4843" width="4.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="4836" fill="#9a9a9a" font-size="10.5">stage/</text>
+<text x="418" y="4836" fill="#5e5e5e" font-size="9" text-anchor="end">1880</text>
+<text x="59" y="4851" fill="#cfcfcf" font-size="10.5">camera.dart</text>
+<text x="418" y="4851" fill="#6e6e6e" font-size="9" text-anchor="end">196</text>
+<rect x="430" y="4843" width="32.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4842" x2="529" y2="4853" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4842" x2="562" y2="4853" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4866" fill="#cfcfcf" font-size="10.5">text_format.rs</text>
-<text x="418" y="4866" fill="#6e6e6e" font-size="9" text-anchor="end">163</text>
-<rect x="430" y="4858" width="26.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="442.0" y="4858" width="14.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4866" fill="#cfcfcf" font-size="10.5">chrome.dart</text>
+<text x="418" y="4866" fill="#6e6e6e" font-size="9" text-anchor="end">447</text>
+<rect x="430" y="4858" width="73.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4857" x2="529" y2="4868" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4857" x2="562" y2="4868" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4881" fill="#cfcfcf" font-size="10.5">thumbnail.rs</text>
-<text x="418" y="4881" fill="#6e6e6e" font-size="9" text-anchor="end">123</text>
-<rect x="430" y="4873" width="20.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4881" fill="#cfcfcf" font-size="10.5">geometry.dart</text>
+<text x="418" y="4881" fill="#6e6e6e" font-size="9" text-anchor="end">143</text>
+<rect x="430" y="4873" width="23.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4872" x2="529" y2="4883" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4872" x2="562" y2="4883" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4896" fill="#9a9a9a" font-size="10.5">timeline_edit/</text>
-<text x="418" y="4896" fill="#5e5e5e" font-size="9" text-anchor="end">1121</text>
-<text x="59" y="4911" fill="#e8b45b" font-size="10.5">copy_paste.rs</text>
-<text x="418" y="4911" fill="#6e6e6e" font-size="9" text-anchor="end">628</text>
-<rect x="430" y="4903" width="103.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="533.0" y="4903" width="0.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="4896" fill="#cfcfcf" font-size="10.5">overlay.dart</text>
+<text x="418" y="4896" fill="#6e6e6e" font-size="9" text-anchor="end">246</text>
+<rect x="430" y="4888" width="40.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4887" x2="529" y2="4898" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4887" x2="562" y2="4898" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4911" fill="#cfcfcf" font-size="10.5">spatial.dart</text>
+<text x="418" y="4911" fill="#6e6e6e" font-size="9" text-anchor="end">73</text>
+<rect x="430" y="4903" width="12.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4902" x2="529" y2="4913" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4902" x2="562" y2="4913" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4926" fill="#cfcfcf" font-size="10.5">hierarchy_clipboard_regressions.rs</text>
-<text x="418" y="4926" fill="#6e6e6e" font-size="9" text-anchor="end">137</text>
-<rect x="430" y="4918" width="22.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4926" fill="#cfcfcf" font-size="10.5">touch.dart</text>
+<text x="418" y="4926" fill="#6e6e6e" font-size="9" text-anchor="end">481</text>
+<rect x="430" y="4918" width="79.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4917" x2="529" y2="4928" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4917" x2="562" y2="4928" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4941" fill="#cfcfcf" font-size="10.5">key_delete.rs</text>
-<text x="418" y="4941" fill="#6e6e6e" font-size="9" text-anchor="end">118</text>
-<rect x="430" y="4933" width="19.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4941" fill="#cfcfcf" font-size="10.5">view.dart</text>
+<text x="418" y="4941" fill="#6e6e6e" font-size="9" text-anchor="end">136</text>
+<rect x="430" y="4933" width="22.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4932" x2="529" y2="4943" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4932" x2="562" y2="4943" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="4956" fill="#cfcfcf" font-size="10.5">split.rs</text>
-<text x="418" y="4956" fill="#6e6e6e" font-size="9" text-anchor="end">238</text>
-<rect x="430" y="4948" width="39.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="4956" fill="#cfcfcf" font-size="10.5">window.dart</text>
+<text x="418" y="4956" fill="#6e6e6e" font-size="9" text-anchor="end">158</text>
+<rect x="430" y="4948" width="26.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4947" x2="529" y2="4958" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4947" x2="562" y2="4958" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4971" fill="#cfcfcf" font-size="10.5">timeline_edit.rs</text>
-<text x="418" y="4971" fill="#6e6e6e" font-size="9" text-anchor="end">17</text>
-<rect x="430" y="4963" width="2.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="4971" fill="#cfcfcf" font-size="10.5">stage.dart</text>
+<text x="418" y="4971" fill="#6e6e6e" font-size="9" text-anchor="end">82</text>
+<rect x="430" y="4963" width="13.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4962" x2="529" y2="4973" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4962" x2="562" y2="4973" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="4986" fill="#cfcfcf" font-size="10.5">visual_samples.rs</text>
-<text x="418" y="4986" fill="#6e6e6e" font-size="9" text-anchor="end">93</text>
-<rect x="430" y="4978" width="15.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="440.7" y="4978" width="4.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
-<line x1="529" y1="4977" x2="529" y2="4988" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="4977" x2="562" y2="4988" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="5001" fill="#cfcfcf" font-size="10.5">lib.rs</text>
-<text x="418" y="5001" fill="#6e6e6e" font-size="9" text-anchor="end">415</text>
-<rect x="430" y="4993" width="68.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="492.0" y="4993" width="6.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<circle cx="886" cy="4967" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4986" fill="#9a9a9a" font-size="10.5">timeline/</text>
+<text x="418" y="4986" fill="#5e5e5e" font-size="9" text-anchor="end">2006</text>
+<text x="59" y="5001" fill="#cfcfcf" font-size="10.5">frame.dart</text>
+<text x="418" y="5001" fill="#6e6e6e" font-size="9" text-anchor="end">207</text>
+<rect x="430" y="4993" width="34.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="4992" x2="529" y2="5003" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="4992" x2="562" y2="5003" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="4997" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="4997" r="3.1" fill="#7d7d7d"/>
-<text x="37" y="5016" fill="#9a9a9a" font-size="10.5">port/</text>
-<text x="418" y="5016" fill="#5e5e5e" font-size="9" text-anchor="end">397</text>
-<text x="48" y="5031" fill="#cfcfcf" font-size="10.5">hot_reload_probe.rs</text>
-<text x="418" y="5031" fill="#6e6e6e" font-size="9" text-anchor="end">65</text>
-<rect x="430" y="5023" width="10.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="5016" fill="#cfcfcf" font-size="10.5">grip.dart</text>
+<text x="418" y="5016" fill="#6e6e6e" font-size="9" text-anchor="end">565</text>
+<rect x="430" y="5008" width="93.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5007" x2="529" y2="5018" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5007" x2="562" y2="5018" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5031" fill="#cfcfcf" font-size="10.5">ink.dart</text>
+<text x="418" y="5031" fill="#6e6e6e" font-size="9" text-anchor="end">73</text>
+<rect x="430" y="5023" width="12.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5022" x2="529" y2="5033" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5022" x2="562" y2="5033" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="5046" fill="#cfcfcf" font-size="10.5">playback_probe.rs</text>
-<text x="418" y="5046" fill="#6e6e6e" font-size="9" text-anchor="end">79</text>
-<rect x="430" y="5038" width="13.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="5046" fill="#cfcfcf" font-size="10.5">layout.dart</text>
+<text x="418" y="5046" fill="#6e6e6e" font-size="9" text-anchor="end">193</text>
+<rect x="430" y="5038" width="31.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5037" x2="529" y2="5048" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5037" x2="562" y2="5048" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="5061" fill="#cfcfcf" font-size="10.5">poster.rs</text>
-<text x="418" y="5061" fill="#6e6e6e" font-size="9" text-anchor="end">66</text>
-<rect x="430" y="5053" width="10.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="5061" fill="#cfcfcf" font-size="10.5">menu.dart</text>
+<text x="418" y="5061" fill="#6e6e6e" font-size="9" text-anchor="end">109</text>
+<rect x="430" y="5053" width="18.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5052" x2="529" y2="5063" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5052" x2="562" y2="5063" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="5076" fill="#cfcfcf" font-size="10.5">sequence_preview.rs</text>
-<text x="418" y="5076" fill="#6e6e6e" font-size="9" text-anchor="end">64</text>
-<rect x="430" y="5068" width="10.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="5076" fill="#cfcfcf" font-size="10.5">overview.dart</text>
+<text x="418" y="5076" fill="#6e6e6e" font-size="9" text-anchor="end">88</text>
+<rect x="430" y="5068" width="14.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5067" x2="529" y2="5078" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5067" x2="562" y2="5078" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="5091" fill="#cfcfcf" font-size="10.5">timing_drag_tests.rs</text>
-<text x="418" y="5091" fill="#6e6e6e" font-size="9" text-anchor="end">123</text>
-<rect x="430" y="5083" width="20.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="59" y="5091" fill="#e8b45b" font-size="10.5">paint.dart</text>
+<text x="418" y="5091" fill="#6e6e6e" font-size="9" text-anchor="end">606</text>
+<rect x="430" y="5083" width="100.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5082" x2="529" y2="5093" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5082" x2="562" y2="5093" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="5106" fill="#cfcfcf" font-size="10.5">port.rs</text>
-<text x="418" y="5106" fill="#6e6e6e" font-size="9" text-anchor="end">528</text>
-<rect x="430" y="5098" width="87.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="489.4" y="5098" width="27.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="5106" fill="#cfcfcf" font-size="10.5">view.dart</text>
+<text x="418" y="5106" fill="#6e6e6e" font-size="9" text-anchor="end">165</text>
+<rect x="430" y="5098" width="27.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5097" x2="529" y2="5108" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5097" x2="562" y2="5108" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="5102" r="3.1" fill="#d0a06a"/>
-<circle cx="895" cy="5102" r="3.1" fill="#d0a06a"/>
-<circle cx="904" cy="5102" r="3.1" fill="#d0a06a"/>
-<circle cx="913" cy="5102" r="3.1" fill="#d0a06a"/>
-<text x="982" y="5106" fill="#6e6e6e" font-size="8.5">80% stage.rs</text>
-<text x="37" y="5121" fill="#9a9a9a" font-size="10.5">snapshot/</text>
-<text x="418" y="5121" fill="#5e5e5e" font-size="9" text-anchor="end">439</text>
-<text x="48" y="5136" fill="#cfcfcf" font-size="10.5">camera_view_cage_tests.rs</text>
-<text x="418" y="5136" fill="#6e6e6e" font-size="9" text-anchor="end">327</text>
-<rect x="430" y="5128" width="54.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="5121" fill="#cfcfcf" font-size="10.5">timeline.dart</text>
+<text x="418" y="5121" fill="#6e6e6e" font-size="9" text-anchor="end">467</text>
+<rect x="430" y="5113" width="77.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5112" x2="529" y2="5123" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5112" x2="562" y2="5123" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5117" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="5117" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="5136" fill="#cfcfcf" font-size="10.5">web_panel.dart</text>
+<text x="418" y="5136" fill="#6e6e6e" font-size="9" text-anchor="end">53</text>
+<rect x="430" y="5128" width="8.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5127" x2="529" y2="5138" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5127" x2="562" y2="5138" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="5151" fill="#cfcfcf" font-size="10.5">frame_cost_probe.rs</text>
-<text x="418" y="5151" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
-<rect x="430" y="5143" width="18.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="5142" x2="529" y2="5153" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5142" x2="562" y2="5153" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="5166" fill="#cfcfcf" font-size="10.5">snapshot.rs</text>
-<text x="418" y="5166" fill="#6e6e6e" font-size="9" text-anchor="end">566</text>
-<rect x="430" y="5158" width="93.4" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="513.3" y="5158" width="10.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="37" y="5151" fill="#9a9a9a" font-size="10.5">session/</text>
+<text x="418" y="5151" fill="#5e5e5e" font-size="9" text-anchor="end">1283</text>
+<text x="48" y="5166" fill="#cfcfcf" font-size="10.5">editor_session.dart</text>
+<text x="418" y="5166" fill="#6e6e6e" font-size="9" text-anchor="end">161</text>
+<rect x="430" y="5158" width="26.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5157" x2="529" y2="5168" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5157" x2="562" y2="5168" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="895" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="904" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="913" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="922" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="931" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="940" cy="5162" r="3.1" fill="#ff9d4d"/>
-<circle cx="949" cy="5162" r="3.1" fill="#ff9d4d"/>
-<text x="982" y="5166" fill="#6e6e6e" font-size="8.5">100% stage.rs</text>
-<text x="37" y="5181" fill="#cfcfcf" font-size="10.5">snapshot_cache.rs</text>
-<text x="418" y="5181" fill="#6e6e6e" font-size="9" text-anchor="end">398</text>
-<rect x="430" y="5173" width="65.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="459.7" y="5173" width="36.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<circle cx="886" cy="5162" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="5162" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="5181" fill="#cfcfcf" font-size="10.5">read_model.dart</text>
+<text x="418" y="5181" fill="#6e6e6e" font-size="9" text-anchor="end">10</text>
+<rect x="430" y="5173" width="1.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5172" x2="529" y2="5183" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5172" x2="562" y2="5183" stroke="#4a4a4a" stroke-width="0.6"/>
-<circle cx="886" cy="5177" r="3.1" fill="#7d7d7d"/>
-<circle cx="895" cy="5177" r="3.1" fill="#7d7d7d"/>
-<text x="37" y="5196" fill="#cfcfcf" font-size="10.5">viewer.rs</text>
-<text x="418" y="5196" fill="#6e6e6e" font-size="9" text-anchor="end">185</text>
-<rect x="430" y="5188" width="30.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
-<rect x="452.8" y="5188" width="7.8" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="5196" fill="#cfcfcf" font-size="10.5">session_commands.dart</text>
+<text x="418" y="5196" fill="#6e6e6e" font-size="9" text-anchor="end">145</text>
+<rect x="430" y="5188" width="23.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5187" x2="529" y2="5198" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5187" x2="562" y2="5198" stroke="#4a4a4a" stroke-width="0.6"/>
-<rect x="20" y="5215" width="1140" height="15" fill="#d98880" fill-opacity="0.09"/>
-<text x="26" y="5226" fill="#d98880" font-size="12" font-family="-apple-system,sans-serif">extensions — 拡張</text>
-<text x="418" y="5226" fill="#8c8c8c" font-size="10" text-anchor="end">4540 行</text>
-<text x="37" y="5241" fill="#9a9a9a" font-size="10.5">edit/</text>
-<text x="418" y="5241" fill="#5e5e5e" font-size="9" text-anchor="end">4009</text>
-<text x="48" y="5256" fill="#9a9a9a" font-size="10.5">src/</text>
-<text x="418" y="5256" fill="#5e5e5e" font-size="9" text-anchor="end">3453</text>
-<text x="59" y="5271" fill="#9a9a9a" font-size="10.5">document/</text>
-<text x="418" y="5271" fill="#5e5e5e" font-size="9" text-anchor="end">1902</text>
-<text x="70" y="5286" fill="#cfcfcf" font-size="10.5">apply.rs</text>
-<text x="418" y="5286" fill="#6e6e6e" font-size="9" text-anchor="end">550</text>
-<rect x="430" y="5278" width="90.8" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="5211" fill="#cfcfcf" font-size="10.5">session_core.dart</text>
+<text x="418" y="5211" fill="#6e6e6e" font-size="9" text-anchor="end">146</text>
+<rect x="430" y="5203" width="24.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5202" x2="529" y2="5213" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5202" x2="562" y2="5213" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5226" fill="#cfcfcf" font-size="10.5">session_files.dart</text>
+<text x="418" y="5226" fill="#6e6e6e" font-size="9" text-anchor="end">133</text>
+<rect x="430" y="5218" width="21.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5217" x2="529" y2="5228" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5217" x2="562" y2="5228" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5241" fill="#cfcfcf" font-size="10.5">session_native.dart</text>
+<text x="418" y="5241" fill="#6e6e6e" font-size="9" text-anchor="end">277</text>
+<rect x="430" y="5233" width="45.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5232" x2="529" y2="5243" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5232" x2="562" y2="5243" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5256" fill="#cfcfcf" font-size="10.5">session_render.dart</text>
+<text x="418" y="5256" fill="#6e6e6e" font-size="9" text-anchor="end">230</text>
+<rect x="430" y="5248" width="38.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5247" x2="529" y2="5258" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5247" x2="562" y2="5258" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5271" fill="#cfcfcf" font-size="10.5">session_snapshot.dart</text>
+<text x="418" y="5271" fill="#6e6e6e" font-size="9" text-anchor="end">127</text>
+<rect x="430" y="5263" width="21.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5262" x2="529" y2="5273" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5262" x2="562" y2="5273" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5286" fill="#cfcfcf" font-size="10.5">session_values.dart</text>
+<text x="418" y="5286" fill="#6e6e6e" font-size="9" text-anchor="end">54</text>
+<rect x="430" y="5278" width="8.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5277" x2="529" y2="5288" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5277" x2="562" y2="5288" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="70" y="5301" fill="#cfcfcf" font-size="10.5">edit.rs</text>
-<text x="418" y="5301" fill="#6e6e6e" font-size="9" text-anchor="end">283</text>
-<rect x="430" y="5293" width="46.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="5292" x2="529" y2="5303" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5292" x2="562" y2="5303" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="70" y="5316" fill="#9a9a9a" font-size="10.5">group/</text>
-<text x="418" y="5316" fill="#5e5e5e" font-size="9" text-anchor="end">488</text>
-<text x="81" y="5331" fill="#cfcfcf" font-size="10.5">moving.rs</text>
-<text x="418" y="5331" fill="#6e6e6e" font-size="9" text-anchor="end">488</text>
-<rect x="430" y="5323" width="80.5" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<text x="37" y="5301" fill="#9a9a9a" font-size="10.5">workspace/</text>
+<text x="418" y="5301" fill="#5e5e5e" font-size="9" text-anchor="end">622</text>
+<text x="48" y="5316" fill="#cfcfcf" font-size="10.5">layout.dart</text>
+<text x="418" y="5316" fill="#6e6e6e" font-size="9" text-anchor="end">223</text>
+<rect x="430" y="5308" width="36.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5307" x2="529" y2="5318" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5307" x2="562" y2="5318" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5331" fill="#cfcfcf" font-size="10.5">panel_ids.dart</text>
+<text x="418" y="5331" fill="#6e6e6e" font-size="9" text-anchor="end">4</text>
+<rect x="430" y="5323" width="0.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5322" x2="529" y2="5333" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5322" x2="562" y2="5333" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="70" y="5346" fill="#cfcfcf" font-size="10.5">group.rs</text>
-<text x="418" y="5346" fill="#6e6e6e" font-size="9" text-anchor="end">329</text>
-<rect x="430" y="5338" width="54.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="5346" fill="#cfcfcf" font-size="10.5">workspace_view.dart</text>
+<text x="418" y="5346" fill="#6e6e6e" font-size="9" text-anchor="end">395</text>
+<rect x="430" y="5338" width="65.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5337" x2="529" y2="5348" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5337" x2="562" y2="5348" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="70" y="5361" fill="#cfcfcf" font-size="10.5">projection.rs</text>
-<text x="418" y="5361" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
-<rect x="430" y="5353" width="12.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="5352" x2="529" y2="5363" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5352" x2="562" y2="5363" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="70" y="5376" fill="#cfcfcf" font-size="10.5">validate.rs</text>
-<text x="418" y="5376" fill="#6e6e6e" font-size="9" text-anchor="end">174</text>
-<rect x="430" y="5368" width="28.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="5367" x2="529" y2="5378" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5367" x2="562" y2="5378" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5391" fill="#cfcfcf" font-size="10.5">document.rs</text>
-<text x="418" y="5391" fill="#6e6e6e" font-size="9" text-anchor="end">581</text>
-<rect x="430" y="5383" width="95.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="5382" x2="529" y2="5393" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5382" x2="562" y2="5393" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5406" fill="#cfcfcf" font-size="10.5">fixture.rs</text>
-<text x="418" y="5406" fill="#6e6e6e" font-size="9" text-anchor="end">453</text>
-<rect x="430" y="5398" width="74.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<circle cx="886" cy="5342" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="5342" r="3.1" fill="#7d7d7d"/>
+<rect x="20" y="5365" width="1140" height="15" fill="#c39bd3" fill-opacity="0.09"/>
+<text x="26" y="5376" fill="#c39bd3" font-size="12" font-family="-apple-system,sans-serif">ui/native — 接続</text>
+<text x="418" y="5376" fill="#8c8c8c" font-size="10" text-anchor="end">11464 行</text>
+<text x="37" y="5391" fill="#9a9a9a" font-size="10.5">editor/</text>
+<text x="418" y="5391" fill="#5e5e5e" font-size="9" text-anchor="end">8536</text>
+<text x="48" y="5406" fill="#cfcfcf" font-size="10.5">blend_preview.rs</text>
+<text x="418" y="5406" fill="#6e6e6e" font-size="9" text-anchor="end">208</text>
+<rect x="430" y="5398" width="34.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="456.2" y="5398" width="8.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
 <line x1="529" y1="5397" x2="529" y2="5408" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5397" x2="562" y2="5408" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5421" fill="#cfcfcf" font-size="10.5">lib.rs</text>
-<text x="418" y="5421" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
-<rect x="430" y="5413" width="6.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<line x1="529" y1="5412" x2="529" y2="5423" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5412" x2="562" y2="5423" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5436" fill="#cfcfcf" font-size="10.5">persist.rs</text>
-<text x="418" y="5436" fill="#6e6e6e" font-size="9" text-anchor="end">210</text>
-<rect x="430" y="5428" width="34.6" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="5421" fill="#9a9a9a" font-size="10.5">clipboard/</text>
+<text x="418" y="5421" fill="#5e5e5e" font-size="9" text-anchor="end">651</text>
+<text x="59" y="5436" fill="#cfcfcf" font-size="10.5">document_identity_regressions.rs</text>
+<text x="418" y="5436" fill="#6e6e6e" font-size="9" text-anchor="end">120</text>
+<rect x="430" y="5428" width="19.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5427" x2="529" y2="5438" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5427" x2="562" y2="5438" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5451" fill="#cfcfcf" font-size="10.5">stagger.rs</text>
-<text x="418" y="5451" fill="#6e6e6e" font-size="9" text-anchor="end">187</text>
-<rect x="430" y="5443" width="30.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="451.1" y="5443" width="9.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="5451" fill="#cfcfcf" font-size="10.5">key_ownership_regressions.rs</text>
+<text x="418" y="5451" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
+<rect x="430" y="5443" width="18.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5442" x2="529" y2="5453" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5442" x2="562" y2="5453" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5466" fill="#cfcfcf" font-size="10.5">text_edit.rs</text>
-<text x="418" y="5466" fill="#6e6e6e" font-size="9" text-anchor="end">82</text>
-<rect x="430" y="5458" width="13.5" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="440.9" y="5458" width="2.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="5466" fill="#cfcfcf" font-size="10.5">tests.rs</text>
+<text x="418" y="5466" fill="#6e6e6e" font-size="9" text-anchor="end">418</text>
+<rect x="430" y="5458" width="69.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5457" x2="529" y2="5468" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5457" x2="562" y2="5468" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="48" y="5481" fill="#9a9a9a" font-size="10.5">tests/</text>
-<text x="418" y="5481" fill="#5e5e5e" font-size="9" text-anchor="end">556</text>
-<text x="59" y="5496" fill="#cfcfcf" font-size="10.5">edit_transactions.rs</text>
-<text x="418" y="5496" fill="#6e6e6e" font-size="9" text-anchor="end">450</text>
-<rect x="430" y="5488" width="74.2" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="5481" fill="#cfcfcf" font-size="10.5">clipboard.rs</text>
+<text x="418" y="5481" fill="#6e6e6e" font-size="9" text-anchor="end">284</text>
+<rect x="430" y="5473" width="46.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="475.9" y="5473" width="1.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5472" x2="529" y2="5483" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5472" x2="562" y2="5483" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5496" fill="#cfcfcf" font-size="10.5">color.rs</text>
+<text x="418" y="5496" fill="#6e6e6e" font-size="9" text-anchor="end">258</text>
+<rect x="430" y="5488" width="42.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5487" x2="529" y2="5498" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5487" x2="562" y2="5498" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5511" fill="#cfcfcf" font-size="10.5">notebook_read.rs</text>
-<text x="418" y="5511" fill="#6e6e6e" font-size="9" text-anchor="end">28</text>
-<rect x="430" y="5503" width="4.6" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="430.7" y="5503" width="4.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<circle cx="886" cy="5492" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="5492" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="5492" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="5492" r="3.1" fill="#d0a06a"/>
+<text x="982" y="5496" fill="#6e6e6e" font-size="8.5">80% port.rs</text>
+<text x="48" y="5511" fill="#e8b45b" font-size="10.5">create.rs</text>
+<text x="418" y="5511" fill="#6e6e6e" font-size="9" text-anchor="end">605</text>
+<rect x="430" y="5503" width="99.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="502.8" y="5503" width="27.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
 <line x1="529" y1="5502" x2="529" y2="5513" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5502" x2="562" y2="5513" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5526" fill="#cfcfcf" font-size="10.5">recording_read.rs</text>
-<text x="418" y="5526" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
-<rect x="430" y="5518" width="12.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="430.7" y="5518" width="12.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="5526" fill="#cfcfcf" font-size="10.5">ease.rs</text>
+<text x="418" y="5526" fill="#6e6e6e" font-size="9" text-anchor="end">179</text>
+<rect x="430" y="5518" width="29.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="455.2" y="5518" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
 <line x1="529" y1="5517" x2="529" y2="5528" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5517" x2="562" y2="5528" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="5541" fill="#9a9a9a" font-size="10.5">jobs/</text>
-<text x="418" y="5541" fill="#5e5e5e" font-size="9" text-anchor="end">335</text>
-<text x="48" y="5556" fill="#9a9a9a" font-size="10.5">src/</text>
-<text x="418" y="5556" fill="#5e5e5e" font-size="9" text-anchor="end">335</text>
-<text x="59" y="5571" fill="#cfcfcf" font-size="10.5">export.rs</text>
-<text x="418" y="5571" fill="#6e6e6e" font-size="9" text-anchor="end">159</text>
-<rect x="430" y="5563" width="26.2" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="452.8" y="5563" width="3.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="48" y="5541" fill="#cfcfcf" font-size="10.5">ease_kinds.rs</text>
+<text x="418" y="5541" fill="#6e6e6e" font-size="9" text-anchor="end">325</text>
+<rect x="430" y="5533" width="53.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="479.3" y="5533" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5532" x2="529" y2="5543" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5532" x2="562" y2="5543" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5556" fill="#cfcfcf" font-size="10.5">effect_sample.rs</text>
+<text x="418" y="5556" fill="#6e6e6e" font-size="9" text-anchor="end">225</text>
+<rect x="430" y="5548" width="37.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="433.5" y="5548" width="33.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5547" x2="529" y2="5558" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5547" x2="562" y2="5558" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5552" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="5571" fill="#cfcfcf" font-size="10.5">fixture.rs</text>
+<text x="418" y="5571" fill="#6e6e6e" font-size="9" text-anchor="end">235</text>
+<rect x="430" y="5563" width="38.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5562" x2="529" y2="5573" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5562" x2="562" y2="5573" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5586" fill="#cfcfcf" font-size="10.5">freeze.rs</text>
-<text x="418" y="5586" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
-<rect x="430" y="5578" width="28.1" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="452.9" y="5578" width="5.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
-<line x1="529" y1="5577" x2="529" y2="5588" stroke="#4a4a4a" stroke-width="0.6"/>
-<line x1="562" y1="5577" x2="562" y2="5588" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="59" y="5601" fill="#cfcfcf" font-size="10.5">lib.rs</text>
-<text x="418" y="5601" fill="#6e6e6e" font-size="9" text-anchor="end">6</text>
-<rect x="430" y="5593" width="1.0" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<text x="48" y="5586" fill="#9a9a9a" font-size="10.5">functions/</text>
+<text x="418" y="5586" fill="#5e5e5e" font-size="9" text-anchor="end">1059</text>
+<text x="59" y="5601" fill="#cfcfcf" font-size="10.5">atom.rs</text>
+<text x="418" y="5601" fill="#6e6e6e" font-size="9" text-anchor="end">80</text>
+<rect x="430" y="5593" width="13.2" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5592" x2="529" y2="5603" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5592" x2="562" y2="5603" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="37" y="5616" fill="#9a9a9a" font-size="10.5">script/</text>
-<text x="418" y="5616" fill="#5e5e5e" font-size="9" text-anchor="end">196</text>
-<text x="48" y="5631" fill="#9a9a9a" font-size="10.5">src/</text>
-<text x="418" y="5631" fill="#5e5e5e" font-size="9" text-anchor="end">196</text>
-<text x="59" y="5646" fill="#cfcfcf" font-size="10.5">lib.rs</text>
-<text x="418" y="5646" fill="#6e6e6e" font-size="9" text-anchor="end">196</text>
-<rect x="430" y="5638" width="32.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
-<rect x="448.8" y="5638" width="13.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<text x="59" y="5616" fill="#cfcfcf" font-size="10.5">compose.rs</text>
+<text x="418" y="5616" fill="#6e6e6e" font-size="9" text-anchor="end">46</text>
+<rect x="430" y="5608" width="7.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5607" x2="529" y2="5618" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5607" x2="562" y2="5618" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5631" fill="#cfcfcf" font-size="10.5">lens.rs</text>
+<text x="418" y="5631" fill="#6e6e6e" font-size="9" text-anchor="end">42</text>
+<rect x="430" y="5623" width="6.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5622" x2="529" y2="5633" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5622" x2="562" y2="5633" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5646" fill="#cfcfcf" font-size="10.5">mod.rs</text>
+<text x="418" y="5646" fill="#6e6e6e" font-size="9" text-anchor="end">3</text>
+<rect x="430" y="5638" width="0.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
 <line x1="529" y1="5637" x2="529" y2="5648" stroke="#4a4a4a" stroke-width="0.6"/>
 <line x1="562" y1="5637" x2="562" y2="5648" stroke="#4a4a4a" stroke-width="0.6"/>
-<text x="26" y="5700" fill="#6e6e6e" font-size="10" font-family="-apple-system,sans-serif">散っている責任は「棒が短いのに ● が多い行」— 小さい file が多くの file を連れてくる。python3 scripts/responsibility-tree.py で引き直す。</text>
+<text x="59" y="5661" fill="#cfcfcf" font-size="10.5">placement.rs</text>
+<text x="418" y="5661" fill="#6e6e6e" font-size="9" text-anchor="end">138</text>
+<rect x="430" y="5653" width="22.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5652" x2="529" y2="5663" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5652" x2="562" y2="5663" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5676" fill="#cfcfcf" font-size="10.5">read.rs</text>
+<text x="418" y="5676" fill="#6e6e6e" font-size="9" text-anchor="end">406</text>
+<rect x="430" y="5668" width="67.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5667" x2="529" y2="5678" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5667" x2="562" y2="5678" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5672" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="5672" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="5672" r="3.1" fill="#d0a06a"/>
+<text x="982" y="5676" fill="#6e6e6e" font-size="8.5">75% snapshot.rs</text>
+<text x="59" y="5691" fill="#cfcfcf" font-size="10.5">verb.rs</text>
+<text x="418" y="5691" fill="#6e6e6e" font-size="9" text-anchor="end">344</text>
+<rect x="430" y="5683" width="56.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="479.7" y="5683" width="7.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5682" x2="529" y2="5693" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5682" x2="562" y2="5693" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5706" fill="#e8b45b" font-size="10.5">gizmo3d.rs</text>
+<text x="418" y="5706" fill="#6e6e6e" font-size="9" text-anchor="end">676</text>
+<rect x="430" y="5698" width="111.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="510.4" y="5698" width="31.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5697" x2="529" y2="5708" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5697" x2="562" y2="5708" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5721" fill="#cfcfcf" font-size="10.5">gradient.rs</text>
+<text x="418" y="5721" fill="#6e6e6e" font-size="9" text-anchor="end">175</text>
+<rect x="430" y="5713" width="28.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="446.8" y="5713" width="12.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5712" x2="529" y2="5723" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5712" x2="562" y2="5723" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5717" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="5717" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="5736" fill="#cfcfcf" font-size="10.5">history.rs</text>
+<text x="418" y="5736" fill="#6e6e6e" font-size="9" text-anchor="end">282</text>
+<rect x="430" y="5728" width="46.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="461.5" y="5728" width="15.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5727" x2="529" y2="5738" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5727" x2="562" y2="5738" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5751" fill="#cfcfcf" font-size="10.5">keyframe_edit.rs</text>
+<text x="418" y="5751" fill="#6e6e6e" font-size="9" text-anchor="end">192</text>
+<rect x="430" y="5743" width="31.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5742" x2="529" y2="5753" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5742" x2="562" y2="5753" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5766" fill="#cfcfcf" font-size="10.5">keymap.rs</text>
+<text x="418" y="5766" fill="#6e6e6e" font-size="9" text-anchor="end">2</text>
+<rect x="430" y="5758" width="0.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5757" x2="529" y2="5768" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5757" x2="562" y2="5768" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5781" fill="#cfcfcf" font-size="10.5">mod.rs</text>
+<text x="418" y="5781" fill="#6e6e6e" font-size="9" text-anchor="end">16</text>
+<rect x="430" y="5773" width="2.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5772" x2="529" y2="5783" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5772" x2="562" y2="5783" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5796" fill="#cfcfcf" font-size="10.5">notes.rs</text>
+<text x="418" y="5796" fill="#6e6e6e" font-size="9" text-anchor="end">50</text>
+<rect x="430" y="5788" width="8.2" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5787" x2="529" y2="5798" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5787" x2="562" y2="5798" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5811" fill="#cfcfcf" font-size="10.5">placement_edit.rs</text>
+<text x="418" y="5811" fill="#6e6e6e" font-size="9" text-anchor="end">248</text>
+<rect x="430" y="5803" width="40.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="459.4" y="5803" width="11.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5802" x2="529" y2="5813" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5802" x2="562" y2="5813" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5826" fill="#9a9a9a" font-size="10.5">script/</text>
+<text x="418" y="5826" fill="#5e5e5e" font-size="9" text-anchor="end">152</text>
+<text x="59" y="5841" fill="#cfcfcf" font-size="10.5">sweep.rs</text>
+<text x="418" y="5841" fill="#6e6e6e" font-size="9" text-anchor="end">152</text>
+<rect x="430" y="5833" width="25.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5832" x2="529" y2="5843" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5832" x2="562" y2="5843" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5856" fill="#cfcfcf" font-size="10.5">script.rs</text>
+<text x="418" y="5856" fill="#6e6e6e" font-size="9" text-anchor="end">323</text>
+<rect x="430" y="5848" width="53.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="444.7" y="5848" width="38.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5847" x2="529" y2="5858" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5847" x2="562" y2="5858" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5852" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="5871" fill="#e8b45b" font-size="10.5">stage.rs</text>
+<text x="418" y="5871" fill="#6e6e6e" font-size="9" text-anchor="end">761</text>
+<rect x="430" y="5863" width="125.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="548.3" y="5863" width="7.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5862" x2="529" y2="5873" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5862" x2="562" y2="5873" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5867" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="5867" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="5886" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="5886" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
+<rect x="430" y="5878" width="18.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="444.7" y="5878" width="4.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5877" x2="529" y2="5888" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5877" x2="562" y2="5888" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5901" fill="#cfcfcf" font-size="10.5">text_format.rs</text>
+<text x="418" y="5901" fill="#6e6e6e" font-size="9" text-anchor="end">163</text>
+<rect x="430" y="5893" width="26.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="442.0" y="5893" width="14.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5892" x2="529" y2="5903" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5892" x2="562" y2="5903" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5916" fill="#cfcfcf" font-size="10.5">thumbnail.rs</text>
+<text x="418" y="5916" fill="#6e6e6e" font-size="9" text-anchor="end">123</text>
+<rect x="430" y="5908" width="20.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5907" x2="529" y2="5918" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5907" x2="562" y2="5918" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5931" fill="#9a9a9a" font-size="10.5">timeline_edit/</text>
+<text x="418" y="5931" fill="#5e5e5e" font-size="9" text-anchor="end">1121</text>
+<text x="59" y="5946" fill="#e8b45b" font-size="10.5">copy_paste.rs</text>
+<text x="418" y="5946" fill="#6e6e6e" font-size="9" text-anchor="end">628</text>
+<rect x="430" y="5938" width="103.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="533.0" y="5938" width="0.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5937" x2="529" y2="5948" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5937" x2="562" y2="5948" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5961" fill="#cfcfcf" font-size="10.5">hierarchy_clipboard_regressions.rs</text>
+<text x="418" y="5961" fill="#6e6e6e" font-size="9" text-anchor="end">137</text>
+<rect x="430" y="5953" width="22.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5952" x2="529" y2="5963" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5952" x2="562" y2="5963" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5976" fill="#cfcfcf" font-size="10.5">key_delete.rs</text>
+<text x="418" y="5976" fill="#6e6e6e" font-size="9" text-anchor="end">118</text>
+<rect x="430" y="5968" width="19.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5967" x2="529" y2="5978" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5967" x2="562" y2="5978" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5991" fill="#cfcfcf" font-size="10.5">split.rs</text>
+<text x="418" y="5991" fill="#6e6e6e" font-size="9" text-anchor="end">238</text>
+<rect x="430" y="5983" width="39.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5982" x2="529" y2="5993" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5982" x2="562" y2="5993" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6006" fill="#cfcfcf" font-size="10.5">timeline_edit.rs</text>
+<text x="418" y="6006" fill="#6e6e6e" font-size="9" text-anchor="end">17</text>
+<rect x="430" y="5998" width="2.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5997" x2="529" y2="6008" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5997" x2="562" y2="6008" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6021" fill="#cfcfcf" font-size="10.5">visual_samples.rs</text>
+<text x="418" y="6021" fill="#6e6e6e" font-size="9" text-anchor="end">93</text>
+<rect x="430" y="6013" width="15.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="440.7" y="6013" width="4.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6012" x2="529" y2="6023" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6012" x2="562" y2="6023" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6036" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="6036" fill="#6e6e6e" font-size="9" text-anchor="end">415</text>
+<rect x="430" y="6028" width="68.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="492.0" y="6028" width="6.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6027" x2="529" y2="6038" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6027" x2="562" y2="6038" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="6032" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="6032" r="3.1" fill="#7d7d7d"/>
+<text x="37" y="6051" fill="#9a9a9a" font-size="10.5">port/</text>
+<text x="418" y="6051" fill="#5e5e5e" font-size="9" text-anchor="end">397</text>
+<text x="48" y="6066" fill="#cfcfcf" font-size="10.5">hot_reload_probe.rs</text>
+<text x="418" y="6066" fill="#6e6e6e" font-size="9" text-anchor="end">65</text>
+<rect x="430" y="6058" width="10.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6057" x2="529" y2="6068" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6057" x2="562" y2="6068" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6081" fill="#cfcfcf" font-size="10.5">playback_probe.rs</text>
+<text x="418" y="6081" fill="#6e6e6e" font-size="9" text-anchor="end">79</text>
+<rect x="430" y="6073" width="13.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6072" x2="529" y2="6083" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6072" x2="562" y2="6083" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6096" fill="#cfcfcf" font-size="10.5">poster.rs</text>
+<text x="418" y="6096" fill="#6e6e6e" font-size="9" text-anchor="end">66</text>
+<rect x="430" y="6088" width="10.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6087" x2="529" y2="6098" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6087" x2="562" y2="6098" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6111" fill="#cfcfcf" font-size="10.5">sequence_preview.rs</text>
+<text x="418" y="6111" fill="#6e6e6e" font-size="9" text-anchor="end">64</text>
+<rect x="430" y="6103" width="10.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6102" x2="529" y2="6113" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6102" x2="562" y2="6113" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6126" fill="#cfcfcf" font-size="10.5">timing_drag_tests.rs</text>
+<text x="418" y="6126" fill="#6e6e6e" font-size="9" text-anchor="end">123</text>
+<rect x="430" y="6118" width="20.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6117" x2="529" y2="6128" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6117" x2="562" y2="6128" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6141" fill="#cfcfcf" font-size="10.5">port.rs</text>
+<text x="418" y="6141" fill="#6e6e6e" font-size="9" text-anchor="end">528</text>
+<rect x="430" y="6133" width="87.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="489.4" y="6133" width="27.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6132" x2="529" y2="6143" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6132" x2="562" y2="6143" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="6137" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="6137" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="6137" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="6137" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="6137" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="6137" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="6141" fill="#6e6e6e" font-size="8.5">80% stage.rs</text>
+<text x="37" y="6156" fill="#9a9a9a" font-size="10.5">snapshot/</text>
+<text x="418" y="6156" fill="#5e5e5e" font-size="9" text-anchor="end">439</text>
+<text x="48" y="6171" fill="#cfcfcf" font-size="10.5">camera_view_cage_tests.rs</text>
+<text x="418" y="6171" fill="#6e6e6e" font-size="9" text-anchor="end">327</text>
+<rect x="430" y="6163" width="54.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6162" x2="529" y2="6173" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6162" x2="562" y2="6173" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6186" fill="#cfcfcf" font-size="10.5">frame_cost_probe.rs</text>
+<text x="418" y="6186" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
+<rect x="430" y="6178" width="18.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6177" x2="529" y2="6188" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6177" x2="562" y2="6188" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6201" fill="#cfcfcf" font-size="10.5">snapshot.rs</text>
+<text x="418" y="6201" fill="#6e6e6e" font-size="9" text-anchor="end">566</text>
+<rect x="430" y="6193" width="93.4" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="513.3" y="6193" width="10.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6192" x2="529" y2="6203" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6192" x2="562" y2="6203" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="6197" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="6197" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="6201" fill="#6e6e6e" font-size="8.5">100% stage.rs</text>
+<text x="37" y="6216" fill="#cfcfcf" font-size="10.5">snapshot_cache.rs</text>
+<text x="418" y="6216" fill="#6e6e6e" font-size="9" text-anchor="end">398</text>
+<rect x="430" y="6208" width="65.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="459.7" y="6208" width="36.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6207" x2="529" y2="6218" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6207" x2="562" y2="6218" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="6212" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="6212" r="3.1" fill="#7d7d7d"/>
+<text x="37" y="6231" fill="#cfcfcf" font-size="10.5">viewer.rs</text>
+<text x="418" y="6231" fill="#6e6e6e" font-size="9" text-anchor="end">185</text>
+<rect x="430" y="6223" width="30.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.8" y="6223" width="7.8" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6222" x2="529" y2="6233" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6222" x2="562" y2="6233" stroke="#4a4a4a" stroke-width="0.6"/>
+<rect x="20" y="6250" width="1140" height="15" fill="#d98880" fill-opacity="0.09"/>
+<text x="26" y="6261" fill="#d98880" font-size="12" font-family="-apple-system,sans-serif">extensions — 拡張</text>
+<text x="418" y="6261" fill="#8c8c8c" font-size="10" text-anchor="end">4540 行</text>
+<text x="37" y="6276" fill="#9a9a9a" font-size="10.5">edit/</text>
+<text x="418" y="6276" fill="#5e5e5e" font-size="9" text-anchor="end">4009</text>
+<text x="48" y="6291" fill="#9a9a9a" font-size="10.5">src/</text>
+<text x="418" y="6291" fill="#5e5e5e" font-size="9" text-anchor="end">3453</text>
+<text x="59" y="6306" fill="#9a9a9a" font-size="10.5">document/</text>
+<text x="418" y="6306" fill="#5e5e5e" font-size="9" text-anchor="end">1902</text>
+<text x="70" y="6321" fill="#cfcfcf" font-size="10.5">apply.rs</text>
+<text x="418" y="6321" fill="#6e6e6e" font-size="9" text-anchor="end">550</text>
+<rect x="430" y="6313" width="90.8" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6312" x2="529" y2="6323" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6312" x2="562" y2="6323" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="6336" fill="#cfcfcf" font-size="10.5">edit.rs</text>
+<text x="418" y="6336" fill="#6e6e6e" font-size="9" text-anchor="end">283</text>
+<rect x="430" y="6328" width="46.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6327" x2="529" y2="6338" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6327" x2="562" y2="6338" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="6351" fill="#9a9a9a" font-size="10.5">group/</text>
+<text x="418" y="6351" fill="#5e5e5e" font-size="9" text-anchor="end">488</text>
+<text x="81" y="6366" fill="#cfcfcf" font-size="10.5">moving.rs</text>
+<text x="418" y="6366" fill="#6e6e6e" font-size="9" text-anchor="end">488</text>
+<rect x="430" y="6358" width="80.5" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6357" x2="529" y2="6368" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6357" x2="562" y2="6368" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="6381" fill="#cfcfcf" font-size="10.5">group.rs</text>
+<text x="418" y="6381" fill="#6e6e6e" font-size="9" text-anchor="end">329</text>
+<rect x="430" y="6373" width="54.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6372" x2="529" y2="6383" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6372" x2="562" y2="6383" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="6396" fill="#cfcfcf" font-size="10.5">projection.rs</text>
+<text x="418" y="6396" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="6388" width="12.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6387" x2="529" y2="6398" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6387" x2="562" y2="6398" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="6411" fill="#cfcfcf" font-size="10.5">validate.rs</text>
+<text x="418" y="6411" fill="#6e6e6e" font-size="9" text-anchor="end">174</text>
+<rect x="430" y="6403" width="28.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6402" x2="529" y2="6413" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6402" x2="562" y2="6413" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6426" fill="#cfcfcf" font-size="10.5">document.rs</text>
+<text x="418" y="6426" fill="#6e6e6e" font-size="9" text-anchor="end">581</text>
+<rect x="430" y="6418" width="95.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6417" x2="529" y2="6428" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6417" x2="562" y2="6428" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6441" fill="#cfcfcf" font-size="10.5">fixture.rs</text>
+<text x="418" y="6441" fill="#6e6e6e" font-size="9" text-anchor="end">453</text>
+<rect x="430" y="6433" width="74.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6432" x2="529" y2="6443" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6432" x2="562" y2="6443" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6456" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="6456" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
+<rect x="430" y="6448" width="6.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6447" x2="529" y2="6458" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6447" x2="562" y2="6458" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6471" fill="#cfcfcf" font-size="10.5">persist.rs</text>
+<text x="418" y="6471" fill="#6e6e6e" font-size="9" text-anchor="end">210</text>
+<rect x="430" y="6463" width="34.6" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6462" x2="529" y2="6473" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6462" x2="562" y2="6473" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6486" fill="#cfcfcf" font-size="10.5">stagger.rs</text>
+<text x="418" y="6486" fill="#6e6e6e" font-size="9" text-anchor="end">187</text>
+<rect x="430" y="6478" width="30.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="451.1" y="6478" width="9.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6477" x2="529" y2="6488" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6477" x2="562" y2="6488" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6501" fill="#cfcfcf" font-size="10.5">text_edit.rs</text>
+<text x="418" y="6501" fill="#6e6e6e" font-size="9" text-anchor="end">82</text>
+<rect x="430" y="6493" width="13.5" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="440.9" y="6493" width="2.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6492" x2="529" y2="6503" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6492" x2="562" y2="6503" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="6516" fill="#9a9a9a" font-size="10.5">tests/</text>
+<text x="418" y="6516" fill="#5e5e5e" font-size="9" text-anchor="end">556</text>
+<text x="59" y="6531" fill="#cfcfcf" font-size="10.5">edit_transactions.rs</text>
+<text x="418" y="6531" fill="#6e6e6e" font-size="9" text-anchor="end">450</text>
+<rect x="430" y="6523" width="74.2" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6522" x2="529" y2="6533" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6522" x2="562" y2="6533" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6546" fill="#cfcfcf" font-size="10.5">notebook_read.rs</text>
+<text x="418" y="6546" fill="#6e6e6e" font-size="9" text-anchor="end">28</text>
+<rect x="430" y="6538" width="4.6" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="430.7" y="6538" width="4.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6537" x2="529" y2="6548" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6537" x2="562" y2="6548" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6561" fill="#cfcfcf" font-size="10.5">recording_read.rs</text>
+<text x="418" y="6561" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="6553" width="12.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="430.7" y="6553" width="12.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6552" x2="529" y2="6563" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6552" x2="562" y2="6563" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6576" fill="#9a9a9a" font-size="10.5">jobs/</text>
+<text x="418" y="6576" fill="#5e5e5e" font-size="9" text-anchor="end">335</text>
+<text x="48" y="6591" fill="#9a9a9a" font-size="10.5">src/</text>
+<text x="418" y="6591" fill="#5e5e5e" font-size="9" text-anchor="end">335</text>
+<text x="59" y="6606" fill="#cfcfcf" font-size="10.5">export.rs</text>
+<text x="418" y="6606" fill="#6e6e6e" font-size="9" text-anchor="end">159</text>
+<rect x="430" y="6598" width="26.2" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.8" y="6598" width="3.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6597" x2="529" y2="6608" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6597" x2="562" y2="6608" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6621" fill="#cfcfcf" font-size="10.5">freeze.rs</text>
+<text x="418" y="6621" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="6613" width="28.1" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.9" y="6613" width="5.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6612" x2="529" y2="6623" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6612" x2="562" y2="6623" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="6636" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="6636" fill="#6e6e6e" font-size="9" text-anchor="end">6</text>
+<rect x="430" y="6628" width="1.0" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6627" x2="529" y2="6638" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6627" x2="562" y2="6638" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6651" fill="#9a9a9a" font-size="10.5">script/</text>
+<text x="418" y="6651" fill="#5e5e5e" font-size="9" text-anchor="end">196</text>
+<text x="48" y="6666" fill="#9a9a9a" font-size="10.5">src/</text>
+<text x="418" y="6666" fill="#5e5e5e" font-size="9" text-anchor="end">196</text>
+<text x="59" y="6681" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="6681" fill="#6e6e6e" font-size="9" text-anchor="end">196</text>
+<rect x="430" y="6673" width="32.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="448.8" y="6673" width="13.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="6672" x2="529" y2="6683" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6672" x2="562" y2="6683" stroke="#4a4a4a" stroke-width="0.6"/>
+<rect x="20" y="6700" width="1140" height="15" fill="#d4b483" fill-opacity="0.09"/>
+<text x="26" y="6711" fill="#d4b483" font-size="12" font-family="-apple-system,sans-serif">vism — 棚(WGSL)</text>
+<text x="418" y="6711" fill="#8c8c8c" font-size="10" text-anchor="end">3271 行</text>
+<text x="37" y="6726" fill="#cfcfcf" font-size="10.5">arrive.wgsl</text>
+<text x="418" y="6726" fill="#6e6e6e" font-size="9" text-anchor="end">56</text>
+<rect x="430" y="6718" width="9.2" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6717" x2="529" y2="6728" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6717" x2="562" y2="6728" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6741" fill="#cfcfcf" font-size="10.5">background_copy.fs</text>
+<text x="418" y="6741" fill="#6e6e6e" font-size="9" text-anchor="end">20</text>
+<rect x="430" y="6733" width="3.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6732" x2="529" y2="6743" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6732" x2="562" y2="6743" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6756" fill="#cfcfcf" font-size="10.5">background_delay.fs</text>
+<text x="418" y="6756" fill="#6e6e6e" font-size="9" text-anchor="end">20</text>
+<rect x="430" y="6748" width="3.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6747" x2="529" y2="6758" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6747" x2="562" y2="6758" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6771" fill="#cfcfcf" font-size="10.5">blend.wgsl</text>
+<text x="418" y="6771" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
+<rect x="430" y="6763" width="6.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6762" x2="529" y2="6773" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6762" x2="562" y2="6773" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6786" fill="#cfcfcf" font-size="10.5">block_dissolve.fs</text>
+<text x="418" y="6786" fill="#6e6e6e" font-size="9" text-anchor="end">26</text>
+<rect x="430" y="6778" width="4.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6777" x2="529" y2="6788" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6777" x2="562" y2="6788" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6801" fill="#cfcfcf" font-size="10.5">bloom.fs</text>
+<text x="418" y="6801" fill="#6e6e6e" font-size="9" text-anchor="end">75</text>
+<rect x="430" y="6793" width="12.4" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6792" x2="529" y2="6803" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6792" x2="562" y2="6803" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6816" fill="#cfcfcf" font-size="10.5">blur.wgsl</text>
+<text x="418" y="6816" fill="#6e6e6e" font-size="9" text-anchor="end">119</text>
+<rect x="430" y="6808" width="19.6" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6807" x2="529" y2="6818" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6807" x2="562" y2="6818" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6831" fill="#cfcfcf" font-size="10.5">bounce.wgsl</text>
+<text x="418" y="6831" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
+<rect x="430" y="6823" width="6.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6822" x2="529" y2="6833" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6822" x2="562" y2="6833" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6846" fill="#cfcfcf" font-size="10.5">cavalry.wgsl</text>
+<text x="418" y="6846" fill="#6e6e6e" font-size="9" text-anchor="end">95</text>
+<rect x="430" y="6838" width="15.7" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6837" x2="529" y2="6848" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6837" x2="562" y2="6848" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6861" fill="#cfcfcf" font-size="10.5">ceil_bloom.fs</text>
+<text x="418" y="6861" fill="#6e6e6e" font-size="9" text-anchor="end">42</text>
+<rect x="430" y="6853" width="6.9" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6852" x2="529" y2="6863" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6852" x2="562" y2="6863" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6876" fill="#cfcfcf" font-size="10.5">ceil_edge.frag</text>
+<text x="418" y="6876" fill="#6e6e6e" font-size="9" text-anchor="end">16</text>
+<rect x="430" y="6868" width="2.6" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6867" x2="529" y2="6878" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6867" x2="562" y2="6878" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6891" fill="#cfcfcf" font-size="10.5">ceil_plasma.frag</text>
+<text x="418" y="6891" fill="#6e6e6e" font-size="9" text-anchor="end">7</text>
+<rect x="430" y="6883" width="1.2" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6882" x2="529" y2="6893" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6882" x2="562" y2="6893" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6906" fill="#cfcfcf" font-size="10.5">ceil_trail.fs</text>
+<text x="418" y="6906" fill="#6e6e6e" font-size="9" text-anchor="end">15</text>
+<rect x="430" y="6898" width="2.5" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6897" x2="529" y2="6908" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6897" x2="562" y2="6908" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6921" fill="#cfcfcf" font-size="10.5">chroma_key.fs</text>
+<text x="418" y="6921" fill="#6e6e6e" font-size="9" text-anchor="end">42</text>
+<rect x="430" y="6913" width="6.9" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6912" x2="529" y2="6923" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6912" x2="562" y2="6923" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6936" fill="#cfcfcf" font-size="10.5">clip.wgsl</text>
+<text x="418" y="6936" fill="#6e6e6e" font-size="9" text-anchor="end">15</text>
+<rect x="430" y="6928" width="2.5" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6927" x2="529" y2="6938" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6927" x2="562" y2="6938" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6951" fill="#cfcfcf" font-size="10.5">compute_toys.wgsl</text>
+<text x="418" y="6951" fill="#6e6e6e" font-size="9" text-anchor="end">27</text>
+<rect x="430" y="6943" width="4.5" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6942" x2="529" y2="6953" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6942" x2="562" y2="6953" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6966" fill="#cfcfcf" font-size="10.5">concentrick.wgsl</text>
+<text x="418" y="6966" fill="#6e6e6e" font-size="9" text-anchor="end">27</text>
+<rect x="430" y="6958" width="4.5" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6957" x2="529" y2="6968" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6957" x2="562" y2="6968" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6981" fill="#cfcfcf" font-size="10.5">depth_map.fs</text>
+<text x="418" y="6981" fill="#6e6e6e" font-size="9" text-anchor="end">85</text>
+<rect x="430" y="6973" width="14.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6972" x2="529" y2="6983" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6972" x2="562" y2="6983" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="6996" fill="#cfcfcf" font-size="10.5">easing.wgsl</text>
+<text x="418" y="6996" fill="#6e6e6e" font-size="9" text-anchor="end">85</text>
+<rect x="430" y="6988" width="14.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="6987" x2="529" y2="6998" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="6987" x2="562" y2="6998" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7011" fill="#cfcfcf" font-size="10.5">effector.wgsl</text>
+<text x="418" y="7011" fill="#6e6e6e" font-size="9" text-anchor="end">37</text>
+<rect x="430" y="7003" width="6.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7002" x2="529" y2="7013" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7002" x2="562" y2="7013" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7026" fill="#cfcfcf" font-size="10.5">effectors.wgsl</text>
+<text x="418" y="7026" fill="#6e6e6e" font-size="9" text-anchor="end">61</text>
+<rect x="430" y="7018" width="10.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7017" x2="529" y2="7028" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7017" x2="562" y2="7028" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7041" fill="#cfcfcf" font-size="10.5">falloff_reveal.wgsl</text>
+<text x="418" y="7041" fill="#6e6e6e" font-size="9" text-anchor="end">32</text>
+<rect x="430" y="7033" width="5.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7032" x2="529" y2="7043" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7032" x2="562" y2="7043" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7056" fill="#cfcfcf" font-size="10.5">field.wgsl</text>
+<text x="418" y="7056" fill="#6e6e6e" font-size="9" text-anchor="end">41</text>
+<rect x="430" y="7048" width="6.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7047" x2="529" y2="7058" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7047" x2="562" y2="7058" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7071" fill="#cfcfcf" font-size="10.5">formations.wgsl</text>
+<text x="418" y="7071" fill="#6e6e6e" font-size="9" text-anchor="end">67</text>
+<rect x="430" y="7063" width="11.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7062" x2="529" y2="7073" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7062" x2="562" y2="7073" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7086" fill="#cfcfcf" font-size="10.5">four_color_gradient.fs</text>
+<text x="418" y="7086" fill="#6e6e6e" font-size="9" text-anchor="end">33</text>
+<rect x="430" y="7078" width="5.4" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7077" x2="529" y2="7088" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7077" x2="562" y2="7088" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7101" fill="#cfcfcf" font-size="10.5">gain.wgsl</text>
+<text x="418" y="7101" fill="#6e6e6e" font-size="9" text-anchor="end">33</text>
+<rect x="430" y="7093" width="5.4" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7092" x2="529" y2="7103" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7092" x2="562" y2="7103" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7116" fill="#cfcfcf" font-size="10.5">glass.wgsl</text>
+<text x="418" y="7116" fill="#6e6e6e" font-size="9" text-anchor="end">22</text>
+<rect x="430" y="7108" width="3.6" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7107" x2="529" y2="7118" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7107" x2="562" y2="7118" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7131" fill="#cfcfcf" font-size="10.5">glow.wgsl</text>
+<text x="418" y="7131" fill="#6e6e6e" font-size="9" text-anchor="end">188</text>
+<rect x="430" y="7123" width="31.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7122" x2="529" y2="7133" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7122" x2="562" y2="7133" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7146" fill="#cfcfcf" font-size="10.5">gradient.wgsl</text>
+<text x="418" y="7146" fill="#6e6e6e" font-size="9" text-anchor="end">26</text>
+<rect x="430" y="7138" width="4.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7137" x2="529" y2="7148" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7137" x2="562" y2="7148" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7161" fill="#cfcfcf" font-size="10.5">hang.wgsl</text>
+<text x="418" y="7161" fill="#6e6e6e" font-size="9" text-anchor="end">35</text>
+<rect x="430" y="7153" width="5.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7152" x2="529" y2="7163" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7152" x2="562" y2="7163" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7176" fill="#cfcfcf" font-size="10.5">hold.fs</text>
+<text x="418" y="7176" fill="#6e6e6e" font-size="9" text-anchor="end">17</text>
+<rect x="430" y="7168" width="2.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7167" x2="529" y2="7178" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7167" x2="562" y2="7178" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7191" fill="#cfcfcf" font-size="10.5">hue_saturation.fs</text>
+<text x="418" y="7191" fill="#6e6e6e" font-size="9" text-anchor="end">49</text>
+<rect x="430" y="7183" width="8.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7182" x2="529" y2="7193" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7182" x2="562" y2="7193" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7206" fill="#cfcfcf" font-size="10.5">inner_shadow.fs</text>
+<text x="418" y="7206" fill="#6e6e6e" font-size="9" text-anchor="end">36</text>
+<rect x="430" y="7198" width="5.9" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7197" x2="529" y2="7208" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7197" x2="562" y2="7208" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7221" fill="#cfcfcf" font-size="10.5">invert.fs</text>
+<text x="418" y="7221" fill="#6e6e6e" font-size="9" text-anchor="end">19</text>
+<rect x="430" y="7213" width="3.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7212" x2="529" y2="7223" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7212" x2="562" y2="7223" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7236" fill="#cfcfcf" font-size="10.5">iq.wgsl</text>
+<text x="418" y="7236" fill="#6e6e6e" font-size="9" text-anchor="end">57</text>
+<rect x="430" y="7228" width="9.4" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7227" x2="529" y2="7238" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7227" x2="562" y2="7238" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7251" fill="#cfcfcf" font-size="10.5">kuwahara.fs</text>
+<text x="418" y="7251" fill="#6e6e6e" font-size="9" text-anchor="end">141</text>
+<rect x="430" y="7243" width="23.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7242" x2="529" y2="7253" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7242" x2="562" y2="7253" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7266" fill="#cfcfcf" font-size="10.5">kynd.wgsl</text>
+<text x="418" y="7266" fill="#6e6e6e" font-size="9" text-anchor="end">24</text>
+<rect x="430" y="7258" width="4.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7257" x2="529" y2="7268" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7257" x2="562" y2="7268" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7281" fill="#cfcfcf" font-size="10.5">linear_wipe.fs</text>
+<text x="418" y="7281" fill="#6e6e6e" font-size="9" text-anchor="end">26</text>
+<rect x="430" y="7273" width="4.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7272" x2="529" y2="7283" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7272" x2="562" y2="7283" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7296" fill="#cfcfcf" font-size="10.5">material_encoding.wgsl</text>
+<text x="418" y="7296" fill="#6e6e6e" font-size="9" text-anchor="end">41</text>
+<rect x="430" y="7288" width="6.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7287" x2="529" y2="7298" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7287" x2="562" y2="7298" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7311" fill="#cfcfcf" font-size="10.5">matte.wgsl</text>
+<text x="418" y="7311" fill="#6e6e6e" font-size="9" text-anchor="end">43</text>
+<rect x="430" y="7303" width="7.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7302" x2="529" y2="7313" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7302" x2="562" y2="7313" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7326" fill="#cfcfcf" font-size="10.5">mazin.wgsl</text>
+<text x="418" y="7326" fill="#6e6e6e" font-size="9" text-anchor="end">32</text>
+<rect x="430" y="7318" width="5.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7317" x2="529" y2="7328" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7317" x2="562" y2="7328" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7341" fill="#cfcfcf" font-size="10.5">mosaic.fs</text>
+<text x="418" y="7341" fill="#6e6e6e" font-size="9" text-anchor="end">27</text>
+<rect x="430" y="7333" width="4.5" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7332" x2="529" y2="7343" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7332" x2="562" y2="7343" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7356" fill="#cfcfcf" font-size="10.5">neighbour_effector.wgsl</text>
+<text x="418" y="7356" fill="#6e6e6e" font-size="9" text-anchor="end">32</text>
+<rect x="430" y="7348" width="5.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7347" x2="529" y2="7358" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7347" x2="562" y2="7358" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7371" fill="#cfcfcf" font-size="10.5">neon_city.frag</text>
+<text x="418" y="7371" fill="#6e6e6e" font-size="9" text-anchor="end">13</text>
+<rect x="430" y="7363" width="2.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7362" x2="529" y2="7373" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7362" x2="562" y2="7373" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7386" fill="#cfcfcf" font-size="10.5">noise.fs</text>
+<text x="418" y="7386" fill="#6e6e6e" font-size="9" text-anchor="end">32</text>
+<rect x="430" y="7378" width="5.3" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7377" x2="529" y2="7388" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7377" x2="562" y2="7388" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7401" fill="#cfcfcf" font-size="10.5">optical_art.wgsl</text>
+<text x="418" y="7401" fill="#6e6e6e" font-size="9" text-anchor="end">24</text>
+<rect x="430" y="7393" width="4.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7392" x2="529" y2="7403" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7392" x2="562" y2="7403" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7416" fill="#cfcfcf" font-size="10.5">overkill.fs</text>
+<text x="418" y="7416" fill="#6e6e6e" font-size="9" text-anchor="end">46</text>
+<rect x="430" y="7408" width="7.6" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7407" x2="529" y2="7418" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7407" x2="562" y2="7418" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7431" fill="#cfcfcf" font-size="10.5">overload.wgsl</text>
+<text x="418" y="7431" fill="#6e6e6e" font-size="9" text-anchor="end">68</text>
+<rect x="430" y="7423" width="11.2" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7422" x2="529" y2="7433" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7422" x2="562" y2="7433" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7446" fill="#cfcfcf" font-size="10.5">pixel_motion_blur.fs</text>
+<text x="418" y="7446" fill="#6e6e6e" font-size="9" text-anchor="end">104</text>
+<rect x="430" y="7438" width="17.2" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7437" x2="529" y2="7448" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7437" x2="562" y2="7448" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7461" fill="#cfcfcf" font-size="10.5">processing.wgsl</text>
+<text x="418" y="7461" fill="#6e6e6e" font-size="9" text-anchor="end">43</text>
+<rect x="430" y="7453" width="7.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7452" x2="529" y2="7463" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7452" x2="562" y2="7463" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7476" fill="#cfcfcf" font-size="10.5">push_apart.wgsl</text>
+<text x="418" y="7476" fill="#6e6e6e" font-size="9" text-anchor="end">35</text>
+<rect x="430" y="7468" width="5.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7467" x2="529" y2="7478" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7467" x2="562" y2="7478" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7491" fill="#cfcfcf" font-size="10.5">radiance.wgsl</text>
+<text x="418" y="7491" fill="#6e6e6e" font-size="9" text-anchor="end">285</text>
+<rect x="430" y="7483" width="47.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7482" x2="529" y2="7493" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7482" x2="562" y2="7493" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7506" fill="#cfcfcf" font-size="10.5">rgb_trail.fs</text>
+<text x="418" y="7506" fill="#6e6e6e" font-size="9" text-anchor="end">31</text>
+<rect x="430" y="7498" width="5.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7497" x2="529" y2="7508" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7497" x2="562" y2="7508" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7521" fill="#cfcfcf" font-size="10.5">ring_ting.wgsl</text>
+<text x="418" y="7521" fill="#6e6e6e" font-size="9" text-anchor="end">34</text>
+<rect x="430" y="7513" width="5.6" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7512" x2="529" y2="7523" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7512" x2="562" y2="7523" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7536" fill="#cfcfcf" font-size="10.5">sequencing.wgsl</text>
+<text x="418" y="7536" fill="#6e6e6e" font-size="9" text-anchor="end">47</text>
+<rect x="430" y="7528" width="7.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7527" x2="529" y2="7538" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7527" x2="562" y2="7538" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7551" fill="#cfcfcf" font-size="10.5">set_matte.fs</text>
+<text x="418" y="7551" fill="#6e6e6e" font-size="9" text-anchor="end">31</text>
+<rect x="430" y="7543" width="5.1" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7542" x2="529" y2="7553" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7542" x2="562" y2="7553" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7566" fill="#cfcfcf" font-size="10.5">time_difference.fs</text>
+<text x="418" y="7566" fill="#6e6e6e" font-size="9" text-anchor="end">21</text>
+<rect x="430" y="7558" width="3.5" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7557" x2="529" y2="7568" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7557" x2="562" y2="7568" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7581" fill="#cfcfcf" font-size="10.5">tint.fs</text>
+<text x="418" y="7581" fill="#6e6e6e" font-size="9" text-anchor="end">22</text>
+<rect x="430" y="7573" width="3.6" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7572" x2="529" y2="7583" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7572" x2="562" y2="7583" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7596" fill="#cfcfcf" font-size="10.5">tome_hame.wgsl</text>
+<text x="418" y="7596" fill="#6e6e6e" font-size="9" text-anchor="end">65</text>
+<rect x="430" y="7588" width="10.7" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7587" x2="529" y2="7598" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7587" x2="562" y2="7598" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7611" fill="#cfcfcf" font-size="10.5">tri_led.wgsl</text>
+<text x="418" y="7611" fill="#6e6e6e" font-size="9" text-anchor="end">97</text>
+<rect x="430" y="7603" width="16.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7602" x2="529" y2="7613" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7602" x2="562" y2="7613" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7626" fill="#cfcfcf" font-size="10.5">turbulent_displace.wgsl</text>
+<text x="418" y="7626" fill="#6e6e6e" font-size="9" text-anchor="end">60</text>
+<rect x="430" y="7618" width="9.9" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7617" x2="529" y2="7628" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7617" x2="562" y2="7628" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7641" fill="#cfcfcf" font-size="10.5">turbulent_warp.wgsl</text>
+<text x="418" y="7641" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="7633" width="12.9" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7632" x2="529" y2="7643" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7632" x2="562" y2="7643" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7656" fill="#cfcfcf" font-size="10.5">wave.wgsl</text>
+<text x="418" y="7656" fill="#6e6e6e" font-size="9" text-anchor="end">24</text>
+<rect x="430" y="7648" width="4.0" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7647" x2="529" y2="7658" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7647" x2="562" y2="7658" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7671" fill="#cfcfcf" font-size="10.5">xdog.fs</text>
+<text x="418" y="7671" fill="#6e6e6e" font-size="9" text-anchor="end">108</text>
+<rect x="430" y="7663" width="17.8" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7662" x2="529" y2="7673" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7662" x2="562" y2="7673" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="7686" fill="#cfcfcf" font-size="10.5">zero_gravity.wgsl</text>
+<text x="418" y="7686" fill="#6e6e6e" font-size="9" text-anchor="end">36</text>
+<rect x="430" y="7678" width="5.9" height="9" fill="#d4b483" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="7677" x2="529" y2="7688" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="7677" x2="562" y2="7688" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="26" y="7740" fill="#6e6e6e" font-size="10" font-family="-apple-system,sans-serif">散っている責任は「棒が短いのに ● が多い行」— 小さい file が多くの file を連れてくる。python3 scripts/responsibility-tree.py で引き直す。</text>
 </svg>

@@ -137,7 +137,6 @@ pub fn resolve_with_solo(
         flatten: attrs.flatten,
         environment: attrs.environment,
         depth: scalar(property::DEPTH, 0.0)?.max(0.0),
-        blocks_light: attrs.blocks_light,
         ghost: false,
         copy: 0,
         after_effects: plate.as_ref().map(|(_, effects)| effects.clone()).unwrap_or_default(),
@@ -315,24 +314,53 @@ pub fn resolved_matte(
 }
 
 pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
-    let any_solo = any_solo(view, t)?;
+    // 層の並び・グループに引き取られた層・solo の有無は、時刻では変わらない。
+    // 版が同じ間は作り直さない(再生中は毎コマ同じ物を組み直していた)。
+    let shared = view.shared_layout_cache();
+    let cached = shared.as_ref().and_then(|(cache, revision)| {
+        let cache = cache.borrow();
+        (cache.revision.as_ref() == Some(*revision)).then(|| cache.structure.clone()).flatten()
+    });
+    let structure = match cached {
+        Some(hit) => hit,
+        None => {
+            let layers = view.layers();
+            let present: HashSet<LayerId> = layers.iter().copied().collect();
+            let built = std::sync::Arc::new(crate::doc::store::scratch::Structure {
+                any_solo: any_solo(view, t)?,
+                handed_out: handed_out_by_a_group(view, &present, t)?,
+                layers,
+                present,
+            });
+            if let Some((cache, revision)) = shared.as_ref() {
+                let mut cache = cache.borrow_mut();
+                if cache.revision.as_ref() != Some(*revision) {
+                    cache.revision = Some((*revision).clone());
+                    cache.frames.clear();
+                }
+                cache.structure = Some(built.clone());
+            }
+            built
+        }
+    };
+    let any_solo = structure.any_solo;
+    let handed_out = &structure.handed_out;
+    let present = &structure.present;
+    let layers = structure.layers.clone();
     let world_transforms = crate::picture::resolve::transform::world_transforms3d(view, t)?;
-    let layers = view.layers();
-    let present: HashSet<LayerId> = layers.iter().copied().collect();
     let mut memo = HashMap::new();
     let mut visiting = HashSet::new();
-    let handed_out = handed_out_by_a_group(view, &present, t)?;
     let mut out = Vec::new();
     for layer in layers {
         if handed_out.contains(&layer) {
             continue;
         }
         // ゴーストは元より先に積む(同じ重ね順なら後の物が上に描かれるので、元が手前に来る)。
-        crate::picture::resolve::copies::push_ghosts(view, layer, t, any_solo, &present, &mut out)?;
+        crate::picture::resolve::copies::push_ghosts(view, layer, t, any_solo, present, &mut out)?;
         if let Some(resolved) =
-            resolve_with_solo(view, layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)?
+            resolve_with_solo(view, layer, t, any_solo, present, &world_transforms, &mut memo, &mut visiting)?
         {
-            crate::picture::resolve::copies::push_copies(view, resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
+            crate::picture::resolve::copies::push_copies(view, resolved, t, any_solo, present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
         }
     }
     crate::picture::resolve::settle::settle(view, &mut out, t)?;

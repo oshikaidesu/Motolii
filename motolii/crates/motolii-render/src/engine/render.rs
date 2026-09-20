@@ -13,7 +13,7 @@ use crate::render::compositor::{
 };
 
 use crate::render::engine::translate::{
-    translate_blend_mode, translate_clip, translate_effect_passes, translate_matte_mode, translate_point_displace,
+    translate_blend_mode, translate_cast_shadow, translate_clip, translate_effect_passes, translate_matte_mode, translate_point_displace,
 };
 use crate::render::compositor::effects::isf::TimeBase;
 use crate::render::engine::{Engine, EngineError};
@@ -254,7 +254,7 @@ impl Engine {
             shading,
             displace: translate_point_displace(&layer.effects),
             clip: translate_clip(&layer.effects),
-            blocks_light: layer.blocks_light,
+            shadow: translate_cast_shadow(&layer.effects),
             outline,
             frame: picture.frame,
         }, picture.padding)))

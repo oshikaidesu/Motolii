@@ -78,9 +78,25 @@ impl Engine {
 
     /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        let inputs = self.analysis_inputs(view, t)?;
+        let view = view.clone().with_layout_solver(self.layout_solver());
+        let inputs = self.analysis_inputs(&view, t)?;
         let resolve = |view: StoreView<'_>| crate::picture::resolve::resolved_layers(&view, t).map_err(|e| EngineError::Store(e.to_string()));
-        if inputs.is_empty() { resolve(view.clone()) } else { resolve(view.clone().with_analysis(&inputs)) }
+        if !inputs.is_empty() { return resolve(view.clone().with_analysis(&inputs)) }
+        // 解析が無い時は、この後 status が同じ (版, 時刻) を訊く。1 コマに 2 度解かない。
+        let key = view.revision_key();
+        if let Some((k, at, layers)) = self.resolved_memo.borrow().as_ref() {
+            if *k == key && *at == t { return Ok(layers.clone()) }
+        }
+        let layers = resolve(view.clone())?;
+        *self.resolved_memo.borrow_mut() = Some((key, t, layers.clone()));
+        Ok(layers)
+    }
+
+    /// 描く側がこのコマで解いた物。status が同じ物を解き直さないための口。
+    /// 解析入力があるコマは覚えていないので `None`(呼ぶ側が自分で解く)。
+    pub fn resolved_for(&self, view: &StoreView<'_>, t: RationalTime) -> Option<Vec<ResolvedLayer>> {
+        let key = view.revision_key();
+        self.resolved_memo.borrow().as_ref().and_then(|(k, at, layers)| (*k == key && *at == t).then(|| layers.clone()))
     }
 
     /// 連続性の物差しの標本: 解析を読んだ view で解き、層の箱の角と文字の字の位置を画面の平面(px)で返す。

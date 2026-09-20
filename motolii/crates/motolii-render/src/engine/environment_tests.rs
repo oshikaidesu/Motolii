@@ -254,10 +254,10 @@ fn backdrop_mips_stop_where_the_roughness_stops_reading() {
 }
 
 /// 光は環境から来て、作者は奪うだけ(裁定 2026-09-10)。空の一点が明るい環境(太陽は camera 側の左上)の
-/// 前に赤い板、その手前(camera 側)に板 1 枚。板に「光を遮る」を付けると、板の右下に影が落ちて
+/// 前に赤い板、その手前(camera 側)に板 1 枚。板に Cast Shadow の効果を掛けると、板の右下に影が落ちて
 /// 赤が暗くなる。付けなければ変わらない。遠くの赤も変わらない。
 #[test]
-fn a_layer_that_blocks_light_casts_a_shadow_on_the_board_behind_it() {
+fn a_layer_with_cast_shadow_darkens_the_board_behind_it() {
     let dir = tempfile::tempdir().unwrap();
     let sky = dir.path().join("sun.png");
     let mut img = image::RgbaImage::from_pixel(8, 4, image::Rgba([40, 40, 40, 255]));
@@ -272,7 +272,8 @@ fn a_layer_that_blocks_light_casts_a_shadow_on_the_board_behind_it() {
         doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
         let blocker = LayerId(2);
         doc.apply(Intent::SetConstant { layer: blocker, property: PropertyId::new(property::POSITION_Z).unwrap(), value: Value::F64(-20.0) }).unwrap();
-        doc.apply(Intent::SetAttrs { layer: blocker, patch: LayerAttrsPatch { blocks_light: Some(blocks), ..Default::default() } }).unwrap();
+        let effects = if blocks { vec![crate::doc::store::EffectInstance { id: crate::doc::store::EffectId(900), plugin_id: "motolii.cast_shadow".into() }] } else { Vec::new() };
+        doc.apply(Intent::SetEffects { layer: blocker, effects }).unwrap();
         engine.models.clear();
         let before = engine.surface_work().light_captures;
         let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();

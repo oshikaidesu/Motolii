@@ -300,8 +300,8 @@ pub struct Layer {
     pub displace: point_cloud::PointDisplace,
     /// 世界の平面で切る(板・点群・網が同じ式)。
     pub clip: Option<clip::ClipSpec>,
-    /// 光を遮る: 太陽から見た型紙に描かれ、表面を持つ全ての層へ影(透過なら色)を落とす。
-    pub blocks_light: bool,
+    /// 影の濃さ(0 なら落とさない): 太陽から見た型紙に描かれ、表面を持つ全ての層へ影(透過なら色)を落とす。
+    pub shadow: f32,
     /// Stage で選ばれている層の番号(1..=255、0 は無し): outline の object-id mask に描かれ、
     /// その画面上の広がりが籠になる(export には出ない)。
     pub outline: u8,
@@ -443,6 +443,8 @@ pub struct Compositor {
     /// このコマの箱のブロックが GPU に書いた、物ごとの world のずれ(view の設定に差す)。
     pub(crate) motion: Option<re_renderer::MotionBuffer>,
     pub(crate) sequential_submits: u64,
+    /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
+    pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
     pub(crate) pending: Vec<wgpu::CommandBuffer>,
 }
@@ -552,7 +554,7 @@ pub(crate) struct SequentialInput<'a> {
     shading: effects::surface_program::SurfaceShading,
     displace: point_cloud::PointDisplace,
     clip: Option<clip::ClipSpec>,
-    blocks_light: bool,
+    shadow: f32,
     outline: u8,
     /// 層の絵へ焼けなかった効果列(網・点群・環境には焼く先の絵が無い)。
     /// 画面へ描いた後で、その窓の絵に対して流す。AE のプリコンポと同じ位置。

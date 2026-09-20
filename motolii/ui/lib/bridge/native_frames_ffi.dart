@@ -9,7 +9,9 @@ abstract class NativeFrames {
   /// One JSON op in, the reply JSON out.
   String request(String json);
 
-  /// Draw `view` into the IOSurface `surfaceId`; 0 on success.
+  /// Submit `view` into the IOSurface `surfaceId`; 0 = submitted (the GPU
+  /// finishing it is native's own thread), 1 = refused because that surface is
+  /// still being drawn, below 0 = failed.
   int render(int surfaceId, String view);
 }
 

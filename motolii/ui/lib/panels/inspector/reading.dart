@@ -128,7 +128,6 @@ mixin _InspectorReading on State<InspectorPanel> {
         'blendMode',
         'ghostable',
         'environment',
-        'blocksLight',
         'frozen',
         'clipToBelow',
         'anchorFraction',

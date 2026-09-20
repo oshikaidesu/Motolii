@@ -6,7 +6,7 @@ use super::*;
 /// 作者も外枠も同じ型と束ねを読む。
 pub(crate) const PRELUDE: &str = "struct Item { lo: vec2f, hi: vec2f, room_lo: vec2f, room_size: vec2f, radius: f32, group: u32, margin: f32, weight: f32, parent_slot: u32, anchor_slot: u32 };\n\
 struct Offset { translate: vec2f, rotate: f32, scale: f32, tint: vec4f };\n\
-struct BlockHost { time: f32, members: u32, objects: u32, round: u32, source: u32 };\n\
+struct BlockHost { time: f32, members: u32, objects: u32, round: u32, source: u32, base: u32, last: u32 };\n\
 @group(0) @binding(0) var<storage, read> objects: array<Item>;\n\
 @group(0) @binding(1) var<storage, read> state_in: array<Offset>;\n\
 @group(0) @binding(2) var<uniform> host: BlockHost;\n\
@@ -89,8 +89,9 @@ pub(crate) fn module_source(manifest: &IsfManifest, body: &str, modules: &[(Stri
     };
     out.push_str(&format!(
         "\n\n@compute @workgroup_size(64)\nfn motolii_block_main(@builtin(global_invocation_id) gid: vec3u) {{\n\
-         \x20   if gid.x >= host.members {{ return; }}\n\
-         \x20   let k = members[gid.x];\n\
+         \x20   let motolii_at = host.base + gid.x;\n\
+         \x20   if motolii_at >= host.last {{ return; }}\n\
+         \x20   let k = members[motolii_at];\n\
          \x20   {call}\n\
          \x20   let s = state_in[k];\n\
          \x20   state_out[k] = Offset(s.translate + d.translate, s.rotate + d.rotate, s.scale * d.scale, s.tint * d.tint);\n}}\n"
@@ -323,10 +324,30 @@ pub(crate) fn wgsl_manifest(name: &str, source: &str) -> Result<(IsfManifest, St
     Ok((manifest, body))
 }
 
+/// 描く device が持っている物(まだ device が無ければ WebGPU の地の物だけ)。`u64::MAX` = まだ見ていない印。
+static DEVICE_CAPABILITIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+
+/// 描く側の device が出来たら、その持ち物を棚の検証へ渡す(棚が組まれるのは device の後)。
+/// 写す規則は自前で持たない — 上流(`wgpu_naga_bridge`、wgpu 本体が pipeline を組む時に使う物)をそのまま借りる。
+/// downlevel は native の compliant(Metal / Vulkan / DX12)。
+pub(crate) fn note_device(device: &wgpu::Device) {
+    let caps = wgpu_naga_bridge::features_to_naga_capabilities(device.features(), wgpu::DownlevelFlags::compliant());
+    DEVICE_CAPABILITIES.store(caps.bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// 棚の検証が使う持ち物。`Capabilities::all()` は嘘で、device に無い機能(f16・subgroup・ray query)の札が
+/// 棚に載ってしまい、描く時に pipeline を組む所で落ちる。
+fn device_capabilities() -> naga::valid::Capabilities {
+    match DEVICE_CAPABILITIES.load(std::sync::atomic::Ordering::Relaxed) {
+        u64::MAX => naga::valid::Capabilities::default(),
+        bits => naga::valid::Capabilities::from_bits_truncate(bits),
+    }
+}
+
 /// 計算シェーダーとして通るかを naga で確かめる(棚に載せる前)。
 pub(crate) fn validate(source: &str) -> Result<(), String> {
     let module = naga::front::wgsl::parse_str(source).map_err(|e| e.emit_to_string(source))?;
-    naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+    naga::valid::Validator::new(naga::valid::ValidationFlags::all(), device_capabilities())
         .validate(&module)
         .map_err(|e| e.to_string())?;
     if !module.entry_points.iter().any(|e| e.name == "motolii_block_main" && e.stage == naga::ShaderStage::Compute) {

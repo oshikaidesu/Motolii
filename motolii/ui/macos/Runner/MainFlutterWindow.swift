@@ -75,24 +75,56 @@ private final class ProbeRuntime {
   typealias Open = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
   typealias Request = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>) -> UnsafePointer<CChar>?
   typealias Render = @convention(c) (UnsafeMutableRawPointer, UInt32, UnsafePointer<CChar>) -> Int32
+  typealias PlaybackTick = @convention(c) (UnsafeMutableRawPointer) -> Int64
   typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
   typealias Wake = @convention(c) (UnsafeMutableRawPointer?) -> Void
   typealias Watch = @convention(c) (UnsafeMutableRawPointer, Wake, UnsafeMutableRawPointer?) -> Int32
   typealias FrameReady = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt32) -> Void
   typealias SetFrameReady = @convention(c) (UnsafeMutableRawPointer, FrameReady?, UnsafeMutableRawPointer?) -> Int32
+  typealias FinishFrames = @convention(c) (UnsafeMutableRawPointer) -> Int32
+  /// An IOSurface-backed buffer may cross to the render actor solely to retain
+  /// it until Metal has imported the surface. No pixel access occurs here.
+  fileprivate struct PlaybackTarget: @unchecked Sendable {
+    let view: String
+    let surface: UInt32
+    let keepAlive: CVPixelBuffer
+  }
+  /// All Rust/Rerun calls live here.  Flutter's main thread may enqueue work or
+  /// publish a completed IOSurface, but it never enters the renderer during
+  /// playback.
+  private let renderQueue = DispatchQueue(label: "motolii.render", qos: .userInteractive)
+  private let renderQueueKey = DispatchSpecificKey<UInt8>()
+  private let playbackGate = NSLock()
+  private var playbackQueued = false
   private var library: UnsafeMutableRawPointer?
-  /// Dart holds the same context and drives every per-frame call through it; the
-  /// host hands it over in each envelope. Both run on the main thread (Flutter 3.35+
-  /// merges the UI and platform threads on macOS), so the runtime is never shared.
+  /// The native host owns playback pulses; Dart retains this context only for
+  /// one-shot commands and still frames. Both use the macOS main thread
+  /// (Flutter 3.35+ merges UI and platform threads), so the runtime is never shared.
   fileprivate private(set) var context: UnsafeMutableRawPointer?
   fileprivate private(set) var location: String?
   private var requestFunction: Request?
-  private var renderFunction: Render?
+  fileprivate var renderFunction: Render?
+  private var playbackTickFunction: PlaybackTick?
   private var closeFunction: Close?
+  /// 描き終わりを待つ同期の口。合図を使わない channel の道だけが使う。
+  private var finishFunction: FinishFrames?
   private(set) var rendered = 0
 
+  init() {
+    renderQueue.setSpecific(key: renderQueueKey, value: 1)
+  }
+
+  private func onRenderQueue<T>(_ body: () throws -> T) throws -> T {
+    if DispatchQueue.getSpecific(key: renderQueueKey) != nil { return try body() }
+    return try renderQueue.sync(execute: body)
+  }
+
   func open(path: String) throws -> [String: Any] {
-    let previous = (library: library, context: context, request: requestFunction, render: renderFunction, close: closeFunction, count: rendered)
+    try onRenderQueue { try openOnRenderQueue(path: path) }
+  }
+
+  private func openOnRenderQueue(path: String) throws -> [String: Any] {
+    let previous = (library: library, context: context, request: requestFunction, render: renderFunction, tick: playbackTickFunction, close: closeFunction, finish: finishFunction, count: rendered)
     let location = ProcessInfo.processInfo.environment["MOTOLII_NATIVE_LIBRARY"] ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("target/debug/libmotolii_ui.dylib").path
     guard let library = dlopen(location, RTLD_NOW | RTLD_LOCAL) else {
       throw ProbeFailure.message(dlerror().map { String(cString: $0) } ?? "dlopen failed")
@@ -102,7 +134,9 @@ private final class ProbeRuntime {
     context = nil
     requestFunction = nil
     renderFunction = nil
+    playbackTickFunction = nil
     closeFunction = nil
+    finishFunction = nil
     do {
       func symbol<T>(_ name: String, _: T.Type) throws -> T {
         guard let address = dlsym(library, name) else { throw ProbeFailure.message("Missing symbol: \(name)") }
@@ -111,16 +145,20 @@ private final class ProbeRuntime {
       let start = try symbol("motolii_probe_open", Open.self)
       requestFunction = try symbol("motolii_probe_request", Request.self)
       renderFunction = try symbol("motolii_probe_render", Render.self)
+      playbackTickFunction = try symbol("motolii_probe_playback_tick", PlaybackTick.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
+      finishFunction = try symbol("motolii_probe_finish_frames", FinishFrames.self)
       let watch = try symbol("motolii_probe_watch_effects", Watch.self)
       let setFrameReady = try symbol("motolii_probe_set_frame_ready", SetFrameReady.self)
       context = path.withCString { start($0) }
       guard let context else { throw ProbeFailure.message("Rust could not open the document") }
       // vism/ の見張り。Rust は別 thread から起こすので、main へ戻してから棚を読み直す。
       _ = watch(context, { _ in DispatchQueue.main.async { ProbeSession.shared.effectsChanged() } }, nil)
-      // 絵が出来た合図: 描いた thread のまま来る(= Dart の呼び出しの中)。texture へ「新しいコマ」を立てる。
+      // GPU completion comes from the render actor.  Only publication crosses
+      // back to the main thread; the callback never re-enters Rust.
       _ = setFrameReady(context, { _, view, surface in
-        ProbeSession.shared.frameReady(view.map { String(cString: $0) } ?? "", surface)
+        let name = view.map { String(cString: $0) } ?? ""
+        DispatchQueue.main.async { ProbeSession.shared.frameReady(name, surface) }
       }, nil)
       rendered = 0
       let reply = try status()
@@ -133,13 +171,69 @@ private final class ProbeRuntime {
       context = previous.context
       requestFunction = previous.request
       renderFunction = previous.render
+      playbackTickFunction = previous.tick
       closeFunction = previous.close
+      finishFunction = previous.finish
       rendered = previous.count
       throw error
     }
   }
 
+  /// The native clock answers only when a new composition frame exists.  No
+  /// JSON snapshot crosses into Dart on this path.
+  func playbackTick() -> Int64? {
+    try? onRenderQueue {
+      guard let context, let playbackTickFunction else { return nil }
+      let frame = playbackTickFunction(context)
+      return frame >= 0 ? frame : nil
+    }
+  }
+
+  /// Queue exactly one playback submission.  A slow render retains the last
+  /// completed picture and makes later display pulses no-ops instead of growing
+  /// a backlog on the UI thread.
+  fileprivate func enqueuePlayback(
+    targets: [PlaybackTarget],
+    completion: @escaping (Result<Int64, Error>) -> Void
+  ) -> Bool {
+    playbackGate.lock()
+    guard !playbackQueued else { playbackGate.unlock(); return false }
+    playbackQueued = true
+    playbackGate.unlock()
+    renderQueue.async { [weak self] in
+      guard let self else { return }
+      let outcome: Result<Int64?, Error> = Result {
+        guard let context = self.context, let tick = self.playbackTickFunction,
+              let render = self.renderFunction else { throw ProbeFailure.message("Document is closed") }
+        let frame = tick(context)
+        guard frame >= 0 else { return nil }
+        for target in targets {
+          // `keepAlive` holds the IOSurface until Rust has imported it.
+          _ = target.keepAlive
+          let code = target.view.withCString { render(context, target.surface, $0) }
+          if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
+        }
+        return frame
+      }
+      self.playbackGate.lock()
+      self.playbackQueued = false
+      self.playbackGate.unlock()
+      DispatchQueue.main.async {
+        switch outcome {
+        case .success(let frame?): completion(.success(frame))
+        case .success(nil): break
+        case .failure(let error): completion(.failure(error))
+        }
+      }
+    }
+    return true
+  }
+
   func request(_ command: String) throws -> [String: Any] {
+    try onRenderQueue { try requestOnRenderQueue(command) }
+  }
+
+  private func requestOnRenderQueue(_ command: String) throws -> [String: Any] {
     guard let context, let requestFunction else { throw ProbeFailure.message("Open a document first") }
     guard let pointer = command.withCString({ requestFunction(context, $0) }) else {
       throw ProbeFailure.message("Rust request returned no reply")
@@ -157,6 +251,10 @@ private final class ProbeRuntime {
   /// Every view Rust lists (Camera always; Stage while its tab holds a window) gets its own
   /// surface and one render. Two pictures of one world, both live.
   func render(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
+    try onRenderQueue { try renderOnRenderQueue(known: known, references: references) }
+  }
+
+  private func renderOnRenderQueue(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
     let state = try request("{\"op\":\"renderInfo\"}")
     guard let views = state["views"] as? [[String: Any]], !views.isEmpty else {
       throw ProbeFailure.message("Document dimensions missing")
@@ -175,6 +273,8 @@ private final class ProbeRuntime {
       guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(view): \(code)") }
       buffers[view] = made.buffer
     }
+    // この道は合図を待たずに buffer をそのまま返すので、ここで描き終わりを待つ。
+    _ = finishFunction?(context)
     rendered += 1
     var query: [String: Any] = ["op": "status"]
     if let known { query["knownSnapshotId"] = known }
@@ -203,11 +303,17 @@ private final class ProbeRuntime {
   }
 
   func close() {
+    _ = try? onRenderQueue { closeOnRenderQueue() }
+  }
+
+  private func closeOnRenderQueue() {
     if let context { closeFunction?(context) }
     context = nil
     requestFunction = nil
     renderFunction = nil
+    playbackTickFunction = nil
     closeFunction = nil
+    finishFunction = nil
     if let library { dlclose(library) }
     library = nil
   }
@@ -265,6 +371,11 @@ final class ProbeSession {
   fileprivate var surfaces: [String: (width: Int, height: Int, entries: [(id: UInt32, buffer: CVPixelBuffer)])] = [:]
   fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
+  /// The native host, not Flutter's `Ticker`, owns playback cadence.  The
+  /// Flutter side receives a texture availability signal and a small playhead
+  /// integer only.
+  private var playbackTimer: Timer?
+  private var playbackSurfaceFlip = false
   private var confirming = false
   var terminationApproved = false
 
@@ -275,9 +386,11 @@ final class ProbeSession {
     main.channel.invokeMethod("effectsChanged", arguments: nil)
   }
 
-  /// Rust drew `view` into the surface `id`, on this thread, inside Dart's render
-  /// call. The main window's texture learns it now; the other windows learn it with
-  /// the status Dart broadcasts next, so their picture and its size travel as one step.
+  /// The GPU finished `view` in the surface `id`, and Rust said so on this thread,
+  /// inside Dart's render call — this frame's picture when it was waited for, the
+  /// previous one while playing. The main window's texture learns it now; the other
+  /// windows learn it with the status Dart broadcasts next, so their picture and its
+  /// size travel as one step.
   fileprivate func frameReady(_ view: String, _ id: UInt32) {
     precondition(Thread.isMainThread)
     guard let buffer = surfaces[view]?.entries.first(where: { $0.id == id })?.buffer else { return }
@@ -347,6 +460,48 @@ final class ProbeSession {
     for host in hosts.allObjects { host.detachTexture() }
   }
 
+  fileprivate func startPlayback() {
+    precondition(Thread.isMainThread)
+    guard playbackTimer == nil else { return }
+    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+      self?.playbackPulse()
+    }
+    playbackTimer = timer
+    RunLoop.main.add(timer, forMode: .common)
+  }
+
+  fileprivate func stopPlayback() {
+    playbackTimer?.invalidate()
+    playbackTimer = nil
+  }
+
+  private func playbackPulse() {
+    precondition(Thread.isMainThread)
+    playbackSurfaceFlip.toggle()
+    let targets = surfaces.compactMap { view, surface -> ProbeRuntime.PlaybackTarget? in
+      guard !surface.entries.isEmpty else { return nil }
+      let entry = surface.entries[playbackSurfaceFlip ? 1 % surface.entries.count : 0]
+      return ProbeRuntime.PlaybackTarget(view: view, surface: entry.id, keepAlive: entry.buffer)
+    }
+    guard !targets.isEmpty else { return }
+    _ = runtime.enqueuePlayback(targets: targets) { [weak self] outcome in
+      guard let self else { return }
+      switch outcome {
+      case .success(let frame):
+        // This wakes only frame listeners (timeline/playhead). It carries no
+        // Document snapshot and never asks Flutter to render the composition.
+        for host in self.hosts.allObjects where !host.closed && host.attached {
+          host.channel.invokeMethod("playbackFrame", arguments: ["frame": frame])
+        }
+      case .failure(let error):
+        self.stopPlayback()
+        for host in self.hosts.allObjects where !host.closed && host.attached {
+          host.channel.invokeMethod("nativeError", arguments: String(describing: error))
+        }
+      }
+    }
+  }
+
   func confirmTermination(_ completion: @escaping (Bool) -> Void) {
     precondition(Thread.isMainThread)
     if terminationApproved { completion(true); return }
@@ -375,6 +530,7 @@ final class ProbeSession {
   func shutdown(_ completion: @escaping () -> Void) {
     precondition(Thread.isMainThread)
     terminationApproved = true
+    stopPlayback()
     epoch &+= 1
     clearFrames()
     state = [:]
@@ -629,6 +785,7 @@ final class ProbeHost: NSObject {
         fail(result, "Stale UI attachment"); return
       }
       session.terminationApproved = false
+      session.stopPlayback()
       rendering = false
       perform(result, work: {
         let status = try self.session.runtime.open(path: path)
@@ -668,6 +825,9 @@ final class ProbeHost: NSObject {
         let status = try self.session.runtime.request(command)
         return status
       }) { status in
+        let operation = parsed?["op"] as? String
+        if operation == "play" { self.session.startPlayback() }
+        if operation == "pause" { self.session.stopPlayback() }
         if !asked, status["error"] == nil { self.session.broadcast(status, origin: self) }
         return status
       }
@@ -695,6 +855,7 @@ final class ProbeHost: NSObject {
         return
       }
       session.epoch &+= 1
+      session.stopPlayback()
       rendering = false
       session.clearFrames()
       session.state = [:]

@@ -128,7 +128,7 @@ mod passes;
 mod wgsl;
 
 pub(crate) use passes::{read_state, BlockProgram, BlockWorld, FollowPass, RopePass, WorldPass};
-pub(crate) use wgsl::{module_source, validate, wgsl_manifest};
+pub(crate) use wgsl::{module_source, note_device, validate, wgsl_manifest};
 
 
 /// test の入口: 棚に載った札(disk の構成では vism/ の今の file、焼き込みでは埋めた物 — 描く時と同じ道)。

@@ -19,13 +19,18 @@ impl Compositor {
         self.sequential_submits
     }
 
+    /// 最後に出した束の番号(まだ 1 度も出していなければ `None`)。
+    pub fn last_submission(&self) -> Option<wgpu::SubmissionIndex> {
+        self.last_submission.clone()
+    }
+
     pub(crate) fn flush_pending(&mut self) {
         if self.pending.is_empty() {
             return;
         }
         self.ctx.before_submit();
         let batch: Vec<wgpu::CommandBuffer> = self.pending.drain(..).collect();
-        self.ctx.queue.submit(batch);
+        self.last_submission = Some(self.ctx.queue.submit(batch));
         self.sequential_submits += 1;
         // staging buffer の回収は submit の**後**に一度だけ。
         self.ctx.begin_frame();

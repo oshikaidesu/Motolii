@@ -20,6 +20,8 @@ impl Compositor {
         output_format: wgpu::TextureFormat,
         config_provider: impl FnOnce(&re_renderer::device_caps::DeviceCaps) -> re_renderer::RenderConfig,
     ) -> Result<Self, CompositorError> {
+        // 棚の検証は、この device が本当に持っている物で行う(`Capabilities::all()` は嘘)。棚は device の後に組まれる。
+        effects::block_program::note_device(&device);
         let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
@@ -74,6 +76,7 @@ impl Compositor {
             coverage_programs: Default::default(),
             catalog,
             sequential_submits: 0,
+            last_submission: None,
             pending: Vec::new(),
         })
     }

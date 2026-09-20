@@ -1,6 +1,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::doc::core::RationalTime;
 use crate::doc::eval::{KeyframeTrack, Value};
@@ -21,6 +22,16 @@ use crate::doc::store::{
     StoreError, TextDocument, EDIT_TIMELINE,
 };
 
+/// The renderer-owned solver for one view's flow layout.
+///
+/// A document owns the values and the resulting [`Frame`] cache, but it must
+/// not own a renderer implementation (or its `TaffyTree`).  The renderer
+/// supplies this narrow read-only hook for a frame; ordinary document reads
+/// deliberately leave it empty.
+pub trait LayoutSolver {
+    fn compute(&self, view: &StoreView<'_>, time: RationalTime) -> Result<super::scratch::Frame, StoreError>;
+}
+
 #[derive(Clone)]
 pub struct StoreView<'a> {
     db: &'a EntityDb,
@@ -35,6 +46,7 @@ pub struct StoreView<'a> {
     analysis: Option<&'a super::analysis::AnalysisInputs>,
     layout_memo: super::scratch::Memo,
     layout_cache: &'a RefCell<super::scratch::LayoutCache>,
+    layout_solver: Option<Rc<dyn LayoutSolver>>,
     programs: super::kind::Programs,
     placement_programs: Option<&'a [super::kind::PlacementProgram]>,
 }
@@ -65,6 +77,7 @@ impl<'a> StoreView<'a> {
             analysis: None,
             layout_memo: Default::default(),
             layout_cache,
+            layout_solver: None,
             programs,
             placement_programs: None,
         }
@@ -72,6 +85,18 @@ impl<'a> StoreView<'a> {
 
     pub fn layout_memo(&self) -> &super::scratch::Memo {
         &self.layout_memo
+    }
+
+    /// Give this ephemeral read a renderer cache.  This is deliberately not
+    /// part of [`Document`]: the cache is a rendering resource, not authored
+    /// state or undoable layout meaning.
+    pub fn with_layout_solver(mut self, solver: Rc<dyn LayoutSolver>) -> Self {
+        self.layout_solver = Some(solver);
+        self
+    }
+
+    pub fn layout_solver(&self) -> Option<&dyn LayoutSolver> {
+        self.layout_solver.as_deref()
     }
 
     /// コマをまたぐ配置の覚えを使ってよい view か(解析・仮の編集・一時の値のどれも読まない)。

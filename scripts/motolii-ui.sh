@@ -34,11 +34,24 @@ case "${1:-dev}" in
     "$window_check_dir/check"
     ;;
   test)
+    "$repo/scripts/motolii-ui.sh" why-slow
     "$repo/scripts/motolii-ui.sh" test-window
-    cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-ui --lib; cargo test -p motolii-render --lib
+    cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-edit; cargo test -p motolii-jobs; cargo test -p motolii-ui --lib; cargo test -p motolii-render --lib
     dart_bin="$(dirname "$flutter_bin")/dart"
     (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
     cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;
+  # Why the loop is slow, in 30 ms, without going and looking. rustc enumerates
+  # every -L dependency directory once per crate: 10.9 s at 611k entries, 0.12 s
+  # at 30k. An APFS directory costs ~32 bytes per entry, so stat answers O(1).
+  why-slow)
+    deps="$workspace/target/debug/deps"
+    files=$(( $(stat -f %z "$deps" 2>/dev/null || echo 0) / 32 ))
+    [[ $files -lt 50000 ]] || echo "slow: deps/ holds ~$files files and every rustc rescans it. Prune: find '$deps' -name '*.rcgu.o' -mtime +7 -delete"
+    busy=$(pgrep -f 'bin/cargo' | wc -l | tr -d ' ')
+    [[ $busy -eq 0 ]] || echo "slow: $busy other cargo run(s) hold the build lock on $workspace/target; yours waits for them."
+    swap=$(sysctl -n vm.swapusage | sed -n 's/.*free = \([0-9]*\).*/\1/p')
+    [[ ${swap:-9999} -gt 2048 ]] || echo "slow: swap has ${swap}M free; rustc stalls before it computes anything."
+    ;;
   restart-ui) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR2 "$(cat "$state/flutter.pid")" ;;
   reload) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR1 "$(cat "$state/flutter.pid")" ;;
   # The real speed: Dart AOT and Rust --release. No hot reload (Flutter's
@@ -64,5 +77,5 @@ case "${1:-dev}" in
     fi
     exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd]|profile [document.rrd]|reload|restart-ui}'; exit 1 ;;
 esac

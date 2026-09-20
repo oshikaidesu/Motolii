@@ -18,6 +18,8 @@ pub enum EffectStage {
     Field,
     /// 世界の平面で切る。板・点群・網が同じ式に従う。
     Clip,
+    /// 太陽の型紙に描かれて影を落とす(shader を持たない)。
+    Shadow,
     /// 配置の集合(shader を持たない)。
     Placement,
     /// 形の層の輪郭(shader を持たない)。
@@ -451,6 +453,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             isf::IsfStage::Surface => EffectStage::Surface,
             isf::IsfStage::Field => EffectStage::Field,
             isf::IsfStage::Clip => EffectStage::Clip,
+            isf::IsfStage::Shadow => EffectStage::Shadow,
             isf::IsfStage::Block => EffectStage::Block,
         },
         params: d.manifest.param_inputs().enumerate().map(|(i, p)| {

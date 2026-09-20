@@ -116,6 +116,12 @@ fn still_pixels() -> StillPixels {
 }
 
 pub struct Engine {
+    /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
+    /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
+    resolved_memo: std::cell::RefCell<Option<(u64, RationalTime, Vec<crate::picture::resolved::ResolvedLayer>)>>,
+    /// Taffy is renderer preparation state, so it survives playback without
+    /// becoming Document/Undo state.
+    layout_flow: std::rc::Rc<crate::picture::flow::FlowCache>,
     pub(crate) compositor: Compositor,
     materials: HashMap<LayerId, material::MaterialCache>,
     probes: HashMap<String, MediaInfo>,
@@ -222,6 +228,8 @@ impl Engine {
         #[cfg(test)]
         let _gpu = GpuLease::take();
         Ok(Self {
+            resolved_memo: Default::default(),
+            layout_flow: Default::default(),
             #[cfg(test)]
             _gpu,
             compositor: Compositor::headless()?,
@@ -277,6 +285,15 @@ impl Engine {
         &self.compositor.render_context().queue
     }
 
+    pub fn layout_solver(&self) -> std::rc::Rc<dyn crate::doc::store::LayoutSolver> {
+        self.layout_flow.clone()
+    }
+
+    /// 直前の描画を queue へ出した時の番号。窓は待たずに返り、これを別 thread が待つ。
+    pub fn last_submission(&self) -> Option<wgpu::SubmissionIndex> {
+        self.compositor.last_submission()
+    }
+
     pub fn gpu_device(&self) -> &wgpu::Device {
         self.compositor.device()
     }
@@ -299,6 +316,8 @@ impl Engine {
         #[cfg(test)]
         let _gpu = GpuLease::take();
         Ok(Self {
+            resolved_memo: Default::default(),
+            layout_flow: Default::default(),
             #[cfg(test)]
             _gpu,
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,

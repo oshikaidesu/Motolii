@@ -359,7 +359,7 @@ impl Engine {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
-            blocks_light: layer.blocks_light,
+            shadow: layer.shadow,
             outline: layer.outline,
             frame: None,
         })
@@ -434,7 +434,7 @@ impl Engine {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
-            blocks_light: sources.iter().any(|s| s.layer.blocks_light),
+            shadow: sources.iter().map(|s| s.layer.shadow).fold(0.0, f32::max),
             outline: sources.iter().map(|s| s.layer.outline).max().unwrap_or(0),
             frame: None,
         })
@@ -500,7 +500,7 @@ impl Engine {
             content, size: layer_size(layer, natural), placement,
             projection: layer.projection, projection_camera, blend_mode,
             shading: Default::default(), displace: translate_point_displace(&layer.effects),
-            clip: translate_clip(&layer.effects), blocks_light: layer.blocks_light, outline: self.outline_id(layer.id),
+            clip: translate_clip(&layer.effects), shadow: translate_cast_shadow(&layer.effects), outline: self.outline_id(layer.id),
             frame,
         };
         let uses_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));

@@ -23,6 +23,7 @@ HOUSES = [
     ("ui/lib — 窓", "motolii/ui/lib", "#85c1a1"),
     ("ui/native — 接続", "motolii/ui/native/src", "#c39bd3"),
     ("extensions — 拡張", "motolii/ui/extensions", "#d98880"),
+    ("vism — 棚(WGSL)", "motolii/crates/motolii-render/vism", "#d4b483"),
 ]
 WARN, SOFT = 600, 800
 
@@ -100,7 +101,7 @@ def measure(path):
 
 def collect(prefix):
     root = ROOT / prefix
-    files = sorted(p for p in root.rglob("*") if p.suffix in (".rs", ".dart") and p.is_file())
+    files = sorted(p for p in root.rglob("*") if p.suffix in (".rs", ".dart", ".wgsl", ".fs", ".frag") and p.is_file())
     out = []
     for p in files:
         rel = p.relative_to(root)

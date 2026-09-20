@@ -13,8 +13,26 @@ mixin SessionRender on SessionCore {
   void _clearSurfaces() => _surfaces.clear();
   bool get _cadenceRunning => _ticker != null;
 
+  /// 計器(`kDebugMode` の裏、再生の道だけ)。名前を付けた区間を Dart の Timeline に
+  /// 載せる: Flutter 自身の `Frame` / `Animate` / `BUILD` / `LAYOUT` / `PAINT` と
+  /// 同じ流れなので、VM service の `getVMTimeline` が 1 回でまとめて渡す。
+  /// ここを自前で測るのは、FFI の先(Rust と GPU)が Flutter のどの計器にも映らないため。
+  /// 段ごとの取り分。Timeline は DevTools を開かないと読めないので、同じ計測を
+  /// 足し込んで、再生が止まった時に 1 行で出す(毎コマは出さない)。
+  static final Map<String, int> _spanUs = {};
+
+  static T _span<T>(String name, T Function() body) {
+    if (!kDebugMode) return body();
+    final at = Stopwatch()..start();
+    try {
+      return Timeline.timeSync(name, body);
+    } finally {
+      _spanUs[name] = (_spanUs[name] ?? 0) + at.elapsedMicroseconds;
+    }
+  }
+
   Future<void> _render({bool notify = true, bool playback = false}) async {
-    if (_frames case final frames?) {
+    if (_frames case final frames? when !playing.value) {
       _renderNow(frames, notify: notify, playback: playback);
       return;
     }
@@ -37,14 +55,20 @@ mixin SessionRender on SessionCore {
   }) {
     if (playback) {
       final tick = EditorSession.map(
-        jsonDecode(frames.request('{"op":"tick","quiet":true}')),
+        _span(
+          'motolii.tick',
+          () => jsonDecode(frames.request('{"op":"tick","quiet":true}')),
+        ),
       );
       // The clock lands on whole frames, so most display frames ask for the
       // picture that is already on screen. Nothing to draw: give the thread back.
       if (tick['needsRender'] == false) return true;
     }
     final info = EditorSession.map(
-      jsonDecode(frames.request('{"op":"renderInfo"}')),
+      _span(
+        'motolii.renderInfo',
+        () => jsonDecode(frames.request('{"op":"renderInfo"}')),
+      ),
     );
     if (info['error'] != null) throw StateError('${info['error']}');
     final listed = EditorSession.maps(info['views']);
@@ -67,32 +91,43 @@ mixin SessionRender on SessionCore {
         missing = true;
         continue;
       }
-      // One render costs 0.18 ms of CPU, so the GPU is waited for right here:
-      // the picture, its window and the status all belong to this one frame.
-      // The pair of surfaces per view still keeps the compositor off the one
-      // being written.
+      // The call returns once the work is submitted: the window, the roi and the
+      // status all belong to this one frame, and the GPU finishing it is somebody
+      // else's thread. The pair of surfaces per view keeps the compositor off the
+      // one being written, and native refuses (1) a surface still being drawn.
       final surface = have.ids[_flip % have.ids.length];
-      final code = frames.render(surface, name);
+      final code = _span(
+        'motolii.render.$name',
+        () => frames.render(surface, name),
+      );
       if (code < 0) {
         final status = EditorSession.map(
           jsonDecode(frames.request('{"op":"status"}')),
         );
         throw StateError('Rust render failed for $name: ${status['error']}');
       }
+      if (code > 0) continue;
       drawn = true;
     }
-    final raw = frames.request(
-      jsonEncode({
-        'op': 'status',
-        'knownSnapshotId': state['snapshotId'],
-        'knownReferenceId': state['referenceId'],
-      }),
+    final raw = _span(
+      'motolii.status',
+      () => frames.request(
+        jsonEncode({
+          'op': 'status',
+          'knownSnapshotId': state['snapshotId'],
+          'knownReferenceId': state['referenceId'],
+        }),
+      ),
     );
-    _accept({
-      'status': jsonDecode(raw),
-      'frameReady': drawn,
-      'frameOnly': playback,
-    }, notify: notify);
+    final decoded = _span('motolii.decode', () => jsonDecode(raw));
+    _span(
+      'motolii.accept',
+      () => _accept({
+        'status': decoded,
+        'frameReady': drawn,
+        'frameOnly': playback,
+      }, notify: notify),
+    );
     _broadcast(raw, frameReady: drawn, frameOnly: playback);
     if (missing) {
       _serial(() async {
@@ -170,20 +205,66 @@ mixin SessionRender on SessionCore {
     });
   }
 
+  /// 再生 1 回ぶんの合否(kDebugMode)。分布は出さない — 予算 1 コマ 16.7 ms に対する
+  /// 可否だけ: UI thread が拍のうち何 % を占めたか、予算超えと倍超えの本数、飛ばした数。
+  int _budgetTicks = 0, _budgetOver16 = 0, _budgetOver33 = 0, _budgetUs = 0;
+  Stopwatch? _budgetSpan;
+
+  void _noteBudget(int micros) {
+    _budgetTicks++;
+    _budgetUs += micros;
+    if (micros > 16700) _budgetOver16++;
+    if (micros > 33300) _budgetOver33++;
+  }
+
+  /// 再生が止まった時に 1 回だけ。毎コマは出さない。
+  void _reportBudget() {
+    final span = _budgetSpan?.elapsedMicroseconds ?? 0;
+    if (!kDebugMode || _budgetTicks == 0 || span == 0) return;
+    debugPrint(
+      'PROBE room=playback-budget ticks=$_budgetTicks '
+      'ui=${(_budgetUs * 100 / span).round()}% '
+      'over16.7=$_budgetOver16 over33=$_budgetOver33 '
+      'skipped=${state['framesSkipped'] ?? 0} seconds=${(span / 1e6).toStringAsFixed(1)}',
+    );
+    // 93% の中身。段ごとに、1 拍あたり何 ms で、拍の予算 16.7 ms の何 % か。
+    final stages = _spanUs.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    if (stages.isNotEmpty) {
+      debugPrint(
+        'PROBE room=playback-stages ${stages.map((e) {
+          final perTick = e.value / _budgetTicks / 1000;
+          return '${e.key.replaceFirst('motolii.', '')}='
+              '${perTick.toStringAsFixed(1)}ms'
+              '(${(perTick * 100 / 16.7).round()}%)';
+        }).join(' ')}',
+      );
+    }
+    _budgetSpan = null;
+  }
+
   void _beginCadence(int generation) {
     if (_disposed || windowInfo['main'] == false) return;
+    _budgetTicks = _budgetOver16 = _budgetOver33 = _budgetUs = 0;
+    _spanUs.clear();
+    _budgetSpan = kDebugMode ? (Stopwatch()..start()) : null;
     _ticker?.dispose();
     _ticker = Ticker((_) {
       if (_disposed || generation != _generation || _pendingWork > 0) return;
       // Same frame: the tick's picture and status are in before this frame builds.
       if (_frames case final frames?) {
+        final spent = kDebugMode ? (Stopwatch()..start()) : null;
         try {
-          _renderNow(frames, notify: false, playback: true);
+          _span(
+            'motolii.renderNow',
+            () => _renderNow(frames, notify: false, playback: true),
+          );
         } catch (e) {
           debugPrint('PROBE room=playback verdict=cadence-stopped reason=$e');
           _schedulePause(renderFinal: false);
           error.value = '$e';
         }
+        if (spent != null) _noteBudget(spent.elapsedMicroseconds);
         return;
       }
       _serial(() async {
@@ -201,6 +282,7 @@ mixin SessionRender on SessionCore {
   }
 
   void _cancelCadence() {
+    if (_ticker != null) _reportBudget();
     _generation++;
     _ticker?.dispose();
     _ticker = null;

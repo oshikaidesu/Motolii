@@ -1,0 +1,27 @@
+# RealtimeSanitizer の抑制表 — **Motolii が直せる違反だけを見る**ための雑音消し。
+# 定規は外の物、書式は LLVM の取説どおり(clang.llvm.org/docs/RealtimeSanitizer.html)。
+#
+#   RTSAN_ENABLE=1 \
+#   RTSAN_OPTIONS=halt_on_error=false,suppressions=$PWD/motolii/reference/rtsan-suppressions.txt \
+#     cargo test -p motolii-render --test staying_realtime -- --nocapture
+#
+# 書ける行は 2 種類だけ。<pattern> は `*` が使える。
+#   function-name-matches:<pattern>   横取りした呼び出しの名前(malloc, pthread_mutex_lock …)
+#   call-stack-contains:<pattern>     stack にこの記号が居たら黙る
+#
+# **ここに足すのは「Motolii が書き換えられない層」だけ。**
+# wgpu_core / re_renderer / re_query は**消さない** — 毎コマそれを呼ぶと決めたのは
+# Motolii の code なので、そこの確保は Motolii の違反として出したい。
+# 自分の code の違反を黙らせたら、この file の意味が消える。
+
+# --- Metal の driver と Objective-C runtime(OS の中身。submit した時点で確保される) ---
+call-stack-contains:*AGXG*
+call-stack-contains:*IOGPUMetal*
+call-stack-contains:*IOGPUMemory*
+call-stack-contains:*MTLResourceListPool*
+call-stack-contains:*MTLLibrary*
+call-stack-contains:*_MTLObjectWithLabel*
+call-stack-contains:*_MTLCommandBuffer*
+call-stack-contains:*_MTLCommandQueue*
+call-stack-contains:*MTLRenderPass*
+call-stack-contains:*MTLBufferDescriptor*
