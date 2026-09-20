@@ -87,7 +87,7 @@ impl Document {
             }
             reject_animated_transform(&view, group, "group")?;
             let new_parent = view.attrs(group)?.and_then(|attrs| attrs.parent);
-            let group_local = crate::doc::store::view::resolve::transform::local_transform(&view, group, t)?;
+            let group_local = (self.geometry.local)(&view, group, t)?;
             let identity = affine2_is_identity(group_local);
 
             for &child in &present {
@@ -117,7 +117,7 @@ impl Document {
                         [0.0, 0.0],
                         t,
                     )?;
-                    let child_local = crate::doc::store::view::resolve::transform::local_transform(&view, child, t)?;
+                    let child_local = (self.geometry.local)(&view, child, t)?;
                     let baked = bake_child_local(group_local, child_local, anchor);
                     intents.extend(baked.into_intents(child)?);
                 }
@@ -441,7 +441,8 @@ impl Document {
             scopes.insert(old_parent);
             if old_parent != new_parent {
                 intents.extend(move_parent_compensation(
-                    &view, layer, old_parent, new_parent, at,
+                    &view,
+                    self.geometry(), layer, old_parent, new_parent, at,
                 )?);
                 intents.push(Intent::SetAttrs {
                     layer,
@@ -663,13 +664,14 @@ pub(super) fn move_translation_values(
 
 fn move_parent_compensation(
     view: &StoreView<'_>,
+    geometry: crate::doc::store::kind::Geometry,
     layer: LayerId,
     old_parent: Option<LayerId>,
     new_parent: Option<LayerId>,
     at: RationalTime,
 ) -> Result<Vec<Intent>, StoreError> {
     let world = |parent: Option<LayerId>| match parent {
-        Some(parent) => crate::doc::store::view::resolve::transform::world_transform3d(view, parent, at),
+        Some(parent) => (geometry.world)(view, parent, at),
         None => Ok(glam::Affine3A::IDENTITY),
     };
     let old_world = world(old_parent)?;
@@ -707,7 +709,7 @@ fn move_parent_compensation(
     move_static_transform(view, layer)?;
     refuse_split_position(view, layer)?;
     let correction = move_planar(correction)?;
-    let local = move_planar(crate::doc::store::view::resolve::transform::local_transform3d(view, layer, at)?)?;
+    let local = move_planar((geometry.local3d)(view, layer, at)?)?;
     let anchor = read_vec2(
         view,
         layer,
@@ -798,6 +800,19 @@ pub(super) fn write_transform_values(
 
 #[cfg(test)]
 mod move_layer_tests {
+
+    /// この検査は「見た目を保つ」補正を見るので、答える口を自分で登録する
+    /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。
+    fn placed() -> Document {
+        use crate::doc::store::view::resolve::{camera, transform};
+        blank_project().with_geometry(crate::doc::store::kind::Geometry {
+            local: transform::local_transform,
+            local3d: transform::local_transform3d,
+            world: transform::world_transform3d,
+            worlds: transform::world_transforms3d,
+            camera: camera::resolve_camera,
+        })
+    }
     use super::*;
     use crate::doc::store::{blank_project, property};
 
@@ -880,7 +895,7 @@ mod move_layer_tests {
 
     #[test]
     fn sibling_drop_preserves_selected_order_and_is_one_undo() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let a = add(&mut doc, 1, false, None);
         let b = add(&mut doc, 2, false, None);
         let c = add(&mut doc, 3, false, None);
@@ -903,7 +918,7 @@ mod move_layer_tests {
 
     #[test]
     fn dropping_selected_parent_and_child_moves_subtree_once() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let parent = add(&mut doc, 1, true, None);
         let child = add(&mut doc, 2, false, Some(parent));
         let target = add(&mut doc, 3, true, None);
@@ -931,7 +946,7 @@ mod move_layer_tests {
 
     #[test]
     fn static_reparent_preserves_world_pose_and_existing_key_time() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let target = add(&mut doc, 1, true, None);
         let child = add(&mut doc, 2, false, None);
         put(
@@ -985,7 +1000,7 @@ mod move_layer_tests {
 
     #[test]
     fn identity_parent_accepts_animation_but_rotated_coordinate_system_does_not() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let identity = add(&mut doc, 1, true, None);
         let translated = add(&mut doc, 2, true, None);
         let child = add(&mut doc, 3, false, None);
@@ -1032,7 +1047,7 @@ mod move_layer_tests {
 
     #[test]
     fn invalid_cycle_locked_and_frozen_drops_are_atomic() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let parent = add(&mut doc, 1, true, None);
         let nested = add(&mut doc, 2, true, Some(parent));
         let plain = add(&mut doc, 3, false, None);
@@ -1070,7 +1085,7 @@ mod move_layer_tests {
 
     #[test]
     fn animated_parent_accepts_static_child_at_current_pose_then_drives_it() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let parent = add(&mut doc, 1, true, None);
         let child = add(&mut doc, 2, false, None);
         animated(&mut doc, parent);
@@ -1105,7 +1120,7 @@ mod move_layer_tests {
 
     #[test]
     fn translation_reparent_keeps_animated_spatial_keys_and_world_motion() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let parent = add(&mut doc, 1, true, None);
         let child = add(&mut doc, 2, false, None);
         put(
@@ -1177,7 +1192,7 @@ mod move_layer_tests {
 
     #[test]
     fn translation_reparent_preserves_separate_xyz_tracks_and_constants() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let parent = add(&mut doc, 1, true, None);
         let child = add(&mut doc, 2, false, None);
         put(

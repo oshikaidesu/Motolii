@@ -157,6 +157,8 @@ pub struct Document {
     record_cache: RefCell<RecordCache>,
     /// 並べた結果をコマをまたいで覚える(書類の版と時刻で。解析・仮の編集・一時の値を読まない view だけ)。
     layout_cache: RefCell<super::layout::LayoutCache>,
+    /// 見た目を保つための「どこに見えているか」。開く側が渡す。
+    geometry: super::kind::Geometry,
     /// この書類で使える効果。開く側が渡す — コアは誰が何を実装しているか知らない。
     /// 渡さなければ効果は 1 つも無い(読んで並べて描くだけの書類)。
     programs: super::kind::Programs,
@@ -171,6 +173,17 @@ impl Default for Document {
 impl Document {
     pub fn new() -> Self {
         Self::with_store_id(StoreId::random(StoreKind::Recording, "motolii"))
+    }
+
+    /// 開く側が、見た目を答える口を渡す。
+    #[must_use]
+    pub fn with_geometry(mut self, geometry: super::kind::Geometry) -> Self {
+        self.geometry = geometry;
+        self
+    }
+
+    pub fn geometry(&self) -> super::kind::Geometry {
+        self.geometry
     }
 
     /// 開く側が、この書類で使える効果の表を渡す。
@@ -197,6 +210,7 @@ impl Document {
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
             layout_cache: RefCell::new(Default::default()),
+            geometry: super::kind::Geometry::NONE,
             programs: super::kind::Programs::NONE,
         }
     }

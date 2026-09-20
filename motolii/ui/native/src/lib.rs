@@ -73,7 +73,7 @@ pub(crate) fn work(path: Option<&str>) -> Result<Document, String> {
         None => doc::store::blank_project(),
         Some(path) => Document::load(path).map_err(|e| e.to_string())?,
     };
-    Ok(doc.with_programs(render::extensions::bundled()))
+    Ok(doc.with_programs(render::extensions::bundled()).with_geometry(render::extensions::geometry()))
 }
 
 impl EditorRuntime {

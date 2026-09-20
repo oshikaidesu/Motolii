@@ -8,7 +8,7 @@ pub mod placement;
 pub mod solid;
 pub mod text;
 
-pub use bundled::{bundled, placement_program, sampling_program, snap_program};
+pub use bundled::{bundled, geometry, placement_program, sampling_program, snap_program};
 use crate::doc::store::kind::{Kind, Family};
 #[cfg(test)]
 use crate::doc::eval::Value;

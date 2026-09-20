@@ -17,3 +17,16 @@ pub fn snap_program(plugin_id: &str) -> Option<crate::doc::store::kind::SnapProg
 pub fn bundled() -> crate::doc::store::kind::Programs {
     crate::doc::store::kind::Programs { placement: placement_program, sampling: sampling_program, snap: snap_program }
 }
+
+/// 「どこに見えているか」を答える口。束ねを解く・親を移す・札を変える時、
+/// コアはこの答えを使って書いた値を補正する(コアは解き方を知らない)。
+pub fn geometry() -> crate::doc::store::kind::Geometry {
+    use crate::doc::store::view::resolve::{camera, transform};
+    crate::doc::store::kind::Geometry {
+        local: transform::local_transform,
+        local3d: transform::local_transform3d,
+        world: transform::world_transform3d,
+        worlds: transform::world_transforms3d,
+        camera: camera::resolve_camera,
+    }
+}

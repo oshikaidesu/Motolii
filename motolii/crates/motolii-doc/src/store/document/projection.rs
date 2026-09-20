@@ -21,7 +21,7 @@ impl Document {
             let view = self.view();
             for &(layer, local_center) in layers {
                 if let Some(to) = patch.projection {
-                    intents.extend(projection_compensation(&view, layer, local_center, to, at)?);
+                    intents.extend(projection_compensation(&view, self.geometry(), layer, local_center, to, at)?);
                 }
                 intents.push(Intent::SetAttrs { layer, patch: patch.clone() });
             }
@@ -32,6 +32,7 @@ impl Document {
 
 fn projection_compensation(
     view: &StoreView<'_>,
+    geometry: crate::doc::store::kind::Geometry,
     layer: LayerId,
     local_center: [f32; 3],
     to: LayerProjection,
@@ -46,8 +47,8 @@ fn projection_compensation(
         .composition()?
         .ok_or_else(|| StoreError::Property("No composition".into()))?
         .spec();
-    let camera = crate::doc::store::view::resolve::camera::resolve_camera(view, at)?;
-    let worlds = crate::doc::store::view::resolve::transform::world_transforms3d(view, at)?;
+    let camera = (geometry.camera)(view, at)?;
+    let worlds = (geometry.worlds)(view, at)?;
     let world = *worlds.get(&layer).ok_or_else(|| {
         StoreError::Property(format!("Layer {} is not present", layer.0))
     })?;
@@ -75,6 +76,19 @@ fn projection_compensation(
 
 #[cfg(test)]
 mod projection_switch_tests {
+
+    /// この検査は「見た目を保つ」補正を見るので、答える口を自分で登録する
+    /// (コアの既定は誰も答えない = 書いた値がそのまま残る)。
+    fn placed() -> Document {
+        use crate::doc::store::view::resolve::{camera, transform};
+        blank_project().with_geometry(crate::doc::store::kind::Geometry {
+            local: transform::local_transform,
+            local3d: transform::local_transform3d,
+            world: transform::world_transform3d,
+            worlds: transform::world_transforms3d,
+            camera: camera::resolve_camera,
+        })
+    }
     use super::*;
     use crate::doc::store::PropertyId;
     use crate::doc::core::{projected_screen_corners, ResolvedCamera};
@@ -147,7 +161,7 @@ mod projection_switch_tests {
 
     #[test]
     fn tilted_child_under_a_moved_camera_keeps_its_center_through_every_switch() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         camera(&mut doc);
         let group = shape(&mut doc, 1, None);
         put(&mut doc, group, property::POSITION, Value::Vec2([300.0, 200.0]));
@@ -170,7 +184,7 @@ mod projection_switch_tests {
 
     #[test]
     fn flat_layer_at_rest_switches_without_touching_values_and_undoes_in_one_step() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let layer = shape(&mut doc, 1, None);
         put(&mut doc, layer, property::POSITION, Value::Vec2([400.0, 300.0]));
         put(&mut doc, layer, property::ROTATION, Value::F64(15.0));
@@ -185,7 +199,7 @@ mod projection_switch_tests {
 
     #[test]
     fn animated_flat_layer_with_depth_keeps_its_keys_when_leaving_two_d() {
-        let mut doc = blank_project();
+        let mut doc = placed();
         let layer = shape(&mut doc, 1, None);
         let mut track = KeyframeTrack::new();
         for (frame, x) in [(0, 100.0), (60, 700.0)] {
