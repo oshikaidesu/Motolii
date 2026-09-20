@@ -5,7 +5,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 # Motolii UX 監査
 
-対象は **デスクトップのプロ道具**(Flutter / dark / 密。row 20 px、font 11、Material の語彙なし)。
+対象は **デスクトップのプロ道具**(Flutter / dark / 密。row 24 px、font 11、Material の語彙なし)。
 一般の web・スマホの物差し(44 pt の指、余白たっぷり、CTA、変換率)は**そのまま当てない** — 下の Motolii の物差しが優先。
 
 同梱の外部 skill を土台に使う:
@@ -29,7 +29,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 | R7 | **色は theme の token だけ** — `EditorTheme` / `EditorInk`。`Color(0x…)` を panel に直書きしない | `dart run bin/check.dart lib` の `raw_color` が clean でない |
 | R8 | **1 画面・page を切り替えない** — 所在は一覧で示す。panel は幅可変・全隠し可、ステージが主 | 全画面を覆う page・modal・wizard、戻らないと前が見えない造り |
 | R9 | **Material の語彙を使わない** — `package:flutter/material.dart` を lib で import しない。`Icons.*` / `Colors.*` は `Glyph` / theme へ | `material_import` が clean でない。Material の形(FAB・Snackbar・Card の影)が見える |
-| R10 | **EditorMetrics の密度** — row 20 / control 24 / section 26 / bar 28、font 11(micro 9 / dense 10 / title 13)。裸の数は `raw_dimension` が拒む | 行が 20 を越えて緩い、文字が 11 より大きい、`raw_dimension` が clean でない |
+| R10 | **EditorMetrics の密度** — row 24 / control 28 / section 30 / bar 32、font 11(micro 9 / dense 10 / title 13)。裸の数は `raw_dimension` が拒む | 行が 24 を越えて緩い、文字が 11 より大きい、`raw_dimension` が clean でない |
 | R11 | **drag→preview→commit の契約** — 掴んでいる間の絵が確定値。Esc と focus 外れで取り消し、undo は 1 回で戻る | Esc が効かない、panel の外を押しても値が残る、1 つの drag で undo が 2 回要る |
 | R12 | **重なりは影でなく白 8〜16% の overlay**、純黒 #000 の地を使わない、文字は 4.5:1 | 影で浮かせた panel、真っ黒の地、読めない灰色の文字 |
 | R13 | **hover は色 1 段だけ** — 拡大・影・ばねを付けない。値の吹き出しは遅延 0 で出し、離れたら即消す | hover で部品が膨らむ、値に 500 ms の tooltip 待ちが掛かる |

@@ -1023,7 +1023,7 @@ class _BrowserSearchBar extends StatelessWidget {
               ),
               prefix: ConstrainedBox(
                 constraints: const BoxConstraints(
-                  minWidth: EditorMetrics.control,
+                  minWidth: EditorMetrics.row,
                   minHeight: EditorMetrics.row,
                 ),
                 child: const Icon(
@@ -1032,10 +1032,9 @@ class _BrowserSearchBar extends StatelessWidget {
                   color: EditorTheme.muted,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: EditorMetrics.s4,
-                vertical: EditorMetrics.s4,
-              ),
+              // The frame is one row tall: its border and one line are all
+              // it has room for, so the padding here is sideways only.
+              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
               hint: 'Search $tab',
               onChanged: (_) => onChanged(),
             ),
@@ -1133,7 +1132,7 @@ class _BrowserRailTab extends StatelessWidget {
       key: const ValueKey('browser:rail-tab'),
       onTap: onTap,
       child: SizedBox(
-        width: EditorMetrics.row,
+        width: EditorMetrics.s19,
         child: Column(
           children: [
             const Padding(

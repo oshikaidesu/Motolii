@@ -695,8 +695,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
     if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
   }
 
-  Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) =>
-      _HeadGlyph(icon: icon, tip: tip, onTap: onTap);
+  Widget _headGlyph(
+    IconData icon,
+    String tip,
+    VoidCallback? onTap, {
+    Color? ink,
+  }) => _HeadGlyph(icon: icon, tip: tip, onTap: onTap, ink: ink);
 
   /// Two wells side by side in one cell, and the wells beside a pad.
   double get _half => (_cellWidth - EditorMetrics.s4) / 2;
@@ -778,7 +782,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
   );
 
   Widget _line(List<Widget> children) => Padding(
-    padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
+    padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
     child: Row(children: children),
   );
 
@@ -2240,15 +2244,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
   Widget _identity(Map<String, dynamic> layer) => Container(
     height: EditorMetrics.bar,
     padding: const EdgeInsets.only(right: EditorMetrics.s6),
+    // The layer's own colour as a flat block, as its bar wears it in the
+    // Timeline: what the panel edits is told by the panel's head.
     decoration: BoxDecoration(
-      color: EditorTheme.panel,
-      border: Border(
-        left: BorderSide(
-          color: EditorTheme.layerColor(layer['id']),
-          width: EditorMetrics.s3,
-        ),
-        bottom: const BorderSide(color: EditorTheme.line),
-      ),
+      color: EditorTheme.layerColor(layer['id']),
+      border: const Border(bottom: BorderSide(color: EditorTheme.line)),
     ),
     child: Row(
       children: [
@@ -2264,7 +2264,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             _ => Glyph.image_outlined,
           },
           size: EditorMetrics.s14,
-          color: EditorTheme.kindColor('${layer['kind']}'),
+          color: EditorTheme.tabInk,
         ),
         const SizedBox(width: EditorMetrics.s6),
         Expanded(
@@ -2277,6 +2277,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               style: const TextStyle(
                 fontSize: EditorMetrics.title,
                 fontWeight: FontWeight.w600,
+                color: EditorTheme.tabInk,
               ),
             ),
           ),
@@ -2298,11 +2299,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 }
               });
             },
+            ink: EditorTheme.tabInk,
           ),
         EditorSwitch(
           on: c.animating,
           glyph: Glyph.diamond_outlined,
           tint: EditorTheme.keyAccent,
+          ink: EditorTheme.tabInk,
           label: c.animateFrom
               ? 'Animate (A): values you touch become keys at this frame, '
                     'and at the frame Animate was turned on'
@@ -2500,10 +2503,18 @@ class _Cell {
 
 /// One glyph on a card's head; quiet, and quieter still when it cannot act.
 class _HeadGlyph extends StatelessWidget {
-  const _HeadGlyph({required this.icon, required this.tip, this.onTap});
+  const _HeadGlyph({
+    required this.icon,
+    required this.tip,
+    this.onTap,
+    this.ink,
+  });
   final IconData icon;
   final String tip;
   final VoidCallback? onTap;
+
+  /// The glyph's colour when the head it sits on is not the panel grey.
+  final Color? ink;
   @override
   Widget build(BuildContext context) => EditorTooltip(
     message: tip,
@@ -2515,7 +2526,9 @@ class _HeadGlyph extends StatelessWidget {
         child: Icon(
           icon,
           size: EditorMetrics.s12,
-          color: onTap == null ? EditorTheme.disabledInk : EditorTheme.muted,
+          color: onTap == null
+              ? EditorTheme.disabledInk
+              : ink ?? EditorTheme.muted,
         ),
       ),
     ),
@@ -2635,4 +2648,3 @@ class _SpaceChoice extends StatelessWidget {
     ),
   );
 }
-
