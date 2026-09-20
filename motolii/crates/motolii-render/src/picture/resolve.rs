@@ -314,8 +314,9 @@ pub fn resolved_matte(
 }
 
 pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
-    // 層の並び・グループに引き取られた層・solo の有無は、時刻では変わらない。
-    // 版が同じ間は作り直さない(再生中は毎コマ同じ物を組み直していた)。
+    // 層の並び・親子・Group 判定だけは時刻では変わらない。
+    // solo と placement effect の有効状態は keyframe で変わり得るので、ここへ
+    // 混ぜて固定してはいけない。
     let shared = view.shared_layout_cache();
     let cached = shared.as_ref().and_then(|(cache, revision)| {
         let cache = cache.borrow();
@@ -342,8 +343,6 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             }
             for list in children.values_mut() { list.sort(); }
             let built = std::sync::Arc::new(crate::doc::store::scratch::Structure {
-                any_solo: any_solo(view, t)?,
-                handed_out: handed_out_by_a_group(view, &present, t)?,
                 layers,
                 present,
                 children,
@@ -361,8 +360,8 @@ pub fn resolved_layers(view: &StoreView<'_>, t: RationalTime) -> Result<Vec<Reso
             built
         }
     };
-    let any_solo = structure.any_solo;
-    let handed_out = &structure.handed_out;
+    let any_solo = any_solo(view, t)?;
+    let handed_out = handed_out_by_a_group(view, &structure.present, t)?;
     let present = &structure.present;
     let layers = structure.layers.clone();
     let world_transforms = crate::picture::resolve::transform::world_transforms3d(view, t)?;
