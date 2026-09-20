@@ -12,7 +12,7 @@
 Motolii も同じ所に居る:
 
 - [store.rs](../../motolii/crates/motolii-doc/src/store.rs) `LayerSource::declared_size` は全種で `None`。
-- [resolve.rs](../../motolii/crates/motolii-doc/src/store/view/resolve.rs) の Motion Blur の道のりは「形・文字は宣言の大きさを持たない(描くまで分からない)」ので原点のまわり 200 px 四方で代用している。
+- [resolve.rs](../../motolii/crates/motolii-render/src/picture/resolve.rs) の Motion Blur の道のりは「形・文字は宣言の大きさを持たない(描くまで分からない)」ので原点のまわり 200 px 四方で代用している。
 
 **足りないのは並べる機能ではなく、層が箱であること。** 箱があれば Flex も Grid も「並べ方の値を 1 つ選ぶ」だけになる。
 

@@ -23,7 +23,7 @@
 ## 実装
 
 - 法 1: [sequential.rs](../../motolii/crates/motolii-render/src/compositor/sequential.rs) の run の切り方。2D と非 2D を同じ run に入れない。連続する 2D は 1 つの run(同じ面・積み順)、3D 群は自分たちだけの run で深度を解き、run 同士は積み順で over。深度 buffer は run ごと。描くのはどちらも re_renderer の同じ ViewBuilder(Motolii 側の描き分けは無し)。2D の層は反射・影の世界にも入らない(世界に居ないので一貫)。
-- 法 3: [projection.rs](../../motolii/crates/motolii-doc/src/store/document/projection.rs) `projection_compensation`。以前は面(回転・scale)まで保とうとして、animate された層を「Cannot change coordinate systems for animated transform position; keep its parent」で拒んでいた — これが「3D が選べない」の正体(Torus の位置に key があった)。中心だけを保つ形にし、`move_translation_values` で全 key を同じ量ずらす。2.5D↔3D は中心が同じなので触らない。
+- 法 3: [projection.rs](../../motolii/ui/extensions/edit/src/document/projection.rs) `projection_compensation`。以前は面(回転・scale)まで保とうとして、animate された層を「Cannot change coordinate systems for animated transform position; keep its parent」で拒んでいた — これが「3D が選べない」の正体(Torus の位置に key があった)。中心だけを保つ形にし、`move_translation_values` で全 key を同じ量ずらす。2.5D↔3D は中心が同じなので触らない。
 - 法 4: 拒む規則は元々無く、法 3 の拒否が原因だった。
 
 ## 審判

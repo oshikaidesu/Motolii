@@ -92,7 +92,7 @@
 
 - Blobは Frame 15 でも白い素材へ追従。効果を無効化すると元の子が戻る。
 - Edit メニューの Undo で追従配置が復元。
-- Motion Blur のサンプルは移動方向の前後両側へ伸びる。中心合わせの方針（[motion.rs:49](../../motolii/crates/motolii-doc/src/extensions/motion.rs:49) の `sample_times` が `-0.5 → +0.5`）どおりで、先例の Alight Motion・AE の既定と一致する。
+- Motion Blur のサンプルは移動方向の前後両側へ伸びる。中心合わせの方針（[motion.rs:49](../../motolii/crates/motolii-render/src/extensions/motion.rs:50) の `sample_times` が `-0.5 → +0.5`）どおりで、先例の Alight Motion・AE の既定と一致する。
 - 保留していた Cmd+Z は**実装の問題ではなかった**。手では undo・redo・cut・copy・paste・select all すべて動く。反応しなかったのは自動操作側の事情。`MainMenu.xib` の First Responder 宛て key equivalent は無効時に鍵を消費しないため、衝突していない。
 
 ## core内の評価組み立てを切った(残件1の一部)
