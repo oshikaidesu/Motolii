@@ -2,6 +2,63 @@
 # 人なら即座に「変だ」と感じる数を、赤緑にする。閾値は reference/hygiene-budget.tsv。
 # build しない。数えるだけなので数秒で終わる。
 set -u
+
+# commit の瞬間に鳴らす口。staged の中身だけを数え、HEAD と比べる。build も find もしない。
+if [ "${1-}" = staged ]; then
+    cd "$(dirname "$0")/.." || exit 2
+    budget=motolii/reference/hygiene-budget.tsv
+    warn=$(awk -F'\t' '$1=="file_lines_warn" {print $2}' "$budget")
+    soft=$(awk -F'\t' '$1=="file_lines_soft" {print $2}' "$budget")
+    fail=0
+    # 数える家は check-hygiene 本体と同じ: doc/render の src、ui/native/src、ui/extensions、ui/lib
+    counts() { # 中身を stdin で受け「全体 test」を返す
+        awk '
+            { total++ }
+            intest {
+                tl++
+                o = gsub(/\{/, "{"); c = gsub(/\}/, "}")
+                depth += o - c
+                if (o > 0) started = 1
+                if (started && depth <= 0) intest = 0
+                else if (!started && /;[ \t]*$/) intest = 0
+                next
+            }
+            /^[ \t]*#\[cfg\(test\)\]/ { intest = 1; tl++; depth = 0; started = 0 }
+            END { print total+0, tl+0 }
+        '
+    }
+    while IFS= read -r path; do
+        case "$path" in
+            motolii/crates/*/src/*.rs|motolii/ui/native/src/*.rs|motolii/ui/extensions/*.rs|motolii/ui/lib/*.dart) ;;
+            *) continue ;;
+        esac
+        set -- $(git show ":$path" 2>/dev/null | counts)
+        now=${1:-0}; tl=${2:-0}
+        [ "$now" -eq 0 ] && continue
+        was=$(git show "HEAD:$path" 2>/dev/null | wc -l | tr -d ' ')
+        [ -z "$was" ] && was=0
+        note=""
+        [ "$tl" -gt 0 ] && note=" — うち test $tl 行"
+        if [ "$now" -gt "$soft" ] && [ "$now" -gt "$was" ]; then
+            echo "NG: $path = $now 行 (HEAD $was、天井 $soft)$note"
+            fail=1
+        elif [ "$now" -gt "$warn" ] && [ "$now" -gt "$was" ]; then
+            echo "warn: $path = $now 行 (HEAD $was、目安 $warn)$note"
+        fi
+    done < <(git diff --cached --name-only --diff-filter=ACMR)
+    over_warn=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v w="$warn" '$1>w' | wc -l | tr -d ' ')
+    over_soft=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v l="$soft" '$1>l' | wc -l | tr -d ' ')
+    echo "いま ${warn}行超 $over_warn 本 / ${soft}行超 $over_soft 本"
+    if [ "$fail" -ne 0 ]; then
+        cat <<'MSG'
+FAILED: 既に天井を超えている file を、さらに伸ばしている。
+責任ごとに割るか、motolii/reference/hygiene-budget.tsv の天井を書き換えて commit しろ(履歴に残る)。
+MSG
+        exit 1
+    fi
+    exit 0
+fi
+
 cd "$(dirname "$0")/../motolii" || exit 2
 budget=reference/hygiene-budget.tsv
 fail=0

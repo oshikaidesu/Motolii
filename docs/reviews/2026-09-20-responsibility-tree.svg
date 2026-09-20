@@ -1,0 +1,1956 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 5716" width="1180" height="5716">
+<rect width="1180" height="5716" fill="#151515"/>
+<style>text{font-family:ui-monospace,"SF Mono",Menlo,monospace}</style>
+<text x="26" y="38" fill="#ececec" font-size="17" font-family="-apple-system,sans-serif">Motolii — file 構造に描いた責任</text>
+<text x="26" y="60" fill="#8c8c8c" font-size="11" font-family="-apple-system,sans-serif">棒 = 行数（暗い方は test）・600 行で黄・800 行で赤。右の ● の数 = その file を触ると一緒に変わる file の本数（直近 400 commit の振る舞い、参照ではない）。</text>
+<line x1="26" y1="76" x2="1154" y2="76" stroke="#2c2c2c"/>
+<rect x="20" y="85" width="1140" height="15" fill="#7fb3d5" fill-opacity="0.09"/>
+<text x="26" y="96" fill="#7fb3d5" font-size="12" font-family="-apple-system,sans-serif">doc — 契約</text>
+<text x="418" y="96" fill="#8c8c8c" font-size="10" text-anchor="end">8966 行</text>
+<text x="37" y="111" fill="#9a9a9a" font-size="10.5">core/</text>
+<text x="418" y="111" fill="#5e5e5e" font-size="9" text-anchor="end">1453</text>
+<text x="48" y="126" fill="#cfcfcf" font-size="10.5">camera.rs</text>
+<text x="418" y="126" fill="#6e6e6e" font-size="9" text-anchor="end">548</text>
+<rect x="430" y="118" width="90.4" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<rect x="479.8" y="118" width="40.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="117" x2="529" y2="128" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="117" x2="562" y2="128" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="141" fill="#cfcfcf" font-size="10.5">frame.rs</text>
+<text x="418" y="141" fill="#6e6e6e" font-size="9" text-anchor="end">306</text>
+<rect x="430" y="133" width="50.5" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="132" x2="529" y2="143" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="132" x2="562" y2="143" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="156" fill="#cfcfcf" font-size="10.5">noise.rs</text>
+<text x="418" y="156" fill="#6e6e6e" font-size="9" text-anchor="end">16</text>
+<rect x="430" y="148" width="2.6" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="147" x2="529" y2="158" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="147" x2="562" y2="158" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="171" fill="#cfcfcf" font-size="10.5">time.rs</text>
+<text x="418" y="171" fill="#6e6e6e" font-size="9" text-anchor="end">377</text>
+<rect x="430" y="163" width="62.2" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="162" x2="529" y2="173" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="162" x2="562" y2="173" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="186" fill="#cfcfcf" font-size="10.5">wide_div.rs</text>
+<text x="418" y="186" fill="#6e6e6e" font-size="9" text-anchor="end">206</text>
+<rect x="430" y="178" width="34.0" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="177" x2="529" y2="188" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="177" x2="562" y2="188" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="201" fill="#cfcfcf" font-size="10.5">core.rs</text>
+<text x="418" y="201" fill="#6e6e6e" font-size="9" text-anchor="end">19</text>
+<rect x="430" y="193" width="3.1" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="192" x2="529" y2="203" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="192" x2="562" y2="203" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="216" fill="#9a9a9a" font-size="10.5">eval/</text>
+<text x="418" y="216" fill="#5e5e5e" font-size="9" text-anchor="end">1044</text>
+<text x="48" y="231" fill="#cfcfcf" font-size="10.5">bezier.rs</text>
+<text x="418" y="231" fill="#6e6e6e" font-size="9" text-anchor="end">54</text>
+<rect x="430" y="223" width="8.9" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="222" x2="529" y2="233" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="222" x2="562" y2="233" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="246" fill="#cfcfcf" font-size="10.5">gsap.rs</text>
+<text x="418" y="246" fill="#6e6e6e" font-size="9" text-anchor="end">193</text>
+<rect x="430" y="238" width="31.8" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<rect x="450.1" y="238" width="11.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="237" x2="529" y2="248" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="237" x2="562" y2="248" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="261" fill="#e8b45b" font-size="10.5">track.rs</text>
+<text x="418" y="261" fill="#6e6e6e" font-size="9" text-anchor="end">648</text>
+<rect x="430" y="253" width="106.9" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="252" x2="529" y2="263" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="252" x2="562" y2="263" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="276" fill="#cfcfcf" font-size="10.5">value.rs</text>
+<text x="418" y="276" fill="#6e6e6e" font-size="9" text-anchor="end">149</text>
+<rect x="430" y="268" width="24.6" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="267" x2="529" y2="278" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="267" x2="562" y2="278" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="291" fill="#cfcfcf" font-size="10.5">eval.rs</text>
+<text x="418" y="291" fill="#6e6e6e" font-size="9" text-anchor="end">10</text>
+<rect x="430" y="283" width="1.7" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="282" x2="529" y2="293" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="282" x2="562" y2="293" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="306" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="306" fill="#6e6e6e" font-size="9" text-anchor="end">12</text>
+<rect x="430" y="298" width="2.0" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="297" x2="529" y2="308" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="297" x2="562" y2="308" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="321" fill="#9a9a9a" font-size="10.5">store/</text>
+<text x="418" y="321" fill="#5e5e5e" font-size="9" text-anchor="end">4612</text>
+<text x="48" y="336" fill="#cfcfcf" font-size="10.5">analysis.rs</text>
+<text x="418" y="336" fill="#6e6e6e" font-size="9" text-anchor="end">49</text>
+<rect x="430" y="328" width="8.1" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="327" x2="529" y2="338" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="327" x2="562" y2="338" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="351" fill="#cfcfcf" font-size="10.5">asset.rs</text>
+<text x="418" y="351" fill="#6e6e6e" font-size="9" text-anchor="end">406</text>
+<rect x="430" y="343" width="67.0" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="342" x2="529" y2="353" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="342" x2="562" y2="353" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="366" fill="#cfcfcf" font-size="10.5">attrs.rs</text>
+<text x="418" y="366" fill="#6e6e6e" font-size="9" text-anchor="end">343</text>
+<rect x="430" y="358" width="56.6" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<rect x="482.3" y="358" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="357" x2="529" y2="368" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="357" x2="562" y2="368" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="381" fill="#cfcfcf" font-size="10.5">components.rs</text>
+<text x="418" y="381" fill="#6e6e6e" font-size="9" text-anchor="end">243</text>
+<rect x="430" y="373" width="40.1" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="372" x2="529" y2="383" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="372" x2="562" y2="383" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="396" fill="#cfcfcf" font-size="10.5">effect.rs</text>
+<text x="418" y="396" fill="#6e6e6e" font-size="9" text-anchor="end">61</text>
+<rect x="430" y="388" width="10.1" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="387" x2="529" y2="398" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="387" x2="562" y2="398" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="411" fill="#cfcfcf" font-size="10.5">fingerprint.rs</text>
+<text x="418" y="411" fill="#6e6e6e" font-size="9" text-anchor="end">215</text>
+<rect x="430" y="403" width="35.5" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<rect x="459.9" y="403" width="5.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="402" x2="529" y2="413" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="402" x2="562" y2="413" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="426" fill="#cfcfcf" font-size="10.5">geometry.rs</text>
+<text x="418" y="426" fill="#6e6e6e" font-size="9" text-anchor="end">36</text>
+<rect x="430" y="418" width="5.9" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="417" x2="529" y2="428" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="417" x2="562" y2="428" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="441" fill="#cfcfcf" font-size="10.5">ids.rs</text>
+<text x="418" y="441" fill="#6e6e6e" font-size="9" text-anchor="end">193</text>
+<rect x="430" y="433" width="31.8" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="432" x2="529" y2="443" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="432" x2="562" y2="443" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="456" fill="#cfcfcf" font-size="10.5">kind.rs</text>
+<text x="418" y="456" fill="#6e6e6e" font-size="9" text-anchor="end">258</text>
+<rect x="430" y="448" width="42.6" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="447" x2="529" y2="458" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="447" x2="562" y2="458" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="452" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="452" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="452" r="3.1" fill="#d0a06a"/>
+<text x="982" y="456" fill="#6e6e6e" font-size="8.5">62% recording.rs</text>
+<text x="48" y="471" fill="#9a9a9a" font-size="10.5">layout/</text>
+<text x="418" y="471" fill="#5e5e5e" font-size="9" text-anchor="end">84</text>
+<text x="59" y="486" fill="#cfcfcf" font-size="10.5">time.rs</text>
+<text x="418" y="486" fill="#6e6e6e" font-size="9" text-anchor="end">84</text>
+<rect x="430" y="478" width="13.9" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="477" x2="529" y2="488" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="477" x2="562" y2="488" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="501" fill="#cfcfcf" font-size="10.5">layout.rs</text>
+<text x="418" y="501" fill="#6e6e6e" font-size="9" text-anchor="end">412</text>
+<rect x="430" y="493" width="68.0" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="492" x2="529" y2="503" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="492" x2="562" y2="503" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="497" r="3.1" fill="#ff9d4d"/>
+<circle cx="958" cy="497" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="501" fill="#6e6e6e" font-size="8.5">100% text.rs</text>
+<text x="48" y="516" fill="#cfcfcf" font-size="10.5">marker.rs</text>
+<text x="418" y="516" fill="#6e6e6e" font-size="9" text-anchor="end">15</text>
+<rect x="430" y="508" width="2.5" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="507" x2="529" y2="518" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="507" x2="562" y2="518" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="531" fill="#cfcfcf" font-size="10.5">mask.rs</text>
+<text x="418" y="531" fill="#6e6e6e" font-size="9" text-anchor="end">101</text>
+<rect x="430" y="523" width="16.7" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="522" x2="529" y2="533" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="522" x2="562" y2="533" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="546" fill="#cfcfcf" font-size="10.5">names.rs</text>
+<text x="418" y="546" fill="#6e6e6e" font-size="9" text-anchor="end">175</text>
+<rect x="430" y="538" width="28.9" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.1" y="538" width="6.8" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="537" x2="529" y2="548" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="537" x2="562" y2="548" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="542" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="542" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="542" r="3.1" fill="#d0a06a"/>
+<text x="982" y="546" fill="#6e6e6e" font-size="8.5">86% snapshot.rs</text>
+<text x="48" y="561" fill="#cfcfcf" font-size="10.5">notebook.rs</text>
+<text x="418" y="561" fill="#6e6e6e" font-size="9" text-anchor="end">47</text>
+<rect x="430" y="553" width="7.8" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="552" x2="529" y2="563" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="552" x2="562" y2="563" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="576" fill="#cfcfcf" font-size="10.5">particles.rs</text>
+<text x="418" y="576" fill="#6e6e6e" font-size="9" text-anchor="end">273</text>
+<rect x="430" y="568" width="45.0" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<rect x="472.6" y="568" width="2.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="567" x2="529" y2="578" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="567" x2="562" y2="578" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="591" fill="#cfcfcf" font-size="10.5">read.rs</text>
+<text x="418" y="591" fill="#6e6e6e" font-size="9" text-anchor="end">100</text>
+<rect x="430" y="583" width="16.5" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="582" x2="529" y2="593" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="582" x2="562" y2="593" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="606" fill="#cfcfcf" font-size="10.5">recording.rs</text>
+<text x="418" y="606" fill="#6e6e6e" font-size="9" text-anchor="end">92</text>
+<rect x="430" y="598" width="15.2" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="597" x2="529" y2="608" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="597" x2="562" y2="608" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="602" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="602" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="602" r="3.1" fill="#d0a06a"/>
+<text x="982" y="606" fill="#6e6e6e" font-size="8.5">100% document.rs</text>
+<text x="48" y="621" fill="#cfcfcf" font-size="10.5">scratch.rs</text>
+<text x="418" y="621" fill="#6e6e6e" font-size="9" text-anchor="end">99</text>
+<rect x="430" y="613" width="16.3" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="612" x2="529" y2="623" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="612" x2="562" y2="623" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="636" fill="#cfcfcf" font-size="10.5">slot.rs</text>
+<text x="418" y="636" fill="#6e6e6e" font-size="9" text-anchor="end">292</text>
+<rect x="430" y="628" width="48.2" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="627" x2="529" y2="638" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="627" x2="562" y2="638" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="651" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="651" fill="#6e6e6e" font-size="9" text-anchor="end">354</text>
+<rect x="430" y="643" width="58.4" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="642" x2="529" y2="653" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="642" x2="562" y2="653" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="666" fill="#cfcfcf" font-size="10.5">text_read.rs</text>
+<text x="418" y="666" fill="#6e6e6e" font-size="9" text-anchor="end">13</text>
+<rect x="430" y="658" width="2.1" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="657" x2="529" y2="668" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="657" x2="562" y2="668" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="681" fill="#e8b45b" font-size="10.5">view.rs</text>
+<text x="418" y="681" fill="#6e6e6e" font-size="9" text-anchor="end">751</text>
+<rect x="430" y="673" width="123.9" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="672" x2="529" y2="683" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="672" x2="562" y2="683" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="677" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="677" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="677" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="677" r="3.1" fill="#d0a06a"/>
+<text x="982" y="681" fill="#6e6e6e" font-size="8.5">62% recording.rs</text>
+<text x="37" y="696" fill="#cfcfcf" font-size="10.5">store.rs</text>
+<text x="418" y="696" fill="#6e6e6e" font-size="9" text-anchor="end">486</text>
+<rect x="430" y="688" width="80.2" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="687" x2="529" y2="698" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="687" x2="562" y2="698" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="692" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="692" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="692" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="692" r="3.1" fill="#d0a06a"/>
+<text x="982" y="696" fill="#6e6e6e" font-size="8.5">80% text_frame.rs</text>
+<text x="37" y="711" fill="#9a9a9a" font-size="10.5">vector/</text>
+<text x="418" y="711" fill="#5e5e5e" font-size="9" text-anchor="end">823</text>
+<text x="48" y="726" fill="#cfcfcf" font-size="10.5">edit.rs</text>
+<text x="418" y="726" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="718" width="28.1" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="717" x2="529" y2="728" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="717" x2="562" y2="728" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="741" fill="#cfcfcf" font-size="10.5">geom.rs</text>
+<text x="418" y="741" fill="#6e6e6e" font-size="9" text-anchor="end">404</text>
+<rect x="430" y="733" width="66.7" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="732" x2="529" y2="743" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="732" x2="562" y2="743" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="756" fill="#cfcfcf" font-size="10.5">group.rs</text>
+<text x="418" y="756" fill="#6e6e6e" font-size="9" text-anchor="end">17</text>
+<rect x="430" y="748" width="2.8" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="747" x2="529" y2="758" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="747" x2="562" y2="758" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="771" fill="#cfcfcf" font-size="10.5">stack_edit.rs</text>
+<text x="418" y="771" fill="#6e6e6e" font-size="9" text-anchor="end">79</text>
+<rect x="430" y="763" width="13.0" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="762" x2="529" y2="773" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="762" x2="562" y2="773" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="786" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="786" fill="#6e6e6e" font-size="9" text-anchor="end">153</text>
+<rect x="430" y="778" width="25.2" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="777" x2="529" y2="788" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="777" x2="562" y2="788" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="801" fill="#cfcfcf" font-size="10.5">vector.rs</text>
+<text x="418" y="801" fill="#6e6e6e" font-size="9" text-anchor="end">507</text>
+<rect x="430" y="793" width="83.7" height="9" fill="#7fb3d5" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="792" x2="529" y2="803" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="792" x2="562" y2="803" stroke="#4a4a4a" stroke-width="0.6"/>
+<rect x="20" y="820" width="1140" height="15" fill="#e8a87c" fill-opacity="0.09"/>
+<text x="26" y="831" fill="#e8a87c" font-size="12" font-family="-apple-system,sans-serif">render — 描く側</text>
+<text x="418" y="831" fill="#8c8c8c" font-size="10" text-anchor="end">38778 行</text>
+<text x="37" y="846" fill="#9a9a9a" font-size="10.5">audio/</text>
+<text x="418" y="846" fill="#5e5e5e" font-size="9" text-anchor="end">2632</text>
+<text x="48" y="861" fill="#cfcfcf" font-size="10.5">cache.rs</text>
+<text x="418" y="861" fill="#6e6e6e" font-size="9" text-anchor="end">98</text>
+<rect x="430" y="853" width="16.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="852" x2="529" y2="863" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="852" x2="562" y2="863" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="876" fill="#cfcfcf" font-size="10.5">clock.rs</text>
+<text x="418" y="876" fill="#6e6e6e" font-size="9" text-anchor="end">202</text>
+<rect x="430" y="868" width="33.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="867" x2="529" y2="878" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="867" x2="562" y2="878" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="891" fill="#cfcfcf" font-size="10.5">convert.rs</text>
+<text x="418" y="891" fill="#6e6e6e" font-size="9" text-anchor="end">119</text>
+<rect x="430" y="883" width="19.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="434.3" y="883" width="15.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="882" x2="529" y2="893" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="882" x2="562" y2="893" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="906" fill="#cfcfcf" font-size="10.5">decode.rs</text>
+<text x="418" y="906" fill="#6e6e6e" font-size="9" text-anchor="end">77</text>
+<rect x="430" y="898" width="12.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="897" x2="529" y2="908" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="897" x2="562" y2="908" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="921" fill="#cfcfcf" font-size="10.5">device.rs</text>
+<text x="418" y="921" fill="#6e6e6e" font-size="9" text-anchor="end">196</text>
+<rect x="430" y="913" width="32.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="912" x2="529" y2="923" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="912" x2="562" y2="923" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="936" fill="#cfcfcf" font-size="10.5">error.rs</text>
+<text x="418" y="936" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="928" width="12.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="927" x2="529" y2="938" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="927" x2="562" y2="938" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="951" fill="#cfcfcf" font-size="10.5">meter.rs</text>
+<text x="418" y="951" fill="#6e6e6e" font-size="9" text-anchor="end">115</text>
+<rect x="430" y="943" width="19.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="942" x2="529" y2="953" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="942" x2="562" y2="953" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="966" fill="#cfcfcf" font-size="10.5">mix.rs</text>
+<text x="418" y="966" fill="#6e6e6e" font-size="9" text-anchor="end">302</text>
+<rect x="430" y="958" width="49.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="957" x2="529" y2="968" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="957" x2="562" y2="968" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="981" fill="#cfcfcf" font-size="10.5">producer.rs</text>
+<text x="418" y="981" fill="#6e6e6e" font-size="9" text-anchor="end">290</text>
+<rect x="430" y="973" width="47.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="474.9" y="973" width="3.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="972" x2="529" y2="983" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="972" x2="562" y2="983" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="996" fill="#cfcfcf" font-size="10.5">program.rs</text>
+<text x="418" y="996" fill="#6e6e6e" font-size="9" text-anchor="end">422</text>
+<rect x="430" y="988" width="69.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="490.2" y="988" width="9.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="987" x2="529" y2="998" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="987" x2="562" y2="998" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1011" fill="#cfcfcf" font-size="10.5">resample.rs</text>
+<text x="418" y="1011" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="1003" width="28.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1002" x2="529" y2="1013" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1002" x2="562" y2="1013" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1026" fill="#cfcfcf" font-size="10.5">ring.rs</text>
+<text x="418" y="1026" fill="#6e6e6e" font-size="9" text-anchor="end">30</text>
+<rect x="430" y="1018" width="5.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1017" x2="529" y2="1028" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1017" x2="562" y2="1028" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1041" fill="#cfcfcf" font-size="10.5">session.rs</text>
+<text x="418" y="1041" fill="#6e6e6e" font-size="9" text-anchor="end">109</text>
+<rect x="430" y="1033" width="18.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1032" x2="529" y2="1043" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1032" x2="562" y2="1043" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1056" fill="#cfcfcf" font-size="10.5">time_map.rs</text>
+<text x="418" y="1056" fill="#6e6e6e" font-size="9" text-anchor="end">107</text>
+<rect x="430" y="1048" width="17.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1047" x2="529" y2="1058" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1047" x2="562" y2="1058" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1071" fill="#cfcfcf" font-size="10.5">waveform.rs</text>
+<text x="418" y="1071" fill="#6e6e6e" font-size="9" text-anchor="end">317</text>
+<rect x="430" y="1063" width="52.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1062" x2="529" y2="1073" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1062" x2="562" y2="1073" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="1086" fill="#cfcfcf" font-size="10.5">audio.rs</text>
+<text x="418" y="1086" fill="#6e6e6e" font-size="9" text-anchor="end">39</text>
+<rect x="430" y="1078" width="6.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1077" x2="529" y2="1088" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1077" x2="562" y2="1088" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="1101" fill="#9a9a9a" font-size="10.5">compositor/</text>
+<text x="418" y="1101" fill="#5e5e5e" font-size="9" text-anchor="end">10306</text>
+<text x="48" y="1116" fill="#cfcfcf" font-size="10.5">clip.rs</text>
+<text x="418" y="1116" fill="#6e6e6e" font-size="9" text-anchor="end">107</text>
+<rect x="430" y="1108" width="17.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="435.6" y="1108" width="12.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1107" x2="529" y2="1118" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1107" x2="562" y2="1118" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1131" fill="#cfcfcf" font-size="10.5">device.rs</text>
+<text x="418" y="1131" fill="#6e6e6e" font-size="9" text-anchor="end">284</text>
+<rect x="430" y="1123" width="46.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="470.9" y="1123" width="5.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1122" x2="529" y2="1133" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1122" x2="562" y2="1133" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1127" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="1127" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="1127" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="1127" r="3.1" fill="#d0a06a"/>
+<text x="982" y="1131" fill="#6e6e6e" font-size="8.5">71% engine.rs</text>
+<text x="48" y="1146" fill="#9a9a9a" font-size="10.5">effects/</text>
+<text x="418" y="1146" fill="#5e5e5e" font-size="9" text-anchor="end">4814</text>
+<text x="59" y="1161" fill="#9a9a9a" font-size="10.5">block_program/</text>
+<text x="418" y="1161" fill="#5e5e5e" font-size="9" text-anchor="end">1042</text>
+<text x="70" y="1176" fill="#cfcfcf" font-size="10.5">passes.rs</text>
+<text x="418" y="1176" fill="#6e6e6e" font-size="9" text-anchor="end">466</text>
+<rect x="430" y="1168" width="76.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1167" x2="529" y2="1178" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1167" x2="562" y2="1178" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="1191" fill="#cfcfcf" font-size="10.5">tests.rs</text>
+<text x="418" y="1191" fill="#6e6e6e" font-size="9" text-anchor="end">239</text>
+<rect x="430" y="1183" width="39.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1182" x2="529" y2="1193" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1182" x2="562" y2="1193" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="1206" fill="#cfcfcf" font-size="10.5">wgsl.rs</text>
+<text x="418" y="1206" fill="#6e6e6e" font-size="9" text-anchor="end">337</text>
+<rect x="430" y="1198" width="55.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1197" x2="529" y2="1208" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1197" x2="562" y2="1208" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1221" fill="#cfcfcf" font-size="10.5">block_program.rs</text>
+<text x="418" y="1221" fill="#6e6e6e" font-size="9" text-anchor="end">149</text>
+<rect x="430" y="1213" width="24.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.6" y="1213" width="2.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1212" x2="529" y2="1223" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1212" x2="562" y2="1223" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1217" r="3.1" fill="#7d7d7d"/>
+<text x="59" y="1236" fill="#9a9a9a" font-size="10.5">catalog/</text>
+<text x="418" y="1236" fill="#5e5e5e" font-size="9" text-anchor="end">220</text>
+<text x="70" y="1251" fill="#cfcfcf" font-size="10.5">character_oracle.rs</text>
+<text x="418" y="1251" fill="#6e6e6e" font-size="9" text-anchor="end">42</text>
+<rect x="430" y="1243" width="6.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1242" x2="529" y2="1253" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1242" x2="562" y2="1253" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="1266" fill="#cfcfcf" font-size="10.5">tests.rs</text>
+<text x="418" y="1266" fill="#6e6e6e" font-size="9" text-anchor="end">178</text>
+<rect x="430" y="1258" width="29.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1257" x2="529" y2="1268" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1257" x2="562" y2="1268" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1281" fill="#cfcfcf" font-size="10.5">catalog.rs</text>
+<text x="418" y="1281" fill="#6e6e6e" font-size="9" text-anchor="end">596</text>
+<rect x="430" y="1273" width="98.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="527.7" y="1273" width="0.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1272" x2="529" y2="1283" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1272" x2="562" y2="1283" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1277" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="1277" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="1277" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="1277" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="1277" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="1277" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="1281" fill="#6e6e6e" font-size="8.5">77% mod.rs</text>
+<text x="59" y="1296" fill="#9a9a9a" font-size="10.5">isf/</text>
+<text x="418" y="1296" fill="#5e5e5e" font-size="9" text-anchor="end">1127</text>
+<text x="70" y="1311" fill="#e8b45b" font-size="10.5">mod.rs</text>
+<text x="418" y="1311" fill="#6e6e6e" font-size="9" text-anchor="end">744</text>
+<rect x="430" y="1303" width="122.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="537.7" y="1303" width="15.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1302" x2="529" y2="1313" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1302" x2="562" y2="1313" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1307" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="1307" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="1307" r="3.1" fill="#d0a06a"/>
+<text x="982" y="1311" fill="#6e6e6e" font-size="8.5">77% mod.rs</text>
+<text x="70" y="1326" fill="#cfcfcf" font-size="10.5">shadertoy.rs</text>
+<text x="418" y="1326" fill="#6e6e6e" font-size="9" text-anchor="end">383</text>
+<rect x="430" y="1318" width="63.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="475.5" y="1318" width="17.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1317" x2="529" y2="1328" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1317" x2="562" y2="1328" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1341" fill="#cfcfcf" font-size="10.5">mod.rs</text>
+<text x="418" y="1341" fill="#6e6e6e" font-size="9" text-anchor="end">296</text>
+<rect x="430" y="1333" width="48.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1332" x2="529" y2="1343" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1332" x2="562" y2="1343" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1337" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="1337" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="1337" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="1337" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="1337" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="1337" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="1341" fill="#6e6e6e" font-size="8.5">85% translate.rs</text>
+<text x="59" y="1356" fill="#cfcfcf" font-size="10.5">subtype.rs</text>
+<text x="418" y="1356" fill="#6e6e6e" font-size="9" text-anchor="end">495</text>
+<rect x="430" y="1348" width="81.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="500.8" y="1348" width="10.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1347" x2="529" y2="1358" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1347" x2="562" y2="1358" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1371" fill="#cfcfcf" font-size="10.5">surface_program.rs</text>
+<text x="418" y="1371" fill="#6e6e6e" font-size="9" text-anchor="end">294</text>
+<rect x="430" y="1363" width="48.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="459.7" y="1363" width="18.8" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1362" x2="529" y2="1373" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1362" x2="562" y2="1373" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1386" fill="#cfcfcf" font-size="10.5">vism.rs</text>
+<text x="418" y="1386" fill="#6e6e6e" font-size="9" text-anchor="end">592</text>
+<rect x="430" y="1378" width="97.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1377" x2="529" y2="1388" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1377" x2="562" y2="1388" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1401" fill="#cfcfcf" font-size="10.5">wgsl_fragment.rs</text>
+<text x="418" y="1401" fill="#6e6e6e" font-size="9" text-anchor="end">3</text>
+<rect x="430" y="1393" width="0.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1392" x2="529" y2="1403" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1392" x2="562" y2="1403" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1416" fill="#cfcfcf" font-size="10.5">environment.rs</text>
+<text x="418" y="1416" fill="#6e6e6e" font-size="9" text-anchor="end">187</text>
+<rect x="430" y="1408" width="30.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1407" x2="529" y2="1418" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1407" x2="562" y2="1418" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1431" fill="#cfcfcf" font-size="10.5">extrude.rs</text>
+<text x="418" y="1431" fill="#6e6e6e" font-size="9" text-anchor="end">349</text>
+<rect x="430" y="1423" width="57.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="465.3" y="1423" width="22.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1422" x2="529" y2="1433" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1422" x2="562" y2="1433" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1446" fill="#cfcfcf" font-size="10.5">headless.rs</text>
+<text x="418" y="1446" fill="#6e6e6e" font-size="9" text-anchor="end">60</text>
+<rect x="430" y="1438" width="9.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1437" x2="529" y2="1448" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1437" x2="562" y2="1448" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1461" fill="#cfcfcf" font-size="10.5">matte.rs</text>
+<text x="418" y="1461" fill="#6e6e6e" font-size="9" text-anchor="end">76</text>
+<rect x="430" y="1453" width="12.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1452" x2="529" y2="1463" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1452" x2="562" y2="1463" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1476" fill="#cfcfcf" font-size="10.5">measurement.rs</text>
+<text x="418" y="1476" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="1468" width="12.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1467" x2="529" y2="1478" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1467" x2="562" y2="1478" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1491" fill="#cfcfcf" font-size="10.5">mesh.rs</text>
+<text x="418" y="1491" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
+<rect x="430" y="1483" width="18.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1482" x2="529" y2="1493" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1482" x2="562" y2="1493" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1506" fill="#cfcfcf" font-size="10.5">paths.rs</text>
+<text x="418" y="1506" fill="#6e6e6e" font-size="9" text-anchor="end">239</text>
+<rect x="430" y="1498" width="39.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="462.0" y="1498" width="7.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1497" x2="529" y2="1508" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1497" x2="562" y2="1508" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1521" fill="#cfcfcf" font-size="10.5">point_cloud.rs</text>
+<text x="418" y="1521" fill="#6e6e6e" font-size="9" text-anchor="end">228</text>
+<rect x="430" y="1513" width="37.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="464.0" y="1513" width="3.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1512" x2="529" y2="1523" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1512" x2="562" y2="1523" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1536" fill="#cfcfcf" font-size="10.5">presentable.rs</text>
+<text x="418" y="1536" fill="#6e6e6e" font-size="9" text-anchor="end">96</text>
+<rect x="430" y="1528" width="15.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1527" x2="529" y2="1538" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1527" x2="562" y2="1538" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1551" fill="#cfcfcf" font-size="10.5">reflection_cache.rs</text>
+<text x="418" y="1551" fill="#6e6e6e" font-size="9" text-anchor="end">225</text>
+<rect x="430" y="1543" width="37.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1542" x2="529" y2="1553" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1542" x2="562" y2="1553" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1566" fill="#cfcfcf" font-size="10.5">reflection_diagnostic.rs</text>
+<text x="418" y="1566" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="1558" width="12.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1557" x2="529" y2="1568" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1557" x2="562" y2="1568" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1581" fill="#cfcfcf" font-size="10.5">render_basic.rs</text>
+<text x="418" y="1581" fill="#6e6e6e" font-size="9" text-anchor="end">141</text>
+<rect x="430" y="1573" width="23.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1572" x2="529" y2="1583" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1572" x2="562" y2="1583" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1596" fill="#9a9a9a" font-size="10.5">render_effects/</text>
+<text x="418" y="1596" fill="#5e5e5e" font-size="9" text-anchor="end">554</text>
+<text x="59" y="1611" fill="#cfcfcf" font-size="10.5">passes_can_read_a_picked_layer.rs</text>
+<text x="418" y="1611" fill="#6e6e6e" font-size="9" text-anchor="end">52</text>
+<rect x="430" y="1603" width="8.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1602" x2="529" y2="1613" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1602" x2="562" y2="1613" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1626" fill="#cfcfcf" font-size="10.5">passes_can_read_what_is_beneath.rs</text>
+<text x="418" y="1626" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
+<rect x="430" y="1618" width="18.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1617" x2="529" y2="1628" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1617" x2="562" y2="1628" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1641" fill="#cfcfcf" font-size="10.5">passes_reach_every_material.rs</text>
+<text x="418" y="1641" fill="#6e6e6e" font-size="9" text-anchor="end">44</text>
+<rect x="430" y="1633" width="7.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1632" x2="529" y2="1643" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1632" x2="562" y2="1643" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1656" fill="#cfcfcf" font-size="10.5">stylize_without_machine_learning.rs</text>
+<text x="418" y="1656" fill="#6e6e6e" font-size="9" text-anchor="end">125</text>
+<rect x="430" y="1648" width="20.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1647" x2="529" y2="1658" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1647" x2="562" y2="1658" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1671" fill="#cfcfcf" font-size="10.5">tests.rs</text>
+<text x="418" y="1671" fill="#6e6e6e" font-size="9" text-anchor="end">221</text>
+<rect x="430" y="1663" width="36.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1662" x2="529" y2="1673" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1662" x2="562" y2="1673" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1686" fill="#e8b45b" font-size="10.5">render_effects.rs</text>
+<text x="418" y="1686" fill="#6e6e6e" font-size="9" text-anchor="end">665</text>
+<rect x="430" y="1678" width="109.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="538.1" y="1678" width="1.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1677" x2="529" y2="1688" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1677" x2="562" y2="1688" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1682" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="1682" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="1682" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="1682" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="1682" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="1682" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="1686" fill="#6e6e6e" font-size="8.5">77% mod.rs</text>
+<text x="48" y="1701" fill="#cfcfcf" font-size="10.5">selection_bounds.rs</text>
+<text x="418" y="1701" fill="#6e6e6e" font-size="9" text-anchor="end">217</text>
+<rect x="430" y="1693" width="35.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="460.2" y="1693" width="5.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1692" x2="529" y2="1703" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1692" x2="562" y2="1703" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1716" fill="#9a9a9a" font-size="10.5">sequential/</text>
+<text x="418" y="1716" fill="#5e5e5e" font-size="9" text-anchor="end">982</text>
+<text x="59" y="1731" fill="#cfcfcf" font-size="10.5">accumulate.rs</text>
+<text x="418" y="1731" fill="#6e6e6e" font-size="9" text-anchor="end">481</text>
+<rect x="430" y="1723" width="79.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1722" x2="529" y2="1733" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1722" x2="562" y2="1733" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1746" fill="#cfcfcf" font-size="10.5">finalize.rs</text>
+<text x="418" y="1746" fill="#6e6e6e" font-size="9" text-anchor="end">273</text>
+<rect x="430" y="1738" width="45.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1737" x2="529" y2="1748" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1737" x2="562" y2="1748" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="1761" fill="#cfcfcf" font-size="10.5">layer.rs</text>
+<text x="418" y="1761" fill="#6e6e6e" font-size="9" text-anchor="end">228</text>
+<rect x="430" y="1753" width="37.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1752" x2="529" y2="1763" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1752" x2="562" y2="1763" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1776" fill="#cfcfcf" font-size="10.5">sequential.rs</text>
+<text x="418" y="1776" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
+<rect x="430" y="1768" width="6.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1767" x2="529" y2="1778" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1767" x2="562" y2="1778" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1772" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="1772" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="1772" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="1772" r="3.1" fill="#d0a06a"/>
+<text x="982" y="1776" fill="#6e6e6e" font-size="8.5">67% surface_scene.rs</text>
+<text x="48" y="1791" fill="#e8b45b" font-size="10.5">surface_scene.rs</text>
+<text x="418" y="1791" fill="#6e6e6e" font-size="9" text-anchor="end">776</text>
+<rect x="430" y="1783" width="128.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="547.8" y="1783" width="10.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1782" x2="529" y2="1793" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1782" x2="562" y2="1793" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1787" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="1787" r="3.1" fill="#7d7d7d"/>
+<text x="37" y="1806" fill="#e8b45b" font-size="10.5">compositor.rs</text>
+<text x="418" y="1806" fill="#6e6e6e" font-size="9" text-anchor="end">748</text>
+<rect x="430" y="1798" width="123.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="526.4" y="1798" width="27.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1797" x2="529" y2="1808" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1797" x2="562" y2="1808" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="1802" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="1802" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="1806" fill="#6e6e6e" font-size="8.5">71% device.rs</text>
+<text x="37" y="1821" fill="#9a9a9a" font-size="10.5">engine/</text>
+<text x="418" y="1821" fill="#5e5e5e" font-size="9" text-anchor="end">11271</text>
+<text x="48" y="1836" fill="#cfcfcf" font-size="10.5">analysis.rs</text>
+<text x="418" y="1836" fill="#6e6e6e" font-size="9" text-anchor="end">505</text>
+<rect x="430" y="1828" width="83.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1827" x2="529" y2="1838" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1827" x2="562" y2="1838" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1832" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="1832" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="1832" r="3.1" fill="#d0a06a"/>
+<text x="982" y="1836" fill="#6e6e6e" font-size="8.5">100% overlay.rs</text>
+<text x="48" y="1851" fill="#cfcfcf" font-size="10.5">analysis_contracts.rs</text>
+<text x="418" y="1851" fill="#6e6e6e" font-size="9" text-anchor="end">171</text>
+<rect x="430" y="1843" width="28.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1842" x2="529" y2="1853" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1842" x2="562" y2="1853" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1866" fill="#cfcfcf" font-size="10.5">antialiasing_tests.rs</text>
+<text x="418" y="1866" fill="#6e6e6e" font-size="9" text-anchor="end">378</text>
+<rect x="430" y="1858" width="62.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1857" x2="529" y2="1868" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1857" x2="562" y2="1868" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1881" fill="#9a9a9a" font-size="10.5">blocks/</text>
+<text x="418" y="1881" fill="#5e5e5e" font-size="9" text-anchor="end">631</text>
+<text x="59" y="1896" fill="#e8b45b" font-size="10.5">tests.rs</text>
+<text x="418" y="1896" fill="#6e6e6e" font-size="9" text-anchor="end">631</text>
+<rect x="430" y="1888" width="104.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1887" x2="529" y2="1898" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1887" x2="562" y2="1898" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1911" fill="#e8b45b" font-size="10.5">blocks.rs</text>
+<text x="418" y="1911" fill="#6e6e6e" font-size="9" text-anchor="end">782</text>
+<rect x="430" y="1903" width="129.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1902" x2="529" y2="1913" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1902" x2="562" y2="1913" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1907" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="1907" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="1926" fill="#cfcfcf" font-size="10.5">clip.rs</text>
+<text x="418" y="1926" fill="#6e6e6e" font-size="9" text-anchor="end">367</text>
+<rect x="430" y="1918" width="60.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="447.2" y="1918" width="43.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1917" x2="529" y2="1928" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1917" x2="562" y2="1928" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1922" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="1922" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="1922" r="3.1" fill="#d0a06a"/>
+<text x="982" y="1926" fill="#6e6e6e" font-size="8.5">100% render.rs</text>
+<text x="48" y="1941" fill="#cfcfcf" font-size="10.5">environment_tests.rs</text>
+<text x="418" y="1941" fill="#6e6e6e" font-size="9" text-anchor="end">440</text>
+<rect x="430" y="1933" width="72.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1932" x2="529" y2="1943" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1932" x2="562" y2="1943" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1956" fill="#cfcfcf" font-size="10.5">frozen.rs</text>
+<text x="418" y="1956" fill="#6e6e6e" font-size="9" text-anchor="end">126</text>
+<rect x="430" y="1948" width="20.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1947" x2="529" y2="1958" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1947" x2="562" y2="1958" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1971" fill="#cfcfcf" font-size="10.5">light_reach_contracts.rs</text>
+<text x="418" y="1971" fill="#6e6e6e" font-size="9" text-anchor="end">55</text>
+<rect x="430" y="1963" width="9.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1962" x2="529" y2="1973" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1962" x2="562" y2="1973" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="1986" fill="#cfcfcf" font-size="10.5">mask.rs</text>
+<text x="418" y="1986" fill="#6e6e6e" font-size="9" text-anchor="end">133</text>
+<rect x="430" y="1978" width="21.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="1977" x2="529" y2="1988" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1977" x2="562" y2="1988" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2001" fill="#cfcfcf" font-size="10.5">material.rs</text>
+<text x="418" y="2001" fill="#6e6e6e" font-size="9" text-anchor="end">311</text>
+<rect x="430" y="1993" width="51.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="449.0" y="1993" width="32.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="1992" x2="529" y2="2003" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="1992" x2="562" y2="2003" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="1997" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="1997" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="2016" fill="#cfcfcf" font-size="10.5">motion.rs</text>
+<text x="418" y="2016" fill="#6e6e6e" font-size="9" text-anchor="end">63</text>
+<rect x="430" y="2008" width="10.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2007" x2="529" y2="2018" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2007" x2="562" y2="2018" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2031" fill="#cfcfcf" font-size="10.5">motion_contracts.rs</text>
+<text x="418" y="2031" fill="#6e6e6e" font-size="9" text-anchor="end">272</text>
+<rect x="430" y="2023" width="44.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2022" x2="529" y2="2033" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2022" x2="562" y2="2033" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2046" fill="#cfcfcf" font-size="10.5">overlay.rs</text>
+<text x="418" y="2046" fill="#6e6e6e" font-size="9" text-anchor="end">510</text>
+<rect x="430" y="2038" width="84.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="500.3" y="2038" width="13.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2037" x2="529" y2="2048" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2037" x2="562" y2="2048" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="2042" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="2042" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="2061" fill="#e8b45b" font-size="10.5">physics.rs</text>
+<text x="418" y="2061" fill="#6e6e6e" font-size="9" text-anchor="end">637</text>
+<rect x="430" y="2053" width="105.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2052" x2="529" y2="2063" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2052" x2="562" y2="2063" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="2057" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="2076" fill="#cfcfcf" font-size="10.5">presentable_matches_export.rs</text>
+<text x="418" y="2076" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="2068" width="12.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2067" x2="529" y2="2078" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2067" x2="562" y2="2078" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2091" fill="#cfcfcf" font-size="10.5">reflection_tests.rs</text>
+<text x="418" y="2091" fill="#6e6e6e" font-size="9" text-anchor="end">537</text>
+<rect x="430" y="2083" width="88.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2082" x2="529" y2="2093" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2082" x2="562" y2="2093" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2106" fill="#9a9a9a" font-size="10.5">render/</text>
+<text x="418" y="2106" fill="#5e5e5e" font-size="9" text-anchor="end">1573</text>
+<text x="59" y="2121" fill="#e8b45b" font-size="10.5">build.rs</text>
+<text x="418" y="2121" fill="#6e6e6e" font-size="9" text-anchor="end">652</text>
+<rect x="430" y="2113" width="107.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2112" x2="529" y2="2123" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2112" x2="562" y2="2123" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2136" fill="#cfcfcf" font-size="10.5">composite_at_another_time.rs</text>
+<text x="418" y="2136" fill="#6e6e6e" font-size="9" text-anchor="end">96</text>
+<rect x="430" y="2128" width="15.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2127" x2="529" y2="2138" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2127" x2="562" y2="2138" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2151" fill="#cfcfcf" font-size="10.5">feedback_is_a_recurrence_from_the_in_point.rs</text>
+<text x="418" y="2151" fill="#6e6e6e" font-size="9" text-anchor="end">125</text>
+<rect x="430" y="2143" width="20.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2142" x2="529" y2="2153" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2142" x2="562" y2="2153" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2166" fill="#cfcfcf" font-size="10.5">freeze_keeps_the_picture.rs</text>
+<text x="418" y="2166" fill="#6e6e6e" font-size="9" text-anchor="end">95</text>
+<rect x="430" y="2158" width="15.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2157" x2="529" y2="2168" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2157" x2="562" y2="2168" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2181" fill="#cfcfcf" font-size="10.5">placement_contract.rs</text>
+<text x="418" y="2181" fill="#6e6e6e" font-size="9" text-anchor="end">266</text>
+<rect x="430" y="2173" width="43.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2172" x2="529" y2="2183" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2172" x2="562" y2="2183" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2196" fill="#cfcfcf" font-size="10.5">projection_contract.rs</text>
+<text x="418" y="2196" fill="#6e6e6e" font-size="9" text-anchor="end">101</text>
+<rect x="430" y="2188" width="16.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2187" x2="529" y2="2198" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2187" x2="562" y2="2198" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2211" fill="#cfcfcf" font-size="10.5">time_reference_is_deterministic.rs</text>
+<text x="418" y="2211" fill="#6e6e6e" font-size="9" text-anchor="end">75</text>
+<rect x="430" y="2203" width="12.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2202" x2="529" y2="2213" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2202" x2="562" y2="2213" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2226" fill="#cfcfcf" font-size="10.5">warm.rs</text>
+<text x="418" y="2226" fill="#6e6e6e" font-size="9" text-anchor="end">163</text>
+<rect x="430" y="2218" width="26.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2217" x2="529" y2="2228" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2217" x2="562" y2="2228" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2241" fill="#e8b45b" font-size="10.5">render.rs</text>
+<text x="418" y="2241" fill="#6e6e6e" font-size="9" text-anchor="end">752</text>
+<rect x="430" y="2233" width="124.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="552.1" y="2233" width="2.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2232" x2="529" y2="2243" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2232" x2="562" y2="2243" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="958" cy="2237" r="3.1" fill="#ff9d4d"/>
+<circle cx="967" cy="2237" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="2241" fill="#6e6e6e" font-size="8.5">100% clip.rs</text>
+<text x="48" y="2256" fill="#cfcfcf" font-size="10.5">response_tests.rs</text>
+<text x="418" y="2256" fill="#6e6e6e" font-size="9" text-anchor="end">217</text>
+<rect x="430" y="2248" width="35.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2247" x2="529" y2="2258" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2247" x2="562" y2="2258" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2271" fill="#cfcfcf" font-size="10.5">spatial_cache_tests.rs</text>
+<text x="418" y="2271" fill="#6e6e6e" font-size="9" text-anchor="end">97</text>
+<rect x="430" y="2263" width="16.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2262" x2="529" y2="2273" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2262" x2="562" y2="2273" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2286" fill="#cfcfcf" font-size="10.5">strokes.rs</text>
+<text x="418" y="2286" fill="#6e6e6e" font-size="9" text-anchor="end">60</text>
+<rect x="430" y="2278" width="9.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="437.4" y="2278" width="2.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2277" x2="529" y2="2288" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2277" x2="562" y2="2288" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2301" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="2301" fill="#6e6e6e" font-size="9" text-anchor="end">193</text>
+<rect x="430" y="2293" width="31.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="451.8" y="2293" width="10.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2292" x2="529" y2="2303" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2292" x2="562" y2="2303" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2316" fill="#9a9a9a" font-size="10.5">texture/</text>
+<text x="418" y="2316" fill="#5e5e5e" font-size="9" text-anchor="end">1422</text>
+<text x="59" y="2331" fill="#cfcfcf" font-size="10.5">bounds.rs</text>
+<text x="418" y="2331" fill="#6e6e6e" font-size="9" text-anchor="end">222</text>
+<rect x="430" y="2323" width="36.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2322" x2="529" y2="2333" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2322" x2="562" y2="2333" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2346" fill="#cfcfcf" font-size="10.5">media_time_contract.rs</text>
+<text x="418" y="2346" fill="#6e6e6e" font-size="9" text-anchor="end">439</text>
+<rect x="430" y="2338" width="72.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2337" x2="529" y2="2348" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2337" x2="562" y2="2348" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2361" fill="#cfcfcf" font-size="10.5">sources.rs</text>
+<text x="418" y="2361" fill="#6e6e6e" font-size="9" text-anchor="end">480</text>
+<rect x="430" y="2353" width="79.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2352" x2="529" y2="2363" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2352" x2="562" y2="2363" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2376" fill="#cfcfcf" font-size="10.5">tests.rs</text>
+<text x="418" y="2376" fill="#6e6e6e" font-size="9" text-anchor="end">91</text>
+<rect x="430" y="2368" width="15.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2367" x2="529" y2="2378" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2367" x2="562" y2="2378" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2391" fill="#cfcfcf" font-size="10.5">vector_projection_contract.rs</text>
+<text x="418" y="2391" fill="#6e6e6e" font-size="9" text-anchor="end">190</text>
+<rect x="430" y="2383" width="31.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2382" x2="529" y2="2393" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2382" x2="562" y2="2393" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2406" fill="#cfcfcf" font-size="10.5">texture.rs</text>
+<text x="418" y="2406" fill="#6e6e6e" font-size="9" text-anchor="end">519</text>
+<rect x="430" y="2398" width="85.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="511.8" y="2398" width="3.8" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2397" x2="529" y2="2408" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2397" x2="562" y2="2408" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="2402" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="2402" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="2421" fill="#cfcfcf" font-size="10.5">translate.rs</text>
+<text x="418" y="2421" fill="#6e6e6e" font-size="9" text-anchor="end">285</text>
+<rect x="430" y="2413" width="47.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="467.1" y="2413" width="9.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2412" x2="529" y2="2423" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2412" x2="562" y2="2423" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="2417" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="2417" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="2417" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="2417" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="2417" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="2421" fill="#6e6e6e" font-size="8.5">85% mod.rs</text>
+<text x="48" y="2436" fill="#cfcfcf" font-size="10.5">visibility_tests.rs</text>
+<text x="418" y="2436" fill="#6e6e6e" font-size="9" text-anchor="end">157</text>
+<rect x="430" y="2428" width="25.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2427" x2="529" y2="2438" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2427" x2="562" y2="2438" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2451" fill="#cfcfcf" font-size="10.5">engine.rs</text>
+<text x="418" y="2451" fill="#6e6e6e" font-size="9" text-anchor="end">546</text>
+<rect x="430" y="2443" width="90.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="494.8" y="2443" width="25.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2442" x2="529" y2="2453" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2442" x2="562" y2="2453" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="2447" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="2447" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="2447" r="3.1" fill="#d0a06a"/>
+<text x="982" y="2451" fill="#6e6e6e" font-size="8.5">71% device.rs</text>
+<text x="37" y="2466" fill="#9a9a9a" font-size="10.5">export/</text>
+<text x="418" y="2466" fill="#5e5e5e" font-size="9" text-anchor="end">1444</text>
+<text x="48" y="2481" fill="#9a9a9a" font-size="10.5">lottie/</text>
+<text x="418" y="2481" fill="#5e5e5e" font-size="9" text-anchor="end">993</text>
+<text x="59" y="2496" fill="#cfcfcf" font-size="10.5">enums.rs</text>
+<text x="418" y="2496" fill="#6e6e6e" font-size="9" text-anchor="end">117</text>
+<rect x="430" y="2488" width="19.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2487" x2="529" y2="2498" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2487" x2="562" y2="2498" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2511" fill="#cfcfcf" font-size="10.5">properties.rs</text>
+<text x="418" y="2511" fill="#6e6e6e" font-size="9" text-anchor="end">474</text>
+<rect x="430" y="2503" width="78.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2502" x2="529" y2="2513" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2502" x2="562" y2="2513" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2526" fill="#cfcfcf" font-size="10.5">shapes.rs</text>
+<text x="418" y="2526" fill="#6e6e6e" font-size="9" text-anchor="end">271</text>
+<rect x="430" y="2518" width="44.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2517" x2="529" y2="2528" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2517" x2="562" y2="2528" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="2541" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="2541" fill="#6e6e6e" font-size="9" text-anchor="end">131</text>
+<rect x="430" y="2533" width="21.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2532" x2="529" y2="2543" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2532" x2="562" y2="2543" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2556" fill="#cfcfcf" font-size="10.5">lottie.rs</text>
+<text x="418" y="2556" fill="#6e6e6e" font-size="9" text-anchor="end">451</text>
+<rect x="430" y="2548" width="74.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2547" x2="529" y2="2558" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2547" x2="562" y2="2558" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2571" fill="#cfcfcf" font-size="10.5">export.rs</text>
+<text x="418" y="2571" fill="#6e6e6e" font-size="9" text-anchor="end">363</text>
+<rect x="430" y="2563" width="59.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2562" x2="529" y2="2573" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2562" x2="562" y2="2573" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2586" fill="#9a9a9a" font-size="10.5">extensions/</text>
+<text x="418" y="2586" fill="#5e5e5e" font-size="9" text-anchor="end">1717</text>
+<text x="48" y="2601" fill="#cfcfcf" font-size="10.5">blob.rs</text>
+<text x="418" y="2601" fill="#6e6e6e" font-size="9" text-anchor="end">145</text>
+<rect x="430" y="2593" width="23.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="446.5" y="2593" width="7.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2592" x2="529" y2="2603" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2592" x2="562" y2="2603" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2616" fill="#cfcfcf" font-size="10.5">bundled.rs</text>
+<text x="418" y="2616" fill="#6e6e6e" font-size="9" text-anchor="end">33</text>
+<rect x="430" y="2608" width="5.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2607" x2="529" y2="2618" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2607" x2="562" y2="2618" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2631" fill="#cfcfcf" font-size="10.5">mod.rs</text>
+<text x="418" y="2631" fill="#6e6e6e" font-size="9" text-anchor="end">70</text>
+<rect x="430" y="2623" width="11.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="436.6" y="2623" width="5.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2622" x2="529" y2="2633" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2622" x2="562" y2="2633" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2646" fill="#cfcfcf" font-size="10.5">motion.rs</text>
+<text x="418" y="2646" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
+<rect x="430" y="2638" width="18.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="444.0" y="2638" width="4.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2637" x2="529" y2="2648" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2637" x2="562" y2="2648" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2661" fill="#cfcfcf" font-size="10.5">overlay.rs</text>
+<text x="418" y="2661" fill="#6e6e6e" font-size="9" text-anchor="end">311</text>
+<rect x="430" y="2653" width="51.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="475.9" y="2653" width="5.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2652" x2="529" y2="2663" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2652" x2="562" y2="2663" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2676" fill="#cfcfcf" font-size="10.5">pathop.rs</text>
+<text x="418" y="2676" fill="#6e6e6e" font-size="9" text-anchor="end">253</text>
+<rect x="430" y="2668" width="41.7" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="464.5" y="2668" width="7.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2667" x2="529" y2="2678" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2667" x2="562" y2="2678" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2691" fill="#cfcfcf" font-size="10.5">placement.rs</text>
+<text x="418" y="2691" fill="#6e6e6e" font-size="9" text-anchor="end">455</text>
+<rect x="430" y="2683" width="75.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="479.3" y="2683" width="25.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2682" x2="529" y2="2693" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2682" x2="562" y2="2693" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2706" fill="#cfcfcf" font-size="10.5">solid.rs</text>
+<text x="418" y="2706" fill="#6e6e6e" font-size="9" text-anchor="end">28</text>
+<rect x="430" y="2698" width="4.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2697" x2="529" y2="2708" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2697" x2="562" y2="2708" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2721" fill="#9a9a9a" font-size="10.5">text/</text>
+<text x="418" y="2721" fill="#5e5e5e" font-size="9" text-anchor="end">248</text>
+<text x="59" y="2736" fill="#cfcfcf" font-size="10.5">morph.rs</text>
+<text x="418" y="2736" fill="#6e6e6e" font-size="9" text-anchor="end">248</text>
+<rect x="430" y="2728" width="40.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="458.4" y="2728" width="12.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2727" x2="529" y2="2738" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2727" x2="562" y2="2738" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2751" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="2751" fill="#6e6e6e" font-size="9" text-anchor="end">62</text>
+<rect x="430" y="2743" width="10.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="436.9" y="2743" width="3.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2742" x2="529" y2="2753" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2742" x2="562" y2="2753" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2766" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="2766" fill="#6e6e6e" font-size="9" text-anchor="end">18</text>
+<rect x="430" y="2758" width="3.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2757" x2="529" y2="2768" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2757" x2="562" y2="2768" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2781" fill="#9a9a9a" font-size="10.5">media/</text>
+<text x="418" y="2781" fill="#5e5e5e" font-size="9" text-anchor="end">1442</text>
+<text x="48" y="2796" fill="#cfcfcf" font-size="10.5">blob.rs</text>
+<text x="418" y="2796" fill="#6e6e6e" font-size="9" text-anchor="end">363</text>
+<rect x="430" y="2788" width="59.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="471.2" y="2788" width="18.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2787" x2="529" y2="2798" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2787" x2="562" y2="2798" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2811" fill="#cfcfcf" font-size="10.5">encode.rs</text>
+<text x="418" y="2811" fill="#6e6e6e" font-size="9" text-anchor="end">149</text>
+<rect x="430" y="2803" width="24.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2802" x2="529" y2="2813" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2802" x2="562" y2="2813" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2826" fill="#cfcfcf" font-size="10.5">mesh.rs</text>
+<text x="418" y="2826" fill="#6e6e6e" font-size="9" text-anchor="end">116</text>
+<rect x="430" y="2818" width="19.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2817" x2="529" y2="2828" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2817" x2="562" y2="2828" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2841" fill="#cfcfcf" font-size="10.5">point_cloud.rs</text>
+<text x="418" y="2841" fill="#6e6e6e" font-size="9" text-anchor="end">129</text>
+<rect x="430" y="2833" width="21.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2832" x2="529" y2="2843" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2832" x2="562" y2="2843" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2856" fill="#cfcfcf" font-size="10.5">probe.rs</text>
+<text x="418" y="2856" fill="#6e6e6e" font-size="9" text-anchor="end">448</text>
+<rect x="430" y="2848" width="73.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2847" x2="529" y2="2858" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2847" x2="562" y2="2858" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2871" fill="#cfcfcf" font-size="10.5">spatial.rs</text>
+<text x="418" y="2871" fill="#6e6e6e" font-size="9" text-anchor="end">237</text>
+<rect x="430" y="2863" width="39.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="460.4" y="2863" width="8.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2862" x2="529" y2="2873" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2862" x2="562" y2="2873" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2886" fill="#cfcfcf" font-size="10.5">media.rs</text>
+<text x="418" y="2886" fill="#6e6e6e" font-size="9" text-anchor="end">268</text>
+<rect x="430" y="2878" width="44.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="467.6" y="2878" width="6.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2877" x2="529" y2="2888" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2877" x2="562" y2="2888" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="2901" fill="#9a9a9a" font-size="10.5">picture/</text>
+<text x="418" y="2901" fill="#5e5e5e" font-size="9" text-anchor="end">7448</text>
+<text x="48" y="2916" fill="#cfcfcf" font-size="10.5">boxes.rs</text>
+<text x="418" y="2916" fill="#6e6e6e" font-size="9" text-anchor="end">509</text>
+<rect x="430" y="2908" width="84.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2907" x2="529" y2="2918" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2907" x2="562" y2="2918" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2931" fill="#cfcfcf" font-size="10.5">connect.rs</text>
+<text x="418" y="2931" fill="#6e6e6e" font-size="9" text-anchor="end">515</text>
+<rect x="430" y="2923" width="85.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="498.6" y="2923" width="16.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="2922" x2="529" y2="2933" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2922" x2="562" y2="2933" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2946" fill="#cfcfcf" font-size="10.5">flow.rs</text>
+<text x="418" y="2946" fill="#6e6e6e" font-size="9" text-anchor="end">553</text>
+<rect x="430" y="2938" width="91.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2937" x2="529" y2="2948" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2937" x2="562" y2="2948" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2961" fill="#cfcfcf" font-size="10.5">frame.rs</text>
+<text x="418" y="2961" fill="#6e6e6e" font-size="9" text-anchor="end">64</text>
+<rect x="430" y="2953" width="10.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2952" x2="529" y2="2963" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2952" x2="562" y2="2963" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2976" fill="#cfcfcf" font-size="10.5">motion_time.rs</text>
+<text x="418" y="2976" fill="#6e6e6e" font-size="9" text-anchor="end">130</text>
+<rect x="430" y="2968" width="21.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2967" x2="529" y2="2978" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2967" x2="562" y2="2978" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="2991" fill="#cfcfcf" font-size="10.5">path.rs</text>
+<text x="418" y="2991" fill="#6e6e6e" font-size="9" text-anchor="end">86</text>
+<rect x="430" y="2983" width="14.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="2982" x2="529" y2="2993" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="2982" x2="562" y2="2993" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3006" fill="#9a9a9a" font-size="10.5">resolve/</text>
+<text x="418" y="3006" fill="#5e5e5e" font-size="9" text-anchor="end">2007</text>
+<text x="59" y="3021" fill="#cfcfcf" font-size="10.5">camera.rs</text>
+<text x="418" y="3021" fill="#6e6e6e" font-size="9" text-anchor="end">314</text>
+<rect x="430" y="3013" width="51.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="458.4" y="3013" width="23.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3012" x2="529" y2="3023" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3012" x2="562" y2="3023" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3036" fill="#cfcfcf" font-size="10.5">copies.rs</text>
+<text x="418" y="3036" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
+<rect x="430" y="3028" width="55.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="478.8" y="3028" width="6.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3027" x2="529" y2="3038" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3027" x2="562" y2="3038" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3051" fill="#cfcfcf" font-size="10.5">effects.rs</text>
+<text x="418" y="3051" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="3043" width="28.1" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="447.7" y="3043" width="10.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3042" x2="529" y2="3053" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3042" x2="562" y2="3053" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3066" fill="#cfcfcf" font-size="10.5">mask.rs</text>
+<text x="418" y="3066" fill="#6e6e6e" font-size="9" text-anchor="end">345</text>
+<rect x="430" y="3058" width="56.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="456.1" y="3058" width="30.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3057" x2="529" y2="3068" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3057" x2="562" y2="3068" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3081" fill="#cfcfcf" font-size="10.5">settle.rs</text>
+<text x="418" y="3081" fill="#6e6e6e" font-size="9" text-anchor="end">339</text>
+<rect x="430" y="3073" width="55.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3072" x2="529" y2="3083" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3072" x2="562" y2="3083" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3096" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="3096" fill="#6e6e6e" font-size="9" text-anchor="end">126</text>
+<rect x="430" y="3088" width="20.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3087" x2="529" y2="3098" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3087" x2="562" y2="3098" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3111" fill="#cfcfcf" font-size="10.5">transform.rs</text>
+<text x="418" y="3111" fill="#6e6e6e" font-size="9" text-anchor="end">377</text>
+<rect x="430" y="3103" width="62.2" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="464.6" y="3103" width="27.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3102" x2="529" y2="3113" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3102" x2="562" y2="3113" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3126" fill="#cfcfcf" font-size="10.5">resolve.rs</text>
+<text x="418" y="3126" fill="#6e6e6e" font-size="9" text-anchor="end">341</text>
+<rect x="430" y="3118" width="56.3" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3117" x2="529" y2="3128" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3117" x2="562" y2="3128" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3141" fill="#cfcfcf" font-size="10.5">resolved.rs</text>
+<text x="418" y="3141" fill="#6e6e6e" font-size="9" text-anchor="end">66</text>
+<rect x="430" y="3133" width="10.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3132" x2="529" y2="3143" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3132" x2="562" y2="3143" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3156" fill="#cfcfcf" font-size="10.5">shape_props.rs</text>
+<text x="418" y="3156" fill="#6e6e6e" font-size="9" text-anchor="end">266</text>
+<rect x="430" y="3148" width="43.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="460.5" y="3148" width="13.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3147" x2="529" y2="3158" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3147" x2="562" y2="3158" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3171" fill="#cfcfcf" font-size="10.5">shapes.rs</text>
+<text x="418" y="3171" fill="#6e6e6e" font-size="9" text-anchor="end">16</text>
+<rect x="430" y="3163" width="2.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3162" x2="529" y2="3173" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3162" x2="562" y2="3173" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3186" fill="#9a9a9a" font-size="10.5">shapes_ops/</text>
+<text x="418" y="3186" fill="#5e5e5e" font-size="9" text-anchor="end">1669</text>
+<text x="59" y="3201" fill="#cfcfcf" font-size="10.5">coverage.rs</text>
+<text x="418" y="3201" fill="#6e6e6e" font-size="9" text-anchor="end">100</text>
+<rect x="430" y="3193" width="16.5" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3192" x2="529" y2="3203" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3192" x2="562" y2="3203" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3216" fill="#9a9a9a" font-size="10.5">ops/</text>
+<text x="418" y="3216" fill="#5e5e5e" font-size="9" text-anchor="end">528</text>
+<text x="70" y="3231" fill="#cfcfcf" font-size="10.5">shaping.rs</text>
+<text x="418" y="3231" fill="#6e6e6e" font-size="9" text-anchor="end">344</text>
+<rect x="430" y="3223" width="56.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="467.5" y="3223" width="19.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3222" x2="529" y2="3233" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3222" x2="562" y2="3233" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="3246" fill="#cfcfcf" font-size="10.5">trim.rs</text>
+<text x="418" y="3246" fill="#6e6e6e" font-size="9" text-anchor="end">184</text>
+<rect x="430" y="3238" width="30.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3237" x2="529" y2="3248" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3237" x2="562" y2="3248" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3261" fill="#cfcfcf" font-size="10.5">ops.rs</text>
+<text x="418" y="3261" fill="#6e6e6e" font-size="9" text-anchor="end">588</text>
+<rect x="430" y="3253" width="97.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3252" x2="529" y2="3263" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3252" x2="562" y2="3263" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3276" fill="#cfcfcf" font-size="10.5">raster.rs</text>
+<text x="418" y="3276" fill="#6e6e6e" font-size="9" text-anchor="end">236</text>
+<rect x="430" y="3268" width="38.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3267" x2="529" y2="3278" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3267" x2="562" y2="3278" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3291" fill="#cfcfcf" font-size="10.5">strokes.rs</text>
+<text x="418" y="3291" fill="#6e6e6e" font-size="9" text-anchor="end">217</text>
+<rect x="430" y="3283" width="35.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="458.5" y="3283" width="7.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3282" x2="529" y2="3293" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3282" x2="562" y2="3293" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3306" fill="#cfcfcf" font-size="10.5">shapes_ops.rs</text>
+<text x="418" y="3306" fill="#6e6e6e" font-size="9" text-anchor="end">279</text>
+<rect x="430" y="3298" width="46.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3297" x2="529" y2="3308" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3297" x2="562" y2="3308" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3321" fill="#cfcfcf" font-size="10.5">shaping.rs</text>
+<text x="418" y="3321" fill="#6e6e6e" font-size="9" text-anchor="end">569</text>
+<rect x="430" y="3313" width="93.9" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="505.9" y="3313" width="18.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3312" x2="529" y2="3323" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3312" x2="562" y2="3323" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3336" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="3336" fill="#6e6e6e" font-size="9" text-anchor="end">127</text>
+<rect x="430" y="3328" width="21.0" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3327" x2="529" y2="3338" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3327" x2="562" y2="3338" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3351" fill="#cfcfcf" font-size="10.5">text_frame.rs</text>
+<text x="418" y="3351" fill="#6e6e6e" font-size="9" text-anchor="end">251</text>
+<rect x="430" y="3343" width="41.4" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3342" x2="529" y2="3353" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3342" x2="562" y2="3353" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="3366" fill="#cfcfcf" font-size="10.5">picture.rs</text>
+<text x="418" y="3366" fill="#6e6e6e" font-size="9" text-anchor="end">28</text>
+<rect x="430" y="3358" width="4.6" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3357" x2="529" y2="3368" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3357" x2="562" y2="3368" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="3381" fill="#cfcfcf" font-size="10.5">playback.rs</text>
+<text x="418" y="3381" fill="#6e6e6e" font-size="9" text-anchor="end">508</text>
+<rect x="430" y="3373" width="83.8" height="9" fill="#e8a87c" fill-opacity="0.72" rx="1.5"/>
+<rect x="497.7" y="3373" width="16.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="3372" x2="529" y2="3383" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3372" x2="562" y2="3383" stroke="#4a4a4a" stroke-width="0.6"/>
+<rect x="20" y="3400" width="1140" height="15" fill="#85c1a1" fill-opacity="0.09"/>
+<text x="26" y="3411" fill="#85c1a1" font-size="12" font-family="-apple-system,sans-serif">ui/lib — 窓</text>
+<text x="418" y="3411" fill="#8c8c8c" font-size="10" text-anchor="end">26373 行</text>
+<text x="37" y="3426" fill="#9a9a9a" font-size="10.5">app/</text>
+<text x="418" y="3426" fill="#5e5e5e" font-size="9" text-anchor="end">891</text>
+<text x="48" y="3441" fill="#cfcfcf" font-size="10.5">editor_app.dart</text>
+<text x="418" y="3441" fill="#6e6e6e" font-size="9" text-anchor="end">105</text>
+<rect x="430" y="3433" width="17.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3432" x2="529" y2="3443" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3432" x2="562" y2="3443" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3456" fill="#e8b45b" font-size="10.5">editor_window.dart</text>
+<text x="418" y="3456" fill="#6e6e6e" font-size="9" text-anchor="end">641</text>
+<rect x="430" y="3448" width="105.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3447" x2="529" y2="3458" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3447" x2="562" y2="3458" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3452" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="3471" fill="#cfcfcf" font-size="10.5">theme_settings.dart</text>
+<text x="418" y="3471" fill="#6e6e6e" font-size="9" text-anchor="end">145</text>
+<rect x="430" y="3463" width="23.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3462" x2="529" y2="3473" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3462" x2="562" y2="3473" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="3486" fill="#9a9a9a" font-size="10.5">bridge/</text>
+<text x="418" y="3486" fill="#5e5e5e" font-size="9" text-anchor="end">240</text>
+<text x="48" y="3501" fill="#cfcfcf" font-size="10.5">native_bridge.dart</text>
+<text x="418" y="3501" fill="#6e6e6e" font-size="9" text-anchor="end">31</text>
+<rect x="430" y="3493" width="5.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3492" x2="529" y2="3503" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3492" x2="562" y2="3503" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3516" fill="#cfcfcf" font-size="10.5">native_frames.dart</text>
+<text x="418" y="3516" fill="#6e6e6e" font-size="9" text-anchor="end">91</text>
+<rect x="430" y="3508" width="15.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3507" x2="529" y2="3518" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3507" x2="562" y2="3518" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3531" fill="#cfcfcf" font-size="10.5">protocol.dart</text>
+<text x="418" y="3531" fill="#6e6e6e" font-size="9" text-anchor="end">118</text>
+<rect x="430" y="3523" width="19.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3522" x2="529" y2="3533" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3522" x2="562" y2="3533" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="3546" fill="#9a9a9a" font-size="10.5">foundation/</text>
+<text x="418" y="3546" fill="#5e5e5e" font-size="9" text-anchor="end">4914</text>
+<text x="48" y="3561" fill="#cfcfcf" font-size="10.5">color_field.dart</text>
+<text x="418" y="3561" fill="#6e6e6e" font-size="9" text-anchor="end">69</text>
+<rect x="430" y="3553" width="11.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3552" x2="529" y2="3563" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3552" x2="562" y2="3563" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3576" fill="#cfcfcf" font-size="10.5">glyphs.dart</text>
+<text x="418" y="3576" fill="#6e6e6e" font-size="9" text-anchor="end">396</text>
+<rect x="430" y="3568" width="65.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3567" x2="529" y2="3578" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3567" x2="562" y2="3578" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3591" fill="#e05b5b" font-size="10.5">leaves.dart</text>
+<text x="418" y="3591" fill="#6e6e6e" font-size="9" text-anchor="end">1416</text>
+<rect x="430" y="3583" width="233.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3582" x2="529" y2="3593" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3582" x2="562" y2="3593" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3606" fill="#cfcfcf" font-size="10.5">metrics.dart</text>
+<text x="418" y="3606" fill="#6e6e6e" font-size="9" text-anchor="end">39</text>
+<rect x="430" y="3598" width="6.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3597" x2="529" y2="3608" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3597" x2="562" y2="3608" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3621" fill="#cfcfcf" font-size="10.5">panel_catalog.dart</text>
+<text x="418" y="3621" fill="#6e6e6e" font-size="9" text-anchor="end">133</text>
+<rect x="430" y="3613" width="21.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3612" x2="529" y2="3623" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3612" x2="562" y2="3623" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3636" fill="#e05b5b" font-size="10.5">panel_controls.dart</text>
+<text x="418" y="3636" fill="#6e6e6e" font-size="9" text-anchor="end">2157</text>
+<rect x="430" y="3628" width="355.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3627" x2="529" y2="3638" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3627" x2="562" y2="3638" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3632" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="3632" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="3632" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="3632" r="3.1" fill="#d0a06a"/>
+<text x="982" y="3636" fill="#6e6e6e" font-size="8.5">71% ease_desk.dart</text>
+<text x="48" y="3651" fill="#e8b45b" font-size="10.5">theme.dart</text>
+<text x="418" y="3651" fill="#6e6e6e" font-size="9" text-anchor="end">704</text>
+<rect x="430" y="3643" width="116.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3642" x2="529" y2="3653" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3642" x2="562" y2="3653" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3647" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="3647" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="3647" r="3.1" fill="#d0a06a"/>
+<text x="982" y="3651" fill="#6e6e6e" font-size="8.5">80% panel_settings.dart</text>
+<text x="37" y="3666" fill="#9a9a9a" font-size="10.5">input/</text>
+<text x="418" y="3666" fill="#5e5e5e" font-size="9" text-anchor="end">317</text>
+<text x="48" y="3681" fill="#cfcfcf" font-size="10.5">editor_shortcuts.dart</text>
+<text x="418" y="3681" fill="#6e6e6e" font-size="9" text-anchor="end">209</text>
+<rect x="430" y="3673" width="34.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3672" x2="529" y2="3683" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3672" x2="562" y2="3683" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3696" fill="#cfcfcf" font-size="10.5">viewport_motion.dart</text>
+<text x="418" y="3696" fill="#6e6e6e" font-size="9" text-anchor="end">108</text>
+<rect x="430" y="3688" width="17.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3687" x2="529" y2="3698" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3687" x2="562" y2="3698" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="3711" fill="#cfcfcf" font-size="10.5">main.dart</text>
+<text x="418" y="3711" fill="#6e6e6e" font-size="9" text-anchor="end">6</text>
+<rect x="430" y="3703" width="1.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3702" x2="529" y2="3713" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3702" x2="562" y2="3713" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="3726" fill="#9a9a9a" font-size="10.5">panels/</text>
+<text x="418" y="3726" fill="#5e5e5e" font-size="9" text-anchor="end">18238</text>
+<text x="48" y="3741" fill="#cfcfcf" font-size="10.5">blend_panel.dart</text>
+<text x="418" y="3741" fill="#6e6e6e" font-size="9" text-anchor="end">430</text>
+<rect x="430" y="3733" width="71.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3732" x2="529" y2="3743" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3732" x2="562" y2="3743" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3756" fill="#9a9a9a" font-size="10.5">browser/</text>
+<text x="418" y="3756" fill="#5e5e5e" font-size="9" text-anchor="end">4792</text>
+<text x="59" y="3771" fill="#cfcfcf" font-size="10.5">color_wheel.dart</text>
+<text x="418" y="3771" fill="#6e6e6e" font-size="9" text-anchor="end">223</text>
+<rect x="430" y="3763" width="36.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3762" x2="529" y2="3773" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3762" x2="562" y2="3773" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3786" fill="#e05b5b" font-size="10.5">colors_shelf.dart</text>
+<text x="418" y="3786" fill="#6e6e6e" font-size="9" text-anchor="end">1020</text>
+<rect x="430" y="3778" width="168.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3777" x2="529" y2="3788" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3777" x2="562" y2="3788" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3782" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="3782" r="3.1" fill="#7d7d7d"/>
+<text x="59" y="3801" fill="#cfcfcf" font-size="10.5">create_shelf.dart</text>
+<text x="418" y="3801" fill="#6e6e6e" font-size="9" text-anchor="end">246</text>
+<rect x="430" y="3793" width="40.6" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3792" x2="529" y2="3803" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3792" x2="562" y2="3803" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3816" fill="#cfcfcf" font-size="10.5">effects_shelf.dart</text>
+<text x="418" y="3816" fill="#6e6e6e" font-size="9" text-anchor="end">206</text>
+<rect x="430" y="3808" width="34.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3807" x2="529" y2="3818" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3807" x2="562" y2="3818" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3831" fill="#cfcfcf" font-size="10.5">files_shelf.dart</text>
+<text x="418" y="3831" fill="#6e6e6e" font-size="9" text-anchor="end">338</text>
+<rect x="430" y="3823" width="55.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3822" x2="529" y2="3833" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3822" x2="562" y2="3833" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3846" fill="#e05b5b" font-size="10.5">filters.dart</text>
+<text x="418" y="3846" fill="#6e6e6e" font-size="9" text-anchor="end">953</text>
+<rect x="430" y="3838" width="157.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3837" x2="529" y2="3848" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3837" x2="562" y2="3848" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3842" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="3842" r="3.1" fill="#7d7d7d"/>
+<text x="59" y="3861" fill="#cfcfcf" font-size="10.5">fonts_shelf.dart</text>
+<text x="418" y="3861" fill="#6e6e6e" font-size="9" text-anchor="end">471</text>
+<rect x="430" y="3853" width="77.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3852" x2="529" y2="3863" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3852" x2="562" y2="3863" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3876" fill="#cfcfcf" font-size="10.5">media_shelf.dart</text>
+<text x="418" y="3876" fill="#6e6e6e" font-size="9" text-anchor="end">488</text>
+<rect x="430" y="3868" width="80.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3867" x2="529" y2="3878" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3867" x2="562" y2="3878" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3891" fill="#cfcfcf" font-size="10.5">parts.dart</text>
+<text x="418" y="3891" fill="#6e6e6e" font-size="9" text-anchor="end">304</text>
+<rect x="430" y="3883" width="50.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3882" x2="529" y2="3893" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3882" x2="562" y2="3893" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3906" fill="#cfcfcf" font-size="10.5">shelf.dart</text>
+<text x="418" y="3906" fill="#6e6e6e" font-size="9" text-anchor="end">207</text>
+<rect x="430" y="3898" width="34.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3897" x2="529" y2="3908" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3897" x2="562" y2="3908" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="3921" fill="#cfcfcf" font-size="10.5">tile.dart</text>
+<text x="418" y="3921" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
+<rect x="430" y="3913" width="55.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3912" x2="529" y2="3923" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3912" x2="562" y2="3923" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3936" fill="#e05b5b" font-size="10.5">browser.dart</text>
+<text x="418" y="3936" fill="#6e6e6e" font-size="9" text-anchor="end">1193</text>
+<rect x="430" y="3928" width="196.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3927" x2="529" y2="3938" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3927" x2="562" y2="3938" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="3932" r="3.1" fill="#ff9d4d"/>
+<circle cx="958" cy="3932" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="3936" fill="#6e6e6e" font-size="8.5">100% browser_tile_test.dart</text>
+<text x="48" y="3951" fill="#cfcfcf" font-size="10.5">composition_controls.dart</text>
+<text x="418" y="3951" fill="#6e6e6e" font-size="9" text-anchor="end">141</text>
+<rect x="430" y="3943" width="23.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3942" x2="529" y2="3953" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3942" x2="562" y2="3953" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3966" fill="#cfcfcf" font-size="10.5">depth_desk.dart</text>
+<text x="418" y="3966" fill="#6e6e6e" font-size="9" text-anchor="end">387</text>
+<rect x="430" y="3958" width="63.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3957" x2="529" y2="3968" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3957" x2="562" y2="3968" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3981" fill="#cfcfcf" font-size="10.5">desk.dart</text>
+<text x="418" y="3981" fill="#6e6e6e" font-size="9" text-anchor="end">239</text>
+<rect x="430" y="3973" width="39.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3972" x2="529" y2="3983" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3972" x2="562" y2="3983" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="3996" fill="#e05b5b" font-size="10.5">ease_desk.dart</text>
+<text x="418" y="3996" fill="#6e6e6e" font-size="9" text-anchor="end">1759</text>
+<rect x="430" y="3988" width="290.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="3987" x2="529" y2="3998" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="3987" x2="562" y2="3998" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="3992" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="3992" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="3992" r="3.1" fill="#d0a06a"/>
+<text x="982" y="3996" fill="#6e6e6e" font-size="8.5">71% panel_controls.dart</text>
+<text x="48" y="4011" fill="#cfcfcf" font-size="10.5">export_controls.dart</text>
+<text x="418" y="4011" fill="#6e6e6e" font-size="9" text-anchor="end">103</text>
+<rect x="430" y="4003" width="17.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4002" x2="529" y2="4013" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4002" x2="562" y2="4013" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4026" fill="#cfcfcf" font-size="10.5">gradient_inspector.dart</text>
+<text x="418" y="4026" fill="#6e6e6e" font-size="9" text-anchor="end">336</text>
+<rect x="430" y="4018" width="55.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4017" x2="529" y2="4028" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4017" x2="562" y2="4028" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4022" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4022" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4041" fill="#cfcfcf" font-size="10.5">history_records.dart</text>
+<text x="418" y="4041" fill="#6e6e6e" font-size="9" text-anchor="end">278</text>
+<rect x="430" y="4033" width="45.9" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4032" x2="529" y2="4043" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4032" x2="562" y2="4043" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4056" fill="#e05b5b" font-size="10.5">inspector.dart</text>
+<text x="418" y="4056" fill="#6e6e6e" font-size="9" text-anchor="end">2655</text>
+<rect x="430" y="4048" width="430.0" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4047" x2="529" y2="4058" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4047" x2="562" y2="4058" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="4052" r="3.1" fill="#ff9d4d"/>
+<circle cx="958" cy="4052" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="4056" fill="#6e6e6e" font-size="8.5">80% gradient_inspector.dart</text>
+<text x="48" y="4071" fill="#cfcfcf" font-size="10.5">inspector_property_style.dart</text>
+<text x="418" y="4071" fill="#6e6e6e" font-size="9" text-anchor="end">183</text>
+<rect x="430" y="4063" width="30.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4062" x2="529" y2="4073" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4062" x2="562" y2="4073" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4086" fill="#cfcfcf" font-size="10.5">native_visual_sample.dart</text>
+<text x="418" y="4086" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="4078" width="28.1" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4077" x2="529" y2="4088" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4077" x2="562" y2="4088" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4101" fill="#e8b45b" font-size="10.5">notes_desk.dart</text>
+<text x="418" y="4101" fill="#6e6e6e" font-size="9" text-anchor="end">714</text>
+<rect x="430" y="4093" width="117.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4092" x2="529" y2="4103" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4092" x2="562" y2="4103" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4097" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4116" fill="#cfcfcf" font-size="10.5">panel_settings.dart</text>
+<text x="418" y="4116" fill="#6e6e6e" font-size="9" text-anchor="end">168</text>
+<rect x="430" y="4108" width="27.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4107" x2="529" y2="4118" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4107" x2="562" y2="4118" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4112" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4131" fill="#cfcfcf" font-size="10.5">registry.dart</text>
+<text x="418" y="4131" fill="#6e6e6e" font-size="9" text-anchor="end">69</text>
+<rect x="430" y="4123" width="11.4" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4122" x2="529" y2="4133" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4122" x2="562" y2="4133" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4146" fill="#cfcfcf" font-size="10.5">rich_text_editor.dart</text>
+<text x="418" y="4146" fill="#6e6e6e" font-size="9" text-anchor="end">374</text>
+<rect x="430" y="4138" width="61.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4137" x2="529" y2="4148" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4137" x2="562" y2="4148" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4161" fill="#e05b5b" font-size="10.5">stage.dart</text>
+<text x="418" y="4161" fill="#6e6e6e" font-size="9" text-anchor="end">1868</text>
+<rect x="430" y="4153" width="308.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4152" x2="529" y2="4163" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4152" x2="562" y2="4163" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4157" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4176" fill="#e05b5b" font-size="10.5">timeline.dart</text>
+<text x="418" y="4176" fill="#6e6e6e" font-size="9" text-anchor="end">2147</text>
+<rect x="430" y="4168" width="354.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4167" x2="529" y2="4178" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4167" x2="562" y2="4178" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4172" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4172" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4191" fill="#cfcfcf" font-size="10.5">timeline_layout.dart</text>
+<text x="418" y="4191" fill="#6e6e6e" font-size="9" text-anchor="end">179</text>
+<rect x="430" y="4183" width="29.5" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4182" x2="529" y2="4193" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4182" x2="562" y2="4193" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4206" fill="#cfcfcf" font-size="10.5">web_panel.dart</text>
+<text x="418" y="4206" fill="#6e6e6e" font-size="9" text-anchor="end">53</text>
+<rect x="430" y="4198" width="8.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4197" x2="529" y2="4208" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4197" x2="562" y2="4208" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="4221" fill="#9a9a9a" font-size="10.5">session/</text>
+<text x="418" y="4221" fill="#5e5e5e" font-size="9" text-anchor="end">1145</text>
+<text x="48" y="4236" fill="#e05b5b" font-size="10.5">editor_session.dart</text>
+<text x="418" y="4236" fill="#6e6e6e" font-size="9" text-anchor="end">1135</text>
+<rect x="430" y="4228" width="187.3" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4227" x2="529" y2="4238" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4227" x2="562" y2="4238" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4232" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4232" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4251" fill="#cfcfcf" font-size="10.5">read_model.dart</text>
+<text x="418" y="4251" fill="#6e6e6e" font-size="9" text-anchor="end">10</text>
+<rect x="430" y="4243" width="1.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4242" x2="529" y2="4253" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4242" x2="562" y2="4253" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="4266" fill="#9a9a9a" font-size="10.5">workspace/</text>
+<text x="418" y="4266" fill="#5e5e5e" font-size="9" text-anchor="end">622</text>
+<text x="48" y="4281" fill="#cfcfcf" font-size="10.5">layout.dart</text>
+<text x="418" y="4281" fill="#6e6e6e" font-size="9" text-anchor="end">223</text>
+<rect x="430" y="4273" width="36.8" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4272" x2="529" y2="4283" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4272" x2="562" y2="4283" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4296" fill="#cfcfcf" font-size="10.5">panel_ids.dart</text>
+<text x="418" y="4296" fill="#6e6e6e" font-size="9" text-anchor="end">4</text>
+<rect x="430" y="4288" width="0.7" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4287" x2="529" y2="4298" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4287" x2="562" y2="4298" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4311" fill="#cfcfcf" font-size="10.5">workspace_view.dart</text>
+<text x="418" y="4311" fill="#6e6e6e" font-size="9" text-anchor="end">395</text>
+<rect x="430" y="4303" width="65.2" height="9" fill="#85c1a1" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4302" x2="529" y2="4313" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4302" x2="562" y2="4313" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4307" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4307" r="3.1" fill="#7d7d7d"/>
+<rect x="20" y="4330" width="1140" height="15" fill="#c39bd3" fill-opacity="0.09"/>
+<text x="26" y="4341" fill="#c39bd3" font-size="12" font-family="-apple-system,sans-serif">ui/native — 接続</text>
+<text x="418" y="4341" fill="#8c8c8c" font-size="10" text-anchor="end">11464 行</text>
+<text x="37" y="4356" fill="#9a9a9a" font-size="10.5">editor/</text>
+<text x="418" y="4356" fill="#5e5e5e" font-size="9" text-anchor="end">8536</text>
+<text x="48" y="4371" fill="#cfcfcf" font-size="10.5">blend_preview.rs</text>
+<text x="418" y="4371" fill="#6e6e6e" font-size="9" text-anchor="end">208</text>
+<rect x="430" y="4363" width="34.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="456.2" y="4363" width="8.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4362" x2="529" y2="4373" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4362" x2="562" y2="4373" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4386" fill="#9a9a9a" font-size="10.5">clipboard/</text>
+<text x="418" y="4386" fill="#5e5e5e" font-size="9" text-anchor="end">651</text>
+<text x="59" y="4401" fill="#cfcfcf" font-size="10.5">document_identity_regressions.rs</text>
+<text x="418" y="4401" fill="#6e6e6e" font-size="9" text-anchor="end">120</text>
+<rect x="430" y="4393" width="19.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4392" x2="529" y2="4403" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4392" x2="562" y2="4403" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4416" fill="#cfcfcf" font-size="10.5">key_ownership_regressions.rs</text>
+<text x="418" y="4416" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
+<rect x="430" y="4408" width="18.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4407" x2="529" y2="4418" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4407" x2="562" y2="4418" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4431" fill="#cfcfcf" font-size="10.5">tests.rs</text>
+<text x="418" y="4431" fill="#6e6e6e" font-size="9" text-anchor="end">418</text>
+<rect x="430" y="4423" width="69.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4422" x2="529" y2="4433" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4422" x2="562" y2="4433" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4446" fill="#cfcfcf" font-size="10.5">clipboard.rs</text>
+<text x="418" y="4446" fill="#6e6e6e" font-size="9" text-anchor="end">284</text>
+<rect x="430" y="4438" width="46.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="475.9" y="4438" width="1.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4437" x2="529" y2="4448" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4437" x2="562" y2="4448" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4461" fill="#cfcfcf" font-size="10.5">color.rs</text>
+<text x="418" y="4461" fill="#6e6e6e" font-size="9" text-anchor="end">258</text>
+<rect x="430" y="4453" width="42.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4452" x2="529" y2="4463" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4452" x2="562" y2="4463" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4476" fill="#e8b45b" font-size="10.5">create.rs</text>
+<text x="418" y="4476" fill="#6e6e6e" font-size="9" text-anchor="end">605</text>
+<rect x="430" y="4468" width="99.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="502.8" y="4468" width="27.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4467" x2="529" y2="4478" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4467" x2="562" y2="4478" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4491" fill="#cfcfcf" font-size="10.5">ease.rs</text>
+<text x="418" y="4491" fill="#6e6e6e" font-size="9" text-anchor="end">179</text>
+<rect x="430" y="4483" width="29.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="455.2" y="4483" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4482" x2="529" y2="4493" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4482" x2="562" y2="4493" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4506" fill="#cfcfcf" font-size="10.5">ease_kinds.rs</text>
+<text x="418" y="4506" fill="#6e6e6e" font-size="9" text-anchor="end">325</text>
+<rect x="430" y="4498" width="53.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="479.3" y="4498" width="4.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4497" x2="529" y2="4508" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4497" x2="562" y2="4508" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4521" fill="#cfcfcf" font-size="10.5">effect_sample.rs</text>
+<text x="418" y="4521" fill="#6e6e6e" font-size="9" text-anchor="end">225</text>
+<rect x="430" y="4513" width="37.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="433.5" y="4513" width="33.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4512" x2="529" y2="4523" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4512" x2="562" y2="4523" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4517" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4536" fill="#cfcfcf" font-size="10.5">fixture.rs</text>
+<text x="418" y="4536" fill="#6e6e6e" font-size="9" text-anchor="end">235</text>
+<rect x="430" y="4528" width="38.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4527" x2="529" y2="4538" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4527" x2="562" y2="4538" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4551" fill="#9a9a9a" font-size="10.5">functions/</text>
+<text x="418" y="4551" fill="#5e5e5e" font-size="9" text-anchor="end">1059</text>
+<text x="59" y="4566" fill="#cfcfcf" font-size="10.5">atom.rs</text>
+<text x="418" y="4566" fill="#6e6e6e" font-size="9" text-anchor="end">80</text>
+<rect x="430" y="4558" width="13.2" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4557" x2="529" y2="4568" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4557" x2="562" y2="4568" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4581" fill="#cfcfcf" font-size="10.5">compose.rs</text>
+<text x="418" y="4581" fill="#6e6e6e" font-size="9" text-anchor="end">46</text>
+<rect x="430" y="4573" width="7.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4572" x2="529" y2="4583" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4572" x2="562" y2="4583" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4596" fill="#cfcfcf" font-size="10.5">lens.rs</text>
+<text x="418" y="4596" fill="#6e6e6e" font-size="9" text-anchor="end">42</text>
+<rect x="430" y="4588" width="6.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4587" x2="529" y2="4598" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4587" x2="562" y2="4598" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4611" fill="#cfcfcf" font-size="10.5">mod.rs</text>
+<text x="418" y="4611" fill="#6e6e6e" font-size="9" text-anchor="end">3</text>
+<rect x="430" y="4603" width="0.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4602" x2="529" y2="4613" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4602" x2="562" y2="4613" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4626" fill="#cfcfcf" font-size="10.5">placement.rs</text>
+<text x="418" y="4626" fill="#6e6e6e" font-size="9" text-anchor="end">138</text>
+<rect x="430" y="4618" width="22.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4617" x2="529" y2="4628" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4617" x2="562" y2="4628" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4641" fill="#cfcfcf" font-size="10.5">read.rs</text>
+<text x="418" y="4641" fill="#6e6e6e" font-size="9" text-anchor="end">406</text>
+<rect x="430" y="4633" width="67.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4632" x2="529" y2="4643" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4632" x2="562" y2="4643" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4637" r="3.1" fill="#7d7d7d"/>
+<text x="59" y="4656" fill="#cfcfcf" font-size="10.5">verb.rs</text>
+<text x="418" y="4656" fill="#6e6e6e" font-size="9" text-anchor="end">344</text>
+<rect x="430" y="4648" width="56.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="479.7" y="4648" width="7.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4647" x2="529" y2="4658" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4647" x2="562" y2="4658" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4671" fill="#e8b45b" font-size="10.5">gizmo3d.rs</text>
+<text x="418" y="4671" fill="#6e6e6e" font-size="9" text-anchor="end">676</text>
+<rect x="430" y="4663" width="111.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="510.4" y="4663" width="31.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4662" x2="529" y2="4673" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4662" x2="562" y2="4673" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4686" fill="#cfcfcf" font-size="10.5">gradient.rs</text>
+<text x="418" y="4686" fill="#6e6e6e" font-size="9" text-anchor="end">175</text>
+<rect x="430" y="4678" width="28.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="446.8" y="4678" width="12.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4677" x2="529" y2="4688" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4677" x2="562" y2="4688" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4701" fill="#cfcfcf" font-size="10.5">history.rs</text>
+<text x="418" y="4701" fill="#6e6e6e" font-size="9" text-anchor="end">282</text>
+<rect x="430" y="4693" width="46.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="461.5" y="4693" width="15.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4692" x2="529" y2="4703" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4692" x2="562" y2="4703" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4716" fill="#cfcfcf" font-size="10.5">keyframe_edit.rs</text>
+<text x="418" y="4716" fill="#6e6e6e" font-size="9" text-anchor="end">192</text>
+<rect x="430" y="4708" width="31.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4707" x2="529" y2="4718" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4707" x2="562" y2="4718" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4731" fill="#cfcfcf" font-size="10.5">keymap.rs</text>
+<text x="418" y="4731" fill="#6e6e6e" font-size="9" text-anchor="end">2</text>
+<rect x="430" y="4723" width="0.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4722" x2="529" y2="4733" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4722" x2="562" y2="4733" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4746" fill="#cfcfcf" font-size="10.5">mod.rs</text>
+<text x="418" y="4746" fill="#6e6e6e" font-size="9" text-anchor="end">16</text>
+<rect x="430" y="4738" width="2.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4737" x2="529" y2="4748" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4737" x2="562" y2="4748" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4761" fill="#cfcfcf" font-size="10.5">notes.rs</text>
+<text x="418" y="4761" fill="#6e6e6e" font-size="9" text-anchor="end">50</text>
+<rect x="430" y="4753" width="8.2" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4752" x2="529" y2="4763" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4752" x2="562" y2="4763" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4776" fill="#cfcfcf" font-size="10.5">placement_edit.rs</text>
+<text x="418" y="4776" fill="#6e6e6e" font-size="9" text-anchor="end">248</text>
+<rect x="430" y="4768" width="40.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="459.4" y="4768" width="11.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4767" x2="529" y2="4778" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4767" x2="562" y2="4778" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4791" fill="#9a9a9a" font-size="10.5">script/</text>
+<text x="418" y="4791" fill="#5e5e5e" font-size="9" text-anchor="end">152</text>
+<text x="59" y="4806" fill="#cfcfcf" font-size="10.5">sweep.rs</text>
+<text x="418" y="4806" fill="#6e6e6e" font-size="9" text-anchor="end">152</text>
+<rect x="430" y="4798" width="25.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4797" x2="529" y2="4808" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4797" x2="562" y2="4808" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4821" fill="#cfcfcf" font-size="10.5">script.rs</text>
+<text x="418" y="4821" fill="#6e6e6e" font-size="9" text-anchor="end">323</text>
+<rect x="430" y="4813" width="53.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="444.7" y="4813" width="38.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4812" x2="529" y2="4823" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4812" x2="562" y2="4823" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4817" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4836" fill="#e8b45b" font-size="10.5">stage.rs</text>
+<text x="418" y="4836" fill="#6e6e6e" font-size="9" text-anchor="end">761</text>
+<rect x="430" y="4828" width="125.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="548.3" y="4828" width="7.3" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4827" x2="529" y2="4838" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4827" x2="562" y2="4838" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4832" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4832" r="3.1" fill="#7d7d7d"/>
+<text x="48" y="4851" fill="#cfcfcf" font-size="10.5">text.rs</text>
+<text x="418" y="4851" fill="#6e6e6e" font-size="9" text-anchor="end">113</text>
+<rect x="430" y="4843" width="18.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="444.7" y="4843" width="4.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4842" x2="529" y2="4853" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4842" x2="562" y2="4853" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4866" fill="#cfcfcf" font-size="10.5">text_format.rs</text>
+<text x="418" y="4866" fill="#6e6e6e" font-size="9" text-anchor="end">163</text>
+<rect x="430" y="4858" width="26.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="442.0" y="4858" width="14.9" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4857" x2="529" y2="4868" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4857" x2="562" y2="4868" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4881" fill="#cfcfcf" font-size="10.5">thumbnail.rs</text>
+<text x="418" y="4881" fill="#6e6e6e" font-size="9" text-anchor="end">123</text>
+<rect x="430" y="4873" width="20.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4872" x2="529" y2="4883" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4872" x2="562" y2="4883" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4896" fill="#9a9a9a" font-size="10.5">timeline_edit/</text>
+<text x="418" y="4896" fill="#5e5e5e" font-size="9" text-anchor="end">1121</text>
+<text x="59" y="4911" fill="#e8b45b" font-size="10.5">copy_paste.rs</text>
+<text x="418" y="4911" fill="#6e6e6e" font-size="9" text-anchor="end">628</text>
+<rect x="430" y="4903" width="103.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="533.0" y="4903" width="0.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4902" x2="529" y2="4913" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4902" x2="562" y2="4913" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4926" fill="#cfcfcf" font-size="10.5">hierarchy_clipboard_regressions.rs</text>
+<text x="418" y="4926" fill="#6e6e6e" font-size="9" text-anchor="end">137</text>
+<rect x="430" y="4918" width="22.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4917" x2="529" y2="4928" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4917" x2="562" y2="4928" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4941" fill="#cfcfcf" font-size="10.5">key_delete.rs</text>
+<text x="418" y="4941" fill="#6e6e6e" font-size="9" text-anchor="end">118</text>
+<rect x="430" y="4933" width="19.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4932" x2="529" y2="4943" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4932" x2="562" y2="4943" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="4956" fill="#cfcfcf" font-size="10.5">split.rs</text>
+<text x="418" y="4956" fill="#6e6e6e" font-size="9" text-anchor="end">238</text>
+<rect x="430" y="4948" width="39.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4947" x2="529" y2="4958" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4947" x2="562" y2="4958" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4971" fill="#cfcfcf" font-size="10.5">timeline_edit.rs</text>
+<text x="418" y="4971" fill="#6e6e6e" font-size="9" text-anchor="end">17</text>
+<rect x="430" y="4963" width="2.8" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="4962" x2="529" y2="4973" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4962" x2="562" y2="4973" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="4986" fill="#cfcfcf" font-size="10.5">visual_samples.rs</text>
+<text x="418" y="4986" fill="#6e6e6e" font-size="9" text-anchor="end">93</text>
+<rect x="430" y="4978" width="15.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="440.7" y="4978" width="4.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4977" x2="529" y2="4988" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4977" x2="562" y2="4988" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="5001" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="5001" fill="#6e6e6e" font-size="9" text-anchor="end">415</text>
+<rect x="430" y="4993" width="68.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="492.0" y="4993" width="6.4" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="4992" x2="529" y2="5003" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="4992" x2="562" y2="5003" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="4997" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="4997" r="3.1" fill="#7d7d7d"/>
+<text x="37" y="5016" fill="#9a9a9a" font-size="10.5">port/</text>
+<text x="418" y="5016" fill="#5e5e5e" font-size="9" text-anchor="end">397</text>
+<text x="48" y="5031" fill="#cfcfcf" font-size="10.5">hot_reload_probe.rs</text>
+<text x="418" y="5031" fill="#6e6e6e" font-size="9" text-anchor="end">65</text>
+<rect x="430" y="5023" width="10.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5022" x2="529" y2="5033" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5022" x2="562" y2="5033" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5046" fill="#cfcfcf" font-size="10.5">playback_probe.rs</text>
+<text x="418" y="5046" fill="#6e6e6e" font-size="9" text-anchor="end">79</text>
+<rect x="430" y="5038" width="13.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5037" x2="529" y2="5048" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5037" x2="562" y2="5048" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5061" fill="#cfcfcf" font-size="10.5">poster.rs</text>
+<text x="418" y="5061" fill="#6e6e6e" font-size="9" text-anchor="end">66</text>
+<rect x="430" y="5053" width="10.9" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5052" x2="529" y2="5063" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5052" x2="562" y2="5063" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5076" fill="#cfcfcf" font-size="10.5">sequence_preview.rs</text>
+<text x="418" y="5076" fill="#6e6e6e" font-size="9" text-anchor="end">64</text>
+<rect x="430" y="5068" width="10.6" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5067" x2="529" y2="5078" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5067" x2="562" y2="5078" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5091" fill="#cfcfcf" font-size="10.5">timing_drag_tests.rs</text>
+<text x="418" y="5091" fill="#6e6e6e" font-size="9" text-anchor="end">123</text>
+<rect x="430" y="5083" width="20.3" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5082" x2="529" y2="5093" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5082" x2="562" y2="5093" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="5106" fill="#cfcfcf" font-size="10.5">port.rs</text>
+<text x="418" y="5106" fill="#6e6e6e" font-size="9" text-anchor="end">528</text>
+<rect x="430" y="5098" width="87.1" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="489.4" y="5098" width="27.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5097" x2="529" y2="5108" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5097" x2="562" y2="5108" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5102" r="3.1" fill="#d0a06a"/>
+<circle cx="895" cy="5102" r="3.1" fill="#d0a06a"/>
+<circle cx="904" cy="5102" r="3.1" fill="#d0a06a"/>
+<circle cx="913" cy="5102" r="3.1" fill="#d0a06a"/>
+<text x="982" y="5106" fill="#6e6e6e" font-size="8.5">80% stage.rs</text>
+<text x="37" y="5121" fill="#9a9a9a" font-size="10.5">snapshot/</text>
+<text x="418" y="5121" fill="#5e5e5e" font-size="9" text-anchor="end">439</text>
+<text x="48" y="5136" fill="#cfcfcf" font-size="10.5">camera_view_cage_tests.rs</text>
+<text x="418" y="5136" fill="#6e6e6e" font-size="9" text-anchor="end">327</text>
+<rect x="430" y="5128" width="54.0" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5127" x2="529" y2="5138" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5127" x2="562" y2="5138" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5151" fill="#cfcfcf" font-size="10.5">frame_cost_probe.rs</text>
+<text x="418" y="5151" fill="#6e6e6e" font-size="9" text-anchor="end">112</text>
+<rect x="430" y="5143" width="18.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5142" x2="529" y2="5153" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5142" x2="562" y2="5153" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="5166" fill="#cfcfcf" font-size="10.5">snapshot.rs</text>
+<text x="418" y="5166" fill="#6e6e6e" font-size="9" text-anchor="end">566</text>
+<rect x="430" y="5158" width="93.4" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="513.3" y="5158" width="10.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5157" x2="529" y2="5168" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5157" x2="562" y2="5168" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="895" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="904" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="913" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="922" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="931" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="940" cy="5162" r="3.1" fill="#ff9d4d"/>
+<circle cx="949" cy="5162" r="3.1" fill="#ff9d4d"/>
+<text x="982" y="5166" fill="#6e6e6e" font-size="8.5">100% stage.rs</text>
+<text x="37" y="5181" fill="#cfcfcf" font-size="10.5">snapshot_cache.rs</text>
+<text x="418" y="5181" fill="#6e6e6e" font-size="9" text-anchor="end">398</text>
+<rect x="430" y="5173" width="65.7" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="459.7" y="5173" width="36.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5172" x2="529" y2="5183" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5172" x2="562" y2="5183" stroke="#4a4a4a" stroke-width="0.6"/>
+<circle cx="886" cy="5177" r="3.1" fill="#7d7d7d"/>
+<circle cx="895" cy="5177" r="3.1" fill="#7d7d7d"/>
+<text x="37" y="5196" fill="#cfcfcf" font-size="10.5">viewer.rs</text>
+<text x="418" y="5196" fill="#6e6e6e" font-size="9" text-anchor="end">185</text>
+<rect x="430" y="5188" width="30.5" height="9" fill="#c39bd3" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.8" y="5188" width="7.8" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5187" x2="529" y2="5198" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5187" x2="562" y2="5198" stroke="#4a4a4a" stroke-width="0.6"/>
+<rect x="20" y="5215" width="1140" height="15" fill="#d98880" fill-opacity="0.09"/>
+<text x="26" y="5226" fill="#d98880" font-size="12" font-family="-apple-system,sans-serif">extensions — 拡張</text>
+<text x="418" y="5226" fill="#8c8c8c" font-size="10" text-anchor="end">4540 行</text>
+<text x="37" y="5241" fill="#9a9a9a" font-size="10.5">edit/</text>
+<text x="418" y="5241" fill="#5e5e5e" font-size="9" text-anchor="end">4009</text>
+<text x="48" y="5256" fill="#9a9a9a" font-size="10.5">src/</text>
+<text x="418" y="5256" fill="#5e5e5e" font-size="9" text-anchor="end">3453</text>
+<text x="59" y="5271" fill="#9a9a9a" font-size="10.5">document/</text>
+<text x="418" y="5271" fill="#5e5e5e" font-size="9" text-anchor="end">1902</text>
+<text x="70" y="5286" fill="#cfcfcf" font-size="10.5">apply.rs</text>
+<text x="418" y="5286" fill="#6e6e6e" font-size="9" text-anchor="end">550</text>
+<rect x="430" y="5278" width="90.8" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5277" x2="529" y2="5288" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5277" x2="562" y2="5288" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="5301" fill="#cfcfcf" font-size="10.5">edit.rs</text>
+<text x="418" y="5301" fill="#6e6e6e" font-size="9" text-anchor="end">283</text>
+<rect x="430" y="5293" width="46.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5292" x2="529" y2="5303" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5292" x2="562" y2="5303" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="5316" fill="#9a9a9a" font-size="10.5">group/</text>
+<text x="418" y="5316" fill="#5e5e5e" font-size="9" text-anchor="end">488</text>
+<text x="81" y="5331" fill="#cfcfcf" font-size="10.5">moving.rs</text>
+<text x="418" y="5331" fill="#6e6e6e" font-size="9" text-anchor="end">488</text>
+<rect x="430" y="5323" width="80.5" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5322" x2="529" y2="5333" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5322" x2="562" y2="5333" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="5346" fill="#cfcfcf" font-size="10.5">group.rs</text>
+<text x="418" y="5346" fill="#6e6e6e" font-size="9" text-anchor="end">329</text>
+<rect x="430" y="5338" width="54.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5337" x2="529" y2="5348" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5337" x2="562" y2="5348" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="5361" fill="#cfcfcf" font-size="10.5">projection.rs</text>
+<text x="418" y="5361" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="5353" width="12.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5352" x2="529" y2="5363" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5352" x2="562" y2="5363" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="70" y="5376" fill="#cfcfcf" font-size="10.5">validate.rs</text>
+<text x="418" y="5376" fill="#6e6e6e" font-size="9" text-anchor="end">174</text>
+<rect x="430" y="5368" width="28.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5367" x2="529" y2="5378" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5367" x2="562" y2="5378" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5391" fill="#cfcfcf" font-size="10.5">document.rs</text>
+<text x="418" y="5391" fill="#6e6e6e" font-size="9" text-anchor="end">581</text>
+<rect x="430" y="5383" width="95.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5382" x2="529" y2="5393" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5382" x2="562" y2="5393" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5406" fill="#cfcfcf" font-size="10.5">fixture.rs</text>
+<text x="418" y="5406" fill="#6e6e6e" font-size="9" text-anchor="end">453</text>
+<rect x="430" y="5398" width="74.7" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5397" x2="529" y2="5408" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5397" x2="562" y2="5408" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5421" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="5421" fill="#6e6e6e" font-size="9" text-anchor="end">38</text>
+<rect x="430" y="5413" width="6.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5412" x2="529" y2="5423" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5412" x2="562" y2="5423" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5436" fill="#cfcfcf" font-size="10.5">persist.rs</text>
+<text x="418" y="5436" fill="#6e6e6e" font-size="9" text-anchor="end">210</text>
+<rect x="430" y="5428" width="34.6" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5427" x2="529" y2="5438" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5427" x2="562" y2="5438" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5451" fill="#cfcfcf" font-size="10.5">stagger.rs</text>
+<text x="418" y="5451" fill="#6e6e6e" font-size="9" text-anchor="end">187</text>
+<rect x="430" y="5443" width="30.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="451.1" y="5443" width="9.7" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5442" x2="529" y2="5453" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5442" x2="562" y2="5453" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5466" fill="#cfcfcf" font-size="10.5">text_edit.rs</text>
+<text x="418" y="5466" fill="#6e6e6e" font-size="9" text-anchor="end">82</text>
+<rect x="430" y="5458" width="13.5" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="440.9" y="5458" width="2.6" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5457" x2="529" y2="5468" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5457" x2="562" y2="5468" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="48" y="5481" fill="#9a9a9a" font-size="10.5">tests/</text>
+<text x="418" y="5481" fill="#5e5e5e" font-size="9" text-anchor="end">556</text>
+<text x="59" y="5496" fill="#cfcfcf" font-size="10.5">edit_transactions.rs</text>
+<text x="418" y="5496" fill="#6e6e6e" font-size="9" text-anchor="end">450</text>
+<rect x="430" y="5488" width="74.2" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5487" x2="529" y2="5498" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5487" x2="562" y2="5498" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5511" fill="#cfcfcf" font-size="10.5">notebook_read.rs</text>
+<text x="418" y="5511" fill="#6e6e6e" font-size="9" text-anchor="end">28</text>
+<rect x="430" y="5503" width="4.6" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="430.7" y="5503" width="4.0" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5502" x2="529" y2="5513" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5502" x2="562" y2="5513" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5526" fill="#cfcfcf" font-size="10.5">recording_read.rs</text>
+<text x="418" y="5526" fill="#6e6e6e" font-size="9" text-anchor="end">78</text>
+<rect x="430" y="5518" width="12.9" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="430.7" y="5518" width="12.2" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5517" x2="529" y2="5528" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5517" x2="562" y2="5528" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="5541" fill="#9a9a9a" font-size="10.5">jobs/</text>
+<text x="418" y="5541" fill="#5e5e5e" font-size="9" text-anchor="end">335</text>
+<text x="48" y="5556" fill="#9a9a9a" font-size="10.5">src/</text>
+<text x="418" y="5556" fill="#5e5e5e" font-size="9" text-anchor="end">335</text>
+<text x="59" y="5571" fill="#cfcfcf" font-size="10.5">export.rs</text>
+<text x="418" y="5571" fill="#6e6e6e" font-size="9" text-anchor="end">159</text>
+<rect x="430" y="5563" width="26.2" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.8" y="5563" width="3.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5562" x2="529" y2="5573" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5562" x2="562" y2="5573" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5586" fill="#cfcfcf" font-size="10.5">freeze.rs</text>
+<text x="418" y="5586" fill="#6e6e6e" font-size="9" text-anchor="end">170</text>
+<rect x="430" y="5578" width="28.1" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="452.9" y="5578" width="5.1" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5577" x2="529" y2="5588" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5577" x2="562" y2="5588" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="59" y="5601" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="5601" fill="#6e6e6e" font-size="9" text-anchor="end">6</text>
+<rect x="430" y="5593" width="1.0" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<line x1="529" y1="5592" x2="529" y2="5603" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5592" x2="562" y2="5603" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="37" y="5616" fill="#9a9a9a" font-size="10.5">script/</text>
+<text x="418" y="5616" fill="#5e5e5e" font-size="9" text-anchor="end">196</text>
+<text x="48" y="5631" fill="#9a9a9a" font-size="10.5">src/</text>
+<text x="418" y="5631" fill="#5e5e5e" font-size="9" text-anchor="end">196</text>
+<text x="59" y="5646" fill="#cfcfcf" font-size="10.5">lib.rs</text>
+<text x="418" y="5646" fill="#6e6e6e" font-size="9" text-anchor="end">196</text>
+<rect x="430" y="5638" width="32.3" height="9" fill="#d98880" fill-opacity="0.72" rx="1.5"/>
+<rect x="448.8" y="5638" width="13.5" height="9" fill="#151515" fill-opacity="0.55" rx="1.5"/>
+<line x1="529" y1="5637" x2="529" y2="5648" stroke="#4a4a4a" stroke-width="0.6"/>
+<line x1="562" y1="5637" x2="562" y2="5648" stroke="#4a4a4a" stroke-width="0.6"/>
+<text x="26" y="5700" fill="#6e6e6e" font-size="10" font-family="-apple-system,sans-serif">散っている責任は「棒が短いのに ● が多い行」— 小さい file が多くの file を連れてくる。python3 scripts/responsibility-tree.py で引き直す。</text>
+</svg>
