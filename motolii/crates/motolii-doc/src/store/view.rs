@@ -53,6 +53,12 @@ pub struct StoreView<'a> {
 
 const MAX_LINK_DEPTH: u32 = 64;
 
+/// 書類ぜんたいを訊く口(居る層・書類の寸法)と、その 1 コマぶんの手控え。
+/// 親の private も見えるので、`db` / `at` / `query` はそのまま使える。
+#[path = "view_records.rs"]
+mod records;
+use records::layer_id_of;
+
 impl<'a> StoreView<'a> {
     pub fn new(
         db: &'a EntityDb,
@@ -193,26 +199,6 @@ impl<'a> StoreView<'a> {
         hasher.finish()
     }
 
-    pub fn layers(&self) -> Vec<LayerId> {
-        let query = self.query();
-        let mut out: Vec<LayerId> = self
-            .db
-            .sorted_entity_paths()
-            .filter_map(|path| {
-                let id = layer_id_of(path)?;
-                let results = self
-                    .db
-                    .latest_at(&query, path, [descriptor_present().component]);
-                let present = results
-                    .component_batch::<LayerPresent>(descriptor_present().component)?
-                    .first()
-                    .copied()?;
-                present.0.then_some(id)
-            })
-            .collect();
-        out.sort();
-        out
-    }
 
     pub fn has_layer(&self, layer: LayerId) -> bool {
         self.layers().contains(&layer)
@@ -496,22 +482,6 @@ impl<'a> StoreView<'a> {
         self.value_at_path(&composition_path(), property, t)
     }
 
-    pub fn composition(&self) -> Result<Option<Composition>, StoreError> {
-        let descriptor = descriptor_composition();
-        let path = composition_path();
-        let results = self
-            .db
-            .latest_at(&self.query(), &path, [descriptor.component]);
-        let Some(json) = results
-            .component_batch::<TrackJson>(descriptor.component)
-            .and_then(|batch| batch.into_iter().next())
-        else {
-            return Ok(None);
-        };
-        serde_json::from_str(&json.0)
-            .map(Some)
-            .map_err(StoreError::Encode)
-    }
 
     pub fn notebook(&self) -> Result<crate::doc::store::Notebook, StoreError> {
         let descriptor = descriptor_notebook();
@@ -767,9 +737,3 @@ impl<'a> StoreView<'a> {
     }
 }
 
-fn layer_id_of(path: &EntityPath) -> Option<LayerId> {
-    let s = path.to_string();
-    s.strip_prefix("/layer/")
-        .and_then(|rest| rest.parse::<u64>().ok())
-        .map(LayerId)
-}
