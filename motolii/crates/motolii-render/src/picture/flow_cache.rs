@@ -20,11 +20,11 @@ pub(super) struct CachedTree {
 
 pub(super) struct CachedNode {
     pub(super) id: NodeId,
-    key: PlanKey,
-    measure: Option<Measure>,
-    leaf: Option<LeafSpec>,
-    group: Option<(LayerId, bool)>,
-    children: Vec<CachedNode>,
+    pub(super) key: PlanKey,
+    pub(super) measure: Option<Measure>,
+    pub(super) leaf: Option<LeafSpec>,
+    pub(super) group: Option<(LayerId, bool)>,
+    pub(super) children: Vec<CachedNode>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

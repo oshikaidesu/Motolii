@@ -137,26 +137,50 @@ impl FlowCache {
             // Do not hold the cache borrow while a layout query recursively asks
             // for a neighbouring time (motion/box evaluation can do that).
             let mut cached = self.roots.borrow_mut().remove(&root);
-            let static_tree = !structure.layout_topology_dynamic && !structure.dynamic_subtrees.contains(&root);
             let mut plan = None;
-            let layout_dirty = if static_tree && cached.is_some() {
-                false
+            let layout_dirty = if let Some(held) = &mut cached {
+                if !structure.layout_topology_dynamic {
+                    match update_cached_node(view, t, &mut held.tree, &mut held.root, &structure, true, false)? {
+                        Some(dirty) => dirty,
+                        None => {
+                            #[cfg(test)]
+                            self.plan_builds.set(self.plan_builds.get() + 1);
+                            let next = plan_container(view, root, t, &children, &displayed, true)?;
+                            let dirty = if next.same_shape(&held.root) { next.update(&mut held.tree, &mut held.root)? } else {
+                                let mut tree = TaffyTree::new();
+                                tree.disable_rounding();
+                                let root_node = next.create(&mut tree)?;
+                                *held = CachedTree { tree, root: root_node, blockers: Vec::new() };
+                                true
+                            };
+                            plan = Some(next);
+                            dirty
+                        }
+                    }
+                } else {
+                    #[cfg(test)]
+                    self.plan_builds.set(self.plan_builds.get() + 1);
+                    let next = plan_container(view, root, t, &children, &displayed, true)?;
+                    let dirty = if next.same_shape(&held.root) { next.update(&mut held.tree, &mut held.root)? } else {
+                        let mut tree = TaffyTree::new();
+                        tree.disable_rounding();
+                        let root_node = next.create(&mut tree)?;
+                        *held = CachedTree { tree, root: root_node, blockers: Vec::new() };
+                        true
+                    };
+                    plan = Some(next);
+                    dirty
+                }
             } else {
                 #[cfg(test)]
                 self.plan_builds.set(self.plan_builds.get() + 1);
                 let next = plan_container(view, root, t, &children, &displayed, true)?;
-                let dirty = match &mut cached {
-                    Some(held) if next.same_shape(&held.root) => next.update(&mut held.tree, &mut held.root)?,
-                    _ => {
-                        let mut tree = TaffyTree::new();
-                        tree.disable_rounding();
-                        let root_node = next.create(&mut tree)?;
-                        cached = Some(CachedTree { tree, root: root_node, blockers: Vec::new() });
-                        true
-                    }
-                };
+                let mut tree = TaffyTree::new();
+                tree.disable_rounding();
+                let root_node = next.create(&mut tree)?;
+                cached = Some(CachedTree { tree, root: root_node, blockers: Vec::new() });
                 plan = Some(next);
-                dirty
+                true
             };
             let mut cached = cached.expect("a plan always creates a Taffy tree");
             let (mut leaves, mut groups) = (Vec::new(), Vec::new());
@@ -210,6 +234,60 @@ fn plan_container(
         planned.push(PlanNode { key: PlanKey::GridPlaceholder, style: Style::default(), measure: None, leaf: None, group: None, children: Vec::new() });
     }
     Ok(PlanNode { key: PlanKey::Group(group), style, measure: None, leaf: None, group: Some((group, is_root)), children: planned })
+}
+
+/// Refresh only the cached nodes whose authored input can vary with time.
+/// `None` means a time-varying topology escaped the conservative classifier;
+/// the caller then falls back to a complete PlanNode rebuild.
+fn update_cached_node(
+    view: &StoreView<'_>, t: RationalTime, tree: &mut TaffyTree<Measure>, cached: &mut flow_cache::CachedNode,
+    structure: &crate::doc::store::scratch::Structure, is_root: bool, parent_flow_dynamic: bool,
+) -> Result<Option<bool>, StoreError> {
+    let mut dirty = false;
+    match cached.key {
+        PlanKey::Group(layer) => {
+            let own_dynamic = structure.dynamic_layers.contains(&layer);
+            if own_dynamic || parent_flow_dynamic {
+                let style = group_style(view, layer, t, is_root)?;
+                if tree.style(cached.id).map_err(layout_error)? != &style {
+                    tree.set_style(cached.id, style).map_err(layout_error)?;
+                    dirty = true;
+                }
+            }
+            let flow = PropertyId::new(FLEX_DIRECTION)?;
+            let child_parent_dynamic = structure.dynamic_properties.contains(&(layer, flow));
+            for child in &mut cached.children {
+                let Some(child_dirty) = update_cached_node(view, t, tree, child, structure, false, child_parent_dynamic)? else { return Ok(None) };
+                dirty |= child_dirty;
+            }
+        }
+        PlanKey::Leaf(layer, expected_text_fill) => {
+            if structure.dynamic_layers.contains(&layer) || parent_flow_dynamic {
+                let bounds = crate::picture::boxes::layer_box(view, layer, t)?.unwrap_or([0.0; 4]);
+                let scale = view.pair(layer, property::SCALE, [1.0, 1.0], t)?;
+                let extent = crate::picture::boxes::natural_extent(view, layer, t, bounds, scale)?;
+                let natural = [extent.hi[0] - extent.lo[0], extent.hi[1] - extent.lo[1]];
+                let mut style = Style::default();
+                let sizing = item_style(view, layer, t, natural, &mut style)?;
+                let text_fill = sizing[0] == Sizing::Fill && view.meta(layer)?.is_some_and(|meta| meta.source == LayerSource::Text);
+                if text_fill != expected_text_fill { return Ok(None); }
+                if text_fill && sizing[1] == Sizing::Hug { style.size.height = Dimension::auto(); }
+                if tree.style(cached.id).map_err(layout_error)? != &style {
+                    tree.set_style(cached.id, style).map_err(layout_error)?;
+                    dirty = true;
+                }
+                let measure = text_fill.then_some(Measure { layer, scale: scale[0].abs().max(1e-3) });
+                if cached.measure != measure {
+                    tree.set_node_context(cached.id, measure).map_err(layout_error)?;
+                    cached.measure = measure;
+                    dirty = true;
+                }
+                cached.leaf = Some(LeafSpec { text_fill, layer, bounds, sizing, fit: view.choice(layer, OBJECT_FIT, t)? });
+            }
+        }
+        PlanKey::GridPlaceholder => {}
+    }
+    Ok(Some(dirty))
 }
 
 #[allow(clippy::too_many_arguments)]
