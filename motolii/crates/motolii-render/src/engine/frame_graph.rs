@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
+use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
 use crate::picture::resolved::ResolvedLayer;
 
 use super::frame_graph_scene::GpuSceneValue;
@@ -40,8 +40,9 @@ impl EngineFrameGraph {
         let scene = program.scene().scene;
         let document_camera = program.camera();
         let solver = program.solver().key();
+        let overlay = program.overlay().output();
         let mut nodes: Vec<_> = program.nodes().collect();
-        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera, solver]);
+        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera, solver, overlay]);
         gpu_identity.time_dependency = TimeDependency::Exact;
         let gpu = GraphNode::new(gpu_identity);
         let projection = |role| {
@@ -121,10 +122,28 @@ impl NodeExecutor for ProgramExecutor<'_> {
                 let value = self.engine.frame_graph_blob_analysis(request, previous, context.time, self.comp, self.fps)?;
                 Ok(NodeValue::new(value))
             }
+            NodeKind::AnalysisOverlay => {
+                let scene = direct::<SceneValue>(node, &inputs, 0)?;
+                let effect = inputs.at(1)
+                    .and_then(|value| value.downcast_ref::<crate::frame_graph::EffectValue>())
+                    .and_then(|value| value.0.as_ref())
+                    .ok_or_else(|| unsupported(node.identity().kind))?;
+                let solver = direct::<SolverPlanValue>(node, &inputs, 2)?;
+                let camera = *direct::<ResolvedCamera>(node, &inputs, 3)?;
+                let previous = inputs.at(4).and_then(|value| value.downcast_ref::<OverlayAnalysisValue>());
+                let (layer, _order, parent) = self.program.overlay().recipe(node.key())
+                    .ok_or_else(|| unsupported(node.identity().kind))?;
+                let value = self.engine.frame_graph_overlay_analysis(
+                    layer, parent, effect, scene, solver, camera, previous, context.time, self.comp,
+                )?;
+                Ok(NodeValue::new(value))
+            }
             NodeKind::GpuScene => {
                 let scene = direct::<SceneValue>(node, &inputs, 0)?;
                 let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
                 let solver = direct::<SolverPlanValue>(node, &inputs, 2)?;
+                let overlays = direct::<OverlaySetValue>(node, &inputs, 3)?;
+                self.engine.install_frame_graph_overlays(overlays);
                 let frame = context.time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
                 self.engine.compositor.clock = Some([
                     context.time.as_seconds_f64() as f32,
