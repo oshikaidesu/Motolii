@@ -487,7 +487,7 @@ fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSet
     }
 }
 
-fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
+pub(crate) fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
     let n = |name| blob::number_of(params, name);
     let source = match n("mode").round() as i64 {
         1 => BlobSource::Motion { threshold: n("threshold") as f32 },
@@ -508,7 +508,7 @@ fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
 }
 
 /// 乗算済み線形 Rgba16Float を、長辺が上限に収まるよう箱で縮めて非乗算 sRGB の RGBA8 に。戻り値の最後は縮めた倍率。
-fn shrink_to_srgb(picture: &LinearPicture, long_side: u32) -> (Vec<u8>, u32, u32, u32) {
+pub(crate) fn shrink_to_srgb(picture: &LinearPicture, long_side: u32) -> (Vec<u8>, u32, u32, u32) {
     let shrink = picture.width.max(picture.height).div_ceil(long_side.max(1)).max(1);
     let (w, h) = (picture.width / shrink, picture.height / shrink);
     let texel = |x: u32, y: u32, c: usize| {
