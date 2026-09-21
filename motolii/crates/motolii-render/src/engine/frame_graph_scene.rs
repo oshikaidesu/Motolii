@@ -1,6 +1,6 @@
 use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 use crate::doc::store::LayerId;
-use crate::frame_graph::{SceneContentValue, SceneValue};
+use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneValue};
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
 
@@ -86,7 +86,18 @@ impl Engine {
                     }
                 }
             };
-            let Some(content) = content else { continue };
+            let Some(mut content) = content else { continue };
+            if !source.image_sources.is_empty() {
+                content = match &content {
+                    crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
+                        .map(crate::render::compositor::LayerContent::Texture)
+                        .unwrap_or(content),
+                    crate::render::compositor::LayerContent::LinearTexture(texture) => self.compositor.snapshot_texture(texture)
+                        .map(crate::render::compositor::LayerContent::LinearTexture)
+                        .unwrap_or(content),
+                    _ => content,
+                };
+            }
             let placement = LayerPlacement {
                 transform: source.transform.affine,
                 world_transform: Some(source.transform.spatial),
@@ -101,6 +112,11 @@ impl Engine {
                 .into_iter()
                 .chain(crate::render::engine::translate::translate_plate_passes(&source.after_effects))
                 .collect();
+            let pass_sources = self.frame_graph_image_sources(
+                &source.image_sources,
+                comp,
+                projection_camera,
+            )?;
             // Stencil/Silhouette are matte sources, never compositor blend modes.
             let blend_mode = if source.blend.is_stencil() {
                 CompositeBlendMode::Normal
@@ -123,7 +139,7 @@ impl Engine {
             };
             let layer = self.apply_masks_to_layer(layer, &source.masks, natural, None)?;
             let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
-            layers.push(LayerWithPasses { layer, passes, padding: 0, pass_sources: Vec::new(), cut: Vec::new() });
+            layers.push(LayerWithPasses { layer, passes, padding: 0, pass_sources, cut: Vec::new() });
             entries.push(Entry {
                 layer: source.layer,
                 matte: source.matte,
@@ -210,6 +226,75 @@ impl Engine {
             .collect();
 
         Ok(GpuSceneValue { layers })
+    }
+
+    fn frame_graph_image_sources(
+        &mut self,
+        rows: &[Vec<SceneImageSourceValue>],
+        comp: CompSpec,
+        camera: ResolvedCamera,
+    ) -> Result<Vec<Vec<crate::render::compositor::GpuTexture2D>>, EngineError> {
+        rows.iter().map(|row| {
+            row.iter().filter_map(|source| match self.frame_graph_image_source(source, comp, camera) {
+                Ok(Some(texture)) => Some(Ok(texture)),
+                Ok(None) => None,
+                Err(error) => Some(Err(error)),
+            }).collect()
+        }).collect()
+    }
+
+    fn frame_graph_image_source(
+        &mut self,
+        source: &SceneImageSourceValue,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+    ) -> Result<Option<crate::render::compositor::GpuTexture2D>, EngineError> {
+        match source {
+            SceneImageSourceValue::Content { layer, content } => {
+                let content = match content {
+                    SceneContentValue::None => return Ok(None),
+                    SceneContentValue::Text(text) => self.shape_texture_from_shapes(
+                        &text.shapes(), *layer, false, 0.05, comp, None, false,
+                    )?.0,
+                    SceneContentValue::Shape(shapes) => self.shape_texture_from_shapes(
+                        shapes, *layer, false, 0.05, comp, None, false,
+                    )?.0,
+                    SceneContentValue::Material(_) | SceneContentValue::Particles(_) => return Ok(None),
+                    SceneContentValue::Media { source, time } => {
+                        self.file_content_for(&source.path, *time, *layer, comp)?.0
+                    }
+                    SceneContentValue::Plate(plate) => {
+                        let nested = SceneValue {
+                            layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
+                        };
+                        let prepared = self.prepare_gpu_scene(&nested, comp, camera)?;
+                        if prepared.layers.is_empty() { return Ok(None); }
+                        let (texture, _) = self.compositor.render_to_texture(
+                            comp,
+                            camera,
+                            &prepared.layers,
+                            crate::render::compositor::NO_BACKGROUND,
+                        )?;
+                        return Ok(self.compositor.import_premultiplied(&texture).ok());
+                    }
+                };
+                let Some(texture) = content.and_then(|content| content.texture().cloned()) else {
+                    return Ok(None);
+                };
+                Ok(self.compositor.snapshot_texture(&texture))
+            }
+            SceneImageSourceValue::Scene { scene, background } => {
+                let prepared = self.prepare_gpu_scene(scene, comp, camera)?;
+                if prepared.layers.is_empty() { return Ok(None); }
+                let (texture, _) = self.compositor.render_to_texture(
+                    comp,
+                    camera,
+                    &prepared.layers,
+                    *background,
+                )?;
+                Ok(self.compositor.import_premultiplied(&texture).ok())
+            }
+        }
     }
 }
 
