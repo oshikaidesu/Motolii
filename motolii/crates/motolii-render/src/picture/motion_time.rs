@@ -138,12 +138,7 @@ pub fn ease(kind: i64, u: f64) -> f64 {
         4 => (0.42, 0.0, 0.58, 1.0),
         _ => (0.25, 0.1, 0.25, 1.0),
     };
-    let bezier = |a: f64, b: f64, s: f64| 3.0 * a * s * (1.0 - s).powi(2) + 3.0 * b * s * s * (1.0 - s) + s.powi(3);
-    let u = u.clamp(0.0, 1.0);
-    let (mut lo, mut hi) = (0.0, 1.0);
-    for _ in 0..40 {
-        let mid = (lo + hi) * 0.5;
-        if bezier(x1, x2, mid) < u { lo = mid } else { hi = mid }
-    }
-    bezier(y1, y2, (lo + hi) * 0.5)
+    // 解くのはコアの 1 箇所だけ(`doc::eval::bezier`)。ここに二つ目の解き方を置かない
+    // —— 置いていた 40 回の二分探索が、2026-09-21 の標本で再生の render thread の 23% だった。
+    crate::doc::eval::cubic_bezier_ease(x1, y1, x2, y2, u.clamp(0.0, 1.0))
 }

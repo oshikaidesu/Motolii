@@ -3140,6 +3140,7 @@ version = "0.0.0"
 dependencies = [
  "arrow",
  "glam 0.30.10",
+ "kurbo",
  "re_build_info",
  "re_byte_size",
  "re_chunk",

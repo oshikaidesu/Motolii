@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 glam = { workspace = true }
+kurbo = { workspace = true }
 re_types_core = { workspace = true }
 serde = { workspace = true }
 arrow = { workspace = true }
