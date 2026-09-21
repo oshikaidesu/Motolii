@@ -80,7 +80,7 @@ impl Engine {
                             prepared.layers,
                             CompositeBlendMode::Normal,
                             placement,
-                            false,
+                            plate.average,
                         )?;
                         (Some(baked.content), baked.size)
                     }
