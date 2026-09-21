@@ -144,7 +144,11 @@ impl VisibilityProgram {
                     .try_to_frame_floor(fps)
                     .map(|frame| recipe.timing.covers(frame))
                     .unwrap_or(false),
-                None => false,
+                // Rendering itself rejects a missing composition. Keeping
+                // visibility neutral here lets revision-program unit tests use
+                // minimal Documents without making visibility the owner of
+                // the NoComposition error.
+                None => true,
             };
             Ok(NodeValue::new(VisibilityValue {
                 active: in_range && !hidden,
