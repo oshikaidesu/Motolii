@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -22,6 +22,7 @@ pub enum SceneProgramError {
     Lookbehind(LookbehindProgramError),
     Particle(ParticleProgramError),
     Relation(RelationProgramError),
+    Solver(SolverProgramError),
     Unsupported(super::NodeKind),
 }
 impl std::fmt::Display for SceneProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
@@ -42,6 +43,7 @@ impl From<MotionProgramError> for SceneProgramError { fn from(value: MotionProgr
 impl From<LookbehindProgramError> for SceneProgramError { fn from(value: LookbehindProgramError) -> Self { Self::Lookbehind(value) } }
 impl From<ParticleProgramError> for SceneProgramError { fn from(value: ParticleProgramError) -> Self { Self::Particle(value) } }
 impl From<RelationProgramError> for SceneProgramError { fn from(value: RelationProgramError) -> Self { Self::Relation(value) } }
+impl From<SolverProgramError> for SceneProgramError { fn from(value: SolverProgramError) -> Self { Self::Solver(value) } }
 
 /// One immutable revision program. Compiler bindings are the only place that
 /// remembers layer ids; runtime execution follows content-addressed edges.
@@ -62,6 +64,7 @@ pub struct SceneProgram {
     lookbehind: LookbehindProgram,
     particles: ParticleProgram,
     relations: RelationProgram,
+    solver: SolverProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
     roots: BTreeSet<NodeKey>,
 }
@@ -78,6 +81,7 @@ impl SceneProgram {
         let motion = MotionProgram::compile(view, &properties, &effects, &transforms, &flow)?;
         let particles = ParticleProgram::compile(view, &properties)?;
         let relations = RelationProgram::compile(view, &properties)?;
+        let solver = SolverProgram::compile(view, &properties, &relations, &flow)?;
         let text = TextProgram::compile(view, &content, &flow, &properties)?;
         let groups = GroupBackgroundProgram::compile(view, &properties, &flow)?;
         let masks = MaskProgram::compile(view, &properties)?;
@@ -85,9 +89,9 @@ impl SceneProgram {
         let lookbehind = LookbehindProgram::compile(view, scene.output().scene)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(relations.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
-        let roots = BTreeSet::from([lookbehind.key(), camera.key(), relations.output()]);
-        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, relations, nodes, roots })
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        let roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
+        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, relations, solver, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -105,6 +109,7 @@ impl SceneProgram {
     pub fn motion(&self) -> &MotionProgram { &self.motion }
     pub fn particles(&self) -> &ParticleProgram { &self.particles }
     pub fn relations(&self) -> &RelationProgram { &self.relations }
+    pub fn solver(&self) -> &SolverProgram { &self.solver }
 
     pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<DynamicInput>, SceneProgramError> {
         if let Some(requests) = self.placements.dynamic_inputs(node, inputs, context) {
@@ -142,6 +147,7 @@ impl SceneProgram {
         if let Some(value) = self.lookbehind.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.particles.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.relations.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.solver.execute(node, inputs, context) { return value.map_err(Into::into); }
         Err(SceneProgramError::Unsupported(node.identity().kind))
     }
 }
