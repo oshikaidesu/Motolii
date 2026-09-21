@@ -90,6 +90,10 @@ pub enum NodeKind {
     Material,
     /// A time-addressed media frame (video) or image source.
     MediaFrame,
+    /// Pure semantic request describing one Blob Track analysis source.
+    AnalysisRequest,
+    /// Host-evaluated blob analysis result, cached by exact graph time.
+    AnalysisBlob,
     /// Exact-time authored participation: hidden/solo/timing.
     Visibility,
     /// Per-frame cumulative emission state for a particle layer.
