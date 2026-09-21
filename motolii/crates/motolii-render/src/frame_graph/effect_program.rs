@@ -16,11 +16,16 @@ impl std::fmt::Display for EffectProgramError { fn fmt(&self, f: &mut std::fmt::
 impl std::error::Error for EffectProgramError {}
 impl From<StoreError> for EffectProgramError { fn from(value: StoreError) -> Self { Self::Store(value) } }
 
-pub struct EffectProgram { nodes: BTreeMap<NodeKey, GraphNode>, recipes: BTreeMap<NodeKey, Recipe>, bindings: BTreeMap<LayerId, EffectBinding> }
+pub struct EffectProgram {
+    nodes: BTreeMap<NodeKey, GraphNode>,
+    recipes: BTreeMap<NodeKey, Recipe>,
+    bindings: BTreeMap<LayerId, EffectBinding>,
+    placement: BTreeMap<NodeKey, bool>,
+}
 
 impl EffectProgram {
     pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram) -> Result<Self, EffectProgramError> {
-        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
+        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new(); let mut placement = BTreeMap::new();
         for layer in view.layers() {
             let property_names = view.properties(layer);
             let mut keys = Vec::new();
@@ -38,16 +43,19 @@ impl EffectProgram {
                 identity.parameters = effect.plugin_id.as_bytes().iter().copied().chain([0]).chain(params.iter().flat_map(|(name, _)| name.as_bytes().iter().copied().chain([0]))).collect();
                 identity.time_dependency = TimeDependency::Exact;
                 let node = GraphNode::new(identity);
+                let is_placement = view.placement_program(&effect.plugin_id).is_some();
                 recipes.entry(node.key()).or_insert(Recipe { plugin_id: effect.plugin_id, enabled, scope, params });
+                placement.entry(node.key()).or_insert(is_placement);
                 nodes.entry(node.key()).or_insert(node.clone());
                 keys.push(node.key());
             }
             if !keys.is_empty() { bindings.insert(layer, EffectBinding { layer, effects: keys }); }
         }
-        Ok(Self { nodes, recipes, bindings })
+        Ok(Self { nodes, recipes, bindings, placement })
     }
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn binding(&self, layer: LayerId) -> Option<&EffectBinding> { self.bindings.get(&layer) }
+    pub fn is_placement(&self, key: NodeKey) -> bool { self.placement.get(&key).copied().unwrap_or(false) }
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, EffectProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
