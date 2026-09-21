@@ -6,7 +6,7 @@
 use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::collections::BTreeMap;
 
-use crate::doc::core::CompSpec;
+use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
 use crate::extensions::{blob, overlay};
@@ -133,7 +133,7 @@ impl Engine {
             self.layer_with_passes_linear_picture(layer)
         })();
         self.compositor.clock = previous_clock;
-        let Some(picture) = picture?? else {
+        let Some(picture) = picture? else {
             let marks = tracker.step(Vec::new(), &request.settings);
             inputs.set_blobs(request.target, EffectId(0), t, marks);
             return Ok(crate::frame_graph::BlobAnalysisValue {
