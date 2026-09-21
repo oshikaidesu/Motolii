@@ -126,13 +126,13 @@ pub fn particle_number(view: &StoreView<'_>, layer: LayerId, name: &str, t: Rati
 
 /// 時刻 t に生きている粒と、乱流・Plexus の取っ手。入点より前は空。
 pub fn particles_at(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<(Vec<Particle>, Turbulence, Links), StoreError> {
-    let empty = || (Vec::new(), Turbulence { amount: 0.0, size: 120.0, seed: 0.0 }, Links { distance: 0.0, width: 1.0, opacity: 0.6 });
-    let Some(fps) = view.composition()?.map(|c| c.fps) else { return Ok(empty()) };
-    let Some(meta) = view.meta(layer)? else { return Ok(empty()) };
     let mut values = std::collections::BTreeMap::new();
     for &(name, _, _, _) in ROWS {
         values.insert(name.to_owned(), particle_value(view, layer, name, t)?);
     }
+    let empty = || particles_from_values_and_births(&values, &[], t.as_seconds_f64());
+    let Some(fps) = view.composition()?.map(|c| c.fps) else { return Ok(empty()) };
+    let Some(meta) = view.meta(layer)? else { return Ok(empty()) };
     let births = births(view, layer, meta.timing.start, t, fps)?;
     Ok(particles_from_values_and_births(&values, &births, t.as_seconds_f64()))
 }
