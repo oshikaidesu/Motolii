@@ -302,6 +302,10 @@ impl<'a> StoreView<'a> {
         let results = self
             .db
             .latest_at(&self.query(), path, [descriptor.component]);
+        // 型のまま置かれていればそれが答え(新しい書き込み)。無ければ従来の文字列(古い書類)。
+        if let Some(value) = super::value_components::constant_from(&results, descriptor.component) {
+            return Ok(Some(PropertySource::constant(value)));
+        }
         let Some(json) = results
             .component_batch::<TrackJson>(descriptor.component)
             .and_then(|batch| batch.into_iter().next())

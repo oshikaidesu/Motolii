@@ -19,6 +19,8 @@ pub mod text;
 pub mod geometry;
 pub mod scratch;
 pub mod view;
+#[path = "store/value_components.rs"]
+pub mod value_components;
 #[cfg(test)]
 #[path = "store/type_probe.rs"]
 mod type_probe;
