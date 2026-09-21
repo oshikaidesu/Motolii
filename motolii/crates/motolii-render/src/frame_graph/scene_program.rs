@@ -13,6 +13,12 @@ pub enum SceneContentValue {
     Shape(Vec<ShapeNode>),
     Material(MaterialValue),
     Media { source: MediaSourceValue, time: RationalTime },
+    Plate(ScenePlateValue),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScenePlateValue {
+    pub(crate) members: Vec<SceneContributionValue>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -22,9 +28,9 @@ pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub tr
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
 #[derive(Clone, Debug, PartialEq)]
-struct SceneContributionValue {
-    solo: bool,
-    layer: Option<SceneLayerValue>,
+pub(super) struct SceneContributionValue {
+    pub(super) solo: bool,
+    pub(super) layer: Option<SceneLayerValue>,
 }
 
 #[derive(Clone)]
@@ -77,10 +83,12 @@ impl SceneNodeProgram {
             let attrs = view.attrs(layer)?.unwrap_or_default();
             let matte = if attrs.clip_to_below { view.clipping_base(layer)?.map(|layer| crate::doc::store::Matte { layer, mode: crate::doc::store::MatteMode::Alpha }) } else { attrs.matte };
             let mut effect_inputs = Vec::new();
-            let mut current = Some(layer); let mut own = true;
-            while let Some(owner) = current {
-                if let Some(binding) = effect_program.binding(owner) { for key in &binding.effects { let at = inputs.len(); inputs.push(*key); effect_inputs.push((at, !own)); } }
-                current = view.attrs(owner)?.unwrap_or_default().parent; own = false;
+            if let Some(binding) = effect_program.binding(layer) {
+                for key in &binding.effects {
+                    let at = inputs.len();
+                    inputs.push(*key);
+                    effect_inputs.push((at, false));
+                }
             }
             let mut mask_inputs = Vec::new();
             if let Some(binding) = mask_program.binding(layer) { for key in &binding.masks { let at = inputs.len(); inputs.push(*key); mask_inputs.push(at); } }
@@ -156,11 +164,12 @@ impl SceneNodeProgram {
                         }
                     }
                 }
-                let mut direct = Vec::new(); let mut after = Vec::new();
-                for (index, inherited) in effects {
+                let mut direct = Vec::new();
+                for (index, _) in effects {
                     let Some(effect) = inputs.at(*index).and_then(|value| value.downcast_ref::<EffectValue>()).and_then(|value| value.0.clone()) else { continue };
-                    if (*inherited && effect.scope == crate::doc::store::EffectScope::Whole) || (!*inherited && effect.scope == crate::doc::store::EffectScope::Whole) { after.push(effect); } else { direct.push(effect); }
+                    direct.push(effect);
                 }
+                let after = Vec::new();
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
                 Ok(NodeValue::new(SceneContributionValue {
                     solo: visibility.solo,
