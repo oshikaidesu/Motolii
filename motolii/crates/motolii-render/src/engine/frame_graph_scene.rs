@@ -1,6 +1,6 @@
 use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 use crate::doc::store::LayerId;
-use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneValue};
+use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneValue};
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
 
@@ -27,7 +27,11 @@ impl Engine {
         for source in &scene.layers {
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let force_picture = clip_bases.contains(&source.layer);
-            let (content, natural) = match &source.content {
+            let frozen = self.frame_graph_frozen_content(source);
+            let (content, natural, frozen_padding, frozen_frame, frozen_hit) = if let Some((content, natural, padding, frame)) = frozen {
+                (Some(content), natural, padding, frame, true)
+            } else {
+                let (content, natural) = match &source.content {
                 SceneContentValue::None => continue,
                 SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
                 SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
@@ -86,8 +90,10 @@ impl Engine {
                     }
                 }
             };
+                (content, natural, 0, None, false)
+            };
             let Some(mut content) = content else { continue };
-            if !source.image_sources.is_empty() {
+            if !frozen_hit && !source.image_sources.is_empty() {
                 content = match &content {
                     crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
                         .map(crate::render::compositor::LayerContent::Texture)
@@ -108,25 +114,27 @@ impl Engine {
                 rotation_y: 0.0,
                 plane: None,
             };
-            let mut direct_passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
-            let direct_screen = (
-                content.texture().is_none()
-                    || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
-            ).then_some([comp.width, comp.height]);
-            self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
+            let (passes, pass_sources) = if frozen_hit {
+                (Vec::new(), Vec::new())
+            } else {
+                let mut direct_passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
+                let direct_screen = (
+                    content.texture().is_none()
+                        || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
+                ).then_some([comp.width, comp.height]);
+                self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
 
-            let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
-            let plate_screen = plate_passes.iter()
-                .any(|pass| pass.reads_backdrop || pass.reads_composite())
-                .then_some([comp.width, comp.height]);
-            self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
+                let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
+                let plate_screen = plate_passes.iter()
+                    .any(|pass| pass.reads_backdrop || pass.reads_composite())
+                    .then_some([comp.width, comp.height]);
+                self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
 
-            let passes: Vec<_> = direct_passes.into_iter().chain(plate_passes).collect();
-            let pass_sources = self.frame_graph_image_sources(
-                &source.image_sources,
-                comp,
-                projection_camera,
-            )?;
+                (
+                    direct_passes.into_iter().chain(plate_passes).collect(),
+                    self.frame_graph_image_sources(&source.image_sources, comp, projection_camera)?,
+                )
+            };
             // Stencil/Silhouette are matte sources, never compositor blend modes.
             let blend_mode = if source.blend.is_stencil() {
                 CompositeBlendMode::Normal
@@ -145,11 +153,11 @@ impl Engine {
                 clip: crate::render::engine::translate::translate_clip(&source.effects),
                 shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects),
                 outline: self.outline_id(source.layer),
-                frame: None,
+                frame: frozen_frame,
             };
-            let layer = self.apply_masks_to_layer(layer, &source.masks, natural, None)?;
+            let layer = self.apply_masks_to_layer(layer, &source.masks, natural, frozen_frame)?;
             let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
-            layers.push(LayerWithPasses { layer, passes, padding: 0, pass_sources, cut: Vec::new() });
+            layers.push(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
             entries.push(Entry {
                 layer: source.layer,
                 matte: source.matte,
@@ -236,6 +244,34 @@ impl Engine {
             .collect();
 
         Ok(GpuSceneValue { layers })
+    }
+
+    fn frame_graph_frozen_content(
+        &mut self,
+        source: &SceneLayerValue,
+    ) -> Option<(
+        crate::render::compositor::LayerContent,
+        [f32; 2],
+        u32,
+        Option<crate::render::compositor::effects::vism::ImageFrame>,
+    )> {
+        if !source.freeze_eligible || source.ghost || source.instance != 0 || self.freezing == Some(source.layer) {
+            return None;
+        }
+        let comp_frame = self.compositor.clock?.get(2).copied()?.round() as i64;
+        let layer_frame = comp_frame - source.timing_start;
+        let Self { frozen, compositor, .. } = self;
+        let picture = frozen.load(
+            source.layer,
+            layer_frame,
+            &mut |bytes, width, height| compositor.upload_rgba16f("motolii-frozen", bytes, width, height).ok(),
+        )?;
+        Some((
+            crate::render::compositor::LayerContent::LinearTexture(picture.texture),
+            picture.natural,
+            picture.padding,
+            picture.frame,
+        ))
     }
 
     fn frame_graph_image_sources(
