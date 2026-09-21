@@ -60,7 +60,7 @@ pub use motion_program::{MotionBinding, MotionPlanValue, MotionProgram, MotionPr
 pub use placement_program::{PlacementBinding, PlacementCopyValue, PlacementProgram, PlacementProgramError, PlacementSetValue};
 pub use particle_program::{ParticleBinding, ParticleProgram, ParticleProgramError, ParticleValue};
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
-pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationValue};
+pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationSetValue, RelationValue};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
