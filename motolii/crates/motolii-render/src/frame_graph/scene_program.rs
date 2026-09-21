@@ -22,6 +22,7 @@ pub enum SceneContentValue {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScenePlateValue {
     pub(crate) members: Vec<SceneContributionValue>,
+    pub(crate) average: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -323,7 +324,7 @@ impl SceneNodeProgram {
                 }
                 let mut plate = base;
                 plate.content_key = None;
-                plate.content = SceneContentValue::Plate(ScenePlateValue { members });
+                plate.content = SceneContentValue::Plate(ScenePlateValue { members, average: false });
                 plate.effects = after;
                 plate.after_effects.clear();
                 plate.masks.clear();
