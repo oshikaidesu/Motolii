@@ -12,18 +12,18 @@ fn preview_sequence_shows_in_status_and_cancels() {
             Intent::SetMeta { layer: LayerId(id), meta: LayerMeta { source: LayerSource::Shape, order: id as i16, timing: LayerTiming::place(0, None, 60) } },
         ]).unwrap();
     }
-    let ghost_of = |rt: &crate::EditorRuntime, id: u64| -> serde_json::Value {
+    let ghost_of = |rt: &mut crate::EditorRuntime, id: u64| -> serde_json::Value {
         let status = rt.status().unwrap();
         status["layers"].as_array().unwrap().iter().find(|l| l["id"] == id).map(|l| l["ghost"].clone()).unwrap()
     };
     rt.request(serde_json::json!({"op":"previewSequence","layers":[11,12],"ghosts":[0,7]})).unwrap();
     assert_eq!(rt.doc.view().attrs(LayerId(12)).unwrap().unwrap().ghost, Some(7), "view().attrs に下書きが乗る");
-    assert_eq!(ghost_of(&rt, 12), serde_json::json!(7), "下書きが status に出る");
-    assert!(ghost_of(&rt, 11).is_null());
+    assert_eq!(ghost_of(&mut rt, 12), serde_json::json!(7), "下書きが status に出る");
+    assert!(ghost_of(&mut rt, 11).is_null());
     rt.request(serde_json::json!({"op":"cancelPreview"})).unwrap();
-    assert!(ghost_of(&rt, 12).is_null(), "cancel で戻る");
+    assert!(ghost_of(&mut rt, 12).is_null(), "cancel で戻る");
     rt.request(serde_json::json!({"op":"sequence","layers":[11,12],"ghosts":[0,7]})).unwrap();
-    assert_eq!(ghost_of(&rt, 12), serde_json::json!(7), "本書き");
+    assert_eq!(ghost_of(&mut rt, 12), serde_json::json!(7), "本書き");
     assert_eq!(rt.doc.view().attrs(LayerId(12)).unwrap().unwrap().ghost, Some(7));
 }
 
