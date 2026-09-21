@@ -489,7 +489,7 @@ impl Engine {
     ) -> Result<(), EngineError> {
         let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?.spec();
-        let camera = crate::doc::core::ResolvedCamera::default();
+        let camera = self.frame_graph_document_camera(view, t)?;
         self.render_frame_graph_into_window(
             view,
             t,
@@ -537,7 +537,7 @@ impl Engine {
             window,
             crate::frame_graph::ViewProjection::Camera,
         )
-
+    }
 }
 
 /// 別の時刻ごとに引き直した「層の姿」。鍵はずれ(ミリ秒)。
