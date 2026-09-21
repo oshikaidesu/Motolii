@@ -10,6 +10,7 @@ mod evaluate;
 mod initial;
 mod key;
 mod property;
+mod program;
 mod scheduler;
 mod topology;
 mod value;
@@ -33,6 +34,7 @@ pub use key::{
     WorkKey,
 };
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
+pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
