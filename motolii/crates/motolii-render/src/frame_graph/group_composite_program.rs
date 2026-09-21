@@ -197,7 +197,7 @@ impl GroupCompositeProgram {
                 let owner_layer = owner.layer.as_ref();
                 layer.layer = seed_layer_id(&children).unwrap_or(layer.layer);
                 layer.content_key = None;
-                layer.content = SceneContentValue::Plate(ScenePlateValue { members: children });
+                layer.content = SceneContentValue::Plate(ScenePlateValue { members: children, average: false });
                 layer.effects = whole;
                 layer.after_effects.clear();
                 layer.masks.clear();
