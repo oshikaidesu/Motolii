@@ -92,6 +92,10 @@ pub enum NodeKind {
     MediaFrame,
     /// Exact-time authored participation: hidden/solo/timing.
     Visibility,
+    /// Per-frame cumulative emission state for a particle layer.
+    ParticleBirths,
+    /// Semantic particle positions/colors/sizes for the exact composition time.
+    Particle,
     /// A fixed authored temporal duplicate (Ghost) of a scene contribution.
     TemporalCopy,
     /// Evaluated placement-effect outputs before they become scene copies.
