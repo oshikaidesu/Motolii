@@ -67,9 +67,15 @@ impl Engine {
         for source in &scene.layers {
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let force_picture = clip_bases.contains(&source.layer);
+            let overlay_content = source.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
+                .then(|| self.overlay_content(source.layer, comp))
+                .transpose()?
+                .flatten();
             let frozen = self.frame_graph_frozen_content(source);
             let (content, natural, frozen_padding, frozen_frame, frozen_hit) = if let Some((content, natural, padding, frame)) = frozen {
                 (Some(content), natural, padding, frame, true)
+            } else if let Some((content, natural)) = overlay_content {
+                (Some(content), natural, 0, None, false)
             } else {
                 let (content, natural) = match &source.content {
                 SceneContentValue::None => continue,
