@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, OverlayProgram, OverlayProgramError, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -22,6 +22,7 @@ pub enum SceneProgramError {
     Motion(MotionProgramError),
     Lookbehind(LookbehindProgramError),
     Particle(ParticleProgramError),
+    Overlay(OverlayProgramError),
     Relation(RelationProgramError),
     Solver(SolverProgramError),
     Unsupported(super::NodeKind),
@@ -44,6 +45,7 @@ impl From<PlacementProgramError> for SceneProgramError { fn from(value: Placemen
 impl From<MotionProgramError> for SceneProgramError { fn from(value: MotionProgramError) -> Self { Self::Motion(value) } }
 impl From<LookbehindProgramError> for SceneProgramError { fn from(value: LookbehindProgramError) -> Self { Self::Lookbehind(value) } }
 impl From<ParticleProgramError> for SceneProgramError { fn from(value: ParticleProgramError) -> Self { Self::Particle(value) } }
+impl From<OverlayProgramError> for SceneProgramError { fn from(value: OverlayProgramError) -> Self { Self::Overlay(value) } }
 impl From<RelationProgramError> for SceneProgramError { fn from(value: RelationProgramError) -> Self { Self::Relation(value) } }
 impl From<SolverProgramError> for SceneProgramError { fn from(value: SolverProgramError) -> Self { Self::Solver(value) } }
 
@@ -66,6 +68,7 @@ pub struct SceneProgram {
     motion: MotionProgram,
     lookbehind: LookbehindProgram,
     particles: ParticleProgram,
+    overlay: OverlayProgram,
     relations: RelationProgram,
     solver: SolverProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
@@ -94,10 +97,11 @@ impl SceneProgram {
         let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
         let lookbehind = LookbehindProgram::compile(view, scene.output().scene)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
+        let overlay = OverlayProgram::compile(view, &effects, lookbehind.key(), solver.key(), camera.key())?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())).chain(overlay.nodes()) { nodes.insert(node.key(), node); }
         let roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
-        Ok(Self { analysis, properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, relations, solver, nodes, roots })
+        Ok(Self { analysis, properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, overlay, relations, solver, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -115,6 +119,7 @@ impl SceneProgram {
     pub fn placements(&self) -> &PlacementProgram { &self.placements }
     pub fn motion(&self) -> &MotionProgram { &self.motion }
     pub fn particles(&self) -> &ParticleProgram { &self.particles }
+    pub fn overlay(&self) -> &OverlayProgram { &self.overlay }
     pub fn relations(&self) -> &RelationProgram { &self.relations }
     pub fn solver(&self) -> &SolverProgram { &self.solver }
 
@@ -129,6 +134,9 @@ impl SceneProgram {
             return requests.map_err(Into::into);
         }
         if let Some(requests) = self.lookbehind.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
+        if let Some(requests) = self.overlay.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
         if let Some(requests) = self.particles.dynamic_inputs(node, inputs, context) {
@@ -156,6 +164,7 @@ impl SceneProgram {
         if let Some(value) = self.placements.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.motion.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.lookbehind.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.overlay.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.particles.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.relations.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.solver.execute(node, inputs, context) { return value.map_err(Into::into); }
