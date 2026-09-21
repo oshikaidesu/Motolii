@@ -32,7 +32,7 @@ pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
-pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaSourceValue};
+pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
 pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
