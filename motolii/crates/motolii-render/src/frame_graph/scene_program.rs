@@ -8,7 +8,7 @@ use super::{ContentProgram, EvaluationContext, GraphNode, MaterialValue, NodeIde
 pub enum SceneContentValue { None, Text(TextShapeValue), Shape(Vec<ShapeNode>), Material(MaterialValue) }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneLayerValue { pub transform: TransformValue, pub content: SceneContentValue, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
+pub struct SceneLayerValue { pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
@@ -76,6 +76,7 @@ impl SceneNodeProgram {
         Some(match recipe {
             Recipe::Contribution { content, opacity, projection, blend, order, kind } => (|| {
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                let content_key = content.map(|index| node.identity().inputs[index]);
                 let content = match (*kind, *content) {
                     (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_ref::<TextShapeValue>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
@@ -83,7 +84,7 @@ impl SceneNodeProgram {
                     _ => SceneContentValue::None,
                 };
                 let opacity = opacity.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None }).unwrap_or(1.0).clamp(0.0, 1.0);
-                Ok(NodeValue::new(SceneLayerValue { transform, content, opacity, projection: *projection, blend: *blend, order: *order }))
+                Ok(NodeValue::new(SceneLayerValue { transform, content_key, content, opacity, projection: *projection, blend: *blend, order: *order }))
             })(),
             Recipe::Composite => inputs.iter().map(|(_, value)| value.downcast_ref::<SceneLayerValue>().cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<Vec<_>, _>>().map(|layers| NodeValue::new(SceneValue { layers })),
         })
