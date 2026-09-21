@@ -88,6 +88,19 @@ impl EngineFrameGraph {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
 #[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
+struct SemanticExecutor<'a> { program: &'a SceneProgram }
+impl NodeExecutor for SemanticExecutor<'_> {
+    type Error = EngineError;
+
+    fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> {
+        self.program.dynamic_inputs(node, inputs, context).map_err(|error| EngineError::Store(error.to_string()))
+    }
+
+    fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
+        self.program.execute(node, &inputs, &context).map_err(|error| EngineError::Store(error.to_string()))
+    }
+}
+
 struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
     type Error = EngineError;
@@ -158,6 +171,51 @@ impl NodeExecutor for ProgramExecutor<'_> {
 }
 
 impl Engine {
+    /// Evaluate only the semantic camera branch. This is intentionally GPU-free:
+    /// native editor projection must share CameraProgram meaning without reviving
+    /// the legacy StoreView -> ResolvedLayer owner just to discover an observer.
+    pub(in crate::engine) fn frame_graph_camera(
+        &self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+    ) -> Result<ResolvedCamera, EngineError> {
+        let program = SceneProgram::compile(view).map_err(|error| EngineError::Store(error.to_string()))?;
+        let camera = program.camera();
+        let topology = GraphTopology::try_new(program.nodes(), vec![camera])
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(view.revision_key()), topology);
+        let mut executor = SemanticExecutor { program: &program };
+        let frame = graph.evaluate(
+            &mut executor,
+            time,
+            FrameQuality::Preview { scale: 1 },
+            Generation::new(1),
+        )?;
+        frame.value(camera)
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .ok_or_else(|| EngineError::Store("FrameGraph camera is missing".into()))
+    }
+
+    /// Editor read-model adapter. It evaluates the same production graph and
+    /// projects its semantic SceneValue into the temporary ResolvedLayer shape
+    /// still consumed by cage/bounds code. It never invokes the legacy resolver.
+    pub fn frame_graph_editor_layers(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+    ) -> Result<Vec<ResolvedLayer>, EngineError> {
+        let state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
+        let scene = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.scene))
+            .and_then(|value| value.downcast_ref::<SceneValue>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        let layers = resolved_layers_from_scene(&scene, time, state.fps);
+        self.frame_graph = Some(state);
+        Ok(layers)
+    }
+
     pub(in crate::engine) fn evaluate_frame_graph_semantics(
         &mut self,
         view: &StoreView<'_>,
