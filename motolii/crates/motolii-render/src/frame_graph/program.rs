@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{ContentProgram, ContentProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, NodeInputs, NodeKey, NodeValue, PropertyProgram, PropertyProgramError, TransformProgram, TransformProgramError};
+use super::{ContentProgram, ContentProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, NodeInputs, NodeKey, NodeValue, PropertyProgram, PropertyProgramError, TextProgram, TextProgramError, TransformProgram, TransformProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -10,6 +10,7 @@ pub enum SceneProgramError {
     Content(ContentProgramError),
     Transform(TransformProgramError),
     Flow(FlowProgramError),
+    Text(TextProgramError),
     Unsupported(super::NodeKind),
 }
 impl std::fmt::Display for SceneProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
@@ -18,6 +19,7 @@ impl From<PropertyProgramError> for SceneProgramError { fn from(value: PropertyP
 impl From<ContentProgramError> for SceneProgramError { fn from(value: ContentProgramError) -> Self { Self::Content(value) } }
 impl From<TransformProgramError> for SceneProgramError { fn from(value: TransformProgramError) -> Self { Self::Transform(value) } }
 impl From<FlowProgramError> for SceneProgramError { fn from(value: FlowProgramError) -> Self { Self::Flow(value) } }
+impl From<TextProgramError> for SceneProgramError { fn from(value: TextProgramError) -> Self { Self::Text(value) } }
 
 /// One immutable revision program. Compiler bindings are the only place that
 /// remembers layer ids; runtime execution follows content-addressed edges.
@@ -26,6 +28,7 @@ pub struct SceneProgram {
     content: ContentProgram,
     transforms: TransformProgram,
     flow: FlowProgram,
+    text: TextProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
     roots: BTreeSet<NodeKey>,
 }
@@ -36,12 +39,13 @@ impl SceneProgram {
         let content = ContentProgram::compile(view)?;
         let flow = FlowProgram::compile(view, &properties, &content)?;
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
+        let text = TextProgram::compile(view, &content, &flow)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(text.nodes()) { nodes.insert(node.key(), node); }
         let roots = properties.bindings().map(|binding| binding.node)
             .chain(content.bindings().flat_map(|binding| [binding.content, binding.extent, binding.material]).flatten())
-            .chain(transforms.bindings().map(|binding| binding.world)).chain(std::iter::once(flow.key())).collect();
-        Ok(Self { properties, content, transforms, flow, nodes, roots })
+            .chain(transforms.bindings().map(|binding| binding.world)).chain(std::iter::once(flow.key())).chain(text.bindings().map(|binding| binding.shape)).collect();
+        Ok(Self { properties, content, transforms, flow, text, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -50,12 +54,14 @@ impl SceneProgram {
     pub fn content(&self) -> &ContentProgram { &self.content }
     pub fn transforms(&self) -> &TransformProgram { &self.transforms }
     pub fn flow(&self) -> &FlowProgram { &self.flow }
+    pub fn text(&self) -> &TextProgram { &self.text }
 
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<NodeValue, SceneProgramError> {
         if let Some(value) = self.properties.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.content.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.transforms.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.flow.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.text.execute(node, inputs, context) { return value.map_err(Into::into); }
         Err(SceneProgramError::Unsupported(node.identity().kind))
     }
 }
