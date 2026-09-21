@@ -31,53 +31,9 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
-        let frame_start = std::time::Instant::now();
-        self.compositor.measurement = Default::default();
         self.layer_failures.clear();
         self.purge_idle_video_players();
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let mut stage = std::time::Instant::now();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        self.compositor.measurement.resolve_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let camera = match camera_override {
-            Some(camera) => camera,
-            None => self.resolve_camera_in(view, &resolved, t)?,
-        };
-        self.compositor.measurement.camera_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        self.compositor.measurement.text_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.compositor.measurement.shape_us = stage.elapsed().as_micros() as u64;
-        let layer_start = std::time::Instant::now();
-        let layers = self.layers_from_resolved(
-            view,
-            comp,
-            camera,
-            self.resolve_camera_in(view, &resolved, t)?,
-            t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        )?;
-
-        self.compositor.measurement.layer_build_us = layer_start.elapsed().as_micros() as u64;
-        let background_color = if include_background {
-            composition.background
-        } else {
-            crate::render::compositor::NO_BACKGROUND
-        };
-        let pixels = self.compositor.render_with_effects(comp, camera, &layers, background_color)?;
-        let m = &mut self.compositor.measurement;
-        m.total_us = frame_start.elapsed().as_micros() as u64;
-        m.prepare_us = m.total_us.saturating_sub(m.submit_us + m.wait_us + m.readback_us);
-        Ok(pixels)
+        self.render_frame_graph_pixels(view, t, include_background, camera_override)
     }
 
     /// 効果が宣言した時刻のずれごとに、**その時刻の層の絵**を用意する。
@@ -522,25 +478,7 @@ impl Engine {
         view: &StoreView<'_>,
         t: RationalTime,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        let camera = self.resolve_camera_in(view, &resolved, t)?;
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.render_resolved_to_texture_with_shapes(
-            view,
-            comp,
-            composition.background,
-            camera,
-            t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        )
+        self.render_frame_graph_to_texture_output(view, t, true)
     }
 
     pub fn render_frame_into(
@@ -549,28 +487,19 @@ impl Engine {
         t: RationalTime,
         target: &wgpu::Texture,
     ) -> Result<(), EngineError> {
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        let camera = self.resolve_camera_in(view, &resolved, t)?;
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        let layers = self.layers_from_resolved(
+        let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?.spec();
+        let camera = crate::doc::core::ResolvedCamera::default();
+        self.render_frame_graph_into_window(
             view,
-            comp,
-            camera,
-            self.resolve_camera_in(view, &resolved, t)?,
             t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        )?;
-        Ok(self
-            .compositor
-            .render_into(target, comp, camera, &layers, composition.background)?)
+            target,
+            camera,
+            true,
+            &[],
+            Window::output(comp),
+            crate::frame_graph::ViewProjection::Camera,
+        )
     }
 
     /// Render from an observation camera while retaining authored layer projection.
@@ -598,151 +527,17 @@ impl Engine {
         outline: &[LayerId],
         window: Window,
     ) -> Result<(), EngineError> {
-        let frame_start = std::time::Instant::now();
-        self.compositor.measurement = Default::default();
-        self.outline_layers = outline.iter().copied().take(255).collect();
-        self.outline_order = self.outline_layers.clone();
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let mut stage = std::time::Instant::now();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        self.compositor.measurement.resolve_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        self.compositor.measurement.text_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.compositor.measurement.shape_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let document_camera = self.resolve_camera_in(view, &resolved, t)?;
-        self.compositor.measurement.camera_us = stage.elapsed().as_micros() as u64;
-        let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        self.feedback_window = Some(window);
-        stage = std::time::Instant::now();
-        let built = self.layers_from_resolved(
+        self.render_frame_graph_into_window(
             view,
-            comp,
-            camera,
-            projection_camera,
             t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        );
-        self.compositor.measurement.layer_build_us = stage.elapsed().as_micros() as u64;
-        self.feedback_window = None;
-        let mut layers = built?;
-        // 2D は出力の画面の物: どの窓でも作中カメラの箱に貼り付き、箱と一緒に動く(Boxcam)。
-        // 2.5D と 3D は世界に居るので、窓の投影基準(Stage は既定)のまま。
-        for layer in &mut layers {
-            if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
-                layer.layer.projection_camera = document_camera;
-            }
-        }
-        let background_color = if include_background {
-            composition.background
-        } else {
-            crate::render::compositor::NO_BACKGROUND
-        };
-        let drawn = self.compositor.render_into_window(target, comp, camera, &layers, background_color, window);
-        self.outline_layers.clear();
-        self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
-        Ok(drawn?)
-    }
+            target,
+            camera,
+            include_background,
+            outline,
+            window,
+            crate::frame_graph::ViewProjection::Camera,
+        )
 
-}
-
-pub(super) fn collect_text_documents(
-    view: &StoreView<'_>,
-    resolved: &[ResolvedLayer],
-    t: RationalTime,
-) -> Result<HashMap<LayerId, TextDocument>, EngineError> {
-    let mut documents = HashMap::new();
-    for layer in resolved {
-        if layer.source == LayerSource::Text {
-            if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, layer.id, t)
-                .map_err(|e| EngineError::Store(e.to_string()))?
-            {
-                documents.insert(layer.id, document);
-            }
-            // Text Morph の相手は見えていない層でもよい: 書類だけ持ってくる。
-            let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-            if let Some((target, _)) = crate::extensions::text::morph(&effects) {
-                if !documents.contains_key(&target) {
-                    if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, target, t).map_err(|e| EngineError::Store(e.to_string()))? {
-                        documents.insert(target, document);
-                    }
-                }
-            }
-        }
-    }
-    Ok(documents)
-}
-
-pub(super) fn collect_shape_documents(
-    view: &StoreView<'_>,
-    resolved: &[ResolvedLayer],
-    t: RationalTime,
-) -> Result<HashMap<LayerId, Vec<ShapeNode>>, EngineError> {
-    let mut documents = HashMap::new();
-    for layer in resolved {
-        if layer.source == LayerSource::Shape {
-            let shapes = crate::picture::shapes::shapes_at(view, layer.id, t)
-                .map_err(|e| EngineError::Store(e.to_string()))?;
-            documents.insert(layer.id, shown_shapes(&shapes, layer));
-        } else if layer.source == LayerSource::Group {
-            if let Some(background) = crate::picture::boxes::background_shapes(view, layer.id, t).map_err(|e| EngineError::Store(e.to_string()))? {
-                documents.insert(layer.id, background);
-            }
-        }
-    }
-    Ok(documents)
-}
-
-/// パス効果を掛けた姿。配置の上下どちらに積んでも輪郭には同じに効く(輪郭は絵より先)。
-pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
-    let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-    crate::extensions::pathop::with_effects(shapes, &effects)
-}
-
-pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
-    [
-        if layer.declared_size[0] > 0.0 {
-            layer.declared_size[0]
-        } else {
-            natural[0]
-        },
-        if layer.declared_size[1] > 0.0 {
-            layer.declared_size[1]
-        } else {
-            natural[1]
-        },
-    ]
-}
-
-#[cfg(test)]
-mod placement_contract;
-
-#[cfg(test)]
-mod projection_contract;
-
-/// 時刻を秒だけずらす(ミリ秒の分母で厳密に足す)。クリップの前へは行かない。
-fn shifted_by_seconds(t: RationalTime, offset: f32) -> RationalTime {
-    const DEN: i64 = 1000;
-    let num = (offset as f64 * DEN as f64).round() as i64;
-    let shifted = t
-        .num()
-        .checked_mul(DEN)
-        .and_then(|scaled| num.checked_mul(t.den()).map(|by| scaled + by))
-        .zip(t.den().checked_mul(DEN))
-        .and_then(|(num, den)| RationalTime::try_new(num, den).ok());
-    match shifted {
-        Some(at) if at.as_seconds_f64() >= 0.0 => at,
-        _ => RationalTime::ZERO,
-    }
 }
 
 /// 別の時刻ごとに引き直した「層の姿」。鍵はずれ(ミリ秒)。
