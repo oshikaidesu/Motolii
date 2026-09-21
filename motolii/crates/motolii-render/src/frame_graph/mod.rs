@@ -15,6 +15,7 @@ mod ghost_program;
 mod group_composite_program;
 mod initial;
 mod key;
+mod lookbehind_program;
 mod mask_program;
 mod motion_program;
 mod placement_program;
@@ -53,6 +54,7 @@ pub use key::{
     WorkKey,
 };
 pub use mask_program::{MaskBinding, MaskProgram, MaskProgramError, MaskValue};
+pub use lookbehind_program::{LookbehindProgram, LookbehindProgramError};
 pub use motion_program::{MotionBinding, MotionPlanValue, MotionProgram, MotionProgramError, MotionSamplesValue};
 pub use placement_program::{PlacementBinding, PlacementCopyValue, PlacementProgram, PlacementProgramError, PlacementSetValue};
 pub use particle_program::{ParticleBinding, ParticleProgram, ParticleProgramError, ParticleValue};
@@ -61,7 +63,7 @@ pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
 pub use text_program::{TextBinding, TextProgram, TextProgramError, TextShapeValue};
-pub use scene_program::{SceneContentValue, SceneLayerValue, SceneNodeError, SceneNodeProgram, SceneProgramNodes, SceneValue};
+pub use scene_program::{SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneNodeError, SceneNodeProgram, ScenePlateValue, SceneProgramNodes, SceneValue};
 pub use visibility_program::{VisibilityBinding, VisibilityProgram, VisibilityProgramError, VisibilityValue};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
