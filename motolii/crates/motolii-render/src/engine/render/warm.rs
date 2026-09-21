@@ -81,7 +81,7 @@ impl Engine {
             // 他の層の入力になる物は消さない。解き手が動かす物も消さない — 画面の外から入って来る
             // (利用者 2026-09-16 の見本: 上から降ってくる切り抜き)。
             let feeds_others = matte_sources.contains(&layer.id) || layer.matte.is_some() || layer.clip_to_below
-                || self.blocks.moves(layer.id) || self.analysing;
+                || self.blocks.moves(layer.id);
             let Some((rect, axis_aligned)) = self.media_screen_rect(comp, camera, layer) else { continue };
             let plain = layer.effects.is_empty() && layer.after_effects.is_empty() && layer.masks.is_empty();
             let offscreen = rect[2] < 0.0 || rect[3] < 0.0 || rect[0] > screen[2] || rect[1] > screen[3];
