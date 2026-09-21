@@ -38,7 +38,7 @@ pub use camera_program::{CameraProgram, CameraProgramError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
 pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
-pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
+pub use evaluate::{DynamicInput, EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
 pub use group_program::{GroupBackgroundProgram, GroupBackgroundProgramError};
 pub use initial::{
