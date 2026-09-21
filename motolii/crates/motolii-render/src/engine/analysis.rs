@@ -395,27 +395,14 @@ impl Engine {
         }
     }
 
-    /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
+    /// Compatibility projection for tests/tools that still consume ResolvedLayer.
+    /// Product meaning is evaluated by FrameGraph first; this must never re-enter
+    /// the legacy StoreView + analysis_inputs + resolved_layers owner.
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        use crate::picture::resolve::tally;
-        let view = view.clone().with_layout_solver(self.layout_solver());
-        let inputs = self.analysis_inputs(&view, t)?;
-        let resolve = |view: StoreView<'_>| crate::picture::resolve::resolved_layers(&view, t).map_err(|e| EngineError::Store(e.to_string()));
-        // 解いた拍だけ中を割る。memo に当たった面は空のまま(= 払っていない証拠)。
         self.resolve_tally.clear();
         self.resolve_worst.clear();
-        if !inputs.is_empty() {
-            tally::begin();
-            let out = resolve(view.clone().with_analysis(&inputs));
-            self.resolve_tally = tally::take();
-            self.resolve_worst = tally::take_worst();
-            return out;
-        }
-        tally::begin();
-        let layers = resolve(view.clone())?;
-        self.resolve_tally = tally::take();
-        self.resolve_worst = tally::take_worst();
-        Ok(layers)
+        let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
+        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
     }
 
     /// 連続性の物差しの標本: 解析を読んだ view で解き、層の箱の角と文字の字の位置を画面の平面(px)で返す。
