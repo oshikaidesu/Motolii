@@ -198,6 +198,203 @@ impl Engine {
         })
     }
 
+    pub(in crate::engine) fn frame_graph_overlay_analysis(
+        &mut self,
+        layer: LayerId,
+        parent: Option<LayerId>,
+        effect: &crate::picture::resolved::ResolvedEffect,
+        scene: &crate::frame_graph::SceneValue,
+        solver: &crate::frame_graph::SolverPlanValue,
+        camera: ResolvedCamera,
+        previous: Option<&crate::frame_graph::OverlayAnalysisValue>,
+        t: RationalTime,
+        comp: CompSpec,
+    ) -> Result<crate::frame_graph::OverlayAnalysisValue, EngineError> {
+        let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
+        let method = overlay::number_of(&params, "method").round() as i64;
+        let physics = effect.plugin_id == crate::extensions::overlay::PHYSICS_TRACE;
+        let own = scene.layers.iter().find(|candidate| candidate.layer == layer && candidate.instance == 0 && !candidate.ghost);
+        let own_order = own.map_or(i16::MAX, |candidate| candidate.order);
+        let own_z = own.map_or(0.0, |candidate| candidate.transform.spatial.translation.z);
+
+        if method == 2 {
+            if physics {
+                return Ok(crate::frame_graph::OverlayAnalysisValue {
+                    layer,
+                    marks: Vec::new(),
+                    mask: None,
+                    params,
+                    depths: None,
+                    pushes: Vec::new(),
+                    physics: true,
+                    tracker: Default::default(),
+                    previous: None,
+                });
+            }
+            let mut marks = Vec::new();
+            let mut depths = Vec::new();
+            let mut pushes = Vec::new();
+            for candidate in &scene.layers {
+                if candidate.layer == layer || candidate.order >= own_order || candidate.ghost {
+                    continue;
+                }
+                let relation_parent = solver.layers.get(&candidate.layer).and_then(|value| value.relation.parent);
+                if relation_parent != parent {
+                    continue;
+                }
+                let size = solver.layers.get(&candidate.layer).and_then(|value| value.size)
+                    .or_else(|| semantic_extent(self, candidate, comp));
+                let Some(size) = size.filter(|size| size[0] > 0.0 && size[1] > 0.0) else { continue };
+                let transform = candidate.transform.affine;
+                let corners = [
+                    glam::Vec2::ZERO,
+                    glam::vec2(size[0], 0.0),
+                    glam::Vec2::from(size),
+                    glam::vec2(0.0, size[1]),
+                ].map(|point| transform.transform_point2(point));
+                let lo = corners.iter().fold(glam::Vec2::MAX, |acc, point| acc.min(*point));
+                let hi = corners.iter().fold(glam::Vec2::MIN, |acc, point| acc.max(*point));
+                marks.push(BlobMark {
+                    id: marks.len() as u32,
+                    center: ((lo + hi) * 0.5).into(),
+                    size: (hi - lo).into(),
+                    age: 0,
+                });
+                depths.push(candidate.transform.spatial.translation.z - own_z);
+                pushes.push([0.0, 0.0]);
+            }
+            return Ok(crate::frame_graph::OverlayAnalysisValue {
+                layer,
+                marks,
+                mask: None,
+                params,
+                depths: own.filter(|candidate| candidate.projection == crate::doc::store::LayerProjection::ThreeD).map(|_| depths),
+                pushes,
+                physics: false,
+                tracker: Default::default(),
+                previous: None,
+            });
+        }
+
+        let below = crate::frame_graph::SceneValue {
+            layers: scene.layers.iter()
+                .filter(|candidate| candidate.layer != layer && candidate.order < own_order)
+                .cloned()
+                .collect(),
+        };
+        let prepared = self.prepare_gpu_scene(&below, comp, camera)?;
+        let picture = if prepared.layers.is_empty() {
+            None
+        } else {
+            let (texture, _view) = self.compositor.render_to_texture(
+                comp,
+                camera,
+                &prepared.layers,
+                crate::render::compositor::NO_BACKGROUND,
+            )?;
+            let mut encoder = self.compositor.ctx.device.create_command_encoder(
+                &wgpu::CommandEncoderDescriptor { label: Some("motolii-framegraph-overlay-analysis") },
+            );
+            let converted = self.compositor.convert_image_encoding(
+                &mut encoder,
+                &texture,
+                true,
+                !texture.format().is_srgb(),
+                true,
+            );
+            self.compositor.pending.push(encoder.finish());
+            let bytes = self.compositor.read_texture_bytes(&converted)?;
+            let (width, height) = (converted.width(), converted.height());
+            self.compositor.effect_scratch.release(width, height, converted.format(), converted);
+            Some(LinearPicture {
+                bytes,
+                width,
+                height,
+                natural: [comp.width as f32, comp.height as f32],
+                padding: 0,
+                frame: None,
+            })
+        };
+
+        let settings = overlay_settings_of(&params);
+        let detail = overlay::number_of(&params, "detail").round().clamp(120.0, 3840.0) as u32;
+        let mut tracker = previous.map(|value| value.tracker.clone()).unwrap_or_default();
+        let previous_pixels = previous.and_then(|value| value.previous.as_ref());
+
+        let Some(picture) = picture else {
+            let marks = tracker.step(Vec::new(), &settings);
+            return Ok(crate::frame_graph::OverlayAnalysisValue {
+                layer,
+                marks,
+                mask: None,
+                params,
+                depths: None,
+                pushes: Vec::new(),
+                physics: false,
+                tracker,
+                previous: None,
+            });
+        };
+        let (pixels, width, height, shrink) = shrink_to_srgb(&picture, detail);
+        let previous_rgba = previous_pixels
+            .filter(|(_, old_width, old_height)| *old_width == width && *old_height == height)
+            .map(|(pixels, _, _)| pixels.as_slice());
+        let scaled = BlobSettings {
+            min_area: ((settings.min_area as f64) / (shrink as f64).powi(2)).round().max(0.0) as u32,
+            max_area: ((settings.max_area as f64) / (shrink as f64).powi(2)).round().min(u32::MAX as f64) as u32,
+            max_move: settings.max_move / shrink as f32,
+            separation: (settings.separation as f32 / shrink as f32).round() as u32,
+            blur: (settings.blur as f32 / shrink as f32).round() as u32,
+            ..settings
+        };
+        let bits = mask(&pixels, width, height, previous_rgba, &scaled);
+        let regions = detect(&pixels, width, height, previous_rgba, &scaled);
+        let blobs = tracker.step(regions, &scaled);
+        let marks = blobs.into_iter().map(|blob| BlobMark {
+            id: blob.id,
+            center: [blob.region.center[0] * shrink as f32, blob.region.center[1] * shrink as f32],
+            size: [
+                (blob.region.max[0] + 1 - blob.region.min[0]) as f32 * shrink as f32,
+                (blob.region.max[1] + 1 - blob.region.min[1]) as f32 * shrink as f32,
+            ],
+            age: blob.age,
+        }).collect();
+
+        Ok(crate::frame_graph::OverlayAnalysisValue {
+            layer,
+            marks,
+            mask: Some((bits.into_iter().map(|bit| u8::from(bit) * 255).collect(), width, height)),
+            params,
+            depths: None,
+            pushes: Vec::new(),
+            physics: false,
+            tracker,
+            previous: Some((pixels, width, height)),
+        })
+    }
+
+    pub(in crate::engine) fn install_frame_graph_overlays(
+        &mut self,
+        values: &crate::frame_graph::OverlaySetValue,
+    ) {
+        self.overlay_frames.clear();
+        for (layer, value) in &values.layers {
+            self.overlay_frames.insert(*layer, OverlayFrame {
+                marks: value.marks.clone(),
+                mask: value.mask.clone(),
+                params: value.params.clone(),
+                depths: value.depths.clone(),
+                pushes: value.pushes.clone(),
+                links: Vec::new(),
+                wells: Vec::new(),
+                contacts: Vec::new(),
+                velocities: Vec::new(),
+                hulls: Vec::new(),
+                physics: value.physics,
+            });
+        }
+    }
+
     /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
         use crate::picture::resolve::tally;
@@ -570,6 +767,21 @@ pub(crate) struct OverlayFrame {
     pub(crate) hulls: Vec<Vec<[f32; 2]>>,
     /// 物理の可視なら真(中身は描く直前に解き手から取る)。
     pub(crate) physics: bool,
+}
+
+fn semantic_extent(engine: &mut Engine, layer: &crate::frame_graph::SceneLayerValue, comp: CompSpec) -> Option<[f32; 2]> {
+    match &layer.content {
+        crate::frame_graph::SceneContentValue::Text(text) => crate::picture::shapes_ops::content_canvas(&text.shapes()).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
+        crate::frame_graph::SceneContentValue::Shape(shapes) => crate::picture::shapes_ops::content_canvas(shapes).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
+        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
+        crate::frame_graph::SceneContentValue::Particles(value) => {
+            let mut hi = glam::Vec2::ZERO;
+            for particle in &value.particles { hi = hi.max(glam::Vec2::new(particle.position[0], particle.position[1])); }
+            Some([hi.x.max(1.0), hi.y.max(1.0)])
+        }
+        crate::frame_graph::SceneContentValue::Plate(_) => Some([comp.width as f32, comp.height as f32]),
+        crate::frame_graph::SceneContentValue::None => None,
+    }
 }
 
 fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
