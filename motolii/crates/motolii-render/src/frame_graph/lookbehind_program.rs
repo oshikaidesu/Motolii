@@ -6,6 +6,7 @@ use crate::picture::resolved::ResolvedEffect;
 use crate::render::compositor::effects::isf::{TimeBase, TimeOffset};
 use crate::render::compositor::TimeSource;
 
+use super::scene_program::{SceneContributionValue, ScenePlateValue};
 use super::{DynamicInput, EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneValue, TimeDependency};
 
 #[derive(Debug)]
@@ -293,50 +294,36 @@ fn content_source(layer: &SceneLayerValue) -> SceneImageSourceValue {
 }
 
 fn find_layer(scene: &SceneValue, id: LayerId, prefer_plate: bool) -> Option<&SceneLayerValue> {
+    fn scan_layer<'a>(
+        layer: &'a SceneLayerValue,
+        id: LayerId,
+        prefer_plate: bool,
+        fallback: &mut Option<&'a SceneLayerValue>,
+    ) -> Option<&'a SceneLayerValue> {
+        if layer.layer == id {
+            if prefer_plate == matches!(layer.content, SceneContentValue::Plate(_)) {
+                return Some(layer);
+            }
+            if fallback.is_none() { *fallback = Some(layer); }
+        }
+        if let SceneContentValue::Plate(plate) = &layer.content {
+            for member in &plate.members {
+                let Some(member) = member.layer.as_ref() else { continue };
+                if let Some(found) = scan_layer(member, id, prefer_plate, fallback) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
     let mut fallback = None;
-    fn visit<'a>(layers: &'a [SceneLayerValue], id: LayerId, prefer_plate: bool, fallback: &mut Option<&'a SceneLayerValue>) -> Option<&'a SceneLayerValue> {
-        for layer in layers {
-            if layer.layer == id {
-                if prefer_plate == matches!(layer.content, SceneContentValue::Plate(_)) {
-                    return Some(layer);
-                }
-                if fallback.is_none() { *fallback = Some(layer); }
-            }
-            if let SceneContentValue::Plate(plate) = &layer.content {
-                let nested: Vec<_> = plate.members.iter().filter_map(|member| member.layer.as_ref().cloned()).collect();
-                if let Some(found) = visit(&nested, id, prefer_plate, fallback) {
-                    // The cloned nested vector cannot be returned by reference.
-                    let _ = found;
-                }
-                for member in &plate.members {
-                    if let Some(member) = member.layer.as_ref() {
-                        if member.layer == id {
-                            if prefer_plate == matches!(member.content, SceneContentValue::Plate(_)) { return Some(member); }
-                            if fallback.is_none() { *fallback = Some(member); }
-                        }
-                        if let SceneContentValue::Plate(inner) = &member.content {
-                            if let Some(found) = find_in_plate(inner, id, prefer_plate, fallback) { return Some(found); }
-                        }
-                    }
-                }
-            }
+    for layer in &scene.layers {
+        if let Some(found) = scan_layer(layer, id, prefer_plate, &mut fallback) {
+            return Some(found);
         }
-        None
     }
-    fn find_in_plate<'a>(plate: &'a super::ScenePlateValue, id: LayerId, prefer_plate: bool, fallback: &mut Option<&'a SceneLayerValue>) -> Option<&'a SceneLayerValue> {
-        for member in &plate.members {
-            let Some(layer) = member.layer.as_ref() else { continue };
-            if layer.layer == id {
-                if prefer_plate == matches!(layer.content, SceneContentValue::Plate(_)) { return Some(layer); }
-                if fallback.is_none() { *fallback = Some(layer); }
-            }
-            if let SceneContentValue::Plate(inner) = &layer.content {
-                if let Some(found) = find_in_plate(inner, id, prefer_plate, fallback) { return Some(found); }
-            }
-        }
-        None
-    }
-    visit(&scene.layers, id, prefer_plate, &mut fallback).or(fallback)
+    fallback
 }
 
 fn filter_scene(scene: &SceneValue, keep: &dyn Fn(LayerId) -> bool) -> SceneValue {
@@ -387,7 +374,7 @@ fn scene_before(scene: &SceneValue, target: LayerId) -> Option<SceneValue> {
     found.then_some(SceneValue { layers })
 }
 
-fn members_before(members: &[super::SceneContributionValue], target: LayerId, found: &mut bool) -> Vec<super::SceneContributionValue> {
+fn members_before(members: &[SceneContributionValue], target: LayerId, found: &mut bool) -> Vec<SceneContributionValue> {
     let mut out = Vec::new();
     for member in members {
         let Some(layer) = member.layer.as_ref() else { continue };
@@ -412,7 +399,7 @@ fn members_before(members: &[super::SceneContributionValue], target: LayerId, fo
     out
 }
 
-fn plate_contains(plate: &super::ScenePlateValue, target: LayerId) -> bool {
+fn plate_contains(plate: &ScenePlateValue, target: LayerId) -> bool {
     plate.members.iter().any(|member| member.layer.as_ref().is_some_and(|layer| {
         layer.layer == target || matches!(&layer.content, SceneContentValue::Plate(inner) if plate_contains(inner, target))
     }))
