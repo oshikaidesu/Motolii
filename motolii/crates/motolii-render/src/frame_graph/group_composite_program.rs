@@ -104,7 +104,8 @@ impl GroupCompositeProgram {
             let child_count = direct.len();
             let effect_start = inputs.len();
             if let Some(binding) = effects.binding(group) {
-                inputs.extend(binding.effects.iter().copied().filter(|key| !effects.is_placement(*key)));
+                let end = binding.effects.iter().position(|key| effects.is_placement(*key)).unwrap_or(binding.effects.len());
+                inputs.extend(binding.effects[..end].iter().copied());
             }
 
             let mut identity = NodeIdentity::new(NodeKind::GroupComposite, inputs);
