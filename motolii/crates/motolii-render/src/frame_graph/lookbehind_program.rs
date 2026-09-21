@@ -178,13 +178,13 @@ impl LookbehindProgram {
             let row = if !request.named_layers.is_empty() {
                 request.named_layers.iter().map(|target| {
                     if *target == layer.layer { return None; }
-                    find_layer(current, *target, false).map(content_source)
+                    find_layer(current, *target, false).map(|target| content_source(target, now, 0))
                 }).collect::<Option<Vec<_>>>().unwrap_or_default()
             } else {
                 request.temporal.iter().map(|(offset, base, source)| {
                     let at = self.time_for(layer.layer, now, *offset, *base);
                     let then = scenes.get(&at)?;
-                    self.temporal_source(layer, then, *source)
+                    self.temporal_source(layer, then, *source, at, temporal_namespace(at, *source))
                 }).collect::<Option<Vec<_>>>().unwrap_or_default()
             };
             rows.push(row);
@@ -205,19 +205,21 @@ impl LookbehindProgram {
         consumer: &SceneLayerValue,
         then: &SceneValue,
         source: TimeSource,
+        time: RationalTime,
+        namespace: u64,
     ) -> Option<SceneImageSourceValue> {
         match source {
             TimeSource::Own => {
                 let wants_plate = matches!(consumer.content, SceneContentValue::Plate(_));
-                find_layer(then, consumer.layer, wants_plate).map(content_source)
+                find_layer(then, consumer.layer, wants_plate).map(|layer| content_source(layer, time, namespace))
             }
             TimeSource::Below => {
                 let filtered = scene_before(then, consumer.layer)?;
-                Some(SceneImageSourceValue::Scene { scene: filtered, background: self.background })
+                Some(SceneImageSourceValue::Scene { scene: filtered, background: self.background, time, namespace })
             }
             TimeSource::Comp => {
                 let filtered = filter_scene(then, &|id| id != consumer.layer);
-                Some(SceneImageSourceValue::Scene { scene: filtered, background: self.background })
+                Some(SceneImageSourceValue::Scene { scene: filtered, background: self.background, time, namespace })
             }
             TimeSource::Group => {
                 let group = match &consumer.content {
@@ -225,7 +227,7 @@ impl LookbehindProgram {
                     _ => self.layers.get(&consumer.layer).and_then(|info| info.parent),
                 }?;
                 let filtered = filter_scene(then, &|id| id != consumer.layer && self.belongs_to_group(id, group));
-                Some(SceneImageSourceValue::Scene { scene: filtered, background: [0.0; 4] })
+                Some(SceneImageSourceValue::Scene { scene: filtered, background: [0.0; 4], time, namespace })
             }
         }
     }
@@ -295,8 +297,17 @@ fn image_requests(layer: &SceneLayerValue) -> Vec<ImageRequest> {
     out
 }
 
-fn content_source(layer: &SceneLayerValue) -> SceneImageSourceValue {
-    SceneImageSourceValue::Content { layer: layer.layer, content: layer.content.clone() }
+fn content_source(layer: &SceneLayerValue, time: RationalTime, namespace: u64) -> SceneImageSourceValue {
+    SceneImageSourceValue::Content { layer: layer.layer, content: layer.content.clone(), time, namespace }
+}
+
+fn temporal_namespace(time: RationalTime, source: TimeSource) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let absolute_ms = (time.as_seconds_f64() * 1000.0).round() as i64;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    absolute_ms.hash(&mut hasher);
+    (source as u8).hash(&mut hasher);
+    hasher.finish() | 1
 }
 
 fn find_layer(scene: &SceneValue, id: LayerId, prefer_plate: bool) -> Option<&SceneLayerValue> {
