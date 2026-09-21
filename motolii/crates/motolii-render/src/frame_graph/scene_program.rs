@@ -4,6 +4,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
 use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::ghost_program::{GhostProgram, GhostProgramError};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
 
@@ -41,10 +42,11 @@ enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: us
 pub struct SceneProgramNodes { pub scene: NodeKey }
 
 #[derive(Debug)]
-pub enum SceneNodeError { Store(StoreError), GroupComposite(String), InvalidInput(NodeKind) }
+pub enum SceneNodeError { Store(StoreError), Ghost(String), GroupComposite(String), InvalidInput(NodeKind) }
 impl std::fmt::Display for SceneNodeError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
 impl std::error::Error for SceneNodeError {}
 impl From<StoreError> for SceneNodeError { fn from(value: StoreError) -> Self { Self::Store(value) } }
+impl From<GhostProgramError> for SceneNodeError { fn from(value: GhostProgramError) -> Self { Self::Ghost(value.to_string()) } }
 impl From<GroupCompositeProgramError> for SceneNodeError { fn from(value: GroupCompositeProgramError) -> Self { Self::GroupComposite(value.to_string()) } }
 
 pub struct SceneNodeProgram {
@@ -53,6 +55,7 @@ pub struct SceneNodeProgram {
     bindings: BTreeMap<LayerId, NodeKey>,
     output: SceneProgramNodes,
     policy: ScenePolicy,
+    ghost: GhostProgram,
     group_composite: GroupCompositeProgram,
 }
 
@@ -117,7 +120,17 @@ impl SceneNodeProgram {
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
         }
-        let group_composite = GroupCompositeProgram::compile(view, effect_program, &bindings)?;
+        let ghost = GhostProgram::compile(view, &bindings)?;
+        for node in ghost.nodes() {
+            nodes.insert(node.key(), node);
+        }
+        let mut hierarchy_bindings = bindings.clone();
+        for layer in view.layers() {
+            if let Some(key) = ghost.binding(layer) {
+                hierarchy_bindings.insert(layer, key);
+            }
+        }
+        let group_composite = GroupCompositeProgram::compile(view, effect_program, &hierarchy_bindings)?;
         for node in group_composite.nodes() {
             nodes.insert(node.key(), node);
         }
@@ -127,7 +140,7 @@ impl SceneNodeProgram {
         let scene = GraphNode::new(identity);
         recipes.insert(scene.key(), Recipe::Composite);
         nodes.insert(scene.key(), scene.clone());
-        Ok(Self { nodes, recipes, bindings, output: SceneProgramNodes { scene: scene.key() }, policy, group_composite })
+        Ok(Self { nodes, recipes, bindings, output: SceneProgramNodes { scene: scene.key() }, policy, ghost, group_composite })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -155,6 +168,9 @@ impl SceneNodeProgram {
     }
 
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
+        if let Some(value) = self.ghost.execute(node, inputs, context) {
+            return Some(value.map_err(Into::into));
+        }
         if let Some(value) = self.group_composite.execute(node, inputs, context) {
             return Some(value.map_err(Into::into));
         }
