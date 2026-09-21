@@ -108,6 +108,8 @@ pub enum NodeKind {
     Relation,
     /// Exact-time relation table consumed by motion/solver lowering.
     RelationSet,
+    /// Exact-time block/physics inputs derived from graph values only.
+    SolverPlan,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
