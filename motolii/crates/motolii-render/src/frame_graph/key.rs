@@ -92,6 +92,8 @@ pub enum NodeKind {
     MediaFrame,
     /// Exact-time authored participation: hidden/solo/timing.
     Visibility,
+    /// Evaluated placement-effect outputs before they become scene copies.
+    PlacementSet,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
