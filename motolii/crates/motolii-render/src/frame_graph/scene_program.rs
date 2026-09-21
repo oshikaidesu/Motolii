@@ -8,13 +8,13 @@ use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, Graph
 pub enum SceneContentValue { None, Text(TextShapeValue), Shape(Vec<ShapeNode>), Material(MaterialValue) }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneLayerValue { pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
+pub struct SceneLayerValue { pub layer: LayerId, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
 #[derive(Clone)]
-enum Recipe { Contribution { content: Option<usize>, opacity: Option<usize>, effects: Vec<(usize, bool)>, masks: Vec<usize>, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
+enum Recipe { Contribution { layer: LayerId, content: Option<usize>, opacity: Option<usize>, effects: Vec<(usize, bool)>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneProgramNodes { pub scene: NodeKey }
@@ -47,6 +47,7 @@ impl SceneNodeProgram {
             let opacity_key = properties.node_for(layer, &PropertyId::new(property::OPACITY).expect("known opacity"));
             let opacity = opacity_key.map(|key| { let at = inputs.len(); inputs.push(key); at });
             let attrs = view.attrs(layer)?.unwrap_or_default();
+            let matte = if attrs.clip_to_below { view.clipping_base(layer)?.map(|layer| crate::doc::store::Matte { layer, mode: crate::doc::store::MatteMode::Alpha }) } else { attrs.matte };
             let mut effect_inputs = Vec::new();
             let mut current = Some(layer); let mut own = true;
             while let Some(owner) = current {
@@ -58,9 +59,10 @@ impl SceneNodeProgram {
             let mut identity = NodeIdentity::new(NodeKind::CompositeContribution, inputs);
             identity.parameters = [kind].into_iter().chain(meta.order.to_be_bytes()).chain([projection_tag(attrs.projection)]).collect();
             identity.parameters.extend(serde_json::to_vec(&attrs.blend_mode).unwrap_or_default());
+            identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            recipes.entry(node.key()).or_insert(Recipe::Contribution { content: content_index, opacity, effects: effect_inputs, masks: mask_inputs, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
+            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, content: content_index, opacity, effects: effect_inputs, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
             ordered.push((meta.order, layer.0, node.key()));
@@ -82,7 +84,7 @@ impl SceneNodeProgram {
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Contribution { content, opacity, effects, masks, projection, blend, order, kind } => (|| {
+            Recipe::Contribution { layer, content, opacity, effects, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 let content_key = content.map(|index| node.identity().inputs[index]);
                 let content = match (*kind, *content) {
@@ -98,7 +100,7 @@ impl SceneNodeProgram {
                     if (*inherited && effect.scope == crate::doc::store::EffectScope::Whole) || (!*inherited && effect.scope == crate::doc::store::EffectScope::Whole) { after.push(effect); } else { direct.push(effect); }
                 }
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                Ok(NodeValue::new(SceneLayerValue { transform, content_key, content, effects: direct, after_effects: after, masks, opacity, projection: *projection, blend: *blend, order: *order }))
+                Ok(NodeValue::new(SceneLayerValue { layer: *layer, transform, content_key, content, effects: direct, after_effects: after, masks, matte: *matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, opacity, projection: *projection, blend: *blend, order: *order }))
             })(),
             Recipe::Composite => inputs.iter().map(|(_, value)| value.downcast_ref::<SceneLayerValue>().cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<Vec<_>, _>>().map(|layers| NodeValue::new(SceneValue { layers })),
         })

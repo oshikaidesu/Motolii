@@ -10,6 +10,7 @@ pub(super) struct GpuSceneValue { pub layers: Vec<LayerWithPasses> }
 impl Engine {
     pub(super) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
         let mut layers = Vec::with_capacity(scene.layers.len());
+        let mut identities = Vec::with_capacity(scene.layers.len());
         for source in &scene.layers {
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let (content, natural) = match &source.content {
@@ -24,6 +25,17 @@ impl Engine {
             let layer = Layer { content, size: natural, placement, projection: source.projection, projection_camera, blend_mode: crate::render::engine::translate::translate_blend_mode(source.blend)?, shading: self.compositor.surface_shading_for(&source.effects, false).map_err(EngineError::Store)?, displace: crate::render::engine::translate::translate_point_displace(&source.effects), clip: crate::render::engine::translate::translate_clip(&source.effects), shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects), outline: 0, frame: None };
             let layer = self.apply_masks_to_layer(layer, &source.masks, natural, None)?;
             layers.push(LayerWithPasses { layer, passes, padding: 0, pass_sources: Vec::new(), cut: Vec::new() });
+            identities.push((source.layer, source.matte));
+        }
+        let by_id: std::collections::HashMap<_, _> = identities.iter().enumerate().map(|(index, (layer, _))| (*layer, index)).collect();
+        let originals = layers.clone();
+        for (index, (_, matte)) in identities.iter().enumerate() {
+            let Some(matte) = matte else { continue };
+            let Some(source_index) = by_id.get(&matte.layer).copied() else { continue };
+            let target = self.apply_effects_before_matte(comp, projection_camera, originals[index].layer.clone(), &originals[index].passes)?;
+            let source = self.apply_effects_before_matte(comp, projection_camera, originals[source_index].layer.clone(), &originals[source_index].passes)?;
+            let layer = self.apply_matte(comp, projection_camera, &target, &source, matte.mode)?;
+            layers[index] = LayerWithPasses { layer, passes: Vec::new(), padding: 0, pass_sources: Vec::new(), cut: Vec::new() };
         }
         Ok(GpuSceneValue { layers })
     }

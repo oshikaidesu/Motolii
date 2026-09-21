@@ -368,7 +368,7 @@ impl Engine {
     /// Track Matte は、Effect後の層をsourceのcoverageで切り、その結果を他層へblendする。
     /// EffectをMatte後のcomp大textureへ掛けると、0-input Effectが透明域を再び塗るため、
     /// 既存のlocal-texture Effect経路をここで一度だけcomp座標へ収めてからMatteへ渡す。
-    fn apply_effects_before_matte(
+    pub(in crate::engine) fn apply_effects_before_matte(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
