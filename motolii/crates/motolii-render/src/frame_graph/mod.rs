@@ -12,6 +12,7 @@ mod evaluate;
 mod flow_program;
 mod initial;
 mod key;
+mod mask_program;
 mod property;
 mod program;
 mod scheduler;
@@ -42,6 +43,7 @@ pub use key::{
     FrameQuality, InputTime, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency,
     WorkKey,
 };
+pub use mask_program::{MaskBinding, MaskProgram, MaskProgramError, MaskValue};
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};

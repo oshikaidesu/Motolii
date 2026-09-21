@@ -106,6 +106,7 @@ pub enum NodeKind {
     GpuScene,
     /// Effect node reserved for the later F4 lowering.
     Effect,
+    Mask,
     Custom(u16),
 }
 
