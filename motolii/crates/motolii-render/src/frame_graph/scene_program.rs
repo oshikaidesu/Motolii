@@ -21,6 +21,7 @@ pub enum SceneContentValue {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScenePlateValue {
+    pub(crate) owner: Option<LayerId>,
     pub(crate) members: Vec<SceneContributionValue>,
     pub(crate) average: bool,
 }
@@ -279,6 +280,7 @@ impl SceneNodeProgram {
                         let mut plate = base;
                         plate.content_key = None;
                         plate.content = SceneContentValue::Plate(ScenePlateValue {
+                            owner: Some(*layer),
                             members,
                             average: !samples.transforms.is_empty(),
                         });
@@ -381,7 +383,7 @@ impl SceneNodeProgram {
                 }
                 let mut plate = base;
                 plate.content_key = None;
-                plate.content = SceneContentValue::Plate(ScenePlateValue { members, average: false });
+                plate.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(*layer), members, average: false });
                 plate.effects = after;
                 plate.after_effects.clear();
                 plate.masks.clear();
