@@ -30,6 +30,7 @@ mod scene_program;
 mod scene_policy;
 mod solver_program;
 mod text_program;
+mod text_flow_program;
 mod topology;
 mod transform;
 mod value;
@@ -71,6 +72,7 @@ pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
 pub use text_program::{TextBinding, TextProgram, TextProgramError, TextShapeValue};
+pub use text_flow_program::{TextFlowBinding, TextFlowProgram, TextFlowProgramError};
 pub use scene_program::{SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneNodeError, SceneNodeProgram, ScenePlateValue, SceneProgramNodes, SceneValue};
 pub use visibility_program::{VisibilityBinding, VisibilityProgram, VisibilityProgramError, VisibilityValue};
 pub use value::{
