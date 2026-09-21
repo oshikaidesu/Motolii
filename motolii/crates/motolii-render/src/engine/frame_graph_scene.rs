@@ -15,7 +15,7 @@ impl Engine {
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let (content, natural) = match &source.content {
                 SceneContentValue::None => continue,
-                SceneContentValue::Text(text) => self.shape_texture_from_shapes(&text.shapes(), key, true, 0.05, comp, None, true)?,
+                SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
                 SceneContentValue::Shape(shapes) => self.shape_texture_from_shapes(shapes, key, true, 0.05, comp, None, true)?,
                 SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
             };

@@ -114,12 +114,13 @@ fn local_value(node: &GraphNode, inputs: &NodeInputs, slots: &[Option<usize>; 10
     let vec2 = |row: usize, default: [f32; 2]| match value(row) { Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32], None => default, _ => default };
     let scalar = |row: usize, default: f32| match value(row) { Some(Value::F64(v)) => *v as f32, None => default, _ => default };
     let mut position = vec2(0, [0.0; 2]);
-    let anchor = vec2(1, [0.0; 2]);
+    let mut anchor = vec2(1, [0.0; 2]);
     let mut scale = vec2(2, [1.0; 2]);
     if let Some((input, index)) = flow {
         if let Some(slot) = inputs.at(input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).and_then(|flow| flow.slots.get(index)).copied().flatten() {
             position = [position[0] + slot.position[0], position[1] + slot.position[1]];
             scale = [scale[0] * slot.scale[0], scale[1] * slot.scale[1]];
+            anchor = slot.anchor;
         }
     }
     let affine = LayerPlacement::from_transform(anchor, position, scale, scalar(3, 0.0), scalar(4, 0.0), scalar(5, 0.0));

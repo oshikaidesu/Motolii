@@ -248,6 +248,39 @@ impl Engine {
             return Ok((None, [0.0, 0.0]));
         };
 
+        self.shape_texture_from_shapes_on_canvas(shapes, layer_id, vector, tolerance, comp, step, remember, canvas)
+    }
+
+    pub(in crate::engine) fn text_texture_from_shapes(
+        &mut self,
+        shapes: &[ShapeNode],
+        layer_id: LayerId,
+        comp: CompSpec,
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        if shapes.is_empty() {
+            return Ok((None, [0.0, 0.0]));
+        }
+        let canvas = crate::picture::shapes_ops::Canvas {
+            width: comp.width,
+            height: comp.height,
+            origin_x: 0,
+            origin_y: 0,
+        };
+        self.shape_texture_from_shapes_on_canvas(shapes, layer_id, true, 0.05, comp, None, true, canvas)
+    }
+
+    fn shape_texture_from_shapes_on_canvas(
+        &mut self,
+        shapes: &[ShapeNode],
+        layer_id: LayerId,
+        vector: bool,
+        tolerance: f32,
+        comp: CompSpec,
+        step: Option<f32>,
+        remember: bool,
+        canvas: crate::picture::shapes_ops::Canvas,
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+
         let key = ShapeCacheKey::new(layer_id, shapes, canvas.width, canvas.height);
         if let Some(cached) = self.shape_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance && c.step == step) {
             return Ok((
