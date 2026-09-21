@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use crate::doc::core::RationalTime;
 
+use super::cache::NodeValue;
 use super::key::{FrameQuality, NodeKey};
 
 /// Ordered by the native playback clock. A later generation supersedes every
@@ -47,6 +50,7 @@ pub struct EvaluatedFrame {
     pub(crate) time: RationalTime,
     pub(crate) quality: FrameQuality,
     pub(crate) state: FrameState,
+    pub(crate) values: BTreeMap<NodeKey, NodeValue>,
     pub(crate) executed: Vec<NodeKey>,
     pub(crate) reused: Vec<NodeKey>,
 }
@@ -66,6 +70,9 @@ impl EvaluatedFrame {
     }
     pub fn state(&self) -> FrameState {
         self.state
+    }
+    pub fn value(&self, key: NodeKey) -> Option<&NodeValue> {
+        self.values.get(&key)
     }
     pub fn executed_nodes(&self) -> &[NodeKey] {
         &self.executed
@@ -132,4 +139,7 @@ pub struct GraphStats {
     pub topology_compiles: u64,
     pub node_executions: u64,
     pub node_reuses: u64,
+    pub cancelled_generations: u64,
+    pub cancelled_evaluations: u64,
+    pub cached_results: usize,
 }
