@@ -380,12 +380,12 @@ fn obstacle_value(
     let slot = flow.slots.get(flow_index).copied().flatten();
 
     let mut local = match source {
-        LayerSource::Shape => {
-            let Some(shapes) = content_input
-                .and_then(|index| inputs.at(index))
-                .and_then(|value| value.downcast_ref::<Vec<ShapeNode>>())
-            else { Vec::new() };
-            shape_polygons(shapes, slot.map_or([1.0, 1.0], |slot| slot.stretch))
+        LayerSource::Shape => match content_input
+            .and_then(|index| inputs.at(index))
+            .and_then(|value| value.downcast_ref::<Vec<ShapeNode>>())
+        {
+            Some(shapes) => shape_polygons(shapes, slot.map_or([1.0, 1.0], |slot| slot.stretch)),
+            None => Vec::new(),
         }
         LayerSource::Text => {
             content_input
