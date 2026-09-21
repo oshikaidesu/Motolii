@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
+use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
 use crate::picture::resolved::ResolvedLayer;
 
 use super::frame_graph_scene::GpuSceneValue;
@@ -115,6 +115,12 @@ impl NodeExecutor for ProgramExecutor<'_> {
             Err(error) => return Err(EngineError::Store(error.to_string())),
         }
         match node.identity().kind {
+            NodeKind::AnalysisBlob => {
+                let request = direct::<BlobAnalysisRequestValue>(node, &inputs, 0)?;
+                let previous = inputs.at(1).and_then(|value| value.downcast_ref::<BlobAnalysisValue>());
+                let value = self.engine.frame_graph_blob_analysis(request, previous, context.time, self.comp, self.fps)?;
+                Ok(NodeValue::new(value))
+            }
             NodeKind::GpuScene => {
                 let scene = direct::<SceneValue>(node, &inputs, 0)?;
                 let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
