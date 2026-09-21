@@ -577,20 +577,30 @@ mod typed_constant_tests {
         assert_eq!(doc.view().value_at(layer, &opacity, RationalTime::ZERO).unwrap(), Some(Value::F64(0.25)));
     }
 
-    /// 文字列のままの値(古い書類・まだ型の無い Vec2)も読める。
+    /// 座標と色は f64 のまま往復する(rerun の `Vec2D` は f32、`Rgba32` は 8bit なので使わない)。
     #[test]
-    fn a_vec2_still_travels_as_text() {
+    fn coordinates_and_colors_keep_every_digit() {
         let mut doc = Document::new();
         let layer = LayerId(7);
         let position = PropertyId::new(property::POSITION).unwrap();
+        // f32 に落ちれば必ず変わる桁を選ぶ。
+        let exact = [12.345_678_901_234_5, -3.141_592_653_589_79];
         doc.apply_all([
             Intent::AddLayer(layer),
-            Intent::SetConstant { layer, property: position.clone(), value: Value::Vec2([12.5, -3.0]) },
+            Intent::SetConstant { layer, property: position.clone(), value: Value::Vec2(exact) },
         ])
         .unwrap();
         assert_eq!(
             doc.view().value_at(layer, &position, RationalTime::ZERO).unwrap(),
-            Some(Value::Vec2([12.5, -3.0]))
+            Some(Value::Vec2(exact))
+        );
+
+        let fill = PropertyId::new(property::SHAPE_FILL_COLOR).unwrap();
+        let shade = [0.123_456_789_012_3, 0.5, 0.987_654_321_098_7, 1.0];
+        doc.apply(Intent::SetConstant { layer, property: fill.clone(), value: Value::Color(shade) }).unwrap();
+        assert_eq!(
+            doc.view().value_at(layer, &fill, RationalTime::ZERO).unwrap(),
+            Some(Value::Color(shade))
         );
     }
 }
