@@ -93,7 +93,10 @@ impl EditorRuntime{
         let target=seen.target(comp);
         let camera_layer=motolii_render::picture::resolve::camera::active_camera_layer(&view, time).map_err(e)?;
         let target_layer=camera_layer.map(|id|motolii_render::picture::resolve::camera::camera_target_layer(&view, id,time)).transpose().map_err(e)?.flatten();
-        let worlds=motolii_render::picture::resolve::transform::world_transforms3d(&view, time).map_err(e)?;
+        let worlds:std::collections::HashMap<LayerId,glam::Affine3A>=resolved.iter()
+            .filter(|layer|!layer.ghost)
+            .filter_map(|layer|layer.placement.world_transform.map(|world|(layer.id,world)))
+            .collect();
         let mut items=Vec::new();
         for layer in resolved {
             // 配置効果の複製は層として 1 つ(元の姿)だけ並べる
@@ -114,10 +117,10 @@ impl EditorRuntime{
             "camera":{"point":[eye.x,eye.z],"layer":camera_layer.map(|l|l.0),"target":target_layer.map(|l|l.0),"orbit":seen.orbit_degrees,"distance":seen.distance_scale,"baseDistance":crate::doc::core::distance_from_camera(comp,0.0)}}))
     }
     /// 注視の球: 層の world 中心と、局所 bounds の 8 角を包む半径(rerun `focus_entity` の bounding sphere)。
-    pub(crate) fn focus_sphere(&self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
-        let view=self.doc.view();let time=self.time()?;
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, time).map_err(e)?;
-        let Some(world)=motolii_render::picture::resolve::transform::world_transforms3d(&view, time).map_err(e)?.get(&id).copied() else{return Ok(None)};
+    pub(crate) fn focus_sphere(&mut self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
+        let time=self.time()?;let view=self.doc.view();
+        let resolved=self.engine.frame_graph_editor_layers(&view,time).map_err(e)?;
+        let Some(world)=resolved.iter().find(|layer|layer.id==id&&!layer.ghost).and_then(|layer|layer.placement.world_transform) else{return Ok(None)};
         let Some(b)=self.engine.selected_layer_bounds_in(&view,&resolved,id,time) else{return Ok(None)};
         let centre=world.transform_point3(glam::Vec3::from(b.center()));
         let radius=(0..8).map(|i|world.transform_point3(glam::vec3(if i&1==0{b.min[0]}else{b.max[0]},if i&2==0{b.min[1]}else{b.max[1]},if i&4==0{b.min[2]}else{b.max[2]})).distance(centre)).fold(0.0,f32::max);
@@ -154,7 +157,7 @@ impl EditorRuntime{
     fn camera_gizmos(&self)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, time).map_err(e)?;
+        let resolved=self.engine.resolved_for(&view,time).ok_or("FrameGraph editor scene is not prepared")?;
         let mut gizmos=Vec::new();
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
@@ -196,7 +199,7 @@ impl EditorRuntime{
     pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{ self.bounds_seen(layer,View::Camera) }
     pub(crate) fn bounds_seen(&self,layer:LayerId,seen:View)->Option<Json>{
         let view=self.doc.view();let at=self.time().ok()?;
-        let resolved=match self.engine.resolved_for(&view,at){Some(r)=>r,None=>crate::render::picture::resolve::resolved_layers(&view,at).ok()?};
+        let resolved=self.engine.resolved_for(&view,at)?;
         let index:std::collections::HashMap<LayerId,usize>=resolved.iter().enumerate().filter(|(_,r)|!r.ghost).map(|(i,r)|(r.id,i)).fold(std::collections::HashMap::new(),|mut m,(id,i)|{m.entry(id).or_insert(i);m});
         self.bounds_from(&view,&self.eye(seen)?,resolved.as_slice(),&index,layer,seen)
     }
@@ -245,14 +248,13 @@ impl EditorRuntime{
         row["stageBounds"]=json!(self.bounds_from(view,&eyes.1,resolved,at,id,View::User));
         Ok(())
     }
-    pub(crate) fn build_status(&self)->Result<Json,String>{
-        let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;let at=self.time()?;
+    pub(crate) fn build_status(&mut self)->Result<Json,String>{
+        let at=self.time()?;let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;
         let catalog=crate::render::engine::known_effects();
-        // 描く側がこのコマで解いた物があればそれを使う(1 コマに 2 度解かない)。
-        let resolved=match self.engine.resolved_for(&view, at) {
-            Some(layers)=>layers,
-            None=>crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?,
-        };
+        // Editor projection reads the same production FrameGraph meaning. The
+        // temporary ResolvedLayer shape below is projected from SceneValue; it
+        // is not a second StoreView-based scene owner.
+        let resolved=self.engine.frame_graph_editor_layers(&view,at).map_err(e)?;
         let clipping=view.clipping_bases().map_err(e)?;
         let eyes=(self.eye(View::Camera).ok_or("No composition")?,self.eye(View::User).ok_or("No composition")?);
         // 再生中で Document が変わっていなければ、時刻で変わる物(値・枠)だけの軽い status にする。
