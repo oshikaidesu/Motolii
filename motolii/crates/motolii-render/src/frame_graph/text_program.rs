@@ -4,7 +4,7 @@ use crate::doc::store::{LayerId, LayerSource, StoreError, StoreView, TextDocumen
 use crate::doc::vector::text::ShapedText;
 use crate::picture::shapes_ops::Canvas;
 
-use super::{ContentProgram, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, TimeDependency};
+use super::{ContentProgram, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText }
@@ -27,8 +27,25 @@ impl TextShapeValue {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextBinding { pub layer: LayerId, pub shape: NodeKey }
 
+#[derive(Clone, Copy, Default)]
+struct StyleInputs {
+    size: Option<usize>,
+    line_height: Option<usize>,
+    tracking: Option<usize>,
+    fill: Option<usize>,
+}
+
 #[derive(Clone)]
-struct Recipe { flow_input: usize, flow_index: usize, canvas: Canvas }
+struct Recipe {
+    flow_input: usize,
+    flow_index: usize,
+    canvas: Canvas,
+    justify: Option<usize>,
+    autospace: Option<usize>,
+    spacing_trim: Option<usize>,
+    hanging: Option<usize>,
+    styles: Vec<StyleInputs>,
+}
 
 #[derive(Debug)]
 pub enum TextProgramError { Store(StoreError), InvalidInput(NodeKind), Shape(String) }
@@ -41,7 +58,7 @@ pub struct TextProgram {
 }
 
 impl TextProgram {
-    pub fn compile(view: &StoreView<'_>, content: &ContentProgram, flow: &FlowProgram) -> Result<Self, TextProgramError> {
+    pub fn compile(view: &StoreView<'_>, content: &ContentProgram, flow: &FlowProgram, properties: &PropertyProgram) -> Result<Self, TextProgramError> {
         let comp = view.composition()?.map(|comp| [comp.width, comp.height]).unwrap_or([1920, 1080]);
         let canvas = Canvas { width: comp[0], height: comp[1], origin_x: 0, origin_y: 0 };
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
@@ -49,11 +66,39 @@ impl TextProgram {
             if !view.meta(layer)?.is_some_and(|meta| meta.source == LayerSource::Text) { continue; }
             let Some(text) = content.binding(layer).and_then(|binding| binding.content) else { continue };
             let Some(flow_binding) = flow.binding(layer) else { continue };
-            let mut identity = NodeIdentity::new(NodeKind::TextShape, vec![text, flow.key()]);
+            let Some(document) = view.text_document(layer)? else { continue };
+            let mut inputs = vec![text, flow.key()];
+            let mut input = |property: crate::doc::store::PropertyId| {
+                properties.node_for(layer, &property).map(|key| {
+                    let at = inputs.len();
+                    inputs.push(key);
+                    at
+                })
+            };
+            let justify = input(crate::doc::store::PropertyId::text_justify());
+            let autospace = input(crate::doc::store::PropertyId::text_autospace());
+            let spacing_trim = input(crate::doc::store::PropertyId::text_spacing_trim());
+            let hanging = input(crate::doc::store::PropertyId::hanging_punctuation());
+            let styles = document.styles.iter().map(|style| StyleInputs {
+                size: input(crate::doc::store::PropertyId::text_style_size(style.id)),
+                line_height: input(crate::doc::store::PropertyId::text_style_line_height(style.id)),
+                tracking: input(crate::doc::store::PropertyId::text_style_tracking(style.id)),
+                fill: input(crate::doc::store::PropertyId::text_style_fill_color(style.id)),
+            }).collect::<Vec<_>>();
+            let mut identity = NodeIdentity::new(NodeKind::TextShape, inputs);
             identity.parameters = (flow_binding.index as u64).to_be_bytes().to_vec();
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            recipes.entry(node.key()).or_insert(Recipe { flow_input: 1, flow_index: flow_binding.index, canvas });
+            recipes.entry(node.key()).or_insert(Recipe {
+                flow_input: 1,
+                flow_index: flow_binding.index,
+                canvas,
+                justify,
+                autospace,
+                spacing_trim,
+                hanging,
+                styles,
+            });
             bindings.insert(layer, TextBinding { layer, shape: node.key() });
             nodes.entry(node.key()).or_insert(node);
         }
@@ -68,6 +113,65 @@ impl TextProgram {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
             let mut document = inputs.at(0).and_then(|value| value.downcast_ref::<TextDocument>()).cloned().ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+            let value = |index: Option<usize>| index.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>());
+            if let Some(value) = value(recipe.justify) {
+                match value {
+                    crate::doc::eval::Value::Enum(value) => {
+                        document.justify = crate::doc::store::TextJustify::from_enum_value(*value).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+                    }
+                    _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                }
+            }
+            if let Some(value) = value(recipe.autospace) {
+                match value {
+                    crate::doc::eval::Value::Enum(value) => {
+                        document.alignment.autospace = crate::doc::store::TextAutospace::from_enum_value(*value).unwrap_or_default();
+                    }
+                    _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                }
+            }
+            if let Some(value) = value(recipe.spacing_trim) {
+                match value {
+                    crate::doc::eval::Value::Enum(value) => {
+                        document.alignment.spacing_trim = crate::doc::store::TextSpacingTrim::from_enum_value(*value).unwrap_or_default();
+                    }
+                    _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                }
+            }
+            if let Some(value) = value(recipe.hanging) {
+                match value {
+                    crate::doc::eval::Value::Enum(value) => {
+                        document.alignment.hanging = crate::doc::store::HangingPunctuation::from_enum_value(*value).unwrap_or_default();
+                    }
+                    _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                }
+            }
+            for (style, bindings) in document.styles.iter_mut().zip(&recipe.styles) {
+                if let Some(value) = value(bindings.size) {
+                    match value {
+                        crate::doc::eval::Value::F64(value) => style.size = *value as f32,
+                        _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                    }
+                }
+                if let Some(value) = value(bindings.line_height) {
+                    match value {
+                        crate::doc::eval::Value::F64(value) => style.line_height = Some(*value as f32),
+                        _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                    }
+                }
+                if let Some(value) = value(bindings.tracking) {
+                    match value {
+                        crate::doc::eval::Value::F64(value) => style.tracking = *value as f32,
+                        _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                    }
+                }
+                if let Some(value) = value(bindings.fill) {
+                    match value {
+                        crate::doc::eval::Value::Color(value) => style.fill = *value,
+                        _ => return Err(TextProgramError::InvalidInput(node.identity().kind)),
+                    }
+                }
+            }
             let flow = inputs.at(recipe.flow_input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
             if let Some(wrap) = flow.slots.get(recipe.flow_index).copied().flatten().and_then(|slot| slot.wrap) { document.wrap_size = Some([wrap.max(1.0), recipe.canvas.height as f32]); }
             let shaped = crate::picture::text_frame::shape_document(&document, context.time, &recipe.canvas).map_err(|error| TextProgramError::Shape(error.to_string()))?.unwrap_or_default();
