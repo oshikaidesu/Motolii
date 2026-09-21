@@ -19,6 +19,9 @@ pub mod text;
 pub mod geometry;
 pub mod scratch;
 pub mod view;
+#[cfg(test)]
+#[path = "store/type_probe.rs"]
+mod type_probe;
 pub mod read;
 pub mod ids;
 
