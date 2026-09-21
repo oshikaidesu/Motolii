@@ -74,7 +74,7 @@ impl SceneProgram {
         let placements = PlacementProgram::compile(view, &properties, &effects, &transforms)?;
         let motion = MotionProgram::compile(view, &properties, &effects, &transforms, &flow)?;
         let particles = ParticleProgram::compile(view, &properties)?;
-        let text = TextProgram::compile(view, &content, &flow)?;
+        let text = TextProgram::compile(view, &content, &flow, &properties)?;
         let groups = GroupBackgroundProgram::compile(view, &properties, &flow)?;
         let masks = MaskProgram::compile(view, &properties)?;
         let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
