@@ -39,7 +39,7 @@ impl ScenePolicy {
     pub(super) fn hand_out_stencils(&self, layers: &mut [SceneLayerValue]) {
         let mut stencils: Vec<(LayerId, i16, bool, MatteMode, Option<LayerId>, Option<LayerId>)> = layers
             .iter()
-            .filter(|layer| layer.blend.is_stencil())
+            .filter(|layer| layer.blend.is_stencil() && !layer.ghost)
             .filter_map(|layer| {
                 let policy = self.layers.get(&layer.layer)?;
                 Some((
@@ -61,6 +61,7 @@ impl ScenePolicy {
         for (stencil, order, clipped, mode, parent, base) in stencils {
             for index in 0..layers.len() {
                 if layers[index].layer == stencil
+                    || layers[index].ghost
                     || layers[index].clip_to_below
                     || layers[index].source == LayerSource::Group
                 {
