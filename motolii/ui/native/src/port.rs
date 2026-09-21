@@ -181,7 +181,7 @@ impl EditorRuntime{
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
                 if patch.projection.is_some(){
                     let at=self.time()?;
-                    let centers:Vec<_>={let view=self.doc.view();let resolved=crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?;
+                    let centers:Vec<_>={let view=self.doc.view();let resolved=self.engine.frame_graph_editor_layers(&view,at).map_err(e)?;
                         layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
