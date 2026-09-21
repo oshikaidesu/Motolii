@@ -334,6 +334,8 @@ impl AnalysisProgram {
                                 projection: plan.projection,
                                 blend: BlendMode::Normal,
                                 order: plan.order,
+                                shape_stretch: [1.0, 1.0],
+                                depth: 0.0,
                             })
                         }
                     }
