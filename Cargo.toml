@@ -11,6 +11,9 @@ stl_io = "0.11.0"
 smallvec = "1"
 wgpu = "29"
 peniko = "0.6"
+# 三次ベジェの根。CSS の easing は三次方程式を解く話なので、自分で Newton も二分探索も書かない
+# (Blinn の方法。kurbo が peniko 経由で既に依存木に居た — 2026-09-21 に気付いた)。
+kurbo = "0.13"
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
 re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["setup"] }
 # 物理の解き手は借りる(自作しない): 積み上げの warm start・摩擦・joint・snapshot を持っている。
