@@ -136,6 +136,72 @@ mod tests {
         assert!(matches!(scene.layers[0].content, super::super::SceneContentValue::Material(_)));
     }
 
+
+    #[test]
+    fn scene_visibility_matches_the_legacy_resolver_for_hidden_solo_and_trim() {
+        fn ids(scene: &crate::frame_graph::SceneValue) -> Vec<LayerId> {
+            scene.layers.iter().map(|layer| layer.layer).collect()
+        }
+
+        let fps = crate::doc::core::Fps::try_new(30, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(crate::doc::store::Composition {
+            width: 640,
+            height: 360,
+            fps,
+            duration_frames: 120,
+            background: [0.0; 4],
+        })).unwrap();
+
+        let normal = LayerId(20);
+        let solo = LayerId(21);
+        for (layer, order, timing) in [
+            (normal, 0, LayerTiming::place(0, None, 120)),
+            (solo, 1, LayerTiming { start: 60, duration: 30, source_in: 0, speed: crate::doc::store::Speed::NORMAL }),
+        ] {
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Null, order, timing } },
+            ]).unwrap();
+        }
+        doc.apply(Intent::SetAttrs {
+            layer: solo,
+            patch: crate::doc::store::LayerAttrsPatch { solo: Some(true), ..Default::default() },
+        }).unwrap();
+
+        for (generation, frame_no) in [(1, 0), (2, 60), (3, 90)] {
+            let at = crate::doc::core::RationalTime::try_from_frame(frame_no, fps).unwrap();
+            let expected = crate::picture::resolve::resolved_layers(&doc.view(), at).unwrap()
+                .into_iter().filter(|layer| !matches!(layer.source, LayerSource::Camera | LayerSource::Stage))
+                .map(|layer| layer.id).collect::<Vec<_>>();
+
+            let program = SceneProgram::compile(&doc.view()).unwrap();
+            let root = program.scene().scene;
+            let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+            let mut graph = CompiledGraph::with_topology(GraphRevision::new(generation), topology);
+            let mut executor = Executor(&program);
+            let evaluated = graph.evaluate(&mut executor, at, FrameQuality::Export, Generation::new(generation)).unwrap();
+            let scene = evaluated.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>()).unwrap();
+            assert_eq!(ids(scene), expected, "frame {frame_no}");
+        }
+
+        doc.apply(Intent::SetAttrs {
+            layer: solo,
+            patch: crate::doc::store::LayerAttrsPatch { hidden: Some(true), ..Default::default() },
+        }).unwrap();
+        let at = crate::doc::core::RationalTime::try_from_frame(60, fps).unwrap();
+        let expected = crate::picture::resolve::resolved_layers(&doc.view(), at).unwrap()
+            .into_iter().map(|layer| layer.id).collect::<Vec<_>>();
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(4), topology);
+        let mut executor = Executor(&program);
+        let evaluated = graph.evaluate(&mut executor, at, FrameQuality::Export, Generation::new(4)).unwrap();
+        let scene = evaluated.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>()).unwrap();
+        assert_eq!(ids(scene), expected);
+    }
+
     #[test]
     fn media_frame_uses_layer_timing_and_disappears_outside_the_trim() {
         let mut doc = Document::new();
