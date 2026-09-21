@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::core::{Fps, RationalTime};
 use crate::doc::store::{LayerId, StoreError, StoreView};
-use crate::picture::resolved::ResolvedEffect;
 use crate::render::compositor::effects::isf::{TimeBase, TimeOffset};
 use crate::render::compositor::TimeSource;
 
@@ -49,8 +48,8 @@ pub struct LookbehindProgram {
 impl LookbehindProgram {
     pub fn compile(view: &StoreView<'_>, scene: NodeKey) -> Result<Self, LookbehindProgramError> {
         let composition = view.composition()?;
-        let fps = composition.map_or(Fps::try_new(30, 1).expect("valid fallback fps"), |composition| composition.fps);
-        let background = composition.map_or([0.0; 4], |composition| composition.background);
+        let fps = composition.as_ref().map_or(Fps::try_new(30, 1).expect("valid fallback fps"), |composition| composition.fps);
+        let background = composition.as_ref().map_or([0.0; 4], |composition| composition.background);
         let mut layers = BTreeMap::new();
         let mut identity = NodeIdentity::new(NodeKind::EffectImages, vec![scene]);
         identity.time_dependency = TimeDependency::Exact;
