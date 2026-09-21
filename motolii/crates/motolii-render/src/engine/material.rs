@@ -55,31 +55,58 @@ impl Compositor {
 }
 
 impl Engine {
-    pub(super) fn apply_material_domains(&mut self, mut layer: Layer, resolved: &ResolvedLayer, natural: [f32; 2], source_frame: Option<ImageFrame>) -> Result<Layer, EngineError> {
+    pub(super) fn apply_material_domains(
+        &mut self,
+        layer: Layer,
+        resolved: &ResolvedLayer,
+        natural: [f32; 2],
+        source_frame: Option<ImageFrame>,
+    ) -> Result<Layer, EngineError> {
+        self.apply_material_domains_semantic(
+            layer,
+            resolved.id,
+            &resolved.effects,
+            matches!(resolved.source, crate::doc::store::LayerSource::File { .. }),
+            resolved.source_frame,
+            natural,
+            source_frame,
+        )
+    }
+
+    pub(in crate::engine) fn apply_material_domains_semantic(
+        &mut self,
+        mut layer: Layer,
+        layer_id: crate::doc::store::LayerId,
+        effects: &[ResolvedEffect],
+        source_is_file: bool,
+        source_tick: i64,
+        natural: [f32; 2],
+        source_frame: Option<ImageFrame>,
+    ) -> Result<Layer, EngineError> {
         let mut spatial_seen = false;
-        for effect in &resolved.effects {
+        for effect in effects {
             match self.compositor.catalog.descriptors.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
                 Some(EffectStage::Field | EffectStage::Surface) => spatial_seen = true,
                 Some(EffectStage::Warp) if spatial_seen => return Err(EngineError::Store("2D warps must precede spatial effects in one material".into())),
                 _ => {},
             }
         }
-        let warps = super::translate::translate_image_effects(&resolved.effects, EffectStage::Warp);
-        let spatial = self.compositor.catalog.descriptors.iter().any(|d| d.stage == EffectStage::Field && resolved.effects.iter().any(|e| e.plugin_id == d.plugin_id));
-        if warps.is_empty() && !spatial && source_frame.is_none() { self.materials.remove(&resolved.id); return Ok(layer); }
+        let warps = super::translate::translate_image_effects(effects, EffectStage::Warp);
+        let spatial = self.compositor.catalog.descriptors.iter().any(|d| d.stage == EffectStage::Field && effects.iter().any(|e| e.plugin_id == d.plugin_id));
+        if warps.is_empty() && !spatial && source_frame.is_none() { self.materials.remove(&layer_id); return Ok(layer); }
         let Some(source) = layer.content.texture().cloned() else {
             if !warps.is_empty() { return Err(EngineError::Store("2D warp requires a planar material".into())); }
-            self.materials.remove(&resolved.id);
+            self.materials.remove(&layer_id);
             return Ok(layer);
         };
-        let source_tick = if matches!(resolved.source, crate::doc::store::LayerSource::File { .. }) { resolved.source_frame } else { 0 };
-        let key = format!("{natural:?}|{warps:?}|{spatial}|{source_tick}|{source_frame:?}");
-        let mut cached = self.materials.remove(&resolved.id);
-        let same_source = cached.as_ref().is_some_and(|c| c.source.handle() == source.handle() && (!matches!(resolved.source, crate::doc::store::LayerSource::File { .. }) || c.source_frame == resolved.source_frame));
+        let tick = if source_is_file { source_tick } else { 0 };
+        let key = format!("{natural:?}|{warps:?}|{spatial}|{tick}|{source_frame:?}");
+        let mut cached = self.materials.remove(&layer_id);
+        let same_source = cached.as_ref().is_some_and(|c| c.source.handle() == source.handle() && (!source_is_file || c.source_frame == tick));
         if !same_source {
             let normalized = self.compositor.normalized_material(&source)?;
             let frame = source_frame.unwrap_or(ImageFrame { size: natural, origin: [0.0;2], pixels: normalized.width_height() });
-            cached = Some(MaterialCache { source: source.clone(), source_frame: resolved.source_frame, normalized: normalized.clone(), key: String::new(), output: normalized, frame, mesh: None });
+            cached = Some(MaterialCache { source: source.clone(), source_frame: tick, normalized: normalized.clone(), key: String::new(), output: normalized, frame, mesh: None });
         }
         let mut cached = cached.expect("material source");
         if cached.key != key {
@@ -107,7 +134,7 @@ impl Engine {
             layer.content = LayerContent::LinearTexture(cached.output.clone());
             layer.frame = Some(cached.frame);
         }
-        self.materials.insert(resolved.id, cached);
+        self.materials.insert(layer_id, cached);
         Ok(layer)
     }
 }
