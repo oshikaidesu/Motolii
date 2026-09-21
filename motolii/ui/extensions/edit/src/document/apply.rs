@@ -326,26 +326,10 @@ impl Document {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
                 if property_is_inside(property.name()) { check_not_frozen_inside(&self.view(), layer, "its effects")?; }
-                let json = serde_json::to_string(&PropertySource::constant(value))?;
-                (
-                    layer.entity_path(),
-                    vec![SerializedComponentBatch {
-                        descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
-                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
-                    }],
-                )
+                (layer.entity_path(), vec![constant_batch(&property, value)?])
             }
             Intent::SetCameraConstant { property, value } => {
-                let json = serde_json::to_string(&PropertySource::constant(value))?;
-                (
-                    Self::composition_path(),
-                    vec![SerializedComponentBatch {
-                        descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
-                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
-                    }],
-                )
+                (Self::composition_path(), vec![constant_batch(&property, value)?])
             }
             Intent::SetCameraTrack { property, track } => {
                 track
@@ -546,4 +530,67 @@ fn serialize_present(present: bool) -> Result<SerializedComponentBatch, StoreErr
         array: <LayerPresent as re_types_core::Loggable>::to_arrow([LayerPresent(present)])
             .map_err(|e| StoreError::Chunk(e.to_string()))?,
     })
+}
+
+/// 動かない値 1 つ分の書き込み。**型のある口が在ればそちらへ**、無ければ従来の文字列へ。
+/// 型を増やす時にここは変わらない(増えるのは `value_components` の対応表だけ)。
+fn constant_batch(
+    property: &motolii_doc::store::PropertyId,
+    value: motolii_doc::eval::Value,
+) -> Result<SerializedComponentBatch, StoreError> {
+    if let Some(typed) = motolii_doc::store::value_components::constant_batch(property, &value) {
+        return typed;
+    }
+    let json = serde_json::to_string(&PropertySource::constant(value))?;
+    Ok(SerializedComponentBatch {
+        descriptor: descriptor_track(property),
+        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+    })
+}
+
+#[cfg(test)]
+mod typed_constant_tests {
+    use super::*;
+    use motolii_doc::eval::Value;
+    use motolii_doc::store::{property, LayerId, PropertyId, RationalTime};
+
+    /// 動かない値は型のまま置かれ、そのまま読み戻る(文字列を経由しない)。
+    #[test]
+    fn a_constant_round_trips_without_json() {
+        let mut doc = Document::new();
+        let layer = LayerId(7);
+        let opacity = PropertyId::new(property::OPACITY).unwrap();
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetConstant { layer, property: opacity.clone(), value: Value::F64(0.25) },
+        ])
+        .unwrap();
+        assert_eq!(doc.view().value_at(layer, &opacity, RationalTime::ZERO).unwrap(), Some(Value::F64(0.25)));
+
+        // 型が変わる値へ上書きしても、新しい型が古い型を覆う。
+        doc.apply(Intent::SetConstant { layer, property: opacity.clone(), value: Value::Bool(true) }).unwrap();
+        assert_eq!(doc.view().value_at(layer, &opacity, RationalTime::ZERO).unwrap(), Some(Value::Bool(true)));
+
+        // undo は edit 軸の巻き戻しなので、型付きでもそのまま効く。
+        doc.undo();
+        assert_eq!(doc.view().value_at(layer, &opacity, RationalTime::ZERO).unwrap(), Some(Value::F64(0.25)));
+    }
+
+    /// 文字列のままの値(古い書類・まだ型の無い Vec2)も読める。
+    #[test]
+    fn a_vec2_still_travels_as_text() {
+        let mut doc = Document::new();
+        let layer = LayerId(7);
+        let position = PropertyId::new(property::POSITION).unwrap();
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetConstant { layer, property: position.clone(), value: Value::Vec2([12.5, -3.0]) },
+        ])
+        .unwrap();
+        assert_eq!(
+            doc.view().value_at(layer, &position, RationalTime::ZERO).unwrap(),
+            Some(Value::Vec2([12.5, -3.0]))
+        );
+    }
 }
