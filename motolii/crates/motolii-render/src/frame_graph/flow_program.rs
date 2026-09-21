@@ -14,7 +14,7 @@ const ROWS: [&str; 23] = [layout::DISPLAY, layout::FLEX_DIRECTION, layout::FLEX_
 pub struct FlowSlot { pub position: [f32; 2], pub scale: [f32; 2], pub stretch: [f32; 2], pub wrap: Option<f32>, pub anchor: [f32; 2] }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct FlowFrameValue { pub slots: Vec<Option<FlowSlot>>, pub sizes: Vec<Option<[f32; 2]>> }
+pub struct FlowFrameValue { pub slots: Vec<Option<FlowSlot>>, pub sizes: Vec<Option<[f32; 2]>>, pub transition_samples: Vec<Vec<(crate::doc::core::RationalTime, f32)>> }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FlowBinding { pub layer: LayerId, pub index: usize }
@@ -105,9 +105,9 @@ impl FlowProgram {
     pub fn bindings(&self) -> impl ExactSizeIterator<Item = FlowBinding> + '_ { self.bindings.values().copied() }
     pub fn binding(&self, layer: LayerId) -> Option<FlowBinding> { self.bindings.get(&layer).copied() }
 
-    pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, FlowProgramError>> {
+    pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, FlowProgramError>> {
         if node.key() == self.node.key() { return Some(evaluate(&self.recipe, inputs).map(NodeValue::new)); }
-        (node.key() == self.window.key()).then(|| evaluate_window(&self.window_recipe, inputs).map(NodeValue::new))
+        (node.key() == self.window.key()).then(|| evaluate_window(&self.window_recipe, inputs, context).map(NodeValue::new))
     }
 }
 
@@ -189,7 +189,7 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs) -> Result<FlowFrameValue, Flow
     for list in children.values_mut() { list.sort_by_key(|index| recipe.layers[*index].order); }
     let displayed: Vec<_> = recipe.layers.iter().enumerate().filter(|(_, layer)| layer.source == LayerSource::Group && choice(layer, 0, inputs, 0) != 0).map(|(index, _)| index).collect();
     let canvas = Canvas { width: recipe.comp[0], height: recipe.comp[1], origin_x: 0, origin_y: 0 };
-    let mut out = FlowFrameValue { slots: vec![None; recipe.layers.len()], sizes: vec![None; recipe.layers.len()] };
+    let mut out = FlowFrameValue { slots: vec![None; recipe.layers.len()], sizes: vec![None; recipe.layers.len()], transition_samples: vec![Vec::new(); recipe.layers.len()] };
     for root in displayed.iter().copied().filter(|index| recipe.layers[*index].parent.is_none_or(|parent| !displayed.contains(&parent))) {
         let mut tree: TaffyTree<()> = TaffyTree::new(); tree.disable_rounding();
         let mut nodes = BTreeMap::new();
@@ -264,7 +264,7 @@ fn window_number(layer: &WindowLayer, which: usize, inputs: &NodeInputs, default
     }
 }
 
-fn evaluate_window(recipe: &WindowRecipe, inputs: &NodeInputs) -> Result<FlowFrameValue, FlowProgramError> {
+fn evaluate_window(recipe: &WindowRecipe, inputs: &NodeInputs, context: &EvaluationContext) -> Result<FlowFrameValue, FlowProgramError> {
     let frames: Vec<&FlowFrameValue> = (0..=recipe.reach).map(|index| inputs.at(index).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(FlowProgramError::InvalidInput(NodeKind::FlowWindow))).collect::<Result<_, _>>()?;
     let mut schedules: Vec<Option<Vec<(usize, f32)>>> = vec![None; recipe.layers.len()];
     fn schedule(index: usize, recipe: &WindowRecipe, inputs: &NodeInputs, frames: &[&FlowFrameValue], schedules: &mut [Option<Vec<(usize, f32)>>]) -> Vec<(usize, f32)> {
@@ -318,8 +318,14 @@ fn evaluate_window(recipe: &WindowRecipe, inputs: &NodeInputs) -> Result<FlowFra
     }
 
     let mut out = frames[0].clone();
+    out.transition_samples = vec![Vec::new(); recipe.layers.len()];
     for index in 0..recipe.layers.len() {
         let samples = schedule(index, recipe, inputs, &frames, &mut schedules);
+        out.transition_samples[index] = samples.iter().map(|(back, weight)| {
+            let delta = crate::doc::core::RationalTime::try_from_frame(-(*back as i64), recipe.fps).expect("valid transition frame offset");
+            let time = context.time.try_add(delta).ok().filter(|value| *value >= crate::doc::core::RationalTime::ZERO).unwrap_or(crate::doc::core::RationalTime::ZERO);
+            (time, *weight)
+        }).collect();
         if samples.is_empty() { continue; }
         let mut position = [0.0; 2]; let mut scale = [0.0; 2]; let mut stretch = [0.0; 2]; let mut total = 0.0;
         for (back, weight) in samples {
