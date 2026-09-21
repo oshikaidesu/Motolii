@@ -53,7 +53,7 @@ impl EngineFrameGraph {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
 #[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
-struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec }
+struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
     type Error = EngineError;
 
@@ -71,6 +71,12 @@ impl NodeExecutor for ProgramExecutor<'_> {
             NodeKind::GpuScene => {
                 let scene = direct::<SceneValue>(node, &inputs, 0)?;
                 let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
+                let frame = context.time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
+                self.engine.compositor.clock = Some([
+                    context.time.as_seconds_f64() as f32,
+                    self.fps.den() as f32 / self.fps.num() as f32,
+                    frame,
+                ]);
                 let prepared = self.engine.prepare_gpu_scene(scene, self.comp, camera)?;
                 Ok(NodeValue::new(Arc::new(prepared)))
             }
@@ -88,10 +94,12 @@ impl Engine {
     fn evaluated_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality) -> Result<EngineFrameGraph, EngineError> {
         let revision = GraphRevision::new(view.revision_key());
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
+        self.compositor.feedback_set_revision(view.revision_key());
+        self.feedback_keys_seen.clear();
         if !state.matches(revision, time) {
             state.generation += 1;
             let started = std::time::Instant::now();
-            let evaluated = { let mut executor = ProgramExecutor { engine: self, program: &state.program, comp: state.comp }; state.graph.evaluate(&mut executor, time, quality, Generation::new(state.generation)) };
+            let evaluated = { let mut executor = ProgramExecutor { engine: self, program: &state.program, comp: state.comp, fps: state.fps }; state.graph.evaluate(&mut executor, time, quality, Generation::new(state.generation)) };
             state.prepare_us = started.elapsed().as_micros() as u64;
             state.measured = false;
             match evaluated { Ok(frame) => state.frame = Some(frame), Err(error) => { self.frame_graph = Some(state); return Err(error); } }
