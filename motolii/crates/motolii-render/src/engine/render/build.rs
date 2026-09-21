@@ -396,7 +396,7 @@ impl Engine {
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。`average` なら写しを足す
     /// (Motion Blur: 各写しの不透明度は 1/枚数なので、足すと平均になる)。
-    pub(super) fn bake_isolated_layers(
+    pub(in crate::engine) fn bake_isolated_layers(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
