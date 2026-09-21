@@ -4,7 +4,7 @@ use crate::doc::store::{LayerId, LayerSource, StoreError, StoreView, TextDocumen
 use crate::doc::vector::text::ShapedText;
 use crate::picture::shapes_ops::Canvas;
 
-use super::{ContentProgram, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
+use super::{ContentProgram, DynamicInput, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText }
@@ -53,15 +53,18 @@ impl std::fmt::Display for TextProgramError { fn fmt(&self, f: &mut std::fmt::Fo
 impl std::error::Error for TextProgramError {}
 impl From<StoreError> for TextProgramError { fn from(value: StoreError) -> Self { Self::Store(value) } }
 
+#[derive(Clone, Copy)]
+struct MotionRecipe { base: usize, flow: usize, flow_index: usize }
+
 pub struct TextProgram {
-    nodes: BTreeMap<NodeKey, GraphNode>, recipes: BTreeMap<NodeKey, Recipe>, bindings: BTreeMap<LayerId, TextBinding>,
+    nodes: BTreeMap<NodeKey, GraphNode>, recipes: BTreeMap<NodeKey, Recipe>, motion: BTreeMap<NodeKey, MotionRecipe>, bindings: BTreeMap<LayerId, TextBinding>,
 }
 
 impl TextProgram {
     pub fn compile(view: &StoreView<'_>, content: &ContentProgram, flow: &FlowProgram, properties: &PropertyProgram) -> Result<Self, TextProgramError> {
         let comp = view.composition()?.map(|comp| [comp.width, comp.height]).unwrap_or([1920, 1080]);
         let canvas = Canvas { width: comp[0], height: comp[1], origin_x: 0, origin_y: 0 };
-        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
+        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut motion = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
             if !view.meta(layer)?.is_some_and(|meta| meta.source == LayerSource::Text) { continue; }
             let Some(text) = content.binding(layer).and_then(|binding| binding.content) else { continue };
@@ -89,7 +92,8 @@ impl TextProgram {
             identity.parameters = (flow_binding.index as u64).to_be_bytes().to_vec();
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            recipes.entry(node.key()).or_insert(Recipe {
+            let base = node.key();
+            recipes.entry(base).or_insert(Recipe {
                 flow_input: 1,
                 flow_index: flow_binding.index,
                 canvas,
@@ -99,17 +103,38 @@ impl TextProgram {
                 hanging,
                 styles,
             });
-            bindings.insert(layer, TextBinding { layer, shape: node.key() });
-            nodes.entry(node.key()).or_insert(node);
+            nodes.entry(base).or_insert(node);
+
+            let mut motion_identity = NodeIdentity::new(NodeKind::TextShape, vec![base, flow.key()]);
+            motion_identity.parameters = b"glyph-transition".to_vec();
+            motion_identity.parameters.extend_from_slice(&(flow_binding.index as u64).to_be_bytes());
+            motion_identity.time_dependency = TimeDependency::Exact;
+            let motion_node = GraphNode::new(motion_identity);
+            let shape = motion_node.key();
+            motion.entry(shape).or_insert(MotionRecipe { base: 0, flow: 1, flow_index: flow_binding.index });
+            nodes.entry(shape).or_insert(motion_node);
+            bindings.insert(layer, TextBinding { layer, shape });
         }
-        Ok(Self { nodes, recipes, bindings })
+        Ok(Self { nodes, recipes, motion, bindings })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn bindings(&self) -> impl ExactSizeIterator<Item = TextBinding> + '_ { self.bindings.values().copied() }
     pub fn binding(&self, layer: LayerId) -> Option<TextBinding> { self.bindings.get(&layer).copied() }
 
+    pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<Vec<DynamicInput>, TextProgramError>> {
+        let recipe = self.motion.get(&node.key())?;
+        Some((|| {
+            let flow = inputs.at(recipe.flow).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+            let samples = flow.transition_samples.get(recipe.flow_index).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+            Ok(samples.iter().map(|(time, _)| DynamicInput { node: node.identity().inputs[recipe.base], time: *time }).collect())
+        })())
+    }
+
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, TextProgramError>> {
+        if let Some(recipe) = self.motion.get(&node.key()) {
+            return Some(apply_glyph_transition(node, inputs, *recipe));
+        }
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
             let mut document = inputs.at(0).and_then(|value| value.downcast_ref::<TextDocument>()).cloned().ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
@@ -178,6 +203,61 @@ impl TextProgram {
             Ok(NodeValue::new(TextShapeValue { document, shaped }))
         })())
     }
+}
+
+
+fn apply_glyph_transition(node: &GraphNode, inputs: &NodeInputs, recipe: MotionRecipe) -> Result<NodeValue, TextProgramError> {
+    let mut current = inputs.at(recipe.base)
+        .and_then(|value| value.downcast_ref::<TextShapeValue>())
+        .cloned()
+        .ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+    let flow = inputs.at(recipe.flow)
+        .and_then(|value| value.downcast_ref::<FlowFrameValue>())
+        .ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+    let samples = flow.transition_samples.get(recipe.flow_index)
+        .ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+    if samples.is_empty() {
+        return Ok(NodeValue::new(current));
+    }
+
+    let positions = |shaped: &ShapedText| -> Vec<(usize, [f32; 2])> {
+        shaped.lines.iter().flat_map(|line| {
+            line.glyph_bytes.iter().zip(&line.glyph_xs).map(move |(byte, x)| (*byte, [*x, line.baseline_y]))
+        }).collect()
+    };
+    let now = positions(&current.shaped);
+    if now.is_empty() {
+        return Ok(NodeValue::new(current));
+    }
+
+    let mut sum = vec![[0.0f32; 2]; now.len()];
+    let mut weights = vec![0.0f32; now.len()];
+    let dynamic_start = node.identity().inputs.len();
+    for (sample_index, (_, weight)) in samples.iter().enumerate() {
+        let past = inputs.at(dynamic_start + sample_index)
+            .and_then(|value| value.downcast_ref::<TextShapeValue>())
+            .ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+        let past: std::collections::HashMap<usize, [f32; 2]> = positions(&past.shaped).into_iter().collect();
+        for (glyph, (byte, here)) in now.iter().enumerate() {
+            if let Some(previous) = past.get(byte) {
+                sum[glyph][0] += (previous[0] - here[0]) * *weight;
+                sum[glyph][1] += (previous[1] - here[1]) * *weight;
+                weights[glyph] += *weight;
+            }
+        }
+    }
+    let offsets: Vec<[f32; 2]> = sum.iter().zip(&weights)
+        .map(|(sum, weight)| if *weight > 1e-6 { [sum[0] / weight, sum[1] / weight] } else { [0.0, 0.0] })
+        .collect();
+
+    for (contour, glyph) in current.shaped.contours.iter_mut().zip(&current.shaped.contour_glyphs) {
+        let Some(offset) = offsets.get(*glyph) else { continue };
+        for vertex in &mut contour.vertices {
+            vertex.point.x += f64::from(offset[0]);
+            vertex.point.y += f64::from(offset[1]);
+        }
+    }
+    Ok(NodeValue::new(current))
 }
 
 #[cfg(test)]
