@@ -17,6 +17,7 @@ mod initial;
 mod key;
 mod mask_program;
 mod placement_program;
+mod particle_program;
 mod property;
 mod program;
 mod scheduler;
@@ -52,6 +53,7 @@ pub use key::{
 };
 pub use mask_program::{MaskBinding, MaskProgram, MaskProgramError, MaskValue};
 pub use placement_program::{PlacementBinding, PlacementCopyValue, PlacementProgram, PlacementProgramError, PlacementSetValue};
+pub use particle_program::{ParticleBinding, ParticleProgram, ParticleProgramError, ParticleValue};
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
