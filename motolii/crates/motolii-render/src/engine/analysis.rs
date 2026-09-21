@@ -75,8 +75,8 @@ impl Engine {
 
         let mut inputs = AnalysisInputs::default();
         let Some(source) = request.source.as_ref() else {
-            let marks = tracker.step(Vec::new(), &request.settings);
-            inputs.set_blobs(request.target, EffectId(0), t, marks);
+            tracker.step(Vec::new(), &request.settings);
+            inputs.set_blobs(request.target, EffectId(0), t, Vec::new());
             return Ok(crate::frame_graph::BlobAnalysisValue {
                 inputs,
                 tracker,
@@ -100,8 +100,8 @@ impl Engine {
         })();
         self.compositor.clock = previous_clock;
         let Some(picture) = picture? else {
-            let marks = tracker.step(Vec::new(), &request.settings);
-            inputs.set_blobs(request.target, EffectId(0), t, marks);
+            tracker.step(Vec::new(), &request.settings);
+            inputs.set_blobs(request.target, EffectId(0), t, Vec::new());
             return Ok(crate::frame_graph::BlobAnalysisValue {
                 inputs,
                 tracker,
@@ -288,10 +288,10 @@ impl Engine {
         let previous_pixels = previous.and_then(|value| value.previous.as_ref());
 
         let Some(picture) = picture else {
-            let marks = tracker.step(Vec::new(), &settings);
+            tracker.step(Vec::new(), &settings);
             return Ok(crate::frame_graph::OverlayAnalysisValue {
                 layer,
-                marks,
+                marks: Vec::new(),
                 mask: None,
                 params,
                 depths: None,

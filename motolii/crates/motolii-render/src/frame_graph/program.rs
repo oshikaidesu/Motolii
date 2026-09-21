@@ -351,7 +351,7 @@ mod tests {
             .value(root)
             .and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>())
             .unwrap();
-        assert!(matches!(scene.layers[0].content, crate::frame_graph::SceneContentValue::None));
+        assert!(scene.layers.is_empty(), "trimmed media must not contribute a placeholder layer");
     }
 
     #[test]

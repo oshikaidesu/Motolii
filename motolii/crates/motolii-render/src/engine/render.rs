@@ -540,6 +540,68 @@ impl Engine {
     }
 }
 
+// These adapters support the explicit `ResolvedLayer` oracle APIs below. The
+// production render entry points evaluate a FrameGraph scene before lowering.
+pub(super) fn collect_text_documents(view: &StoreView<'_>, resolved: &[ResolvedLayer], t: RationalTime) -> Result<HashMap<LayerId, TextDocument>, EngineError> {
+    let mut documents = HashMap::new();
+    for layer in resolved {
+        if layer.source == LayerSource::Text {
+            if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, layer.id, t).map_err(|error| EngineError::Store(error.to_string()))? {
+                documents.insert(layer.id, document);
+            }
+            let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
+            if let Some((target, _)) = crate::extensions::text::morph(&effects) {
+                if !documents.contains_key(&target) {
+                    if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, target, t).map_err(|error| EngineError::Store(error.to_string()))? {
+                        documents.insert(target, document);
+                    }
+                }
+            }
+        }
+    }
+    Ok(documents)
+}
+
+pub(super) fn collect_shape_documents(view: &StoreView<'_>, resolved: &[ResolvedLayer], t: RationalTime) -> Result<HashMap<LayerId, Vec<ShapeNode>>, EngineError> {
+    let mut documents = HashMap::new();
+    for layer in resolved {
+        if layer.source == LayerSource::Shape {
+            let shapes = crate::picture::shapes::shapes_at(view, layer.id, t).map_err(|error| EngineError::Store(error.to_string()))?;
+            documents.insert(layer.id, shown_shapes(&shapes, layer));
+        } else if layer.source == LayerSource::Group {
+            if let Some(background) = crate::picture::boxes::background_shapes(view, layer.id, t).map_err(|error| EngineError::Store(error.to_string()))? {
+                documents.insert(layer.id, background);
+            }
+        }
+    }
+    Ok(documents)
+}
+
+pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
+    let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
+    crate::extensions::pathop::with_effects(shapes, &effects)
+}
+
+pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
+    [
+        if layer.declared_size[0] > 0.0 { layer.declared_size[0] } else { natural[0] },
+        if layer.declared_size[1] > 0.0 { layer.declared_size[1] } else { natural[1] },
+    ]
+}
+
+fn shifted_by_seconds(t: RationalTime, offset: f32) -> RationalTime {
+    const DEN: i64 = 1000;
+    let num = (offset as f64 * DEN as f64).round() as i64;
+    let shifted = t.num().checked_mul(DEN)
+        .and_then(|scaled| num.checked_mul(t.den()).map(|by| scaled + by))
+        .zip(t.den().checked_mul(DEN))
+        .and_then(|(num, den)| RationalTime::try_new(num, den).ok());
+    match shifted {
+        Some(at) if at.as_seconds_f64() >= 0.0 => at,
+        _ => RationalTime::ZERO,
+    }
+}
+
 /// 別の時刻ごとに引き直した「層の姿」。鍵はずれ(ミリ秒)。
 type OtherTimes = BTreeMap<i64, (RationalTime, Vec<ResolvedLayer>, HashMap<LayerId, TextDocument>, HashMap<LayerId, Vec<ShapeNode>>)>;
 /// 合体後の別時刻の写し: (時刻のずれ, 相手, 求めた層) → 絵。

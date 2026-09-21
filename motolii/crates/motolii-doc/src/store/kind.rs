@@ -189,6 +189,7 @@ pub struct Snapping {
 }
 
 /// 取っ手の値から Snapping を読む効果。
+#[derive(Clone, Copy)]
 pub struct SnapProgram {
     pub plugin_id: &'static str,
     pub snapping: fn(&str, &[(String, Value)]) -> Option<Snapping>,

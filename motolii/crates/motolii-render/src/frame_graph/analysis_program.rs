@@ -188,7 +188,7 @@ impl AnalysisProgram {
                 keys.extend(plan.masks.iter().copied());
                 Ok(keys.into_iter().map(|key| DynamicInput { node: key, time: context.time }).collect())
             }
-            Recipe::Result { start, fps, .. } => {
+            Recipe::Result { start, fps, .. } => (|| {
                 let request = inputs.at(0)
                     .and_then(|value| value.downcast_ref::<BlobAnalysisRequestValue>())
                     .ok_or(AnalysisProgramError::InvalidInput(node.identity().kind))?;
@@ -205,7 +205,7 @@ impl AnalysisProgram {
                         Ok(vec![DynamicInput { node: node.key(), time: previous }])
                     }
                 }
-            }
+            })()
         })
     }
 
