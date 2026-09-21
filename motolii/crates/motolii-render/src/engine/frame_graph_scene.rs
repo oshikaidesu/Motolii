@@ -20,8 +20,31 @@ impl Engine {
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
     ) -> Result<GpuSceneValue, EngineError> {
+        let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
+            .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
+            .collect();
+        if physics_overlays.is_empty() {
+            let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+            self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
+            return Ok(prepared);
+        }
+
+        // Physics Trace reads the solver's current-frame state. Build the
+        // ordinary scene first, solve motion/physics, then lower the complete
+        // scene once the overlay can read those results.
+        let base_scene = SceneValue {
+            layers: scene.layers.iter()
+                .filter(|layer| !physics_overlays.contains(&layer.layer))
+                .cloned()
+                .collect(),
+        };
+        let mut base = self.prepare_gpu_scene(&base_scene, comp, projection_camera)?;
+        self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut base)?;
+
         let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
-        self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
+        for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
+            self.attach_block_id(id, &mut layer.layer, comp);
+        }
         Ok(prepared)
     }
 
