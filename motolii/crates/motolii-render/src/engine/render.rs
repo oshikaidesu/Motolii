@@ -230,7 +230,7 @@ impl Engine {
             .ok_or(EngineError::NoComposition)?;
         let t = RationalTime::try_from_frame(comp_frame, composition.fps)
             .map_err(|error| EngineError::Time(error.to_string()))?;
-        let (scene, camera, comp, fps) = Self::evaluate_frame_graph_semantics(view, t)?;
+        let (scene, camera, comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
         let Some(mut target) = scene.layers.into_iter().find(|layer| layer.layer == layer_id && layer.freeze_eligible && !layer.ghost) else {
             return Ok(false);
         };
