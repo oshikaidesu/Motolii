@@ -198,6 +198,7 @@ impl GroupCompositeProgram {
                 let owner_layer = owner.layer.as_ref();
                 layer.layer = recipe.group;
                 layer.content_key = None;
+                layer.freeze_eligible = false;
                 layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(recipe.group), members: children, average: false });
                 layer.effects.clear();
                 layer.after_effects = whole;
