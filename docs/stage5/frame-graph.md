@@ -54,6 +54,103 @@ Cube Layer
 
 Layer を複製した時、同じ `TextShape`、`MeshSource`、`Material` は同じ Node を参照する。Position だけが異なる複製は Transform 以降だけを分ける。
 
+## どこまでを Node にするか
+
+Node は「Layer を細かく分解した物」ではなく、**独立して共有・cache・無効化・時刻参照したい計算の境界**である。
+
+Node にする判断基準:
+
+- 完全入力が同じなら、別 Layer / 別 view からでも結果を共有したい。
+- 入力の一部だけが変わった時、その計算と下流だけを無効化したい。
+- 時刻 `t` や別時刻 `t'` を明示した依存として持ちたい。
+- renderer の前に semantic value のまま保持する意味がある。
+
+逆に、UI 上の分類、単なる struct の分割、GPU pass 一個ごとの都合は Node にしない。評価 Node 数と GPU pass 数は一致しなくてよい。連続する image effect は論理 Node を保ったまま、lowering 後に shader/pass fusion してよい。
+
+```text
+AUTHORING
+Layer / Group / Follow / LookAt / Effect stack / Mask / Matte
+        ↓ compile
+
+EVALUATION DAG
+Property / MediaFrame / TextShape / Geometry / Layout / Transform
+Particle / Effect / Mask / Matte / GroupComposite / SceneComposite / History
+        ↓ lower / optimize
+
+GPU EXECUTION
+texture / buffer / mesh / point cloud / fused shader / render pass / re_renderer scene
+```
+
+利用者が触るのは authoring language。FrameGraph は内部 IR。GPU graph は実行計画であり、三者を同じ node vocabulary にしない。
+
+### Group は scope、必要な時だけ plate
+
+Group は常に texture を作る Layer ではない。既定では親子・Layout・Transform・scope を与えるだけで、子はそのまま Scene へ寄与する。
+
+```text
+Group
+ ├─ Child A ───────────────┐
+ ├─ Child B ───────────────┼→ Scene
+ └─ Child C ───────────────┘
+        ↑
+      Layout
+```
+
+Group 全体に `Whole` effect、matte 後処理、flatten など「子の合成結果を一枚として扱う意味」が付いた時だけ compiler が plate 境界を作る。
+
+```text
+Child A ─┐
+Child B ─┼→ GroupComposite → Whole effects → Group Contribution
+Child C ─┘
+```
+
+AE の「まとめて効果を掛けたいから precomp を作る」という回避策を Document 構造へ要求しない。Group という既存の意味から compiler が必要な中間合成を作る。
+
+### 最初に Node 化する境界
+
+- Property / Track / Link
+- local Transform / inherited WorldTransform
+- Layout / Flow
+- Text shaping / Shape geometry
+- Media source / exact-time MediaFrame
+- Effect（論理上は一 Effect 一 Node、GPU では融合可）
+- Mask / Matte
+- Particle（pixel ではなく positions / sizes / colors / links の semantic value）
+- 必要な時だけ GroupComposite / SceneComposite
+
+Layer 自体を一 Node にしない。Layer はこれらの binding と ordered contribution を記述する authoring unit である。
+
+### Feedback は時間 edge、Freeze は cache policy
+
+Feedback を self-cycle の Node にしない。必要な過去値を host-owned history から明示的な時間 edge として読む。
+
+```text
+Source(t) ───────────────┐
+Source/History(t - 1) ───┼→ Feedback → Result(t)
+```
+
+`InputTime::Offset` と同じ法で「何フレーム前を読むか」を Graph に宣言する。plugin 自身が隠れた履歴を持つ旧式には戻さない。
+
+Freeze は原則として作品意味の `FreezeNode` にしない。任意 subgraph の完成結果を disk / RAM / VRAM に保持する評価戦略であり、cache を消しても同じ作品意味が得られることを保つ。
+
+## 旧実装を戻してよい境界
+
+旧実装は **FrameGraph の下流 adapter / GPU resource implementation としては再利用してよい**。戻してよい物:
+
+- text / shape の既存 rasterize・tessellate・cache
+- still / video decode、GPU frame cache、mesh / point-cloud import
+- `LayerWithPasses`、effect pass、matte、flatten、feedback の実装部品
+- re_renderer / compositor の最終描画
+
+戻してはいけない物:
+
+- `StoreView + time` から始まって全 Layer を `Vec<ResolvedLayer>` に作り直す playback owner
+- `layers_from_resolved()` を FrameGraph の恒久 fallback として丸ごと呼ぶこと
+- Camera / Stage / export ごとに同じ作品意味を再評価すること
+- Node 入力に無い Document 読みを adapter の中へ隠すこと
+
+移植は「旧 owner を復活」ではなく、旧 owner に埋まっていた意味と実装部品を Node / edge / lowerer へ一つずつほどく。
+
 ## Node の同一性
 
 Node の名前は結果へ影響する完全な入力から作る。
