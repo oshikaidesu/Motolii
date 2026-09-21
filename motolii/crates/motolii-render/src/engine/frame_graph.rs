@@ -193,6 +193,21 @@ impl Engine {
         Ok((scene, camera, composition.spec(), composition.fps))
     }
 
+    pub(in crate::engine) fn frame_graph_document_camera(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+    ) -> Result<ResolvedCamera, EngineError> {
+        let state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
+        let camera = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.program.camera()))
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
+        self.frame_graph = Some(state);
+        Ok(camera)
+    }
+
     pub(in crate::engine) fn render_frame_graph_pixels(
         &mut self,
         view: &StoreView<'_>,
@@ -457,7 +472,8 @@ impl Engine {
         self.pending_frame_copies.clear();
         self.feedback_keys_seen.clear();
         Ok(())
-    }}
+    }
+}
 
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }
 fn store(error: crate::doc::store::StoreError) -> EngineError { EngineError::Store(error.to_string()) }
