@@ -15,6 +15,7 @@ mod group_composite_program;
 mod initial;
 mod key;
 mod mask_program;
+mod placement_program;
 mod property;
 mod program;
 mod scheduler;
@@ -49,6 +50,7 @@ pub use key::{
     WorkKey,
 };
 pub use mask_program::{MaskBinding, MaskProgram, MaskProgramError, MaskValue};
+pub use placement_program::{PlacementBinding, PlacementCopyValue, PlacementProgram, PlacementProgramError, PlacementSetValue};
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
