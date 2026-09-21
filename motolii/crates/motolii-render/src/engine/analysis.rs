@@ -96,6 +96,108 @@ impl Engine {
         }))
     }
 
+    pub(in crate::engine) fn frame_graph_blob_analysis(
+        &mut self,
+        request: &crate::frame_graph::BlobAnalysisRequestValue,
+        previous: Option<&crate::frame_graph::BlobAnalysisValue>,
+        t: RationalTime,
+        comp: CompSpec,
+        fps: crate::doc::store::Fps,
+    ) -> Result<crate::frame_graph::BlobAnalysisValue, EngineError> {
+        let mut tracker = previous.map(|value| value.tracker.clone()).unwrap_or_default();
+        let previous_pixels = previous.and_then(|value| value.previous.as_ref());
+
+        let mut inputs = AnalysisInputs::default();
+        let Some(source) = request.source.as_ref() else {
+            let marks = tracker.step(Vec::new(), &request.settings);
+            inputs.set_blobs(request.target, EffectId(0), t, marks);
+            return Ok(crate::frame_graph::BlobAnalysisValue {
+                inputs,
+                tracker,
+                previous: None,
+                mask: None,
+            });
+        };
+
+        let previous_clock = self.compositor.clock;
+        let frame = t.try_to_frame_round(fps).unwrap_or(0) as f32;
+        self.compositor.clock = Some([
+            t.as_seconds_f64() as f32,
+            fps.den() as f32 / fps.num() as f32,
+            frame,
+        ]);
+        let picture = (|| {
+            let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
+            let prepared = self.prepare_gpu_scene(&scene, comp, ResolvedCamera::default())?;
+            let Some(layer) = prepared.layers.first() else { return Ok(None); };
+            self.layer_with_passes_linear_picture(layer)
+        })();
+        self.compositor.clock = previous_clock;
+        let Some(picture) = picture?? else {
+            let marks = tracker.step(Vec::new(), &request.settings);
+            inputs.set_blobs(request.target, EffectId(0), t, marks);
+            return Ok(crate::frame_graph::BlobAnalysisValue {
+                inputs,
+                tracker,
+                previous: None,
+                mask: None,
+            });
+        };
+
+        let (pixels, width, height, shrink) = shrink_to_srgb(&picture, request.detail);
+        let per_logical = picture.width as f32
+            / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0)
+            / shrink as f32;
+        let to_local = |point: [f32; 2]| {
+            glam::vec2(
+                point[0] / per_logical - picture.padding as f32,
+                point[1] / per_logical - picture.padding as f32,
+            )
+        };
+        let transform = source.transform.affine;
+        let comp_per_local = transform.matrix2.x_axis.length().max(1e-6);
+        let small = |px: f32| px / comp_per_local * per_logical;
+        let area = |value: u32| {
+            (value as f64 * f64::from(small(1.0)).powi(2))
+                .round()
+                .min(u32::MAX as f64) as u32
+        };
+        let scaled = BlobSettings {
+            min_area: area(request.settings.min_area),
+            max_area: area(request.settings.max_area),
+            max_move: small(request.settings.max_move),
+            separation: small(request.settings.separation as f32).round() as u32,
+            blur: small(request.settings.blur as f32).round() as u32,
+            ..request.settings
+        };
+        let previous_rgba = previous_pixels
+            .filter(|(_, old_width, old_height)| *old_width == width && *old_height == height)
+            .map(|(pixels, _, _)| pixels.as_slice());
+        let bits = mask(&pixels, width, height, previous_rgba, &scaled);
+        let regions = detect(&pixels, width, height, previous_rgba, &scaled);
+        let blobs = tracker.step(regions, &scaled);
+        let marks: Vec<BlobMark> = blobs.into_iter().map(|blob| {
+            let corners = [
+                [blob.region.min[0] as f32, blob.region.min[1] as f32],
+                [blob.region.max[0] as f32 + 1.0, blob.region.min[1] as f32],
+                [blob.region.min[0] as f32, blob.region.max[1] as f32 + 1.0],
+                [blob.region.max[0] as f32 + 1.0, blob.region.max[1] as f32 + 1.0],
+            ].map(|corner| transform.transform_point2(to_local(corner)));
+            let lo = corners.iter().fold(glam::Vec2::splat(f32::MAX), |acc, point| acc.min(*point));
+            let hi = corners.iter().fold(glam::Vec2::splat(f32::MIN), |acc, point| acc.max(*point));
+            let center = transform.transform_point2(to_local(blob.region.center));
+            BlobMark { id: blob.id, center: center.into(), size: (hi - lo).into(), age: blob.age }
+        }).collect();
+        inputs.set_blobs(request.target, EffectId(0), t, marks);
+
+        Ok(crate::frame_graph::BlobAnalysisValue {
+            inputs,
+            tracker,
+            previous: Some((pixels, width, height)),
+            mask: Some((bits.into_iter().map(|bit| u8::from(bit) * 255).collect(), width, height)),
+        })
+    }
+
     /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
         use crate::picture::resolve::tally;
