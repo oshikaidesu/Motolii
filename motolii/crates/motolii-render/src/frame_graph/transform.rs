@@ -4,7 +4,7 @@ use crate::doc::core::LayerPlacement;
 use crate::doc::eval::Value;
 use crate::doc::store::{property, LayerId, PropertyId, StoreError, StoreView};
 
-use super::{EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
+use super::{EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 const ROWS: [&str; 10] = [property::POSITION, property::ANCHOR, property::SCALE, property::ROTATION, property::SKEW, property::SKEW_AXIS, property::POSITION_Z, property::ROTATION_X, property::ROTATION_Y, property::SCALE_Z];
 
@@ -15,7 +15,7 @@ pub struct TransformValue { pub affine: glam::Affine2, pub spatial: glam::Affine
 pub struct TransformBinding { pub layer: LayerId, pub local: NodeKey, pub world: NodeKey }
 
 #[derive(Clone)]
-enum Recipe { Local { slots: [Option<usize>; 10] }, World { parent: bool } }
+enum Recipe { Local { slots: [Option<usize>; 10], flow: Option<(usize, usize)> }, World { parent: bool } }
 
 #[derive(Debug)]
 pub enum TransformProgramError { Store(StoreError), Cycle(LayerId), InvalidInput(NodeKind) }
@@ -30,7 +30,7 @@ pub struct TransformProgram {
 }
 
 impl TransformProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram) -> Result<Self, TransformProgramError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, flow: &FlowProgram) -> Result<Self, TransformProgramError> {
         let layers = view.layers();
         let mut nodes = BTreeMap::new();
         let mut recipes = BTreeMap::new();
@@ -48,14 +48,18 @@ impl TransformProgram {
                     mask |= 1 << row;
                 }
             }
+            let attrs = view.attrs(layer)?.unwrap_or_default();
+            let flow_binding = attrs.parent.and_then(|parent| view.meta(parent).ok().flatten().filter(|meta| meta.source == crate::doc::store::LayerSource::Group))
+                .and_then(|_| flow.binding(layer));
+            let flow_input = flow_binding.map(|binding| { let at = inputs.len(); inputs.push(flow.key()); (at, binding.index) });
             let mut identity = NodeIdentity::new(NodeKind::Transform, inputs);
-            identity.parameters = mask.to_be_bytes().to_vec();
+            identity.parameters = mask.to_be_bytes().into_iter().chain(flow_binding.map(|binding| binding.index as u32).unwrap_or(u32::MAX).to_be_bytes()).collect();
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
             local.insert(layer, node.key());
-            recipes.entry(node.key()).or_insert(Recipe::Local { slots });
+            recipes.entry(node.key()).or_insert(Recipe::Local { slots, flow: flow_input });
             nodes.entry(node.key()).or_insert(node);
-            parents.insert(layer, view.attrs(layer)?.unwrap_or_default().parent.filter(|parent| layers.contains(parent)));
+            parents.insert(layer, attrs.parent.filter(|parent| layers.contains(parent)));
         }
         let mut world = BTreeMap::new();
         let mut visiting = BTreeSet::new();
@@ -89,7 +93,7 @@ impl TransformProgram {
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, TransformProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Local { slots } => local_value(node, inputs, slots).map(NodeValue::new),
+            Recipe::Local { slots, flow } => local_value(node, inputs, slots, *flow).map(NodeValue::new),
             Recipe::World { parent } => (|| {
                 let local_index = usize::from(*parent);
                 let local = read_transform(node, inputs, local_index)?;
@@ -105,13 +109,19 @@ fn read_transform(node: &GraphNode, inputs: &NodeInputs, index: usize) -> Result
     inputs.at(index).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(TransformProgramError::InvalidInput(node.identity().kind))
 }
 
-fn local_value(node: &GraphNode, inputs: &NodeInputs, slots: &[Option<usize>; 10]) -> Result<TransformValue, TransformProgramError> {
+fn local_value(node: &GraphNode, inputs: &NodeInputs, slots: &[Option<usize>; 10], flow: Option<(usize, usize)>) -> Result<TransformValue, TransformProgramError> {
     let value = |row: usize| slots[row].and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>());
     let vec2 = |row: usize, default: [f32; 2]| match value(row) { Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32], None => default, _ => default };
     let scalar = |row: usize, default: f32| match value(row) { Some(Value::F64(v)) => *v as f32, None => default, _ => default };
-    let position = vec2(0, [0.0; 2]);
+    let mut position = vec2(0, [0.0; 2]);
     let anchor = vec2(1, [0.0; 2]);
-    let scale = vec2(2, [1.0; 2]);
+    let mut scale = vec2(2, [1.0; 2]);
+    if let Some((input, index)) = flow {
+        if let Some(slot) = inputs.at(input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).and_then(|flow| flow.slots.get(index)).copied().flatten() {
+            position = [position[0] + slot.position[0], position[1] + slot.position[1]];
+            scale = [scale[0] * slot.scale[0], scale[1] * slot.scale[1]];
+        }
+    }
     let affine = LayerPlacement::from_transform(anchor, position, scale, scalar(3, 0.0), scalar(4, 0.0), scalar(5, 0.0));
     let spatial = LayerPlacement::spatial_from_transform(affine, position, scalar(6, 0.0), scalar(7, 0.0), scalar(8, 0.0), scalar(9, 1.0));
     if !affine.matrix2.is_finite() || !spatial.is_finite() { return Err(TransformProgramError::InvalidInput(node.identity().kind)); }
