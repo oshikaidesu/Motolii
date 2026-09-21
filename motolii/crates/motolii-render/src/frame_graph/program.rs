@@ -260,7 +260,15 @@ mod tests {
         let mut doc = Document::new();
         let clip = LayerId(9);
         let path = "/motolii-test/nonexistent-clip.mp4";
+        let fps = crate::doc::core::Fps::try_new(30, 1).unwrap();
         doc.apply_all([
+            Intent::SetComposition(crate::doc::store::Composition {
+                width: 640,
+                height: 360,
+                fps,
+                duration_frames: 90,
+                background: [0.0, 0.0, 0.0, 1.0],
+            }),
             Intent::AddLayer(clip),
             Intent::SetMeta {
                 layer: clip,
@@ -281,7 +289,7 @@ mod tests {
         let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
         let mut executor = Executor(&program);
-        let at = crate::doc::core::RationalTime::try_new(1, 2).unwrap();
+        let at = crate::doc::core::RationalTime::try_from_frame(15, fps).unwrap();
         let frame = graph
             .evaluate(&mut executor, at, FrameQuality::Export, Generation::new(1))
             .unwrap();
