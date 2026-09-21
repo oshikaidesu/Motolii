@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 use super::ghost_program::{GhostProgram, GhostProgramError};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
@@ -33,7 +33,7 @@ pub enum SceneImageSourceValue {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub image_sources: Vec<Vec<SceneImageSourceValue>>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub freeze_eligible: bool, pub timing_start: i64, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
+pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub image_sources: Vec<Vec<SceneImageSourceValue>>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub freeze_eligible: bool, pub timing_start: i64, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16, pub shape_stretch: [f32; 2], pub depth: f32 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
@@ -45,7 +45,7 @@ pub(crate) struct SceneContributionValue {
 }
 
 #[derive(Clone)]
-enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, effects: Vec<usize>, placement_effects: Vec<bool>, placement: Option<usize>, motion: Option<usize>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, frozen: bool, timing_start: i64, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
+enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, flow: Option<(usize, usize)>, depth: Option<usize>, effects: Vec<usize>, placement_effects: Vec<bool>, placement: Option<usize>, motion: Option<usize>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, frozen: bool, timing_start: i64, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneProgramNodes { pub scene: NodeKey }
@@ -69,7 +69,7 @@ pub struct SceneNodeProgram {
 }
 
 impl SceneNodeProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram, motion_program: &MotionProgram, particle_program: &ParticleProgram) -> Result<Self, SceneNodeError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, flow_program: &FlowProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram, motion_program: &MotionProgram, particle_program: &ParticleProgram) -> Result<Self, SceneNodeError> {
         let policy = ScenePolicy::compile(view)?;
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
@@ -94,6 +94,12 @@ impl SceneNodeProgram {
                 let at = inputs.len(); inputs.push(key); at
             });
             let matte_mode = properties.node_for(layer, &PropertyId::matte_mode()).map(|key| {
+                let at = inputs.len(); inputs.push(key); at
+            });
+            let flow = flow_program.binding(layer).map(|binding| {
+                let at = inputs.len(); inputs.push(flow_program.key()); (at, binding.index)
+            });
+            let depth = properties.node_for(layer, &PropertyId::new(property::DEPTH).expect("known depth")).map(|key| {
                 let at = inputs.len(); inputs.push(key); at
             });
             let attrs = view.attrs(layer)?.unwrap_or_default();
@@ -131,7 +137,7 @@ impl SceneNodeProgram {
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, effects: effect_inputs, placement_effects, placement, motion, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, frozen: attrs.frozen, timing_start: meta.timing.start, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
+            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, flow, depth, effects: effect_inputs, placement_effects, placement, motion, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, frozen: attrs.frozen, timing_start: meta.timing.start, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
         }
@@ -191,7 +197,7 @@ impl SceneNodeProgram {
         }
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, effects, placement_effects, placement, motion, masks, matte, clip_to_below, flatten, environment, frozen, timing_start, projection, blend, order, kind } => (|| {
+            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, flow, depth, effects, placement_effects, placement, motion, masks, matte, clip_to_below, flatten, environment, frozen, timing_start, projection, blend, order, kind } => (|| {
                 let visibility = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 if !visibility.active {
                     return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: None }));
@@ -255,7 +261,9 @@ impl SceneNodeProgram {
                     }
                 }
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                let base = SceneLayerValue { layer: *layer, instance: 0, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, freeze_eligible: *frozen, timing_start: *timing_start, opacity, projection: *projection, blend, order: *order };
+                let shape_stretch = flow.and_then(|(input, index)| inputs.at(input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).and_then(|flow| flow.slots.get(index)).copied().flatten()).map_or([1.0, 1.0], |slot| slot.stretch);
+                let depth = depth.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) if value.is_finite() => Some(*value as f32), _ => None }).unwrap_or(0.0).max(0.0);
+                let base = SceneLayerValue { layer: *layer, instance: 0, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, freeze_eligible: *frozen, timing_start: *timing_start, opacity, projection: *projection, blend, order: *order, shape_stretch, depth };
 
                 let Some(set) = placement_set.filter(|set| set.selected_effect.is_some()) else {
                     if let Some(samples) = motion_samples.filter(|samples| samples.selected_effect.is_some()) {
@@ -304,6 +312,8 @@ impl SceneNodeProgram {
                         plate.projection = LayerProjection::TwoD;
                         plate.flatten = false;
                         plate.environment = false;
+                        plate.shape_stretch = [1.0, 1.0];
+                        plate.depth = 0.0;
                         return Ok(NodeValue::new(SceneContributionValue {
                             solo: visibility.solo,
                             layer: Some(plate),
@@ -351,6 +361,8 @@ impl SceneNodeProgram {
                         sample_start,
                     )?;
                     layer.masks = sampled_masks(node, inputs, masks, &sample_indices, sample_start)?;
+                    layer.shape_stretch = sampled_flow_stretch(inputs, *flow, &sample_indices, sample_start).unwrap_or([1.0, 1.0]);
+                    layer.depth = sampled_number(inputs, *depth, &sample_indices, sample_start).unwrap_or(0.0).max(0.0);
 
                     let (sampled_direct, sampled_selected) = sampled_effects(
                         node,
@@ -406,6 +418,8 @@ impl SceneNodeProgram {
                 plate.projection = LayerProjection::TwoD;
                 plate.flatten = false;
                 plate.environment = false;
+                plate.shape_stretch = [1.0, 1.0];
+                plate.depth = 0.0;
                 Ok(NodeValue::new(SceneFragmentValue {
                     contributions: vec![SceneContributionValue { solo: visibility.solo, layer: Some(plate) }],
                 }))
@@ -442,6 +456,37 @@ fn contribution_sample_indices(node: &GraphNode, placement: Option<usize>) -> Ve
 
 fn sampled_value<'a>(inputs: &'a NodeInputs, original: usize, sample_indices: &[usize], sample_start: usize) -> Option<&'a NodeValue> {
     sample_indices.iter().position(|index| *index == original).and_then(|offset| inputs.at(sample_start + offset))
+}
+
+
+fn sampled_flow_stretch(
+    inputs: &NodeInputs,
+    flow: Option<(usize, usize)>,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Option<[f32; 2]> {
+    let (input, index) = flow?;
+    sampled_value(inputs, input, sample_indices, sample_start)
+        .and_then(|value| value.downcast_ref::<FlowFrameValue>())
+        .and_then(|flow| flow.slots.get(index))
+        .copied()
+        .flatten()
+        .map(|slot| slot.stretch)
+}
+
+fn sampled_number(
+    inputs: &NodeInputs,
+    input: Option<usize>,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Option<f32> {
+    let input = input?;
+    sampled_value(inputs, input, sample_indices, sample_start)
+        .and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())
+        .and_then(|value| match value {
+            crate::doc::eval::Value::F64(value) if value.is_finite() => Some(*value as f32),
+            _ => None,
+        })
 }
 
 fn sampled_content(
