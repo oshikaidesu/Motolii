@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, OverlayProgram, OverlayProgramError, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, OverlayProgram, OverlayProgramError, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextFlowProgram, TextFlowProgramError, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -12,6 +12,7 @@ pub enum SceneProgramError {
     Transform(TransformProgramError),
     Flow(FlowProgramError),
     Text(TextProgramError),
+    TextFlow(TextFlowProgramError),
     Scene(SceneNodeError),
     Camera(CameraProgramError),
     Effect(EffectProgramError),
@@ -35,6 +36,7 @@ impl From<ContentProgramError> for SceneProgramError { fn from(value: ContentPro
 impl From<TransformProgramError> for SceneProgramError { fn from(value: TransformProgramError) -> Self { Self::Transform(value) } }
 impl From<FlowProgramError> for SceneProgramError { fn from(value: FlowProgramError) -> Self { Self::Flow(value) } }
 impl From<TextProgramError> for SceneProgramError { fn from(value: TextProgramError) -> Self { Self::Text(value) } }
+impl From<TextFlowProgramError> for SceneProgramError { fn from(value: TextFlowProgramError) -> Self { Self::TextFlow(value) } }
 impl From<SceneNodeError> for SceneProgramError { fn from(value: SceneNodeError) -> Self { Self::Scene(value) } }
 impl From<CameraProgramError> for SceneProgramError { fn from(value: CameraProgramError) -> Self { Self::Camera(value) } }
 impl From<EffectProgramError> for SceneProgramError { fn from(value: EffectProgramError) -> Self { Self::Effect(value) } }
@@ -58,6 +60,7 @@ pub struct SceneProgram {
     transforms: TransformProgram,
     flow: FlowProgram,
     text: TextProgram,
+    text_flow: TextFlowProgram,
     scene: SceneNodeProgram,
     camera: CameraProgram,
     effects: EffectProgram,
@@ -91,17 +94,18 @@ impl SceneProgram {
         let analysis = AnalysisProgram::compile(
             view, &properties, &content, &transforms, &visibility, &effects, &masks, &text, &groups, &particles,
         )?;
+        let text_flow = TextFlowProgram::compile(view, &properties, &content, &flow, &transforms, &text, &analysis)?;
         let placements = PlacementProgram::compile(view, &properties, &effects, &transforms, &analysis)?;
         let relations = RelationProgram::compile(view, &properties)?;
         let solver = SolverProgram::compile(view, &properties, &relations, &flow)?;
-        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &flow, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
+        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &flow, &text_flow, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
         let lookbehind = LookbehindProgram::compile(view, scene.output().scene)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let overlay = OverlayProgram::compile(view, &effects, lookbehind.key(), solver.key(), camera.key())?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())).chain(overlay.nodes()) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(text_flow.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())).chain(overlay.nodes()) { nodes.insert(node.key(), node); }
         let roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
-        Ok(Self { analysis, properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, overlay, relations, solver, nodes, roots })
+        Ok(Self { analysis, properties, content, transforms, flow, text, text_flow, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, overlay, relations, solver, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -112,6 +116,7 @@ impl SceneProgram {
     pub fn transforms(&self) -> &TransformProgram { &self.transforms }
     pub fn flow(&self) -> &FlowProgram { &self.flow }
     pub fn text(&self) -> &TextProgram { &self.text }
+    pub fn text_flow(&self) -> &TextFlowProgram { &self.text_flow }
     pub fn scene(&self) -> SceneProgramNodes { SceneProgramNodes { scene: self.lookbehind.key() } }
     pub fn base_scene(&self) -> SceneProgramNodes { self.scene.output() }
     pub fn camera(&self) -> NodeKey { self.camera.key() }
@@ -136,6 +141,9 @@ impl SceneProgram {
         if let Some(requests) = self.text.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
+        if let Some(requests) = self.text_flow.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
         if let Some(requests) = self.lookbehind.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
@@ -157,6 +165,7 @@ impl SceneProgram {
         if let Some(value) = self.transforms.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.flow.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.text.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.text_flow.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.scene.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.camera.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.effects.execute(node, inputs, context) { return value.map_err(Into::into); }
