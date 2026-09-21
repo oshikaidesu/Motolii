@@ -49,7 +49,7 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
-        let resolved = crate::picture::resolve::resolved_layers(view, t).ok()?;
+        let resolved = self.resolved_for(view, t)?;
         self.selected_layer_size_in(view, &resolved, layer_id, t)
     }
 
