@@ -4,13 +4,15 @@
 
 状態: **長期コンセプト・名称・拡張子決定／ファイル形式未決**。Motoliiから持ち運べる映像表現を**Vism（ヴィズム）**、拡張子を**`.vism`**とする。一方、container、manifest field、MIME、署名、動的ロード、marketplace、複数capabilityの同梱規則は未決であり、本書はv1のloader実装許可ではない。
 
-関連正本: [コンセプト](concept.md)、[Vism / Kitモデル](vism-kit-model.md)、[小さなコアと探索可能な拡張](extensible-core-model.md)、[プラグイン作者向け規約](plugin-authoring.md)、[ジェネラティブユーザー境界](generative-user-boundary.md)
+関連正本: [コンセプト](concept.md)、[Vism / Kitモデル](vism-kit-model.md)、[VismとGraphの抽象境界決定](reviews/2026-09-22-vism-graph-abstraction-boundary-decision.md)、[小さなコアと探索可能な拡張](extensible-core-model.md)、[プラグイン作者向け規約](plugin-authoring.md)、[ジェネラティブユーザー境界](generative-user-boundary.md)
 
 実装順と停止ゲート: [Vism実装計画](reviews/2026-07-17-vism-implementation-plan.md)
 
 ## 1. 一文で
 
 > **Vismは、時間に沿って働く一つの映像表現を、作品やHostから切り離して保存・共有・再利用するための配布単位である。**
+
+Vismの**作者・利用者向け意味**はtyped semantic componentであり、WGSL shader、TypeScript source、Host plugin kind、内部FrameGraph nodeの別名ではない。内部実装は一つのprimitiveでも複数nodeのsubgraphでもよく、公開contractをHostが実行IRへlowerする。詳細は[Graph抽象境界決定](reviews/2026-09-22-vism-graph-abstraction-boundary-decision.md)を正本とする。
 
 MotoliiはVismを扱う最初のリファレンスHostを目指す。VismはMotolii projectの別名でも、Motolii専用plugin binaryの呼称でもない。憲法上の可搬先はMotoliiの公開契約を引き継ぐ互換Host／fork群とする。他製品adapterは可能性として残すが、全映像ソフト共通規格やVismの完成条件にはしない。
 

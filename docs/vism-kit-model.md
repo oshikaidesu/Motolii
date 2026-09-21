@@ -4,7 +4,7 @@
 
 状態: **設計原則決定／公開schema・拡張子・runtime未決**。`Core / Vism / Kit / Project`の責任分離、Vism同士を直接参照させず型付き入出力をKitが接続する原則、v1のKitをmaterialize型とする方向を定める。2026-07-23に独立artifactとしての旧仮称`Plugin Set`をKitへ統合し、Rack型の作者成果へ一本化した。`BeatMap`、`TimeGuide`、`KitDefinition`等の型名は説明用の仮名であり、M2 Document、plugin公開API、package形式の実装許可ではない。
 
-関連正本: [Vismコンセプト](vism-package-concept.md)、[Kit / Plugin Set統合決定](reviews/2026-07-23-vism-kit-rack-unification-decision.md)、[小さなコアと探索可能な拡張](extensible-core-model.md)、[プラグイン作者向け規約](plugin-authoring.md)、[Vism実装計画](reviews/2026-07-17-vism-implementation-plan.md)
+関連正本: [Vismコンセプト](vism-package-concept.md)、[VismとGraphの抽象境界決定](reviews/2026-09-22-vism-graph-abstraction-boundary-decision.md)、[Kit / Plugin Set統合決定](reviews/2026-07-23-vism-kit-rack-unification-decision.md)、[小さなコアと探索可能な拡張](extensible-core-model.md)、[プラグイン作者向け規約](plugin-authoring.md)、[Vism実装計画](reviews/2026-07-17-vism-implementation-plan.md)
 
 ## 1. 結論
 
@@ -16,7 +16,7 @@ Project  = 実際の作品
 ```
 
 - **Core**は時間、型付き入出力、接続、identity、保存、Undo、資源、失敗を管理する。
-- **Vism**は一つの小さな映像表現またはproviderを実装する。
+- **Vism**は一つのtyped semantic componentとして映像表現またはproviderを公開する。内部は一つのprimitiveでも複数nodeのsubgraphでもよく、内部実行graphそのものを公開identityにはしない。
 - **Kit**は複数Vism、接続、初期値、素材要求を目的単位へまとめる。
 - **Project**はKitの展開結果を通常のObject、Effect、Data接続として所有する。
 
