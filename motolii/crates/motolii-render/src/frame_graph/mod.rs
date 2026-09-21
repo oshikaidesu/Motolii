@@ -4,6 +4,7 @@
 
 mod cache;
 mod canonical;
+mod camera_program;
 mod compiler;
 mod content;
 mod evaluate;
@@ -26,6 +27,7 @@ use crate::doc::store::StoreView;
 
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
+pub use camera_program::{CameraProgram, CameraProgramError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
 pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaSourceValue};
 pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
