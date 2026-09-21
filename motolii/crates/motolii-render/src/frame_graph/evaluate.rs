@@ -30,6 +30,10 @@ impl EvaluationContext {
 pub struct NodeInputs(Vec<(NodeKey, NodeValue)>);
 
 impl NodeInputs {
+    pub fn at(&self, index: usize) -> Option<&NodeValue> {
+        self.0.get(index).map(|(_, value)| value)
+    }
+
     pub fn get(&self, key: NodeKey) -> Option<&NodeValue> {
         self.0
             .iter()
@@ -106,19 +110,27 @@ pub(super) fn evaluate<E: NodeExecutor>(
     let Some(lease) = scheduler.begin(generation) else {
         return Ok(ScheduledFrame::stale(generation));
     };
-    let context = EvaluationContext {
-        time,
-        quality,
-        generation: lease.clone(),
-    };
     let mut values = BTreeMap::new();
     let mut executed = Vec::new();
     let mut reused = Vec::new();
 
-    for key in topology.reachable() {
+    #[allow(clippy::too_many_arguments)]
+    fn node_at<E: NodeExecutor>(
+        scheduler: &mut FrameScheduler,
+        topology: &GraphTopology,
+        executor: &mut E,
+        key: NodeKey,
+        time: RationalTime,
+        root_time: RationalTime,
+        quality: FrameQuality,
+        lease: &GenerationLease,
+        values: &mut BTreeMap<NodeKey, NodeValue>,
+        executed: &mut Vec<NodeKey>,
+        reused: &mut Vec<NodeKey>,
+    ) -> Result<Option<NodeValue>, E::Error> {
         if !lease.is_current() {
             scheduler.record_cancelled_evaluation();
-            return Ok(ScheduledFrame::cancelled(generation));
+            return Ok(None);
         }
         let node = topology
             .node(key)
@@ -126,28 +138,35 @@ pub(super) fn evaluate<E: NodeExecutor>(
         let work = WorkKey::for_node(node.identity(), time, quality);
         if let Some(value) = scheduler.cache().get(work) {
             scheduler.record_reuse();
-            values.insert(key, value);
+            if time == root_time { values.insert(key, value.clone()); }
             reused.push(key);
-            continue;
+            return Ok(Some(value));
         }
 
         let mut inputs = Vec::with_capacity(node.identity().inputs.len());
-        for input in &node.identity().inputs {
-            let value = values
-                .get(input)
-                .expect("topology traversal evaluates inputs before their consumer")
-                .clone();
+        for (index, input) in node.identity().inputs.iter().enumerate() {
+            let input_time = node.identity().input_times[index].apply(time);
+            let Some(value) = node_at(scheduler, topology, executor, *input, input_time, root_time, quality, lease, values, executed, reused)? else {
+                return Ok(None);
+            };
             inputs.push((*input, value));
         }
-        let value = executor.execute(node, NodeInputs(inputs), context.clone())?;
+        let value = executor.execute(node, NodeInputs(inputs), EvaluationContext { time, quality, generation: lease.clone() })?;
         if !lease.is_current() {
             scheduler.record_cancelled_evaluation();
-            return Ok(ScheduledFrame::cancelled(generation));
+            return Ok(None);
         }
         scheduler.cache_mut().insert(work, value.clone());
         scheduler.record_execution();
-        values.insert(key, value);
+        if time == root_time { values.insert(key, value.clone()); }
         executed.push(key);
+        Ok(Some(value))
+    }
+
+    for root in topology.roots() {
+        if node_at(scheduler, topology, executor, *root, time, time, quality, &lease, &mut values, &mut executed, &mut reused)?.is_none() {
+            return Ok(ScheduledFrame::cancelled(generation));
+        }
     }
 
     scheduler.finish(generation);

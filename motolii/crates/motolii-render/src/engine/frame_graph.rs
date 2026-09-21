@@ -358,7 +358,7 @@ where
         )));
     };
     inputs
-        .get(*key)
+        .at(index)
         .and_then(|value| value.downcast_ref::<Arc<T>>())
         .cloned()
         .ok_or_else(|| {
