@@ -22,6 +22,7 @@ mod text_program;
 mod topology;
 mod transform;
 mod value;
+mod visibility_program;
 
 use std::collections::BTreeSet;
 
@@ -52,6 +53,7 @@ pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
 pub use text_program::{TextBinding, TextProgram, TextProgramError, TextShapeValue};
 pub use scene_program::{SceneContentValue, SceneLayerValue, SceneNodeError, SceneNodeProgram, SceneProgramNodes, SceneValue};
+pub use visibility_program::{VisibilityBinding, VisibilityProgram, VisibilityProgramError, VisibilityValue};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
     RenderTarget, Submission, ViewProjection,
