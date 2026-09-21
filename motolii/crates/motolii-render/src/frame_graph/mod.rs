@@ -2,7 +2,12 @@
 //! S0 deliberately contains no renderer adapter: later lanes supply node
 //! evaluators and GPU submissions without changing these ownership rules.
 
+mod cache;
+mod canonical;
+mod compiler;
+mod evaluate;
 mod key;
+mod scheduler;
 mod topology;
 mod value;
 
@@ -11,6 +16,10 @@ use std::collections::BTreeSet;
 use crate::doc::core::RationalTime;
 use crate::doc::store::StoreView;
 
+pub use cache::NodeValue;
+pub use canonical::{CanonicalEncoder, CanonicalError};
+pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
+pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
 pub use key::{
     FrameQuality, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency, WorkKey,
 };
@@ -34,9 +43,7 @@ pub fn compile(view: &StoreView<'_>) -> CompiledGraph {
 pub struct CompiledGraph {
     revision: GraphRevision,
     topology: GraphTopology,
-    completed: BTreeSet<WorkKey>,
-    latest_generation: Option<Generation>,
-    stats: GraphStats,
+    scheduler: scheduler::FrameScheduler,
 }
 
 impl CompiledGraph {
@@ -48,12 +55,7 @@ impl CompiledGraph {
         Self {
             revision,
             topology,
-            completed: BTreeSet::new(),
-            latest_generation: None,
-            stats: GraphStats {
-                topology_compiles: 1,
-                ..GraphStats::default()
-            },
+            scheduler: scheduler::FrameScheduler::default(),
         }
     }
 
@@ -66,67 +68,55 @@ impl CompiledGraph {
     }
 
     pub fn stats(&self) -> GraphStats {
-        self.stats
+        let scheduler = self.scheduler.stats();
+        GraphStats {
+            topology_compiles: 1,
+            node_executions: scheduler.node_executions,
+            node_reuses: scheduler.node_reuses,
+            cancelled_generations: scheduler.cancelled_generations,
+            cancelled_evaluations: scheduler.cancelled_evaluations,
+            cached_results: scheduler.cached_results,
+        }
     }
 
     /// Remove only changed nodes and their graph descendants from the result
     /// cache. Unrelated nodes remain available to the next generation.
     pub fn invalidate(&mut self, changed: impl IntoIterator<Item = NodeKey>) -> BTreeSet<NodeKey> {
-        let dirty = self.topology.downstream_of(changed);
-        self.completed.retain(|work| !dirty.contains(&work.node()));
-        dirty
+        self.scheduler.invalidate(&self.topology, changed).nodes
     }
 
     /// Evaluate each reachable node at most once. S0 records the scheduling
     /// result only; the evaluator lane will attach actual node values here.
-    pub fn evaluate(
+    pub fn evaluate<E: NodeExecutor>(
         &mut self,
+        executor: &mut E,
         time: RationalTime,
         quality: FrameQuality,
         generation: Generation,
-    ) -> EvaluatedFrame {
-        if self
-            .latest_generation
-            .is_some_and(|latest| generation < latest)
-        {
-            return EvaluatedFrame {
-                revision: self.revision,
-                generation,
-                time,
-                quality,
-                state: FrameState::Stale,
-                executed: Vec::new(),
-                reused: Vec::new(),
-            };
-        }
-        self.latest_generation = Some(generation);
-
-        let mut executed = Vec::new();
-        let mut reused = Vec::new();
-        for node in self.topology.reachable() {
-            let identity = self
-                .topology
-                .node(node)
-                .expect("reachable nodes belong to the topology")
-                .identity();
-            let work = WorkKey::for_node(identity, time, quality);
-            if self.completed.insert(work) {
-                self.stats.node_executions += 1;
-                executed.push(node);
-            } else {
-                self.stats.node_reuses += 1;
-                reused.push(node);
-            }
-        }
-        EvaluatedFrame {
+    ) -> Result<EvaluatedFrame, E::Error> {
+        let scheduled = evaluate::evaluate(
+            &mut self.scheduler,
+            &self.topology,
+            executor,
+            time,
+            quality,
+            generation,
+        )?;
+        Ok(EvaluatedFrame {
             revision: self.revision,
             generation,
             time,
             quality,
-            state: FrameState::Current,
-            executed,
-            reused,
-        }
+            state: match scheduled.state {
+                evaluate::EvaluationState::Current => FrameState::Current,
+                evaluate::EvaluationState::Stale | evaluate::EvaluationState::Cancelled => {
+                    FrameState::Stale
+                }
+            },
+            values: scheduled.values,
+            executed: scheduled.executed,
+            reused: scheduled.reused,
+        })
     }
 
     /// A host may publish only a submission from the current generation of
@@ -134,11 +124,11 @@ impl CompiledGraph {
     pub fn publish(&self, submission: &Submission) -> Option<PublishedFrame> {
         (submission.state == FrameState::Current
             && submission.revision == self.revision
-            && Some(submission.generation) == self.latest_generation)
-            .then_some(PublishedFrame {
-                generation: submission.generation,
-                target: submission.target,
-            })
+            && self.scheduler.may_publish(submission.generation))
+        .then_some(PublishedFrame {
+            generation: submission.generation,
+            target: submission.target,
+        })
     }
 }
 
@@ -161,6 +151,22 @@ pub fn render_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+
+    struct EchoExecutor;
+
+    impl NodeExecutor for EchoExecutor {
+        type Error = ();
+
+        fn execute(
+            &mut self,
+            node: &GraphNode,
+            _inputs: NodeInputs,
+            _context: EvaluationContext,
+        ) -> Result<NodeValue, Self::Error> {
+            Ok(NodeValue::new(node.key().as_u64()))
+        }
+    }
 
     fn node(kind: u16, inputs: Vec<NodeKey>) -> GraphNode {
         GraphNode::new(NodeIdentity::new(NodeKind::Custom(kind), inputs))
@@ -183,8 +189,16 @@ mod tests {
         )
         .unwrap();
         let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
+        let mut executor = EchoExecutor;
 
-        let frame = compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(1));
+        let frame = compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::ZERO,
+                FrameQuality::Export,
+                Generation::new(1),
+            )
+            .unwrap();
 
         assert_eq!(
             frame
@@ -202,7 +216,7 @@ mod tests {
                 .count(),
             1
         );
-        assert_eq!(compiled.stats().node_executions, 103);
+        assert_eq!(compiled.stats().node_executions, 104);
     }
 
     #[test]
@@ -222,10 +236,25 @@ mod tests {
         )
         .unwrap();
         let mut compiled = CompiledGraph::with_topology(GraphRevision::new(7), graph);
-        compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(1));
+        let mut executor = EchoExecutor;
+        compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::ZERO,
+                FrameQuality::Export,
+                Generation::new(1),
+            )
+            .unwrap();
 
         let dirty = compiled.invalidate([source.key()]);
-        let frame = compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(2));
+        let frame = compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::ZERO,
+                FrameQuality::Export,
+                Generation::new(2),
+            )
+            .unwrap();
 
         assert_eq!(
             dirty,
@@ -244,16 +273,23 @@ mod tests {
         let root = node(1, vec![]);
         let graph = GraphTopology::try_new([root.clone()], vec![root.key()]).unwrap();
         let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
-        let old = compiled.evaluate(
-            RationalTime::ZERO,
-            FrameQuality::Preview { scale: 1 },
-            Generation::new(1),
-        );
-        let current = compiled.evaluate(
-            RationalTime::ZERO,
-            FrameQuality::Preview { scale: 1 },
-            Generation::new(2),
-        );
+        let mut executor = EchoExecutor;
+        let old = compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::ZERO,
+                FrameQuality::Preview { scale: 1 },
+                Generation::new(1),
+            )
+            .unwrap();
+        let current = compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::ZERO,
+                FrameQuality::Preview { scale: 1 },
+                Generation::new(2),
+            )
+            .unwrap();
 
         let old_submission = render_view(&old, ViewProjection::Camera, RenderTarget::new(1));
         let current_submission = render_view(&current, ViewProjection::Stage, RenderTarget::new(2));
@@ -286,18 +322,32 @@ mod tests {
         )
         .unwrap();
         let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
+        let mut executor = EchoExecutor;
 
-        compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(1));
-        let advanced = compiled.evaluate(
-            RationalTime::from_seconds(1),
-            FrameQuality::Export,
-            Generation::new(2),
-        );
-        let preview = compiled.evaluate(
-            RationalTime::from_seconds(1),
-            FrameQuality::Preview { scale: 1 },
-            Generation::new(3),
-        );
+        compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::ZERO,
+                FrameQuality::Export,
+                Generation::new(1),
+            )
+            .unwrap();
+        let advanced = compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::from_seconds(1),
+                FrameQuality::Export,
+                Generation::new(2),
+            )
+            .unwrap();
+        let preview = compiled
+            .evaluate(
+                &mut executor,
+                RationalTime::from_seconds(1),
+                FrameQuality::Preview { scale: 1 },
+                Generation::new(3),
+            )
+            .unwrap();
 
         assert_eq!(advanced.executed_nodes(), &[timed_node.key()]);
         assert_eq!(

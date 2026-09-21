@@ -31,12 +31,45 @@ pub enum QualityDependency {
 /// changing the graph's ownership or scheduling contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NodeKind {
-    Content,
+    /// Canonical authored text content and its run/style references.
+    TextContent,
+    /// Canonical text style/font input.  It is separate so equal styles can
+    /// be shared by otherwise different text documents.
+    TextStyle,
+    /// Shaped text paths/contours after the layout input is known.
+    TextShape,
+    /// Authored vector geometry plus evaluated shape/fill properties.
+    ShapeGeometry,
+    /// Shape path tessellation/raster input.  The renderer chooses the value.
+    ShapeMesh,
+    /// A group authoring/topology descriptor, before its time-varying layout.
+    Group,
+    /// The layout/slot result for a group and its direct children.
+    Layout,
+    /// A display group's generated background/clip geometry.
+    GroupBackground,
+    /// Resource dimensions and immutable source metadata.
+    MediaExtent,
+    /// Imported mesh/resource geometry.
+    MeshSource,
+    /// Material/resource surface input for a file or mesh.
+    Material,
+    /// A time-addressed media frame (video) or image source.
+    MediaFrame,
+    /// Authored local placement after layout.
     Transform,
+    /// Inherited world placement.
+    WorldTransform,
+    /// Resolved document/observer camera state.
+    Camera,
+    /// A view-specific camera/stage projection.
+    CameraProjection,
+    /// One authored layer's ordered contribution to the scene.
+    CompositeContribution,
+    /// The ordered shared scene before any view projection.
+    SceneComposite,
+    /// Effect node reserved for the later F4 lowering.
     Effect,
-    Composite,
-    World,
-    Projection,
     Custom(u16),
 }
 
