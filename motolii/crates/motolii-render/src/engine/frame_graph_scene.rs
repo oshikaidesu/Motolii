@@ -20,7 +20,8 @@ impl Engine {
             };
             let Some(content) = content else { continue };
             let placement = LayerPlacement { transform: source.transform.affine, world_transform: Some(source.transform.spatial), order: i32::from(source.order), opacity: source.opacity, z: source.transform.spatial.translation.z, rotation_x: 0.0, rotation_y: 0.0, plane: None };
-            layers.push(LayerWithPasses { layer: Layer { content, size: natural, placement, projection: source.projection, projection_camera, blend_mode: crate::render::engine::translate::translate_blend_mode(source.blend)?, shading: Default::default(), displace: Default::default(), clip: None, shadow: 0.0, outline: 0, frame: None }, passes: Vec::new(), padding: 0, pass_sources: Vec::new(), cut: Vec::new() });
+            let passes: Vec<_> = crate::render::engine::translate::translate_effect_passes(&source.effects).into_iter().chain(crate::render::engine::translate::translate_plate_passes(&source.after_effects)).collect();
+            layers.push(LayerWithPasses { layer: Layer { content, size: natural, placement, projection: source.projection, projection_camera, blend_mode: crate::render::engine::translate::translate_blend_mode(source.blend)?, shading: self.compositor.surface_shading_for(&source.effects, false).map_err(EngineError::Store)?, displace: crate::render::engine::translate::translate_point_displace(&source.effects), clip: crate::render::engine::translate::translate_clip(&source.effects), shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects), outline: 0, frame: None }, passes, padding: 0, pass_sources: Vec::new(), cut: Vec::new() });
         }
         Ok(GpuSceneValue { layers })
     }

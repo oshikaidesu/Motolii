@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, NodeInputs, NodeKey, NodeValue, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError};
+use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, NodeInputs, NodeKey, NodeValue, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -13,6 +13,7 @@ pub enum SceneProgramError {
     Text(TextProgramError),
     Scene(SceneNodeError),
     Camera(CameraProgramError),
+    Effect(EffectProgramError),
     Unsupported(super::NodeKind),
 }
 impl std::fmt::Display for SceneProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
@@ -24,6 +25,7 @@ impl From<FlowProgramError> for SceneProgramError { fn from(value: FlowProgramEr
 impl From<TextProgramError> for SceneProgramError { fn from(value: TextProgramError) -> Self { Self::Text(value) } }
 impl From<SceneNodeError> for SceneProgramError { fn from(value: SceneNodeError) -> Self { Self::Scene(value) } }
 impl From<CameraProgramError> for SceneProgramError { fn from(value: CameraProgramError) -> Self { Self::Camera(value) } }
+impl From<EffectProgramError> for SceneProgramError { fn from(value: EffectProgramError) -> Self { Self::Effect(value) } }
 
 /// One immutable revision program. Compiler bindings are the only place that
 /// remembers layer ids; runtime execution follows content-addressed edges.
@@ -35,6 +37,7 @@ pub struct SceneProgram {
     text: TextProgram,
     scene: SceneNodeProgram,
     camera: CameraProgram,
+    effects: EffectProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
     roots: BTreeSet<NodeKey>,
 }
@@ -46,12 +49,13 @@ impl SceneProgram {
         let flow = FlowProgram::compile(view, &properties, &content)?;
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
         let text = TextProgram::compile(view, &content, &flow)?;
-        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text)?;
+        let effects = EffectProgram::compile(view, &properties)?;
+        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &effects)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(text.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(text.nodes()).chain(effects.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
         let roots = BTreeSet::from([scene.output().scene, camera.key()]);
-        Ok(Self { properties, content, transforms, flow, text, scene, camera, nodes, roots })
+        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -72,6 +76,7 @@ impl SceneProgram {
         if let Some(value) = self.text.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.scene.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.camera.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.effects.execute(node, inputs, context) { return value.map_err(Into::into); }
         Err(SceneProgramError::Unsupported(node.identity().kind))
     }
 }
