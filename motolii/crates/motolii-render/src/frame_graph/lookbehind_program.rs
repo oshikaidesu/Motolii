@@ -48,19 +48,21 @@ pub struct LookbehindProgram {
 
 impl LookbehindProgram {
     pub fn compile(view: &StoreView<'_>, scene: NodeKey) -> Result<Self, LookbehindProgramError> {
-        let composition = view.composition()?.ok_or_else(|| StoreError::Property("composition is required for temporal image inputs".into()))?;
+        let composition = view.composition()?;
+        let fps = composition.map_or(Fps::try_new(30, 1).expect("valid fallback fps"), |composition| composition.fps);
+        let background = composition.map_or([0.0; 4], |composition| composition.background);
         let mut layers = BTreeMap::new();
         let mut identity = NodeIdentity::new(NodeKind::EffectImages, vec![scene]);
         identity.time_dependency = TimeDependency::Exact;
-        identity.parameters.extend_from_slice(&composition.fps.num().to_be_bytes());
-        identity.parameters.extend_from_slice(&composition.fps.den().to_be_bytes());
-        for component in composition.background {
+        identity.parameters.extend_from_slice(&fps.num().to_be_bytes());
+        identity.parameters.extend_from_slice(&fps.den().to_be_bytes());
+        for component in background {
             identity.parameters.extend_from_slice(&component.to_bits().to_be_bytes());
         }
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
             let parent = view.attrs(layer)?.unwrap_or_default().parent;
-            let in_point = RationalTime::try_from_frame(meta.timing.start, composition.fps)
+            let in_point = RationalTime::try_from_frame(meta.timing.start, fps)
                 .map_err(|error| StoreError::Property(error.to_string()))?;
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.parameters.extend_from_slice(&parent.map_or(0, |parent| parent.0).to_be_bytes());
@@ -70,8 +72,8 @@ impl LookbehindProgram {
         Ok(Self {
             node: GraphNode::new(identity),
             scene,
-            fps: composition.fps,
-            background: composition.background,
+            fps,
+            background,
             layers,
         })
     }
@@ -160,35 +162,40 @@ impl LookbehindProgram {
         scenes: &BTreeMap<RationalTime, SceneValue>,
     ) {
         for layer in layers {
-            let requests = image_requests(layer);
-            let mut rows = Vec::with_capacity(requests.len());
-            for request in requests {
-                let row = if !request.named_layers.is_empty() {
-                    request.named_layers.iter().map(|target| {
-                        if *target == layer.layer { return None; }
-                        find_layer(current, *target, false).map(content_source)
-                    }).collect::<Option<Vec<_>>>().unwrap_or_default()
-                } else {
-                    request.temporal.iter().map(|(offset, base, source)| {
-                        let at = self.time_for(layer.layer, now, *offset, *base);
-                        let then = scenes.get(&at)?;
-                        self.temporal_source(layer, then, *source)
-                    }).collect::<Option<Vec<_>>>().unwrap_or_default()
-                };
-                rows.push(row);
-            }
-            layer.image_sources = rows;
+            self.attach_layer(layer, current, now, scenes);
+        }
+    }
 
-            if let SceneContentValue::Plate(plate) = &mut layer.content {
-                let mut nested = SceneValue {
-                    layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
-                };
-                self.attach_scene_sources(&mut nested, now, scenes);
-                let mut iter = nested.layers.into_iter();
-                for member in &mut plate.members {
-                    if member.layer.is_some() {
-                        member.layer = iter.next();
-                    }
+    fn attach_layer(
+        &self,
+        layer: &mut SceneLayerValue,
+        current: &SceneValue,
+        now: RationalTime,
+        scenes: &BTreeMap<RationalTime, SceneValue>,
+    ) {
+        let requests = image_requests(layer);
+        let mut rows = Vec::with_capacity(requests.len());
+        for request in requests {
+            let row = if !request.named_layers.is_empty() {
+                request.named_layers.iter().map(|target| {
+                    if *target == layer.layer { return None; }
+                    find_layer(current, *target, false).map(content_source)
+                }).collect::<Option<Vec<_>>>().unwrap_or_default()
+            } else {
+                request.temporal.iter().map(|(offset, base, source)| {
+                    let at = self.time_for(layer.layer, now, *offset, *base);
+                    let then = scenes.get(&at)?;
+                    self.temporal_source(layer, then, *source)
+                }).collect::<Option<Vec<_>>>().unwrap_or_default()
+            };
+            rows.push(row);
+        }
+        layer.image_sources = rows;
+
+        if let SceneContentValue::Plate(plate) = &mut layer.content {
+            for member in &mut plate.members {
+                if let Some(member) = member.layer.as_mut() {
+                    self.attach_layer(member, current, now, scenes);
                 }
             }
         }
