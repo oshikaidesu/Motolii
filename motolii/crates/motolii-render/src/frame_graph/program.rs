@@ -94,7 +94,7 @@ impl SceneProgram {
         let placements = PlacementProgram::compile(view, &properties, &effects, &transforms, &analysis)?;
         let relations = RelationProgram::compile(view, &properties)?;
         let solver = SolverProgram::compile(view, &properties, &relations, &flow)?;
-        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
+        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &flow, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
         let lookbehind = LookbehindProgram::compile(view, scene.output().scene)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let overlay = OverlayProgram::compile(view, &effects, lookbehind.key(), solver.key(), camera.key())?;
