@@ -12,6 +12,9 @@ pub struct MediaSourceValue { pub path: String, pub fingerprint: Option<String>,
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MaterialValue { pub source: MediaSourceValue }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaExtentValue { pub source: MediaSourceValue, pub size: [f32; 3] }
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MediaFrameValue {
     pub source: MediaSourceValue,
@@ -132,12 +135,20 @@ impl ContentProgram {
     pub fn binding(&self, layer: LayerId) -> Option<&ContentBinding> { self.bindings.get(&layer) }
     pub fn bindings(&self) -> impl ExactSizeIterator<Item = &ContentBinding> { self.bindings.values() }
 
+    pub fn extent_source(&self, key: NodeKey) -> Option<&MediaSourceValue> {
+        match self.recipes.get(&key) {
+            Some(Recipe::MediaExtent(source)) => Some(source),
+            _ => None,
+        }
+    }
+
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, ContentProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
             Recipe::Text(value) => Ok(NodeValue::new(value.clone())),
             Recipe::Shape(value) => Ok(NodeValue::new(value.clone())),
-            Recipe::MediaExtent(value) | Recipe::Mesh(value) => Ok(NodeValue::new(value.clone())),
+            Recipe::MediaExtent(value) => Ok(NodeValue::new(MediaExtentValue { source: value.clone(), size: [0.0; 3] })),
+            Recipe::Mesh(value) => Ok(NodeValue::new(value.clone())),
             Recipe::MediaFrame { source, timing, fps, speed_track, remap } => {
                 let result = (|| {
                     let Some(fps) = *fps else {
