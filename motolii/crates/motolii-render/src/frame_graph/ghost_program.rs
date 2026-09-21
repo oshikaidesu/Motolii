@@ -101,6 +101,7 @@ fn contributions(value: &NodeValue) -> Option<Vec<SceneContributionValue>> {
 fn mark_ghost(contribution: &mut SceneContributionValue) {
     let Some(layer) = contribution.layer.as_mut() else { return };
     layer.ghost = true;
+    layer.freeze_eligible = false;
     if let SceneContentValue::Plate(plate) = &mut layer.content {
         for member in &mut plate.members {
             mark_ghost(member);
