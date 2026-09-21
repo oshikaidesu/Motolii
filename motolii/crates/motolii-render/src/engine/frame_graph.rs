@@ -351,12 +351,12 @@ fn input<T>(
 where
     T: Send + Sync + 'static,
 {
-    let Some(key) = node.identity().inputs.get(index) else {
+    if node.identity().inputs.get(index).is_none() {
         return Err(EngineError::Store(format!(
             "FrameGraph {:?} is missing input {index}",
             node.identity().kind
         )));
-    };
+    }
     inputs
         .at(index)
         .and_then(|value| value.downcast_ref::<Arc<T>>())

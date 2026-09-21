@@ -5,6 +5,7 @@
 mod cache;
 mod canonical;
 mod compiler;
+mod content;
 mod evaluate;
 mod initial;
 mod key;
@@ -21,6 +22,7 @@ use crate::doc::store::StoreView;
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
+pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaSourceValue};
 pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
 pub use initial::{
     build_initial_topology, CameraRoot, DocumentCamera, InitialTopology, ResolvedWorld,
