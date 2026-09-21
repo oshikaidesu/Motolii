@@ -19,10 +19,34 @@ pub struct HeadlessGpu {
 
 impl HeadlessGpu {
     pub fn new() -> Result<Self, HeadlessError> {
-        let instance = wgpu::Instance::new(device_caps::testing_instance_descriptor());
-        let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
-        let adapter = device_caps::select_adapter(&adapters, wgpu::Backends::all(), None)
+        // GPU tests must be diagnosable. In particular, do not silently touch
+        // every compiled backend when the caller pinned one with WGPU_BACKEND:
+        // a broken driver/backend can otherwise hang before the first assertion.
+        let backends = wgpu::Backends::from_env().unwrap_or(wgpu::Backends::all());
+        let adapter_name = std::env::var("WGPU_ADAPTER_NAME").ok().filter(|name| !name.trim().is_empty());
+        eprintln!(
+            "MOTOLII_GPU_INIT phase=enumerate backends={backends:?} adapter_filter={:?}",
+            adapter_name.as_deref().unwrap_or("<any>")
+        );
+        let mut instance_descriptor = device_caps::testing_instance_descriptor();
+        instance_descriptor.backends = backends;
+        let instance = wgpu::Instance::new(instance_descriptor);
+        let adapters = pollster::block_on(instance.enumerate_adapters(backends));
+        let adapters: Vec<_> = match adapter_name.as_deref() {
+            Some(needle) => {
+                let needle = needle.to_ascii_lowercase();
+                adapters.into_iter().filter(|adapter| adapter.get_info().name.to_ascii_lowercase().contains(&needle)).collect()
+            }
+            None => adapters,
+        };
+        eprintln!("MOTOLII_GPU_INIT phase=select candidates={}", adapters.len());
+        let adapter = device_caps::select_adapter(&adapters, backends, None)
             .map_err(HeadlessError::NoAdapter)?;
+        let info = adapter.get_info();
+        eprintln!(
+            "MOTOLII_GPU_INIT phase=selected name={:?} backend={:?} device_type={:?} driver={:?} driver_info={:?}",
+            info.name, info.backend, info.device_type, info.driver, info.driver_info
+        );
 
         let caps = DeviceCaps::from_adapter(&adapter)
             .map_err(|e| HeadlessError::InsufficientCaps(e.to_string()))?;
@@ -47,8 +71,10 @@ impl HeadlessGpu {
         }
         let timestamps = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
         if adapter.features().contains(timestamps) { descriptor.required_features |= timestamps; }
+        eprintln!("MOTOLII_GPU_INIT phase=request_device");
         let (device, queue) = pollster::block_on(adapter.request_device(&descriptor))
             .map_err(|e| HeadlessError::Device(e.to_string()))?;
+        eprintln!("MOTOLII_GPU_INIT phase=ready");
 
         Ok(Self {
             adapter,
