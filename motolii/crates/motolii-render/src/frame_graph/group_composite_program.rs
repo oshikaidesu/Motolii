@@ -17,7 +17,7 @@ struct Recipe {
 }
 
 #[derive(Debug)]
-pub(super) enum GroupCompositeProgramError {
+pub enum GroupCompositeProgramError {
     Store(StoreError),
     Cycle(LayerId),
     InvalidInput(NodeKind),
