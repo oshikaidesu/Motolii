@@ -23,6 +23,7 @@ mod translate;
 mod blocks;
 mod physics;
 mod frozen;
+mod frame_graph;
 
 use crate::doc::core::ResolvedCamera;
 use crate::render::compositor::{Compositor, CompositorError};
@@ -116,9 +117,9 @@ fn still_pixels() -> StillPixels {
 }
 
 pub struct Engine {
+    frame_graph: Option<frame_graph::EngineFrameGraph>,
     /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
     /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
-    resolved_memo: std::cell::RefCell<Option<(u64, RationalTime, Vec<crate::picture::resolved::ResolvedLayer>)>>,
     /// 直前に**実際に解いた**拍の中身(相ごと・層の種類ごと)。memo に当たった面では空。
     resolve_tally: Vec<(&'static str, String, u64, u32)>,
     /// その拍で重かった層(µs, 層番号, 種類)。
@@ -232,7 +233,7 @@ impl Engine {
         #[cfg(test)]
         let _gpu = GpuLease::take();
         Ok(Self {
-            resolved_memo: Default::default(),
+            frame_graph: None,
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
@@ -322,7 +323,7 @@ impl Engine {
         #[cfg(test)]
         let _gpu = GpuLease::take();
         Ok(Self {
-            resolved_memo: Default::default(),
+            frame_graph: None,
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),

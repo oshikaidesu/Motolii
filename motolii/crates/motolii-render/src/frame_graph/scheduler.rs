@@ -30,6 +30,7 @@ impl GenerationLease {
 pub(super) struct GenerationGate {
     current: Arc<AtomicU64>,
     has_current: bool,
+    active: bool,
     cancelled_generations: u64,
 }
 
@@ -38,6 +39,7 @@ impl Default for GenerationGate {
         Self {
             current: Arc::new(AtomicU64::new(0)),
             has_current: false,
+            active: false,
             cancelled_generations: 0,
         }
     }
@@ -50,12 +52,13 @@ impl GenerationGate {
             if generation < current {
                 return None;
             }
-            if generation > current {
+            if generation > current && self.active {
                 self.cancelled_generations += 1;
             }
         }
         self.current.store(generation.get(), Ordering::Release);
         self.has_current = true;
+        self.active = true;
         Some(GenerationLease {
             generation,
             current: Arc::clone(&self.current),
@@ -64,6 +67,12 @@ impl GenerationGate {
 
     pub(super) fn is_current(&self, generation: Generation) -> bool {
         self.has_current && self.current.load(Ordering::Acquire) == generation.get()
+    }
+
+    pub(super) fn finish(&mut self, generation: Generation) {
+        if self.is_current(generation) {
+            self.active = false;
+        }
     }
 
     pub(super) fn cancelled_generations(&self) -> u64 {
@@ -107,6 +116,10 @@ impl FrameScheduler {
 
     pub(super) fn may_publish(&self, generation: Generation) -> bool {
         self.gate.is_current(generation)
+    }
+
+    pub(super) fn finish(&mut self, generation: Generation) {
+        self.gate.finish(generation);
     }
 
     /// Invalidate a changed node and only its reachable descendants. Every

@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use crate::doc::store::LayerId;
 
-use super::{GraphNode, GraphTopology, NodeIdentity, NodeKey, NodeKind, TopologyError};
+use super::{
+    GraphNode, GraphTopology, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency,
+    TopologyError,
+};
 
 /// Compiler-local lookup for edits and diagnostics. Layer identity is kept
 /// here, outside content-addressed node identity.
@@ -70,20 +73,31 @@ impl GraphBuilder {
         mut self,
         camera_state: Option<NodeKey>,
     ) -> Result<CompilerOutput, TopologyError> {
-        let scene = self.intern(NodeIdentity::new(
-            NodeKind::SceneComposite,
-            self.contributions.clone(),
-        ))?;
+        let mut scene_identity =
+            NodeIdentity::new(NodeKind::SceneComposite, self.contributions.clone());
+        (
+            scene_identity.time_dependency,
+            scene_identity.quality_dependency,
+        ) = self.dependencies_of(&scene_identity.inputs);
+        let scene = self.intern(scene_identity)?;
 
         let mut camera_inputs = vec![scene];
         if let Some(camera) = camera_state {
             camera_inputs.push(camera);
         }
         let mut camera_identity = NodeIdentity::new(NodeKind::CameraProjection, camera_inputs);
+        (
+            camera_identity.time_dependency,
+            camera_identity.quality_dependency,
+        ) = self.dependencies_of(&camera_identity.inputs);
         camera_identity.parameters.push(0);
         let camera = self.intern(camera_identity)?;
 
         let mut stage_identity = NodeIdentity::new(NodeKind::CameraProjection, vec![scene]);
+        (
+            stage_identity.time_dependency,
+            stage_identity.quality_dependency,
+        ) = self.dependencies_of(&stage_identity.inputs);
         stage_identity.parameters.push(1);
         let stage = self.intern(stage_identity)?;
 
@@ -95,6 +109,28 @@ impl GraphBuilder {
             camera,
             stage,
         })
+    }
+
+    fn dependencies_of(&self, inputs: &[NodeKey]) -> (TimeDependency, QualityDependency) {
+        let time = if inputs
+            .iter()
+            .filter_map(|key| self.nodes.get(key))
+            .any(|node| node.identity().time_dependency == TimeDependency::Exact)
+        {
+            TimeDependency::Exact
+        } else {
+            TimeDependency::Static
+        };
+        let quality = if inputs
+            .iter()
+            .filter_map(|key| self.nodes.get(key))
+            .any(|node| node.identity().quality_dependency == QualityDependency::Sensitive)
+        {
+            QualityDependency::Sensitive
+        } else {
+            QualityDependency::Invariant
+        };
+        (time, quality)
     }
 }
 

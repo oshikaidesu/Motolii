@@ -150,6 +150,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
         executed.push(key);
     }
 
+    scheduler.finish(generation);
     Ok(ScheduledFrame {
         state: EvaluationState::Current,
         values,

@@ -6,6 +6,7 @@ mod cache;
 mod canonical;
 mod compiler;
 mod evaluate;
+mod initial;
 mod key;
 mod scheduler;
 mod topology;
@@ -20,6 +21,10 @@ pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
 pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
+pub use initial::{
+    build_initial_topology, CameraRoot, DocumentCamera, InitialTopology, ResolvedWorld,
+    ShapeDocuments, SharedScene, StageRoot, TextDocuments,
+};
 pub use key::{
     FrameQuality, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency, WorkKey,
 };
@@ -359,5 +364,6 @@ mod tests {
             preview.reused_nodes(),
             &[static_node.key(), timed_node.key()]
         );
+        assert_eq!(compiled.stats().cancelled_generations, 0);
     }
 }
