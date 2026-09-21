@@ -15,6 +15,12 @@ pub struct EvaluationContext {
     generation: GenerationLease,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DynamicInput {
+    pub node: NodeKey,
+    pub time: RationalTime,
+}
+
 impl EvaluationContext {
     pub fn generation(&self) -> Generation {
         self.generation.generation()
@@ -44,6 +50,14 @@ impl NodeInputs {
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (NodeKey, &NodeValue)> {
         self.0.iter().map(|(key, value)| (*key, value))
     }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 /// Small adapter boundary for existing layout, text, shape, media, and GPU
@@ -51,6 +65,15 @@ impl NodeInputs {
 /// renderer-wide value enum.
 pub trait NodeExecutor {
     type Error;
+
+    fn dynamic_inputs(
+        &mut self,
+        _node: &GraphNode,
+        _inputs: &NodeInputs,
+        _context: &EvaluationContext,
+    ) -> Result<Vec<DynamicInput>, Self::Error> {
+        Ok(Vec::new())
+    }
 
     fn execute(
         &mut self,
@@ -151,7 +174,27 @@ pub(super) fn evaluate<E: NodeExecutor>(
             };
             inputs.push((*input, value));
         }
-        let value = executor.execute(node, NodeInputs(inputs), EvaluationContext { time, quality, generation: lease.clone() })?;
+        let context = EvaluationContext { time, quality, generation: lease.clone() };
+        let requests = executor.dynamic_inputs(node, &NodeInputs(inputs.clone()), &context)?;
+        for request in requests {
+            let Some(value) = node_at(
+                scheduler,
+                topology,
+                executor,
+                request.node,
+                request.time,
+                root_time,
+                quality,
+                lease,
+                values,
+                executed,
+                reused,
+            )? else {
+                return Ok(None);
+            };
+            inputs.push((request.node, value));
+        }
+        let value = executor.execute(node, NodeInputs(inputs), context)?;
         if !lease.is_current() {
             scheduler.record_cancelled_evaluation();
             return Ok(None);
