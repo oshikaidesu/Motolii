@@ -88,7 +88,7 @@ impl EditorRuntime{
     fn depth_layout(&self,resolved:&[crate::render::picture::resolved::ResolvedLayer])->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
-        let seen=self.engine.resolve_camera_in(&view,resolved,time).map_err(e)?;
+        let seen=self.engine.resolve_camera(&view,time).map_err(e)?;
         let camera=crate::doc::core::camera_projection(comp,seen);
         let target=seen.target(comp);
         let camera_layer=motolii_render::picture::resolve::camera::active_camera_layer(&view, time).map_err(e)?;
