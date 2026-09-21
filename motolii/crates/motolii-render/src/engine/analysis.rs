@@ -8,6 +8,7 @@ use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
 use crate::extensions::{blob, overlay};
+use crate::render::compositor::LayerContent;
 use crate::render::engine::{Engine, EngineError};
 use crate::render::media::blob::{detect, mask, BlobSettings, BlobSource};
 
