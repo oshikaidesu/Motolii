@@ -65,6 +65,7 @@ impl EffectProgram {
     pub fn is_placement(&self, key: NodeKey) -> bool { self.placement.contains_key(&key) }
     pub fn placement_program(&self, key: NodeKey) -> Option<crate::doc::store::kind::PlacementProgram> { self.placement.get(&key).copied() }
     pub fn sampling_program(&self, key: NodeKey) -> Option<crate::doc::store::kind::SamplingProgram> { self.sampling.get(&key).copied() }
+    pub fn plugin_id(&self, key: NodeKey) -> Option<&str> { self.recipes.get(&key).map(|recipe| recipe.plugin_id.as_str()) }
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, EffectProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
