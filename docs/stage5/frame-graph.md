@@ -329,6 +329,40 @@ still、playback、scrub、Stage、Camera、exportを同じGraphへ揃え、旧r
 - edit → visible frame → Undo → save/reopen → export が同じ結果になる。
 - Previewで品質を落としてもExportの画素は変わらない。
 
+## GPU test host の契約
+
+FrameGraph の GPU parity test は、GPU 初期化そのものを合格扱いしない。driver/backend が
+固まった時に test process が永久待機する状態は **test failure** であり、assertion 未到達のまま
+「未検証」を増やしてはいけない。
+
+ローカルの GPU test は process 境界で実行する。
+
+```bash
+python3 scripts/gpu-test.py --backend metal --timeout-seconds 90 -- \
+  cargo test -p motolii-render <test-filter> -- --nocapture --test-threads=1
+```
+
+Windows は通常 `--backend dx12`、Linux は通常 `--backend vulkan`。省略時はplatformの
+primary backendを選ぶ。別backendを試す時は明示して別runにし、同じrunで黙ってfallbackしない。
+adapterを固定したい時は `--adapter <name-substring>` を使う。
+
+headless初期化は標準の `WGPU_BACKEND` / `WGPU_ADAPTER_NAME` を読み、stderrへ次のphaseを出す。
+
+```text
+MOTOLII_GPU_INIT phase=enumerate
+MOTOLII_GPU_INIT phase=select
+MOTOLII_GPU_INIT phase=selected ...
+MOTOLII_GPU_INIT phase=request_device
+MOTOLII_GPU_INIT phase=ready
+```
+
+これにより timeout 時も「adapter列挙」「device作成」「test本体」のどこで止まったかを区別する。
+timeout は exit 124 とし、子孫processを含むtest process treeを終了する。GPUが無い・capability不足・
+shader failure・pixel mismatch・timeoutを同じ「skip」へ丸めない。
+
+CIでGPUを持たないrunnerは semantic/cache/time-edge tests を走らせ、GPU parityをpassしたことにはしない。
+GPU parityの完了判定は、対象backend/adapterを記録した実GPU runでassertionまで完走した時だけ行う。
+
 ## 実装規律
 
 - 一つのNode ownerを足す時、同じ責任の旧ownerをcutoverで削除する。
