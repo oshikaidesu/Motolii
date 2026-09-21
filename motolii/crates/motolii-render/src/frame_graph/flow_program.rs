@@ -14,7 +14,7 @@ const ROWS: [&str; 23] = [layout::DISPLAY, layout::FLEX_DIRECTION, layout::FLEX_
 pub struct FlowSlot { pub position: [f32; 2], pub scale: [f32; 2], pub stretch: [f32; 2], pub wrap: Option<f32>, pub anchor: [f32; 2] }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct FlowFrameValue { pub slots: Vec<Option<FlowSlot>>, pub sizes: Vec<Option<[f32; 2]>>, pub transition_samples: Vec<Vec<(crate::doc::core::RationalTime, f32)>> }
+pub struct FlowFrameValue { pub slots: Vec<Option<FlowSlot>>, pub sizes: Vec<Option<[f32; 2]>>, pub fields: BTreeMap<usize, (Vec<(f32, f32)>, Vec<(f32, f32)>)>, pub transition_samples: Vec<Vec<(crate::doc::core::RationalTime, f32)>> }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FlowBinding { pub layer: LayerId, pub index: usize }
@@ -111,6 +111,27 @@ impl FlowProgram {
     }
 }
 
+
+fn evaluated_grid_fields(tree: &TaffyTree<()>, node: NodeId) -> Option<(Vec<(f32, f32)>, Vec<(f32, f32)>)> {
+    let taffy::tree::DetailedLayoutInfo::Grid(info) = tree.detailed_layout_info(node) else { return None };
+    let padding = tree.layout(node).ok()?.padding;
+    let lines = |tracks: &taffy::compute::detailed_info::DetailedGridTracksInfo, start: f32| {
+        let mut at = start;
+        let mut out = Vec::new();
+        for (index, size) in tracks.sizes.iter().enumerate() {
+            at += tracks.gutters.get(index).copied().unwrap_or(0.0);
+            out.push((at, at + size));
+            at += size;
+        }
+        let skip = tracks.negative_implicit_tracks as usize;
+        out.into_iter().skip(skip).take(tracks.explicit_tracks as usize).collect::<Vec<_>>()
+    };
+    Some((
+        lines(&info.columns, padding.left + crate::picture::CANVAS_MARGIN),
+        lines(&info.rows, padding.top + crate::picture::CANVAS_MARGIN),
+    ))
+}
+
 fn source_tag(source: &LayerSource) -> u8 { match source { LayerSource::File { .. } => 0, LayerSource::Null => 1, LayerSource::Camera => 2, LayerSource::Stage => 3, LayerSource::Shape => 4, LayerSource::Text => 5, LayerSource::Group => 6, LayerSource::Particles => 7 } }
 
 fn value<'a>(plan: &LayerPlan, row: usize, inputs: &'a NodeInputs) -> Option<&'a Value> { plan.props[row].and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref()) }
@@ -189,7 +210,7 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs) -> Result<FlowFrameValue, Flow
     for list in children.values_mut() { list.sort_by_key(|index| recipe.layers[*index].order); }
     let displayed: Vec<_> = recipe.layers.iter().enumerate().filter(|(_, layer)| layer.source == LayerSource::Group && choice(layer, 0, inputs, 0) != 0).map(|(index, _)| index).collect();
     let canvas = Canvas { width: recipe.comp[0], height: recipe.comp[1], origin_x: 0, origin_y: 0 };
-    let mut out = FlowFrameValue { slots: vec![None; recipe.layers.len()], sizes: vec![None; recipe.layers.len()], transition_samples: vec![Vec::new(); recipe.layers.len()] };
+    let mut out = FlowFrameValue { slots: vec![None; recipe.layers.len()], sizes: vec![None; recipe.layers.len()], fields: BTreeMap::new(), transition_samples: vec![Vec::new(); recipe.layers.len()] };
     for root in displayed.iter().copied().filter(|index| recipe.layers[*index].parent.is_none_or(|parent| !displayed.contains(&parent))) {
         let mut tree: TaffyTree<()> = TaffyTree::new(); tree.disable_rounding();
         let mut nodes = BTreeMap::new();
@@ -209,6 +230,13 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs) -> Result<FlowFrameValue, Flow
         let root_sizing = sizing(root_plan, inputs);
         let available = Size { width: if root_sizing[0] == Sizing::Fixed { AvailableSpace::Definite(number(root_plan, 11, inputs, 0.0)) } else { AvailableSpace::MaxContent }, height: if root_sizing[1] == Sizing::Fixed { AvailableSpace::Definite(number(root_plan, 12, inputs, 0.0)) } else { AvailableSpace::MaxContent } };
         tree.compute_layout(root_node, available)?;
+        for (&index, &node) in &nodes {
+            if recipe.layers[index].source == LayerSource::Group && choice(&recipe.layers[index], 0, inputs, 0) == 2 {
+                if let Some(fields) = evaluated_grid_fields(&tree, node) {
+                    out.fields.insert(index, fields);
+                }
+            }
+        }
         for (index, node) in nodes {
             let placed = tree.layout(node)?;
             out.sizes[index] = Some([placed.size.width, placed.size.height]);
