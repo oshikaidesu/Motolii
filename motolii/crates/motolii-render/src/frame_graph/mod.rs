@@ -11,6 +11,7 @@ mod effect_program;
 mod evaluate;
 mod flow_program;
 mod group_program;
+mod ghost_program;
 mod group_composite_program;
 mod initial;
 mod key;
