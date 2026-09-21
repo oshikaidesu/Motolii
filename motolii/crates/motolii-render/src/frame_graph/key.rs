@@ -70,6 +70,10 @@ pub enum NodeKind {
     TextStyle,
     /// Shaped text paths/contours after the layout input is known.
     TextShape,
+    /// One Shape Outside source expressed as comp-space obstacle polygons.
+    TextObstacle,
+    /// Post-analysis text shaping with Shape Outside and glyph-transition time edges.
+    TextFlow,
     /// Authored vector geometry plus evaluated shape/fill properties.
     ShapeGeometry,
     /// Shape path tessellation/raster input.  The renderer chooses the value.
