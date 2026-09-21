@@ -88,19 +88,6 @@ impl EngineFrameGraph {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
 #[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
-struct SemanticProgramExecutor<'a> { program: &'a SceneProgram }
-impl NodeExecutor for SemanticProgramExecutor<'_> {
-    type Error = crate::frame_graph::SceneProgramError;
-
-    fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> {
-        self.program.dynamic_inputs(node, inputs, context)
-    }
-
-    fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
-        self.program.execute(node, &inputs, &context)
-    }
-}
-
 struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
     type Error = EngineError;
@@ -165,6 +152,7 @@ impl NodeExecutor for ProgramExecutor<'_> {
 
 impl Engine {
     pub(in crate::engine) fn evaluate_frame_graph_semantics(
+        &mut self,
         view: &StoreView<'_>,
         time: RationalTime,
     ) -> Result<(SceneValue, ResolvedCamera, CompSpec, crate::doc::store::Fps), EngineError> {
@@ -175,13 +163,18 @@ impl Engine {
         let topology = GraphTopology::try_new(program.nodes(), vec![scene_key, camera_key])
             .map_err(|error| EngineError::Store(error.to_string()))?;
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(view.revision_key()), topology);
-        let mut executor = SemanticProgramExecutor { program: &program };
+        let mut executor = ProgramExecutor {
+            engine: self,
+            program: &program,
+            comp: composition.spec(),
+            fps: composition.fps,
+        };
         let frame = graph.evaluate(
             &mut executor,
             time,
             FrameQuality::Export,
             Generation::new(1),
-        ).map_err(|error| EngineError::Store(error.to_string()))?;
+        )?;
         let scene = frame.value(scene_key)
             .and_then(|value| value.downcast_ref::<SceneValue>())
             .cloned()
