@@ -269,19 +269,61 @@ impl Engine {
     /// Freeze の 1 コマを焼く: 層を本物で組み、効果の列の出口(乗算済み線形)を読み戻して cache へ。
     /// 順に呼ぶ(feedback は 1 歩ずつ進む)。絵にならない層(網・点群)は false。
     pub fn freeze_bake_frame(&mut self, view: &StoreView<'_>, layer_id: LayerId, comp_frame: i64) -> Result<bool, EngineError> {
-        let composition = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let t = RationalTime::try_from_frame(comp_frame, composition.fps).map_err(|e| EngineError::Time(e.to_string()))?;
-        let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(|e| EngineError::Store(e.to_string()))?;
-        let Some(target) = resolved.iter().find(|l| l.id == layer_id && l.copy == 0 && !l.ghost).cloned() else { return Ok(false) };
+        let composition = view.composition()
+            .map_err(|error| EngineError::Store(error.to_string()))?
+            .ok_or(EngineError::NoComposition)?;
+        let t = RationalTime::try_from_frame(comp_frame, composition.fps)
+            .map_err(|error| EngineError::Time(error.to_string()))?;
+        let (scene, camera, comp, fps) = Self::evaluate_frame_graph_semantics(view, t)?;
+        let Some(mut target) = scene.layers.into_iter().find(|layer| layer.layer == layer_id && layer.freeze_eligible && !layer.ghost) else {
+            return Ok(false);
+        };
+
+        // Freeze stores the material result before external coverage/composite
+        // semantics. Placement/opacity/blend/matte stay live when the cache is read.
+        target.matte = None;
+        target.clip_to_below = false;
+        target.blend = crate::doc::store::BlendMode::Normal;
+
         self.freezing = Some(layer_id);
-        let picture = self.layer_linear_picture(view, &resolved, &target, t, comp);
+        let previous_clock = self.compositor.clock;
+        let frame = t.try_to_frame_round(fps).unwrap_or(comp_frame) as f32;
+        self.compositor.clock = Some([
+            t.as_seconds_f64() as f32,
+            fps.den() as f32 / fps.num() as f32,
+            frame,
+        ]);
+        let prepared = self.prepare_gpu_scene(
+            &crate::frame_graph::SceneValue { layers: vec![target] },
+            comp,
+            camera,
+        );
+        self.compositor.clock = previous_clock;
         self.freezing = None;
-        let Some(picture) = picture? else { return Ok(false) };
-        let uploaded = self.compositor.upload_rgba16f("motolii-frozen", picture.bytes.clone(), picture.width, picture.height)?;
-        let start = view.meta(layer_id).map_err(|e| EngineError::Store(e.to_string()))?.map_or(0, |m| m.timing.start);
-        let frozen = super::frozen::FrozenFrame { texture: uploaded, natural: picture.natural, padding: picture.padding, frame: picture.frame };
-        self.frozen.remember(layer_id, comp_frame - start, frozen, Some(&picture.bytes)).map_err(|e| EngineError::Store(format!("Freeze の cache を書けない: {e}")))?;
+
+        let Some(layer) = prepared?.layers.into_iter().next() else { return Ok(false) };
+        let Some(picture) = self.layer_with_passes_linear_picture(&layer)? else { return Ok(false) };
+        let uploaded = self.compositor.upload_rgba16f(
+            "motolii-frozen",
+            picture.bytes.clone(),
+            picture.width,
+            picture.height,
+        )?;
+        let start = view.meta(layer_id)
+            .map_err(|error| EngineError::Store(error.to_string()))?
+            .map_or(0, |meta| meta.timing.start);
+        let frozen = super::frozen::FrozenFrame {
+            texture: uploaded,
+            natural: picture.natural,
+            padding: picture.padding,
+            frame: picture.frame,
+        };
+        self.frozen.remember(
+            layer_id,
+            comp_frame - start,
+            frozen,
+            Some(&picture.bytes),
+        ).map_err(|error| EngineError::Store(format!("Freeze の cache を書けない: {error}")))?;
         Ok(true)
     }
 
