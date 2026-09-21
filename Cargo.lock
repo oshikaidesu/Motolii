@@ -3148,6 +3148,7 @@ dependencies = [
  "re_log",
  "re_log_encoding",
  "re_log_types",
+ "re_query",
  "re_types_core",
  "serde",
  "serde_json",
