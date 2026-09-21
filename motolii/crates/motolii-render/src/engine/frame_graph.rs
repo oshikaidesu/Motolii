@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
+use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
 use crate::picture::resolved::ResolvedLayer;
 
 use super::frame_graph_scene::GpuSceneValue;
@@ -97,6 +97,13 @@ impl NodeExecutor for ProgramExecutor<'_> {
     }
 
     fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
+        if node.identity().kind == NodeKind::MediaExtent {
+            let source = self.program.content().extent_source(node.key())
+                .cloned()
+                .ok_or_else(|| unsupported(node.identity().kind))?;
+            let size = self.engine.material_extent(&source.path, self.comp).unwrap_or([0.0; 3]);
+            return Ok(NodeValue::new(MediaExtentValue { source, size }));
+        }
         match self.program.execute(node, &inputs, &context) {
             Ok(value) => return Ok(value),
             Err(crate::frame_graph::SceneProgramError::Unsupported(_)) => {}
