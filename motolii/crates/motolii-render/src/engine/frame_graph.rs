@@ -193,6 +193,62 @@ impl Engine {
         Ok((scene, camera, composition.spec(), composition.fps))
     }
 
+    pub(in crate::engine) fn render_frame_graph_pixels(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+        include_background: bool,
+        camera_override: Option<ResolvedCamera>,
+    ) -> Result<Vec<u8>, EngineError> {
+        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
+        let prepared = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.gpu))
+            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
+        let document_camera = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.program.camera()))
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
+        let camera = camera_override.unwrap_or(document_camera);
+        let mut layers = prepared.layers.clone();
+        for layer in &mut layers {
+            layer.layer.projection_camera = document_camera;
+        }
+        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
+        let pixels = self.compositor.render_with_effects(state.comp, camera, &layers, background)?;
+        self.frame_graph = Some(state);
+        Ok(pixels)
+    }
+
+    pub(in crate::engine) fn render_frame_graph_to_texture_output(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+        include_background: bool,
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
+        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
+        let prepared = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.gpu))
+            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
+        let document_camera = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.program.camera()))
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
+        let mut layers = prepared.layers.clone();
+        for layer in &mut layers {
+            layer.layer.projection_camera = document_camera;
+        }
+        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
+        let texture = self.compositor.render_to_texture(state.comp, document_camera, &layers, background)?;
+        self.frame_graph = Some(state);
+        Ok(texture)
+    }
+
     fn evaluated_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality) -> Result<EngineFrameGraph, EngineError> {
         let revision = GraphRevision::new(view.revision_key());
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
