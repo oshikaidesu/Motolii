@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -19,6 +19,7 @@ pub enum SceneProgramError {
     Visibility(VisibilityProgramError),
     Placement(PlacementProgramError),
     Motion(MotionProgramError),
+    Lookbehind(LookbehindProgramError),
     Particle(ParticleProgramError),
     Unsupported(super::NodeKind),
 }
@@ -37,6 +38,7 @@ impl From<GroupBackgroundProgramError> for SceneProgramError { fn from(value: Gr
 impl From<VisibilityProgramError> for SceneProgramError { fn from(value: VisibilityProgramError) -> Self { Self::Visibility(value) } }
 impl From<PlacementProgramError> for SceneProgramError { fn from(value: PlacementProgramError) -> Self { Self::Placement(value) } }
 impl From<MotionProgramError> for SceneProgramError { fn from(value: MotionProgramError) -> Self { Self::Motion(value) } }
+impl From<LookbehindProgramError> for SceneProgramError { fn from(value: LookbehindProgramError) -> Self { Self::Lookbehind(value) } }
 impl From<ParticleProgramError> for SceneProgramError { fn from(value: ParticleProgramError) -> Self { Self::Particle(value) } }
 
 /// One immutable revision program. Compiler bindings are the only place that
@@ -55,6 +57,7 @@ pub struct SceneProgram {
     visibility: VisibilityProgram,
     placements: PlacementProgram,
     motion: MotionProgram,
+    lookbehind: LookbehindProgram,
     particles: ParticleProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
     roots: BTreeSet<NodeKey>,
@@ -75,11 +78,12 @@ impl SceneProgram {
         let groups = GroupBackgroundProgram::compile(view, &properties, &flow)?;
         let masks = MaskProgram::compile(view, &properties)?;
         let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
+        let lookbehind = LookbehindProgram::compile(view, scene.output().scene)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
-        let roots = BTreeSet::from([scene.output().scene, camera.key()]);
-        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, particles, nodes, roots })
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        let roots = BTreeSet::from([lookbehind.key(), camera.key()]);
+        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -89,7 +93,8 @@ impl SceneProgram {
     pub fn transforms(&self) -> &TransformProgram { &self.transforms }
     pub fn flow(&self) -> &FlowProgram { &self.flow }
     pub fn text(&self) -> &TextProgram { &self.text }
-    pub fn scene(&self) -> SceneProgramNodes { self.scene.output() }
+    pub fn scene(&self) -> SceneProgramNodes { SceneProgramNodes { scene: self.lookbehind.key() } }
+    pub fn base_scene(&self) -> SceneProgramNodes { self.scene.output() }
     pub fn camera(&self) -> NodeKey { self.camera.key() }
     pub fn visibility(&self) -> &VisibilityProgram { &self.visibility }
     pub fn placements(&self) -> &PlacementProgram { &self.placements }
@@ -101,6 +106,9 @@ impl SceneProgram {
             return requests.map_err(Into::into);
         }
         if let Some(requests) = self.motion.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
+        if let Some(requests) = self.lookbehind.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
         if let Some(requests) = self.particles.dynamic_inputs(node, inputs, context) {
@@ -126,6 +134,7 @@ impl SceneProgram {
         if let Some(value) = self.visibility.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.placements.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.motion.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.lookbehind.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.particles.execute(node, inputs, context) { return value.map_err(Into::into); }
         Err(SceneProgramError::Unsupported(node.identity().kind))
     }
