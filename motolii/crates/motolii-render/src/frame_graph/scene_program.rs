@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 use super::ghost_program::{GhostProgram, GhostProgramError};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
@@ -15,6 +15,7 @@ pub enum SceneContentValue {
     Shape(Vec<ShapeNode>),
     Material(MaterialValue),
     Media { source: MediaSourceValue, time: RationalTime },
+    Particles(ParticleValue),
     Plate(ScenePlateValue),
 }
 
@@ -60,7 +61,7 @@ pub struct SceneNodeProgram {
 }
 
 impl SceneNodeProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram) -> Result<Self, SceneNodeError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram, particle_program: &ParticleProgram) -> Result<Self, SceneNodeError> {
         let policy = ScenePolicy::compile(view)?;
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
@@ -75,6 +76,7 @@ impl SceneNodeProgram {
                 LayerSource::Shape => (content.binding(layer).and_then(|binding| binding.content), 2),
                 LayerSource::File { .. } => (content.binding(layer).and_then(|binding| binding.material.or(binding.content)), 3),
                 LayerSource::Group => (groups.binding(layer), 2),
+                LayerSource::Particles => (particle_program.binding(layer).map(|binding| binding.particles), 4),
                 _ => (None, 0),
             };
             let content_index = content_key.map(|key| { let at = inputs.len(); inputs.push(key); at });
@@ -199,6 +201,12 @@ impl SceneNodeProgram {
                             return Err(SceneNodeError::InvalidInput(node.identity().kind));
                         }
                     },
+                    (4, Some(index)) => SceneContentValue::Particles(
+                        inputs.at(index)
+                            .and_then(|value| value.downcast_ref::<ParticleValue>())
+                            .cloned()
+                            .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+                    ),
                     _ => SceneContentValue::None,
                 };
                 let opacity = opacity.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None }).unwrap_or(1.0).clamp(0.0, 1.0);
@@ -397,6 +405,12 @@ fn sampled_content(
                 return Err(SceneNodeError::InvalidInput(node.identity().kind));
             }
         }
+        (4, Some(index)) => SceneContentValue::Particles(
+            sampled_value(inputs, index, sample_indices, sample_start)
+                .and_then(|value| value.downcast_ref::<ParticleValue>())
+                .cloned()
+                .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+        ),
         _ => SceneContentValue::None,
     })
 }
