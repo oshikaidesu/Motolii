@@ -285,8 +285,7 @@ impl Engine {
         let state = self.frame_graph.as_ref()?;
         if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
         let scene = state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()?;
-        let source_frame = time.try_to_frame_floor(state.fps).ok()?;
-        Some(scene.layers.iter().map(|layer| ResolvedLayer { id: layer.layer, source: layer.source.clone(), placement: crate::doc::core::LayerPlacement { transform: layer.transform.affine, world_transform: Some(layer.transform.spatial), order: i32::from(layer.order), opacity: layer.opacity, z: layer.transform.spatial.translation.z, rotation_x: 0.0, rotation_y: 0.0, plane: None }, declared_size: [0.0; 2], source_frame, source_time: time, masks: layer.masks.clone(), effects: layer.effects.clone(), blend_mode: layer.blend, matte: layer.matte, clip_to_below: layer.clip_to_below, projection: layer.projection, flatten: layer.flatten, environment: layer.environment, depth: 0.0, ghost: false, copy: 0, after_effects: layer.after_effects.clone(), plate: None, averaged: 0, shape_stretch: [1.0, 1.0], glyph_offsets: None, flow_around: None }).collect())
+        Some(resolved_layers_from_scene(scene, time, state.fps))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -473,6 +472,64 @@ impl Engine {
         self.feedback_keys_seen.clear();
         Ok(())
     }
+}
+
+
+pub(super) fn resolved_layers_from_scene(
+    scene: &SceneValue,
+    time: RationalTime,
+    fps: crate::doc::store::Fps,
+) -> Vec<ResolvedLayer> {
+    scene.layers.iter().map(|layer| {
+        let source_time = match &layer.content {
+            crate::frame_graph::SceneContentValue::Media { time, .. } => *time,
+            _ => time,
+        };
+        let source_frame = source_time.try_to_frame_floor(fps).unwrap_or(0);
+        let (plate, averaged) = match &layer.content {
+            crate::frame_graph::SceneContentValue::Plate(plate) => (
+                plate.owner,
+                if plate.average { plate.members.len().try_into().unwrap_or(u32::MAX) } else { 0 },
+            ),
+            _ => (None, 0),
+        };
+        ResolvedLayer {
+            id: layer.layer,
+            source: layer.source.clone(),
+            placement: crate::doc::core::LayerPlacement {
+                transform: layer.transform.affine,
+                world_transform: Some(layer.transform.spatial),
+                order: i32::from(layer.order),
+                opacity: layer.opacity,
+                z: layer.transform.spatial.translation.z,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
+                plane: None,
+            },
+            declared_size: [0.0; 2],
+            source_frame,
+            source_time,
+            masks: layer.masks.clone(),
+            effects: layer.effects.clone(),
+            blend_mode: layer.blend,
+            matte: layer.matte,
+            clip_to_below: layer.clip_to_below,
+            projection: layer.projection,
+            flatten: layer.flatten,
+            environment: layer.environment,
+            depth: layer.depth,
+            ghost: layer.ghost,
+            copy: layer.instance,
+            after_effects: layer.after_effects.clone(),
+            plate,
+            averaged,
+            shape_stretch: layer.shape_stretch,
+            // These meanings are already baked into TextFlow/TextShape values.
+            // The compatibility ResolvedLayer projection must not re-run them.
+            glyph_offsets: None,
+            flow_around: None,
+        }
+    }).collect()
 }
 
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }
