@@ -100,6 +100,10 @@ pub enum NodeKind {
     TemporalCopy,
     /// Evaluated placement-effect outputs before they become scene copies.
     PlacementSet,
+    /// Motion-blur shutter measurement; samples only the two shutter edges.
+    MotionMeasure,
+    /// Exact motion-blur transform samples selected by MotionMeasure.
+    MotionSamples,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
