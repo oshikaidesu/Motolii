@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, NodeInputs, NodeKey, NodeValue, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError};
+use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, NodeInputs, NodeKey, NodeValue, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -16,6 +16,7 @@ pub enum SceneProgramError {
     Effect(EffectProgramError),
     Mask(MaskProgramError),
     Group(GroupBackgroundProgramError),
+    Visibility(VisibilityProgramError),
     Unsupported(super::NodeKind),
 }
 impl std::fmt::Display for SceneProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
@@ -30,6 +31,7 @@ impl From<CameraProgramError> for SceneProgramError { fn from(value: CameraProgr
 impl From<EffectProgramError> for SceneProgramError { fn from(value: EffectProgramError) -> Self { Self::Effect(value) } }
 impl From<MaskProgramError> for SceneProgramError { fn from(value: MaskProgramError) -> Self { Self::Mask(value) } }
 impl From<GroupBackgroundProgramError> for SceneProgramError { fn from(value: GroupBackgroundProgramError) -> Self { Self::Group(value) } }
+impl From<VisibilityProgramError> for SceneProgramError { fn from(value: VisibilityProgramError) -> Self { Self::Visibility(value) } }
 
 /// One immutable revision program. Compiler bindings are the only place that
 /// remembers layer ids; runtime execution follows content-addressed edges.
@@ -44,6 +46,7 @@ pub struct SceneProgram {
     effects: EffectProgram,
     masks: MaskProgram,
     groups: GroupBackgroundProgram,
+    visibility: VisibilityProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
     roots: BTreeSet<NodeKey>,
 }
@@ -51,6 +54,7 @@ pub struct SceneProgram {
 impl SceneProgram {
     pub fn compile(view: &StoreView<'_>) -> Result<Self, SceneProgramError> {
         let properties = PropertyProgram::compile(view)?;
+        let visibility = VisibilityProgram::compile(view, &properties)?;
         let content = ContentProgram::compile(view, &properties)?;
         let flow = FlowProgram::compile(view, &properties, &content)?;
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
@@ -58,12 +62,12 @@ impl SceneProgram {
         let groups = GroupBackgroundProgram::compile(view, &properties, &flow)?;
         let effects = EffectProgram::compile(view, &properties)?;
         let masks = MaskProgram::compile(view, &properties)?;
-        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks)?;
+        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(effects.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(effects.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
         let roots = BTreeSet::from([scene.output().scene, camera.key()]);
-        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, nodes, roots })
+        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -75,6 +79,7 @@ impl SceneProgram {
     pub fn text(&self) -> &TextProgram { &self.text }
     pub fn scene(&self) -> SceneProgramNodes { self.scene.output() }
     pub fn camera(&self) -> NodeKey { self.camera.key() }
+    pub fn visibility(&self) -> &VisibilityProgram { &self.visibility }
 
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<NodeValue, SceneProgramError> {
         if let Some(value) = self.properties.execute(node, inputs, context) { return value.map_err(Into::into); }
@@ -87,6 +92,7 @@ impl SceneProgram {
         if let Some(value) = self.effects.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.masks.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.groups.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.visibility.execute(node, inputs, context) { return value.map_err(Into::into); }
         Err(SceneProgramError::Unsupported(node.identity().kind))
     }
 }
