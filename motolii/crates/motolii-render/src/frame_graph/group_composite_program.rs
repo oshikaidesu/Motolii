@@ -199,8 +199,8 @@ impl GroupCompositeProgram {
                 layer.layer = recipe.group;
                 layer.content_key = None;
                 layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(recipe.group), members: children, average: false });
-                layer.effects = whole;
-                layer.after_effects.clear();
+                layer.effects.clear();
+                layer.after_effects = whole;
                 layer.masks.clear();
                 layer.matte = None;
                 layer.clip_to_below = false;
@@ -330,7 +330,7 @@ mod tests {
 
         let plate_layer = scene.layers.iter().find(|layer| matches!(layer.content, SceneContentValue::Plate(_))).expect("Group Whole must create one semantic plate");
         assert_eq!(
-            plate_layer.effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(),
+            plate_layer.after_effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(),
             ["group.whole", "group.after"],
         );
         let SceneContentValue::Plate(plate) = &plate_layer.content else { unreachable!() };
