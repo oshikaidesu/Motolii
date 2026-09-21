@@ -18,6 +18,7 @@ mod property;
 mod program;
 mod scheduler;
 mod scene_program;
+mod scene_policy;
 mod text_program;
 mod topology;
 mod transform;
