@@ -4,7 +4,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
 use crate::doc::store::{property, kind::PlacementProgram as PlacementEvaluator, LayerId, LayerSource, PropertyId, StoreError, StoreView};
 
-use super::{DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency, TransformProgram, TransformValue};
+use super::{AnalysisProgram, BlobAnalysisValue, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency, TransformProgram, TransformValue};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlacementCopyValue {
@@ -39,6 +39,7 @@ struct Recipe {
     position_y: Option<usize>,
     position_z: Option<usize>,
     stretch_outline: bool,
+    analysis: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -70,6 +71,7 @@ impl PlacementProgram {
         properties: &PropertyProgram,
         effects: &EffectProgram,
         transforms: &TransformProgram,
+        analysis: &AnalysisProgram,
     ) -> Result<Self, PlacementProgramError> {
         let mut nodes = BTreeMap::new();
         let mut recipes = BTreeMap::new();
@@ -111,6 +113,12 @@ impl PlacementProgram {
             let position_y = add_property(prop(property::POSITION_Y));
             let position_z = add_property(prop(property::POSITION_Z));
 
+            let analysis = analysis.binding(layer).map(|binding| {
+                let index = inputs.len();
+                inputs.push(binding.result);
+                index
+            });
+
             let mut identity = NodeIdentity::new(NodeKind::PlacementSet, inputs);
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.parameters.push(u8::from(meta.source == LayerSource::Shape));
@@ -129,6 +137,7 @@ impl PlacementProgram {
                 position_y,
                 position_z,
                 stretch_outline: meta.source == LayerSource::Shape,
+                analysis,
             });
             bindings.insert(layer, PlacementBinding { layer, node: key });
         }
@@ -149,13 +158,17 @@ impl PlacementProgram {
         Some((|| {
             let Some((_, program, effect)) = selected_effect(recipe, inputs) else { return Ok(Vec::new()); };
             let position = read_position(node, inputs, recipe, None)?;
+            let analysis = recipe.analysis
+                .and_then(|index| inputs.at(index))
+                .and_then(|value| value.downcast_ref::<BlobAnalysisValue>())
+                .map(|value| &value.inputs);
             let outputs = (program.evaluate)(&crate::doc::store::kind::PlacementInput {
                 params: &effect.params,
                 layer: recipe.layer,
                 time: context.time,
                 position,
                 stretch_outline: recipe.stretch_outline,
-                analysis: None,
+                analysis,
             });
             let sample_indices = sample_indices(recipe);
             let mut requests = Vec::new();
@@ -182,17 +195,18 @@ impl PlacementProgram {
                 return Ok(NodeValue::new(PlacementSetValue { selected_effect: None, copies: Vec::new() }));
             };
 
-            // Analysis-backed placement programs (Blob Track) are deliberately
-            // left to the analysis lane. Calling them with no analysis yields
-            // no copies, never a hidden StoreView read.
             let position = read_position(node, inputs, recipe, None)?;
+            let analysis = recipe.analysis
+                .and_then(|index| inputs.at(index))
+                .and_then(|value| value.downcast_ref::<BlobAnalysisValue>())
+                .map(|value| &value.inputs);
             let outputs = (program.evaluate)(&crate::doc::store::kind::PlacementInput {
                 params: &effect.params,
                 layer: recipe.layer,
                 time: context.time,
                 position,
                 stretch_outline: recipe.stretch_outline,
-                analysis: None,
+                analysis,
             });
 
             let sample_indices = sample_indices(recipe);
