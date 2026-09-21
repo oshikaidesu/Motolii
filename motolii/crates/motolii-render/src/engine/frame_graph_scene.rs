@@ -119,9 +119,9 @@ impl Engine {
 
         // Track mattes and stencils consume their source. A missing source means
         // the target has no coverage and therefore contributes nothing.
-        let matte_sources: std::collections::HashSet<_> = entries.iter().enumerate()
-            .filter(|(index, entry)| !removed[*index] && !entry.clip_to_below)
-            .filter_map(|(_, entry)| entry.matte.map(|matte| matte.layer))
+        let matte_sources: std::collections::HashSet<_> = scene.layers.iter()
+            .filter(|entry| !entry.clip_to_below)
+            .filter_map(|entry| entry.matte.map(|matte| matte.layer))
             .collect();
 
         for index in 0..layers.len() {
@@ -165,4 +165,5 @@ impl Engine {
             .collect();
 
         Ok(GpuSceneValue { layers })
-    }}
+    }
+}
