@@ -13,6 +13,7 @@ mod property;
 mod program;
 mod scheduler;
 mod topology;
+mod transform;
 mod value;
 
 use std::collections::BTreeSet;
@@ -36,6 +37,7 @@ pub use key::{
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
+pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
     RenderTarget, Submission, ViewProjection,
