@@ -198,7 +198,8 @@ impl GroupCompositeProgram {
                 let owner_layer = owner.layer.as_ref();
                 layer.layer = recipe.group;
                 layer.content_key = None;
-                layer.freeze_eligible = false;
+                layer.freeze_eligible = owner_layer.is_some_and(|owner| owner.freeze_eligible);
+                layer.timing_start = owner_layer.map_or(layer.timing_start, |owner| owner.timing_start);
                 layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(recipe.group), members: children, average: false });
                 layer.effects.clear();
                 layer.after_effects = whole;
