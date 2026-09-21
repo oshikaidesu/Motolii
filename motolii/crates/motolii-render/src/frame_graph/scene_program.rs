@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue};
+use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneContentValue {
@@ -20,8 +20,14 @@ pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub tr
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
+#[derive(Clone, Debug, PartialEq)]
+struct SceneContributionValue {
+    solo: bool,
+    layer: Option<SceneLayerValue>,
+}
+
 #[derive(Clone)]
-enum Recipe { Contribution { layer: LayerId, source: LayerSource, content: Option<usize>, opacity: Option<usize>, effects: Vec<(usize, bool)>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
+enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, effects: Vec<(usize, bool)>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneProgramNodes { pub scene: NodeKey }
@@ -37,13 +43,15 @@ pub struct SceneNodeProgram {
 }
 
 impl SceneNodeProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram) -> Result<Self, SceneNodeError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram) -> Result<Self, SceneNodeError> {
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new(); let mut ordered = Vec::new();
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
             if matches!(meta.source, LayerSource::Camera | LayerSource::Stage) { continue; }
             let Some(transform) = transforms.binding(layer).map(|binding| binding.world) else { continue };
-            let mut inputs = vec![transform];
+            let Some(visibility_key) = visibility_program.binding(layer).map(|binding| binding.node) else { continue };
+            let mut inputs = vec![transform, visibility_key];
+            let visibility = 1usize;
             let (content_key, kind) = match meta.source {
                 LayerSource::Text => (text.binding(layer).map(|binding| binding.shape), 1),
                 LayerSource::Shape => (content.binding(layer).and_then(|binding| binding.content), 2),
@@ -71,7 +79,7 @@ impl SceneNodeProgram {
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
             let non_group = meta.source != LayerSource::Group;
-            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, content: content_index, opacity, effects: effect_inputs, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
+            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, effects: effect_inputs, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
             ordered.push((meta.order, non_group, layer.0, node.key()));
@@ -96,7 +104,11 @@ impl SceneNodeProgram {
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Contribution { layer, source, content, opacity, effects, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
+            Recipe::Contribution { layer, source, visibility, content, opacity, effects, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
+                let visibility = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                if !visibility.active {
+                    return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: None }));
+                }
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 let content_key = content.map(|index| node.identity().inputs[index]);
                 let content = match (*kind, *content) {
@@ -124,18 +136,27 @@ impl SceneNodeProgram {
                     if (*inherited && effect.scope == crate::doc::store::EffectScope::Whole) || (!*inherited && effect.scope == crate::doc::store::EffectScope::Whole) { after.push(effect); } else { direct.push(effect); }
                 }
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                Ok(NodeValue::new(SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: after, masks, matte: *matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, opacity, projection: *projection, blend: *blend, order: *order }))
+                Ok(NodeValue::new(SceneContributionValue {
+                    solo: visibility.solo,
+                    layer: Some(SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: after, masks, matte: *matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, opacity, projection: *projection, blend: *blend, order: *order }),
+                }))
             })(),
-            Recipe::Composite => inputs.iter().enumerate().map(|(rank, (_, value))| {
-                let mut layer = value.downcast_ref::<SceneLayerValue>().cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
-                // The compositor's depth key must describe the flattened scene,
-                // not the sibling-local authored order.  A child commonly has
-                // order 0 while its Group was created later; forwarding those
-                // raw values lets the Group background cover the child even
-                // though the graph inputs are already parent-before-child.
-                layer.order = i16::try_from(rank).unwrap_or(i16::MAX);
-                Ok(layer)
-            }).collect::<Result<Vec<_>, _>>().map(|layers| NodeValue::new(SceneValue { layers })),
+            Recipe::Composite => (|| {
+                let contributions = inputs.iter()
+                    .map(|(_, value)| value.downcast_ref::<SceneContributionValue>().cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let any_solo = contributions.iter().any(|contribution| contribution.solo);
+                let mut layers = Vec::new();
+                for contribution in contributions {
+                    if any_solo && !contribution.solo { continue; }
+                    let Some(mut layer) = contribution.layer else { continue };
+                    // The compositor's depth key describes the flattened visible
+                    // scene, not sibling-local authored order.
+                    layer.order = i16::try_from(layers.len()).unwrap_or(i16::MAX);
+                    layers.push(layer);
+                }
+                Ok(NodeValue::new(SceneValue { layers }))
+            })(),
         })
     }
 }
