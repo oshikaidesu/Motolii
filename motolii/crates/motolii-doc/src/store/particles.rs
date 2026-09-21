@@ -126,50 +126,66 @@ pub fn particle_number(view: &StoreView<'_>, layer: LayerId, name: &str, t: Rati
 
 /// 時刻 t に生きている粒と、乱流・Plexus の取っ手。入点より前は空。
 pub fn particles_at(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<(Vec<Particle>, Turbulence, Links), StoreError> {
-    let number = |name| particle_number(view, layer, name, t);
-    let vec2 = |name| -> Result<[f64; 2], StoreError> { Ok(match particle_value(view, layer, name, t)? { Value::Vec2(v) => v, _ => [0.0, 0.0] }) };
-    let color = |name| -> Result<[f64; 4], StoreError> { Ok(match particle_value(view, layer, name, t)? { Value::Color(c) => c, _ => [1.0; 4] }) };
-    let turbulence = Turbulence { amount: number(TURBULENCE)? as f32, size: number(TURBULENCE_SIZE)?.max(1.0) as f32, seed: number(SEED)? as f32 };
-    let links = Links { distance: number(CONNECT)?.max(0.0) as f32, width: number(LINE_WIDTH)?.max(0.0) as f32, opacity: number(LINE_OPACITY)?.clamp(0.0, 1.0) as f32 };
-    let Some(fps) = view.composition()?.map(|c| c.fps) else { return Ok((Vec::new(), turbulence, links)) };
-    let Some(meta) = view.meta(layer)? else { return Ok((Vec::new(), turbulence, links)) };
-    let p = Params {
-        life: number(LIFE)?.max(0.01),
-        life_random: number(LIFE_RANDOM)?.clamp(0.0, 1.0),
-        emitter: vec2(EMITTER)?,
-        direction: number(DIRECTION)?,
-        spread: number(SPREAD)?.clamp(0.0, 360.0),
-        speed: number(SPEED)?,
-        speed_random: number(SPEED_RANDOM)?.clamp(0.0, 1.0),
-        size: number(SIZE)?.max(0.0),
-        size_end: number(SIZE_END)?.max(0.0),
-        opacity_end: number(OPACITY_END)?.clamp(0.0, 1.0),
-        color: color(COLOR)?,
-        color_end: color(COLOR_END)?,
-        gravity: number(GRAVITY)?,
-        wind: vec2(WIND)?,
-        bounce: number(BOUNCE)?.clamp(0.0, 1.0),
-        floor: number(FLOOR)?,
-        seed: number(SEED)?.round().max(0.0) as u64,
-    };
+    let empty = || (Vec::new(), Turbulence { amount: 0.0, size: 120.0, seed: 0.0 }, Links { distance: 0.0, width: 1.0, opacity: 0.6 });
+    let Some(fps) = view.composition()?.map(|c| c.fps) else { return Ok(empty()) };
+    let Some(meta) = view.meta(layer)? else { return Ok(empty()) };
+    let mut values = std::collections::BTreeMap::new();
+    for &(name, _, _, _) in ROWS {
+        values.insert(name.to_owned(), particle_value(view, layer, name, t)?);
+    }
     let births = births(view, layer, meta.timing.start, t, fps)?;
-    let now = t.as_seconds_f64();
-    let longest = p.life;
+    Ok(particles_from_values_and_births(&values, &births, t.as_seconds_f64()))
+}
+
+pub fn particles_from_values_and_births(
+    values: &std::collections::BTreeMap<String, Value>,
+    births: &[(u32, f64)],
+    now: f64,
+) -> (Vec<Particle>, Turbulence, Links) {
+    let value = |name: &str| values.get(name).cloned().or_else(|| default_of(name)).unwrap_or(Value::F64(0.0));
+    let number = |name: &str| match value(name) { Value::F64(v) if v.is_finite() => v, _ => 0.0 };
+    let vec2 = |name: &str| match value(name) { Value::Vec2(v) => v, _ => [0.0, 0.0] };
+    let color = |name: &str| match value(name) { Value::Color(v) => v, _ => [1.0; 4] };
+    let turbulence = Turbulence {
+        amount: number(TURBULENCE) as f32,
+        size: number(TURBULENCE_SIZE).max(1.0) as f32,
+        seed: number(SEED) as f32,
+    };
+    let links = Links {
+        distance: number(CONNECT).max(0.0) as f32,
+        width: number(LINE_WIDTH).max(0.0) as f32,
+        opacity: number(LINE_OPACITY).clamp(0.0, 1.0) as f32,
+    };
+    let p = Params {
+        life: number(LIFE).max(0.01),
+        life_random: number(LIFE_RANDOM).clamp(0.0, 1.0),
+        emitter: vec2(EMITTER),
+        direction: number(DIRECTION),
+        spread: number(SPREAD).clamp(0.0, 360.0),
+        speed: number(SPEED),
+        speed_random: number(SPEED_RANDOM).clamp(0.0, 1.0),
+        size: number(SIZE).max(0.0),
+        size_end: number(SIZE_END).max(0.0),
+        opacity_end: number(OPACITY_END).clamp(0.0, 1.0),
+        color: color(COLOR),
+        color_end: color(COLOR_END),
+        gravity: number(GRAVITY),
+        wind: vec2(WIND),
+        bounce: number(BOUNCE).clamp(0.0, 1.0),
+        floor: number(FLOOR),
+        seed: number(SEED).round().max(0.0) as u64,
+    };
     let mut out = Vec::new();
-    for (index, born) in births.into_iter().rev() {
+    for &(index, born) in births.iter().rev() {
         let age = now - born;
-        if age > longest {
-            break;
-        }
-        if out.len() >= MAX_ALIVE {
-            break;
-        }
+        if age > p.life { break; }
+        if out.len() >= MAX_ALIVE { break; }
         if let Some(particle) = p.particle(index, age) {
             out.push(particle);
         }
     }
     out.reverse();
-    Ok((out, turbulence, links))
+    (out, turbulence, links)
 }
 
 /// 入点から t までに生まれた粒: (番号, 生まれた comp の秒)。率はコマごとにその時刻の値で積む。
