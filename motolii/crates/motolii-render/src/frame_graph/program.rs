@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, NodeInputs, NodeKey, NodeValue, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, NodeInputs, NodeKey, NodeValue, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -85,6 +85,16 @@ impl SceneProgram {
     pub fn camera(&self) -> NodeKey { self.camera.key() }
     pub fn visibility(&self) -> &VisibilityProgram { &self.visibility }
     pub fn placements(&self) -> &PlacementProgram { &self.placements }
+
+    pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<DynamicInput>, SceneProgramError> {
+        if let Some(requests) = self.placements.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
+        if let Some(requests) = self.scene.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
+        Ok(Vec::new())
+    }
 
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<NodeValue, SceneProgramError> {
         if let Some(value) = self.properties.execute(node, inputs, context) { return value.map_err(Into::into); }
