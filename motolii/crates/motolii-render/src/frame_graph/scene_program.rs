@@ -87,7 +87,12 @@ impl SceneNodeProgram {
             let matte = if attrs.clip_to_below { view.clipping_base(layer)?.map(|layer| crate::doc::store::Matte { layer, mode: crate::doc::store::MatteMode::Alpha }) } else { attrs.matte };
             let mut effect_inputs = Vec::new();
             if let Some(binding) = effect_program.binding(layer) {
-                for key in &binding.effects {
+                let end = if meta.source == LayerSource::Group {
+                    binding.effects.iter().position(|key| effect_program.is_placement(*key)).unwrap_or(binding.effects.len())
+                } else {
+                    binding.effects.len()
+                };
+                for key in &binding.effects[..end] {
                     let at = inputs.len();
                     inputs.push(*key);
                     effect_inputs.push(at);
