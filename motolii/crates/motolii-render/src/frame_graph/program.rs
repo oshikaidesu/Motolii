@@ -129,4 +129,49 @@ mod tests {
         assert_eq!(scene.layers[0].opacity, 0.75);
         assert!(matches!(scene.layers[0].content, super::super::SceneContentValue::Material(_)));
     }
+
+    #[test]
+    fn file_frame_reaches_the_scene_as_timed_media_instead_of_a_material() {
+        let mut doc = Document::new();
+        let clip = LayerId(9);
+        let path = "/motolii-test/nonexistent-clip.mp4";
+        doc.apply_all([
+            Intent::AddLayer(clip),
+            Intent::SetMeta {
+                layer: clip,
+                meta: LayerMeta {
+                    source: LayerSource::File {
+                        path: path.into(),
+                        fingerprint: Some("fixture-v1".into()),
+                    },
+                    order: 0,
+                    timing: LayerTiming::place(0, None, 90),
+                },
+            },
+        ])
+        .unwrap();
+
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+        let at = crate::doc::core::RationalTime::try_new(1, 2).unwrap();
+        let frame = graph
+            .evaluate(&mut executor, at, FrameQuality::Export, Generation::new(1))
+            .unwrap();
+        let scene = frame
+            .value(root)
+            .and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>())
+            .unwrap();
+
+        match &scene.layers[0].content {
+            crate::frame_graph::SceneContentValue::Media { source, time } => {
+                assert_eq!(source.path, path);
+                assert_eq!(*time, at);
+            }
+            other => panic!("file frame lowered to the wrong scene content: {other:?}"),
+        }
+    }
+
 }
