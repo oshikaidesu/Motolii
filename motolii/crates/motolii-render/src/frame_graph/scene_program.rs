@@ -41,11 +41,11 @@ enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: us
 pub struct SceneProgramNodes { pub scene: NodeKey }
 
 #[derive(Debug)]
-pub enum SceneNodeError { Store(StoreError), GroupComposite(GroupCompositeProgramError), InvalidInput(NodeKind) }
+pub enum SceneNodeError { Store(StoreError), GroupComposite(String), InvalidInput(NodeKind) }
 impl std::fmt::Display for SceneNodeError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
 impl std::error::Error for SceneNodeError {}
 impl From<StoreError> for SceneNodeError { fn from(value: StoreError) -> Self { Self::Store(value) } }
-impl From<GroupCompositeProgramError> for SceneNodeError { fn from(value: GroupCompositeProgramError) -> Self { Self::GroupComposite(value) } }
+impl From<GroupCompositeProgramError> for SceneNodeError { fn from(value: GroupCompositeProgramError) -> Self { Self::GroupComposite(value.to_string()) } }
 
 pub struct SceneNodeProgram {
     nodes: BTreeMap<NodeKey, GraphNode>,
