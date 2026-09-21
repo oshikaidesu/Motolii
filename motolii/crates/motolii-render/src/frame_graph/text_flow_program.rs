@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::doc::core::{Fps, LayerTiming};
+use crate::doc::core::Fps;
 use crate::doc::eval::Value;
-use crate::doc::store::{layout, EffectId, LayerId, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
+use crate::doc::store::{layout, EffectId, LayerId, LayerSource, LayerTiming, PropertyId, ShapeNode, StoreError, StoreView};
 use crate::doc::vector::text::ShapedText;
 use crate::picture::shapes_ops::Canvas;
 
@@ -47,6 +47,7 @@ enum Recipe {
         shape_margin: Option<usize>,
         layout_margin: Option<usize>,
         analysis: Option<usize>,
+        canvas: Canvas,
     },
     Layout {
         base: usize,
@@ -168,6 +169,7 @@ impl TextFlowProgram {
                 shape_margin,
                 layout_margin,
                 analysis: analysis_input,
+                canvas,
             });
             nodes.insert(key, node);
             obstacles.insert(layer, (key, flow_binding.index, view.attrs(layer)?.unwrap_or_default().parent));
@@ -294,9 +296,10 @@ impl TextFlowProgram {
                 shape_margin,
                 layout_margin,
                 analysis,
+                canvas,
             } => obstacle_value(
                 node, inputs, context, *layer, *timing, *fps, source, *transform, *flow,
-                *flow_index, *content, *mode, *shape_margin, *layout_margin, *analysis,
+                *flow_index, *content, *mode, *shape_margin, *layout_margin, *analysis, *canvas,
             ).map(NodeValue::new),
             Recipe::Layout { base, transform, flow, canvas, obstacles, .. } => {
                 layout_text(node, inputs, context, *base, *transform, *flow, *canvas, obstacles).map(NodeValue::new)
@@ -325,6 +328,7 @@ fn obstacle_value(
     shape_margin_input: Option<usize>,
     layout_margin_input: Option<usize>,
     analysis_input: Option<usize>,
+    canvas: Canvas,
 ) -> Result<ObstacleValue, TextFlowProgramError> {
     let frame = context.time.try_to_frame_floor(fps).map_err(|error| StoreError::Property(error.to_string()))?;
     if !timing.covers(frame) {
@@ -390,7 +394,7 @@ fn obstacle_value(
                 .and_then(|text| crate::picture::text_frame::line_box(
                     &text.document,
                     &text.shaped,
-                    &Canvas { width: 1, height: 1, origin_x: 0, origin_y: 0 },
+                    &canvas,
                 ))
                 .map(rectangle)
                 .into_iter()
