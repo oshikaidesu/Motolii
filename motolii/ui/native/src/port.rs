@@ -491,7 +491,8 @@ mod poster_probe {
             let i=((y*comp.width+x)*4) as usize;
             eprintln!("({x},{y}) = {:?}",&pixels[i..i+4]);
         }
-        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&crate::render::picture::resolve::resolved_layers(&view, time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
+        let resolved=rt.engine.resolved_for(&view,time).unwrap();
+        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&resolved,id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
     }
 }
 
