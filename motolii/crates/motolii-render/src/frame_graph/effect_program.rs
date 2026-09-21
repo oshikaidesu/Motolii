@@ -97,7 +97,7 @@ mod tests {
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology); let mut executor = Executor(&program);
         let frame = graph.evaluate(&mut executor, crate::doc::core::RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
         let scene = frame.value(root).and_then(|value| value.downcast_ref::<SceneValue>()).unwrap();
-        assert!(scene.layers[0].effects.is_empty());
-        assert_eq!(scene.layers[0].after_effects[0].params, vec![("amount".into(), Value::F64(0.5))]);
+        assert_eq!(scene.layers[0].effects[0].params, vec![("amount".into(), Value::F64(0.5))]);
+        assert!(scene.layers[0].after_effects.is_empty(), "scope is only a Group distribution rule");
     }
 }
