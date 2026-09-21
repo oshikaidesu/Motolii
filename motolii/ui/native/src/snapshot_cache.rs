@@ -111,9 +111,9 @@ impl EditorRuntime {
         Ok(dirty)
     }
 
-    pub(crate) fn status(&self) -> Result<Value, String> { self.status_response(None, None) }
+    pub(crate) fn status(&mut self) -> Result<Value, String> { self.status_response(None, None) }
 
-    pub(crate) fn status_response(&self, known: Option<u64>, known_references: Option<u64>) -> Result<Value, String> {
+    pub(crate) fn status_response(&mut self, known: Option<u64>, known_references: Option<u64>) -> Result<Value, String> {
         // 描画後は読み戻した選択範囲でgeometryを更新する。文書の行と参照データは再利用する。
         // 音の健康と波形は Document 版と無関係に動くので、鍵に入れて古い body を残さない。
         // 棚で断った理由は世代を動かさずに変わる(壊れた保存)。鍵に指紋を入れて古い body を残さない。
