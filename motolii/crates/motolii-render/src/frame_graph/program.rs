@@ -51,7 +51,7 @@ pub struct SceneProgram {
 impl SceneProgram {
     pub fn compile(view: &StoreView<'_>) -> Result<Self, SceneProgramError> {
         let properties = PropertyProgram::compile(view)?;
-        let content = ContentProgram::compile(view)?;
+        let content = ContentProgram::compile(view, &properties)?;
         let flow = FlowProgram::compile(view, &properties, &content)?;
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
         let text = TextProgram::compile(view, &content, &flow)?;
