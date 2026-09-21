@@ -231,3 +231,113 @@ fn append_each(contribution: &mut SceneContributionValue, effects: &[crate::pict
 fn seed_layer_id(children: &[SceneContributionValue]) -> Option<LayerId> {
     children.iter().find_map(|child| child.layer.as_ref().map(|layer| layer.layer))
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::doc::eval::Value;
+    use crate::doc::store::{
+        Composition, EffectId, EffectInstance, Fps, LayerAttrsPatch, LayerMeta, LayerSource,
+        LayerTiming, PropertyId, ShapeNode,
+    };
+    use crate::doc::vector::{Brush, Fill, PathSource, Point, Rgb, Shape};
+    use crate::frame_graph::{
+        CompiledGraph, FrameQuality, Generation, GraphRevision, GraphTopology, NodeExecutor,
+        SceneContentValue, SceneProgram, SceneProgramError, SceneValue,
+    };
+    use motolii_edit::{Document, Intent};
+
+    struct Executor<'a>(&'a SceneProgram);
+    impl NodeExecutor for Executor<'_> {
+        type Error = SceneProgramError;
+        fn execute(
+            &mut self,
+            node: &GraphNode,
+            inputs: NodeInputs,
+            context: EvaluationContext,
+        ) -> Result<NodeValue, Self::Error> {
+            self.0.execute(node, &inputs, &context)
+        }
+    }
+
+    fn rectangle() -> Vec<ShapeNode> {
+        vec![ShapeNode::Leaf(Shape {
+            source: PathSource::Rectangle { size: Point { x: 20.0, y: 20.0 } },
+            ops: Vec::new(),
+            stroke: None,
+            fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }),
+        })]
+    }
+
+    #[test]
+    fn group_each_stays_on_children_and_whole_becomes_one_plate() {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 30,
+            background: [0.0; 4],
+        })).unwrap();
+
+        let group = LayerId(1);
+        let leaf = LayerId(2);
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 30) } },
+            Intent::AddLayer(leaf),
+            Intent::SetMeta { layer: leaf, meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 30) } },
+            Intent::SetAttrs { layer: leaf, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } },
+            Intent::SetShapes { layer: leaf, shapes: rectangle() },
+        ]).unwrap();
+
+        let leaf_effect = EffectId(10);
+        doc.apply(Intent::SetEffects {
+            layer: leaf,
+            effects: vec![EffectInstance { id: leaf_effect, plugin_id: "leaf.own".into() }],
+        }).unwrap();
+
+        let each = EffectId(20);
+        let whole = EffectId(21);
+        let after = EffectId(22);
+        doc.apply(Intent::SetEffects {
+            layer: group,
+            effects: vec![
+                EffectInstance { id: each, plugin_id: "group.each".into() },
+                EffectInstance { id: whole, plugin_id: "group.whole".into() },
+                EffectInstance { id: after, plugin_id: "group.after".into() },
+            ],
+        }).unwrap();
+        doc.apply(Intent::SetConstant {
+            layer: group,
+            property: PropertyId::effect_scope(whole),
+            value: Value::Enum(EffectScope::Whole.enum_value()),
+        }).unwrap();
+
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+        let frame = graph.evaluate(
+            &mut executor,
+            crate::doc::core::RationalTime::ZERO,
+            FrameQuality::Export,
+            Generation::new(1),
+        ).unwrap();
+        let scene = frame.value(root).and_then(|value| value.downcast_ref::<SceneValue>()).unwrap();
+
+        let plate_layer = scene.layers.iter().find(|layer| matches!(layer.content, SceneContentValue::Plate(_))).expect("Group Whole must create one semantic plate");
+        assert_eq!(
+            plate_layer.effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(),
+            ["group.whole", "group.after"],
+        );
+        let SceneContentValue::Plate(plate) = &plate_layer.content else { unreachable!() };
+        let member = plate.members.iter().find_map(|member| member.layer.as_ref()).expect("plate member");
+        assert_eq!(
+            member.effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(),
+            ["leaf.own", "group.each"],
+        );
+    }
+}
