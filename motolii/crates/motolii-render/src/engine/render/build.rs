@@ -312,7 +312,7 @@ impl Engine {
     /// 平面へ収める。3D の素材を comp の絵へ一度焼き、以後は板として扱う
     /// (裁定 2026-08-30「平面に収めるのは選択肢」)。焼いた層にも blend・matte・
     /// エフェクトは今まで通り効く。
-    fn flatten_if_asked(
+    pub(in crate::engine) fn flatten_if_asked(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
