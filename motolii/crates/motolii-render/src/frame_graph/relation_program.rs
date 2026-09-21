@@ -22,15 +22,18 @@ pub struct RelationBinding {
 }
 
 #[derive(Clone)]
-struct Recipe {
-    parent: Option<LayerId>,
-    anchor: Option<usize>,
-    area: Option<usize>,
-    connect_from: Option<usize>,
-    connect_to: Option<usize>,
-    trace: Option<usize>,
-    line_path: Option<usize>,
-    slack: Option<usize>,
+enum Recipe {
+    Layer {
+        parent: Option<LayerId>,
+        anchor: Option<usize>,
+        area: Option<usize>,
+        connect_from: Option<usize>,
+        connect_to: Option<usize>,
+        trace: Option<usize>,
+        line_path: Option<usize>,
+        slack: Option<usize>,
+    },
+    Set { layers: Vec<LayerId> },
 }
 
 #[derive(Debug)]
@@ -49,10 +52,16 @@ impl From<StoreError> for RelationProgramError {
     fn from(value: StoreError) -> Self { Self::Store(value) }
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RelationSetValue {
+    pub layers: BTreeMap<LayerId, RelationValue>,
+}
+
 pub struct RelationProgram {
     nodes: BTreeMap<NodeKey, GraphNode>,
     recipes: BTreeMap<NodeKey, Recipe>,
     bindings: BTreeMap<LayerId, RelationBinding>,
+    output: NodeKey,
 }
 
 impl RelationProgram {
@@ -89,7 +98,7 @@ impl RelationProgram {
             let key = node.key();
 
             nodes.entry(key).or_insert(node);
-            recipes.entry(key).or_insert(Recipe {
+            recipes.entry(key).or_insert(Recipe::Layer {
                 parent: attrs.parent,
                 anchor,
                 area,
@@ -102,7 +111,16 @@ impl RelationProgram {
             bindings.insert(layer, RelationBinding { layer, node: key });
         }
 
-        Ok(Self { nodes, recipes, bindings })
+        let layers: Vec<_> = bindings.keys().copied().collect();
+        let inputs: Vec<_> = layers.iter().filter_map(|layer| bindings.get(layer).map(|binding| binding.node)).collect();
+        let mut identity = NodeIdentity::new(NodeKind::RelationSet, inputs);
+        identity.time_dependency = TimeDependency::Exact;
+        let node = GraphNode::new(identity);
+        let output = node.key();
+        nodes.insert(output, node);
+        recipes.insert(output, Recipe::Set { layers });
+
+        Ok(Self { nodes, recipes, bindings, output })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ {
@@ -117,6 +135,8 @@ impl RelationProgram {
         self.bindings.values().copied()
     }
 
+    pub fn output(&self) -> NodeKey { self.output }
+
     pub fn execute(
         &self,
         node: &GraphNode,
@@ -124,6 +144,21 @@ impl RelationProgram {
         _context: &EvaluationContext,
     ) -> Option<Result<NodeValue, RelationProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
+        if let Recipe::Set { layers } = recipe {
+            let mut values = BTreeMap::new();
+            for (index, layer) in layers.iter().enumerate() {
+                let value = inputs.at(index)
+                    .and_then(|value| value.downcast_ref::<RelationValue>())
+                    .cloned()
+                    .ok_or(RelationProgramError::InvalidInput(node.identity().kind));
+                match value {
+                    Ok(value) => { values.insert(*layer, value); }
+                    Err(error) => return Some(Err(error)),
+                }
+            }
+            return Some(Ok(NodeValue::new(RelationSetValue { layers: values })));
+        }
+        let Recipe::Layer { parent, anchor, area, connect_from, connect_to, trace, line_path, slack } = recipe else { unreachable!() };
         Some((|| {
             let layer_id = |index: Option<usize>| -> Result<Option<LayerId>, RelationProgramError> {
                 Ok(match index.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()) {
@@ -149,26 +184,26 @@ impl RelationProgram {
                 })
             };
 
-            let anchor = layer_id(recipe.anchor)?;
-            let follow_anchor = choice(recipe.area, 0)? > 0 && anchor.is_some();
-            let from = layer_id(recipe.connect_from)?;
-            let to = layer_id(recipe.connect_to)?;
+            let anchor = layer_id(*anchor)?;
+            let follow_anchor = choice(*area, 0)? > 0 && anchor.is_some();
+            let from = layer_id(*connect_from)?;
+            let to = layer_id(*connect_to)?;
             let connection = match (from, to) {
                 (Some(from), Some(to)) if from != to => Some((from, to)),
                 _ => None,
             };
-            let trace_kind = choice(recipe.trace, 0)?;
+            let trace_kind = choice(*trace, 0)?;
             let trace = if connection.is_none() && trace_kind > 0 {
                 from.map(|target| (target, trace_kind))
             } else {
                 None
             };
-            let rope_slack = (choice(recipe.line_path, 0)? == 4)
-                .then(|| number(recipe.slack, 20.0).map(|value| value.max(0.0) as f32))
+            let rope_slack = (choice(*line_path, 0)? == 4)
+                .then(|| number(*slack, 20.0).map(|value| value.max(0.0) as f32))
                 .transpose()?;
 
             Ok(NodeValue::new(RelationValue {
-                parent: recipe.parent,
+                parent: *parent,
                 anchor,
                 follow_anchor,
                 connection,
