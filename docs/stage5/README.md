@@ -8,7 +8,7 @@
 
 ## コンセプトと採用事項
 
-[根本コンセプト](../concept.md) → [UIと操作の採用事項](product-contract.md) → [文書の救出・照合](document-map.md)。保存形式・GPU共有・測定の範囲は[技術境界](technical-boundaries.md)。下記は実装の配置と移行状況であり、製品コンセプトの代わりではない。
+[根本コンセプト](../concept.md) → [UIと操作の採用事項](product-contract.md) → [FrameGraph実行モデル](frame-graph.md) → [文書の救出・照合](document-map.md)。保存形式・GPU共有・測定の範囲は[技術境界](technical-boundaries.md)。下記は実装の配置と移行状況であり、製品コンセプトの代わりではない。
 
 ## 正本
 
