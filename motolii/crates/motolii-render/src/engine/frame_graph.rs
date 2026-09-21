@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, SceneProgram, SceneValue, TimeDependency};
+use crate::frame_graph::{CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
 use crate::picture::resolved::ResolvedLayer;
 
 use super::frame_graph_scene::GpuSceneValue;
@@ -39,8 +39,9 @@ impl EngineFrameGraph {
         let program = SceneProgram::compile(view).map_err(|error| EngineError::Store(error.to_string()))?;
         let scene = program.scene().scene;
         let document_camera = program.camera();
+        let solver = program.solver().key();
         let mut nodes: Vec<_> = program.nodes().collect();
-        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera]);
+        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera, solver]);
         gpu_identity.time_dependency = TimeDependency::Exact;
         let gpu = GraphNode::new(gpu_identity);
         let projection = |role| {
@@ -117,13 +118,14 @@ impl NodeExecutor for ProgramExecutor<'_> {
             NodeKind::GpuScene => {
                 let scene = direct::<SceneValue>(node, &inputs, 0)?;
                 let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
+                let solver = direct::<SolverPlanValue>(node, &inputs, 2)?;
                 let frame = context.time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
                 self.engine.compositor.clock = Some([
                     context.time.as_seconds_f64() as f32,
                     self.fps.den() as f32 / self.fps.num() as f32,
                     frame,
                 ]);
-                let prepared = self.engine.prepare_gpu_scene(scene, self.comp, camera)?;
+                let prepared = self.engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, context.time, self.fps)?;
                 Ok(NodeValue::new(Arc::new(prepared)))
             }
             NodeKind::CameraProjection => {
