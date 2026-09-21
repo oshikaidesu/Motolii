@@ -220,6 +220,19 @@ impl Engine {
                 frame: frozen_frame,
             };
             let layer = self.apply_masks_to_layer(layer, &source.masks, natural, frozen_frame)?;
+            let source_tick = match &source.content {
+                SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
+                _ => 0,
+            };
+            let layer = self.apply_material_domains_semantic(
+                layer,
+                source.layer,
+                &source.effects,
+                matches!(source.source, crate::doc::store::LayerSource::File { .. }),
+                source_tick,
+                natural,
+                frozen_frame,
+            )?;
             let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
             layers.push(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
             entries.push(Entry {
