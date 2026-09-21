@@ -102,6 +102,8 @@ pub enum NodeKind {
     CameraProjection,
     /// One authored layer's ordered contribution to the scene.
     CompositeContribution,
+    /// A Group scope over its direct children. It becomes a plate only when an evaluated Whole effect requires one.
+    GroupComposite,
     /// The ordered shared scene before any view projection.
     SceneComposite,
     /// GPU-ready layer resources shared by every final projection.
