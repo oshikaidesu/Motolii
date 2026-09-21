@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
+    Analysis(AnalysisProgramError),
     Property(PropertyProgramError),
     Content(ContentProgramError),
     Transform(TransformProgramError),
@@ -27,6 +28,7 @@ pub enum SceneProgramError {
 }
 impl std::fmt::Display for SceneProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
 impl std::error::Error for SceneProgramError {}
+impl From<AnalysisProgramError> for SceneProgramError { fn from(value: AnalysisProgramError) -> Self { Self::Analysis(value) } }
 impl From<PropertyProgramError> for SceneProgramError { fn from(value: PropertyProgramError) -> Self { Self::Property(value) } }
 impl From<ContentProgramError> for SceneProgramError { fn from(value: ContentProgramError) -> Self { Self::Content(value) } }
 impl From<TransformProgramError> for SceneProgramError { fn from(value: TransformProgramError) -> Self { Self::Transform(value) } }
@@ -48,6 +50,7 @@ impl From<SolverProgramError> for SceneProgramError { fn from(value: SolverProgr
 /// One immutable revision program. Compiler bindings are the only place that
 /// remembers layer ids; runtime execution follows content-addressed edges.
 pub struct SceneProgram {
+    analysis: AnalysisProgram,
     properties: PropertyProgram,
     content: ContentProgram,
     transforms: TransformProgram,
@@ -77,25 +80,29 @@ impl SceneProgram {
         let flow = FlowProgram::compile(view, &properties, &content)?;
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
         let effects = EffectProgram::compile(view, &properties)?;
-        let placements = PlacementProgram::compile(view, &properties, &effects, &transforms)?;
         let motion = MotionProgram::compile(view, &properties, &effects, &transforms, &flow)?;
         let particles = ParticleProgram::compile(view, &properties)?;
-        let relations = RelationProgram::compile(view, &properties)?;
-        let solver = SolverProgram::compile(view, &properties, &relations, &flow)?;
         let text = TextProgram::compile(view, &content, &flow, &properties)?;
         let groups = GroupBackgroundProgram::compile(view, &properties, &flow)?;
         let masks = MaskProgram::compile(view, &properties)?;
+        let analysis = AnalysisProgram::compile(
+            view, &properties, &content, &transforms, &visibility, &effects, &masks, &text, &groups, &particles,
+        )?;
+        let placements = PlacementProgram::compile(view, &properties, &effects, &transforms, &analysis)?;
+        let relations = RelationProgram::compile(view, &properties)?;
+        let solver = SolverProgram::compile(view, &properties, &relations, &flow)?;
         let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
         let lookbehind = LookbehindProgram::compile(view, scene.output().scene)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
         let roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
-        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, relations, solver, nodes, roots })
+        Ok(Self { analysis, properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, relations, solver, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn roots(&self) -> impl ExactSizeIterator<Item = NodeKey> + '_ { self.roots.iter().copied() }
+    pub fn analysis(&self) -> &AnalysisProgram { &self.analysis }
     pub fn properties(&self) -> &PropertyProgram { &self.properties }
     pub fn content(&self) -> &ContentProgram { &self.content }
     pub fn transforms(&self) -> &TransformProgram { &self.transforms }
@@ -112,6 +119,9 @@ impl SceneProgram {
     pub fn solver(&self) -> &SolverProgram { &self.solver }
 
     pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<DynamicInput>, SceneProgramError> {
+        if let Some(requests) = self.analysis.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
         if let Some(requests) = self.placements.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
@@ -142,6 +152,7 @@ impl SceneProgram {
         if let Some(value) = self.masks.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.groups.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.visibility.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.analysis.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.placements.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.motion.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.lookbehind.execute(node, inputs, context) { return value.map_err(Into::into); }
