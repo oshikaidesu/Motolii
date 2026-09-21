@@ -6,6 +6,7 @@ use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use std::collections::HashMap;
 
 use crate::doc::core::CompSpec;
+use crate::frame_graph::{SceneContentValue, SceneLayerValue, SceneValue, SolverPlanValue};
 use crate::doc::store::{LayerId, MaskFrame, PropertyId, RationalTime, StoreView, Value};
 use crate::render::compositor::effects::block_program::{BlockItem, BlockProgram, BlockWorld, FollowPass, WorldPass};
 use crate::render::compositor::effects::isf::IsfStage;
@@ -613,17 +614,19 @@ impl Engine {
 
     /// 組んだ 1 枚にブロックが掛かっていれば、描く時と同じ置き方の箱を物として並べ、motion の番号を最後の欄に入れる。
     pub(super) fn attach_block(&mut self, layer: &ResolvedLayer, built: &mut Layer, comp: CompSpec) {
+        self.attach_block_id(layer.id, built, comp);
+    }
+
+    pub(in crate::engine) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec) {
         // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
         // その物の comp → world の向き(組んだ素材の大きさが要るのでここでしか作れない)。
-        let Some(&k) = self.blocks.slots.get(&layer.id) else {
-            // 物でない層: つなぐ線は物の後ろの自分の番号、なぞる形は相手の番号を読む。
-            if let Some(c) = self.blocks.connectors.iter().position(|(id, _, _)| *id == layer.id) {
+        let Some(&k) = self.blocks.slots.get(&layer) else {
+            if let Some(c) = self.blocks.connectors.iter().position(|(id, _, _)| *id == layer) {
                 built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (self.blocks.objects.len() + 2 * c + 1) as f32;
                 if self.blocks.ropes.iter().any(|(index, ..)| *index as usize == c) {
-                    // 紐は曲線に沿って頂点が動くので板を刻む。
                     built.shading.grid_hint = 48;
                 }
-            } else if let Some(&target) = self.blocks.traces.get(&layer.id) {
+            } else if let Some(&target) = self.blocks.traces.get(&layer) {
                 built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (target + 1) as f32;
             }
             return;
@@ -638,7 +641,7 @@ impl Engine {
         let (per_x, per_y) = (u / size.x, v / size.y);
         let inverse = if m.matrix2.determinant().abs() > 1e-12 { m.matrix2.inverse() } else { glam::Mat2::IDENTITY };
         let world = |comp_step: glam::Vec2| { let material = inverse * comp_step; (per_x * material.x + per_y * material.y).to_array() };
-        let own = self.blocks.placed.get(&layer.id).map(|p| p.own).unwrap_or([0.0; 4]);
+        let own = self.blocks.placed.get(&layer).map(|p| p.own).unwrap_or([0.0; 4]);
         let middle = glam::Vec2::new((own[0] + own[2]) * 0.5, (own[1] + own[3]) * 0.5);
         let centre = origin + u * (middle.x / size.x) + v * (middle.y / size.y);
         if let Some(slot) = self.blocks.bases.get_mut(k as usize) {
