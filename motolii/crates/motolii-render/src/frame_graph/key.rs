@@ -92,6 +92,8 @@ pub enum NodeKind {
     MediaFrame,
     /// Exact-time authored participation: hidden/solo/timing.
     Visibility,
+    /// A fixed authored temporal duplicate (Ghost) of a scene contribution.
+    TemporalCopy,
     /// Evaluated placement-effect outputs before they become scene copies.
     PlacementSet,
     /// Authored local placement after layout.
