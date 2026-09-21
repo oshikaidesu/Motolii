@@ -49,6 +49,9 @@ pub struct EditorRuntime {
     frames: frames::Frames,
     /// 再生中の 1 コマを持ち主ごとに畳む。▶ で空にし、Ⅱ で 1 度だけ出す。
     owners: owners::FrameOwners,
+    /// 面ごとに前回描いた窓(roi・寸法・投影)。同じ窓のまま時刻だけ動く道
+    /// —— 時間帯のドラッグ —— は、絵と窓を揃えるために待つ必要がない。
+    last_window: std::collections::HashMap<&'static str, Window>,
     /// host の再生 pulse が既に提出した時刻。Flutter の vsync ではなく native
     /// の時計がこれを進め、同じ作中コマを二度 CPU で解かない。
     playback_rendered_frame: Option<i64>,
@@ -97,7 +100,7 @@ impl EditorRuntime {
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
             flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
             history, effects_watch: None, last_script: None, frames,
-            owners: Default::default(),
+            owners: Default::default(), last_window: Default::default(),
             playback_rendered_frame: None,
         })
     }
@@ -222,9 +225,13 @@ impl EditorRuntime {
         // as an explicit preload, but forbidden on the realtime render path:
         // it turns one submitted frame into two extra full-document resolves.
         self.frames.submitted(submission, view.name(), surface_id);
-        // 止まっている 1 枚は、絵と窓(roi)が同じコマで揃っていないといけないので、ここで待つ
-        // (掴む・伸ばす・Fit の道)。再生中だけは待たない —— UI thread を GPU に明け渡さない。
-        if !self.viewer.clock.playing() { self.frames.finish(); }
+        // 絵と窓(roi)が同じコマで揃っていないといけない道 —— 掴む・伸ばす・Fit —— はここで待つ。
+        // **窓が同じまま時刻だけ動く道(時間帯のドラッグ)は揃える相手が居ない**ので待たない:
+        // 待つと UI thread が GPU に明け渡され、掴んでいる手がカクつく(2026-09-21 の標本で
+        // main thread の 22.5% が semaphore 待ち)。再生中も待たない。
+        let same_window = self.last_window.insert(view.name(), window) == Some(window);
+        let coherent = self.stage_drag.is_some() || !same_window;
+        if !self.viewer.clock.playing() && coherent { self.frames.finish(); }
         // Playback has no outline, so a selection readback and geometry cache
         // invalidation cannot produce a new cage. Keep both off the realtime
         // path; exact still frames retain the bridge below.
