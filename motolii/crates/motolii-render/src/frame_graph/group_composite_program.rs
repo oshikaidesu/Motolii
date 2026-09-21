@@ -12,6 +12,7 @@ pub(super) struct SceneFragmentValue {
 
 #[derive(Clone)]
 struct Recipe {
+    group: LayerId,
     child_count: usize,
     effect_start: usize,
 }
@@ -115,7 +116,7 @@ impl GroupCompositeProgram {
             let node = GraphNode::new(identity);
             let key = node.key();
             program.nodes.entry(key).or_insert(node);
-            program.recipes.entry(key).or_insert(Recipe { child_count, effect_start });
+            program.recipes.entry(key).or_insert(Recipe { group, child_count, effect_start });
             program.group_nodes.insert(group, key);
             visiting.remove(&group);
             Ok(key)
@@ -195,9 +196,9 @@ impl GroupCompositeProgram {
             let seed = children.iter().find_map(|child| child.layer.as_ref()).cloned();
             if let Some(mut layer) = seed {
                 let owner_layer = owner.layer.as_ref();
-                layer.layer = seed_layer_id(&children).unwrap_or(layer.layer);
+                layer.layer = recipe.group;
                 layer.content_key = None;
-                layer.content = SceneContentValue::Plate(ScenePlateValue { members: children, average: false });
+                layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(recipe.group), members: children, average: false });
                 layer.effects = whole;
                 layer.after_effects.clear();
                 layer.masks.clear();
