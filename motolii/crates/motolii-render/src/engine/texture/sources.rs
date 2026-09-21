@@ -230,7 +230,7 @@ impl Engine {
         ))
     }
 
-    fn shape_texture_from_shapes(
+    pub(in crate::engine) fn shape_texture_from_shapes(
         &mut self,
         shapes: &[ShapeNode],
         layer_id: LayerId,
@@ -291,7 +291,7 @@ impl Engine {
         self.probes.get(path).map(|info| [info.width as f32, info.height as f32, 0.0])
     }
 
-    fn mesh_content_for(
+    pub(in crate::engine) fn mesh_content_for(
         &mut self,
         path: &str,
         comp: CompSpec,

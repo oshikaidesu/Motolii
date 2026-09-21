@@ -9,6 +9,21 @@ use super::{ContentProgram, EvaluationContext, FlowFrameValue, FlowProgram, Grap
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText }
 
+impl TextShapeValue {
+    pub fn shapes(&self) -> Vec<crate::doc::store::ShapeNode> {
+        use crate::doc::vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape};
+        let mut batches: Vec<(usize, Vec<crate::doc::vector::Contour>)> = Vec::new();
+        for (contour, style) in self.shaped.contours.iter().cloned().zip(&self.shaped.contour_styles) {
+            if let Some((_, contours)) = batches.last_mut().filter(|(index, _)| index == style) { contours.push(contour); }
+            else { batches.push((*style, vec![contour])); }
+        }
+        batches.into_iter().filter_map(|(index, contours)| {
+            let style = self.document.styles.get(index)?;
+            Some(crate::doc::store::ShapeNode::Leaf(Shape { source: PathSource::Bezier(contours), ops: Vec::new(), fill: Some(Fill { brush: Brush::Solid(Rgb { r: style.fill[0], g: style.fill[1], b: style.fill[2] }), rule: FillRule::NonZero, opacity: style.fill[3], hidden: false }), stroke: None }))
+        }).collect()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextBinding { pub layer: LayerId, pub shape: NodeKey }
 
