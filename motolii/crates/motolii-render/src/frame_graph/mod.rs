@@ -1,0 +1,313 @@
+//! The single scheduling boundary between authored document state and views.
+//! S0 deliberately contains no renderer adapter: later lanes supply node
+//! evaluators and GPU submissions without changing these ownership rules.
+
+mod key;
+mod topology;
+mod value;
+
+use std::collections::BTreeSet;
+
+use crate::doc::core::RationalTime;
+use crate::doc::store::StoreView;
+
+pub use key::{
+    FrameQuality, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency, WorkKey,
+};
+pub use topology::{GraphNode, GraphTopology, TopologyError};
+pub use value::{
+    EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
+    RenderTarget, Submission, ViewProjection,
+};
+
+/// Compile document meaning once for the current document read revision.
+///
+/// S0 freezes the entry point while keeping topology empty. The compiler lane
+/// will replace only the topology construction, not the document/evaluation
+/// boundary exposed here.
+pub fn compile(view: &StoreView<'_>) -> CompiledGraph {
+    CompiledGraph::empty(GraphRevision::new(view.revision_key()))
+}
+
+/// Immutable topology plus the mutable result cache and generation gate.
+/// `StoreView` exists only in [`compile`], never in this owner.
+pub struct CompiledGraph {
+    revision: GraphRevision,
+    topology: GraphTopology,
+    completed: BTreeSet<WorkKey>,
+    latest_generation: Option<Generation>,
+    stats: GraphStats,
+}
+
+impl CompiledGraph {
+    pub fn empty(revision: GraphRevision) -> Self {
+        Self::with_topology(revision, GraphTopology::empty())
+    }
+
+    pub fn with_topology(revision: GraphRevision, topology: GraphTopology) -> Self {
+        Self {
+            revision,
+            topology,
+            completed: BTreeSet::new(),
+            latest_generation: None,
+            stats: GraphStats {
+                topology_compiles: 1,
+                ..GraphStats::default()
+            },
+        }
+    }
+
+    pub fn revision(&self) -> GraphRevision {
+        self.revision
+    }
+
+    pub fn topology(&self) -> &GraphTopology {
+        &self.topology
+    }
+
+    pub fn stats(&self) -> GraphStats {
+        self.stats
+    }
+
+    /// Remove only changed nodes and their graph descendants from the result
+    /// cache. Unrelated nodes remain available to the next generation.
+    pub fn invalidate(&mut self, changed: impl IntoIterator<Item = NodeKey>) -> BTreeSet<NodeKey> {
+        let dirty = self.topology.downstream_of(changed);
+        self.completed.retain(|work| !dirty.contains(&work.node()));
+        dirty
+    }
+
+    /// Evaluate each reachable node at most once. S0 records the scheduling
+    /// result only; the evaluator lane will attach actual node values here.
+    pub fn evaluate(
+        &mut self,
+        time: RationalTime,
+        quality: FrameQuality,
+        generation: Generation,
+    ) -> EvaluatedFrame {
+        if self
+            .latest_generation
+            .is_some_and(|latest| generation < latest)
+        {
+            return EvaluatedFrame {
+                revision: self.revision,
+                generation,
+                time,
+                quality,
+                state: FrameState::Stale,
+                executed: Vec::new(),
+                reused: Vec::new(),
+            };
+        }
+        self.latest_generation = Some(generation);
+
+        let mut executed = Vec::new();
+        let mut reused = Vec::new();
+        for node in self.topology.reachable() {
+            let identity = self
+                .topology
+                .node(node)
+                .expect("reachable nodes belong to the topology")
+                .identity();
+            let work = WorkKey::for_node(identity, time, quality);
+            if self.completed.insert(work) {
+                self.stats.node_executions += 1;
+                executed.push(node);
+            } else {
+                self.stats.node_reuses += 1;
+                reused.push(node);
+            }
+        }
+        EvaluatedFrame {
+            revision: self.revision,
+            generation,
+            time,
+            quality,
+            state: FrameState::Current,
+            executed,
+            reused,
+        }
+    }
+
+    /// A host may publish only a submission from the current generation of
+    /// this graph. This is the cancellation gate for late GPU/worker results.
+    pub fn publish(&self, submission: &Submission) -> Option<PublishedFrame> {
+        (submission.state == FrameState::Current
+            && submission.revision == self.revision
+            && Some(submission.generation) == self.latest_generation)
+            .then_some(PublishedFrame {
+                generation: submission.generation,
+                target: submission.target,
+            })
+    }
+}
+
+/// Turn an already-evaluated scene into a view-specific render request. This
+/// intentionally cannot accept `StoreView`.
+pub fn render_view(
+    frame: &EvaluatedFrame,
+    projection: ViewProjection,
+    target: RenderTarget,
+) -> Submission {
+    Submission {
+        revision: frame.revision,
+        generation: frame.generation,
+        projection,
+        target,
+        state: frame.state,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(kind: u16, inputs: Vec<NodeKey>) -> GraphNode {
+        GraphNode::new(NodeIdentity::new(NodeKind::Custom(kind), inputs))
+    }
+
+    #[test]
+    fn one_node_key_executes_once_through_two_roots_and_one_hundred_instances() {
+        let shared = node(1, vec![]);
+        let instances: Vec<_> = (0..100).map(|n| node(2 + n, vec![shared.key()])).collect();
+        let scene = node(200, instances.iter().map(GraphNode::key).collect());
+        let camera = node(201, vec![scene.key()]);
+        let stage = node(202, vec![scene.key()]);
+        let graph = GraphTopology::try_new(
+            std::iter::once(shared.clone()).chain(instances).chain([
+                scene.clone(),
+                camera.clone(),
+                stage.clone(),
+            ]),
+            vec![camera.key(), stage.key()],
+        )
+        .unwrap();
+        let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
+
+        let frame = compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(1));
+
+        assert_eq!(
+            frame
+                .executed_nodes()
+                .iter()
+                .filter(|key| **key == shared.key())
+                .count(),
+            1
+        );
+        assert_eq!(
+            frame
+                .executed_nodes()
+                .iter()
+                .filter(|key| **key == scene.key())
+                .count(),
+            1
+        );
+        assert_eq!(compiled.stats().node_executions, 103);
+    }
+
+    #[test]
+    fn dirtying_a_node_reexecutes_only_its_downstream_and_keeps_one_topology_per_revision() {
+        let source = node(1, vec![]);
+        let middle = node(2, vec![source.key()]);
+        let output = node(3, vec![middle.key()]);
+        let unrelated = node(4, vec![]);
+        let graph = GraphTopology::try_new(
+            [
+                source.clone(),
+                middle.clone(),
+                output.clone(),
+                unrelated.clone(),
+            ],
+            vec![output.key(), unrelated.key()],
+        )
+        .unwrap();
+        let mut compiled = CompiledGraph::with_topology(GraphRevision::new(7), graph);
+        compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(1));
+
+        let dirty = compiled.invalidate([source.key()]);
+        let frame = compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(2));
+
+        assert_eq!(
+            dirty,
+            BTreeSet::from([source.key(), middle.key(), output.key()])
+        );
+        assert_eq!(
+            frame.executed_nodes(),
+            &[source.key(), middle.key(), output.key()]
+        );
+        assert_eq!(frame.reused_nodes(), &[unrelated.key()]);
+        assert_eq!(compiled.stats().topology_compiles, 1);
+    }
+
+    #[test]
+    fn a_stale_generation_cannot_publish() {
+        let root = node(1, vec![]);
+        let graph = GraphTopology::try_new([root.clone()], vec![root.key()]).unwrap();
+        let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
+        let old = compiled.evaluate(
+            RationalTime::ZERO,
+            FrameQuality::Preview { scale: 1 },
+            Generation::new(1),
+        );
+        let current = compiled.evaluate(
+            RationalTime::ZERO,
+            FrameQuality::Preview { scale: 1 },
+            Generation::new(2),
+        );
+
+        let old_submission = render_view(&old, ViewProjection::Camera, RenderTarget::new(1));
+        let current_submission = render_view(&current, ViewProjection::Stage, RenderTarget::new(2));
+
+        assert_eq!(compiled.publish(&old_submission), None);
+        assert_eq!(
+            compiled
+                .publish(&current_submission)
+                .map(|frame| frame.generation),
+            Some(Generation::new(2))
+        );
+    }
+
+    #[test]
+    fn work_keys_reuse_static_nodes_and_split_time_and_quality_dependencies() {
+        let static_node = node(1, vec![]);
+        let mut timed_identity = NodeIdentity::new(NodeKind::Custom(2), vec![]);
+        timed_identity.time_dependency = TimeDependency::Exact;
+        let timed_node = GraphNode::new(timed_identity);
+        let mut quality_identity = NodeIdentity::new(NodeKind::Custom(3), vec![]);
+        quality_identity.quality_dependency = QualityDependency::Sensitive;
+        let quality_node = GraphNode::new(quality_identity);
+        let graph = GraphTopology::try_new(
+            [
+                static_node.clone(),
+                timed_node.clone(),
+                quality_node.clone(),
+            ],
+            vec![static_node.key(), timed_node.key(), quality_node.key()],
+        )
+        .unwrap();
+        let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
+
+        compiled.evaluate(RationalTime::ZERO, FrameQuality::Export, Generation::new(1));
+        let advanced = compiled.evaluate(
+            RationalTime::from_seconds(1),
+            FrameQuality::Export,
+            Generation::new(2),
+        );
+        let preview = compiled.evaluate(
+            RationalTime::from_seconds(1),
+            FrameQuality::Preview { scale: 1 },
+            Generation::new(3),
+        );
+
+        assert_eq!(advanced.executed_nodes(), &[timed_node.key()]);
+        assert_eq!(
+            advanced.reused_nodes(),
+            &[static_node.key(), quality_node.key()]
+        );
+        assert_eq!(preview.executed_nodes(), &[quality_node.key()]);
+        assert_eq!(
+            preview.reused_nodes(),
+            &[static_node.key(), timed_node.key()]
+        );
+    }
+}

@@ -6,6 +6,7 @@ pub mod compositor;
 pub mod engine;
 pub mod export;
 pub mod extensions;
+pub mod frame_graph;
 pub mod media;
 pub mod playback;
 
