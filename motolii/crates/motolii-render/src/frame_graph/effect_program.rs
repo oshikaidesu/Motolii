@@ -20,7 +20,7 @@ pub struct EffectProgram {
     nodes: BTreeMap<NodeKey, GraphNode>,
     recipes: BTreeMap<NodeKey, Recipe>,
     bindings: BTreeMap<LayerId, EffectBinding>,
-    placement: BTreeMap<NodeKey, bool>,
+    placement: BTreeMap<NodeKey, crate::doc::store::kind::PlacementProgram>,
 }
 
 impl EffectProgram {
@@ -43,9 +43,11 @@ impl EffectProgram {
                 identity.parameters = effect.plugin_id.as_bytes().iter().copied().chain([0]).chain(params.iter().flat_map(|(name, _)| name.as_bytes().iter().copied().chain([0]))).collect();
                 identity.time_dependency = TimeDependency::Exact;
                 let node = GraphNode::new(identity);
-                let is_placement = view.placement_program(&effect.plugin_id).is_some();
+                let placement_program = view.placement_program(&effect.plugin_id);
                 recipes.entry(node.key()).or_insert(Recipe { plugin_id: effect.plugin_id, enabled, scope, params });
-                placement.entry(node.key()).or_insert(is_placement);
+                if let Some(program) = placement_program {
+                    placement.entry(node.key()).or_insert(program);
+                }
                 nodes.entry(node.key()).or_insert(node.clone());
                 keys.push(node.key());
             }
@@ -55,7 +57,8 @@ impl EffectProgram {
     }
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn binding(&self, layer: LayerId) -> Option<&EffectBinding> { self.bindings.get(&layer) }
-    pub fn is_placement(&self, key: NodeKey) -> bool { self.placement.get(&key).copied().unwrap_or(false) }
+    pub fn is_placement(&self, key: NodeKey) -> bool { self.placement.contains_key(&key) }
+    pub fn placement_program(&self, key: NodeKey) -> Option<crate::doc::store::kind::PlacementProgram> { self.placement.get(&key).copied() }
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, EffectProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
