@@ -1,6 +1,7 @@
 //! Product playback owner: compile once per revision, evaluate once per exact
 //! comp time, prepare one GPU scene, then branch only for final projection.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
@@ -15,11 +16,13 @@ pub(super) struct EngineFrameGraph {
     graph: CompiledGraph,
     program: SceneProgram,
     scene: NodeKey,
+    gpu: NodeKey,
     camera: NodeKey,
     stage: NodeKey,
     comp: CompSpec,
     fps: crate::doc::store::Fps,
     background: [f32; 4],
+    in_points: HashMap<LayerId, i64>,
     frame: Option<EvaluatedFrame>,
     generation: u64,
     prepare_us: u64,
@@ -30,6 +33,9 @@ impl EngineFrameGraph {
     fn new(view: &StoreView<'_>, revision: GraphRevision) -> Result<Self, EngineError> {
         let composition = view.composition().map_err(store)?.ok_or(EngineError::NoComposition)?;
         let (comp, fps, background) = (composition.spec(), composition.fps, composition.background);
+        let in_points = view.layers().into_iter().filter_map(|layer| {
+            view.meta(layer).ok().flatten().map(|meta| (layer, meta.timing.start))
+        }).collect();
         let program = SceneProgram::compile(view).map_err(|error| EngineError::Store(error.to_string()))?;
         let scene = program.scene().scene;
         let document_camera = program.camera();
@@ -43,11 +49,38 @@ impl EngineFrameGraph {
             GraphNode::new(identity)
         };
         let camera = projection(0); let stage = projection(1);
-        nodes.extend([gpu, camera.clone(), stage.clone()]);
+        nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, camera: camera.key(), stage: stage.key(), comp, fps, background, frame: None, generation: 0, prepare_us: 0, measured: false })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+
+    fn evaluate_at(
+        &mut self,
+        engine: &mut Engine,
+        time: RationalTime,
+        quality: FrameQuality,
+        force_gpu: bool,
+    ) -> Result<(), EngineError> {
+        if force_gpu {
+            self.graph.invalidate([self.gpu]);
+        }
+        self.generation += 1;
+        let mut executor = ProgramExecutor {
+            engine,
+            program: &self.program,
+            comp: self.comp,
+            fps: self.fps,
+        };
+        let evaluated = self.graph.evaluate(
+            &mut executor,
+            time,
+            quality,
+            Generation::new(self.generation),
+        )?;
+        self.frame = Some(evaluated);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
@@ -97,12 +130,13 @@ impl Engine {
         self.compositor.feedback_set_revision(view.revision_key());
         self.feedback_keys_seen.clear();
         if !state.matches(revision, time) {
-            state.generation += 1;
             let started = std::time::Instant::now();
-            let evaluated = { let mut executor = ProgramExecutor { engine: self, program: &state.program, comp: state.comp, fps: state.fps }; state.graph.evaluate(&mut executor, time, quality, Generation::new(state.generation)) };
+            if let Err(error) = state.evaluate_at(self, time, quality, false) {
+                self.frame_graph = Some(state);
+                return Err(error);
+            }
             state.prepare_us = started.elapsed().as_micros() as u64;
             state.measured = false;
-            match evaluated { Ok(frame) => state.frame = Some(frame), Err(error) => { self.frame_graph = Some(state); return Err(error); } }
         }
         Ok(state)
     }
@@ -116,24 +150,189 @@ impl Engine {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn render_frame_graph_into_window(&mut self, view: &StoreView<'_>, time: RationalTime, target: &wgpu::Texture, camera: ResolvedCamera, include_background: bool, outline: &[LayerId], window: crate::render::compositor::Window, projection: crate::frame_graph::ViewProjection) -> Result<(), EngineError> {
+    pub fn render_frame_graph_into_window(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+        target: &wgpu::Texture,
+        camera: ResolvedCamera,
+        include_background: bool,
+        outline: &[LayerId],
+        window: crate::render::compositor::Window,
+        projection: crate::frame_graph::ViewProjection,
+    ) -> Result<(), EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
-        let root = match projection { crate::frame_graph::ViewProjection::Camera => state.camera, crate::frame_graph::ViewProjection::Stage => state.stage, _ => { self.frame_graph = Some(state); return Err(EngineError::Store("Unsupported playback projection".into())); } };
-        let projected = state.frame.as_ref().and_then(|frame| frame.value(root)).and_then(|value| value.downcast_ref::<Arc<Projection>>()).cloned().ok_or_else(|| EngineError::Store("FrameGraph projection is missing".into()))?;
-        let expected = if projection == crate::frame_graph::ViewProjection::Camera { ProjectionRole::Camera } else { ProjectionRole::Stage };
-        if projected.role != expected { self.frame_graph = Some(state); return Err(EngineError::Store("FrameGraph projection role mismatch".into())); }
-        let document_camera = state.frame.as_ref().and_then(|frame| frame.value(state.program.camera())).and_then(|value| value.downcast_ref::<ResolvedCamera>()).copied().unwrap_or_default();
-        let frame_start = std::time::Instant::now(); self.compositor.measurement = Default::default();
-        if !state.measured { self.compositor.measurement.resolve_us = state.prepare_us; state.measured = true; }
-        self.outline_layers = outline.iter().copied().take(255).collect(); self.outline_order = self.outline_layers.clone();
+        let frame_start = std::time::Instant::now();
+        self.compositor.measurement = Default::default();
+        if !state.measured {
+            self.compositor.measurement.resolve_us = state.prepare_us;
+            state.measured = true;
+        }
+        self.outline_layers = outline.iter().copied().take(255).collect();
+        self.outline_order = self.outline_layers.clone();
+
+        self.render_frame_graph_projection(
+            &state,
+            target,
+            camera,
+            include_background,
+            window,
+            projection,
+        )?;
+
+        let now = time.try_to_frame_round(state.fps).unwrap_or(0);
+        if let Some(start) = self.frame_graph_feedback_replay_start(&state, now) {
+            self.replay_frame_graph_feedback(
+                &mut state,
+                start,
+                now,
+                camera,
+                include_background,
+                window,
+                projection,
+            )?;
+
+            let c = &mut self.compositor;
+            c.baked_effects.clear(&mut c.effect_scratch);
+            self.feedback_keys_seen.clear();
+            state.evaluate_at(self, time, FrameQuality::Preview { scale: 1 }, true)?;
+            self.render_frame_graph_projection(
+                &state,
+                target,
+                camera,
+                include_background,
+                window,
+                projection,
+            )?;
+        }
+
+        self.outline_layers.clear();
+        self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
+        self.frame_graph = Some(state);
+        Ok(())
+    }
+
+    fn render_frame_graph_projection(
+        &mut self,
+        state: &EngineFrameGraph,
+        target: &wgpu::Texture,
+        camera: ResolvedCamera,
+        include_background: bool,
+        window: crate::render::compositor::Window,
+        projection: crate::frame_graph::ViewProjection,
+    ) -> Result<(), EngineError> {
+        let root = match projection {
+            crate::frame_graph::ViewProjection::Camera => state.camera,
+            crate::frame_graph::ViewProjection::Stage => state.stage,
+            _ => return Err(EngineError::Store("Unsupported playback projection".into())),
+        };
+        let projected = state.frame.as_ref()
+            .and_then(|frame| frame.value(root))
+            .and_then(|value| value.downcast_ref::<Arc<Projection>>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph projection is missing".into()))?;
+        let expected = if projection == crate::frame_graph::ViewProjection::Camera {
+            ProjectionRole::Camera
+        } else {
+            ProjectionRole::Stage
+        };
+        if projected.role != expected {
+            return Err(EngineError::Store("FrameGraph projection role mismatch".into()));
+        }
+
+        let document_camera = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.program.camera()))
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
         let mut layers = projected.scene.layers.clone();
-        for layer in &mut layers { layer.layer.projection_camera = if layer.layer.projection == crate::doc::store::LayerProjection::TwoD { document_camera } else { projection_camera }; }
-        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
-        let drawn = self.compositor.render_into_window(target, state.comp, camera, &layers, background, window);
-        self.outline_layers.clear(); self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64; self.frame_graph = Some(state); Ok(drawn?)
+        for layer in &mut layers {
+            layer.layer.projection_camera =
+                if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
+                    document_camera
+                } else {
+                    projection_camera
+                };
+        }
+        self.stamp_frame_graph_window_feedback(&mut layers, window);
+        let background = if include_background {
+            state.background
+        } else {
+            crate::render::compositor::NO_BACKGROUND
+        };
+        self.compositor.render_into_window(target, state.comp, camera, &layers, background, window)?;
+        Ok(())
     }
-}
+
+    fn frame_graph_feedback_replay_start(
+        &mut self,
+        state: &EngineFrameGraph,
+        now: i64,
+    ) -> Option<i64> {
+        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        let mut unique = HashSet::new();
+        let mut start: Option<i64> = None;
+        for key in seen.into_iter().filter(|key| unique.insert(*key)) {
+            let Some(have) = self.compositor.feedback_frame(key) else { continue };
+            if have == now && !self.compositor.feedback_is_fresh(key) {
+                continue;
+            }
+            let in_point = state.in_points.get(&key.layer).copied().unwrap_or(0);
+            let from = self.compositor.feedback_restore(key, now - 1)
+                .map_or(in_point, |checkpoint| checkpoint + 1);
+            if from < now {
+                start = Some(start.map_or(from, |current| current.min(from)));
+            }
+        }
+        start
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn replay_frame_graph_feedback(
+        &mut self,
+        state: &mut EngineFrameGraph,
+        start: i64,
+        now: i64,
+        camera: ResolvedCamera,
+        include_background: bool,
+        window: crate::render::compositor::Window,
+        projection: crate::frame_graph::ViewProjection,
+    ) -> Result<(), EngineError> {
+        let replay_target = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("motolii-frame-graph-feedback-replay"),
+            size: wgpu::Extent3d {
+                width: window.width,
+                height: window.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: crate::render::compositor::PRESENTABLE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        for frame in start..now {
+            self.pending_frame_copies.clear();
+            self.feedback_keys_seen.clear();
+            let at = RationalTime::try_from_frame(frame, state.fps)
+                .map_err(|error| EngineError::Time(error.to_string()))?;
+            state.evaluate_at(self, at, FrameQuality::Preview { scale: 1 }, true)?;
+            self.render_frame_graph_projection(
+                state,
+                &replay_target,
+                camera,
+                include_background,
+                window,
+                projection,
+            )?;
+        }
+        self.pending_frame_copies.clear();
+        self.feedback_keys_seen.clear();
+        Ok(())
+    }}
 
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }
 fn store(error: crate::doc::store::StoreError) -> EngineError { EngineError::Store(error.to_string()) }
