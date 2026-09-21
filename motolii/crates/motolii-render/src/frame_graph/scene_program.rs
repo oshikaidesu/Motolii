@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextFlowProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 use super::ghost_program::{GhostProgram, GhostProgramError};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
@@ -69,7 +69,7 @@ pub struct SceneNodeProgram {
 }
 
 impl SceneNodeProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, flow_program: &FlowProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram, motion_program: &MotionProgram, particle_program: &ParticleProgram) -> Result<Self, SceneNodeError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, flow_program: &FlowProgram, text: &TextFlowProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram, motion_program: &MotionProgram, particle_program: &ParticleProgram) -> Result<Self, SceneNodeError> {
         let policy = ScenePolicy::compile(view)?;
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
