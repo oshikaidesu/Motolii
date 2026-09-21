@@ -137,6 +137,14 @@ impl<'a> StoreView<'a> {
         (self.programs.sampling)(plugin_id).is_some()
     }
 
+    pub fn sampling_program(&self, plugin_id: &str) -> Option<super::kind::SamplingProgram> {
+        (self.programs.sampling)(plugin_id)
+    }
+
+    pub fn snap_program(&self, plugin_id: &str) -> Option<super::kind::SnapProgram> {
+        (self.programs.snap)(plugin_id)
+    }
+
     pub fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {
         match self.placement_programs {
             Some(programs) => programs.iter().find(|program| program.plugin_id == plugin_id).copied(),
