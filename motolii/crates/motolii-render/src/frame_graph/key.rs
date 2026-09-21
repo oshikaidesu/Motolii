@@ -106,6 +106,8 @@ pub enum NodeKind {
     MotionSamples,
     /// Authored layer-to-layer relation inputs (Follow, connector, trace).
     Relation,
+    /// Exact-time relation table consumed by motion/solver lowering.
+    RelationSet,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
