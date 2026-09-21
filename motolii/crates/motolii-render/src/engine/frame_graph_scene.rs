@@ -66,7 +66,11 @@ impl Engine {
         let mut entries = Vec::with_capacity(scene.layers.len());
         for source in &scene.layers {
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
-            let force_picture = clip_bases.contains(&source.layer);
+            let solid = crate::render::engine::translate::translate_solid(&source.effects)
+                .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
+                .unwrap_or(crate::render::compositor::extrude::Solid { depth: source.depth, bevel: None });
+            let flat = solid.extent() <= 0.0;
+            let force_picture = clip_bases.contains(&source.layer) || !flat;
             let overlay_content = source.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
                 .then(|| self.overlay_content(source.layer, comp))
                 .transpose()?
@@ -148,6 +152,11 @@ impl Engine {
                 (content, natural, 0, None, false)
             };
             let Some(mut content) = content else { continue };
+            if let crate::render::compositor::LayerContent::Texture(texture) = &content {
+                if !flat && source.projection != crate::doc::store::LayerProjection::TwoD && source.masks.is_empty() {
+                    content = self.frame_graph_extruded_content(source, texture.clone(), natural, comp, solid)?;
+                }
+            }
             if !frozen_hit && !source.image_sources.is_empty() {
                 content = match &content {
                     crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
@@ -301,6 +310,82 @@ impl Engine {
         let layers = kept.into_iter().map(|(_, layer)| layer).collect();
 
         Ok(GpuSceneValue { layers, layer_ids })
+    }
+
+
+    fn frame_graph_extruded_content(
+        &mut self,
+        source: &crate::frame_graph::SceneLayerValue,
+        texture: crate::render::compositor::GpuTexture2D,
+        natural: [f32; 2],
+        comp: CompSpec,
+        solid: crate::render::compositor::extrude::Solid,
+    ) -> Result<crate::render::compositor::LayerContent, EngineError> {
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        texture.handle.hash(&mut hasher);
+        solid.hash_key(&mut hasher);
+        source.shape_stretch[0].to_bits().hash(&mut hasher);
+        source.shape_stretch[1].to_bits().hash(&mut hasher);
+        let key = hasher.finish();
+        if let Some((cached, model)) = self.extrusions.get(&source.layer) {
+            if *cached == key {
+                return Ok(crate::render::compositor::LayerContent::Model(model.clone()));
+            }
+        }
+
+        let rectangle = |size: [f32; 2]| {
+            let vertex = |x: f32, y: f32| re_renderer::renderer::PathVertex {
+                point: glam::vec2(x, y),
+                in_tangent: glam::Vec2::ZERO,
+                out_tangent: glam::Vec2::ZERO,
+            };
+            vec![(
+                vec![re_renderer::renderer::PathContour {
+                    closed: true,
+                    vertices: vec![
+                        vertex(0.0, 0.0),
+                        vertex(size[0], 0.0),
+                        vertex(size[0], size[1]),
+                        vertex(0.0, size[1]),
+                    ],
+                }],
+                re_renderer::renderer::PathFillRule::NonZero,
+            )]
+        };
+
+        let outlines = match &source.content {
+            crate::frame_graph::SceneContentValue::Text(text) => {
+                let shapes = text.shapes();
+                match crate::picture::shapes_ops::content_canvas(&shapes)? {
+                    Some(canvas) => crate::render::compositor::paths::outlines(&shapes, &canvas)?,
+                    None => Vec::new(),
+                }
+            }
+            crate::frame_graph::SceneContentValue::Shape(shapes) => {
+                let stretched;
+                let shapes = if source.shape_stretch != [1.0, 1.0] {
+                    stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                    stretched.as_slice()
+                } else {
+                    shapes.as_slice()
+                };
+                match crate::picture::shapes_ops::content_canvas(shapes)? {
+                    Some(canvas) => crate::render::compositor::paths::outlines(shapes, &canvas)?,
+                    None => Vec::new(),
+                }
+            }
+            _ => rectangle(natural),
+        };
+
+        let Some(model) = self.compositor.extrude_model(&outlines, texture.clone(), natural, solid)? else {
+            return Ok(crate::render::compositor::LayerContent::Texture(texture));
+        };
+        let model = std::sync::Arc::new(model);
+        self.extrusions.insert(source.layer, (key, model.clone()));
+        let _ = comp;
+        Ok(crate::render::compositor::LayerContent::Model(model))
     }
 
     fn frame_graph_frozen_content(
