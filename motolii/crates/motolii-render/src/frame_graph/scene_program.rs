@@ -4,6 +4,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
 use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -28,9 +29,9 @@ pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub tr
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct SceneContributionValue {
-    pub(super) solo: bool,
-    pub(super) layer: Option<SceneLayerValue>,
+pub(crate) struct SceneContributionValue {
+    pub(crate) solo: bool,
+    pub(crate) layer: Option<SceneLayerValue>,
 }
 
 #[derive(Clone)]
@@ -40,10 +41,11 @@ enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: us
 pub struct SceneProgramNodes { pub scene: NodeKey }
 
 #[derive(Debug)]
-pub enum SceneNodeError { Store(StoreError), InvalidInput(NodeKind) }
+pub enum SceneNodeError { Store(StoreError), GroupComposite(GroupCompositeProgramError), InvalidInput(NodeKind) }
 impl std::fmt::Display for SceneNodeError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
 impl std::error::Error for SceneNodeError {}
 impl From<StoreError> for SceneNodeError { fn from(value: StoreError) -> Self { Self::Store(value) } }
+impl From<GroupCompositeProgramError> for SceneNodeError { fn from(value: GroupCompositeProgramError) -> Self { Self::GroupComposite(value) } }
 
 pub struct SceneNodeProgram {
     nodes: BTreeMap<NodeKey, GraphNode>,
@@ -51,12 +53,13 @@ pub struct SceneNodeProgram {
     bindings: BTreeMap<LayerId, NodeKey>,
     output: SceneProgramNodes,
     policy: ScenePolicy,
+    group_composite: GroupCompositeProgram,
 }
 
 impl SceneNodeProgram {
     pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram) -> Result<Self, SceneNodeError> {
         let policy = ScenePolicy::compile(view)?;
-        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new(); let mut ordered = Vec::new();
+        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
             if matches!(meta.source, LayerSource::Camera | LayerSource::Stage) { continue; }
@@ -98,30 +101,31 @@ impl SceneNodeProgram {
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            let non_group = meta.source != LayerSource::Group;
             recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, effects: effect_inputs, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
-            ordered.push((meta.order, non_group, layer.0, node.key()));
         }
-        // Preserve the established settle contract: authored order first, and
-        // a Group background immediately behind non-Group content at the same
-        // order. The composite input order then becomes the final depth rank.
-        ordered.sort_by_key(|(order, non_group, id, _)| (*order, *non_group, *id));
-        let inputs = ordered.into_iter().map(|(_, _, _, key)| key).collect();
+        let group_composite = GroupCompositeProgram::compile(view, effect_program, &bindings)?;
+        for node in group_composite.nodes() {
+            nodes.insert(node.key(), node);
+        }
+        let inputs = group_composite.roots().to_vec();
         let mut identity = NodeIdentity::new(NodeKind::SceneComposite, inputs);
         identity.time_dependency = TimeDependency::Exact;
         let scene = GraphNode::new(identity);
         recipes.insert(scene.key(), Recipe::Composite);
         nodes.insert(scene.key(), scene.clone());
-        Ok(Self { nodes, recipes, bindings, output: SceneProgramNodes { scene: scene.key() }, policy })
+        Ok(Self { nodes, recipes, bindings, output: SceneProgramNodes { scene: scene.key() }, policy, group_composite })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn output(&self) -> SceneProgramNodes { self.output }
     pub fn binding(&self, layer: LayerId) -> Option<NodeKey> { self.bindings.get(&layer).copied() }
 
-    pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
+    pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
+        if let Some(value) = self.group_composite.execute(node, inputs, context) {
+            return Some(value.map_err(Into::into));
+        }
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
             Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, effects, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
@@ -177,14 +181,21 @@ impl SceneNodeProgram {
                 }))
             })(),
             Recipe::Composite => (|| {
-                let contributions = inputs.iter()
-                    .map(|(_, value)| value.downcast_ref::<SceneContributionValue>().cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let any_solo = contributions.iter().any(|contribution| contribution.solo);
+                let mut contributions = Vec::new();
+                for (_, value) in inputs.iter() {
+                    if let Some(contribution) = value.downcast_ref::<SceneContributionValue>() {
+                        contributions.push(contribution.clone());
+                    } else if let Some(fragment) = value.downcast_ref::<SceneFragmentValue>() {
+                        contributions.extend(fragment.contributions.iter().cloned());
+                    } else {
+                        return Err(SceneNodeError::InvalidInput(node.identity().kind));
+                    }
+                }
+                let any_solo = contributions.iter().any(contribution_has_solo);
                 let mut layers = Vec::new();
                 for contribution in contributions {
-                    if any_solo && !contribution.solo { continue; }
-                    let Some(mut layer) = contribution.layer else { continue };
+                    let Some(mut layer) = filtered_layer(contribution, any_solo) else { continue };
+                    normalize_plate_orders(&mut layer);
                     layer.order = i16::try_from(layers.len()).unwrap_or(i16::MAX);
                     layers.push(layer);
                 }
@@ -192,6 +203,38 @@ impl SceneNodeProgram {
                 Ok(NodeValue::new(SceneValue { layers }))
             })(),
         })
+    }
+}
+
+fn contribution_has_solo(contribution: &SceneContributionValue) -> bool {
+    if contribution.solo { return true; }
+    contribution.layer.as_ref().is_some_and(|layer| {
+        matches!(&layer.content, SceneContentValue::Plate(plate) if plate.members.iter().any(contribution_has_solo))
+    })
+}
+
+fn filtered_layer(mut contribution: SceneContributionValue, any_solo: bool) -> Option<SceneLayerValue> {
+    if any_solo && !contribution_has_solo(&contribution) { return None; }
+    let mut layer = contribution.layer.take()?;
+    if let SceneContentValue::Plate(plate) = &mut layer.content {
+        let members = std::mem::take(&mut plate.members);
+        plate.members = members.into_iter().filter_map(|member| {
+            let solo = member.solo;
+            filtered_layer(member, any_solo).map(|layer| SceneContributionValue { solo, layer: Some(layer) })
+        }).collect();
+        if plate.members.is_empty() { return None; }
+    }
+    Some(layer)
+}
+
+fn normalize_plate_orders(layer: &mut SceneLayerValue) {
+    if let SceneContentValue::Plate(plate) = &mut layer.content {
+        for (rank, member) in plate.members.iter_mut().enumerate() {
+            if let Some(member_layer) = member.layer.as_mut() {
+                normalize_plate_orders(member_layer);
+                member_layer.order = i16::try_from(rank).unwrap_or(i16::MAX);
+            }
+        }
     }
 }
 
