@@ -133,6 +133,9 @@ impl SceneProgram {
         if let Some(requests) = self.motion.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
+        if let Some(requests) = self.text.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
         if let Some(requests) = self.lookbehind.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
