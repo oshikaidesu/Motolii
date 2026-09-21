@@ -104,6 +104,8 @@ pub enum NodeKind {
     MotionMeasure,
     /// Exact motion-blur transform samples selected by MotionMeasure.
     MotionSamples,
+    /// Authored layer-to-layer relation inputs (Follow, connector, trace).
+    Relation,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
