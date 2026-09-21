@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
 
@@ -35,7 +35,7 @@ pub(crate) struct SceneContributionValue {
 }
 
 #[derive(Clone)]
-enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, effects: Vec<usize>, placement: Option<usize>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
+enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, effects: Vec<usize>, placement_effects: Vec<bool>, placement: Option<usize>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneProgramNodes { pub scene: NodeKey }
@@ -86,6 +86,7 @@ impl SceneNodeProgram {
             let attrs = view.attrs(layer)?.unwrap_or_default();
             let matte = if attrs.clip_to_below { view.clipping_base(layer)?.map(|layer| crate::doc::store::Matte { layer, mode: crate::doc::store::MatteMode::Alpha }) } else { attrs.matte };
             let mut effect_inputs = Vec::new();
+            let mut placement_effects = Vec::new();
             if let Some(binding) = effect_program.binding(layer) {
                 let end = if meta.source == LayerSource::Group {
                     binding.effects.iter().position(|key| effect_program.is_placement(*key)).unwrap_or(binding.effects.len())
@@ -96,6 +97,7 @@ impl SceneNodeProgram {
                     let at = inputs.len();
                     inputs.push(*key);
                     effect_inputs.push(at);
+                    placement_effects.push(effect_program.is_placement(*key));
                 }
             }
             let placement = placement_program.binding(layer).map(|binding| {
@@ -111,7 +113,7 @@ impl SceneNodeProgram {
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, effects: effect_inputs, placement, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
+            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, effects: effect_inputs, placement_effects, placement, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
         }
@@ -132,13 +134,33 @@ impl SceneNodeProgram {
     pub fn output(&self) -> SceneProgramNodes { self.output }
     pub fn binding(&self, layer: LayerId) -> Option<NodeKey> { self.bindings.get(&layer).copied() }
 
+    pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<Vec<DynamicInput>, SceneNodeError>> {
+        let recipe = self.recipes.get(&node.key())?;
+        let Recipe::Contribution { placement: Some(placement), .. } = recipe else {
+            return Some(Ok(Vec::new()));
+        };
+        let Some(set) = inputs.at(*placement).and_then(|value| value.downcast_ref::<PlacementSetValue>()) else {
+            return Some(Err(SceneNodeError::InvalidInput(node.identity().kind)));
+        };
+        let sample_indices = contribution_sample_indices(node, Some(*placement));
+        let mut requests = Vec::new();
+        for copy in &set.copies {
+            if copy.time_offset == RationalTime::ZERO || copy.transform.is_none() { continue; }
+            let Ok(at) = context.time.try_sub(copy.time_offset) else { continue };
+            for index in &sample_indices {
+                requests.push(DynamicInput { node: node.identity().inputs[*index], time: at });
+            }
+        }
+        Some(Ok(requests))
+    }
+
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
         if let Some(value) = self.group_composite.execute(node, inputs, context) {
             return Some(value.map_err(Into::into));
         }
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, effects, placement, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
+            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, effects, placement_effects, placement, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
                 let visibility = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 if !visibility.active {
                     return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: None }));
