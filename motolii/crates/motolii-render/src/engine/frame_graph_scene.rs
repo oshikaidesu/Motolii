@@ -81,7 +81,16 @@ impl Engine {
                 SceneContentValue::None => continue,
                 SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
                 SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
-                SceneContentValue::Shape(shapes) => self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, true)?,
+                SceneContentValue::Shape(shapes) => {
+                    let stretched;
+                    let shapes = if source.shape_stretch != [1.0, 1.0] {
+                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                        stretched.as_slice()
+                    } else {
+                        shapes.as_slice()
+                    };
+                    self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, source.shape_stretch == [1.0, 1.0])?
+                },
                 SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
                 SceneContentValue::Media { source: media, time } => {
                     if source.environment && crate::render::media::is_still_image_path(&media.path) {
