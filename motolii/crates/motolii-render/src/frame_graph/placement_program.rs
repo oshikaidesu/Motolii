@@ -4,7 +4,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
 use crate::doc::store::{property, kind::PlacementProgram as PlacementEvaluator, LayerId, LayerSource, PropertyId, StoreError, StoreView};
 
-use super::{EffectProgram, EffectValue, EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency, TransformProgram, TransformValue};
+use super::{DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency, TransformProgram, TransformValue};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlacementCopyValue {
@@ -139,6 +139,37 @@ impl PlacementProgram {
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn binding(&self, layer: LayerId) -> Option<PlacementBinding> { self.bindings.get(&layer).copied() }
 
+    pub fn dynamic_inputs(
+        &self,
+        node: &GraphNode,
+        inputs: &NodeInputs,
+        context: &EvaluationContext,
+    ) -> Option<Result<Vec<DynamicInput>, PlacementProgramError>> {
+        let recipe = self.recipes.get(&node.key())?;
+        Some((|| {
+            let Some((_, program, effect)) = selected_effect(recipe, inputs) else { return Ok(Vec::new()); };
+            let position = read_position(node, inputs, recipe, None)?;
+            let outputs = (program.evaluate)(&crate::doc::store::kind::PlacementInput {
+                params: &effect.params,
+                layer: recipe.layer,
+                time: context.time,
+                position,
+                stretch_outline: recipe.stretch_outline,
+                analysis: None,
+            });
+            let sample_indices = sample_indices(recipe);
+            let mut requests = Vec::new();
+            for output in outputs {
+                if output.placement.time_offset == RationalTime::ZERO { continue; }
+                let Ok(at) = context.time.try_sub(output.placement.time_offset) else { continue };
+                for index in &sample_indices {
+                    requests.push(DynamicInput { node: node.identity().inputs[*index], time: at });
+                }
+            }
+            Ok(requests)
+        })())
+    }
+
     pub fn execute(
         &self,
         node: &GraphNode,
@@ -147,19 +178,14 @@ impl PlacementProgram {
     ) -> Option<Result<NodeValue, PlacementProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
-            let selected = (0..recipe.effect_count).find_map(|index| {
-                let program = recipe.programs.get(index).copied().flatten()?;
-                let effect = inputs.at(index)?.downcast_ref::<EffectValue>()?.0.as_ref()?;
-                Some((index, program, effect))
-            });
-            let Some((selected_effect, program, effect)) = selected else {
+            let Some((selected_effect, program, effect)) = selected_effect(recipe, inputs) else {
                 return Ok(NodeValue::new(PlacementSetValue { selected_effect: None, copies: Vec::new() }));
             };
 
             // Analysis-backed placement programs (Blob Track) are deliberately
             // left to the analysis lane. Calling them with no analysis yields
             // no copies, never a hidden StoreView read.
-            let position = read_position(node, inputs, recipe)?;
+            let position = read_position(node, inputs, recipe, None)?;
             let outputs = (program.evaluate)(&crate::doc::store::kind::PlacementInput {
                 params: &effect.params,
                 layer: recipe.layer,
@@ -169,52 +195,100 @@ impl PlacementProgram {
                 analysis: None,
             });
 
-            let world = read_transform(node, inputs, recipe.world)?;
-            let parent = recipe.parent_world
-                .map(|index| read_transform(node, inputs, index))
-                .transpose()?
-                .unwrap_or(TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY });
-            let pivot = glam::Vec2::from(position);
-            let depth = read_number(inputs, recipe.position_z).unwrap_or(0.0) as f32;
-
-            let copies = outputs.into_iter().map(|output| {
+            let sample_indices = sample_indices(recipe);
+            let static_len = node.identity().inputs.len();
+            let mut dynamic_start = static_len;
+            let mut copies = Vec::with_capacity(outputs.len());
+            for output in outputs {
                 let placement = output.placement;
-                let transform = (placement.time_offset == RationalTime::ZERO).then(|| TransformValue {
-                    affine: parent.affine * placement.affine2(pivot) * parent.affine.inverse() * world.affine,
-                    spatial: parent.spatial * placement.affine3(pivot.extend(depth)) * parent.spatial.inverse() * world.spatial,
-                });
-                PlacementCopyValue {
+                let sampled_start = if placement.time_offset == RationalTime::ZERO {
+                    None
+                } else if context.time.try_sub(placement.time_offset).is_ok() {
+                    let start = dynamic_start;
+                    dynamic_start += sample_indices.len();
+                    Some(start)
+                } else {
+                    None
+                };
+                let transform = if placement.time_offset == RationalTime::ZERO || sampled_start.is_some() {
+                    let world = read_transform_sampled(node, inputs, recipe.world, &sample_indices, sampled_start)?;
+                    let parent = recipe.parent_world
+                        .map(|index| read_transform_sampled(node, inputs, index, &sample_indices, sampled_start))
+                        .transpose()?
+                        .unwrap_or(TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY });
+                    let sampled_position = read_position(node, inputs, recipe, sampled_start)?;
+                    let pivot = glam::Vec2::from(sampled_position);
+                    let depth = read_number_sampled(inputs, recipe.position_z, &sample_indices, sampled_start).unwrap_or(0.0) as f32;
+                    Some(TransformValue {
+                        affine: parent.affine * placement.affine2(pivot) * parent.affine.inverse() * world.affine,
+                        spatial: parent.spatial * placement.affine3(pivot.extend(depth)) * parent.spatial.inverse() * world.spatial,
+                    })
+                } else {
+                    None
+                };
+                copies.push(PlacementCopyValue {
                     index: placement.index,
                     transform,
                     opacity: placement.opacity,
                     time_offset: placement.time_offset,
                     outline_stretch: output.outline_stretch,
-                }
-            }).collect();
+                });
+            }
 
             Ok(NodeValue::new(PlacementSetValue { selected_effect: Some(selected_effect), copies }))
         })())
     }
 }
 
-fn read_transform(node: &GraphNode, inputs: &NodeInputs, index: usize) -> Result<TransformValue, PlacementProgramError> {
+fn selected_effect<'a>(recipe: &Recipe, inputs: &'a NodeInputs) -> Option<(usize, PlacementEvaluator, &'a crate::picture::resolved::ResolvedEffect)> {
+    (0..recipe.effect_count).find_map(|index| {
+        let program = recipe.programs.get(index).copied().flatten()?;
+        let effect = inputs.at(index)?.downcast_ref::<EffectValue>()?.0.as_ref()?;
+        Some((index, program, effect))
+    })
+}
+
+fn sample_indices(recipe: &Recipe) -> Vec<usize> {
+    let mut indices = vec![recipe.world];
+    for index in [recipe.parent_world, recipe.position, recipe.position_x, recipe.position_y, recipe.position_z].into_iter().flatten() {
+        if !indices.contains(&index) { indices.push(index); }
+    }
+    indices
+}
+
+fn actual_index(original: usize, sample_indices: &[usize], sampled_start: Option<usize>) -> Option<usize> {
+    match sampled_start {
+        None => Some(original),
+        Some(start) => sample_indices.iter().position(|index| *index == original).map(|offset| start + offset),
+    }
+}
+
+fn read_transform_sampled(node: &GraphNode, inputs: &NodeInputs, original: usize, sample_indices: &[usize], sampled_start: Option<usize>) -> Result<TransformValue, PlacementProgramError> {
+    let index = actual_index(original, sample_indices, sampled_start).ok_or(PlacementProgramError::InvalidInput(node.identity().kind))?;
     inputs.at(index).and_then(|value| value.downcast_ref::<TransformValue>()).copied()
         .ok_or(PlacementProgramError::InvalidInput(node.identity().kind))
 }
 
-fn read_number(inputs: &NodeInputs, index: Option<usize>) -> Option<f64> {
-    index.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()).and_then(|value| match value {
+fn read_number_sampled(inputs: &NodeInputs, original: Option<usize>, sample_indices: &[usize], sampled_start: Option<usize>) -> Option<f64> {
+    let original = original?;
+    let index = actual_index(original, sample_indices, sampled_start)?;
+    inputs.at(index).and_then(|value| value.downcast_ref::<Value>()).and_then(|value| match value {
         Value::F64(value) if value.is_finite() => Some(*value),
         _ => None,
     })
 }
 
-fn read_position(node: &GraphNode, inputs: &NodeInputs, recipe: &Recipe) -> Result<[f32; 2], PlacementProgramError> {
-    if let Some(Value::Vec2(value)) = recipe.position.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()) {
-        return Ok([value[0] as f32, value[1] as f32]);
+fn read_position(node: &GraphNode, inputs: &NodeInputs, recipe: &Recipe, sampled_start: Option<usize>) -> Result<[f32; 2], PlacementProgramError> {
+    let indices = sample_indices(recipe);
+    if let Some(original) = recipe.position {
+        if let Some(index) = actual_index(original, &indices, sampled_start) {
+            if let Some(Value::Vec2(value)) = inputs.at(index).and_then(|value| value.downcast_ref::<Value>()) {
+                return Ok([value[0] as f32, value[1] as f32]);
+            }
+        }
     }
-    let x = read_number(inputs, recipe.position_x).unwrap_or(0.0) as f32;
-    let y = read_number(inputs, recipe.position_y).unwrap_or(0.0) as f32;
+    let x = read_number_sampled(inputs, recipe.position_x, &indices, sampled_start).unwrap_or(0.0) as f32;
+    let y = read_number_sampled(inputs, recipe.position_y, &indices, sampled_start).unwrap_or(0.0) as f32;
     if x.is_finite() && y.is_finite() { Ok([x, y]) } else { Err(PlacementProgramError::InvalidInput(node.identity().kind)) }
 }
 
