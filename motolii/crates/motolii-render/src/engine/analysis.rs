@@ -405,56 +405,82 @@ impl Engine {
         Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
     }
 
-    /// 連続性の物差しの標本: 解析を読んだ view で解き、層の箱の角と文字の字の位置を画面の平面(px)で返す。
-    /// 鍵は `L<id> 名前.min` / `.max` / `.g<n>`(n は組んだ順の字)。関係の動きがコマごとに跳ばないかを測る。
+    /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、
+    /// semantic Scene/TextFlow の最終値から測る。診断のために legacy resolve を再実行しない。
     pub fn continuity_samples(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<(String, [f32; 2])>, EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
-        let inputs = self.analysis_inputs(view, t)?;
-        let view = if inputs.is_empty() { view.clone() } else { view.clone().with_analysis(&inputs) };
-        let Some(comp) = view.composition().map_err(store)? else { return Ok(Vec::new()) };
+        let (scene, camera, comp, _fps) = self.evaluate_frame_graph_semantics(view, t)?;
         let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let mut out = Vec::new();
-        // カメラの動き(注視点と、距離の対数を px 相当に)。
-        let camera = crate::picture::resolve::camera::resolve_camera(&view, t).map_err(store)?;
         out.push(("camera.center".to_owned(), camera.center));
         out.push(("camera.distance".to_owned(), [camera.distance_scale.max(1e-3).ln() * 300.0, camera.target_z]));
-        for layer in crate::picture::resolve::resolved_layers(&view, t).map_err(store)? {
-            // 見えない層(Opacity 0 の解析係など)の箱は動きとして読まない。
-            if layer.ghost || layer.copy != 0 || layer.placement.opacity <= 0.0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {
+
+        for layer in &scene.layers {
+            if layer.ghost || layer.instance != 0 || layer.opacity <= 0.0
+                || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null)
+            {
                 continue;
             }
-            let to_screen = |p: glam::Vec2| match layer.placement.world_transform {
-                Some(world) => world.transform_point3(p.extend(0.0)).truncate().to_array(),
-                None => layer.placement.transform.transform_point2(p).to_array(),
+            let world = layer.transform.spatial;
+            let to_screen = |point: glam::Vec2| world.transform_point3(point.extend(0.0)).truncate().to_array();
+            let name = view.attrs(layer.layer).map_err(store)?.unwrap_or_default().name;
+
+            let bounds = match &layer.content {
+                crate::frame_graph::SceneContentValue::Text(text) => {
+                    crate::picture::text_frame::line_box(&text.document, &text.shaped, &canvas)
+                }
+                crate::frame_graph::SceneContentValue::Shape(shapes) => {
+                    let stretched;
+                    let shapes = if layer.shape_stretch != [1.0, 1.0] {
+                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch);
+                        stretched.as_slice()
+                    } else {
+                        shapes.as_slice()
+                    };
+                    crate::picture::shapes_ops::content_bounds(shapes).ok().flatten()
+                        .map(|bounds| bounds.map(|value| value as f32))
+                }
+                crate::frame_graph::SceneContentValue::Media { source, .. }
+                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => {
+                    self.material_extent(&source.path, comp).map(|extent| [0.0, 0.0, extent[0], extent[1]])
+                }
+                crate::frame_graph::SceneContentValue::Plate(_) => Some([0.0, 0.0, comp.width as f32, comp.height as f32]),
+                _ => None,
             };
-            let name = view.attrs(layer.id).map_err(store)?.unwrap_or_default().name;
-            if let Some(b) = crate::picture::boxes::layer_box(&view, layer.id, t).map_err(store)? {
-                out.push((format!("L{} {name}.min", layer.id.0), to_screen(glam::vec2(b[0], b[1]))));
-                out.push((format!("L{} {name}.max", layer.id.0), to_screen(glam::vec2(b[2], b[3]))));
-                // 奥行きの向きの動き(世界の z と、中心の x)。
-                if let Some(world) = layer.placement.world_transform {
-                    let c = world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0));
-                    out.push((format!("L{} {name}.z", layer.id.0), [c.z, 0.0]));
+            if let Some(bounds) = bounds {
+                out.push((format!("L{} {name}.min", layer.layer.0), to_screen(glam::vec2(bounds[0], bounds[1]))));
+                out.push((format!("L{} {name}.max", layer.layer.0), to_screen(glam::vec2(bounds[2], bounds[3]))));
+                let center = world.transform_point3(glam::vec3(
+                    (bounds[0] + bounds[2]) * 0.5,
+                    (bounds[1] + bounds[3]) * 0.5,
+                    0.0,
+                ));
+                out.push((format!("L{} {name}.z", layer.layer.0), [center.z, 0.0]));
+            }
+
+            let crate::frame_graph::SceneContentValue::Text(text) = &layer.content else { continue };
+            let content = text.document.content.eval(t);
+            let glyph_bytes: Vec<usize> = text.shaped.lines.iter()
+                .flat_map(|line| line.glyph_bytes.iter().copied())
+                .collect();
+            // TextFlow has already applied Shape Outside and transition offsets to
+            // contours. Use those final contours instead of reconstructing offsets
+            // through the legacy text resolver.
+            let mut glyph_points: std::collections::BTreeMap<usize, glam::Vec2> = std::collections::BTreeMap::new();
+            for (contour, glyph) in text.shaped.contours.iter().zip(&text.shaped.contour_glyphs) {
+                let lo = contour.vertices.iter().fold(glam::Vec2::splat(f32::MAX), |acc, vertex| {
+                    acc.min(glam::vec2(vertex.point.x as f32, vertex.point.y as f32))
+                });
+                if lo.is_finite() {
+                    glyph_points.entry(*glyph).and_modify(|point| *point = point.min(lo)).or_insert(lo);
                 }
             }
-            if layer.source == crate::doc::store::LayerSource::Text {
-                if let Some(document) = crate::picture::resolve::text::resolved_text_document(&view, layer.id, t).map_err(store)? {
-                    let content = document.content.eval(t).to_owned();
-                    if let Ok(Some(shaped)) = crate::picture::text_frame::shape_document_around(&document, t, &canvas, layer.flow_around.as_deref().map_or(&[], Vec::as_slice)) {
-                        let mut n = 0;
-                        for line in &shaped.lines {
-                            // 字は元の文字の byte で名付ける(組み直しても同じ字の軌跡)。空白は見えないので数えない。
-                            for (x, byte) in line.glyph_xs.iter().zip(&line.glyph_bytes) {
-                                if content.get(*byte..).and_then(|rest| rest.chars().next()).is_some_and(char::is_whitespace) {
-                                    n += 1;
-                                    continue;
-                                }
-                                let d = layer.glyph_offsets.as_ref().and_then(|o| o.get(n).copied()).unwrap_or([0.0, 0.0]);
-                                out.push((format!("L{} {name}.g{byte}", layer.id.0), to_screen(glam::vec2(*x + d[0], line.baseline_y + d[1]))));
-                                n += 1;
-                            }
-                        }
-                    }
+            for (glyph, byte) in glyph_bytes.into_iter().enumerate() {
+                if content.get(byte..).and_then(|rest| rest.chars().next()).is_some_and(char::is_whitespace) {
+                    continue;
+                }
+                if let Some(point) = glyph_points.get(&glyph) {
+                    out.push((format!("L{} {name}.g{byte}", layer.layer.0), to_screen(*point)));
                 }
             }
         }
