@@ -2,6 +2,7 @@
 //! S0 deliberately contains no renderer adapter: later lanes supply node
 //! evaluators and GPU submissions without changing these ownership rules.
 
+mod analysis_program;
 mod cache;
 mod canonical;
 mod camera_program;
@@ -38,6 +39,7 @@ use std::collections::BTreeSet;
 use crate::doc::core::RationalTime;
 use crate::doc::store::StoreView;
 
+pub use analysis_program::{AnalysisBinding, AnalysisProgram, AnalysisProgramError, BlobAnalysisRequestValue, BlobAnalysisValue};
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
