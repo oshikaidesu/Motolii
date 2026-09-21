@@ -17,7 +17,7 @@ struct Recipe {
 }
 
 #[derive(Debug)]
-pub enum GroupCompositeProgramError {
+pub(super) enum GroupCompositeProgramError {
     Store(StoreError),
     Cycle(LayerId),
     InvalidInput(NodeKind),
@@ -51,7 +51,6 @@ impl GroupCompositeProgram {
         contributions: &BTreeMap<LayerId, NodeKey>,
     ) -> Result<Self, GroupCompositeProgramError> {
         let mut metas = BTreeMap::new();
-        let mut parents = BTreeMap::new();
         let mut children: BTreeMap<Option<LayerId>, Vec<LayerId>> = BTreeMap::new();
 
         for layer in view.layers() {
@@ -63,7 +62,6 @@ impl GroupCompositeProgram {
                 _ => None,
             };
             metas.insert(layer, meta.clone());
-            parents.insert(layer, parent);
             children.entry(parent).or_default().push(layer);
         }
         for list in children.values_mut() {
