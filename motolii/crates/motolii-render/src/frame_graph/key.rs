@@ -31,6 +31,16 @@ pub enum QualityDependency {
 /// changing the graph's ownership or scheduling contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NodeKind {
+    /// Coarse F2 world evaluation, before per-content node lowering.
+    ResolvedWorld,
+    /// Text documents collected from one resolved world.
+    TextDocuments,
+    /// Shape documents collected from one resolved world.
+    ShapeDocuments,
+    /// The authored camera resolved from one world.
+    DocumentCamera,
+    /// Coarse shared scene passed to final view projections.
+    SharedScene,
     /// Canonical authored text content and its run/style references.
     TextContent,
     /// Canonical text style/font input.  It is separate so equal styles can

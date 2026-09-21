@@ -218,7 +218,8 @@ impl EditorRuntime {
         self.engine.set_realtime(self.viewer.clock.playing());
         // 再生中はギズモを出さないので、選択の mask も焼かない。
         let outline: &[LayerId] = if self.viewer.clock.playing() { &[] } else { &self.viewer.selected_ids };
-        self.engine.render_frame_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window).map_err(|e|e.to_string())?;
+        self.engine.render_frame_graph_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window,
+            match view { View::Camera=>crate::render::frame_graph::ViewProjection::Camera, View::User=>crate::render::frame_graph::ViewProjection::Stage }).map_err(|e|e.to_string())?;
         // 出した束の番号。これが終われば、この surface に絵が入っている。
         let submission = self.engine.last_submission();
         // `warm_upcoming` resolves now and ahead to find media. That is useful

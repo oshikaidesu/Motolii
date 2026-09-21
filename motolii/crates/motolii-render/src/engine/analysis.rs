@@ -92,24 +92,11 @@ impl Engine {
             self.resolve_worst = tally::take_worst();
             return out;
         }
-        // 解析が無い時は、この後 status が同じ (版, 時刻) を訊く。1 コマに 2 度解かない。
-        let key = view.revision_key();
-        if let Some((k, at, layers)) = self.resolved_memo.borrow().as_ref() {
-            if *k == key && *at == t { return Ok(layers.clone()) }
-        }
         tally::begin();
         let layers = resolve(view.clone())?;
         self.resolve_tally = tally::take();
         self.resolve_worst = tally::take_worst();
-        *self.resolved_memo.borrow_mut() = Some((key, t, layers.clone()));
         Ok(layers)
-    }
-
-    /// 描く側がこのコマで解いた物。status が同じ物を解き直さないための口。
-    /// 解析入力があるコマは覚えていないので `None`(呼ぶ側が自分で解く)。
-    pub fn resolved_for(&self, view: &StoreView<'_>, t: RationalTime) -> Option<Vec<ResolvedLayer>> {
-        let key = view.revision_key();
-        self.resolved_memo.borrow().as_ref().and_then(|(k, at, layers)| (*k == key && *at == t).then(|| layers.clone()))
     }
 
     /// 連続性の物差しの標本: 解析を読んだ view で解き、層の箱の角と文字の字の位置を画面の平面(px)で返す。
