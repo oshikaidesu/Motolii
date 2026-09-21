@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::doc::store::StoreView;
 
-use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, NodeInputs, NodeKey, NodeValue, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
+use super::{CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, MaskProgram, MaskProgramError, NodeInputs, NodeKey, NodeValue, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, SceneNodeError, SceneNodeProgram, SceneProgramNodes, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
 #[derive(Debug)]
 pub enum SceneProgramError {
@@ -18,6 +18,7 @@ pub enum SceneProgramError {
     Group(GroupBackgroundProgramError),
     Visibility(VisibilityProgramError),
     Placement(PlacementProgramError),
+    Particle(ParticleProgramError),
     Unsupported(super::NodeKind),
 }
 impl std::fmt::Display for SceneProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
@@ -34,6 +35,7 @@ impl From<MaskProgramError> for SceneProgramError { fn from(value: MaskProgramEr
 impl From<GroupBackgroundProgramError> for SceneProgramError { fn from(value: GroupBackgroundProgramError) -> Self { Self::Group(value) } }
 impl From<VisibilityProgramError> for SceneProgramError { fn from(value: VisibilityProgramError) -> Self { Self::Visibility(value) } }
 impl From<PlacementProgramError> for SceneProgramError { fn from(value: PlacementProgramError) -> Self { Self::Placement(value) } }
+impl From<ParticleProgramError> for SceneProgramError { fn from(value: ParticleProgramError) -> Self { Self::Particle(value) } }
 
 /// One immutable revision program. Compiler bindings are the only place that
 /// remembers layer ids; runtime execution follows content-addressed edges.
@@ -50,6 +52,7 @@ pub struct SceneProgram {
     groups: GroupBackgroundProgram,
     visibility: VisibilityProgram,
     placements: PlacementProgram,
+    particles: ParticleProgram,
     nodes: BTreeMap<NodeKey, GraphNode>,
     roots: BTreeSet<NodeKey>,
 }
@@ -63,15 +66,16 @@ impl SceneProgram {
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
         let effects = EffectProgram::compile(view, &properties)?;
         let placements = PlacementProgram::compile(view, &properties, &effects, &transforms)?;
+        let particles = ParticleProgram::compile(view, &properties)?;
         let text = TextProgram::compile(view, &content, &flow)?;
         let groups = GroupBackgroundProgram::compile(view, &properties, &flow)?;
         let masks = MaskProgram::compile(view, &properties)?;
-        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements)?;
+        let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &text, &groups, &effects, &masks, &visibility, &placements, &particles)?;
         let camera = CameraProgram::compile(view, &properties, &transforms)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(placements.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(scene.nodes()).chain(std::iter::once(camera.node())) { nodes.insert(node.key(), node); }
         let roots = BTreeSet::from([scene.output().scene, camera.key()]);
-        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, nodes, roots })
+        Ok(Self { properties, content, transforms, flow, text, scene, camera, effects, masks, groups, visibility, placements, particles, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
@@ -85,9 +89,13 @@ impl SceneProgram {
     pub fn camera(&self) -> NodeKey { self.camera.key() }
     pub fn visibility(&self) -> &VisibilityProgram { &self.visibility }
     pub fn placements(&self) -> &PlacementProgram { &self.placements }
+    pub fn particles(&self) -> &ParticleProgram { &self.particles }
 
     pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<DynamicInput>, SceneProgramError> {
         if let Some(requests) = self.placements.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
+        if let Some(requests) = self.particles.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }
         if let Some(requests) = self.scene.dynamic_inputs(node, inputs, context) {
@@ -109,6 +117,7 @@ impl SceneProgram {
         if let Some(value) = self.groups.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.visibility.execute(node, inputs, context) { return value.map_err(Into::into); }
         if let Some(value) = self.placements.execute(node, inputs, context) { return value.map_err(Into::into); }
+        if let Some(value) = self.particles.execute(node, inputs, context) { return value.map_err(Into::into); }
         Err(SceneProgramError::Unsupported(node.identity().kind))
     }
 }
