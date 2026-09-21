@@ -94,6 +94,10 @@ pub enum NodeKind {
     AnalysisRequest,
     /// Host-evaluated blob analysis result, cached by exact graph time.
     AnalysisBlob,
+    /// Host-evaluated Track Overlay analysis over the semantic scene.
+    AnalysisOverlay,
+    /// Exact-time table of Track Overlay analysis results.
+    OverlaySet,
     /// Exact-time authored participation: hidden/solo/timing.
     Visibility,
     /// Per-frame cumulative emission state for a particle layer.
