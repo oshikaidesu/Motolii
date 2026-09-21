@@ -62,6 +62,7 @@ impl OverlayProgram {
         effects: &EffectProgram,
         scene: NodeKey,
         solver: NodeKey,
+        camera: NodeKey,
     ) -> Result<Self, OverlayProgramError> {
         let fps = view.composition()?.map(|composition| composition.fps)
             .unwrap_or(Fps::try_new(30, 1).expect("30fps"));
@@ -76,7 +77,7 @@ impl OverlayProgram {
                     effects.plugin_id(*key).is_some_and(crate::extensions::overlay::is_track_overlay)
                 })) else { continue };
             let attrs = view.attrs(layer)?.unwrap_or_default();
-            let mut identity = NodeIdentity::new(NodeKind::AnalysisOverlay, vec![scene, effect, solver]);
+            let mut identity = NodeIdentity::new(NodeKind::AnalysisOverlay, vec![scene, effect, solver, camera]);
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.parameters.extend_from_slice(&meta.order.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
