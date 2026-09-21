@@ -1,13 +1,30 @@
 use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 use crate::doc::store::LayerId;
-use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneValue};
+use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneValue, SolverPlanValue};
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
 
 #[derive(Clone)]
-pub(super) struct GpuSceneValue { pub layers: Vec<LayerWithPasses> }
+pub(super) struct GpuSceneValue {
+    pub layers: Vec<LayerWithPasses>,
+    pub layer_ids: Vec<LayerId>,
+}
 
 impl Engine {
+    pub(super) fn prepare_gpu_scene_with_solver(
+        &mut self,
+        scene: &SceneValue,
+        solver: &SolverPlanValue,
+        comp: CompSpec,
+        projection_camera: ResolvedCamera,
+        time: crate::doc::core::RationalTime,
+        fps: crate::doc::store::Fps,
+    ) -> Result<GpuSceneValue, EngineError> {
+        let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+        self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
+        Ok(prepared)
+    }
+
     pub(super) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
         #[derive(Clone, Copy)]
         struct Entry {
@@ -234,16 +251,18 @@ impl Engine {
             };
         }
 
-        let layers = layers.into_iter().enumerate()
+        let kept: Vec<_> = layers.into_iter().enumerate()
             .filter(|(index, _)| {
                 !removed[*index]
                     && !entries[*index].stencil
                     && !matte_sources.contains(&entries[*index].layer)
             })
-            .map(|(_, layer)| layer)
+            .map(|(index, layer)| (entries[index].layer, layer))
             .collect();
+        let layer_ids = kept.iter().map(|(layer, _)| *layer).collect();
+        let layers = kept.into_iter().map(|(_, layer)| layer).collect();
 
-        Ok(GpuSceneValue { layers })
+        Ok(GpuSceneValue { layers, layer_ids })
     }
 
     fn frame_graph_frozen_content(
