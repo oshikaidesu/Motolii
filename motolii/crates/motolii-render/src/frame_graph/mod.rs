@@ -13,6 +13,7 @@ mod key;
 mod property;
 mod program;
 mod scheduler;
+mod text_program;
 mod topology;
 mod transform;
 mod value;
@@ -40,6 +41,7 @@ pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
+pub use text_program::{TextBinding, TextProgram, TextProgramError, TextShapeValue};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
     RenderTarget, Submission, ViewProjection,
