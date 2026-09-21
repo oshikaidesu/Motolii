@@ -7,6 +7,7 @@ mod canonical;
 mod camera_program;
 mod compiler;
 mod content;
+mod effect_program;
 mod evaluate;
 mod flow_program;
 mod initial;
@@ -30,6 +31,7 @@ pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
 pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaSourceValue};
+pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
 pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
 pub use initial::{
