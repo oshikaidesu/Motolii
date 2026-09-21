@@ -410,7 +410,7 @@ impl Engine {
 
     /// ファイル素材の道はここ1本。**種別で分かれるのはこの関数の中だけ**で、
     /// 呼ぶ側は素材が何かを知らない。種別を足す時に触るのもここだけ。
-    fn file_content_for(
+    pub(in crate::engine) fn file_content_for(
         &mut self,
         path: &str,
         source_time: RationalTime,
@@ -433,7 +433,7 @@ impl Engine {
 
     /// 環境にした画。線形の放射輝度で上げ、照度図は上げる時に畳む。
     /// 失敗は普通の画と同じ棚(`failed_probes`)に置く。
-    fn environment_content_for(
+    pub(in crate::engine) fn environment_content_for(
         &mut self,
         path: &str,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
