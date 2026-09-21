@@ -33,7 +33,7 @@ pub enum SceneImageSourceValue {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub image_sources: Vec<Vec<SceneImageSourceValue>>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
+pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub image_sources: Vec<Vec<SceneImageSourceValue>>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
@@ -255,7 +255,7 @@ impl SceneNodeProgram {
                     }
                 }
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                let base = SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, opacity, projection: *projection, blend, order: *order };
+                let base = SceneLayerValue { layer: *layer, instance: 0, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, opacity, projection: *projection, blend, order: *order };
 
                 let Some(set) = placement_set.filter(|set| set.selected_effect.is_some()) else {
                     if let Some(samples) = motion_samples.filter(|samples| samples.selected_effect.is_some()) {
@@ -267,8 +267,9 @@ impl SceneNodeProgram {
                             members.push(SceneContributionValue { solo: visibility.solo, layer: Some(member) });
                         } else {
                             let count = samples.transforms.len() as f32;
-                            for transform in &samples.transforms {
+                            for (sample_index, transform) in samples.transforms.iter().enumerate() {
                                 let mut member = base.clone();
+                                member.instance = sample_index as u32;
                                 member.transform = *transform;
                                 member.opacity = (member.opacity / count).clamp(0.0, 1.0);
                                 member.matte = None;
@@ -316,6 +317,7 @@ impl SceneNodeProgram {
                     let Some(copy_transform) = copy.transform else { continue };
                     if copy.time_offset == RationalTime::ZERO {
                         let mut layer = base.clone();
+                        layer.instance = copy.index;
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
                         members.push(SceneContributionValue { solo: visibility.solo, layer: Some(layer) });
@@ -331,6 +333,7 @@ impl SceneNodeProgram {
                     if !sampled_visibility.active { continue; }
 
                     let mut layer = base.clone();
+                    layer.instance = copy.index;
                     layer.content = sampled_content(node, inputs, *kind, *content, &sample_indices, sample_start)?;
                     layer.opacity = sampled_opacity(inputs, *opacity, &sample_indices, sample_start).unwrap_or(1.0).clamp(0.0, 1.0);
                     layer.blend = sampled_blend(node, inputs, *blend_value, *blend, &sample_indices, sample_start)?;
