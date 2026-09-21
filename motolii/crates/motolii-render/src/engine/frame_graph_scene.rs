@@ -108,10 +108,20 @@ impl Engine {
                 rotation_y: 0.0,
                 plane: None,
             };
-            let passes: Vec<_> = crate::render::engine::translate::translate_effect_passes(&source.effects)
-                .into_iter()
-                .chain(crate::render::engine::translate::translate_plate_passes(&source.after_effects))
-                .collect();
+            let mut direct_passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
+            let direct_screen = (
+                content.texture().is_none()
+                    || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
+            ).then_some([comp.width, comp.height]);
+            self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
+
+            let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
+            let plate_screen = plate_passes.iter()
+                .any(|pass| pass.reads_backdrop || pass.reads_composite())
+                .then_some([comp.width, comp.height]);
+            self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
+
+            let passes: Vec<_> = direct_passes.into_iter().chain(plate_passes).collect();
             let pass_sources = self.frame_graph_image_sources(
                 &source.image_sources,
                 comp,
@@ -256,7 +266,12 @@ impl Engine {
         camera: ResolvedCamera,
     ) -> Result<Option<crate::render::compositor::GpuTexture2D>, EngineError> {
         match source {
-            SceneImageSourceValue::Content { layer, content } => {
+            SceneImageSourceValue::Content { layer, content, time, namespace } => {
+                let previous_clock = self.compositor.clock;
+                let previous_namespace = self.feedback_namespace;
+                self.feedback_namespace = *namespace;
+                self.set_frame_graph_source_clock(*time);
+                let result = (|| {
                 let content = match content {
                     SceneContentValue::None => return Ok(None),
                     SceneContentValue::Text(text) => self.shape_texture_from_shapes(
@@ -288,8 +303,17 @@ impl Engine {
                     return Ok(None);
                 };
                 Ok(self.compositor.snapshot_texture(&texture))
+                })();
+                self.compositor.clock = previous_clock;
+                self.feedback_namespace = previous_namespace;
+                result
             }
-            SceneImageSourceValue::Scene { scene, background } => {
+            SceneImageSourceValue::Scene { scene, background, time, namespace } => {
+                let previous_clock = self.compositor.clock;
+                let previous_namespace = self.feedback_namespace;
+                self.feedback_namespace = *namespace;
+                self.set_frame_graph_source_clock(*time);
+                let result = (|| {
                 let prepared = self.prepare_gpu_scene(scene, comp, camera)?;
                 let (texture, _) = self.compositor.render_to_texture(
                     comp,
@@ -298,6 +322,38 @@ impl Engine {
                     *background,
                 )?;
                 Ok(self.compositor.import_premultiplied(&texture).ok())
+                })();
+                self.compositor.clock = previous_clock;
+                self.feedback_namespace = previous_namespace;
+                result
+            }
+        }
+    }
+
+    fn set_frame_graph_source_clock(&mut self, time: crate::doc::core::RationalTime) {
+        let delta = self.compositor.clock.map_or(1.0 / 30.0, |clock| clock[1].max(1.0e-9));
+        let frame = (time.as_seconds_f64() as f32 / delta).round();
+        self.compositor.clock = Some([time.as_seconds_f64() as f32, delta, frame]);
+    }
+
+    pub(super) fn stamp_frame_graph_window_feedback(
+        &mut self,
+        layers: &mut [LayerWithPasses],
+        window: crate::render::compositor::Window,
+    ) {
+        for entry in layers {
+            let screen_chain = entry.layer.content.texture().is_none()
+                || entry.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite());
+            for pass in &mut entry.passes {
+                if let Some(mut key) = pass.feedback {
+                    if screen_chain || pass.reads_backdrop || pass.reads_composite() {
+                        key.screen = Some(window.size());
+                        pass.feedback = Some(key);
+                    }
+                    if self.feedback_namespace == 0 {
+                        self.feedback_keys_seen.push(key);
+                    }
+                }
             }
         }
     }
