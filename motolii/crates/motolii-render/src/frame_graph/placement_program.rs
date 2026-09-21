@@ -233,6 +233,72 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn same_time_repeater_expands_scene_contributions_in_order() {
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
+        doc.apply(Intent::SetComposition(Composition {
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+        })).unwrap();
+        let layer = LayerId(2);
+        let effect = EffectId(2);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetEffects { layer, effects: vec![EffectInstance { id: effect, plugin_id: crate::extensions::placement::REPEAT.into() }] },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(effect, "count").unwrap(), value: Value::F64(3.0) },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(effect, "position_each").unwrap(), value: Value::Vec2([10.0, 0.0]) },
+        ]).unwrap();
+
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+        let frame = graph.evaluate(&mut executor, RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        let scene = frame.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>()).unwrap();
+
+        assert_eq!(scene.layers.len(), 3);
+        assert_eq!(
+            scene.layers.iter().map(|layer| layer.transform.affine.translation.x.round()).collect::<Vec<_>>(),
+            [0.0, 10.0, 20.0],
+        );
+    }
+
+    #[test]
+    fn effects_below_repeater_receive_one_plate_not_each_copy() {
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
+        doc.apply(Intent::SetComposition(Composition {
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+        })).unwrap();
+        let layer = LayerId(3);
+        let repeat = EffectId(3);
+        let after = EffectId(4);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetEffects { layer, effects: vec![
+                EffectInstance { id: repeat, plugin_id: crate::extensions::placement::REPEAT.into() },
+                EffectInstance { id: after, plugin_id: "test.after".into() },
+            ] },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(2.0) },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([20.0, 0.0]) },
+        ]).unwrap();
+
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(2), topology);
+        let mut executor = Executor(&program);
+        let frame = graph.evaluate(&mut executor, RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        let scene = frame.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>()).unwrap();
+
+        assert_eq!(scene.layers.len(), 1);
+        assert_eq!(scene.layers[0].effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(), ["test.after"]);
+        let crate::frame_graph::SceneContentValue::Plate(plate) = &scene.layers[0].content else { panic!("copies must be one plate before downstream effects"); };
+        assert_eq!(plate.members.len(), 2);
+    }
+
     #[test]
     fn repeater_outputs_current_time_copies_and_keeps_delayed_copies_explicit() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
