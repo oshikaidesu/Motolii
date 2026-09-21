@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue};
+use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneContentValue {
@@ -106,8 +106,11 @@ impl SceneNodeProgram {
                         let value = inputs.at(index).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                         if let Some(material) = value.downcast_ref::<MaterialValue>() {
                             SceneContentValue::Material(material.clone())
-                        } else if let Some((source, time)) = value.downcast_ref::<(MediaSourceValue, RationalTime)>() {
-                            SceneContentValue::Media { source: source.clone(), time: *time }
+                        } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
+                            match frame.time {
+                                Some(time) => SceneContentValue::Media { source: frame.source.clone(), time },
+                                None => SceneContentValue::None,
+                            }
                         } else {
                             return Err(SceneNodeError::InvalidInput(node.identity().kind));
                         }
