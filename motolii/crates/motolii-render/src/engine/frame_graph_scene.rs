@@ -40,6 +40,22 @@ impl Engine {
                         self.file_content_for(&media.path, *time, source.layer, comp)?
                     }
                 }
+                SceneContentValue::Particles(value) => {
+                    let frame = super::ParticleFrame::from_particles(&value.particles, value.turbulence, value.links);
+                    let natural = [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)];
+                    (
+                        Some(crate::render::compositor::LayerContent::Cloud {
+                            positions: frame.positions,
+                            colors: frame.colors,
+                            bounds: frame.bounds,
+                            point_size: 1.0,
+                            sizes: Some(frame.sizes),
+                            sprites: true,
+                            links: frame.links,
+                        }),
+                        natural,
+                    )
+                }
                 SceneContentValue::Plate(plate) => {
                     let nested = SceneValue {
                         layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
