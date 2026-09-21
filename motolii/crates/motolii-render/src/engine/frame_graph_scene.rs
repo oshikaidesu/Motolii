@@ -40,6 +40,35 @@ impl Engine {
                         self.file_content_for(&media.path, *time, source.layer, comp)?
                     }
                 }
+                SceneContentValue::Plate(plate) => {
+                    let nested = SceneValue {
+                        layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
+                    };
+                    let prepared = self.prepare_gpu_scene(&nested, comp, projection_camera)?;
+                    if prepared.layers.is_empty() {
+                        (None, [comp.width as f32, comp.height as f32])
+                    } else {
+                        let placement = LayerPlacement {
+                            transform: glam::Affine2::IDENTITY,
+                            world_transform: None,
+                            opacity: 1.0,
+                            order: i32::from(source.order),
+                            z: 0.0,
+                            rotation_x: 0.0,
+                            rotation_y: 0.0,
+                            plane: None,
+                        };
+                        let baked = self.bake_isolated_layers(
+                            comp,
+                            projection_camera,
+                            prepared.layers,
+                            CompositeBlendMode::Normal,
+                            placement,
+                            false,
+                        )?;
+                        (Some(baked.content), baked.size)
+                    }
+                }
             };
             let Some(content) = content else { continue };
             let placement = LayerPlacement {
