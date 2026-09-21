@@ -49,6 +49,10 @@ pub enum QualityDependency {
 /// changing the graph's ownership or scheduling contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NodeKind {
+    PropertyConstant,
+    PropertyTrack,
+    PropertyLink,
+    PropertySum,
     /// Coarse F2 world evaluation, before per-content node lowering.
     ResolvedWorld,
     /// Text documents collected from one resolved world.
