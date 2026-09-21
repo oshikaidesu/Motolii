@@ -8,10 +8,10 @@ use crate::picture::shapes_ops::Canvas;
 
 use super::{ContentProgram, EvaluationContext, GraphNode, InputTime, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
-const ROWS: [&str; 22] = [layout::DISPLAY, layout::FLEX_DIRECTION, layout::FLEX_WRAP, layout::JUSTIFY_CONTENT, layout::ALIGN_ITEMS, layout::GAP, layout::PADDING, layout::GRID_COLUMNS, layout::GRID_ROWS, layout::HORIZONTAL_SIZING, layout::VERTICAL_SIZING, layout::WIDTH, layout::HEIGHT, layout::MARGIN, layout::FLEX_SHRINK, layout::ALIGN_SELF, layout::COLUMN_START, layout::COLUMN_SPAN, layout::ROW_START, layout::ROW_SPAN, layout::OBJECT_FIT, crate::doc::store::property::SCALE];
+const ROWS: [&str; 23] = [layout::DISPLAY, layout::FLEX_DIRECTION, layout::FLEX_WRAP, layout::JUSTIFY_CONTENT, layout::ALIGN_ITEMS, layout::GAP, layout::PADDING, layout::GRID_COLUMNS, layout::GRID_ROWS, layout::HORIZONTAL_SIZING, layout::VERTICAL_SIZING, layout::WIDTH, layout::HEIGHT, layout::MARGIN, layout::FLEX_SHRINK, layout::ALIGN_SELF, layout::COLUMN_START, layout::COLUMN_SPAN, layout::ROW_START, layout::ROW_SPAN, layout::OBJECT_FIT, crate::doc::store::property::SCALE, crate::doc::store::property::ANCHOR];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct FlowSlot { pub position: [f32; 2], pub scale: [f32; 2], pub stretch: [f32; 2], pub wrap: Option<f32> }
+pub struct FlowSlot { pub position: [f32; 2], pub scale: [f32; 2], pub stretch: [f32; 2], pub wrap: Option<f32>, pub anchor: [f32; 2] }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FlowFrameValue { pub slots: Vec<Option<FlowSlot>>, pub sizes: Vec<Option<[f32; 2]>> }
@@ -22,7 +22,7 @@ pub struct FlowBinding { pub layer: LayerId, pub index: usize }
 #[derive(Clone)]
 struct LayerPlan {
     parent: Option<usize>, order: i16, source: LayerSource,
-    props: [Option<usize>; 22], content: Option<usize>,
+    props: [Option<usize>; 23], content: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -61,7 +61,7 @@ impl FlowProgram {
         for layer in ids.iter().copied() {
             let meta = view.meta(layer)?.unwrap_or_else(|| crate::doc::store::LayerMeta { source: LayerSource::Null, order: 0, timing: crate::doc::store::LayerTiming::place(0, None, 0) });
             let parent = view.attrs(layer)?.unwrap_or_default().parent.and_then(|parent| index.get(&parent).copied());
-            let mut props = [None; 22];
+            let mut props = [None; 23];
             for (row, name) in ROWS.iter().enumerate() {
                 props[row] = properties.node_for(layer, &PropertyId::new(name).expect("known layout property")).map(&mut input);
             }
@@ -214,17 +214,42 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs) -> Result<FlowFrameValue, Flow
             out.sizes[index] = Some([placed.size.width, placed.size.height]);
             if index == root { continue; }
             let plan = &recipe.layers[index];
+            if plan.source == LayerSource::Group {
+                // A nested layout Group is the cell itself, not content to be
+                // centred inside that cell. Its children are already laid out
+                // relative to this origin. Authored Position/Scale remain in
+                // TransformProgram and therefore must not be duplicated here.
+                out.slots[index] = Some(FlowSlot {
+                    position: [placed.location.x, placed.location.y],
+                    scale: [1.0, 1.0],
+                    stretch: [1.0, 1.0],
+                    wrap: None,
+                    anchor: [0.0, 0.0],
+                });
+                continue;
+            }
             let bounds = natural_bounds(plan, inputs, &canvas);
             let authored_scale = pair(plan, 21, inputs, [1.0, 1.0]);
             let natural = [(bounds[2] - bounds[0]) * authored_scale[0].abs(), (bounds[3] - bounds[1]) * authored_scale[1].abs()];
             let size = sizing(plan, inputs);
-            let factor = [0, 1].map(|axis| if size[axis] == Sizing::Hug || natural[axis] <= 1e-6 { 1.0 } else { [placed.size.width, placed.size.height][axis] / natural[axis] });
+            let mut factor = [0, 1].map(|axis| if size[axis] == Sizing::Hug || natural[axis] <= 1e-6 { 1.0 } else { [placed.size.width, placed.size.height][axis] / natural[axis] });
+            let fitted: Vec<_> = (0..2).filter(|axis| size[*axis] != Sizing::Hug).map(|axis| factor[axis]).collect();
+            factor = match (choice(plan, 20, inputs, 0), fitted.as_slice()) {
+                (1, _) if !fitted.is_empty() => { let scale = fitted.iter().copied().fold(f32::INFINITY, f32::min); [scale; 2] },
+                (2, _) if !fitted.is_empty() => { let scale = fitted.iter().copied().fold(0.0, f32::max); [scale; 2] },
+                (3, _) => [1.0; 2],
+                _ => factor,
+            };
             let cell = [placed.size.width, placed.size.height];
             let shown = [natural[0] * factor[0], natural[1] * factor[1]];
-            let lo = [bounds[0] * authored_scale[0] * factor[0], bounds[1] * authored_scale[1] * factor[1]];
+            let anchor = match value(plan, 22, inputs) {
+                Some(Value::Vec2(value)) => [value[0] as f32, value[1] as f32],
+                _ => [(bounds[0] + bounds[2]) * 0.5, (bounds[1] + bounds[3]) * 0.5],
+            };
+            let lo = [(bounds[0] - anchor[0]) * authored_scale[0] * factor[0], (bounds[1] - anchor[1]) * authored_scale[1] * factor[1]];
             let origin = [placed.location.x, placed.location.y];
             let position = [0, 1].map(|axis| origin[axis] + (cell[axis] - shown[axis]) * 0.5 - lo[axis] + crate::picture::CANVAS_MARGIN);
-            out.slots[index] = Some(FlowSlot { position, scale: factor, stretch: if plan.source == LayerSource::Shape { factor } else { [1.0, 1.0] }, wrap: (plan.source == LayerSource::Text && size[0] == Sizing::Fill).then_some(placed.size.width / authored_scale[0].abs().max(1e-3)) });
+            out.slots[index] = Some(FlowSlot { position, scale: factor, stretch: if plan.source == LayerSource::Shape { factor } else { [1.0, 1.0] }, wrap: (plan.source == LayerSource::Text && size[0] == Sizing::Fill).then_some(placed.size.width / authored_scale[0].abs().max(1e-3)), anchor });
         }
     }
     Ok(out)
@@ -241,7 +266,6 @@ fn window_number(layer: &WindowLayer, which: usize, inputs: &NodeInputs, default
 
 fn evaluate_window(recipe: &WindowRecipe, inputs: &NodeInputs) -> Result<FlowFrameValue, FlowProgramError> {
     let frames: Vec<&FlowFrameValue> = (0..=recipe.reach).map(|index| inputs.at(index).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(FlowProgramError::InvalidInput(NodeKind::FlowWindow))).collect::<Result<_, _>>()?;
-    let fps = recipe.fps.as_f64();
     let mut schedules: Vec<Option<Vec<(usize, f32)>>> = vec![None; recipe.layers.len()];
     fn schedule(index: usize, recipe: &WindowRecipe, inputs: &NodeInputs, frames: &[&FlowFrameValue], schedules: &mut [Option<Vec<(usize, f32)>>]) -> Vec<(usize, f32)> {
         if let Some(schedule) = &schedules[index] { return schedule.clone(); }
