@@ -131,6 +131,131 @@ mod tests {
     }
 
     #[test]
+    fn media_frame_uses_layer_timing_and_disappears_outside_the_trim() {
+        let mut doc = Document::new();
+        let clip = LayerId(7);
+        let fps = crate::doc::core::Fps::try_new(30, 1).unwrap();
+        doc.apply_all([
+            Intent::SetComposition(crate::doc::store::Composition {
+                width: 640,
+                height: 360,
+                fps,
+                duration_frames: 120,
+                background: [0.0, 0.0, 0.0, 1.0],
+            }),
+            Intent::AddLayer(clip),
+            Intent::SetMeta {
+                layer: clip,
+                meta: LayerMeta {
+                    source: LayerSource::File {
+                        path: "/motolii-test/clip.mp4".into(),
+                        fingerprint: Some("clip-v1".into()),
+                    },
+                    order: 0,
+                    timing: LayerTiming {
+                        start: 10,
+                        duration: 20,
+                        source_in: 5,
+                        speed: crate::doc::store::Speed::try_new(2, 1).unwrap(),
+                    },
+                },
+            },
+        ])
+        .unwrap();
+
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+
+        let at = crate::doc::core::RationalTime::try_from_frame(12, fps).unwrap();
+        let frame = graph
+            .evaluate(&mut executor, at, FrameQuality::Export, Generation::new(1))
+            .unwrap();
+        let scene = frame
+            .value(root)
+            .and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>())
+            .unwrap();
+        match &scene.layers[0].content {
+            crate::frame_graph::SceneContentValue::Media { time, .. } => {
+                assert_eq!(*time, crate::doc::core::RationalTime::try_from_frame(9, fps).unwrap());
+            }
+            other => panic!("in-range file frame did not lower to media: {other:?}"),
+        }
+
+        let before = crate::doc::core::RationalTime::try_from_frame(9, fps).unwrap();
+        let frame = graph
+            .evaluate(&mut executor, before, FrameQuality::Export, Generation::new(2))
+            .unwrap();
+        let scene = frame
+            .value(root)
+            .and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>())
+            .unwrap();
+        assert!(matches!(scene.layers[0].content, crate::frame_graph::SceneContentValue::None));
+    }
+
+    #[test]
+    fn media_frame_time_remap_overrides_speed_like_the_legacy_resolver() {
+        let mut doc = Document::new();
+        let clip = LayerId(8);
+        let fps = crate::doc::core::Fps::try_new(30, 1).unwrap();
+        doc.apply_all([
+            Intent::SetComposition(crate::doc::store::Composition {
+                width: 640,
+                height: 360,
+                fps,
+                duration_frames: 120,
+                background: [0.0, 0.0, 0.0, 1.0],
+            }),
+            Intent::AddLayer(clip),
+            Intent::SetMeta {
+                layer: clip,
+                meta: LayerMeta {
+                    source: LayerSource::File {
+                        path: "/motolii-test/remap.mp4".into(),
+                        fingerprint: Some("clip-remap".into()),
+                    },
+                    order: 0,
+                    timing: LayerTiming {
+                        start: 0,
+                        duration: 120,
+                        source_in: 3,
+                        speed: crate::doc::store::Speed::try_new(2, 1).unwrap(),
+                    },
+                },
+            },
+            Intent::SetConstant {
+                layer: clip,
+                property: PropertyId::new(crate::doc::store::property::TIME_REMAP).unwrap(),
+                value: Value::F64(42.75),
+            },
+        ])
+        .unwrap();
+
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.scene().scene;
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+        let at = crate::doc::core::RationalTime::try_from_frame(10, fps).unwrap();
+        let frame = graph
+            .evaluate(&mut executor, at, FrameQuality::Export, Generation::new(1))
+            .unwrap();
+        let scene = frame
+            .value(root)
+            .and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>())
+            .unwrap();
+        match &scene.layers[0].content {
+            crate::frame_graph::SceneContentValue::Media { time, .. } => {
+                assert_eq!(*time, crate::doc::core::RationalTime::try_from_frame(42, fps).unwrap());
+            }
+            other => panic!("remapped file frame did not lower to media: {other:?}"),
+        }
+    }
+
+
+    #[test]
     fn file_frame_reaches_the_scene_as_timed_media_instead_of_a_material() {
         let mut doc = Document::new();
         let clip = LayerId(9);
