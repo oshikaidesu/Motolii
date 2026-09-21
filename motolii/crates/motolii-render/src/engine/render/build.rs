@@ -176,7 +176,7 @@ impl Engine {
                 // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
                 // 解き手が動かす物は、書類の位置で間引かない(画面の外から入って来る)。
                 // 解析で 1 枚だけ組んでいる間も間引かない(絵がどこに居ても透過を読みたい)。
-                if !needs_auxiliary_views && !self.analysing && layer.matte.is_none() && !layer.clip_to_below && !self.blocks.moves(layer.id) && offscreen(comp, camera, &built, &passes) {
+                if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && !self.blocks.moves(layer.id) && offscreen(comp, camera, &built, &passes) {
                     continue;
                 }
                 (built, passes)

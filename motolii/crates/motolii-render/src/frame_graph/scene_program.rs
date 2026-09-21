@@ -198,13 +198,13 @@ impl SceneNodeProgram {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
             Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, flow, depth, effects, placement_effects, placement, motion, masks, matte, clip_to_below, flatten, environment, frozen, timing_start, projection, blend, order, kind } => (|| {
-                let visibility = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
-                if !visibility.active {
-                    return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: None }));
+                let visible = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                if !visible.active {
+                    return Ok(NodeValue::new(SceneContributionValue { solo: visible.solo, layer: None }));
                 }
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 let content_key = content.map(|index| node.identity().inputs[index]);
-                let content = match (*kind, *content) {
+                let scene_content = match (*kind, *content) {
                     (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_ref::<TextShapeValue>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (3, Some(index)) => {
@@ -228,15 +228,15 @@ impl SceneNodeProgram {
                     ),
                     _ => SceneContentValue::None,
                 };
-                let opacity = opacity.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None }).unwrap_or(1.0).clamp(0.0, 1.0);
-                let blend = match blend_value.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()) {
+                let layer_opacity = opacity.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None }).unwrap_or(1.0).clamp(0.0, 1.0);
+                let layer_blend = match blend_value.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()) {
                     Some(crate::doc::eval::Value::Enum(value)) => BlendMode::from_enum_value(*value).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
                     Some(_) => return Err(SceneNodeError::InvalidInput(node.identity().kind)),
                     None => *blend,
                 };
-                let mut matte = *matte;
+                let mut layer_matte = *matte;
                 if !*clip_to_below {
-                    if let (Some(matte), Some(value)) = (matte.as_mut(), matte_mode.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())) {
+                    if let (Some(matte), Some(value)) = (layer_matte.as_mut(), matte_mode.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())) {
                         match value {
                             crate::doc::eval::Value::Enum(value) => matte.mode = crate::doc::store::MatteMode::from_enum_value(*value).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
                             _ => return Err(SceneNodeError::InvalidInput(node.identity().kind)),
@@ -260,10 +260,10 @@ impl SceneNodeProgram {
                         _ => direct.push(effect),
                     }
                 }
-                let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
+                let layer_masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
                 let shape_stretch = flow.and_then(|(input, index)| inputs.at(input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).and_then(|flow| flow.slots.get(index)).copied().flatten()).map_or([1.0, 1.0], |slot| slot.stretch);
-                let depth = depth.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) if value.is_finite() => Some(*value as f32), _ => None }).unwrap_or(0.0).max(0.0);
-                let base = SceneLayerValue { layer: *layer, instance: 0, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, freeze_eligible: *frozen, timing_start: *timing_start, opacity, projection: *projection, blend, order: *order, shape_stretch, depth };
+                let layer_depth = depth.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) if value.is_finite() => Some(*value as f32), _ => None }).unwrap_or(0.0).max(0.0);
+                let base = SceneLayerValue { layer: *layer, instance: 0, source: source.clone(), transform, content_key, content: scene_content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks: layer_masks, matte: layer_matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, freeze_eligible: *frozen, timing_start: *timing_start, opacity: layer_opacity, projection: *projection, blend: layer_blend, order: *order, shape_stretch, depth: layer_depth };
 
                 let Some(set) = placement_set.filter(|set| set.selected_effect.is_some()) else {
                     if let Some(samples) = motion_samples.filter(|samples| samples.selected_effect.is_some()) {
@@ -272,7 +272,7 @@ impl SceneNodeProgram {
                             let mut member = base.clone();
                             member.matte = None;
                             member.clip_to_below = false;
-                            members.push(SceneContributionValue { solo: visibility.solo, layer: Some(member) });
+                            members.push(SceneContributionValue { solo: visible.solo, layer: Some(member) });
                         } else {
                             let count = samples.transforms.len() as f32;
                             for (sample_index, transform) in samples.transforms.iter().enumerate() {
@@ -283,13 +283,13 @@ impl SceneNodeProgram {
                                 member.opacity = (member.opacity / count).clamp(0.0, 1.0);
                                 member.matte = None;
                                 member.clip_to_below = false;
-                                members.push(SceneContributionValue { solo: visibility.solo, layer: Some(member) });
+                                members.push(SceneContributionValue { solo: visible.solo, layer: Some(member) });
                             }
                         }
                         if after.is_empty() && samples.transforms.is_empty() {
                             // The sampling effect is a no-op at this frame.
                             return Ok(NodeValue::new(SceneContributionValue {
-                                solo: visibility.solo,
+                                solo: visible.solo,
                                 layer: members.into_iter().next().and_then(|member| member.layer),
                             }));
                         }
@@ -315,11 +315,11 @@ impl SceneNodeProgram {
                         plate.shape_stretch = [1.0, 1.0];
                         plate.depth = 0.0;
                         return Ok(NodeValue::new(SceneContributionValue {
-                            solo: visibility.solo,
+                            solo: visible.solo,
                             layer: Some(plate),
                         }));
                     }
-                    return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: Some(base) }));
+                    return Ok(NodeValue::new(SceneContributionValue { solo: visible.solo, layer: Some(base) }));
                 };
 
                 let sample_indices = contribution_sample_indices(node, *placement);
@@ -333,7 +333,7 @@ impl SceneNodeProgram {
                         layer.freeze_eligible = false;
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
-                        members.push(SceneContributionValue { solo: visibility.solo, layer: Some(layer) });
+                        members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
                         continue;
                     }
 
@@ -386,12 +386,12 @@ impl SceneNodeProgram {
                             .copied()
                             .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                     }
-                    members.push(SceneContributionValue { solo: visibility.solo, layer: Some(layer) });
+                    members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
                 }
 
                 if members.is_empty() {
                     return Ok(NodeValue::new(SceneFragmentValue {
-                        contributions: vec![SceneContributionValue { solo: visibility.solo, layer: None }],
+                        contributions: vec![SceneContributionValue { solo: visible.solo, layer: None }],
                     }));
                 }
                 if after.is_empty() {
@@ -421,7 +421,7 @@ impl SceneNodeProgram {
                 plate.shape_stretch = [1.0, 1.0];
                 plate.depth = 0.0;
                 Ok(NodeValue::new(SceneFragmentValue {
-                    contributions: vec![SceneContributionValue { solo: visibility.solo, layer: Some(plate) }],
+                    contributions: vec![SceneContributionValue { solo: visible.solo, layer: Some(plate) }],
                 }))
             })(),
             Recipe::Composite => (|| {
