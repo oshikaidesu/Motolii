@@ -528,7 +528,7 @@ impl Engine {
         Ok(Some(if masks_applied { built } else { self.apply_masks_to_layer(built, masks, natural, frame)? }))
     }
 
-    fn apply_masks_to_layer(
+    pub(in crate::engine) fn apply_masks_to_layer(
         &mut self,
         mut layer: Layer,
         masks: &[ResolvedMask],
