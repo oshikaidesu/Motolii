@@ -91,10 +91,10 @@ impl Engine {
                 content = match &content {
                     crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
                         .map(crate::render::compositor::LayerContent::Texture)
-                        .unwrap_or(content),
+                        .unwrap_or_else(|| content.clone()),
                     crate::render::compositor::LayerContent::LinearTexture(texture) => self.compositor.snapshot_texture(texture)
                         .map(crate::render::compositor::LayerContent::LinearTexture)
-                        .unwrap_or(content),
+                        .unwrap_or_else(|| content.clone()),
                     _ => content,
                 };
             }
@@ -235,11 +235,17 @@ impl Engine {
         camera: ResolvedCamera,
     ) -> Result<Vec<Vec<crate::render::compositor::GpuTexture2D>>, EngineError> {
         rows.iter().map(|row| {
-            row.iter().filter_map(|source| match self.frame_graph_image_source(source, comp, camera) {
-                Ok(Some(texture)) => Some(Ok(texture)),
-                Ok(None) => None,
-                Err(error) => Some(Err(error)),
-            }).collect()
+            let mut textures = Vec::with_capacity(row.len());
+            for source in row {
+                match self.frame_graph_image_source(source, comp, camera)? {
+                    Some(texture) => textures.push(texture),
+                    None => {
+                        textures.clear();
+                        break;
+                    }
+                }
+            }
+            Ok(textures)
         }).collect()
     }
 
@@ -285,7 +291,6 @@ impl Engine {
             }
             SceneImageSourceValue::Scene { scene, background } => {
                 let prepared = self.prepare_gpu_scene(scene, comp, camera)?;
-                if prepared.layers.is_empty() { return Ok(None); }
                 let (texture, _) = self.compositor.render_to_texture(
                     comp,
                     camera,
