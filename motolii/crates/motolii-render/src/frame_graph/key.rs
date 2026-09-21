@@ -90,6 +90,8 @@ pub enum NodeKind {
     Material,
     /// A time-addressed media frame (video) or image source.
     MediaFrame,
+    /// Exact-time authored participation: hidden/solo/timing.
+    Visibility,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
