@@ -26,6 +26,7 @@ mod program;
 mod scheduler;
 mod scene_program;
 mod scene_policy;
+mod solver_program;
 mod text_program;
 mod topology;
 mod transform;
@@ -61,6 +62,7 @@ pub use placement_program::{PlacementBinding, PlacementCopyValue, PlacementProgr
 pub use particle_program::{ParticleBinding, ParticleProgram, ParticleProgramError, ParticleValue};
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationSetValue, RelationValue};
+pub use solver_program::{SolverLayerValue, SolverPlanValue, SolverProgram, SolverProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
