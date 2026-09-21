@@ -6,7 +6,7 @@ use crate::doc::eval::Value;
 use crate::doc::store::{layout, LayerId, LayerSource, PropertyId, ShapeNode, StoreError, StoreView, TextDocument};
 use crate::picture::shapes_ops::Canvas;
 
-use super::{ContentProgram, EvaluationContext, GraphNode, InputTime, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
+use super::{ContentProgram, EvaluationContext, GraphNode, InputTime, MediaExtentValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 const ROWS: [&str; 23] = [layout::DISPLAY, layout::FLEX_DIRECTION, layout::FLEX_WRAP, layout::JUSTIFY_CONTENT, layout::ALIGN_ITEMS, layout::GAP, layout::PADDING, layout::GRID_COLUMNS, layout::GRID_ROWS, layout::HORIZONTAL_SIZING, layout::VERTICAL_SIZING, layout::WIDTH, layout::HEIGHT, layout::MARGIN, layout::FLEX_SHRINK, layout::ALIGN_SELF, layout::COLUMN_START, layout::COLUMN_SPAN, layout::ROW_START, layout::ROW_SPAN, layout::OBJECT_FIT, crate::doc::store::property::SCALE, crate::doc::store::property::ANCHOR];
 
@@ -155,6 +155,11 @@ fn natural_bounds(plan: &LayerPlan, inputs: &NodeInputs, canvas: &Canvas) -> [f3
     }
     if let Some(shapes) = content.downcast_ref::<Vec<ShapeNode>>() {
         return crate::picture::shapes_ops::content_bounds(shapes).ok().flatten().map(|bounds| bounds.map(|value| value as f32)).unwrap_or([0.0; 4]);
+    }
+    if let Some(extent) = content.downcast_ref::<MediaExtentValue>() {
+        if extent.size[0] > 0.0 && extent.size[1] > 0.0 {
+            return [0.0, 0.0, extent.size[0], extent.size[1]];
+        }
     }
     [0.0; 4]
 }
