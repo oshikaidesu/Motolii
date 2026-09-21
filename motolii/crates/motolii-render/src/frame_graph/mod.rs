@@ -8,6 +8,7 @@ mod compiler;
 mod evaluate;
 mod initial;
 mod key;
+mod property;
 mod scheduler;
 mod topology;
 mod value;
@@ -29,6 +30,7 @@ pub use key::{
     FrameQuality, InputTime, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency,
     WorkKey,
 };
+pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
