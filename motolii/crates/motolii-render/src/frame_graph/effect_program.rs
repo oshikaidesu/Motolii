@@ -22,11 +22,12 @@ pub struct EffectProgram {
     bindings: BTreeMap<LayerId, EffectBinding>,
     placement: BTreeMap<NodeKey, crate::doc::store::kind::PlacementProgram>,
     sampling: BTreeMap<NodeKey, crate::doc::store::kind::SamplingProgram>,
+    snap: BTreeMap<NodeKey, crate::doc::store::kind::SnapProgram>,
 }
 
 impl EffectProgram {
     pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram) -> Result<Self, EffectProgramError> {
-        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new(); let mut placement = BTreeMap::new(); let mut sampling = BTreeMap::new();
+        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new(); let mut placement = BTreeMap::new(); let mut sampling = BTreeMap::new(); let mut snap = BTreeMap::new();
         for layer in view.layers() {
             let property_names = view.properties(layer);
             let mut keys = Vec::new();
@@ -46,6 +47,7 @@ impl EffectProgram {
                 let node = GraphNode::new(identity);
                 let placement_program = view.placement_program(&effect.plugin_id);
                 let sampling_program = view.sampling_program(&effect.plugin_id);
+                let snap_program = view.snap_program(&effect.plugin_id);
                 recipes.entry(node.key()).or_insert(Recipe { plugin_id: effect.plugin_id, enabled, scope, params });
                 if let Some(program) = placement_program {
                     placement.entry(node.key()).or_insert(program);
@@ -53,18 +55,22 @@ impl EffectProgram {
                 if let Some(program) = sampling_program {
                     sampling.entry(node.key()).or_insert(program);
                 }
+                if let Some(program) = snap_program {
+                    snap.entry(node.key()).or_insert(program);
+                }
                 nodes.entry(node.key()).or_insert(node.clone());
                 keys.push(node.key());
             }
             if !keys.is_empty() { bindings.insert(layer, EffectBinding { layer, effects: keys }); }
         }
-        Ok(Self { nodes, recipes, bindings, placement, sampling })
+        Ok(Self { nodes, recipes, bindings, placement, sampling, snap })
     }
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn binding(&self, layer: LayerId) -> Option<&EffectBinding> { self.bindings.get(&layer) }
     pub fn is_placement(&self, key: NodeKey) -> bool { self.placement.contains_key(&key) }
     pub fn placement_program(&self, key: NodeKey) -> Option<crate::doc::store::kind::PlacementProgram> { self.placement.get(&key).copied() }
     pub fn sampling_program(&self, key: NodeKey) -> Option<crate::doc::store::kind::SamplingProgram> { self.sampling.get(&key).copied() }
+    pub fn snap_program(&self, key: NodeKey) -> Option<crate::doc::store::kind::SnapProgram> { self.snap.get(&key).copied() }
     pub fn plugin_id(&self, key: NodeKey) -> Option<&str> { self.recipes.get(&key).map(|recipe| recipe.plugin_id.as_str()) }
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, EffectProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
