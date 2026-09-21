@@ -19,6 +19,24 @@ pub enum TimeDependency {
     Exact,
 }
 
+/// Mapping from a consumer's exact comp time to one input's time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum InputTime {
+    Same,
+    Offset { delta: RationalTime, clamp_to_zero: bool },
+}
+
+impl InputTime {
+    pub fn apply(self, time: RationalTime) -> RationalTime {
+        match self {
+            Self::Same => time,
+            Self::Offset { delta, clamp_to_zero } => time.try_add(delta).ok()
+                .filter(|value| !clamp_to_zero || *value >= RationalTime::ZERO)
+                .unwrap_or(RationalTime::ZERO),
+        }
+    }
+}
+
 /// Whether preview and export may share the same result. This is recipe
 /// metadata, not a concrete preview/export choice captured at compile time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -90,6 +108,7 @@ pub enum NodeKind {
 pub struct NodeIdentity {
     pub kind: NodeKind,
     pub inputs: Vec<NodeKey>,
+    pub input_times: Vec<InputTime>,
     pub parameters: Vec<u8>,
     pub time_dependency: TimeDependency,
     pub source_versions: Vec<u64>,
@@ -98,14 +117,22 @@ pub struct NodeIdentity {
 
 impl NodeIdentity {
     pub fn new(kind: NodeKind, inputs: Vec<NodeKey>) -> Self {
+        let input_times = vec![InputTime::Same; inputs.len()];
         Self {
             kind,
             inputs,
+            input_times,
             parameters: Vec::new(),
             time_dependency: TimeDependency::Static,
             source_versions: Vec::new(),
             quality_dependency: QualityDependency::Invariant,
         }
+    }
+
+    pub fn with_input_times(mut self, input_times: Vec<InputTime>) -> Self {
+        assert_eq!(self.inputs.len(), input_times.len(), "every FrameGraph input needs one time mapping");
+        self.input_times = input_times;
+        self
     }
 }
 

@@ -26,7 +26,8 @@ pub use initial::{
     ShapeDocuments, SharedScene, StageRoot, TextDocuments,
 };
 pub use key::{
-    FrameQuality, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency, WorkKey,
+    FrameQuality, InputTime, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency,
+    WorkKey,
 };
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use value::{
@@ -365,5 +366,42 @@ mod tests {
             &[static_node.key(), timed_node.key()]
         );
         assert_eq!(compiled.stats().cancelled_generations, 0);
+    }
+
+    #[test]
+    fn temporal_edges_reuse_the_same_source_time_and_keep_duplicate_inputs_positional() {
+        struct TemporalExecutor { sources: Vec<RationalTime>, pairs: Vec<(RationalTime, RationalTime)> }
+        impl NodeExecutor for TemporalExecutor {
+            type Error = ();
+            fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
+                if node.identity().kind == NodeKind::Custom(10) {
+                    self.sources.push(context.time);
+                    return Ok(NodeValue::new(context.time));
+                }
+                let now = *inputs.at(0).and_then(|value| value.downcast_ref::<RationalTime>()).unwrap();
+                let before = *inputs.at(1).and_then(|value| value.downcast_ref::<RationalTime>()).unwrap();
+                self.pairs.push((now, before));
+                Ok(NodeValue::new((now, before)))
+            }
+        }
+
+        let mut source_identity = NodeIdentity::new(NodeKind::Custom(10), vec![]);
+        source_identity.time_dependency = TimeDependency::Exact;
+        let source = GraphNode::new(source_identity);
+        let step = RationalTime::try_new(1, 30).unwrap();
+        let mut consumer_identity = NodeIdentity::new(NodeKind::Custom(11), vec![source.key(), source.key()])
+            .with_input_times(vec![InputTime::Same, InputTime::Offset { delta: RationalTime::try_new(-1, 30).unwrap(), clamp_to_zero: true }]);
+        consumer_identity.time_dependency = TimeDependency::Exact;
+        let consumer = GraphNode::new(consumer_identity);
+        let graph = GraphTopology::try_new([source.clone(), consumer.clone()], vec![consumer.key()]).unwrap();
+        let mut compiled = CompiledGraph::with_topology(GraphRevision::new(1), graph);
+        let mut executor = TemporalExecutor { sources: Vec::new(), pairs: Vec::new() };
+
+        compiled.evaluate(&mut executor, step, FrameQuality::Export, Generation::new(1)).unwrap();
+        compiled.evaluate(&mut executor, step.try_add(step).unwrap(), FrameQuality::Export, Generation::new(2)).unwrap();
+
+        assert_eq!(executor.pairs, vec![(step, RationalTime::ZERO), (step.try_add(step).unwrap(), step)]);
+        assert_eq!(executor.sources, vec![step, RationalTime::ZERO, step.try_add(step).unwrap()]);
+        assert!(compiled.stats().node_reuses >= 1, "the second frame must reuse source@previous-time");
     }
 }
