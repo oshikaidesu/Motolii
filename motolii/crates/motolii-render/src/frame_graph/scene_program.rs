@@ -27,7 +27,13 @@ pub struct ScenePlateValue {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
+pub enum SceneImageSourceValue {
+    Content { layer: LayerId, content: SceneContentValue },
+    Scene { scene: SceneValue, background: [f32; 4] },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub image_sources: Vec<Vec<SceneImageSourceValue>>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
@@ -249,7 +255,7 @@ impl SceneNodeProgram {
                     }
                 }
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                let base = SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, opacity, projection: *projection, blend, order: *order };
+                let base = SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, opacity, projection: *projection, blend, order: *order };
 
                 let Some(set) = placement_set.filter(|set| set.selected_effect.is_some()) else {
                     if let Some(samples) = motion_samples.filter(|samples| samples.selected_effect.is_some()) {
