@@ -77,7 +77,8 @@ impl Engine {
         let Some(target) = crate::picture::resolve::camera::camera_target_layer(view, id, t).map_err(store)? else { return Ok(camera) };
         let (Some(bounds), Some(comp)) = (self.selected_layer_bounds_in(view, resolved, target, t), view.composition().map_err(store)?) else { return Ok(camera) };
         let comp = comp.spec();
-        let point = crate::picture::resolve::transform::world_transform3d(view, target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
+        let Some(world) = resolved.iter().find(|layer| layer.id == target && !layer.ghost).and_then(|layer| layer.placement.world_transform) else { return Ok(camera) };
+        let point = world.transform_point3(glam::Vec3::from(bounds.center()));
         camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
         camera.target_z = point.z;
         Ok(camera)
@@ -97,17 +98,16 @@ impl Engine {
         }
     }
 
-    /// 解決済みの層の並びが手元に無い時。層ターゲットがある時だけ層を解く。
+    /// 作中カメラの意味は FrameGraph Camera node が所有する。
+    ///
+    /// Native editor も playback/export と同じ camera branch を読む。ここで
+    /// StoreView から legacy ResolvedLayer owner を復活させない。
     pub fn resolve_camera(
         &self,
         view: &StoreView<'_>,
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
-        let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
-        let Some(id) = crate::picture::resolve::camera::active_camera_layer(view, t).map_err(store)? else { return crate::picture::resolve::camera::resolve_camera(view, t).map_err(store) };
-        if crate::picture::resolve::camera::camera_target_layer(view, id, t).map_err(store)?.is_none() { return crate::picture::resolve::camera::camera_of_layer(view, id, t).map_err(store) }
-        let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(store)?;
-        self.camera_of_layer_in(view, &resolved, id, t)
+        self.frame_graph_camera(view, t)
     }
 
     pub fn selected_layer_bounds_in(
