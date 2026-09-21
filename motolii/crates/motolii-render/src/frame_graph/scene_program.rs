@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
 
@@ -35,7 +35,7 @@ pub(crate) struct SceneContributionValue {
 }
 
 #[derive(Clone)]
-enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, effects: Vec<(usize, bool)>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
+enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, effects: Vec<usize>, placement: Option<usize>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneProgramNodes { pub scene: NodeKey }
@@ -57,7 +57,7 @@ pub struct SceneNodeProgram {
 }
 
 impl SceneNodeProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram) -> Result<Self, SceneNodeError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram) -> Result<Self, SceneNodeError> {
         let policy = ScenePolicy::compile(view)?;
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
@@ -90,9 +90,14 @@ impl SceneNodeProgram {
                 for key in &binding.effects {
                     let at = inputs.len();
                     inputs.push(*key);
-                    effect_inputs.push((at, false));
+                    effect_inputs.push(at);
                 }
             }
+            let placement = placement_program.binding(layer).map(|binding| {
+                let at = inputs.len();
+                inputs.push(binding.node);
+                at
+            });
             let mut mask_inputs = Vec::new();
             if let Some(binding) = mask_program.binding(layer) { for key in &binding.masks { let at = inputs.len(); inputs.push(*key); mask_inputs.push(at); } }
             let mut identity = NodeIdentity::new(NodeKind::CompositeContribution, inputs);
@@ -101,7 +106,7 @@ impl SceneNodeProgram {
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, effects: effect_inputs, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
+            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, effects: effect_inputs, placement, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
         }
@@ -128,7 +133,7 @@ impl SceneNodeProgram {
         }
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, effects, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
+            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, effects, placement, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
                 let visibility = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 if !visibility.active {
                     return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: None }));
@@ -168,16 +173,64 @@ impl SceneNodeProgram {
                         }
                     }
                 }
+                let placement_set = placement.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<PlacementSetValue>());
+                let selected = placement_set.and_then(|set| set.selected_effect);
                 let mut direct = Vec::new();
-                for (index, _) in effects {
-                    let Some(effect) = inputs.at(*index).and_then(|value| value.downcast_ref::<EffectValue>()).and_then(|value| value.0.clone()) else { continue };
-                    direct.push(effect);
+                let mut after = Vec::new();
+                for (effect_index, input_index) in effects.iter().copied().enumerate() {
+                    let Some(effect) = inputs.at(input_index).and_then(|value| value.downcast_ref::<EffectValue>()).and_then(|value| value.0.clone()) else { continue };
+                    match selected {
+                        Some(selected) if effect_index == selected => {}
+                        Some(selected) if effect_index > selected => after.push(effect),
+                        _ => direct.push(effect),
+                    }
                 }
-                let after = Vec::new();
                 let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                Ok(NodeValue::new(SceneContributionValue {
-                    solo: visibility.solo,
-                    layer: Some(SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: after, masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, opacity, projection: *projection, blend, order: *order }),
+                let base = SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: Vec::new(), masks, matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, opacity, projection: *projection, blend, order: *order };
+
+                let Some(set) = placement_set.filter(|set| set.selected_effect.is_some()) else {
+                    return Ok(NodeValue::new(SceneContributionValue { solo: visibility.solo, layer: Some(base) }));
+                };
+
+                let mut members = Vec::new();
+                for copy in &set.copies {
+                    let Some(transform) = copy.transform else { continue };
+                    let mut layer = base.clone();
+                    layer.transform = transform;
+                    layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                    members.push(SceneContributionValue { solo: visibility.solo, layer: Some(layer) });
+                }
+
+                if members.is_empty() {
+                    return Ok(NodeValue::new(SceneFragmentValue {
+                        contributions: vec![SceneContributionValue { solo: visibility.solo, layer: None }],
+                    }));
+                }
+                if after.is_empty() {
+                    return Ok(NodeValue::new(SceneFragmentValue { contributions: members }));
+                }
+
+                // Effects below the placement effect see the copies as one picture.
+                // Matte/clip remain on the outer plate, matching the old build order.
+                for member in &mut members {
+                    if let Some(layer) = member.layer.as_mut() {
+                        layer.matte = None;
+                        layer.clip_to_below = false;
+                    }
+                }
+                let mut plate = base;
+                plate.content_key = None;
+                plate.content = SceneContentValue::Plate(ScenePlateValue { members });
+                plate.effects = after;
+                plate.after_effects.clear();
+                plate.masks.clear();
+                plate.transform = TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY };
+                plate.opacity = 1.0;
+                plate.projection = LayerProjection::TwoD;
+                plate.flatten = false;
+                plate.environment = false;
+                Ok(NodeValue::new(SceneFragmentValue {
+                    contributions: vec![SceneContributionValue { solo: visibility.solo, layer: Some(plate) }],
                 }))
             })(),
             Recipe::Composite => (|| {
