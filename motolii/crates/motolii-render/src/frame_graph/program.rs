@@ -37,7 +37,7 @@ impl SceneProgram {
         let flow = FlowProgram::compile(view, &properties, &content)?;
         let transforms = TransformProgram::compile(view, &properties, &flow)?;
         let mut nodes = BTreeMap::new();
-        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(std::iter::once(flow.node())) { nodes.insert(node.key(), node); }
+        for node in properties.nodes().chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()) { nodes.insert(node.key(), node); }
         let roots = properties.bindings().map(|binding| binding.node)
             .chain(content.bindings().flat_map(|binding| [binding.content, binding.extent, binding.material]).flatten())
             .chain(transforms.bindings().map(|binding| binding.world)).chain(std::iter::once(flow.key())).collect();

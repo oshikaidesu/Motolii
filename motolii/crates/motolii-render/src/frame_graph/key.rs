@@ -78,6 +78,8 @@ pub enum NodeKind {
     Group,
     /// The layout/slot result for a group and its direct children.
     Layout,
+    /// Transition/stagger blend over exact-time Layout results.
+    FlowWindow,
     /// A display group's generated background/clip geometry.
     GroupBackground,
     /// Resource dimensions and immutable source metadata.

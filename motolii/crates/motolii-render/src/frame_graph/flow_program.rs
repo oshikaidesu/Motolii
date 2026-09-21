@@ -6,7 +6,7 @@ use crate::doc::eval::Value;
 use crate::doc::store::{layout, LayerId, LayerSource, PropertyId, ShapeNode, StoreError, StoreView, TextDocument};
 use crate::picture::shapes_ops::Canvas;
 
-use super::{ContentProgram, EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
+use super::{ContentProgram, EvaluationContext, GraphNode, InputTime, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 const ROWS: [&str; 22] = [layout::DISPLAY, layout::FLEX_DIRECTION, layout::FLEX_WRAP, layout::JUSTIFY_CONTENT, layout::ALIGN_ITEMS, layout::GAP, layout::PADDING, layout::GRID_COLUMNS, layout::GRID_ROWS, layout::HORIZONTAL_SIZING, layout::VERTICAL_SIZING, layout::WIDTH, layout::HEIGHT, layout::MARGIN, layout::FLEX_SHRINK, layout::ALIGN_SELF, layout::COLUMN_START, layout::COLUMN_SPAN, layout::ROW_START, layout::ROW_SPAN, layout::OBJECT_FIT, crate::doc::store::property::SCALE];
 
@@ -28,6 +28,12 @@ struct LayerPlan {
 #[derive(Clone)]
 struct Recipe { layers: Vec<LayerPlan>, comp: [u32; 2] }
 
+#[derive(Clone)]
+struct WindowLayer { parent: Option<usize>, duration: Option<usize>, easing: Option<usize>, delay: Option<usize>, stagger: Option<usize>, from: Option<usize> }
+
+#[derive(Clone)]
+struct WindowRecipe { layers: Vec<WindowLayer>, fps: crate::doc::store::Fps, reach: usize }
+
 #[derive(Debug)]
 pub enum FlowProgramError { Store(StoreError), Taffy(taffy::TaffyError), InvalidInput(NodeKind) }
 impl std::fmt::Display for FlowProgramError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
@@ -38,6 +44,8 @@ impl From<taffy::TaffyError> for FlowProgramError { fn from(value: taffy::TaffyE
 pub struct FlowProgram {
     node: GraphNode,
     recipe: Recipe,
+    window: GraphNode,
+    window_recipe: WindowRecipe,
     bindings: BTreeMap<LayerId, FlowBinding>,
 }
 
@@ -69,17 +77,37 @@ impl FlowProgram {
         identity.parameters = parameters;
         identity.time_dependency = TimeDependency::Exact;
         let node = GraphNode::new(identity);
+        let fps = view.composition()?.map(|comp| comp.fps).unwrap_or(crate::doc::store::Fps::try_new(30, 1).expect("30fps"));
+        let reach = crate::picture::motion_time::transition_reach(view, crate::doc::core::RationalTime::ZERO)?.max(0) as usize;
+        let mut window_inputs = Vec::with_capacity(reach + 1);
+        let mut window_times = Vec::with_capacity(reach + 1);
+        for back in 0..=reach {
+            window_inputs.push(node.key());
+            window_times.push(if back == 0 { InputTime::Same } else { InputTime::Offset { delta: crate::doc::core::RationalTime::try_from_frame(-(back as i64), fps).expect("valid frame offset"), clamp_to_zero: true } });
+        }
+        let mut property_inputs = BTreeMap::new();
+        let mut window_layers = Vec::with_capacity(ids.len());
+        let mut property = |layer, name: &str| properties.node_for(layer, &PropertyId::new(name).expect("known transition property")).map(|key| *property_inputs.entry(key).or_insert_with(|| { let at = window_inputs.len(); window_inputs.push(key); window_times.push(InputTime::Same); at }));
+        for (at, layer) in ids.iter().copied().enumerate() {
+            window_layers.push(WindowLayer { parent: layers[at].parent, duration: property(layer, layout::TRANSITION_DURATION), easing: property(layer, layout::TRANSITION_EASING), delay: property(layer, layout::TRANSITION_DELAY), stagger: property(layer, layout::STAGGER), from: property(layer, layout::STAGGER_FROM) });
+        }
+        let mut window_identity = NodeIdentity::new(NodeKind::FlowWindow, window_inputs).with_input_times(window_times);
+        window_identity.parameters = (reach as u64).to_be_bytes().into_iter().chain(fps.num().to_be_bytes()).chain(fps.den().to_be_bytes()).collect();
+        window_identity.time_dependency = TimeDependency::Exact;
+        let window = GraphNode::new(window_identity);
         let bindings = ids.into_iter().enumerate().map(|(index, layer)| (layer, FlowBinding { layer, index })).collect();
-        Ok(Self { node, recipe: Recipe { layers, comp }, bindings })
+        Ok(Self { node, recipe: Recipe { layers, comp }, window, window_recipe: WindowRecipe { layers: window_layers, fps, reach }, bindings })
     }
 
-    pub fn node(&self) -> GraphNode { self.node.clone() }
-    pub fn key(&self) -> NodeKey { self.node.key() }
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> { [self.node.clone(), self.window.clone()].into_iter() }
+    pub fn layout_key(&self) -> NodeKey { self.node.key() }
+    pub fn key(&self) -> NodeKey { self.window.key() }
     pub fn bindings(&self) -> impl ExactSizeIterator<Item = FlowBinding> + '_ { self.bindings.values().copied() }
     pub fn binding(&self, layer: LayerId) -> Option<FlowBinding> { self.bindings.get(&layer).copied() }
 
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, FlowProgramError>> {
-        (node.key() == self.node.key()).then(|| evaluate(&self.recipe, inputs).map(NodeValue::new))
+        if node.key() == self.node.key() { return Some(evaluate(&self.recipe, inputs).map(NodeValue::new)); }
+        (node.key() == self.window.key()).then(|| evaluate_window(&self.window_recipe, inputs).map(NodeValue::new))
     }
 }
 
@@ -202,9 +230,92 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs) -> Result<FlowFrameValue, Flow
     Ok(out)
 }
 
+fn window_number(layer: &WindowLayer, which: usize, inputs: &NodeInputs, default: f64) -> f64 {
+    let index = match which { 0 => layer.duration, 1 => layer.easing, 2 => layer.delay, 3 => layer.stagger, _ => layer.from };
+    match index.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()) {
+        Some(Value::F64(value)) => *value,
+        Some(Value::Enum(value)) => *value as f64,
+        _ => default,
+    }
+}
+
+fn evaluate_window(recipe: &WindowRecipe, inputs: &NodeInputs) -> Result<FlowFrameValue, FlowProgramError> {
+    let frames: Vec<&FlowFrameValue> = (0..=recipe.reach).map(|index| inputs.at(index).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(FlowProgramError::InvalidInput(NodeKind::FlowWindow))).collect::<Result<_, _>>()?;
+    let fps = recipe.fps.as_f64();
+    let mut schedules: Vec<Option<Vec<(usize, f32)>>> = vec![None; recipe.layers.len()];
+    fn schedule(index: usize, recipe: &WindowRecipe, inputs: &NodeInputs, frames: &[&FlowFrameValue], schedules: &mut [Option<Vec<(usize, f32)>>]) -> Vec<(usize, f32)> {
+        if let Some(schedule) = &schedules[index] { return schedule.clone(); }
+        let layer = &recipe.layers[index];
+        let duration_frames = (window_number(layer, 0, inputs, 0.0).max(0.0) * recipe.fps.as_f64()).round().min(120.0);
+        let own_delay = window_number(layer, 2, inputs, 0.0).max(0.0);
+        if duration_frames < 1.0 && own_delay <= 1e-6 {
+            if let Some(parent) = layer.parent {
+                let borrowed = schedule(parent, recipe, inputs, frames, schedules);
+                schedules[index] = Some(borrowed.clone());
+                return borrowed;
+            }
+        }
+        let easing = window_number(layer, 1, inputs, 0.0).round() as i64;
+        let mut base = if duration_frames < 1.0 { vec![(0.0, 1.0)] } else {
+            let count = duration_frames as usize;
+            (0..count).map(|step| {
+                let (u0, u1) = (step as f64 / count as f64, (step + 1) as f64 / count as f64);
+                ((duration_frames * u0).round(), (crate::picture::motion_time::ease(easing, u1) - crate::picture::motion_time::ease(easing, u0)) as f32)
+            }).collect()
+        };
+        let mut delay = own_delay;
+        if let Some(parent) = layer.parent {
+            let stagger = window_number(&recipe.layers[parent], 3, inputs, 0.0).max(0.0);
+            if stagger > 0.0 {
+                let max_back = base.iter().map(|(back, _)| *back).fold(0.0, f64::max);
+                let before = (max_back + 1.0 + ((stagger + own_delay) * recipe.fps.as_f64()).ceil()).round() as usize;
+                let before = before.min(recipe.reach);
+                if let (Some(size), Some(slot)) = (frames[before].sizes.get(parent).copied().flatten(), frames[before].slots.get(index).copied().flatten()) {
+                    let point = glam::Vec2::from(slot.position) - glam::vec2(crate::picture::CANVAS_MARGIN, crate::picture::CANVAS_MARGIN);
+                    let dimensions = glam::Vec2::from(size);
+                    let diagonal = dimensions.length().max(1e-3);
+                    let centre = (point - dimensions * 0.5).length() / (diagonal * 0.5);
+                    let reach = match window_number(&recipe.layers[parent], 4, inputs, 0.0).round() as i64 { 1 => centre, 2 => (point - dimensions).length() / diagonal, 3 => 1.0 - centre, _ => point.length() / diagonal };
+                    delay += stagger * f64::from(reach.clamp(0.0, 1.0));
+                }
+            }
+        }
+        let delay_frames = delay * recipe.fps.as_f64();
+        let mut out = Vec::with_capacity(base.len() * 2);
+        for (back, weight) in base.drain(..) {
+            let at = back + delay_frames;
+            let lo = at.floor();
+            let fraction = (at - lo) as f32;
+            out.push(((lo as usize).min(recipe.reach), weight * (1.0 - fraction)));
+            if fraction > 1e-4 { out.push((((lo + 1.0) as usize).min(recipe.reach), weight * fraction)); }
+        }
+        schedules[index] = Some(out.clone());
+        out
+    }
+
+    let mut out = frames[0].clone();
+    for index in 0..recipe.layers.len() {
+        let samples = schedule(index, recipe, inputs, &frames, &mut schedules);
+        if samples.is_empty() { continue; }
+        let mut position = [0.0; 2]; let mut scale = [0.0; 2]; let mut stretch = [0.0; 2]; let mut total = 0.0;
+        for (back, weight) in samples {
+            let Some(slot) = frames[back].slots.get(index).copied().flatten() else { continue };
+            for axis in 0..2 { position[axis] += slot.position[axis] * weight; scale[axis] += slot.scale[axis] * weight; stretch[axis] += slot.stretch[axis] * weight; }
+            total += weight;
+        }
+        if total > 1e-6 {
+            if let Some(slot) = out.slots[index].as_mut() {
+                slot.position = position.map(|value| value / total); slot.scale = scale.map(|value| value / total); slot.stretch = stretch.map(|value| value / total);
+            }
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::doc::eval::{Interp, Keyframe, KeyframeTrack};
     use crate::doc::store::{Composition, Fps, LayerAttrsPatch, LayerMeta, LayerTiming};
     use crate::frame_graph::{CompiledGraph, FrameQuality, Generation, GraphRevision, GraphTopology, NodeExecutor, SceneProgram, SceneProgramError};
     use motolii_edit::{Document, Intent};
@@ -219,12 +330,16 @@ mod tests {
     fn grid_slots_are_evaluated_from_graph_values_without_store_reads() {
         let mut doc = Document::new();
         let root = LayerId(1);
+        let columns = KeyframeTrack::try_from_keys(vec![
+            Keyframe { t: crate::doc::core::RationalTime::ZERO, value: Value::F64(2.0), interp: Interp::Hold, spatial: None },
+            Keyframe { t: crate::doc::core::RationalTime::from_seconds(1), value: Value::F64(1.0), interp: Interp::Hold, spatial: None },
+        ]).unwrap();
         doc.apply_all([
             Intent::SetComposition(Composition { width: 640, height: 480, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] }),
             Intent::AddLayer(root),
             Intent::SetMeta { layer: root, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
             Intent::SetConstant { layer: root, property: PropertyId::new(layout::DISPLAY).unwrap(), value: Value::Enum(2) },
-            Intent::SetConstant { layer: root, property: PropertyId::new(layout::GRID_COLUMNS).unwrap(), value: Value::F64(2.0) },
+            Intent::SetTrack { layer: root, property: PropertyId::new(layout::GRID_COLUMNS).unwrap(), track: columns },
             Intent::SetConstant { layer: root, property: PropertyId::new(layout::HORIZONTAL_SIZING).unwrap(), value: Value::Enum(2) },
             Intent::SetConstant { layer: root, property: PropertyId::new(layout::VERTICAL_SIZING).unwrap(), value: Value::Enum(2) },
             Intent::SetConstant { layer: root, property: PropertyId::new(layout::WIDTH).unwrap(), value: Value::F64(600.0) },
@@ -238,6 +353,8 @@ mod tests {
                 Intent::SetAttrs { layer, patch: LayerAttrsPatch { parent: Some(Some(root)), ..Default::default() } },
                 Intent::SetConstant { layer, property: PropertyId::new(layout::HORIZONTAL_SIZING).unwrap(), value: Value::Enum(1) },
                 Intent::SetConstant { layer, property: PropertyId::new(layout::VERTICAL_SIZING).unwrap(), value: Value::Enum(1) },
+                Intent::SetConstant { layer, property: PropertyId::new(layout::TRANSITION_DURATION).unwrap(), value: Value::F64(1.0) },
+                Intent::SetConstant { layer, property: PropertyId::new(layout::TRANSITION_EASING).unwrap(), value: Value::Enum(1) },
             ]).unwrap();
         }
         let program = SceneProgram::compile(&doc.view()).unwrap();
@@ -247,7 +364,8 @@ mod tests {
         let topology = GraphTopology::try_new(program.nodes(), roots).unwrap();
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
         let mut executor = Executor(&program);
-        let frame = graph.evaluate(&mut executor, crate::doc::core::RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        let at = crate::doc::core::RationalTime::try_new(3, 2).unwrap();
+        let frame = graph.evaluate(&mut executor, at, FrameQuality::Export, Generation::new(1)).unwrap();
         let flow = frame.value(key).and_then(|value| value.downcast_ref::<FlowFrameValue>()).unwrap();
         let slots: Vec<_> = (2..=5).map(|id| flow.slots[program.flow().binding(LayerId(id)).unwrap().index].unwrap()).collect();
         let positions: std::collections::BTreeSet<_> = slots.iter().map(|slot| (slot.position[0] as i32, slot.position[1] as i32)).collect();
@@ -255,7 +373,7 @@ mod tests {
         assert!(slots.iter().all(|slot| slot.scale[0] > 0.0 && slot.scale[1] > 0.0));
         let world = frame.value(child_world).and_then(|value| value.downcast_ref::<crate::frame_graph::TransformValue>()).unwrap();
         assert_eq!(world.affine.translation.to_array(), slots[0].position);
-        let oracle = crate::picture::resolve::resolved_layers(&doc.view(), crate::doc::core::RationalTime::ZERO).unwrap();
+        let oracle = crate::picture::resolve::resolved_layers(&doc.view(), at).unwrap();
         for id in 2..=5 {
             let root = program.transforms().binding(LayerId(id)).unwrap().world;
             let actual = frame.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::TransformValue>()).unwrap().affine.translation;
