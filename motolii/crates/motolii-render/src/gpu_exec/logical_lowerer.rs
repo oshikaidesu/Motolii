@@ -320,6 +320,7 @@ mod tests {
             matte_source: None,
             clip_base: None,
             clip_to_below: false,
+            matte_mode: None,
             stencil: false,
             plate: None,
         };
