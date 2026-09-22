@@ -378,7 +378,7 @@ impl Engine {
         let revision = GraphRevision::new(view.revision_key());
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
         self.compositor.feedback_set_revision(view.revision_key());
-        self.feedback_keys_seen.clear();
+        self.gpu_history.begin_frame();
         if !state.matches(revision, time) {
             let started = std::time::Instant::now();
             if let Err(error) = state.evaluate_at(self, time, quality, false) {
@@ -519,7 +519,7 @@ impl Engine {
 
             let c = &mut self.compositor;
             c.baked_effects.clear(&mut c.effect_scratch);
-            self.feedback_keys_seen.clear();
+            self.gpu_history.begin_frame();
             state.evaluate_at(self, time, FrameQuality::Preview { scale: 1 }, true)?;
             self.render_frame_graph_projection(
                 &state,
@@ -641,7 +641,7 @@ impl Engine {
 
         for frame in start..now {
             self.pending_frame_copies.clear();
-            self.feedback_keys_seen.clear();
+            self.gpu_history.begin_frame();
             let at = RationalTime::try_from_frame(frame, state.fps)
                 .map_err(|error| EngineError::Time(error.to_string()))?;
             state.evaluate_at(self, at, FrameQuality::Preview { scale: 1 }, true)?;
@@ -655,7 +655,7 @@ impl Engine {
             )?;
         }
         self.pending_frame_copies.clear();
-        self.feedback_keys_seen.clear();
+        self.gpu_history.begin_frame();
         Ok(())
     }
 }
