@@ -14,8 +14,8 @@ peniko = "0.6"
 # 三次ベジェの根。CSS の easing は三次方程式を解く話なので、自分で Newton も二分探索も書かない
 # (Blinn の方法。kurbo が peniko 経由で既に依存木に居た — 2026-09-21 に気付いた)。
 kurbo = "0.13"
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd", features = ["setup"] }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
+re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056", features = ["setup"] }
 # 物理の解き手は借りる(自作しない): 積み上げの warm start・摩擦・joint・snapshot を持っている。
 # 先例: Cavalry は Box2D。Rapier はその Rust 版で、状態の保存と復元がある(Apache-2.0)。
 rapier3d = "0.32"
@@ -29,24 +29,24 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
-re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd", features = ["lavc"] }
+re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056", features = ["lavc"] }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
-re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd", default-features = false }
-re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd", default-features = false }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
+re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056", default-features = false }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056", default-features = false }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
 serde = { version = "1", features = ["derive"] }
 arrow = { version = "58.3", default-features = false }
 sha2 = "0.10"
 proptest = "1"
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd", features = ["encoder", "decoder"] }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056", features = ["encoder", "decoder"] }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 cosmic-text = "0.19"
 taffy = "0.13"
@@ -62,7 +62,7 @@ quick_cache = "0.7.0"
 tempfile = "3"
 rtsan-standalone = "=0.3.0"
 memmap2 = "0.9"
-re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "8ac6a8c06a710f743dd969944b8588740d1dccfd" }
+re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "8598334c2e88f247decc8c9d8499070f04b7e056" }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"

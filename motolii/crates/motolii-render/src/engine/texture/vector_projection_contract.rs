@@ -253,3 +253,39 @@ fn an_exact_stroke_stays_a_true_ring_at_any_magnification() {
     }
     assert_eq!(wrong, 0, "pixels on the wrong side of the true ring");
 }
+
+/// Gradient paint is located per fragment: magnified, each pixel still shows the colour the
+/// document's own gradient gives at that point.
+#[test]
+fn an_exact_gradient_is_located_per_pixel_at_any_magnification() {
+    use crate::doc::vector::{Gradient, GradientStop, GradientType};
+    let scale = 40.0;
+    let mut doc = circle(16.0, scale as f64, false);
+    let gradient = Gradient {
+        kind: GradientType::Linear,
+        start: Point { x: -8.0, y: 0.0 },
+        end: Point { x: 8.0, y: 0.0 },
+        stops: vec![GradientStop { offset: 0.0, color: Rgb { r: 0.0, g: 0.0, b: 0.0 } }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }],
+        stop_ids: Vec::new(),
+        next_stop_id: 0,
+        blend: Default::default(),
+    };
+    let mut shapes = doc.view().shapes(LayerId(1)).unwrap();
+    if let ShapeNode::Leaf(shape) = &mut shapes[0] {
+        shape.fill.as_mut().unwrap().brush = Brush::Gradient(gradient.clone());
+    }
+    doc.apply(Intent::SetShapes { layer: LayerId(1), shapes }).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    let mut worst = 0u8;
+    for x in 0..512usize {
+        // Inside the circle along its horizontal diameter; shape x = (x + 0.5 - 256) / scale.
+        let shape_x = (x as f64 + 0.5 - 256.0) / scale;
+        let want = gradient.color_at(gradient.parameter(Point { x: shape_x, y: 0.0 }));
+        let want = (want.r.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let got = pixels[(256 * 512 + x) * 4];
+        worst = worst.max(got.abs_diff(want));
+    }
+    assert!(worst <= 3, "the rendered gradient drifts from the document's by {worst}");
+}

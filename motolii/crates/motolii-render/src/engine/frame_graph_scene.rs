@@ -11,9 +11,6 @@ use crate::render::engine::{Engine, EngineError};
 pub(super) struct GpuSceneValue {
     pub layers: Vec<LayerWithPasses>,
     pub layer_ids: Vec<LayerId>,
-    /// Outline recipes of plain vector layers, so a view that magnifies them can
-    /// cut them again at its own device density.
-    pub vectors: Vec<Option<std::sync::Arc<LayerWork>>>,
 }
 
 impl Engine {
@@ -179,36 +176,13 @@ impl Engine {
         let mut groups = std::collections::HashMap::new();
         let mut layers = Vec::with_capacity(graph.output.len());
         let mut layer_ids = Vec::with_capacity(graph.output.len());
-        let mut vectors = Vec::with_capacity(graph.output.len());
         for composed in &graph.output {
             if let Some(layer) = self.realize_composed(graph, &prepared, composed, &mut groups, comp, projection_camera)? {
-                let work = &graph.layers[composed.base];
-                let plain_vector = composed.atop.is_empty() && composed.mask.is_none()
-                    && matches!(work.content, RasterSource::Vector { vector: true, field_step: false, .. })
-                    && !work.host_picture && work.freeze.is_none()
-                    && work.material.warps.is_empty() && !work.material.spatial
-                    && matches!(layer.layer.content, LayerContent::Model(_));
-                vectors.push(plain_vector.then(|| std::sync::Arc::new(work.clone())));
                 layers.push(layer);
-                layer_ids.push(work.id);
+                layer_ids.push(graph.layers[composed.base].id);
             }
         }
-        Ok(GpuSceneValue { layers, layer_ids, vectors })
-    }
-
-    /// A view whose camera magnifies a vector layer cuts its outline again at
-    /// that view's device density (the shape cache keeps the finest cut).
-    pub(super) fn cut_outlines_for_view(&mut self, prepared: &GpuSceneValue, layers: &mut [LayerWithPasses], comp: CompSpec, camera: ResolvedCamera) -> Result<(), EngineError> {
-        for (layer, work) in layers.iter_mut().zip(&prepared.vectors) {
-            let Some(work) = work else { continue };
-            if work.projection == crate::doc::store::LayerProjection::TwoD { continue; }
-            let RasterSource::Vector { shapes, remember, .. } = &work.content else { continue };
-            let tolerance = self.outline_tolerance(Some(work), shapes, true, comp, camera)?;
-            if let (Some(content), _) = self.shape_texture_from_shapes(shapes, work.content_key, true, tolerance, comp, None, *remember)? {
-                layer.layer.content = content;
-            }
-        }
-        Ok(())
+        Ok(GpuSceneValue { layers, layer_ids })
     }
 
     /// How finely outlines are cut: one device pixel after projection. Vector

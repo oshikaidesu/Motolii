@@ -77,16 +77,27 @@ fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, ste
     build_paths(shapes, canvas, tolerance, step, false)
 }
 
-/// Shapes the GPU can paint exactly from their curves: every fill and stroke is one colour (exact
-/// paint is drawn after tessellated paint, so a layer is all one or the other), and no field bends
-/// the outline.
-fn fills_exactly(shapes: &[ShapeNode], step: Option<f32>) -> Result<bool, CompositorError> {
-    if step.is_some() { return Ok(false); }
-    let leaves = crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))?;
-    Ok(leaves.iter().all(|shape| {
-        shape.stroke.as_ref().is_none_or(|s| s.hidden || matches!(s.brush, Brush::Solid(_)))
-            && shape.fill.as_ref().is_none_or(|f| f.hidden || matches!(f.brush, Brush::Solid(_)))
-    }))
+/// Samples of the gradient's colour over t = 0..=1. The colour model (stops, blend space) stays
+/// here; the renderer only locates t per fragment.
+const RAMP: usize = 1024;
+
+fn exact_gradient(g: &Gradient, alpha: f64, origin: Point) -> re_renderer::mesh::CurveGradient {
+    use re_renderer::mesh::CurveGradientKind as Kind;
+    let at = |p: Point| glam::vec2((p.x + origin.x) as f32, (p.y + origin.y) as f32);
+    re_renderer::mesh::CurveGradient {
+        kind: match g.kind {
+            crate::doc::vector::GradientType::Linear => Kind::Linear,
+            crate::doc::vector::GradientType::Radial => Kind::Radial,
+            crate::doc::vector::GradientType::Angular => Kind::Angular,
+            crate::doc::vector::GradientType::Diamond => Kind::Diamond,
+        },
+        start: at(g.start),
+        end: at(g.end),
+        ramp: (0..RAMP).map(|i| {
+            let c = g.color_at(i as f64 / (RAMP - 1) as f64);
+            Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])
+        }).collect(),
+    }
 }
 
 fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>, exact: bool) -> Result<PathDrawDataBuilder, CompositorError> {
@@ -97,9 +108,11 @@ fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Opti
             let outline = contours(&instance.path, origin, step);
             if let Some(fill) = shape.fill.as_ref().filter(|f| !f.hidden) {
                 let rule = match fill.rule { crate::doc::vector::FillRule::NonZero => PathFillRule::NonZero, crate::doc::vector::FillRule::EvenOdd => PathFillRule::EvenOdd };
+                let alpha = fill.opacity * instance.opacity;
                 match (&fill.brush, exact) {
-                    (Brush::Solid(c), true) => b.fill_exact(&outline, rule, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(fill.opacity * instance.opacity)])),
-                    _ => b.fill(&outline, rule, &*paint(&fill.brush, fill.opacity * instance.opacity, origin)),
+                    (Brush::Solid(c), true) => b.fill_exact(&outline, rule, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])),
+                    (Brush::Gradient(g), true) => b.fill_exact_gradient(&outline, rule, exact_gradient(g, alpha, origin)),
+                    _ => b.fill(&outline, rule, &*paint(&fill.brush, alpha, origin)),
                 }
             }
             if let Some(stroke) = shape.stroke.as_ref().filter(|s| !s.hidden) {
@@ -110,9 +123,11 @@ fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Opti
                     miter_limit: stroke.miter_limit as f32,
                     dash: stroke.dash.as_ref().map(|d| (d.pattern.iter().map(|v| *v as f32).collect(), d.offset as f32)),
                 };
+                let alpha = stroke.opacity * instance.opacity;
                 match (&stroke.brush, exact) {
-                    (Brush::Solid(c), true) => b.stroke_exact(&outline, &s, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(stroke.opacity * instance.opacity)])),
-                    _ => b.stroke(&outline, &s, &*paint(&stroke.brush, stroke.opacity * instance.opacity, origin)),
+                    (Brush::Solid(c), true) => b.stroke_exact(&outline, &s, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])),
+                    (Brush::Gradient(g), true) => b.stroke_exact_gradient(&outline, &s, exact_gradient(g, alpha, origin)),
+                    _ => b.stroke(&outline, &s, &*paint(&stroke.brush, alpha, origin)),
                 }
             }
         }
@@ -139,7 +154,9 @@ pub(crate) fn outlines(shapes: &[ShapeNode], canvas: &Canvas) -> Result<Vec<(Vec
 impl Compositor {
     /// `step`: 場が乗る時、輪郭を ≤ step px の直線に刻む(頂点段の場が滑らかに効くように)。
     pub(crate) fn path_model(&mut self, shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<Option<super::GpuModelData>, CompositorError> {
-        let builder = build_paths(shapes, canvas, tolerance, step, fills_exactly(shapes, step)?)?;
+        // The GPU paints the curves exactly unless a field bends the outline: that needs
+        // tessellated vertices to move.
+        let builder = build_paths(shapes, canvas, tolerance, step, step.is_none())?;
         if builder.is_empty() { return Ok(None); }
         let mut mesh = builder.into_mesh(&self.ctx, "vector layer");
         // 場は線の中心線の点(錨)で評価する: 線の両側が同じ量だけ動き、線幅が保たれる。
