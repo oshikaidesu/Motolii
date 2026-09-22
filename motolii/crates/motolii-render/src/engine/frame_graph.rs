@@ -369,7 +369,8 @@ impl Engine {
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let _plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
+        let _stats = state.execute_pre_sink(&plan, crate::gpu_exec::GpuSinkKind::Readback)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
@@ -669,7 +670,8 @@ impl Engine {
         if !matches!(projection, crate::frame_graph::ViewProjection::Camera | crate::frame_graph::ViewProjection::Stage) {
             return Err(EngineError::Store("Unsupported playback projection".into()));
         }
-        let _plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Present)?;
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Present)?;
+        let _stats = state.execute_pre_sink(&plan, crate::gpu_exec::GpuSinkKind::Present)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
