@@ -42,9 +42,13 @@ jobs:
 
       - name: Check gallery formatting
         working-directory: motolii/ui
+        run: dart format --output=none --set-exit-if-changed lib/gallery_main.dart
+
+      - name: Prepare CI build directory
+        working-directory: motolii/ui
         run: |
-          dart format lib/gallery_main.dart
-          git diff -- lib/gallery_main.dart
+          rm -f build
+          mkdir -p build
 
       - name: Analyze gallery
         working-directory: motolii/ui
