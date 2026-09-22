@@ -229,9 +229,9 @@ mod tests {
         assert!(public_roots.contains(&transform_binding.local));
         assert!(public_roots.contains(&transform_binding.world));
         let mut clusters = program.static_clusters().unwrap();
-        assert!(clusters.clusters_with_kind(super::NodeKind::SceneComposite).next().is_some());
-        let effect_images = clusters.clusters_with_kind(super::NodeKind::EffectImages).next().expect("lookbehind cluster");
-        assert_eq!(effect_images.signature.dynamic, super::StaticDynamicClass::TemporalSample);
+        assert!(clusters.clusters_with_kind(crate::frame_graph::NodeKind::SceneComposite).next().is_some());
+        let effect_images = clusters.clusters_with_kind(crate::frame_graph::NodeKind::EffectImages).next().expect("lookbehind cluster");
+        assert_eq!(effect_images.signature.dynamic, crate::frame_graph::StaticDynamicClass::TemporalSample);
         let topology = GraphTopology::try_new(program.nodes(), program.roots().collect()).unwrap();
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
         let mut executor = Executor(&program);

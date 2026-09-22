@@ -9,7 +9,7 @@ use crate::render::media::blob::{BlobSettings, BlobSource, BlobTracker};
 
 use super::{
     ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode,
-    GroupBackgroundProgram, MaskProgram, MaskValue, MediaFrameValue, NodeIdentity,
+    GroupBackgroundProgram, MaskProgram, MaskValue, MediaFrameValue, MediaSourceValue, NodeIdentity,
     NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PropertyProgram,
     SceneContentValue, SceneLayerValue, TextProgram, TextShapeValue, TimeDependency, TransformProgram,
     TransformValue, VisibilityProgram, VisibilityValue,

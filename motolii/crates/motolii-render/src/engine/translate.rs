@@ -49,6 +49,42 @@ pub(crate) fn translate_effect_passes(
     translate_image_effects(effects, crate::render::compositor::EffectStage::Pass)
 }
 
+/// 評価済みの層 1 つの置き場所。
+pub(crate) fn scene_layer_placement(layer: &crate::frame_graph::SceneLayerValue) -> crate::doc::core::LayerPlacement {
+    crate::doc::core::LayerPlacement {
+        transform: layer.transform.affine,
+        world_transform: Some(layer.transform.spatial),
+        order: i32::from(layer.order),
+        opacity: layer.opacity,
+        z: layer.transform.spatial.translation.z,
+        rotation_x: 0.0,
+        rotation_y: 0.0,
+        plane: None,
+    }
+}
+
+/// 評価済みの層 1 つの素材の時刻(µs)。動画でない層は 0。
+pub(crate) fn scene_layer_media_tick(layer: &crate::frame_graph::SceneLayerValue) -> i64 {
+    match &layer.content {
+        crate::frame_graph::SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
+        _ => 0,
+    }
+}
+
+/// 評価済みの層 1 つの効果列(層の効果 = 列 0、板の後の効果 = 列 1)。
+pub(crate) fn scene_layer_effect_chain(layer: &crate::frame_graph::SceneLayerValue, comp: crate::doc::core::CompSpec) -> crate::gpu_exec::ResidentEffectChain {
+    let screen = |passes: &[crate::render::compositor::EffectPass]| passes.iter()
+        .any(|pass| pass.reads_backdrop || pass.reads_composite())
+        .then_some([comp.width, comp.height]);
+    let mut passes = translate_effect_passes(&layer.effects);
+    let direct_screen = screen(&passes);
+    stamp_feedback(&mut passes, layer.layer, layer.instance, 0, direct_screen, 0);
+    let mut plate_passes = translate_plate_passes(&layer.after_effects);
+    let plate_screen = screen(&plate_passes);
+    stamp_feedback(&mut plate_passes, layer.layer, layer.instance, 1, plate_screen, 0);
+    crate::gpu_exec::ResidentEffectChain { passes, plate_passes }
+}
+
 /// feedback を持つ pass に、状態の持ち主の鍵(層 × 複製 × 列 × 番)を刻む。
 /// 列 0 = 層の効果、列 1 = 板(配置・Whole)の後の効果。
 pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass], layer: crate::doc::store::LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>, namespace: u64) {

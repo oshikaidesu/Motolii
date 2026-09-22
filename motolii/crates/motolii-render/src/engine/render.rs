@@ -160,34 +160,6 @@ fn shifted_by_seconds(t: RationalTime, offset: f32) -> RationalTime {
     }
 }
 
-/// 別の時刻ごとに引き直した「層の姿」。鍵はずれ(ミリ秒)。
-type OtherTimes = BTreeMap<i64, (RationalTime, Vec<ResolvedLayer>, HashMap<LayerId, TextDocument>, HashMap<LayerId, Vec<ShapeNode>>)>;
-/// 合体後の別時刻の写し: (時刻のずれ, 相手, 求めた層) → 絵。
-type Composites = HashMap<(i64, crate::render::compositor::TimeSource, LayerId), crate::render::compositor::GpuTexture2D>;
-
-/// 時刻のずれ(秒)を鍵にする — 同じずれは 1 回しか引かない。
-/// 絶対時刻の鍵(ms)。復号の流れの名前空間に使う。
-fn offset_key_of(at: RationalTime, _view: &StoreView<'_>) -> i64 { (at.as_seconds_f64() * 1000.0).round() as i64 }
-
-fn offset_key(offset: f32) -> i64 {
-    (offset as f64 * 1000.0).round() as i64
-}
-
-/// 別の時刻の鍵: ずれ(ms)か、層ごとの絶対時刻(入点からの ms に層の番号を混ぜ、上の bit で区別)。
-fn time_key(offset: f32, base: TimeBase, layer: LayerId) -> i64 {
-    match base {
-        TimeBase::Offset => return offset_key(offset),
-        // コマ数の鍵は秒の鍵と混ざらないよう上の bit で分ける(-1 コマと -0.001 秒は別の時刻)。
-        TimeBase::Frames => return offset.round() as i64 | 1 << 60,
-        TimeBase::At => {}
-    }
-    let mut hasher = std::hash::DefaultHasher::new();
-    use std::hash::{Hash as _, Hasher as _};
-    layer.0.hash(&mut hasher);
-    offset_key(offset).hash(&mut hasher);
-    (hasher.finish() >> 2) as i64 | 1 << 61
-}
-
 /// 層の入点(comp の時刻)。TIME_AT はここからの秒。
 fn layer_in_point(view: &StoreView<'_>, layer: LayerId) -> RationalTime {
     let start = view.meta(layer).ok().flatten().map_or(0, |m| m.timing.start);
@@ -222,6 +194,3 @@ mod feedback_is_a_recurrence_from_the_in_point;
 #[cfg(test)]
 mod composite_at_another_time;
 
-/// Freeze(docs/freeze-and-flatten.md §2-6): 凍っても絵は変わらない、飛んでも辿っても同じ、Unfreeze で戻る。
-#[cfg(test)]
-mod freeze_keeps_the_picture;

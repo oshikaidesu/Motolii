@@ -139,7 +139,7 @@ impl EngineFrameGraph {
                 output,
                 version,
                 self.generation,
-                layer.layer, if let crate::frame_graph::SceneContentValue::Media { time, .. } = &layer.content { (time.as_seconds_f64() * 1_000_000.0).round() as i64 } else { 0 },
+                layer.layer, crate::render::engine::translate::scene_layer_media_tick(layer),
                 content,
                 placement,
                 blend,
@@ -216,23 +216,8 @@ impl EngineFrameGraph {
                 }
                 let placement_version = self.gpu_resources.version(resources.placement)
                     .ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
-                let placement = crate::doc::core::LayerPlacement {
-                    transform: layer.transform.affine,
-                    world_transform: Some(layer.transform.spatial),
-                    order: i32::from(layer.order),
-                    opacity: layer.opacity,
-                    z: layer.transform.spatial.translation.z,
-                    rotation_x: 0.0,
-                    rotation_y: 0.0,
-                    plane: None,
-                };
-                let _ = crate::gpu_exec::resident_placement(
-                    &mut self.gpu_placement,
-                    resources.placement,
-                    placement_version,
-                    self.generation,
-                    placement,
-                );
+                let placement = crate::render::engine::translate::scene_layer_placement(layer);
+                let _ = crate::gpu_exec::resident_placement(&mut self.gpu_placement, resources.placement, placement_version, self.generation, placement);
                 self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
                 self.gpu_blend_projection.install(&mut self.gpu_resources, self.generation, resources.blend, resources.projection, layer.blend, layer.projection)
                     .ok_or_else(|| EngineError::Store("GPU blend/projection resource version missing".into()))?;
@@ -245,28 +230,8 @@ impl EngineFrameGraph {
                     let mut encoded = crate::frame_graph::CanonicalEncoder::new();
                     let _ = encoded.string(&format!("{:?}{:?}", layer.effects, layer.after_effects));
                     let effect_version = crate::gpu_exec::GpuResourceVersion::from_canonical(&encoded);
-                    let mut passes = crate::render::engine::translate::translate_effect_passes(&layer.effects);
-                    let direct_screen = passes.iter()
-                        .any(|pass| pass.reads_backdrop || pass.reads_composite())
-                        .then_some([self.comp.width, self.comp.height]);
-                    crate::render::engine::translate::stamp_feedback(
-                        &mut passes, layer.layer, layer.instance, 0, direct_screen, 0,
-                    );
-                    let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&layer.after_effects);
-                    let plate_screen = plate_passes.iter()
-                        .any(|pass| pass.reads_backdrop || pass.reads_composite())
-                        .then_some([self.comp.width, self.comp.height]);
-                    crate::render::engine::translate::stamp_feedback(
-                        &mut plate_passes, layer.layer, layer.instance, 1, plate_screen, 0,
-                    );
-                    let _ = crate::gpu_exec::resident_effect_chain(
-                        &mut self.gpu_effects,
-                        identity.key(),
-                        effect_version,
-                        self.generation,
-                        passes,
-                        plate_passes,
-                    );
+                    let chain = crate::render::engine::translate::scene_layer_effect_chain(layer, self.comp);
+                    let _ = crate::gpu_exec::resident_effect_chain(&mut self.gpu_effects, identity.key(), effect_version, self.generation, chain.passes, chain.plate_passes);
                 }
                 if let Some(content_key) = resources.content {
                     let version = self.gpu_resources.version(content_key)

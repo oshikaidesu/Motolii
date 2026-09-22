@@ -174,7 +174,7 @@ pub struct Engine {
     containers: HashMap<String, ContainerInfo>,
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
-    /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
+    /// このコマの粒子の層の点。
     particle_frames: HashMap<LayerId, ParticleFrame>,
     /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
     pub(crate) overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
@@ -345,13 +345,11 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
-            feedback_replaying: false,
             keyed_outlines: HashMap::new(),
             keyed_cache: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
             material_picture: None,
