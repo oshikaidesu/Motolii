@@ -223,33 +223,8 @@ impl Engine {
                     )
                 }
                 SceneContentValue::Plate(plate) => {
-                    let nested = SceneValue {
-                        layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
-                    };
-                    let prepared = self.prepare_gpu_scene(&nested, comp, projection_camera)?;
-                    if prepared.layers.is_empty() {
-                        (None, [comp.width as f32, comp.height as f32])
-                    } else {
-                        let placement = LayerPlacement {
-                            transform: glam::Affine2::IDENTITY,
-                            world_transform: None,
-                            opacity: 1.0,
-                            order: i32::from(source.order),
-                            z: 0.0,
-                            rotation_x: 0.0,
-                            rotation_y: 0.0,
-                            plane: None,
-                        };
-                        let baked = self.bake_isolated_layers(
-                            comp,
-                            projection_camera,
-                            prepared.layers,
-                            CompositeBlendMode::Normal,
-                            placement,
-                            plate.average,
-                        )?;
-                        (Some(baked.content), baked.size)
-                    }
+                    self.frame_graph_plate(source, plate, comp, projection_camera)?
+                        .map_or((None, [comp.width as f32, comp.height as f32]), |(content, size)| (Some(content), size))
                 }
             };
                 (content, natural, 0, None, false)
@@ -379,26 +354,14 @@ impl Engine {
                 removed[index] = true;
                 continue;
             };
-            let target = self.apply_effects_before_matte(
+            let semantic = &scene.layers[index];
+            layers[index] = self.frame_graph_matte(
+                semantic,
+                &layers[index],
+                &layers[source_index],
                 comp,
                 projection_camera,
-                layers[index].layer.clone(),
-                &layers[index].passes,
             )?;
-            let source = self.apply_effects_before_matte(
-                comp,
-                projection_camera,
-                layers[source_index].layer.clone(),
-                &layers[source_index].passes,
-            )?;
-            let layer = self.apply_matte(comp, projection_camera, &target, &source, matte.mode)?;
-            layers[index] = LayerWithPasses {
-                layer,
-                passes: Vec::new(),
-                padding: 0,
-                pass_sources: Vec::new(),
-                cut: Vec::new(),
-            };
         }
 
         let kept: Vec<_> = layers.into_iter().enumerate()
