@@ -239,13 +239,13 @@ mod tests {
         clusters.observe_frame(&frame);
         let cluster_table = clusters.to_markdown();
         println!("{cluster_table}");
-        assert!(cluster_table.contains("MaterialValue"));
+        assert!(cluster_table.contains("MediaSourceValue"));
         assert!(cluster_table.contains("TransformValue"));
         assert!(clusters.clusters.iter().any(|cluster| cluster.input_types.iter().any(|ty| ty.ends_with("Value"))));
         let property = program.properties().node_for(cube, &opacity).unwrap();
-        let material = program.content().binding(cube).unwrap().material.unwrap();
+        let material = program.content().binding(cube).unwrap().content.unwrap();
         assert_eq!(frame.value(property).and_then(|value| value.downcast_ref::<Value>()), Some(&Value::F64(0.75)));
-        assert!(frame.value(material).and_then(|value| value.downcast_ref::<super::super::MaterialValue>()).is_some());
+        assert!(frame.value(material).and_then(|value| value.downcast_ref::<super::super::MediaSourceValue>()).is_some());
         let scene = frame.value(program.scene().scene).and_then(|value| value.downcast_ref::<super::super::SceneValue>()).unwrap();
         assert_eq!(scene.layers.len(), 1);
         assert_eq!(scene.layers[0].opacity, 0.75);
