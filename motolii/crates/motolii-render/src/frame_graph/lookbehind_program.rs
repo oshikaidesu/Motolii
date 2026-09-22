@@ -30,6 +30,7 @@ struct LayerInfo {
 
 #[derive(Clone)]
 struct ImageRequest {
+    effect: NodeKey,
     named_layers: Vec<LayerId>,
     temporal: Vec<(f32, TimeBase, TimeSource)>,
 }
@@ -173,8 +174,10 @@ impl LookbehindProgram {
         scenes: &BTreeMap<RationalTime, SceneValue>,
     ) {
         let requests = image_requests(layer);
+        let mut effect_keys = Vec::with_capacity(requests.len());
         let mut rows = Vec::with_capacity(requests.len());
         for request in requests {
+            effect_keys.push(request.effect);
             let row = if !request.named_layers.is_empty() {
                 request.named_layers.iter().map(|target| {
                     if *target == layer.layer { return None; }
@@ -189,6 +192,7 @@ impl LookbehindProgram {
             };
             rows.push(row);
         }
+        layer.image_source_effects = effect_keys;
         layer.image_sources = rows;
 
         if let SceneContentValue::Plate(plate) = &mut layer.content {
@@ -258,8 +262,8 @@ impl LookbehindProgram {
 fn image_requests(layer: &SceneLayerValue) -> Vec<ImageRequest> {
     let catalog = crate::render::engine::known_effects();
     let mut out = Vec::new();
-    for (effect, plate_chain) in layer.effects.iter().map(|effect| (effect, false))
-        .chain(layer.after_effects.iter().map(|effect| (effect, true)))
+    for ((effect_key, effect), plate_chain) in layer.effect_keys.iter().copied().zip(layer.effects.iter()).map(|pair| (pair, false))
+        .chain(layer.after_effect_keys.iter().copied().zip(layer.after_effects.iter()).map(|pair| (pair, true)))
     {
         let Some(descriptor) = catalog.iter().find(|descriptor| descriptor.plugin_id == effect.plugin_id) else { continue };
         let accepted = if plate_chain {
@@ -292,7 +296,7 @@ fn image_requests(layer: &SceneLayerValue) -> Vec<ImageRequest> {
             )
         }).collect();
 
-        out.push(ImageRequest { named_layers, temporal });
+        out.push(ImageRequest { effect: effect_key, named_layers, temporal });
     }
     out
 }

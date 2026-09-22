@@ -210,6 +210,7 @@ impl GroupCompositeProgram {
                 layer.effects.clear();
                 layer.after_effect_keys = whole_keys;
                 layer.after_effects = whole;
+                layer.mask_keys.clear();
                 layer.masks.clear();
                 layer.matte = None;
                 layer.clip_to_below = false;

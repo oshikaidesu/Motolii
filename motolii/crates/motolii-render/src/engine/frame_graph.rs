@@ -78,6 +78,12 @@ impl EngineFrameGraph {
             program: &self.program,
             comp: self.comp,
             fps: self.fps,
+            generation: self.generation,
+            gpu_resources: &mut self.gpu_resources,
+            gpu_lowerer: &mut self.gpu_lowerer,
+            gpu_content: &mut self.gpu_content,
+            gpu_placement: &mut self.gpu_placement,
+            gpu_effects: &mut self.gpu_effects,
         };
         let evaluated = self.graph.evaluate(
             &mut executor,
@@ -85,46 +91,7 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
-        if let Some(scene) = evaluated.value(self.scene).and_then(|value| value.downcast_ref::<SceneValue>()) {
-            let adapter = crate::gpu_exec::SemanticGpuAdapter::new(&self.program, &evaluated);
-            let inputs = adapter.contributions(scene).map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
-            for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
-                let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
-                let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
-                let _ = crate::gpu_exec::resident_placement(
-                    &mut self.gpu_placement,
-                    resources.placement,
-                    placement_version,
-                    self.generation,
-                    layer,
-                );
-                self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
-                if let Some((effect_key, effect_version)) = crate::gpu_exec::effect_chain_key(layer) {
-                    let _ = crate::gpu_exec::resident_effect_chain(
-                        &mut self.gpu_effects,
-                        effect_key,
-                        effect_version,
-                        self.generation,
-                        layer,
-                        [self.comp.width, self.comp.height],
-                    );
-                }
-                if let Some(content_key) = resources.content {
-                    let version = self.gpu_resources.version(content_key).ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
-                    let _ = engine.gpu_resident_content(
-                        &mut self.gpu_content,
-                        content_key,
-                        version,
-                        self.generation,
-                        layer,
-                        self.comp,
-                        time,
-                    )?;
-                    self.gpu_resources.mark_resident(content_key, version, self.generation);
-                }
-            }
-            self.gpu_resources.retire_temporal(self.generation);
-        }
+        self.gpu_resources.retire_temporal(self.generation);
         self.frame = Some(evaluated);
         Ok(())
     }
@@ -133,7 +100,18 @@ impl EngineFrameGraph {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
 #[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
-struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
+struct ProgramExecutor<'a> {
+    engine: &'a mut Engine,
+    program: &'a SceneProgram,
+    comp: CompSpec,
+    fps: crate::doc::store::Fps,
+    generation: u64,
+    gpu_resources: &'a mut crate::gpu_exec::GpuResourceGraph,
+    gpu_lowerer: &'a mut crate::gpu_exec::LogicalGpuLowerer,
+    gpu_content: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
+    gpu_placement: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
+    gpu_effects: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
+}
 impl NodeExecutor for ProgramExecutor<'_> {
     type Error = EngineError;
 
@@ -189,7 +167,71 @@ impl NodeExecutor for ProgramExecutor<'_> {
                     self.fps.den() as f32 / self.fps.num() as f32,
                     frame,
                 ]);
-                let prepared = self.engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, context.time, self.fps)?;
+                let adapter = crate::gpu_exec::SemanticGpuAdapter::new(self.program);
+                let gpu_inputs = adapter.contributions(scene)
+                    .map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
+                let mut resident_resources = HashMap::new();
+                for (layer, input) in scene.layers.iter().zip(gpu_inputs.iter()) {
+                    let resources = self.gpu_lowerer.lower_contribution(self.gpu_resources, input)
+                        .map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+
+                    let placement_version = self.gpu_resources.version(resources.placement)
+                        .ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
+                    let _ = crate::gpu_exec::resident_placement(
+                        self.gpu_placement,
+                        resources.placement,
+                        placement_version,
+                        self.generation,
+                        layer,
+                    );
+                    self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
+
+                    if let Some((effect_key, effect_version)) = crate::gpu_exec::effect_chain_key(layer) {
+                        let _ = crate::gpu_exec::resident_effect_chain(
+                            self.gpu_effects,
+                            effect_key,
+                            effect_version,
+                            self.generation,
+                            layer,
+                            [self.comp.width, self.comp.height],
+                        );
+                    }
+
+                    if let Some(content_key) = resources.content {
+                        let version = self.gpu_resources.version(content_key)
+                            .ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
+                        let built = self.engine.gpu_resident_content(
+                            self.gpu_content,
+                            content_key,
+                            version,
+                            self.generation,
+                            layer,
+                            self.comp,
+                            context.time,
+                        )?;
+                        if built.is_some() {
+                            self.gpu_resources.mark_resident(content_key, version, self.generation);
+                        }
+                    }
+                    resident_resources.insert((layer.layer, layer.instance), resources);
+                }
+
+                let resident = super::frame_graph_scene::GpuResidentScene {
+                    graph: self.gpu_resources,
+                    resources: &resident_resources,
+                    content: self.gpu_content,
+                    placement: self.gpu_placement,
+                    effects: self.gpu_effects,
+                };
+                let prepared = self.engine.prepare_gpu_scene_with_solver_resident(
+                    scene,
+                    solver,
+                    self.comp,
+                    camera,
+                    context.time,
+                    self.fps,
+                    Some(&resident),
+                )?;
                 Ok(NodeValue::new(Arc::new(prepared)))
             }
             NodeKind::CameraProjection => {

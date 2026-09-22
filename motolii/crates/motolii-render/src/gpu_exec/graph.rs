@@ -53,24 +53,29 @@ impl GpuResourceGraph {
         desc: GpuResourceDesc,
     ) -> Result<GpuResourceDelta, GpuGraphError> {
         let key = desc.key();
-        if let Some(existing) = self.resources.get_mut(&key) {
-            if existing.desc.identity != desc.identity {
-                return Err(GpuGraphError::ResourceHashCollision(key));
+        if self.resources.contains_key(&key) {
+            {
+                let existing = self.resources.get_mut(&key).expect("checked above");
+                if existing.desc.identity != desc.identity {
+                    return Err(GpuGraphError::ResourceHashCollision(key));
+                }
+                let same = existing.desc.version == desc.version
+                    && existing.desc.dependencies == desc.dependencies
+                    && existing.desc.lifetime == desc.lifetime
+                    && existing.desc.alias_class == desc.alias_class
+                    && existing.desc.estimated_bytes == desc.estimated_bytes;
+                if same {
+                    return Ok(GpuResourceDelta::Unchanged);
+                }
+                // Any descriptor change changes what this logical slot means.
+                existing.desc = desc;
             }
-            let same = existing.desc.version == desc.version
-                && existing.desc.dependencies == desc.dependencies
-                && existing.desc.lifetime == desc.lifetime
-                && existing.desc.alias_class == desc.alias_class
-                && existing.desc.estimated_bytes == desc.estimated_bytes;
-            if same {
-                return Ok(GpuResourceDelta::Unchanged);
-            }
-            // Any descriptor change can change what the GPU slot means.
-            // A lowerer bug that forgets to bump version must not preserve
-            // stale residency after dependency/lifetime/alias changes.
-            existing.resident_version = None;
-            existing.desc = desc;
             self.rebuild_downstream();
+            // Version/dependency changes invalidate the slot and every cached
+            // consumer. This is the core guarantee that lets downstream
+            // versions remain value-local rather than manually folding every
+            // ancestor version into their own fingerprint.
+            self.invalidate([key]);
             return Ok(GpuResourceDelta::Changed);
         }
 
@@ -286,6 +291,25 @@ mod tests {
         let dirty = graph.invalidate([content_key]);
         assert_eq!(dirty, BTreeSet::from([content_key, effect_key, composite_key]));
         assert!(graph.is_current(unrelated_key));
+    }
+
+    #[test]
+    fn upstream_version_change_invalidates_resident_dependents() {
+        let mut graph = GpuResourceGraph::default();
+        let content = resource(node(11), GpuResourceClass::Content, 1, vec![]);
+        let content_key = content.key();
+        graph.upsert_resource(content).unwrap();
+        let effect = resource(node(12), GpuResourceClass::Effect, 1, vec![content_key]);
+        let effect_key = effect.key();
+        graph.upsert_resource(effect).unwrap();
+
+        graph.mark_resident(content_key, GpuResourceVersion::new(1), 1);
+        graph.mark_resident(effect_key, GpuResourceVersion::new(1), 1);
+        assert!(graph.is_current(effect_key));
+
+        graph.upsert_resource(resource(node(11), GpuResourceClass::Content, 2, vec![])).unwrap();
+        assert!(!graph.is_current(content_key));
+        assert!(!graph.is_current(effect_key));
     }
 
     #[test]

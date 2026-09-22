@@ -1,7 +1,7 @@
 use crate::frame_graph::NodeKey;
 
 use super::graph::{GpuGraphError, GpuResourceGraph};
-use super::types::{GpuResourceKey, GpuResourceVersion};
+use super::types::{GpuResourceKey, GpuResourceLifetime, GpuResourceVersion};
 
 /// A semantic recipe plus the version of its currently evaluated value.
 ///
@@ -14,6 +14,25 @@ pub(crate) struct VersionedSemantic {
     pub version: GpuResourceVersion,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GpuImageSourceKind {
+    Content,
+    Scene,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct VersionedImageSource {
+    pub version: GpuResourceVersion,
+    pub lifetime: GpuResourceLifetime,
+    pub kind: GpuImageSourceKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GpuEffectImages {
+    pub effect: NodeKey,
+    pub sources: Vec<VersionedImageSource>,
+}
+
 /// Per-contribution lowering input. The semantic adapter constructs these from
 /// contribution/content/transform/effect/mask bindings. The GPU lowerer never
 /// receives StoreView or the whole Document.
@@ -24,6 +43,8 @@ pub(crate) struct GpuContributionInput {
     pub content: Option<VersionedSemantic>,
     pub placement: VersionedSemantic,
     pub effects: Vec<VersionedSemantic>,
+    pub after_effects: Vec<VersionedSemantic>,
+    pub effect_images: Vec<GpuEffectImages>,
     pub masks: Vec<VersionedSemantic>,
     pub matte_source: Option<GpuResourceKey>,
     pub plate: Option<VersionedSemantic>,
