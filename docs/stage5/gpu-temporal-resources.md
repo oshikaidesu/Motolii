@@ -40,7 +40,7 @@ Effect resource dependency
 Image-source identity is stable for one consumer effect input:
 
 ```text
-(effect NodeKey, contribution instance, input index)
+(effect NodeKey, owner LayerId, contribution instance, input index)
 ```
 
 The version fingerprints the evaluated source value, requested time, namespace, and source contents.
