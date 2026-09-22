@@ -65,6 +65,26 @@ impl EngineFrameGraph {
             .map_err(|error| EngineError::Store(format!("GPU execution plan: {error:?}")))
     }
 
+    fn execute_pre_sink(
+        &mut self,
+        plan: &crate::gpu_exec::GpuExecutionPlan,
+        sink: crate::gpu_exec::GpuSinkKind,
+    ) -> Result<crate::gpu_exec::GpuExecutionStats, EngineError> {
+        let sink_pass = match sink {
+            crate::gpu_exec::GpuSinkKind::Present => self.gpu_present_sink,
+            crate::gpu_exec::GpuSinkKind::Readback => self.gpu_readback_sink,
+        }.ok_or_else(|| EngineError::Store("GPU sink root missing".into()))?.pass;
+        let mut pre = plan.clone();
+        pre.passes.retain(|pass| *pass != sink_pass);
+        let mut backend = crate::gpu_exec::EngineGpuBackend { operations: &self.gpu_operations };
+        crate::gpu_exec::GpuExecutor.execute(
+            &mut self.gpu_resources,
+            &pre,
+            self.generation,
+            &mut backend,
+        ).map_err(|error| EngineError::Store(format!("GPU executor: {error:?}")))
+    }
+
 
     fn evaluate_at(
         &mut self,
