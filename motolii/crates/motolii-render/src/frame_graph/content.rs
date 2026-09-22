@@ -131,6 +131,7 @@ impl ContentProgram {
         Ok(program)
     }
 
+    pub fn binding(&self, layer: LayerId) -> Option<&ContentBinding> { self.bindings.get(&layer) }
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn binding(&self, layer: LayerId) -> Option<&ContentBinding> { self.bindings.get(&layer) }
     pub fn bindings(&self) -> impl ExactSizeIterator<Item = &ContentBinding> { self.bindings.values() }
