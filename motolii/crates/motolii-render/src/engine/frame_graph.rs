@@ -393,6 +393,33 @@ impl Engine {
         Ok(state)
     }
 
+    pub(in crate::engine) fn frame_graph_plate(
+        &mut self,
+        source: &crate::frame_graph::SceneLayerValue,
+        plate: &crate::frame_graph::ScenePlateValue,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::render::engine::ResolvedCamera,
+    ) -> Result<Option<(crate::render::compositor::LayerContent, [f32; 2])>, EngineError> {
+        let mut state = self.frame_graph.take().ok_or_else(|| EngineError::Store("frame graph state missing".into()))?;
+        let result = self.gpu_plate(&mut state.gpu_composites, source, plate, comp, camera, state.generation);
+        self.frame_graph = Some(state);
+        result
+    }
+
+    pub(in crate::engine) fn frame_graph_matte(
+        &mut self,
+        source: &crate::frame_graph::SceneLayerValue,
+        target: &crate::render::compositor::LayerWithPasses,
+        matte_source: &crate::render::compositor::LayerWithPasses,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::render::engine::ResolvedCamera,
+    ) -> Result<crate::render::compositor::LayerWithPasses, EngineError> {
+        let mut state = self.frame_graph.take().ok_or_else(|| EngineError::Store("frame graph state missing".into()))?;
+        let result = self.gpu_matte(&mut state.gpu_composites, source, target, matte_source, comp, camera, state.generation);
+        self.frame_graph = Some(state);
+        result
+    }
+
     pub(in crate::engine) fn frame_graph_process_mask_flatten(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
