@@ -44,9 +44,11 @@ class _GalleryStoryState extends State<GalleryStory> {
     bridge = _PreviewBridge(status);
     session = EditorSession(bridge: bridge)
       ..windowInfo = const {'id': 'preview', 'main': true}
-      ..deskWork.value = const {'theme': _velvetTheme}
       ..document.value = status
       ..frame.value = (status['frame'] as num? ?? 0).toInt();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) session.deskWork.value = const {'theme': _velvetTheme};
+    });
   }
 
   @override
