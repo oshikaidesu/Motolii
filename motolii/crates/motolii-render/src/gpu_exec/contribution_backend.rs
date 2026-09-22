@@ -71,3 +71,46 @@ impl crate::render::engine::Engine {
         })
     }
 }
+
+
+/// Materialize the already-lowered contribution into the resource store used by
+/// relation operations. This is deliberately one contribution at a time; it
+/// never scans or mutates a whole scene.
+impl crate::render::engine::Engine {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn gpu_materialize_contribution(
+        &mut self,
+        composites: &mut super::GpuResourceStore<super::ResidentCompositeLayer>,
+        output: super::GpuResourceKey,
+        version: super::GpuResourceVersion,
+        generation: u64,
+        source: &SceneLayerValue,
+        resident: ResidentContent,
+        placement: ResidentPlacement,
+        effects: ResidentEffectChain,
+        pass_sources: Vec<Vec<crate::render::compositor::GpuTexture2D>>,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+    ) -> Result<(), crate::render::engine::EngineError> {
+        if composites.current(output, version).is_some() {
+            composites.touch(output, generation);
+            return Ok(());
+        }
+        let layer = self.gpu_contribution_layer(
+            source,
+            resident,
+            placement,
+            effects,
+            pass_sources,
+            comp,
+            camera,
+        )?;
+        composites.install(
+            output,
+            version,
+            generation,
+            super::ResidentCompositeLayer { layer },
+        );
+        Ok(())
+    }
+}
