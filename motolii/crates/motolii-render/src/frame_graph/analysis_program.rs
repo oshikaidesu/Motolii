@@ -305,12 +305,14 @@ impl AnalysisProgram {
                                 }
                                 cursor += 1;
                             }
+                            let mut resolved_mask_keys = Vec::new();
                             let mut resolved_masks = Vec::new();
-                            for _ in &plan.masks {
+                            for key in &plan.masks {
                                 let mask = inputs.at(cursor)
                                     .and_then(|value| value.downcast_ref::<MaskValue>())
                                     .map(|value| value.0.clone())
                                     .ok_or(AnalysisProgramError::InvalidInput(node.identity().kind))?;
+                                resolved_mask_keys.push(*key);
                                 resolved_masks.push(mask);
                                 cursor += 1;
                             }
@@ -327,6 +329,7 @@ impl AnalysisProgram {
                                 after_effects: Vec::new(),
                                 image_source_effects: Vec::new(),
                                 image_sources: Vec::new(),
+                                mask_keys: resolved_mask_keys,
                                 masks: resolved_masks,
                                 matte: None,
                                 clip_to_below: false,
