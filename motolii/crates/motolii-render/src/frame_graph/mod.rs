@@ -44,7 +44,7 @@ pub use analysis_program::{AnalysisBinding, AnalysisProgram, AnalysisProgramErro
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
-pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaExtentValue, MediaFrameValue, MediaSourceValue};
+pub use content::{ContentBinding, ContentProgram, ContentProgramError, MediaExtentValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
 pub use evaluate::{DynamicInput, EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
