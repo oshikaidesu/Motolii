@@ -199,6 +199,9 @@ impl SceneNodeProgram {
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn output(&self) -> SceneProgramNodes { self.output }
     pub fn binding(&self, layer: LayerId) -> Option<NodeKey> { self.bindings.get(&layer).copied() }
+    pub fn bindings(&self) -> impl ExactSizeIterator<Item = (LayerId, NodeKey)> + '_ {
+        self.bindings.iter().map(|(layer, key)| (*layer, *key))
+    }
 
     pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<Vec<DynamicInput>, SceneNodeError>> {
         let recipe = self.recipes.get(&node.key())?;
