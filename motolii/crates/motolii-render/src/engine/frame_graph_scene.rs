@@ -234,59 +234,32 @@ impl Engine {
                 };
             }
             let placement = self.frame_graph_resident_placement(source)
-                .map(|resident| resident.placement)
-                .unwrap_or_else(|| crate::gpu_exec::ResidentPlacement::from_scene(source).placement);
-            let (passes, pass_sources) = if frozen_hit {
-                (Vec::new(), Vec::new())
+                .unwrap_or_else(|| crate::gpu_exec::ResidentPlacement::from_scene(source));
+            let effects = self.frame_graph_resident_effects(source).unwrap_or_else(|| {
+                let mut passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
+                let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
+                crate::render::engine::translate::stamp_feedback(&mut passes, source.layer, source.instance, 0, None, 0);
+                crate::render::engine::translate::stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, None, 0);
+                crate::gpu_exec::ResidentEffectChain { passes, plate_passes }
+            });
+            let pass_sources = if frozen_hit {
+                Vec::new()
             } else {
-                let resident = self.frame_graph_resident_effects(source);
-                let (direct_passes, plate_passes) = resident.map_or_else(
-                    || (
-                        crate::render::engine::translate::translate_effect_passes(&source.effects),
-                        crate::render::engine::translate::translate_plate_passes(&source.after_effects),
-                    ),
-                    |resident| (resident.passes, resident.plate_passes),
-                );
-                (
-                    direct_passes.into_iter().chain(plate_passes).collect(),
-                    self.frame_graph_snapshot_rows(source, comp, projection_camera)?,
-                )
+                self.frame_graph_snapshot_rows(source, comp, projection_camera)?
             };
-            // Stencil/Silhouette are matte sources, never compositor blend modes.
-            let blend_mode = if source.blend.is_stencil() {
-                CompositeBlendMode::Normal
-            } else {
-                crate::render::engine::translate::translate_blend_mode(source.blend)?
-            };
-            let layer = Layer {
-                content,
-                size: natural,
+            let resident = crate::gpu_exec::ResidentContent { content, natural };
+            let mut prepared = self.gpu_contribution_layer(
+                source,
+                resident,
                 placement,
-                projection: source.projection,
+                effects,
+                pass_sources,
+                comp,
                 projection_camera,
-                blend_mode,
-                shading: self.compositor.surface_shading_for(&source.effects, false).map_err(EngineError::Store)?,
-                displace: crate::render::engine::translate::translate_point_displace(&source.effects),
-                clip: crate::render::engine::translate::translate_clip(&source.effects),
-                shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects),
-                outline: self.outline_id(source.layer),
-                frame: frozen_frame,
-            };
-            let layer = self.frame_graph_process_mask_flatten(source, layer, natural, frozen_frame, comp, projection_camera)?;
-            let source_tick = match &source.content {
-                SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
-                _ => 0,
-            };
-            let layer = self.apply_material_domains_semantic(
-                layer,
-                source.layer,
-                &source.effects,
-                matches!(source.source, crate::doc::store::LayerSource::File { .. }),
-                source_tick,
-                natural,
-                frozen_frame,
             )?;
-            layers.push(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
+            prepared.padding = frozen_padding;
+            prepared.layer.frame = frozen_frame;
+            layers.push(prepared);
             entries.push(Entry {
                 layer: source.layer,
                 matte: source.matte,
