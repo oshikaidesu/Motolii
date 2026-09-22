@@ -312,7 +312,7 @@ impl Engine {
     /// 平面へ収める。3D の素材を comp の絵へ一度焼き、以後は板として扱う
     /// (裁定 2026-08-30「平面に収めるのは選択肢」)。焼いた層にも blend・matte・
     /// エフェクトは今まで通り効く。
-    pub(in crate::engine) fn flatten_if_asked(
+    pub(crate) fn flatten_if_asked(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
@@ -368,7 +368,7 @@ impl Engine {
     /// Track Matte は、Effect後の層をsourceのcoverageで切り、その結果を他層へblendする。
     /// EffectをMatte後のcomp大textureへ掛けると、0-input Effectが透明域を再び塗るため、
     /// 既存のlocal-texture Effect経路をここで一度だけcomp座標へ収めてからMatteへ渡す。
-    pub(in crate::engine) fn apply_effects_before_matte(
+    pub(crate) fn apply_effects_before_matte(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
@@ -396,7 +396,7 @@ impl Engine {
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。`average` なら写しを足す
     /// (Motion Blur: 各写しの不透明度は 1/枚数なので、足すと平均になる)。
-    pub(in crate::engine) fn bake_isolated_layers(
+    pub(crate) fn bake_isolated_layers(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
@@ -528,7 +528,7 @@ impl Engine {
         Ok(Some(if masks_applied { built } else { self.apply_masks_to_layer(built, masks, natural, frame)? }))
     }
 
-    pub(in crate::engine) fn apply_masks_to_layer(
+    pub(crate) fn apply_masks_to_layer(
         &mut self,
         mut layer: Layer,
         masks: &[ResolvedMask],
