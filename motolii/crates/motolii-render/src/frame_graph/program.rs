@@ -224,8 +224,7 @@ mod tests {
             Intent::SetConstant { layer: cube, property: opacity.clone(), value: Value::F64(0.75) },
         ]).unwrap();
         let program = SceneProgram::compile(&doc.view()).unwrap();
-        let clusters = program.static_clusters().unwrap();
-        println!("{}", clusters.to_markdown());
+        let mut clusters = program.static_clusters().unwrap();
         assert!(clusters.clusters_with_kind(super::NodeKind::SceneComposite).next().is_some());
         let effect_images = clusters.clusters_with_kind(super::NodeKind::EffectImages).next().expect("lookbehind cluster");
         assert_eq!(effect_images.signature.dynamic, super::StaticDynamicClass::TemporalSample);
@@ -233,6 +232,11 @@ mod tests {
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
         let mut executor = Executor(&program);
         let frame = graph.evaluate(&mut executor, crate::doc::core::RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        clusters.observe_frame(&frame);
+        let cluster_table = clusters.to_markdown();
+        println!("{cluster_table}");
+        assert!(cluster_table.contains("MaterialValue"));
+        assert!(cluster_table.contains("TransformValue"));
         let property = program.properties().node_for(cube, &opacity).unwrap();
         let material = program.content().binding(cube).unwrap().material.unwrap();
         assert_eq!(frame.value(property).and_then(|value| value.downcast_ref::<Value>()), Some(&Value::F64(0.75)));
