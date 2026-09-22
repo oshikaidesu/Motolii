@@ -36,7 +36,7 @@ impl crate::render::engine::Engine {
             displace: crate::render::engine::translate::translate_point_displace(&source.effects),
             clip: crate::render::engine::translate::translate_clip(&source.effects),
             shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects),
-            outline: self.outline_order.iter().position(|id| *id == source.layer).map(|index| (index + 1) as u32).unwrap_or(0),
+            outline: self.outline_order.iter().position(|id| *id == source.layer).map(|index| (index + 1).min(u8::MAX as usize) as u8).unwrap_or(0),
             frame,
         };
         layer = self.frame_graph_process_mask_flatten(
