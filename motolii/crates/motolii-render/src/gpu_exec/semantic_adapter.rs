@@ -61,7 +61,7 @@ impl<'a> SemanticGpuAdapter<'a> {
             version: transform_version(&layer.transform)?,
         };
 
-        let matte_source = layer.matte.and_then(|matte| {
+        let relation_source = layer.matte.and_then(|matte| {
             let source = self.program.contribution(matte.layer)?;
             Some(super::types::GpuResourceIdentity::semantic(
                 source,
@@ -69,6 +69,8 @@ impl<'a> SemanticGpuAdapter<'a> {
                 0,
             ).key())
         });
+        let clip_base = layer.clip_to_below.then_some(relation_source).flatten();
+        let matte_source = (!layer.clip_to_below).then_some(relation_source).flatten();
 
         let direct_effects = versioned_effects(layer.layer, &layer.effect_keys, &layer.effects)?;
         let after_effects = versioned_effects(layer.layer, &layer.after_effect_keys, &layer.after_effects)?;
@@ -93,6 +95,7 @@ impl<'a> SemanticGpuAdapter<'a> {
             image_sources: layer.image_sources.clone(),
             masks,
             matte_source,
+            clip_base,
             clip_to_below: layer.clip_to_below,
             stencil: layer.blend.is_stencil(),
             plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
