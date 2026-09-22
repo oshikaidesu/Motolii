@@ -8,6 +8,7 @@ mod content_backend;
 mod effect_backend;
 mod executor;
 mod graph;
+mod image_source_backend;
 mod lowerer;
 mod logical_lowerer;
 mod planner;
@@ -20,11 +21,12 @@ mod types;
 pub(crate) use content_backend::ResidentContent;
 pub(crate) use effect_backend::{effect_chain_key, resident_effect_chain, ResidentEffectChain};
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
+pub(crate) use image_source_backend::ResidentImageSource;
 pub(crate) use graph::{GpuGraphError, GpuGraphStats, GpuResourceDelta, GpuResourceGraph};
 pub(crate) use logical_lowerer::{LogicalGpuLowerer, LogicalLowerError};
 pub(crate) use lowerer::GpuLowerer;
 pub(crate) use lowerer::{
-    GpuContributionInput, GpuContributionResources, VersionedSemantic,
+    image_source_identity, GpuContributionInput, GpuContributionResources, VersionedSemantic,
 };
 pub(crate) use resource_store::{GpuOperationTable, GpuResourceStore};
 pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
