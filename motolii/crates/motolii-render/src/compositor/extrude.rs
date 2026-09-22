@@ -191,6 +191,7 @@ impl Compositor {
             materials: smallvec::smallvec![Material {
                 albedo_is_premultiplied: true,
                 field_anchor: false,
+                curves: None,
                 label: "layer picture".into(),
                 index_range: 0..index_count,
                 albedo: texture,

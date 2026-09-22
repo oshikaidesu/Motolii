@@ -188,3 +188,31 @@ fn enlarging_a_path_matches_drawing_the_large_contour_even_at_an_image_effect_bo
         assert!(bad < 300, "magnifying a contour introduced {bad} differing pixels (image effect={pass})");
     }
 }
+
+/// A solid fill is one quad whose coverage the GPU evaluates from the curves, so the outline stays
+/// a true circle however far it is magnified — nothing was tessellated to magnify.
+#[test]
+fn an_exact_fill_stays_a_true_circle_at_any_magnification() {
+    let scale = 40.0;
+    let doc = circle(16.0, scale as f64, false);
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert!(
+        engine.shape_textures.values().any(|c| matches!(&c.texture, LayerContent::Model(m) if m.vertices.len() == 4)),
+        "a solid fill is drawn as one quad, not a tessellation",
+    );
+    // The anchor is the shape origin (the circle's centre) placed at (256, 256).
+    let center = glam::vec2(256.0, 256.0);
+    let radius = 8.0 * scale;
+    let mut wrong = 0;
+    for y in 0..512usize {
+        for x in 0..512usize {
+            let distance = (glam::vec2(x as f32 + 0.5, y as f32 + 0.5) - center).length() - radius;
+            if distance.abs() < 1.5 { continue; }
+            let ink = pixels[(y * 512 + x) * 4] < 128;
+            if ink != (distance < 0.0) { wrong += 1; }
+        }
+    }
+    assert_eq!(wrong, 0, "pixels on the wrong side of the true circle");
+}

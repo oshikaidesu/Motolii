@@ -74,6 +74,21 @@ fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> 
 
 /// 形の木を描き手へ積む。群は平らにし、演算(trim・角丸…)は解決済みの輪郭で渡す。
 fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<PathDrawDataBuilder, CompositorError> {
+    build_paths(shapes, canvas, tolerance, step, false)
+}
+
+/// Shapes the GPU can fill exactly from their curves: solid fills only, no strokes (an exact fill
+/// is drawn after tessellated paint, so mixing would reorder it), and no field bending the outline.
+fn fills_exactly(shapes: &[ShapeNode], step: Option<f32>) -> Result<bool, CompositorError> {
+    if step.is_some() { return Ok(false); }
+    let leaves = crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))?;
+    Ok(leaves.iter().all(|shape| {
+        shape.stroke.as_ref().is_none_or(|s| s.hidden)
+            && shape.fill.as_ref().is_none_or(|f| f.hidden || matches!(f.brush, Brush::Solid(_)))
+    }))
+}
+
+fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>, exact: bool) -> Result<PathDrawDataBuilder, CompositorError> {
     let origin = Point { x: canvas.origin_x as f64, y: canvas.origin_y as f64 };
     let mut b = PathDrawDataBuilder::default().with_tolerance(tolerance);
     for shape in crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
@@ -81,7 +96,10 @@ fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, ste
             let outline = contours(&instance.path, origin, step);
             if let Some(fill) = shape.fill.as_ref().filter(|f| !f.hidden) {
                 let rule = match fill.rule { crate::doc::vector::FillRule::NonZero => PathFillRule::NonZero, crate::doc::vector::FillRule::EvenOdd => PathFillRule::EvenOdd };
-                b.fill(&outline, rule, &*paint(&fill.brush, fill.opacity * instance.opacity, origin));
+                match (&fill.brush, exact) {
+                    (Brush::Solid(c), true) => b.fill_exact(&outline, rule, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(fill.opacity * instance.opacity)])),
+                    _ => b.fill(&outline, rule, &*paint(&fill.brush, fill.opacity * instance.opacity, origin)),
+                }
             }
             if let Some(stroke) = shape.stroke.as_ref().filter(|s| !s.hidden) {
                 let s = PathStroke {
@@ -117,7 +135,7 @@ pub(crate) fn outlines(shapes: &[ShapeNode], canvas: &Canvas) -> Result<Vec<(Vec
 impl Compositor {
     /// `step`: 場が乗る時、輪郭を ≤ step px の直線に刻む(頂点段の場が滑らかに効くように)。
     pub(crate) fn path_model(&mut self, shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<Option<super::GpuModelData>, CompositorError> {
-        let builder = build_at_tolerance(shapes, canvas, tolerance, step)?;
+        let builder = build_paths(shapes, canvas, tolerance, step, fills_exactly(shapes, step)?)?;
         if builder.is_empty() { return Ok(None); }
         let mut mesh = builder.into_mesh(&self.ctx, "vector layer");
         // 場は線の中心線の点(錨)で評価する: 線の両側が同じ量だけ動き、線幅が保たれる。
