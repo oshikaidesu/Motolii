@@ -121,8 +121,11 @@ impl EngineFrameGraph {
             let mut ordered_outputs = Vec::with_capacity(inputs.len());
             for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
                 let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
-                if let Some(output) = resources.final_image_or_geometry {
-                    ordered_outputs.push(output);
+                // Scene ordering is expressed in terms of the stable declared
+                // contribution outputs. Concrete backends must not rebuild
+                // this mapping by scanning SceneValue/LayerId.
+                if resources.final_image_or_geometry.is_some() {
+                    ordered_outputs.push(resources.contribution);
                 }
                 let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
                 let _ = crate::gpu_exec::resident_placement(
