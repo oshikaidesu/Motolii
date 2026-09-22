@@ -82,6 +82,52 @@ impl EngineFrameGraph {
         let mut pre = plan.clone();
         pre.passes.retain(|pass| *pass != sink_pass);
 
+        // Materialize prepared contribution outputs before relation passes.
+        // This is the replacement for whole-scene Vec<LayerWithPasses> assembly:
+        // each resource is addressed by the lowering result that owns it.
+        let frame = self.frame.as_ref()
+            .ok_or_else(|| EngineError::Store("FrameGraph evaluated frame is missing".into()))?;
+        let scene = frame.value(self.scene)
+            .and_then(|value| value.downcast_ref::<SceneValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        for (layer, resources) in scene.layers.iter().zip(self.gpu_contributions.iter()) {
+            let Some(output) = resources.prepared else { continue };
+            let version = self.gpu_resources.version(output)
+                .ok_or_else(|| EngineError::Store("GPU prepared contribution version missing".into()))?;
+            if self.gpu_composites.current(output, version).is_some() {
+                self.gpu_composites.touch(output, self.generation);
+                self.gpu_resources.mark_resident(output, version, self.generation);
+                continue;
+            }
+            let Some(content_key) = resources.content else { continue };
+            let content_version = self.gpu_resources.version(content_key)
+                .ok_or_else(|| EngineError::Store("GPU content version missing".into()))?;
+            let Some(content) = self.gpu_content.current(content_key, content_version).cloned() else { continue };
+            let placement_version = self.gpu_resources.version(resources.placement)
+                .ok_or_else(|| EngineError::Store("GPU placement version missing".into()))?;
+            let Some(placement) = self.gpu_placement.current(resources.placement, placement_version).copied() else { continue };
+            let effects = crate::gpu_exec::effect_chain_key(layer)
+                .and_then(|(key, version)| self.gpu_effects.current(key, version).cloned())
+                .unwrap_or_else(|| crate::gpu_exec::ResidentEffectChain {
+                    passes: crate::render::engine::translate::translate_effect_passes(&layer.effects),
+                    plate_passes: crate::render::engine::translate::translate_plate_passes(&layer.after_effects),
+                });
+            engine.gpu_materialize_contribution(
+                &mut self.gpu_composites,
+                output,
+                version,
+                self.generation,
+                layer,
+                content,
+                placement,
+                effects,
+                Vec::new(),
+                self.comp,
+                camera,
+            )?;
+            self.gpu_resources.mark_resident(output, version, self.generation);
+        }
+
         let cross = crate::gpu_exec::EngineCrossContext {
             engine,
             resources: &mut self.gpu_composites,
