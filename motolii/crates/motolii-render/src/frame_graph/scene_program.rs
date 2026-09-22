@@ -367,6 +367,7 @@ impl SceneNodeProgram {
                         layer.freeze_eligible = false;
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                        layer.shape_stretch = copy.outline_stretch;
                         members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
                         continue;
                     }
@@ -411,6 +412,7 @@ impl SceneNodeProgram {
                     if sampled_selected.is_some() {
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                        layer.shape_stretch = copy.outline_stretch;
                     } else {
                         // The placement effect was disabled at the sampled
                         // source time. Legacy push_placements emits that sampled
