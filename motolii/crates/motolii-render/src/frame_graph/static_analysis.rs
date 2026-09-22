@@ -57,7 +57,7 @@ pub struct StaticCluster {
 pub struct StaticClusterReport {
     pub clusters: Vec<StaticCluster>,
     pub node_cluster: BTreeMap<NodeKey, StaticClusterId>,
-    pub unused_builtin_kinds: BTreeSet<NodeKind>,
+    pub absent_builtin_kinds: BTreeSet<NodeKind>,
     pub merge_candidates: Vec<(NodeKey, NodeKey)>,
 }
 
@@ -93,9 +93,9 @@ impl StaticClusterReport {
                 downstream,
             ));
         }
-        if !self.unused_builtin_kinds.is_empty() {
-            out.push_str("\n## Unused builtin NodeKind\n\n");
-            for kind in &self.unused_builtin_kinds {
+        if !self.absent_builtin_kinds.is_empty() {
+            out.push_str("\n## Builtin NodeKind absent from this topology\n\n");
+            for kind in &self.absent_builtin_kinds {
                 out.push_str(&format!("- {kind:?}\n"));
             }
         }
@@ -173,7 +173,7 @@ fn build_report(
         .filter_map(|key| topology.node(*key))
         .map(|node| node.identity().kind)
         .collect();
-    let unused_builtin_kinds = NodeKind::BUILTINS.iter().copied()
+    let absent_builtin_kinds = NodeKind::BUILTINS.iter().copied()
         .filter(|kind| !used.contains(kind))
         .collect();
 
@@ -201,7 +201,7 @@ fn build_report(
         merge_candidates.push((from, to));
     }
 
-    StaticClusterReport { clusters, node_cluster, unused_builtin_kinds, merge_candidates }
+    StaticClusterReport { clusters, node_cluster, absent_builtin_kinds, merge_candidates }
 }
 
 /// Conservative static capability map for SceneProgram.
@@ -340,13 +340,13 @@ mod tests {
     }
 
     #[test]
-    fn audit_reports_unused_kinds_and_only_linear_same_cluster_merge_candidates() {
+    fn audit_reports_absent_kinds_and_only_linear_same_cluster_merge_candidates() {
         let a = node(NodeKind::PropertyConstant, vec![]);
         let b = node(NodeKind::PropertyConstant, vec![a.key()]);
         let cnode = node(NodeKind::PropertyConstant, vec![b.key()]);
         let topology = GraphTopology::try_new([a.clone(), b.clone(), cnode.clone()], vec![cnode.key()]).unwrap();
         let report = cluster_topology(&topology, |_| StaticDynamicClass::None);
-                assert!(report.unused_builtin_kinds.contains(&NodeKind::ShapeMesh));
+                assert!(report.absent_builtin_kinds.contains(&NodeKind::ShapeMesh));
         assert!(report.merge_candidates.contains(&(a.key(), b.key())));
         assert!(!report.merge_candidates.contains(&(b.key(), cnode.key())), "root consumer is not a merge candidate");
     }
