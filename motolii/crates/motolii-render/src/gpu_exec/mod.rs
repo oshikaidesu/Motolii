@@ -11,6 +11,7 @@ mod logical_lowerer;
 mod planner;
 mod semantic_adapter;
 mod resource_store;
+mod telemetry;
 mod types;
 
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
@@ -25,6 +26,7 @@ pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
 pub(crate) use planner::{
     GpuExecutionPlan, GpuPlanError, GpuPlanner, GpuResourceInterval,
 };
+pub(crate) use telemetry::{GpuFrameCounters, GpuTelemetry};
 pub(crate) use types::{
     GpuAliasClass, GpuIdentitySource, GpuPassDesc, GpuPassIdentity, GpuPassKey, GpuPassKind,
     GpuPhysicalSlot, GpuResourceClass, GpuResourceDesc, GpuResourceIdentity, GpuResourceKey,
