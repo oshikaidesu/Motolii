@@ -157,7 +157,8 @@ pub struct Engine {
     freezing: Option<LayerId>,
     material_picture: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
-    feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
+    /// GPU execution layer owns feedback identity/visibility; compositor remains the concrete texture/checkpoint backend during cutover.
+    gpu_history: crate::gpu_exec::GpuHistoryRegistry,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
     /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
@@ -271,7 +272,7 @@ impl Engine {
             frozen: Default::default(),
             freezing: None,
             material_picture: None,
-            feedback_keys_seen: Vec::new(),
+            gpu_history: Default::default(),
             blocks: Default::default(),
             clip_bases: Default::default(),
             frame_cache: HashMap::new(),
