@@ -512,6 +512,57 @@ mod spatial_gizmo_tests {
         crate::doc::core::CompSpec { width: 1920, height: 1080 }
     }
 
+    fn evaluated_transforms(
+        doc: &Document,
+        at: RationalTime,
+    ) -> std::collections::HashMap<LayerId, (glam::Affine3A, glam::Affine3A)> {
+        use crate::render::frame_graph::{
+            CompiledGraph, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision,
+            GraphTopology, NodeExecutor, NodeInputs, NodeValue, SceneProgram, SceneProgramError,
+            TransformValue,
+        };
+        struct Executor<'a>(&'a SceneProgram);
+        impl NodeExecutor for Executor<'_> {
+            type Error = SceneProgramError;
+            fn dynamic_inputs(
+                &mut self,
+                node: &GraphNode,
+                inputs: &NodeInputs,
+                context: &EvaluationContext,
+            ) -> Result<Vec<crate::render::frame_graph::DynamicInput>, Self::Error> {
+                self.0.dynamic_inputs(node, inputs, context)
+            }
+            fn execute(
+                &mut self,
+                node: &GraphNode,
+                inputs: NodeInputs,
+                context: EvaluationContext,
+            ) -> Result<NodeValue, Self::Error> {
+                self.0.execute(node, &inputs, &context)
+            }
+        }
+
+        let view = doc.view();
+        let program = SceneProgram::compile(&view).unwrap();
+        let bindings: Vec<_> = program.transforms().bindings().collect();
+        let roots: Vec<_> = bindings.iter().flat_map(|binding| [binding.local, binding.world]).collect();
+        let topology = GraphTopology::try_new(program.nodes(), roots).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(view.revision_key()), topology);
+        let mut executor = Executor(&program);
+        let frame = graph.evaluate(&mut executor, at, FrameQuality::Export, Generation::new(1)).unwrap();
+        bindings.into_iter().map(|binding| {
+            let local = frame.value(binding.local).and_then(|value| value.downcast_ref::<TransformValue>()).unwrap().spatial;
+            let world = frame.value(binding.world).and_then(|value| value.downcast_ref::<TransformValue>()).unwrap().spatial;
+            (binding.layer, (local, world))
+        }).collect()
+    }
+
+    fn evaluated_targets(doc: &Document, ids: &[LayerId], at: RationalTime) -> Result<Vec<SpatialTarget>, String> {
+        let transforms = evaluated_transforms(doc, at);
+        let view = doc.view();
+        spatial_targets(&view, ids, at, |id| transforms.get(&id).copied())
+    }
+
     /// 案内の層(Camera・Stage)には 3 軸が立たない。position を持たないので、
     /// 立てると掴んでも何も届かない札が世界の別の場所に出る。
     #[test]
@@ -536,9 +587,8 @@ mod spatial_gizmo_tests {
         let camera = make(1, LayerSource::Camera);
         let stage = make(2, LayerSource::Stage);
         let shape = make(3, LayerSource::Shape);
-        let view = doc.view();
-        assert!(spatial_targets(&view, &[camera, stage], at).unwrap().is_empty(), "a camera or a stage carries no transform");
-        let targets = spatial_targets(&view, &[camera, stage, shape], at).unwrap();
+        assert!(evaluated_targets(&doc, &[camera, stage], at).unwrap().is_empty(), "a camera or a stage carries no transform");
+        let targets = evaluated_targets(&doc, &[camera, stage, shape], at).unwrap();
         assert_eq!(targets.iter().map(|t| t.layer).collect::<Vec<_>>(), vec![shape], "the drawn layer still gets its handle");
     }
 
@@ -631,7 +681,7 @@ mod spatial_gizmo_tests {
             for x in (700..1250).step_by(25) {
                 for y in (300..800).step_by(25) {
                     let start = [f64::from(x), f64::from(y)];
-                    let Ok(drag) = SpatialDrag::begin(&doc, &[LayerId(41)], start, RationalTime::ZERO, camera, 0.5, None) else {
+                    let Ok(drag) = SpatialDrag::begin_with_targets(&doc, evaluated_targets(&doc, &[LayerId(41)], RationalTime::ZERO).unwrap(), start, RationalTime::ZERO, camera, 0.5, None) else {
                         continue;
                     };
                     grabbed += 1;
@@ -652,7 +702,7 @@ mod spatial_gizmo_tests {
         for x in (700..1250).step_by(25) {
             for y in (300..800).step_by(25) {
                 let start = [f64::from(x), f64::from(y)];
-                let Ok(drag) = SpatialDrag::begin(&doc, &[layer], start, RationalTime::ZERO, camera, 0.5, None) else {
+                let Ok(drag) = SpatialDrag::begin_with_targets(&doc, evaluated_targets(&doc, &[layer], RationalTime::ZERO).unwrap(), start, RationalTime::ZERO, camera, 0.5, None) else {
                     continue;
                 };
                 let Ok(out) = drag.edits(&doc, [start[0] + 30.0, start[1]], false, Animate::Off) else { continue };
