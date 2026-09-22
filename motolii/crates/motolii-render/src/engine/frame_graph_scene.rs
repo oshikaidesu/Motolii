@@ -174,10 +174,44 @@ impl Engine {
         Ok(GpuSceneValue { layers, layer_ids })
     }
 
-    fn execute_raster(&mut self, id: LayerId, key: LayerId, source: &RasterSource, order: i32, comp: CompSpec, camera: ResolvedCamera) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+    /// How finely outlines are cut: one device pixel after projection. Vector
+    /// output reuses power-of-two steps; pictures use the exact density so
+    /// placing them does not resample the edge.
+    fn outline_tolerance(&self, work: Option<&LayerWork>, shapes: &[crate::doc::store::ShapeNode], vector: bool, comp: CompSpec, camera: ResolvedCamera) -> Result<f32, EngineError> {
+        let Some(work) = work else { return Ok(0.05) };
+        let natural = crate::picture::shapes_ops::content_canvas(shapes)?
+            .map_or([1.0; 2], |canvas| [canvas.width as f32, canvas.height as f32]);
+        let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, camera, work.projection, work.placement, glam::Vec2::ZERO, natural.into());
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let matrix = projection.projection_matrix() * projection.view_matrix();
+        let project = |p: glam::Vec3| {
+            let p = matrix * p.extend(1.0);
+            glam::vec2(p.x / p.w, p.y / p.w) * glam::vec2(comp.width as f32, comp.height as f32) * 0.5
+        };
+        let density = [origin, origin + u, origin + v, origin + u + v, origin + (u + v) * 0.5].into_iter().flat_map(|p| {
+            [(project(p + u / natural[0].max(1.0)) - project(p)).length(),
+             (project(p + v / natural[1].max(1.0)) - project(p)).length()]
+        }).filter(|v| v.is_finite()).fold(1.0f32, f32::max);
+        let mut exact = ((density.max(1.0) * 1024.0).round() / 1024.0).max(1.0);
+        if !work.passes.is_empty() {
+            let reach = work.passes.iter().map(|p| p.padding() as f32).fold(0.0f32, f32::max);
+            let limit = self.compositor.ctx.device.limits().max_texture_dimension_2d as f32;
+            let extent = natural[0].max(natural[1]).max(1.0) + 2.0 * reach;
+            exact = exact.min((limit / extent).max(1.0));
+        }
+        let stepped = (density * (1.0 - 1e-4)).log2().ceil().exp2().max(1.0);
+        Ok((0.05 / if vector { stepped } else { exact }).max(1e-6))
+    }
+
+    fn execute_raster(&mut self, id: LayerId, key: LayerId, source: &RasterSource, work: Option<&LayerWork>, comp: CompSpec, camera: ResolvedCamera) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        let order = work.map_or(0, |work| work.placement.order);
         Ok(match source {
             RasterSource::None => (None, [0.0, 0.0]),
-            RasterSource::Vector { shapes, vector, remember } => self.shape_texture_from_shapes(shapes, key, *vector, 0.05, comp, None, *remember)?,
+            RasterSource::Vector { shapes, vector, remember, field_step } => {
+                let tolerance = self.outline_tolerance(work, shapes, *vector, comp, camera)?;
+                let step = field_step.then_some(crate::render::engine::texture::FIELD_STEP);
+                self.shape_texture_from_shapes(shapes, key, *vector, tolerance, comp, step, *remember)?
+            }
             RasterSource::CanvasVector { shapes } => self.text_texture_from_shapes(shapes, key, comp)?,
             RasterSource::Mesh { path } => self.mesh_content_for(path, comp)?,
             RasterSource::EnvironmentMap { path } => self.environment_content_for(path)?,
@@ -224,8 +258,13 @@ impl Engine {
         } else if let Some((content, natural)) = host {
             (Some(content), natural, 0, None, false)
         } else {
-            let (content, natural) = self.execute_raster(work.id, work.content_key, &work.content, work.placement.order, comp, projection_camera)?;
-            (content, natural, 0, None, false)
+            let (content, natural) = self.execute_raster(work.id, work.content_key, &work.content, Some(work), comp, projection_camera)?;
+            // A picture drawn above one pixel per unit carries its logical frame.
+            let frame = matches!(work.content, RasterSource::Vector { .. })
+                .then(|| content.as_ref().and_then(|content| content.texture()))
+                .flatten()
+                .map(|texture| crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0; 2], pixels: texture.width_height() });
+            (content, natural, 0, frame, false)
         };
         let Some(mut content) = content else { return Ok(None) };
         if let (LayerContent::Texture(texture), Some(extrusion)) = (&content, &work.extrude) {
@@ -450,7 +489,7 @@ impl Engine {
         let result = (|| match input {
             ImageInput::Absent => Ok(None),
             ImageInput::Raster { id, source, .. } => {
-                let (content, _) = self.execute_raster(*id, *id, source, 0, comp, camera)?;
+                let (content, _) = self.execute_raster(*id, *id, source, None, comp, camera)?;
                 let Some(texture) = content.and_then(|content| content.texture().cloned()) else {
                     return Ok(None);
                 };

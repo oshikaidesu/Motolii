@@ -14,8 +14,9 @@ use crate::render::media::SpatialBounds;
 #[derive(Clone)]
 pub enum RasterSource {
     None,
-    /// Outlines on their own canvas. `vector` keeps them resolution-independent.
-    Vector { shapes: Arc<Vec<ShapeNode>>, vector: bool, remember: bool },
+    /// Outlines on their own canvas. `vector` keeps them resolution-independent;
+    /// `field_step` subdivides them so a field can bend the outline.
+    Vector { shapes: Arc<Vec<ShapeNode>>, vector: bool, remember: bool, field_step: bool },
     /// Outlines on the output canvas.
     CanvasVector { shapes: Arc<Vec<ShapeNode>> },
     Mesh { path: String },

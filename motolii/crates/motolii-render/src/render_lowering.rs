@@ -29,6 +29,11 @@ impl std::fmt::Display for RenderLoweringError {
 }
 
 pub fn lower_scene(scene: &SceneValue, catalog: &CatalogSnapshot) -> Result<RenderGraph, RenderLoweringError> {
+    lower(scene, catalog, false)
+}
+
+/// `averaged`: every contribution is summed into an averaging plate.
+fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, averaged: bool) -> Result<RenderGraph, RenderLoweringError> {
     let plan = plan_composite(scene);
     let clip_bases: std::collections::HashSet<usize> = plan.iter()
         .flat_map(|planned| {
@@ -44,7 +49,7 @@ pub fn lower_scene(scene: &SceneValue, catalog: &CatalogSnapshot) -> Result<Rend
         .map(|group| group.base)
         .collect();
     let layers = scene.layers.iter().enumerate()
-        .map(|(index, layer)| lower_layer(layer, clip_bases.contains(&index), catalog))
+        .map(|(index, layer)| lower_layer(layer, clip_bases.contains(&index), averaged, catalog))
         .collect::<Result<_, _>>()?;
     Ok(RenderGraph { layers, output: plan.iter().map(composed).collect() })
 }
@@ -65,15 +70,16 @@ fn stretched(layer: &SceneLayerValue, shapes: &[crate::doc::store::ShapeNode]) -
     })
 }
 
-fn raster(layer: &SceneLayerValue, picture: bool, catalog: &CatalogSnapshot) -> Result<RasterSource, RenderLoweringError> {
+fn raster(layer: &SceneLayerValue, vector: bool, field_step: bool, catalog: &CatalogSnapshot) -> Result<RasterSource, RenderLoweringError> {
     Ok(match &layer.content {
         SceneContentValue::None => RasterSource::None,
-        SceneContentValue::Text(text) if picture => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: true },
+        SceneContentValue::Text(text) if !vector => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: true, field_step: false },
         SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: Arc::new(text.shapes()) },
         SceneContentValue::Shape(shapes) => RasterSource::Vector {
             shapes: stretched(layer, shapes),
-            vector: !picture,
+            vector,
             remember: layer.shape_stretch == [1.0, 1.0],
+            field_step,
         },
         SceneContentValue::Material(material) => RasterSource::Mesh { path: material.source.path.clone() },
         SceneContentValue::Media { source, .. } if layer.environment && crate::render::media::is_still_image_path(&source.path) => {
@@ -85,7 +91,7 @@ fn raster(layer: &SceneLayerValue, picture: bool, catalog: &CatalogSnapshot) -> 
             RasterSource::Points { positions: frame.positions, colors: frame.colors, sizes: frame.sizes, bounds: frame.bounds, links: frame.links }
         }
         SceneContentValue::Plate(plate) => RasterSource::Isolate {
-            graph: Arc::new(lower_scene(&plate_scene(plate), catalog)?),
+            graph: Arc::new(lower(&plate_scene(plate), catalog, plate.average)?),
             average: plate.average,
         },
     })
@@ -100,8 +106,8 @@ fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Res
         SceneImageSourceValue::Content { layer, content, time, namespace } => {
             let source = match content {
                 SceneContentValue::None | SceneContentValue::Material(_) | SceneContentValue::Particles(_) => return Ok(ImageInput::Absent),
-                SceneContentValue::Text(text) => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: false },
-                SceneContentValue::Shape(shapes) => RasterSource::Vector { shapes: Arc::new(shapes.clone()), vector: false, remember: false },
+                SceneContentValue::Text(text) => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: false, field_step: false },
+                SceneContentValue::Shape(shapes) => RasterSource::Vector { shapes: Arc::new(shapes.clone()), vector: false, remember: false, field_step: false },
                 SceneContentValue::Media { source, time } => RasterSource::Image { path: source.path.clone(), time: *time },
                 SceneContentValue::Plate(plate) => return Ok(ImageInput::Graph {
                     graph: Arc::new(lower_scene(&plate_scene(plate), catalog)?),
@@ -123,7 +129,7 @@ fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Res
     })
 }
 
-fn lower_layer(layer: &SceneLayerValue, clip_base: bool, catalog: &CatalogSnapshot) -> Result<LayerWork, RenderLoweringError> {
+fn lower_layer(layer: &SceneLayerValue, clip_base: bool, averaged: bool, catalog: &CatalogSnapshot) -> Result<LayerWork, RenderLoweringError> {
     let solid = translate::translate_solid(&layer.effects)
         .map(|solid| if solid.depth > 0.0 { solid } else { Solid { depth: layer.depth, ..solid } })
         .unwrap_or(Solid { depth: layer.depth, bevel: None });
@@ -137,6 +143,15 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, catalog: &CatalogSnapsh
         },
         stretch: layer.shape_stretch,
     });
+    let has_stage = |stage: crate::render::compositor::EffectStage| catalog.descriptors.iter()
+        .any(|d| d.stage == stage && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
+    let passes = translate::translate_effect_passes(&layer.effects);
+    let needs_warp = has_stage(crate::render::compositor::EffectStage::Warp);
+    let needs_field = has_stage(crate::render::compositor::EffectStage::Field) && !needs_warp;
+    // A pass that reads neighbouring pixels, or an averaging plate, needs a
+    // picture in material space; a pointwise pass can shade the outline itself.
+    let needs_image = passes.iter().any(|pass| pass.padding() > 0) || averaged;
+    let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image && !clip_base;
     let blend = if layer.blend.is_stencil() {
         crate::render::compositor::BlendMode::Normal
     } else {
@@ -146,7 +161,7 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, catalog: &CatalogSnapsh
         id: layer.layer,
         instance: layer.instance,
         content_key: LayerId(layer.content_key.map_or(0, |key| key.as_u64())),
-        content: raster(layer, clip_base || !flat, catalog)?,
+        content: raster(layer, vector, vector && needs_field, catalog)?,
         host_picture: layer.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id)),
         freeze: (layer.freeze_eligible && !layer.ghost && layer.instance == 0).then_some(layer.timing_start),
         extrude,
@@ -166,7 +181,7 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, catalog: &CatalogSnapsh
         displace: translate::translate_point_displace(&layer.effects),
         clip: translate::translate_clip(&layer.effects),
         shadow: translate::translate_cast_shadow(&layer.effects),
-        passes: translate::translate_effect_passes(&layer.effects),
+        passes,
         after_passes: translate::translate_plate_passes(&layer.after_effects),
         image_inputs: layer.image_sources.iter()
             .map(|row| row.iter().map(|source| image_input(source, catalog)).collect())
