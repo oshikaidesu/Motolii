@@ -661,7 +661,7 @@ impl Engine {
 
     fn render_frame_graph_projection(
         &mut self,
-        state: &EngineFrameGraph,
+        state: &mut EngineFrameGraph,
         target: &wgpu::Texture,
         camera: ResolvedCamera,
         include_background: bool,
