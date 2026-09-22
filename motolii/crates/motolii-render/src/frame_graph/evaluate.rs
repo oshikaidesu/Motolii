@@ -194,6 +194,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
                 values,
                 executed,
                 reused,
+                input_types,
             )? else {
                 return Ok(None);
             };
@@ -213,7 +214,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
     }
 
     for root in topology.roots() {
-        if node_at(scheduler, topology, executor, *root, time, time, quality, &lease, &mut values, &mut executed, &mut reused)?.is_none() {
+        if node_at(scheduler, topology, executor, *root, time, time, quality, &lease, &mut values, &mut executed, &mut reused, &mut input_types)?.is_none() {
             return Ok(ScheduledFrame::cancelled(generation));
         }
     }
