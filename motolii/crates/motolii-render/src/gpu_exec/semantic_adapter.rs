@@ -97,6 +97,7 @@ impl<'a> SemanticGpuAdapter<'a> {
             matte_source,
             clip_base,
             clip_to_below: layer.clip_to_below,
+            matte_mode: layer.matte.map(|matte| matte.mode),
             stencil: layer.blend.is_stencil(),
             plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
                 node: contribution,
