@@ -222,7 +222,9 @@ impl GpuLowerer for LogicalGpuLowerer {
 
         for (index, effect) in input.after_effects.iter().copied().enumerate() {
             let mut reads = current.into_iter().collect::<Vec<_>>();
-            reads.extend(Self::effect_image_resources(graph, input, effect)?);
+            let sources = Self::effect_image_resources(graph, input, effect)?;
+            reads.extend(sources.iter().copied());
+            image_sources.extend(sources);
             let output = Self::resource(
                 graph,
                 effect,
@@ -303,6 +305,50 @@ mod tests {
             node: NodeKey::for_identity(&NodeIdentity::new(NodeKind::Custom(tag), vec![])),
             version: GpuResourceVersion::new(version),
         }
+    }
+
+    #[test]
+    fn temporal_image_version_change_invalidates_effect_only_through_resource_edge() {
+        use crate::gpu_exec::lowerer::{GpuEffectImages, GpuImageSourceKind, VersionedImageSource};
+        use crate::gpu_exec::types::GpuResourceLifetime;
+
+        let mut graph = GpuResourceGraph::default();
+        let mut lowerer = LogicalGpuLowerer;
+        let effect = semantic(20, 1);
+        let mut first = GpuContributionInput {
+            contribution: semantic(21, 1),
+            instance: 0,
+            content: Some(semantic(22, 1)),
+            placement: semantic(23, 1),
+            effects: vec![effect],
+            after_effects: vec![],
+            effect_images: vec![GpuEffectImages {
+                effect: effect.node,
+                sources: vec![VersionedImageSource {
+                    version: GpuResourceVersion::new(100),
+                    lifetime: GpuResourceLifetime::Temporal { retain_generations: 8 },
+                    kind: GpuImageSourceKind::Content,
+                }],
+            }],
+            masks: vec![],
+            matte_source: None,
+            plate: None,
+        };
+        let resources = lowerer.lower_contribution(&mut graph, &first).unwrap();
+        assert_eq!(resources.image_sources.len(), 1);
+        let image = resources.image_sources[0];
+        assert_eq!(graph.resource(image).unwrap().lifetime, GpuResourceLifetime::Temporal { retain_generations: 8 });
+
+        let effect_key = GpuResourceIdentity::semantic(effect.node, GpuResourceClass::Effect, 0).key();
+        let effect_version = graph.version(effect_key).unwrap();
+        graph.mark_resident(image, GpuResourceVersion::new(100), 1);
+        graph.mark_resident(effect_key, effect_version, 1);
+        assert!(graph.is_current(effect_key));
+
+        first.effect_images[0].sources[0].version = GpuResourceVersion::new(101);
+        lowerer.lower_contribution(&mut graph, &first).unwrap();
+        assert!(!graph.is_current(image));
+        assert!(!graph.is_current(effect_key));
     }
 
     #[test]
