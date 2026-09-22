@@ -59,7 +59,7 @@ mod tests {
             source: ResourceSource::Media { path: "still.png".into() },
             output: ResourceId(4),
         }]);
-        let mut raster = |_| -> Result<String, ()> { unreachable!() };
+        let mut raster = |_: &ResourceSource| -> Result<String, ()> { unreachable!() };
         let mut transfer = |source: &ResourceSource| -> Result<String, ()> {
             match source { ResourceSource::Media { path } => Ok(path.clone()), _ => Err(()) }
         };

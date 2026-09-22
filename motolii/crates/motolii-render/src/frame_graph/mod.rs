@@ -7,6 +7,7 @@ mod cache;
 mod canonical;
 mod camera_program;
 mod compiler;
+mod composite_plan;
 mod content;
 mod effect_program;
 mod evaluate;
@@ -45,6 +46,7 @@ pub use analysis_program::{AnalysisBinding, AnalysisProgram, AnalysisProgramErro
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
+pub use composite_plan::{plan_composite, ClipGroup, PlannedContribution, PlannedMatte};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
 pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaExtentValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};

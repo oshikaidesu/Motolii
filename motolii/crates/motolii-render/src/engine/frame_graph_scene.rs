@@ -146,22 +146,15 @@ impl Engine {
     }
 
     pub(super) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
-        #[derive(Clone, Copy)]
-        struct Entry {
-            layer: LayerId,
-            matte: Option<crate::doc::store::Matte>,
-            clip_to_below: bool,
-            stencil: bool,
-        }
-
-        let clip_bases: std::collections::HashSet<_> = scene.layers.iter()
-            .filter(|layer| layer.clip_to_below)
-            .filter_map(|layer| layer.matte.map(|matte| matte.layer))
+        let plan = crate::frame_graph::plan_composite(scene);
+        let clip_bases: std::collections::HashSet<LayerId> = plan.iter()
+            .flat_map(|planned| std::iter::once(&planned.group).chain(planned.matte.iter().map(|matte| &matte.source.group)))
+            .filter(|group| !group.clips.is_empty())
+            .map(|group| scene.layers[group.base].layer)
             .collect();
 
-        let mut layers = Vec::with_capacity(scene.layers.len());
-        let mut entries = Vec::with_capacity(scene.layers.len());
-        for source in &scene.layers {
+        let mut prepared: Vec<Option<LayerWithPasses>> = vec![None; scene.layers.len()];
+        for (index, source) in scene.layers.iter().enumerate() {
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let solid = crate::render::engine::translate::translate_solid(&source.effects)
                 .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
@@ -331,95 +324,59 @@ impl Engine {
                 frozen_frame,
             )?;
             let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
-            layers.push(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
-            entries.push(Entry {
-                layer: source.layer,
-                matte: source.matte,
-                clip_to_below: source.clip_to_below,
-                stencil: source.blend.is_stencil(),
-            });
+            prepared[index] = Some(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
         }
 
-        let by_id: std::collections::HashMap<_, _> = entries.iter().enumerate()
-            .map(|(index, entry)| (entry.layer, index))
-            .collect();
-        let mut removed = vec![false; layers.len()];
-
-        // Clipping is source-atop onto the visible base. The upper contribution
-        // never reaches the final scene as a separate layer.
-        for index in 0..layers.len() {
-            let entry = entries[index];
-            if !entry.clip_to_below || entry.stencil {
-                continue;
+        let mut groups = std::collections::HashMap::new();
+        let mut layers = Vec::with_capacity(plan.len());
+        let mut layer_ids = Vec::with_capacity(plan.len());
+        for planned in &plan {
+            if let Some(layer) = self.realize_contribution(scene, &prepared, planned, &mut groups, comp, projection_camera)? {
+                layers.push(layer);
+                layer_ids.push(scene.layers[planned.group.base].layer);
             }
-            let Some(base_id) = entry.matte.map(|matte| matte.layer) else {
-                removed[index] = true;
-                continue;
-            };
-            let Some(base_index) = by_id.get(&base_id).copied() else {
-                removed[index] = true;
-                continue;
-            };
-            match self.clip_onto_base(layers[base_index].clone(), &layers[index].layer, &layers[index].passes)? {
-                Some(clipped) => layers[base_index] = clipped,
-                None => self.layer_failures.push(format!(
-                    "layer {} clips to a base without a texture (point cloud / model bases are not clippable)",
-                    entry.layer.0
-                )),
-            }
-            removed[index] = true;
         }
-
-        // Track mattes and stencils consume their source. A missing source means
-        // the target has no coverage and therefore contributes nothing.
-        let matte_sources: std::collections::HashSet<_> = scene.layers.iter()
-            .filter(|entry| !entry.clip_to_below)
-            .filter_map(|entry| entry.matte.map(|matte| matte.layer))
-            .collect();
-
-        for index in 0..layers.len() {
-            if removed[index] || entries[index].clip_to_below {
-                continue;
-            }
-            let Some(matte) = entries[index].matte else { continue };
-            let Some(source_index) = by_id.get(&matte.layer).copied() else {
-                removed[index] = true;
-                continue;
-            };
-            let target = self.apply_effects_before_matte(
-                comp,
-                projection_camera,
-                layers[index].layer.clone(),
-                &layers[index].passes,
-            )?;
-            let source = self.apply_effects_before_matte(
-                comp,
-                projection_camera,
-                layers[source_index].layer.clone(),
-                &layers[source_index].passes,
-            )?;
-            let layer = self.apply_matte(comp, projection_camera, &target, &source, matte.mode)?;
-            layers[index] = LayerWithPasses {
-                layer,
-                passes: Vec::new(),
-                padding: 0,
-                pass_sources: Vec::new(),
-                cut: Vec::new(),
-            };
-        }
-
-        let kept: Vec<_> = layers.into_iter().enumerate()
-            .filter(|(index, _)| {
-                !removed[*index]
-                    && !entries[*index].stencil
-                    && !matte_sources.contains(&entries[*index].layer)
-            })
-            .map(|(index, layer)| (entries[index].layer, layer))
-            .collect();
-        let layer_ids = kept.iter().map(|(layer, _)| *layer).collect();
-        let layers = kept.into_iter().map(|(_, layer)| layer).collect();
 
         Ok(GpuSceneValue { layers, layer_ids })
+    }
+
+    /// Follows one planned contribution. An absent resource contributes no
+    /// coverage, so a target whose matte source is absent is absent too.
+    fn realize_contribution(
+        &mut self,
+        scene: &SceneValue,
+        prepared: &[Option<LayerWithPasses>],
+        planned: &crate::frame_graph::PlannedContribution,
+        groups: &mut std::collections::HashMap<usize, Option<LayerWithPasses>>,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+    ) -> Result<Option<LayerWithPasses>, EngineError> {
+        let group = &planned.group;
+        if !groups.contains_key(&group.base) {
+            let mut base = prepared[group.base].clone();
+            for &clip in &group.clips {
+                let Some(upper) = prepared[clip].as_ref() else { continue };
+                let Some(current) = base.take() else { break };
+                base = match self.clip_onto_base(current.clone(), &upper.layer, &upper.passes)? {
+                    Some(clipped) => Some(clipped),
+                    None => {
+                        self.layer_failures.push(format!(
+                            "layer {} clips to a base without a texture (point cloud / model bases are not clippable)",
+                            scene.layers[clip].layer.0
+                        ));
+                        Some(current)
+                    }
+                };
+            }
+            groups.insert(group.base, base);
+        }
+        let Some(base) = groups[&group.base].clone() else { return Ok(None) };
+        let Some(matte) = &planned.matte else { return Ok(Some(base)) };
+        let Some(source) = self.realize_contribution(scene, prepared, &matte.source, groups, comp, camera)? else { return Ok(None) };
+        let target = self.apply_effects_before_matte(comp, camera, base.layer, &base.passes)?;
+        let source = self.apply_effects_before_matte(comp, camera, source.layer, &source.passes)?;
+        let layer = self.apply_matte(comp, camera, &target, &source, matte.mode)?;
+        Ok(Some(LayerWithPasses { layer, passes: Vec::new(), padding: 0, pass_sources: Vec::new(), cut: Vec::new() }))
     }
 
 
