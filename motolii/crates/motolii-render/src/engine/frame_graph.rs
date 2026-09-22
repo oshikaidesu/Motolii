@@ -725,15 +725,10 @@ impl Engine {
         &mut self,
         state: &mut EngineFrameGraph,
         time: RationalTime,
-        document_camera: ResolvedCamera,
+        _document_camera: ResolvedCamera,
     ) -> Result<Vec<crate::render::compositor::LayerWithPasses>, EngineError> {
-        let frame = state.frame.as_ref().ok_or_else(|| EngineError::Store("FrameGraph evaluated frame is missing".into()))?;
-        let scene = frame.value(state.scene)
-            .and_then(|value| value.downcast_ref::<SceneValue>())
-            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
-        let solver = frame.value(state.solver)
-            .and_then(|value| value.downcast_ref::<SolverPlanValue>())
-            .ok_or_else(|| EngineError::Store("FrameGraph solver value is missing".into()))?;
+        let frame = state.frame.as_ref()
+            .ok_or_else(|| EngineError::Store("FrameGraph evaluated frame is missing".into()))?;
         let overlays = frame.value(state.overlay)
             .and_then(|value| value.downcast_ref::<OverlaySetValue>())
             .cloned()
@@ -745,14 +740,20 @@ impl Engine {
             state.fps.den() as f32 / state.fps.num() as f32,
             frame_number,
         ]);
-        Ok(self.gpu_executable_scene_with_solver(
-            scene,
-            solver,
-            state.comp,
-            document_camera,
-            time,
-            state.fps,
-        )?.layers)
+
+        // The scene root already decided survivors/order. Presentation merely
+        // reads those resource outputs; it must not reconstruct a scene.
+        let mut layers = Vec::with_capacity(state.gpu_scene_outputs.len());
+        for key in &state.gpu_scene_outputs {
+            let Some((_, resident)) = state.gpu_composites.get_any(*key) else {
+                return Err(EngineError::Store(format!(
+                    "GPU scene output {:?} was not materialized by the execution plan",
+                    key
+                )));
+            };
+            layers.push(resident.layer.clone());
+        }
+        Ok(layers)
     }
 
     fn render_frame_graph_projection(
