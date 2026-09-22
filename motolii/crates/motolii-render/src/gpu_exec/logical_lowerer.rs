@@ -298,6 +298,8 @@ mod tests {
             image_sources: vec![],
             masks: vec![],
             matte_source: None,
+            clip_to_below: false,
+            stencil: false,
             plate: None,
         };
         let resources = lowerer.lower_contribution(&mut graph, &first).unwrap();
