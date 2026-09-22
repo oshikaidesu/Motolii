@@ -43,7 +43,7 @@ impl crate::render::engine::Engine {
             return Ok(Some((hit.layer.layer.content, hit.layer.layer.size)));
         }
         let nested = SceneValue { layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect() };
-        let prepared = self.prepare_gpu_scene(&nested, comp, camera)?;
+        let prepared = self.prepare_execution_scene(&nested, comp, camera)?;
         if prepared.layers.is_empty() { return Ok(None); }
         let placement = LayerPlacement {
             transform: glam::Affine2::IDENTITY,
