@@ -139,7 +139,7 @@ impl EngineFrameGraph {
                 output,
                 version,
                 self.generation,
-                layer,
+                layer.layer, if let crate::frame_graph::SceneContentValue::Media { time, .. } = &layer.content { (time.as_seconds_f64() * 1_000_000.0).round() as i64 } else { 0 },
                 content,
                 placement,
                 blend,

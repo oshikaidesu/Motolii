@@ -26,7 +26,6 @@ mod snapshot_backend;
 mod resource_store;
 mod telemetry;
 mod types;
-mod visibility;
 
 pub(crate) use blend_backend::ResidentBlend;
 pub(crate) use blend_projection::GpuBlendProjectionResidency;

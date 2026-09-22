@@ -1,5 +1,5 @@
 use crate::doc::core::{CompSpec, ResolvedCamera};
-use crate::frame_graph::{SceneContentValue, SceneLayerValue};
+use crate::doc::store::LayerId;
 use crate::picture::resolved::ResolvedEffect;
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 
@@ -12,7 +12,8 @@ impl crate::render::engine::Engine {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn gpu_contribution_layer(
         &mut self,
-        source: &SceneLayerValue,
+        layer_id: LayerId,
+        source_tick: i64,
         resident: ResidentContent,
         placement: ResidentPlacement,
         blend: ResidentBlend,
@@ -49,15 +50,9 @@ impl crate::render::engine::Engine {
             outline,
             frame,
         };
-        let source_tick = match &source.content {
-            SceneContentValue::Media { time, .. } => {
-                (time.as_seconds_f64() * 1_000_000.0).round() as i64
-            }
-            _ => 0,
-        };
         let layer = self.apply_material_domains_semantic(
             layer,
-            source.layer,
+            layer_id,
             direct_effects,
             is_file_source,
             source_tick,
@@ -86,7 +81,8 @@ impl crate::render::engine::Engine {
         output: super::GpuResourceKey,
         version: super::GpuResourceVersion,
         generation: u64,
-        source: &SceneLayerValue,
+        layer_id: LayerId,
+        source_tick: i64,
         resident: ResidentContent,
         placement: ResidentPlacement,
         blend: ResidentBlend,
@@ -104,7 +100,8 @@ impl crate::render::engine::Engine {
             return Ok(());
         }
         let layer = self.gpu_contribution_layer(
-            source,
+            layer_id,
+            source_tick,
             resident,
             placement,
             blend,
