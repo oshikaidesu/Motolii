@@ -14,6 +14,7 @@ mod logical_lowerer;
 mod planner;
 mod placement_backend;
 mod semantic_adapter;
+mod snapshot_backend;
 mod resource_store;
 mod telemetry;
 mod types;
@@ -29,6 +30,7 @@ pub(crate) use lowerer::{
     GpuContributionInput, GpuContributionResources, VersionedSemantic,
 };
 pub(crate) use resource_store::{GpuOperationTable, GpuResourceStore};
+pub(crate) use snapshot_backend::ResidentSnapshot;
 pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
 pub(crate) use placement_backend::{resident_placement, ResidentPlacement};
 pub(crate) use planner::{
