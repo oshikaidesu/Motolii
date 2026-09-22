@@ -101,7 +101,21 @@ impl GpuLowerer for LogicalGpuLowerer {
 
         let mut current = content;
         for (index, effect) in input.direct_effects.iter().copied().enumerate() {
-            let reads = current.into_iter().collect::<Vec<_>>();
+            let mut reads = current.into_iter().collect::<Vec<_>>();
+            if let Some(row) = input.image_sources.get(index) {
+                for (image_slot, source) in row.iter().cloned().enumerate() {
+                    let resources = super::image_source::lower_image_source(
+                        graph,
+                        &super::image_source::GpuImageSourceInput {
+                            effect: effect.node,
+                            pass_slot: index as u32,
+                            image_slot: image_slot as u32,
+                            source,
+                        },
+                    )?;
+                    reads.push(resources.snapshot);
+                }
+            }
             let output = Self::resource(
                 graph,
                 effect,
@@ -251,6 +265,7 @@ mod tests {
             placement: semantic(3, 20),
             direct_effects: vec![],
             after_effects: vec![],
+            image_sources: vec![],
             masks: vec![],
             matte_source: None,
             plate: None,
