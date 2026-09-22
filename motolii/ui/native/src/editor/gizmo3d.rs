@@ -207,6 +207,7 @@ pub(crate) fn spatial_targets(
     view: &StoreView<'_>,
     ids: &[LayerId],
     at: RationalTime,
+    mut evaluated: impl FnMut(LayerId) -> Option<(glam::Affine3A, glam::Affine3A)>,
 ) -> Result<Vec<SpatialTarget>, String> {
     let e = |x: StoreError| x.to_string();
     let mut out = Vec::new();
@@ -226,8 +227,9 @@ pub(crate) fn spatial_targets(
         if !meta.timing.covers(frame) {
             continue;
         }
+        let (local, world) = evaluated(layer).ok_or_else(|| format!("Layer {} has no evaluated FrameGraph transform", layer.0))?;
         let parent = match attrs.parent {
-            Some(id) => motolii_render::picture::resolve::transform::world_transform3d(view, id, at).map_err(e)?,
+            Some(id) => evaluated(id).map(|(_, world)| world).ok_or_else(|| format!("Parent layer {} has no evaluated FrameGraph transform", id.0))?,
             None => glam::Affine3A::IDENTITY,
         };
         if !is_similarity(parent) {
@@ -240,15 +242,14 @@ pub(crate) fn spatial_targets(
             return Err("Rejoin the separate Position axes before using the 3D gizmo".into());
         }
         let anchor = vec2_at(view, layer, property::ANCHOR, at, [0.0, 0.0]);
-        let local = motolii_render::picture::resolve::transform::local_transform3d(view, layer, at).map_err(e)?;
-        // 値 → 行列 → 値 が閉じない層は、掴んだ瞬間に飛ぶ。先に断る。
+        // 値 → FrameGraph local → 値 が閉じない層は、掴んだ瞬間に飛ぶ。先に断る。
         let Some(back) = decompose(local, anchor) else {
             return Err("This layer is flattened along an axis; the 3D gizmo cannot write it back".into());
         };
         if !close(&compose(&back, anchor), &local) {
             return Err("This layer's transform cannot be carried by the 3D gizmo".into());
         }
-        let world = parent * local;
+        debug_assert!(close(&(parent * local), &world), "FrameGraph world must equal parent * local");
         let anchor3 = glam::vec3(anchor[0] as f32, anchor[1] as f32, 0.0);
         let (scale, rotation, _) = world.to_scale_rotation_translation();
         let translation = world.transform_point3(anchor3);
@@ -348,6 +349,7 @@ struct Live {
 impl SpatialDrag {
     pub(crate) fn begin(
         doc: &Document,
+        engine: &mut crate::render::engine::Engine,
         ids: &[LayerId],
         start: [f64; 2],
         at: RationalTime,
@@ -357,8 +359,25 @@ impl SpatialDrag {
     ) -> Result<Self, String> {
         let e = |x: StoreError| x.to_string();
         let view = doc.view().without_transients();
+        engine.frame_graph_editor_scene(&view, at).map_err(|error| error.to_string())?;
+        let targets = spatial_targets(&view, ids, at, |id| {
+            engine.frame_graph_cached_transform(&view, at, id).map(|(local, world)| (local.spatial, world.spatial))
+        })?;
+        Self::begin_with_targets(doc, targets, start, at, observer, view_scale, held)
+    }
+
+    fn begin_with_targets(
+        doc: &Document,
+        targets: Vec<SpatialTarget>,
+        start: [f64; 2],
+        at: RationalTime,
+        observer: crate::doc::core::ResolvedCamera,
+        view_scale: f64,
+        held: Option<&str>,
+    ) -> Result<Self, String> {
+        let e = |x: StoreError| x.to_string();
+        let view = doc.view().without_transients();
         let comp = view.composition().map_err(e)?.ok_or("No composition")?.spec();
-        let targets = spatial_targets(&view, ids, at)?;
         if targets.is_empty() {
             return Err("Select a 3D layer".into());
         }
