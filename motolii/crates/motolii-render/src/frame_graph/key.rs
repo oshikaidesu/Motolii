@@ -203,6 +203,10 @@ impl WorkKey {
     pub fn node(self) -> NodeKey {
         self.node
     }
+
+    pub fn is_time_dependent(self) -> bool {
+        self.time.is_some()
+    }
 }
 
 /// A compact lookup key. `GraphTopology` retains and compares the complete
