@@ -162,77 +162,20 @@ impl Engine {
         let mut layers = Vec::with_capacity(scene.layers.len());
         let mut entries = Vec::with_capacity(scene.layers.len());
         for source in &scene.layers {
-            let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let solid = crate::render::engine::translate::translate_solid(&source.effects)
                 .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
                 .unwrap_or(crate::render::compositor::extrude::Solid { depth: source.depth, bevel: None });
-            let flat = solid.extent() <= 0.0;
-            let force_picture = clip_bases.contains(&source.layer) || !flat;
-            let overlay_content = source.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
-                .then(|| self.overlay_content(source.layer, comp))
-                .transpose()?
-                .flatten();
-            let frozen = self.frame_graph_frozen_content(source);
-            let (content, natural, frozen_padding, frozen_frame, frozen_hit) = if let Some((content, natural, padding, frame)) = frozen {
-                (Some(content), natural, padding, frame, true)
-            } else if let Some((content, natural)) = overlay_content {
-                (Some(content), natural, 0, None, false)
-            } else if let Some(resident) = self.frame_graph_resident_content(source) {
-                (Some(resident.content), resident.natural, 0, None, false)
-            } else {
-                let (content, natural) = match &source.content {
-                SceneContentValue::None => continue,
-                // Resident leaf content is the production owner for these
-                // semantic values. Reaching this fallback means the new
-                // backend could not materialize the resource; keep the bridge
-                // temporarily for special force-picture/extrusion cases.
-                SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
-                SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
-                SceneContentValue::Shape(shapes) => {
-                    let stretched;
-                    let shapes = if source.shape_stretch != [1.0, 1.0] {
-                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
-                        stretched.as_slice()
-                    } else {
-                        shapes.as_slice()
-                    };
-                    self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, source.shape_stretch == [1.0, 1.0])?
-                },
-                SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
-                SceneContentValue::Media { source: media, time } => {
-                    if source.environment && crate::render::media::is_still_image_path(&media.path) {
-                        self.environment_content_for(&media.path)?
-                    } else {
-                        self.file_content_for(&media.path, *time, source.layer, comp)?
-                    }
-                }
-                SceneContentValue::Particles(_) => {
-                    return Err(EngineError::Store("GPU resident particle content missing".into()));
-                }
-                SceneContentValue::Plate(plate) => {
-                    self.frame_graph_plate(source, plate, comp, projection_camera)?
-                        .map_or((None, [comp.width as f32, comp.height as f32]), |(content, size)| (Some(content), size))
-                }
-            };
-                (content, natural, 0, None, false)
-            };
-            let Some(mut content) = content else { continue };
-            if let crate::render::compositor::LayerContent::Texture(texture) = &content {
-                if !flat && source.projection != crate::doc::store::LayerProjection::TwoD && source.masks.is_empty() {
-                    content = self.frame_graph_extruded_content(source, texture.clone(), natural, comp, solid)?;
-                }
-            }
-            if !frozen_hit && !source.image_sources.is_empty() {
-                content = match &content {
-                    crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
-                        .map(crate::render::compositor::LayerContent::Texture)
-                        .unwrap_or_else(|| content.clone()),
-                    crate::render::compositor::LayerContent::LinearTexture(texture) => self.compositor.snapshot_texture(texture)
-                        .map(crate::render::compositor::LayerContent::LinearTexture)
-                        .unwrap_or_else(|| content.clone()),
-                    _ => content,
-                };
-            }
+            let force_picture = clip_bases.contains(&source.layer) || solid.extent() > 0.0;
+            let resident = self.frame_graph_resident_content(source);
+            let Some((resident, frozen_padding, frozen_frame, frozen_hit)) = self.gpu_special_content(
+                source,
+                resident,
+                force_picture,
+                comp,
+                projection_camera,
+            )? else { continue; };
+            let content = resident.content;
+            let natural = resident.natural;
             let placement = self.frame_graph_resident_placement(source)
                 .unwrap_or_else(|| crate::gpu_exec::ResidentPlacement::from_scene(source));
             let effects = self.frame_graph_resident_effects(source).unwrap_or_else(|| {
