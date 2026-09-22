@@ -14,6 +14,7 @@ mod motion_contracts;
 #[cfg(test)]
 mod light_reach_contracts;
 mod clip;
+mod composite_primitives;
 mod render;
 mod texture;
 mod material;
