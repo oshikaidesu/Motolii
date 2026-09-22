@@ -1,12 +1,12 @@
 //! Product playback owner: compile once per revision, evaluate once per exact
-//! comp time, prepare one GPU scene, then branch only for final projection.
+//! comp time, then lower evaluated semantic values through the separate GPU control plane.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
+use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, SceneProgram, SceneValue, SolverPlanValue};
 use crate::picture::resolved::ResolvedLayer;
 
 use super::frame_graph_scene::GpuSceneValue;
@@ -16,9 +16,9 @@ pub(super) struct EngineFrameGraph {
     graph: CompiledGraph,
     program: SceneProgram,
     scene: NodeKey,
-    gpu: NodeKey,
-    camera: NodeKey,
-    stage: NodeKey,
+    solver: NodeKey,
+    overlay: NodeKey,
+    prepared: Option<Arc<GpuSceneValue>>,
     comp: CompSpec,
     fps: crate::doc::store::Fps,
     background: [f32; 4],
@@ -41,19 +41,27 @@ impl EngineFrameGraph {
         let document_camera = program.camera();
         let solver = program.solver().key();
         let overlay = program.overlay().output();
-        let mut nodes: Vec<_> = program.nodes().collect();
-        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera, solver, overlay]);
-        gpu_identity.time_dependency = TimeDependency::Exact;
-        let gpu = GraphNode::new(gpu_identity);
-        let projection = |role| {
-            let mut identity = NodeIdentity::new(NodeKind::CameraProjection, vec![gpu.key()]);
-            identity.parameters = vec![role]; identity.time_dependency = TimeDependency::Exact;
-            GraphNode::new(identity)
-        };
-        let camera = projection(0); let stage = projection(1);
-        nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
-        let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
+        let nodes: Vec<_> = program.nodes().collect();
+        let topology = GraphTopology::try_new(
+            nodes,
+            vec![scene, document_camera, solver, overlay],
+        ).map_err(|error| EngineError::Store(error.to_string()))?;
+        Ok(Self {
+            graph: CompiledGraph::with_topology(revision, topology),
+            program,
+            scene,
+            solver,
+            overlay,
+            prepared: None,
+            comp,
+            fps,
+            background,
+            in_points,
+            frame: None,
+            generation: 0,
+            prepare_us: 0,
+            measured: false,
+        })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -62,11 +70,8 @@ impl EngineFrameGraph {
         engine: &mut Engine,
         time: RationalTime,
         quality: FrameQuality,
-        force_gpu: bool,
+        _force_gpu: bool,
     ) -> Result<(), EngineError> {
-        if force_gpu {
-            self.graph.invalidate([self.gpu]);
-        }
         self.generation += 1;
         let mut executor = ProgramExecutor {
             engine,
@@ -80,13 +85,45 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
+        drop(executor);
+
+        // GPU lowering is intentionally outside the semantic FrameGraph. The
+        // semantic scheduler owns meaning/cache; the GPU control plane owns
+        // residency, invalidation and execution planning.
+        let scene = evaluated.value(self.scene)
+            .and_then(|value| value.downcast_ref::<SceneValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        let camera = evaluated.value(self.program.camera())
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
+        let solver = evaluated.value(self.solver)
+            .and_then(|value| value.downcast_ref::<SolverPlanValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph solver plan is missing".into()))?;
+        let overlays = evaluated.value(self.overlay)
+            .and_then(|value| value.downcast_ref::<crate::frame_graph::OverlaySetValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph overlay set is missing".into()))?;
+        engine.install_frame_graph_overlays(overlays);
+        let frame = time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
+        engine.compositor.clock = Some([
+            time.as_seconds_f64() as f32,
+            self.fps.den() as f32 / self.fps.num() as f32,
+            frame,
+        ]);
+        self.prepared = Some(Arc::new(
+            engine.prepare_gpu_scene_with_solver(
+                scene,
+                solver,
+                self.comp,
+                camera,
+                time,
+                self.fps,
+            )?
+        ));
         self.frame = Some(evaluated);
         Ok(())
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
-#[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
 struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
@@ -131,26 +168,6 @@ impl NodeExecutor for ProgramExecutor<'_> {
                     layer, parent, effect, scene, solver, camera, previous, context.time, self.comp,
                 )?;
                 Ok(NodeValue::new(value))
-            }
-            NodeKind::GpuScene => {
-                let scene = direct::<SceneValue>(node, &inputs, 0)?;
-                let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
-                let solver = direct::<SolverPlanValue>(node, &inputs, 2)?;
-                let overlays = direct::<OverlaySetValue>(node, &inputs, 3)?;
-                self.engine.install_frame_graph_overlays(overlays);
-                let frame = context.time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
-                self.engine.compositor.clock = Some([
-                    context.time.as_seconds_f64() as f32,
-                    self.fps.den() as f32 / self.fps.num() as f32,
-                    frame,
-                ]);
-                let prepared = self.engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, context.time, self.fps)?;
-                Ok(NodeValue::new(Arc::new(prepared)))
-            }
-            NodeKind::CameraProjection => {
-                let scene = inputs.at(0).and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>()).cloned().ok_or_else(|| unsupported(node.identity().kind))?;
-                let role = match node.identity().parameters.as_slice() { [0] => ProjectionRole::Camera, [1] => ProjectionRole::Stage, _ => return Err(unsupported(node.identity().kind)) };
-                Ok(NodeValue::new(Arc::new(Projection { scene, role })))
             }
             kind => Err(unsupported(kind)),
         }
@@ -280,11 +297,8 @@ impl Engine {
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
+        let prepared = state.prepared.clone()
+            .ok_or_else(|| EngineError::Store("GPU lowering result is missing".into()))?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
@@ -308,11 +322,8 @@ impl Engine {
         include_background: bool,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
+        let prepared = state.prepared.clone()
+            .ok_or_else(|| EngineError::Store("GPU lowering result is missing".into()))?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
@@ -421,24 +432,14 @@ impl Engine {
         window: crate::render::compositor::Window,
         projection: crate::frame_graph::ViewProjection,
     ) -> Result<(), EngineError> {
-        let root = match projection {
-            crate::frame_graph::ViewProjection::Camera => state.camera,
-            crate::frame_graph::ViewProjection::Stage => state.stage,
-            _ => return Err(EngineError::Store("Unsupported playback projection".into())),
-        };
-        let projected = state.frame.as_ref()
-            .and_then(|frame| frame.value(root))
-            .and_then(|value| value.downcast_ref::<Arc<Projection>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph projection is missing".into()))?;
-        let expected = if projection == crate::frame_graph::ViewProjection::Camera {
-            ProjectionRole::Camera
-        } else {
-            ProjectionRole::Stage
-        };
-        if projected.role != expected {
-            return Err(EngineError::Store("FrameGraph projection role mismatch".into()));
+        if !matches!(
+            projection,
+            crate::frame_graph::ViewProjection::Camera | crate::frame_graph::ViewProjection::Stage
+        ) {
+            return Err(EngineError::Store("Unsupported playback projection".into()));
         }
+        let prepared = state.prepared.as_ref()
+            .ok_or_else(|| EngineError::Store("GPU lowering result is missing".into()))?;
 
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
@@ -446,7 +447,7 @@ impl Engine {
             .copied()
             .unwrap_or_default();
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        let mut layers = projected.scene.layers.clone();
+        let mut layers = prepared.layers.clone();
         for layer in &mut layers {
             layer.layer.projection_camera =
                 if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
