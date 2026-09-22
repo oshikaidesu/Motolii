@@ -26,18 +26,10 @@ pub fn source_bounds(source: &PathSource) -> [f64; 4] {
     }
 }
 
-/// gradient の軸を比で読む: 向き(°)、中心のずれ(bounds の半幅・半高に対する %)、広がり(%)。
-/// 線形の広がり 100% は、その向きで bounds を端から端まで。放射の 100% は bounds の大きい方の半分を半径に。
-pub struct GradientAxis { pub angle: f64, pub center: [f64; 2], pub spread: f64 }
-
-pub fn half_extent(bounds: [f64; 4], angle: f64) -> f64 {
-    let (w, h) = (bounds[2] - bounds[0], bounds[3] - bounds[1]);
-    let (s, c) = angle.to_radians().sin_cos();
-    (c.abs() * w + s.abs() * h) * 0.5
-}
+pub use crate::doc::vector::{half_extent, GradientAxis};
 
 /// The frame the axis ratios are measured in: the shape's bounds, or the unit square for a gradient
-/// already in object-bounding-box units.
+/// in object-bounding-box units.
 fn axis_bounds(source: &PathSource, units: GradientUnits) -> [f64; 4] {
     match units {
         GradientUnits::UserSpaceOnUse => source_bounds(source),
@@ -46,36 +38,12 @@ fn axis_bounds(source: &PathSource, units: GradientUnits) -> [f64; 4] {
 }
 
 pub fn axis_of(source: &PathSource, g: &Gradient) -> GradientAxis {
-    let b = axis_bounds(source, g.units);
-    let (hw, hh) = (((b[2] - b[0]) * 0.5).max(1e-6), ((b[3] - b[1]) * 0.5).max(1e-6));
-    let c0 = Point { x: (b[0] + b[2]) * 0.5, y: (b[1] + b[3]) * 0.5 };
-    let d = g.end.sub(g.start);
-    let angle = d.y.atan2(d.x).to_degrees();
-    let (mid, spread) = match g.kind {
-        GradientType::Linear => (g.start.add(g.end).scale(0.5), d.length() * 0.5 / half_extent(b, angle).max(1e-6) * 100.0),
-        GradientType::Radial | GradientType::Angular | GradientType::Diamond => (g.start, d.length() / hw.max(hh) * 100.0),
-    };
-    GradientAxis { angle, center: [(mid.x - c0.x) / hw * 100.0, (mid.y - c0.y) / hh * 100.0], spread }
+    g.axis_in(axis_bounds(source, g.units))
 }
 
 /// 比から軸の 2 点へ。`axis_of` の逆。
 pub fn axis_points(source: &PathSource, kind: GradientType, units: GradientUnits, axis: &GradientAxis) -> (Point, Point) {
-    let b = axis_bounds(source, units);
-    let (hw, hh) = ((b[2] - b[0]) * 0.5, (b[3] - b[1]) * 0.5);
-    let c = Point { x: (b[0] + b[2]) * 0.5 + axis.center[0] / 100.0 * hw, y: (b[1] + b[3]) * 0.5 + axis.center[1] / 100.0 * hh };
-    match kind {
-        GradientType::Linear => {
-            let (s, co) = axis.angle.to_radians().sin_cos();
-            let half = axis.spread / 100.0 * half_extent(b, axis.angle);
-            let d = Point { x: co * half, y: s * half };
-            (c.sub(d), c.add(d))
-        }
-        GradientType::Radial | GradientType::Angular | GradientType::Diamond => {
-            let (s, co) = axis.angle.to_radians().sin_cos();
-            let r = axis.spread / 100.0 * hw.max(hh);
-            (c, c.add(Point { x: co * r, y: s * r }))
-        }
-    }
+    crate::doc::vector::axis_points_in(kind, axis_bounds(source, units), axis)
 }
 
 /// Inspector の 1 行。`value` は property が無い時の既定(書類の形の値)。

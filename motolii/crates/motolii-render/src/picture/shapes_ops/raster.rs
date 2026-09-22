@@ -95,10 +95,9 @@ fn paint_for(brush: &Brush, origin: Point, bounds: [f64; 4], alpha: f64) -> Pain
 }
 
 fn gradient_shader(g: &Gradient, origin: Point, bounds: [f64; 4], alpha: f64) -> Option<Shader<'static>> {
-    // Points stay in the gradient's own space; the shader's transform places that space.
+    let g = &g.in_user_space(bounds);
     let at = |p: Point| tiny_skia::Point::from_xy(p.x as f32, p.y as f32);
-    let (space_origin, scale) = g.space(bounds);
-    let space = Transform::from_row(scale.x as f32, 0.0, 0.0, scale.y as f32, (space_origin.x + origin.x) as f32, (space_origin.y + origin.y) as f32);
+    let space = Transform::from_translate(origin.x as f32, origin.y as f32);
     let stops: Vec<TsStop> = g.baked_stops()
         .iter()
         .map(|s| TsStop::new(clamp01(s.offset) as f32, color_of(s.color, alpha)))
@@ -209,6 +208,7 @@ pub(crate) fn draw(
 }
 
 fn fill_by_parameter(pixmap: &mut Pixmap, path: &tiny_skia::Path, rule: TsFillRule, g: &Gradient, origin: Point, bounds: [f64; 4], alpha: f64) {
+    let g = &g.in_user_space(bounds);
     let (w, h) = (pixmap.width(), pixmap.height());
     let Some(mut mask) = tiny_skia::Mask::new(w, h) else { return };
     mask.fill_path(path, rule, true, Transform::identity());
@@ -218,7 +218,7 @@ fn fill_by_parameter(pixmap: &mut Pixmap, path: &tiny_skia::Path, rule: TsFillRu
         let cover = f64::from(coverage[i]) / 255.0 * alpha;
         if cover <= 0.0 { continue; }
         let (x, y) = ((i as u32 % w) as f64 + 0.5 - origin.x, (i as u32 / w) as f64 + 0.5 - origin.y);
-        let c = g.color_at(g.parameter_in(Point { x, y }, bounds));
+        let c = g.color_at(g.parameter(Point { x, y }));
         let src = [clamp01(c.r) * cover, clamp01(c.g) * cover, clamp01(c.b) * cover, cover];
         let dst = px.demultiply();
         let da = f64::from(dst.alpha()) / 255.0;

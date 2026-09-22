@@ -63,9 +63,9 @@ fn paint(brush: &Brush, alpha: f64, origin: Point, bounds: [f64; 4]) -> Box<dyn 
             Box::new(move |_| color)
         }
         Brush::Gradient(g) => {
-            let g: Gradient = g.clone();
+            let g: Gradient = g.in_user_space(bounds);
             Box::new(move |p| {
-                let c = g.color_at(g.parameter_in(Point { x: p.x as f64 - origin.x, y: p.y as f64 - origin.y }, bounds));
+                let c = g.color_at(g.parameter(Point { x: p.x as f64 - origin.x, y: p.y as f64 - origin.y }));
                 Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])
             })
         }
@@ -84,10 +84,10 @@ const RAMP: usize = 1024;
 fn exact_gradient(g: &Gradient, alpha: f64, origin: Point, bounds: [f64; 4]) -> re_renderer::mesh::CurveGradient {
     use re_renderer::mesh::CurveGradientKind as Kind;
     let at = |p: Point| glam::vec2(p.x as f32, p.y as f32);
-    let (space_origin, space_scale) = g.space(bounds);
+    let g = &g.in_user_space(bounds);
     re_renderer::mesh::CurveGradient {
-        space_origin: glam::vec2((space_origin.x + origin.x) as f32, (space_origin.y + origin.y) as f32),
-        space_scale: at(space_scale),
+        space_origin: glam::vec2(origin.x as f32, origin.y as f32),
+        space_scale: glam::Vec2::ONE,
         kind: match g.kind {
             crate::doc::vector::GradientType::Linear => Kind::Linear,
             crate::doc::vector::GradientType::Radial => Kind::Radial,
