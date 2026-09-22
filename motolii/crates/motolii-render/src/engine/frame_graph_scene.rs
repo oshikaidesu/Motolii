@@ -2,6 +2,7 @@ use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 use crate::doc::store::LayerId;
 use crate::frame_graph::{SceneContentValue, SceneValue, SolverPlanValue};
 use crate::render::compositor::LayerContent;
+use crate::render::compositor::effects::surface_program::SurfaceRecipe;
 use crate::render_graph::{Composed, Extrusion, ImageInput, LayerWork, RasterSource, RenderGraph};
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
@@ -269,7 +270,7 @@ impl Engine {
             projection: work.projection,
             projection_camera,
             blend_mode: work.blend,
-            shading: self.compositor.surface_shading_from(&work.surface).map_err(EngineError::Store)?,
+            shading: Default::default(),
             displace: work.displace,
             clip: work.clip,
             shadow: work.shadow,
@@ -277,7 +278,11 @@ impl Engine {
             frame: frozen_frame,
         };
         let layer = self.apply_masks_to_layer(layer, &work.masks, natural, frozen_frame)?;
-        let layer = self.apply_material_recipe(layer, work.id, &work.material, work.source_is_file, work.source_tick, natural, frozen_frame)?;
+        let mut layer = self.apply_material_recipe(layer, work.id, &work.material, work.source_is_file, work.source_tick, natural, frozen_frame)?;
+        if matches!(layer.content, LayerContent::Model(_) | LayerContent::Texture(_) | LayerContent::LinearTexture(_)) {
+            let recipe = SurfaceRecipe { unlit: matches!(&layer.content, LayerContent::Model(model) if model.planar_size.is_some()), ..work.surface.clone() };
+            layer.shading = self.compositor.surface_shading_from(&recipe).map_err(EngineError::Store)?;
+        }
         let layer = self.flatten_if_asked(comp, projection_camera, layer, work.isolate)?;
         Ok(Some(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() }))
     }
