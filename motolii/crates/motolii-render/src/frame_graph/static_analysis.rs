@@ -246,25 +246,16 @@ pub fn domain(kind: NodeKind) -> StaticDomain {
         | NodeKind::Relation
         | NodeKind::RelationSet => StaticDomain::Property,
 
-        NodeKind::ResolvedWorld
-        | NodeKind::TextDocuments
-        | NodeKind::ShapeDocuments
-        | NodeKind::SharedScene
-        | NodeKind::TextContent
-        | NodeKind::TextStyle
-        | NodeKind::ShapeGeometry
-        | NodeKind::ShapeMesh
-        | NodeKind::MediaExtent
+        NodeKind::TextContent        | NodeKind::ShapeGeometry        | NodeKind::MediaExtent
         | NodeKind::MediaFrame
         | NodeKind::MeshSource
         | NodeKind::Material
         | NodeKind::ParticleBirths
         | NodeKind::Particle => StaticDomain::Content,
 
-        NodeKind::Group
-        | NodeKind::Layout
+        NodeKind::Layout
         | NodeKind::FlowWindow
-        | NodeKind::GroupBackground
+        Background
         | NodeKind::TextObstacle
         | NodeKind::TextShape
         | NodeKind::TextFlow => StaticDomain::Layout,
@@ -287,10 +278,10 @@ pub fn domain(kind: NodeKind) -> StaticDomain {
         NodeKind::SolverPlan => StaticDomain::Solver,
 
         NodeKind::CompositeContribution
-        | NodeKind::GroupComposite
+        Composite
         | NodeKind::SceneComposite => StaticDomain::Scene,
 
-        NodeKind::DocumentCamera | NodeKind::Camera | NodeKind::CameraProjection => StaticDomain::View,
+        NodeKind::Camera  => StaticDomain::View,
 
         NodeKind::Custom(_) => StaticDomain::Other,
     }
@@ -346,7 +337,7 @@ mod tests {
         let cnode = node(NodeKind::PropertyConstant, vec![b.key()]);
         let topology = GraphTopology::try_new([a.clone(), b.clone(), cnode.clone()], vec![cnode.key()]).unwrap();
         let report = cluster_topology(&topology, |_| StaticDynamicClass::None);
-                assert!(report.absent_builtin_kinds.contains(&NodeKind::ShapeMesh));
+                assert!(report.absent_builtin_kinds.contains(&));
         assert!(report.merge_candidates.contains(&(a.key(), b.key())));
         assert!(!report.merge_candidates.contains(&(b.key(), cnode.key())), "root consumer is not a merge candidate");
     }
