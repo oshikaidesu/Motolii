@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 
 use super::cache::NodeValue;
-use super::key::{FrameQuality, NodeKey};
+use super::key::{FrameQuality, NodeKey, WorkKey};
 
 /// Ordered by the native playback clock. A later generation supersedes every
 /// unfinished submission from an earlier generation.
@@ -53,6 +53,7 @@ pub struct EvaluatedFrame {
     pub(crate) values: BTreeMap<NodeKey, NodeValue>,
     pub(crate) executed: Vec<NodeKey>,
     pub(crate) reused: Vec<NodeKey>,
+    pub(crate) work_keys: BTreeMap<NodeKey, WorkKey>,
 }
 
 impl EvaluatedFrame {
@@ -79,6 +80,9 @@ impl EvaluatedFrame {
     }
     pub fn reused_nodes(&self) -> &[NodeKey] {
         &self.reused
+    }
+    pub fn work_key(&self, key: NodeKey) -> Option<WorkKey> {
+        self.work_keys.get(&key).copied()
     }
 }
 
