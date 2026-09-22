@@ -33,7 +33,7 @@ impl crate::render::engine::Engine {
             | SceneImageSourceValue::Scene { time, namespace, .. } => (*time, *namespace),
         };
         self.feedback_namespace = namespace;
-        self.set_frame_graph_source_clock(time);
+        self.gpu_set_source_clock(time);
 
         let built = (|| {
             let texture = match source {
