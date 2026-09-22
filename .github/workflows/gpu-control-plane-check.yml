@@ -1,0 +1,23 @@
+name: GPU control-plane check
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "motolii/crates/motolii-render/**"
+      - ".github/workflows/gpu-control-plane-check.yml"
+  workflow_dispatch:
+
+jobs:
+  render-lib-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+      - name: Check motolii-render
+        run: cargo check -p motolii-render --lib
