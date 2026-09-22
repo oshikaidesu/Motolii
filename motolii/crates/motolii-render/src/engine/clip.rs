@@ -9,7 +9,7 @@ impl Engine {
     /// クリップ層を下地の**局所座標**(素材の画素、効果の余白込み)へ描き、下地の alpha で
     /// source-atop する。下地の配置(z・回転・world)は触らない — 畳むのは絵だけで、
     /// 点群や他の 3D 層との前後は下地が普通の層として解く。下地に texture が無ければ None。
-    pub(super) fn clip_onto_base(
+    pub(crate) fn clip_onto_base(
         &mut self,
         base: LayerWithPasses,
         upper: &Layer,
