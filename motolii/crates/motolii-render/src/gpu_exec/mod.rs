@@ -4,6 +4,7 @@
 //! resource/execution graph and deliberately does not preserve the old
 //! GpuScene/LayerWithPasses orchestration contract.
 
+mod content_backend;
 mod executor;
 mod graph;
 mod lowerer;
@@ -14,6 +15,7 @@ mod resource_store;
 mod telemetry;
 mod types;
 
+pub(crate) use content_backend::ResidentContent;
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
 pub(crate) use graph::{GpuGraphError, GpuGraphStats, GpuResourceDelta, GpuResourceGraph};
 pub(crate) use logical_lowerer::{LogicalGpuLowerer, LogicalLowerError};
