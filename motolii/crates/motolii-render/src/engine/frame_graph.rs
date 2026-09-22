@@ -31,7 +31,6 @@ pub(super) struct EngineFrameGraph {
     gpu_placement: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
     gpu_effects: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
     gpu_snapshots: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentSnapshot>,
-    gpu_processed: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentProcessedLayer>,
     gpu_composites: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentCompositeLayer>,
     gpu_contributions: Vec<crate::gpu_exec::GpuContributionResources>,
     gpu_scene_outputs: Vec<crate::gpu_exec::GpuResourceKey>,
@@ -56,7 +55,7 @@ impl EngineFrameGraph {
         let nodes: Vec<_> = program.nodes().collect();
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, solver, overlay])
             .map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_contributions: Vec::new(), gpu_scene_outputs: Vec::new(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_composites: Default::default(), gpu_contributions: Vec::new(), gpu_scene_outputs: Vec::new(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
     fn plan_sink(&self, kind: crate::gpu_exec::GpuSinkKind) -> Result<crate::gpu_exec::GpuExecutionPlan, EngineError> {
