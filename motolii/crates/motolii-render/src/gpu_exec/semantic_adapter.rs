@@ -111,6 +111,7 @@ impl<'a> SemanticGpuAdapter<'a> {
                 node: contribution,
                 version: contribution_version(layer)?,
             },
+            layer: layer.layer,
             instance: layer.instance,
             content,
             placement,
