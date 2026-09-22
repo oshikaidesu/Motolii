@@ -44,10 +44,11 @@ impl GpuResidentScene<'_> {
     fn image_source(
         &self,
         effect: crate::frame_graph::NodeKey,
+        layer: LayerId,
         instance: u32,
         index: usize,
     ) -> Option<crate::render::compositor::GpuTexture2D> {
-        let key = crate::gpu_exec::image_source_identity(effect, instance, index).key();
+        let key = crate::gpu_exec::image_source_identity(effect, layer, instance, index).key();
         let version = self.graph.version(key)?;
         self.image_sources.current(key, version).map(|resident| resident.texture.clone())
     }
@@ -600,7 +601,7 @@ impl Engine {
             let mut textures = Vec::with_capacity(row.len());
             for (source_index, source) in row.iter().enumerate() {
                 if let Some(texture) = effect.and_then(|effect| {
-                    resident.and_then(|resident| resident.image_source(effect, layer.instance, source_index))
+                    resident.and_then(|resident| resident.image_source(effect, layer.layer, layer.instance, source_index))
                 }) {
                     textures.push(texture);
                     continue;
