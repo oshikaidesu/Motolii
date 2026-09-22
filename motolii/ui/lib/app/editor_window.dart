@@ -36,13 +36,16 @@ String? freezeNotice(Map<String, dynamic> status) {
 }
 
 class EditorWindow extends StatefulWidget {
-  const EditorWindow({super.key});
+  const EditorWindow({super.key, this.controller, this.initialize = true});
+  final EditorSession? controller;
+  final bool initialize;
   @override
   State<EditorWindow> createState() => _EditorWindowState();
 }
 
 class _EditorWindowState extends State<EditorWindow> {
-  final c = EditorSession();
+  late final EditorSession c;
+  late final bool _ownsController;
   late final shortcuts = EditorShortcuts(
     c,
     onMenu: menu,
@@ -66,6 +69,8 @@ class _EditorWindowState extends State<EditorWindow> {
   @override
   void initState() {
     super.initState();
+    c = widget.controller ?? EditorSession();
+    _ownsController = widget.controller == null;
     c
         .slice('animationAppearance', const ['animate'])
         .addListener(_syncAnimationAppearance);
@@ -85,7 +90,12 @@ class _EditorWindowState extends State<EditorWindow> {
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);
     };
-    _initialize();
+    if (widget.initialize) {
+      _initialize();
+    } else {
+      c.windowInfo = const {'id': 'preview', 'main': true};
+      ready = true;
+    }
   }
 
   @override
@@ -151,7 +161,7 @@ class _EditorWindowState extends State<EditorWindow> {
         .removeListener(_syncAnimationAppearance);
     workspace.dispose();
     saveTimer?.cancel();
-    c.dispose();
+    if (_ownsController) c.dispose();
     super.dispose();
   }
 

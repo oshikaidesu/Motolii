@@ -12,10 +12,10 @@ Inspectorは部品版に一本化。[操作契約と検証](../../docs/stage5/in
 
 ## UI Gallery
 
-`lib/gallery_main.dart`は製品とは別のUI確認入口。native bridgeや作品runtimeを起動せず、実際の`foundation`と`workspace`部品をブラウザで確認する。
+`lib/gallery_main.dart`は製品とは別の起動入口だが、UIの別実装ではない。`EditorApp → EditorWindow → buildPanel` の本番経路をそのまま起動し、Gallery側が持つのはdocumentのfixtureとnative hostの代役だけ。
 
-- ローカルでGalleryを開く: `flutter run -d chrome -t lib/gallery_main.dart`
-- Flutter公式Widget Previewerで同じstoryを見る: `flutter widget-preview start`
-- 直接storyを開く: `?story=foundation-controls` / `?story=panel-chrome` / `?story=workspace-dock`
+- ローカル: `flutter run -d chrome -t lib/gallery_main.dart`
+- Flutter Widget Previewer: `flutter widget-preview start`
+- Pagesの状態: `?story=default` / `?story=dense` / `?story=text`
 
-`ui-gallery-pages.yml`はPRでGalleryのformat/analyze/Web buildを検査し、mainでは同じbuildをGitHub Pagesへ出す。GalleryのWeb buildがnative依存で壊れた場合は、UIからnative実装への依存漏れとして扱う。
+Galleryから `foundation/`・`panels/`・`workspace/` を直接importしてUIを組み直すのは禁止で、CIが止める。Web buildは同時に、UI経路へFFI実装が漏れていないことも検査する。

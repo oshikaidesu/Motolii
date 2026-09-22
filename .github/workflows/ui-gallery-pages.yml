@@ -42,13 +42,29 @@ jobs:
 
       - name: Check gallery formatting
         working-directory: motolii/ui
-        run: dart format --output=none --set-exit-if-changed lib/gallery_main.dart
+        run: >
+          dart format --output=none --set-exit-if-changed
+          lib/gallery_main.dart
+          lib/app/editor_app.dart
+          lib/app/editor_window.dart
+          lib/session/editor_session.dart
+          lib/bridge/native_frames.dart
+          lib/bridge/native_frames_ffi.dart
+          lib/bridge/native_frames_stub.dart
 
       - name: Prepare CI build directory
         working-directory: motolii/ui
         run: |
           rm -f build
           mkdir -p build
+
+      - name: Enforce gallery boundary
+        working-directory: motolii/ui
+        run: |
+          if grep -E "^import '.*(foundation|panels|workspace)/" lib/gallery_main.dart; then
+            echo "gallery_main.dart must render EditorApp, not compose product UI"
+            exit 1
+          fi
 
       - name: Analyze gallery
         working-directory: motolii/ui

@@ -1,395 +1,283 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter/widgets.dart';
 
-import 'foundation/color_field.dart';
-import 'foundation/metrics.dart';
-import 'foundation/panel_controls.dart';
-import 'foundation/theme.dart';
-import 'workspace/layout.dart';
-import 'workspace/workspace_view.dart';
+import 'app/editor_app.dart';
+import 'bridge/native_bridge.dart';
+import 'session/editor_session.dart';
 
-void main() => runApp(const GalleryApp());
-
-class GalleryApp extends StatefulWidget {
-  const GalleryApp({super.key});
-
-  @override
-  State<GalleryApp> createState() => _GalleryAppState();
-}
-
-class _GalleryAppState extends State<GalleryApp> {
-  late String story = _initialStory();
-
-  static String _initialStory() {
-    final requested = Uri.base.queryParameters['story'];
-    return galleryStories.any((entry) => entry.id == requested)
-        ? requested!
-        : galleryStories.first.id;
-  }
-
-  @override
-  Widget build(BuildContext context) => WidgetsApp(
-    debugShowCheckedModeBanner: false,
-    color: EditorTheme.app,
-    textStyle: EditorTheme.text,
-    pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
-      settings: settings,
-      pageBuilder: (context, _, __) => builder(context),
-    ),
-    builder: (context, child) => galleryPreviewWrapper(child!),
-    home: _GalleryHome(
-      story: story,
-      onStory: (value) => setState(() => story = value),
-    ),
+void main() {
+  const stories = {'default', 'dense', 'text'};
+  final requested = Uri.base.queryParameters['story'];
+  runApp(
+    GalleryStory(story: stories.contains(requested) ? requested! : 'default'),
   );
 }
 
-Widget galleryPreviewWrapper(Widget child) => EditorLook(
-  tooltips: false,
-  child: ColoredBox(
-    color: EditorTheme.app,
-    child: DefaultTextStyle(
-      style: EditorTheme.text,
-      child: IconTheme(data: EditorTheme.icon, child: child),
-    ),
-  ),
-);
+@Preview(name: 'Default workspace', group: 'Motolii')
+Widget defaultWorkspacePreview() => const GalleryStory(story: 'default');
 
-class GalleryStory {
-  const GalleryStory(this.id, this.group, this.name, this.builder);
+@Preview(name: 'Dense timeline', group: 'Motolii')
+Widget denseWorkspacePreview() => const GalleryStory(story: 'dense');
 
-  final String id;
-  final String group;
-  final String name;
-  final WidgetBuilder builder;
-}
+@Preview(name: 'Text selected', group: 'Motolii')
+Widget textWorkspacePreview() => const GalleryStory(story: 'text');
 
-final galleryStories = <GalleryStory>[
-  GalleryStory(
-    'foundation-controls',
-    'Foundation',
-    'Controls',
-    (_) => const FoundationControlsStory(),
-  ),
-  GalleryStory(
-    'panel-chrome',
-    'Panels',
-    'Panel chrome',
-    (_) => const PanelChromeStory(),
-  ),
-  GalleryStory(
-    'workspace-dock',
-    'Workspace',
-    'Dock',
-    (_) => const WorkspaceDockStory(),
-  ),
-];
-
-class _GalleryHome extends StatelessWidget {
-  const _GalleryHome({required this.story, required this.onStory});
+class GalleryStory extends StatefulWidget {
+  const GalleryStory({super.key, required this.story});
 
   final String story;
-  final ValueChanged<String> onStory;
 
   @override
-  Widget build(BuildContext context) {
-    final current = galleryStories.firstWhere((entry) => entry.id == story);
-    return ColoredBox(
-      color: EditorTheme.app,
-      child: Row(
-        children: [
-          SizedBox(
-            width: EditorMetrics.s200,
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                color: EditorTheme.panel,
-                border: Border(right: BorderSide(color: EditorTheme.line)),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.all(EditorMetrics.s8),
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.all(EditorMetrics.s8),
-                    child: Text(
-                      'MOTOLII UI',
-                      style: TextStyle(
-                        fontSize: EditorMetrics.title,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  for (final group in const [
-                    'Foundation',
-                    'Panels',
-                    'Workspace',
-                  ]) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        EditorMetrics.s8,
-                        EditorMetrics.s12,
-                        EditorMetrics.s8,
-                        EditorMetrics.s4,
-                      ),
-                      child: Text(
-                        group,
-                        style: const TextStyle(color: EditorTheme.muted),
-                      ),
-                    ),
-                    for (final entry in galleryStories.where(
-                      (item) => item.group == group,
-                    ))
-                      EditorButton(
-                        entry.name,
-                        () => onStory(entry.id),
-                        selected: entry.id == story,
-                        tooltip: '?story=${entry.id}',
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                EditorBar(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: EditorMetrics.s8,
-                  ),
-                  children: [
-                    Text('${current.group} / ${current.name}'),
-                    const Spacer(),
-                    Text(
-                      '?story=${current.id}',
-                      style: const TextStyle(color: EditorTheme.muted),
-                    ),
-                  ],
-                ),
-                Expanded(child: current.builder(context)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  State<GalleryStory> createState() => _GalleryStoryState();
+}
+
+class _GalleryStoryState extends State<GalleryStory> {
+  late final Map<String, dynamic> status;
+  late final _PreviewBridge bridge;
+  late final EditorSession session;
+
+  @override
+  void initState() {
+    super.initState();
+    status = _status(widget.story);
+    bridge = _PreviewBridge(status);
+    session = EditorSession(bridge: bridge)
+      ..windowInfo = const {'id': 'preview', 'main': true}
+      ..document.value = status
+      ..frame.value = (status['frame'] as num? ?? 0).toInt();
   }
-}
-
-@Preview(name: 'Controls', group: 'Foundation', wrapper: galleryPreviewWrapper)
-Widget foundationControlsPreview() => const FoundationControlsStory();
-
-class FoundationControlsStory extends StatefulWidget {
-  const FoundationControlsStory({super.key});
-
-  @override
-  State<FoundationControlsStory> createState() =>
-      _FoundationControlsStoryState();
-}
-
-class _FoundationControlsStoryState extends State<FoundationControlsStory> {
-  bool selected = true;
-  String draft = '24';
-
-  @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.all(EditorMetrics.s16),
-    child: Align(
-      alignment: Alignment.topLeft,
-      child: SizedBox(
-        width: EditorMetrics.sheetWide,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            panelTitle('Controls'),
-            EditorBar(
-              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-              children: [
-                EditorButton(
-                  'Selected',
-                  () => setState(() => selected = !selected),
-                  selected: selected,
-                ),
-                EditorButton('Action', () {}),
-                const EditorButton('Disabled', null),
-              ],
-            ),
-            const SizedBox(height: EditorMetrics.s12),
-            EditorSection(
-              'Fields',
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  EditorDraftField(
-                    value: draft,
-                    label: 'Frame',
-                    onCommit: (value) async => setState(() => draft = value),
-                  ),
-                  const SizedBox(height: EditorMetrics.s8),
-                  Row(
-                    children: [
-                      EditorColorField(
-                        value: EditorTheme.spatial,
-                        label: 'spatial',
-                        onFocus: () {},
-                      ),
-                      const SizedBox(width: EditorMetrics.s8),
-                      EditorColorField(
-                        value: EditorTheme.amount,
-                        label: 'amount',
-                        onFocus: () {},
-                      ),
-                      const SizedBox(width: EditorMetrics.s8),
-                      const EditorColorField(
-                        value: EditorTheme.time,
-                        label: 'time',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-@Preview(name: 'Panel chrome', group: 'Panels', wrapper: galleryPreviewWrapper)
-Widget panelChromePreview() => const PanelChromeStory();
-
-class PanelChromeStory extends StatefulWidget {
-  const PanelChromeStory({super.key});
-
-  @override
-  State<PanelChromeStory> createState() => _PanelChromeStoryState();
-}
-
-class _PanelChromeStoryState extends State<PanelChromeStory> {
-  String x = '640';
-  String y = '360';
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: SizedBox(
-      width: EditorMetrics.s280,
-      height: EditorMetrics.sheetWide,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: EditorTheme.panel,
-          border: Border.all(color: EditorTheme.line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            panelTitle('Inspector'),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(EditorMetrics.s8),
-                children: [
-                  EditorSection(
-                    'Transform',
-                    Column(
-                      children: [
-                        _fieldRow('X', x, (value) => setState(() => x = value)),
-                        const SizedBox(height: EditorMetrics.s4),
-                        _fieldRow('Y', y, (value) => setState(() => y = value)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: EditorMetrics.s8),
-                  EditorSection(
-                    'Appearance',
-                    Row(
-                      children: [
-                        EditorColorField(
-                          value: EditorTheme.spatial,
-                          label: 'fill',
-                          onFocus: () {},
-                        ),
-                        const SizedBox(width: EditorMetrics.s8),
-                        const Expanded(child: Text('Fill')),
-                        EditorButton('Reset', () {}),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  Widget _fieldRow(String label, String value, ValueChanged<String> onCommit) =>
-      Row(
-        children: [
-          SizedBox(width: EditorMetrics.s32, child: Text(label)),
-          Expanded(
-            child: EditorDraftField(
-              value: value,
-              label: label,
-              onCommit: (next) async => onCommit(next),
-            ),
-          ),
-        ],
-      );
-}
-
-@Preview(name: 'Dock', group: 'Workspace', wrapper: galleryPreviewWrapper)
-Widget workspaceDockPreview() => const WorkspaceDockStory();
-
-class WorkspaceDockStory extends StatefulWidget {
-  const WorkspaceDockStory({super.key});
-
-  @override
-  State<WorkspaceDockStory> createState() => _WorkspaceDockStoryState();
-}
-
-class _WorkspaceDockStoryState extends State<WorkspaceDockStory> {
-  final layout = WorkspaceLayout();
 
   @override
   void dispose() {
-    layout.dispose();
+    session.dispose();
     super.dispose();
   }
 
-  void changed(VoidCallback change) => setState(change);
-
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(EditorMetrics.s8),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: EditorTheme.panel,
-        border: Border.all(color: EditorTheme.line),
-      ),
-      child: WorkspaceView(
-        layout: layout.root,
-        panelBuilder: (name) => _WorkspacePlaceholder(name: name),
-        onMove: (name, target, edge) =>
-            changed(() => layout.move(name, target, edge)),
-        onClose: (name) => changed(() => layout.close(name)),
-        onDetach: (_) {},
-        onLayoutChanged: () => setState(() {}),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      EditorApp(controller: session, initialize: false);
 }
 
-class _WorkspacePlaceholder extends StatelessWidget {
-  const _WorkspacePlaceholder({required this.name});
+class _PreviewBridge extends NativeBridge {
+  _PreviewBridge(this.status);
 
-  final String name;
+  final Map<String, dynamic> status;
+  Future<dynamic> Function(MethodCall)? _handler;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: name == 'Stage' ? EditorTheme.app : EditorTheme.panel,
-    child: Center(
-      child: Text(name, style: const TextStyle(color: EditorTheme.muted)),
+  void listen(Future<dynamic> Function(MethodCall)? handler) {
+    _handler = handler;
+  }
+
+  @override
+  Future<dynamic> invoke(
+    String method, [
+    Map<String, dynamic> arguments = const {},
+  ]) async {
+    switch (method) {
+      case 'windowInfo':
+        return const {'id': 'preview', 'main': true};
+      case 'attach':
+      case 'render':
+      case 'request':
+        return status;
+      case 'readSettings':
+        return const <String, dynamic>{};
+      case 'placePanel':
+        await _handler?.call(MethodCall('placePanel', arguments));
+        return true;
+      case 'openPanelWindow':
+        return const {'id': 'preview-panel'};
+      case 'pickOpen':
+      case 'pickSave':
+      case 'pickImport':
+      case 'pickExport':
+        return null;
+      default:
+        return const <String, dynamic>{};
+    }
+  }
+}
+
+Map<String, dynamic> _number(String id, String label, Object value) => {
+  'id': id,
+  'label': label,
+  'kind': 'number',
+  'value': value,
+  'keys': const [],
+  'keyedNow': false,
+  'min': null,
+  'max': null,
+};
+
+Map<String, dynamic> _layer(
+  int id,
+  String kind,
+  double x, {
+  String? name,
+  int duration = 180,
+}) => {
+  'id': id,
+  'order': id,
+  'name': name ?? '$kind $id',
+  'kind': kind,
+  'locked': false,
+  'hidden': false,
+  'solo': false,
+  'frozen': false,
+  'ghostable': true,
+  'flatten': false,
+  'clipToBelow': false,
+  'environment': false,
+  'blendMode': 'Normal',
+  'projection': '2.5D',
+  'start': 0,
+  'sourceIn': 0,
+  'duration': duration,
+  'parent': null,
+  'colors': const [],
+  'contentKeys': const [],
+  'x': x,
+  'y': 244.0,
+  'properties': [
+    {
+      'id': 'position',
+      'label': 'Position',
+      'kind': 'vec2',
+      'value': [x, 244.0],
+      'keys': const [],
+      'keyedNow': false,
+      'min': null,
+      'max': null,
+    },
+    _number('position.z', 'Position Z', 0.0),
+    {
+      'id': 'scale',
+      'label': 'Scale',
+      'kind': 'vec2',
+      'value': const [1.0, 1.0],
+      'keys': const [],
+      'keyedNow': false,
+      'min': null,
+      'max': null,
+    },
+    _number('scale.z', 'Scale Z', 1.0),
+    _number('rotation', 'Rotation', 0.0),
+    _number('rotation.x', 'Rotation X', 0.0),
+    _number('rotation.y', 'Rotation Y', 0.0),
+    _number('opacity', 'Opacity', 1.0),
+    if (kind == 'Text') ...[
+      _number('text_style.0.size', 'Size', 64.0),
+      _number('text_style.0.line_height', 'Line height', 72.0),
+      _number('text_style.0.tracking', 'Tracking', 0.0),
+    ],
+  ],
+  'effects': [
+    {
+      'id': 'motolii.blur',
+      'name': 'Blur',
+      'enabled': true,
+      'params': [_number('amount', 'Amount', 2.0)],
+    },
+  ],
+};
+
+Map<String, dynamic> _status(String story) {
+  final dense = story == 'dense';
+  final text = story == 'text';
+  final layers = <Map<String, dynamic>>[
+    _layer(
+      1,
+      text ? 'Text' : 'Rectangle',
+      320,
+      name: text ? 'Title' : 'Card',
+      duration: dense ? 900 : 180,
     ),
-  );
+    for (var i = 2; i <= (dense ? 36 : 5); i++)
+      _layer(
+        i,
+        i % 5 == 0 ? 'Text' : 'Rectangle',
+        320 + i * 12,
+        name: i % 5 == 0 ? 'Label $i' : 'Layer $i',
+        duration: dense ? 900 : 180,
+      ),
+  ];
+  return {
+    'path': '/preview/Motolii Gallery.motolii',
+    'layers': layers,
+    'selectedId': 1,
+    'selectedIds': const [1],
+    'selectedKeys': const [],
+    'assets': const [
+      {
+        'id': 'a0',
+        'name': 'city-night.mp4',
+        'mime': 'video/mp4',
+        'path': '/preview/city-night.mp4',
+      },
+      {
+        'id': 'a1',
+        'name': 'portrait.png',
+        'mime': 'image/png',
+        'path': '/preview/portrait.png',
+      },
+    ],
+    'background': const [0.1, 0.1, 0.1, 1.0],
+    'backgrounds': const [],
+    'catalog': const [
+      {'id': 'motolii.isf_bloom', 'name': 'Bloom'},
+      {'id': 'motolii.blur', 'name': 'Blur'},
+      {'id': 'motolii.glow', 'name': 'Glow'},
+      {'id': 'motolii.noise', 'name': 'Noise'},
+      {'id': 'motolii.shadow', 'name': 'Shadow'},
+      {'id': 'motolii.warp', 'name': 'Warp'},
+    ],
+    'palette': const [
+      {'id': 'p0', 'hex': '#93a5f5'},
+      {'id': 'p1', 'hex': '#eedb73'},
+      {'id': 'p2', 'hex': '#c18bd3'},
+      {'id': 'p3', 'hex': '#79c4ca'},
+    ],
+    'easeKinds': const ['Linear', 'Hold', 'Ease', 'EaseIn', 'EaseOut'],
+    'fontFamilies': const ['Arial', 'Georgia', 'Hiragino Sans'],
+    'importExtensions': const ['png', 'jpg', 'mp4', 'obj'],
+    'history': const {
+      'head': 2,
+      'entries': [
+        {'head': 0, 'kind': 'open', 'label': 'Open'},
+        {'head': 1, 'kind': 'edit', 'label': 'Move Card'},
+        {'head': 2, 'kind': 'edit', 'label': 'Blur'},
+      ],
+    },
+    'capabilities': const [
+      'create',
+      'setFont',
+      'preview',
+      'animate',
+      'placeAsset',
+      'previewProperties',
+      'commitPreview',
+      'cancelPreview',
+      'removeAsset',
+      'import',
+      'setAttrs',
+      'previewBlend',
+      'focusColor',
+      'toggleKey',
+      'historyGoto',
+    ],
+    'durationFrames': dense ? 900 : 180,
+    'fps': 30.0,
+    'fpsNum': 30,
+    'fpsDen': 1,
+    'width': 1600,
+    'height': 1000,
+    'frame': dense ? 310 : 48,
+    'stageView': 'free',
+    'contentRevision': story,
+    'documentRevision': story,
+    'snapshotId': 1,
+    'referenceId': 1,
+  };
 }
