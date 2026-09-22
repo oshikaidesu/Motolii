@@ -84,3 +84,17 @@ pub(crate) trait GpuLowerer {
         input: &GpuContributionInput,
     ) -> Result<GpuContributionResources, Self::Error>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frame_graph::{NodeIdentity, NodeKind};
+
+    #[test]
+    fn shared_effect_image_sources_are_scoped_by_owner_layer() {
+        let effect = NodeKey::for_identity(&NodeIdentity::new(NodeKind::Custom(91), vec![]));
+        let left = image_source_identity(effect, LayerId(1), 0, 0).key();
+        let right = image_source_identity(effect, LayerId(2), 0, 0).key();
+        assert_ne!(left, right);
+    }
+}
