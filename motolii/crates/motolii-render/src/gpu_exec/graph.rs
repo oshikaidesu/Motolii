@@ -123,6 +123,10 @@ impl GpuResourceGraph {
         Ok(())
     }
 
+    pub fn resources_by_class(&self, class: super::types::GpuResourceClass) -> Vec<GpuResourceKey> {
+        self.resources.iter().filter_map(|(key, record)| (record.desc.identity.class == class).then_some(*key)).collect()
+    }
+
     pub fn version(&self, key: GpuResourceKey) -> Option<GpuResourceVersion> {
         self.resources.get(&key).map(|record| record.desc.version)
     }
