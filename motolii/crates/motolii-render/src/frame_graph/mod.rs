@@ -70,9 +70,10 @@ pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationSetValue, RelationValue};
 pub use solver_program::{SolverLayerValue, SolverPlanValue, SolverProgram, SolverProgramError};
 pub use static_analysis::{
-    cluster_topology, domain as static_domain, scene_node_may_request_dynamic_inputs,
-    scene_static_clusters, StaticCluster, StaticClusterId, StaticClusterReport,
-    StaticClusterSignature, StaticDomain,
+    cluster_topology, domain as static_domain, scene_dynamic_class,
+    scene_node_may_request_dynamic_inputs, scene_static_clusters, StaticCluster,
+    StaticClusterId, StaticClusterReport, StaticClusterSignature, StaticDomain,
+    StaticDynamicClass,
 };
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
