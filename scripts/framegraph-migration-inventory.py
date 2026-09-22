@@ -15,7 +15,7 @@ CLUSTERS = (
     ("legacy-scene-owner", r"\blayers_from_resolved\b|\bbuild_layers\b", "SceneValue / prepare_gpu_scene"),
     ("compat-resolved-projection", r"\bresolved_layers_from_scene\b|\bresolved_with_analysis\b", "SceneValue direct consumers"),
     ("resolved-layer-type", r"\bResolvedLayer\b", "SceneLayerValue / lower-level adapters"),
-    ("legacy-transform-resolve", r"\bresolve_(?:local_)?transform\b|\bresolved_transform\b", "TransformProgram / world transform nodes"),
+    ("legacy-transform-resolve", r"\b(?:local_transform3d|world_transform3d|world_transforms3d|world_transform3d_chain|world_affine|resolve_(?:local_)?transform|resolved_transform)\b", "TransformProgram / world transform nodes"),
 )
 TEXT_SUFFIXES={".rs",".md",".toml",".py",".sh",".yml",".yaml"}
 
