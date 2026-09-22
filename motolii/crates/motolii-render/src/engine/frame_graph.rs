@@ -200,12 +200,22 @@ impl EngineFrameGraph {
                 }
                 let placement_version = self.gpu_resources.version(resources.placement)
                     .ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
+                let placement = crate::doc::core::LayerPlacement {
+                    transform: layer.transform.affine,
+                    world_transform: Some(layer.transform.spatial),
+                    order: i32::from(layer.order),
+                    opacity: layer.opacity,
+                    z: layer.transform.spatial.translation.z,
+                    rotation_x: 0.0,
+                    rotation_y: 0.0,
+                    plane: None,
+                };
                 let _ = crate::gpu_exec::resident_placement(
                     &mut self.gpu_placement,
                     resources.placement,
                     placement_version,
                     self.generation,
-                    layer,
+                    placement,
                 );
                 self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
                 if let Some((effect_key, effect_version)) = crate::gpu_exec::effect_chain_key(layer) {
