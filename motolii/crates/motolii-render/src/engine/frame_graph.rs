@@ -32,6 +32,7 @@ pub(super) struct EngineFrameGraph {
     gpu_content: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
     gpu_placement: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
     gpu_effects: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
+    gpu_image_sources: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentImageSource>,
 }
 
 impl EngineFrameGraph {
@@ -58,7 +59,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_image_sources: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -84,6 +85,7 @@ impl EngineFrameGraph {
             gpu_content: &mut self.gpu_content,
             gpu_placement: &mut self.gpu_placement,
             gpu_effects: &mut self.gpu_effects,
+            gpu_image_sources: &mut self.gpu_image_sources,
         };
         let evaluated = self.graph.evaluate(
             &mut executor,
@@ -111,6 +113,7 @@ struct ProgramExecutor<'a> {
     gpu_content: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
     gpu_placement: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
     gpu_effects: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
+    gpu_image_sources: &'a mut crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentImageSource>,
 }
 impl NodeExecutor for ProgramExecutor<'_> {
     type Error = EngineError;
@@ -213,6 +216,32 @@ impl NodeExecutor for ProgramExecutor<'_> {
                             self.gpu_resources.mark_resident(content_key, version, self.generation);
                         }
                     }
+                    let source_values: Vec<_> = layer.image_sources.iter().flat_map(|row| row.iter()).collect();
+                    if source_values.len() != resources.image_sources.len() {
+                        return Err(EngineError::Store(format!(
+                            "GPU image-source lowering mismatch for layer {}: semantic={} lowered={}",
+                            layer.layer.0,
+                            source_values.len(),
+                            resources.image_sources.len(),
+                        )));
+                    }
+                    for (source_key, source_value) in resources.image_sources.iter().copied().zip(source_values) {
+                        let version = self.gpu_resources.version(source_key)
+                            .ok_or_else(|| EngineError::Store("GPU image-source version missing".into()))?;
+                        let built = self.engine.gpu_resident_image_source(
+                            self.gpu_image_sources,
+                            source_key,
+                            version,
+                            self.generation,
+                            source_value,
+                            self.comp,
+                            camera,
+                        )?;
+                        if built.is_some() {
+                            self.gpu_resources.mark_resident(source_key, version, self.generation);
+                        }
+                    }
+
                     resident_resources.insert((layer.layer, layer.instance), resources);
                 }
 
@@ -222,6 +251,7 @@ impl NodeExecutor for ProgramExecutor<'_> {
                     content: self.gpu_content,
                     placement: self.gpu_placement,
                     effects: self.gpu_effects,
+                    image_sources: self.gpu_image_sources,
                 };
                 let prepared = self.engine.prepare_gpu_scene_with_solver_resident(
                     scene,
