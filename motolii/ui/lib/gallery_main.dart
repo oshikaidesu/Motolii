@@ -9,7 +9,9 @@ import 'session/editor_session.dart';
 void main() {
   const stories = {'default', 'dense', 'text'};
   final requested = Uri.base.queryParameters['story'];
-  runApp(GalleryStory(story: stories.contains(requested) ? requested! : 'default'));
+  runApp(
+    GalleryStory(story: stories.contains(requested) ? requested! : 'default'),
+  );
 }
 
 @Preview(name: 'Default workspace', group: 'Motolii')
