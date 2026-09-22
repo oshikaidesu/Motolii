@@ -22,6 +22,7 @@ mod placement_backend;
 mod scene_root;
 mod semantic_adapter;
 mod snapshot_backend;
+mod special_content_backend;
 mod resource_store;
 mod telemetry;
 mod types;
