@@ -91,6 +91,13 @@ impl EngineFrameGraph {
         if let Some(scene) = evaluated.value(self.scene).and_then(|value| value.downcast_ref::<SceneValue>()) {
             let adapter = crate::gpu_exec::SemanticGpuAdapter::new(&self.program, &evaluated);
             let inputs = adapter.contributions(scene).map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
+            // Phase 1: every contribution output identity exists before any
+            // matte/clip/cross-layer dependency is connected.
+            for input in &inputs {
+                self.gpu_lowerer.declare_contribution(&mut self.gpu_resources, input)
+                    .map_err(|error| EngineError::Store(format!("GPU contribution declaration: {error:?}")))?;
+            }
+            // Phase 2: lower producers and cross-contribution edges.
             for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
                 let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
                 let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
