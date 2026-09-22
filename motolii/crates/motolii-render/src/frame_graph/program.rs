@@ -221,6 +221,7 @@ mod tests {
         ]).unwrap();
         let program = SceneProgram::compile(&doc.view()).unwrap();
         let clusters = program.static_clusters().unwrap();
+        println!("{}", clusters.to_markdown());
         assert!(clusters.clusters_with_kind(super::NodeKind::SceneComposite).next().is_some());
         let effect_images = clusters.clusters_with_kind(super::NodeKind::EffectImages).next().expect("lookbehind cluster");
         assert_eq!(effect_images.signature.dynamic, super::StaticDynamicClass::TemporalSample);
