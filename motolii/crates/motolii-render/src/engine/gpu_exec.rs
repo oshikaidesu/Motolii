@@ -7,10 +7,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
-use crate::frame_graph::NodeKey;
+use crate::frame_graph::{NodeKey, WorkKey};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct GpuResourceId(u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct GpuContentCacheKey {
+    pub(crate) work: WorkKey,
+    pub(crate) variant: u64,
+}
 
 impl GpuResourceId {
     pub(crate) fn from_parts(kind: GpuResourceKind, semantic: NodeKey, discriminator: u64) -> Self {
