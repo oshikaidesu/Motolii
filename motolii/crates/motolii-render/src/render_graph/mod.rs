@@ -5,4 +5,4 @@
 
 pub mod work;
 
-pub use work::{RenderGraph, RenderWork, ResourceId};
+pub use work::{CompositeItem, RenderGraph, RenderWork, ResourceId};
