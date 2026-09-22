@@ -229,6 +229,49 @@ mod tests {
     }
 
     #[test]
+    fn feedback_side_effect_pass_is_never_cache_cut() {
+        let mut graph = GpuResourceGraph::default();
+        let history = resource(
+            90,
+            GpuResourceClass::History,
+            7,
+            GpuResourceLifetime::Persistent,
+            None,
+        );
+        let history_key = history.key();
+        graph.upsert_resource(history).unwrap();
+
+        let output = resource(
+            91,
+            GpuResourceClass::Effect,
+            7,
+            GpuResourceLifetime::Persistent,
+            None,
+        );
+        let output_key = output.key();
+        graph.upsert_resource(output).unwrap();
+
+        let feedback = pass(
+            GpuPassKind::Render,
+            900,
+            vec![history_key],
+            vec![output_key],
+            vec![],
+            true,
+            true,
+        );
+        let feedback_key = feedback.key();
+        graph.insert_pass(feedback).unwrap();
+
+        graph.mark_resident(history_key, GpuResourceVersion::new(7), 1);
+        graph.mark_resident(output_key, GpuResourceVersion::new(7), 1);
+
+        let plan = GpuPlanner.plan(&graph, [feedback_key]).unwrap();
+        assert!(plan.passes.contains(&feedback_key));
+        assert!(!plan.skipped_cached.contains(&feedback_key));
+    }
+
+    #[test]
     fn transform_change_does_not_rebuild_resident_content() {
         let mut graph = GpuResourceGraph::default();
         let content = resource(1, GpuResourceClass::Content, 1, GpuResourceLifetime::Persistent, None);
