@@ -102,7 +102,7 @@ impl StaticClusterReport {
 /// predict runtime DynamicInput values; it marks nodes that *may* request them.
 pub fn cluster_topology(
     topology: &GraphTopology,
-    dynamic_capable: impl Fn(&GraphNode) -> bool,
+    dynamic_class: impl Fn(&GraphNode) -> StaticDynamicClass,
 ) -> StaticClusterReport {
     let reachable = topology.reachable();
     let mut grouped: BTreeMap<StaticClusterSignature, Vec<NodeKey>> = BTreeMap::new();
@@ -114,7 +114,7 @@ pub fn cluster_topology(
             time: node.identity().time_dependency,
             quality: node.identity().quality_dependency,
             temporal_edge: node.identity().input_times.iter().any(|time| !matches!(time, InputTime::Same)),
-            dynamic: if dynamic_capable(node) { StaticDynamicClass::TemporalSample } else { StaticDynamicClass::None },
+            dynamic: dynamic_class(node),
         };
         grouped.entry(signature).or_default().push(*key);
     }
@@ -187,22 +187,7 @@ pub fn scene_node_may_request_dynamic_inputs(kind: NodeKind) -> bool {
 }
 
 pub fn scene_static_clusters(topology: &GraphTopology) -> StaticClusterReport {
-    let reachable = topology.reachable();
-    let mut grouped: BTreeMap<StaticClusterSignature, Vec<NodeKey>> = BTreeMap::new();
-
-    for key in &reachable {
-        let node = topology.node(*key).expect("reachable node");
-        let signature = StaticClusterSignature {
-            domain: domain(node.identity().kind),
-            time: node.identity().time_dependency,
-            quality: node.identity().quality_dependency,
-            temporal_edge: node.identity().input_times.iter().any(|time| !matches!(time, InputTime::Same)),
-            dynamic: scene_dynamic_class(node.identity().kind),
-        };
-        grouped.entry(signature).or_default().push(*key);
-    }
-
-    build_report(topology, reachable, grouped)
+    cluster_topology(topology, |node| scene_dynamic_class(node.identity().kind))
 }
 
 pub fn domain(kind: NodeKind) -> StaticDomain {
