@@ -10,6 +10,37 @@ pub(super) struct GpuSceneValue {
     pub layer_ids: Vec<LayerId>,
 }
 
+pub(super) struct GpuResidentScene<'a> {
+    pub graph: &'a crate::gpu_exec::GpuResourceGraph,
+    pub resources: &'a std::collections::HashMap<(LayerId, u32), crate::gpu_exec::GpuContributionResources>,
+    pub content: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
+    pub placement: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
+    pub effects: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
+}
+
+impl GpuResidentScene<'_> {
+    fn resources_for(&self, source: &SceneLayerValue) -> Option<&crate::gpu_exec::GpuContributionResources> {
+        self.resources.get(&(source.layer, source.instance))
+    }
+
+    fn content(&self, source: &SceneLayerValue) -> Option<crate::gpu_exec::ResidentContent> {
+        let key = self.resources_for(source)?.content?;
+        let version = self.graph.version(key)?;
+        self.content.current(key, version).cloned()
+    }
+
+    fn placement(&self, source: &SceneLayerValue) -> Option<crate::gpu_exec::ResidentPlacement> {
+        let key = self.resources_for(source)?.placement;
+        let version = self.graph.version(key)?;
+        self.placement.current(key, version).copied()
+    }
+
+    fn effects(&self, source: &SceneLayerValue) -> Option<crate::gpu_exec::ResidentEffectChain> {
+        let (key, version) = crate::gpu_exec::effect_chain_key(source)?;
+        self.effects.current(key, version).cloned()
+    }
+}
+
 impl Engine {
     pub(super) fn prepare_gpu_scene_with_solver(
         &mut self,
@@ -20,6 +51,19 @@ impl Engine {
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
     ) -> Result<GpuSceneValue, EngineError> {
+        self.prepare_gpu_scene_with_solver_resident(scene, solver, comp, projection_camera, time, fps, None)
+    }
+
+    pub(super) fn prepare_gpu_scene_with_solver_resident(
+        &mut self,
+        scene: &SceneValue,
+        solver: &SolverPlanValue,
+        comp: CompSpec,
+        projection_camera: ResolvedCamera,
+        time: crate::doc::core::RationalTime,
+        fps: crate::doc::store::Fps,
+        resident: Option<&GpuResidentScene<'_>>,
+    ) -> Result<GpuSceneValue, EngineError> {
         let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
@@ -29,7 +73,7 @@ impl Engine {
             // contributions that cannot feed analysis/matte/solver work.
             let planned = self.plan_frame_graph_scene(scene, solver, comp, projection_camera);
             let scene = planned.as_ref().unwrap_or(scene);
-            let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+            let mut prepared = self.prepare_gpu_scene_resident(scene, comp, projection_camera, resident)?;
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
             return Ok(prepared);
         }
@@ -43,10 +87,10 @@ impl Engine {
                 .cloned()
                 .collect(),
         };
-        let mut base = self.prepare_gpu_scene(&base_scene, comp, projection_camera)?;
+        let mut base = self.prepare_gpu_scene_resident(&base_scene, comp, projection_camera, resident)?;
         self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut base)?;
 
-        let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+        let mut prepared = self.prepare_gpu_scene_resident(scene, comp, projection_camera, resident)?;
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
             self.attach_block_id(id, &mut layer.layer, comp);
         }
@@ -146,6 +190,16 @@ impl Engine {
     }
 
     pub(super) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+        self.prepare_gpu_scene_resident(scene, comp, projection_camera, None)
+    }
+
+    fn prepare_gpu_scene_resident(
+        &mut self,
+        scene: &SceneValue,
+        comp: CompSpec,
+        projection_camera: ResolvedCamera,
+        resident: Option<&GpuResidentScene<'_>>,
+    ) -> Result<GpuSceneValue, EngineError> {
         #[derive(Clone, Copy)]
         struct Entry {
             layer: LayerId,
@@ -177,8 +231,11 @@ impl Engine {
                 (Some(content), natural, padding, frame, true)
             } else if let Some((content, natural)) = overlay_content {
                 (Some(content), natural, 0, None, false)
-            } else if let Some(resident) = self.frame_graph_resident_content(source) {
-                (Some(resident.content), resident.natural, 0, None, false)
+            } else if !force_picture {
+                if let Some(resident_content) = resident.and_then(|resident| resident.content(source)) {
+                    (Some(resident_content.content), resident_content.natural, 0, None, false)
+                } else {
+                    let (content, natural) = match &source.content {
             } else {
                 let (content, natural) = match &source.content {
                 SceneContentValue::None => continue,
