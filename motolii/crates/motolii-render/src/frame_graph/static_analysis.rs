@@ -349,7 +349,7 @@ mod tests {
         let cnode = node(NodeKind::PropertyConstant, vec![b.key()]);
         let topology = GraphTopology::try_new([a.clone(), b.clone(), cnode.clone()], vec![cnode.key()]).unwrap();
         let report = cluster_topology(&topology, |_| StaticDynamicClass::None);
-                assert!(report.absent_builtin_kinds.contains(&));
+        assert!(report.absent_builtin_kinds.contains(&NodeKind::Mask));
         assert!(report.merge_candidates.contains(&(a.key(), b.key())));
         assert!(!report.merge_candidates.contains(&(b.key(), cnode.key())), "root consumer is not a merge candidate");
     }
