@@ -102,7 +102,8 @@ impl EditorRuntime{
             for i in &mut intents{if let Intent::SetTextDocument{document,..}=i{for style in &mut document.styles{style.font=crate::doc::store::FontRef{family:family.into(),..Default::default()};}}}
         }
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
-            let camera = self.engine.resolve_camera(&view,self.time()?).map_err(e)?;
+            let camera_time=self.time()?;
+            let camera = self.engine.frame_graph_document_camera(&view,camera_time).map_err(e)?;
             for (name,value) in property::camera_values(&camera) {
                 intents.push(Intent::SetConstant { layer:id, property:PropertyId::new(name).map_err(e)?, value });
             }
@@ -304,7 +305,11 @@ impl EditorRuntime{
             // hover。掴まないので Document には触らず、ギズモの絵だけが変わる。
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
-                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera(seen)?,self.projection_camera(seen,ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection))?,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
+                let at=self.time()?;
+                let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
+                let observer=self.view_camera(seen)?;
+                let projection_camera=self.projection_camera(seen,projection)?;
+                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
