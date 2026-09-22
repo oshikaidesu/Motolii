@@ -44,6 +44,15 @@ pub(crate) struct GpuContributionResources {
 /// Implementations add/update logical resources and producer passes. They do
 /// not record or submit GPU commands.
 pub(crate) trait GpuLowerer {
+    /// Phase 1 declares stable contribution output identities before any
+    /// cross-contribution edge (matte/clip/scene composition) is connected.
+    fn declare_contribution(
+        &mut self,
+        graph: &mut GpuResourceGraph,
+        input: &GpuContributionInput,
+    ) -> Result<GpuResourceKey, Self::Error>;
+
+
     type Error: From<GpuGraphError>;
 
     fn lower_contribution(
