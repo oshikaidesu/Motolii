@@ -147,8 +147,6 @@ pub struct Engine {
     video_stream_namespace: u64,
     /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
     pub(crate) feedback_namespace: u64,
-    /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
-    feedback_saw_composites: bool,
     /// Freeze の cache(層の投影の前の絵、書類の隣)。
     pub(crate) frozen: frozen::FrozenStore,
     /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
@@ -265,7 +263,6 @@ impl Engine {
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
             material_picture: None,
