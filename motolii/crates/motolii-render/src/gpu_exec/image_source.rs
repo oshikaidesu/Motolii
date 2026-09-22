@@ -122,6 +122,24 @@ mod tests {
     use crate::frame_graph::{NodeIdentity, NodeKind};
 
     #[test]
+    fn snapshot_miss_has_complete_producer_chain() {
+        let effect = NodeKey::for_identity(&NodeIdentity::new(NodeKind::Custom(89), vec![]));
+        let source = SceneImageSourceValue::Content {
+            layer: LayerId(6),
+            content: SceneContentValue::None,
+            time: RationalTime::try_new(1, 3).unwrap(),
+            namespace: 2,
+        };
+        let input = GpuImageSourceInput { effect, pass_slot: 0, image_slot: 0, source };
+        let mut graph = GpuResourceGraph::default();
+        let resources = lower_image_source(&mut graph, &input).unwrap();
+        let snapshot_pass = graph.producer(resources.snapshot).unwrap();
+        let plan = crate::gpu_exec::GpuPlanner.plan(&graph, [snapshot_pass]).unwrap();
+        assert_eq!(plan.passes.len(), 2);
+        assert_eq!(plan.passes.last().copied(), Some(snapshot_pass));
+    }
+
+    #[test]
     fn same_temporal_request_reuses_snapshot_identity_and_version() {
         let effect = NodeKey::for_identity(&NodeIdentity::new(NodeKind::Custom(90), vec![]));
         let source = SceneImageSourceValue::Content {
