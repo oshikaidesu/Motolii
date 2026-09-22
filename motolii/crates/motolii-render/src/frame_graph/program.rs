@@ -241,6 +241,7 @@ mod tests {
         println!("{cluster_table}");
         assert!(cluster_table.contains("MaterialValue"));
         assert!(cluster_table.contains("TransformValue"));
+        assert!(clusters.clusters.iter().any(|cluster| cluster.input_types.iter().any(|ty| ty.ends_with("Value"))));
         let property = program.properties().node_for(cube, &opacity).unwrap();
         let material = program.content().binding(cube).unwrap().material.unwrap();
         assert_eq!(frame.value(property).and_then(|value| value.downcast_ref::<Value>()), Some(&Value::F64(0.75)));
