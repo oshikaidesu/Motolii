@@ -326,10 +326,12 @@ impl GpuLowerer for LogicalGpuLowerer {
         )?;
 
         let operations = Vec::new();
+        let mut snapshot_rows = Vec::with_capacity(input.direct_effects.len());
         let mut current = content;
 
         for (index, effect) in input.direct_effects.iter().copied().enumerate() {
             let mut reads = current.into_iter().collect::<Vec<_>>();
+            let mut snapshots = Vec::new();
             if let Some(row) = input.image_sources.get(index) {
                 for (image_slot, source) in row.iter().cloned().enumerate() {
                     let resources = super::image_source::lower_image_source(
@@ -342,8 +344,10 @@ impl GpuLowerer for LogicalGpuLowerer {
                         },
                     )?;
                     reads.push(resources.snapshot);
+                    snapshots.push(resources.snapshot);
                 }
             }
+            snapshot_rows.push(snapshots);
             let output = Self::resource(
                 graph,
                 effect,
@@ -465,6 +469,7 @@ impl GpuLowerer for LogicalGpuLowerer {
             placement,
             contribution,
             prepared,
+            snapshot_rows,
             operations,
         })
     }
