@@ -391,6 +391,44 @@ impl Engine {
         Ok(state)
     }
 
+    pub(in crate::engine) fn frame_graph_snapshot_rows(
+        &mut self,
+        source: &crate::frame_graph::SceneLayerValue,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::render::engine::ResolvedCamera,
+    ) -> Result<Vec<Vec<crate::render::compositor::GpuTexture2D>>, EngineError> {
+        let Some(state) = self.frame_graph.as_mut() else { return Ok(Vec::new()) };
+        let mut rows = Vec::with_capacity(source.image_sources.len());
+        for (pass_slot, row) in source.image_sources.iter().enumerate() {
+            let Some(effect) = source.effect_keys.get(pass_slot).copied() else {
+                rows.push(Vec::new());
+                continue;
+            };
+            let mut textures = Vec::with_capacity(row.len());
+            for (image_slot, image) in row.iter().enumerate() {
+                let identity = crate::gpu_exec::snapshot_identity(effect, pass_slot as u32, image_slot as u32);
+                let key = identity.key();
+                let version = crate::gpu_exec::snapshot_version(image);
+                let Some(texture) = self.gpu_snapshot_source(
+                    &mut state.gpu_snapshots,
+                    key,
+                    version,
+                    state.generation,
+                    image,
+                    comp,
+                    camera,
+                )? else {
+                    textures.clear();
+                    break;
+                };
+                state.gpu_resources.mark_resident(key, version, state.generation);
+                textures.push(texture);
+            }
+            rows.push(textures);
+        }
+        Ok(rows)
+    }
+
     pub(in crate::engine) fn frame_graph_resident_effects(
         &self,
         source: &crate::frame_graph::SceneLayerValue,
