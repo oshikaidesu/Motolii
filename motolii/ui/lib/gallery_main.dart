@@ -135,8 +135,9 @@ class _GalleryHome extends StatelessWidget {
                         style: const TextStyle(color: EditorTheme.muted),
                       ),
                     ),
-                    for (final entry
-                        in galleryStories.where((item) => item.group == group))
+                    for (final entry in galleryStories.where(
+                      (item) => item.group == group,
+                    ))
                       EditorButton(
                         entry.name,
                         () => onStory(entry.id),
@@ -175,11 +176,7 @@ class _GalleryHome extends StatelessWidget {
   }
 }
 
-@Preview(
-  name: 'Controls',
-  group: 'Foundation',
-  wrapper: galleryPreviewWrapper,
-)
+@Preview(name: 'Controls', group: 'Foundation', wrapper: galleryPreviewWrapper)
 Widget foundationControlsPreview() => const FoundationControlsStory();
 
 class FoundationControlsStory extends StatefulWidget {
@@ -206,9 +203,7 @@ class _FoundationControlsStoryState extends State<FoundationControlsStory> {
           children: [
             panelTitle('Controls'),
             EditorBar(
-              padding: const EdgeInsets.symmetric(
-                horizontal: EditorMetrics.s4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
               children: [
                 EditorButton(
                   'Selected',
@@ -297,17 +292,9 @@ class _PanelChromeStoryState extends State<PanelChromeStory> {
                     'Transform',
                     Column(
                       children: [
-                        _fieldRow(
-                          'X',
-                          x,
-                          (value) => setState(() => x = value),
-                        ),
+                        _fieldRow('X', x, (value) => setState(() => x = value)),
                         const SizedBox(height: EditorMetrics.s4),
-                        _fieldRow(
-                          'Y',
-                          y,
-                          (value) => setState(() => y = value),
-                        ),
+                        _fieldRow('Y', y, (value) => setState(() => y = value)),
                       ],
                     ),
                   ),
@@ -336,22 +323,19 @@ class _PanelChromeStoryState extends State<PanelChromeStory> {
     ),
   );
 
-  Widget _fieldRow(
-    String label,
-    String value,
-    ValueChanged<String> onCommit,
-  ) => Row(
-    children: [
-      SizedBox(width: EditorMetrics.s32, child: Text(label)),
-      Expanded(
-        child: EditorDraftField(
-          value: value,
-          label: label,
-          onCommit: (next) async => onCommit(next),
-        ),
-      ),
-    ],
-  );
+  Widget _fieldRow(String label, String value, ValueChanged<String> onCommit) =>
+      Row(
+        children: [
+          SizedBox(width: EditorMetrics.s32, child: Text(label)),
+          Expanded(
+            child: EditorDraftField(
+              value: value,
+              label: label,
+              onCommit: (next) async => onCommit(next),
+            ),
+          ),
+        ],
+      );
 }
 
 @Preview(name: 'Dock', group: 'Workspace', wrapper: galleryPreviewWrapper)
@@ -405,10 +389,7 @@ class _WorkspacePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) => ColoredBox(
     color: name == 'Stage' ? EditorTheme.app : EditorTheme.panel,
     child: Center(
-      child: Text(
-        name,
-        style: const TextStyle(color: EditorTheme.muted),
-      ),
+      child: Text(name, style: const TextStyle(color: EditorTheme.muted)),
     ),
   );
 }
