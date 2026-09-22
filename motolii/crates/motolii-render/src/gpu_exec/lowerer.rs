@@ -36,6 +36,10 @@ pub(crate) struct GpuContributionInput {
 pub(crate) struct GpuContributionResources {
     pub content: Option<GpuResourceKey>,
     pub placement: GpuResourceKey,
+    /// Stable contribution output declared before cross-contribution edges are
+    /// connected. Matte/clip/composition backends must address this resource
+    /// directly instead of rediscovering layers from SceneValue.
+    pub contribution: GpuResourceKey,
     pub final_image_or_geometry: Option<GpuResourceKey>,
 }
 
