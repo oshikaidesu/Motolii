@@ -279,6 +279,79 @@ impl Engine {
     /// This deliberately makes the new boundary draw real pixels before replacing
     /// resource preparation. The RenderGraph, not GpuScene, owns the ordered
     /// composite description on this path.
+    fn cassette_plain_still_layers(
+        &mut self,
+        scene: &SceneValue,
+        projection_camera: ResolvedCamera,
+    ) -> Result<Option<Vec<crate::render::compositor::LayerWithPasses>>, EngineError> {
+        use crate::frame_graph::SceneContentValue;
+        use crate::render::compositor::{Layer, LayerContent, LayerWithPasses};
+
+        let mut layers = Vec::new();
+        for source in &scene.layers {
+            if !source.effects.is_empty()
+                || !source.after_effects.is_empty()
+                || !source.image_sources.is_empty()
+                || !source.masks.is_empty()
+                || source.matte.is_some()
+                || source.clip_to_below
+                || source.flatten
+                || source.environment
+            {
+                return Ok(None);
+            }
+
+            let SceneContentValue::Media { source: media, .. } = &source.content else {
+                if matches!(source.content, SceneContentValue::None) {
+                    continue;
+                }
+                return Ok(None);
+            };
+            if !crate::render::media::is_still_image_path(&media.path) {
+                return Ok(None);
+            }
+
+            let (content, natural) = self.still_texture_for(&media.path)?;
+            let Some(content) = content else { continue };
+            if !matches!(content, LayerContent::Texture(_)) {
+                return Ok(None);
+            }
+
+            let placement = crate::doc::core::LayerPlacement {
+                transform: source.transform.affine,
+                world_transform: Some(source.transform.spatial),
+                opacity: source.opacity,
+                order: i32::from(source.order),
+                z: source.transform.spatial.translation.z,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
+                plane: None,
+            };
+            let layer = Layer {
+                content,
+                size: natural,
+                placement,
+                projection: source.projection,
+                projection_camera,
+                blend_mode: crate::render::engine::translate::translate_blend_mode(source.blend)?,
+                shading: Default::default(),
+                displace: Default::default(),
+                clip: None,
+                shadow: 0.0,
+                outline: self.outline_id(source.layer),
+                frame: None,
+            };
+            layers.push(LayerWithPasses {
+                layer,
+                passes: Vec::new(),
+                padding: 0,
+                pass_sources: Vec::new(),
+                cut: Vec::new(),
+            });
+        }
+        Ok(Some(layers))
+    }
+
     pub(in crate::engine) fn render_frame_graph_cassette_pixels(
         &mut self,
         view: &StoreView<'_>,
@@ -295,26 +368,36 @@ impl Engine {
         let graph = crate::render_lowering::lower_scene(&scene)
             .map_err(|_| EngineError::Store("Render lowering failed".into()))?;
 
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("GpuScene reference resources are missing".into()))?;
+        let document_camera = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.program.camera()))
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
 
-        // The first visual slice consumes Composite work for ordering/placement.
-        // Resource production remains the oracle. This assertion prevents the
-        // bridge from silently becoming another semantic evaluator.
-        let composite = graph.work().iter().find_map(|work| match work {
-            crate::render_graph::RenderWork::Composite { items, .. } => Some(items),
-            _ => None,
-        }).ok_or_else(|| EngineError::Store("RenderGraph composite work is missing".into()))?;
-        let order: std::collections::HashMap<_, _> = composite.iter()
-            .enumerate().map(|(index, item)| (item.layer, index)).collect();
-        let mut paired: Vec<_> = prepared.layer_ids.iter().copied()
-            .zip(prepared.layers.iter().cloned())
-            .collect();
-        paired.sort_by_key(|(id, _)| order.get(id).copied().unwrap_or(usize::MAX));
-        let mut layers: Vec<_> = paired.into_iter().map(|(_, layer)| layer).collect();
+        let mut layers = if let Some(layers) = self.cassette_plain_still_layers(&scene, document_camera)? {
+            layers
+        } else {
+            let prepared = state.frame.as_ref()
+                .and_then(|frame| frame.value(state.gpu))
+                .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
+                .cloned()
+                .ok_or_else(|| EngineError::Store("GpuScene reference resources are missing".into()))?;
+
+            // Unsupported resource kinds still use the frozen oracle, but order is
+            // taken from the lowered RenderGraph so semantic ownership does not
+            // move back into the backend.
+            let composite = graph.work().iter().find_map(|work| match work {
+                crate::render_graph::RenderWork::Composite { items, .. } => Some(items),
+                _ => None,
+            }).ok_or_else(|| EngineError::Store("RenderGraph composite work is missing".into()))?;
+            let order: std::collections::HashMap<_, _> = composite.iter()
+                .enumerate().map(|(index, item)| (item.layer, index)).collect();
+            let mut paired: Vec<_> = prepared.layer_ids.iter().copied()
+                .zip(prepared.layers.iter().cloned())
+                .collect();
+            paired.sort_by_key(|(id, _)| order.get(id).copied().unwrap_or(usize::MAX));
+            paired.into_iter().map(|(_, layer)| layer).collect()
+        };
 
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
