@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
+use crate::gpu_exec::GpuLowerer;
 use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue};
 use crate::picture::resolved::ResolvedLayer;
 
