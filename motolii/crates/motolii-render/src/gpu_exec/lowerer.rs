@@ -27,7 +27,11 @@ pub(crate) struct GpuContributionInput {
     pub after_effects: Vec<VersionedSemantic>,
     pub image_sources: Vec<Vec<crate::frame_graph::SceneImageSourceValue>>,
     pub masks: Vec<VersionedSemantic>,
+    /// Explicit cross-contribution dependency. The semantic adapter resolves
+    /// authoring LayerId to a stable contribution resource exactly once.
     pub matte_source: Option<GpuResourceKey>,
+    pub clip_to_below: bool,
+    pub stencil: bool,
     pub plate: Option<VersionedSemantic>,
 }
 
