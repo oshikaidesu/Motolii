@@ -9,7 +9,7 @@ use crate::render::media::blob::{BlobSettings, BlobSource, BlobTracker};
 
 use super::{
     ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode,
-    GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, NodeIdentity,
+    GroupBackgroundProgram, MaskProgram, MaskValue, MediaFrameValue, NodeIdentity,
     NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PropertyProgram,
     SceneContentValue, SceneLayerValue, TextProgram, TextShapeValue, TimeDependency, TransformProgram,
     TransformValue, VisibilityProgram, VisibilityValue,
@@ -106,7 +106,7 @@ impl AnalysisProgram {
             let content = match meta.source {
                 LayerSource::Text => text.binding(layer).map(|binding| (1, binding.shape)),
                 LayerSource::Shape => content.binding(layer).and_then(|binding| binding.content).map(|key| (2, key)),
-                LayerSource::File { .. } => content.binding(layer).and_then(|binding| binding.material.or(binding.content)).map(|key| (3, key)),
+                LayerSource::File { .. } => content.binding(layer).and_then(|binding| binding.content).map(|key| (3, key)),
                 LayerSource::Group => groups.binding(layer).map(|key| (2, key)),
                 LayerSource::Particles => particles.binding(layer).map(|binding| (4, binding.particles)),
                 _ => None,
@@ -263,7 +263,7 @@ impl AnalysisProgram {
                                 Some((3, _)) => {
                                     let value = inputs.at(cursor).ok_or(AnalysisProgramError::InvalidInput(node.identity().kind))?;
                                     cursor += 1;
-                                    if let Some(material) = value.downcast_ref::<MaterialValue>() {
+                                    if let Some(material) = value.downcast_ref::<MediaSourceValue>() {
                                         SceneContentValue::Material(material.clone())
                                     } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
                                         match frame.time {
