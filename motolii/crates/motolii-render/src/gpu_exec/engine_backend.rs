@@ -43,18 +43,11 @@ pub(crate) enum EngineGpuBackendError {
     SinkRequiresEngineContext(GpuPassKey),
 }
 
-pub(crate) struct EngineGpuBackend<'a, X = NoCrossExecutor> {
+pub(crate) struct EngineGpuBackend<'a, X> {
     pub operations: &'a GpuOperationTable<EngineGpuOperation>,
     pub cross: X,
 }
 
-#[derive(Clone, Copy, Default)]
-pub(crate) struct NoCrossExecutor;
-impl EngineCrossExecutor for NoCrossExecutor {
-    type Error = EngineGpuBackendError;
-    fn execute_clip(&mut self, _source: GpuResourceKey, _base: GpuResourceKey, _output: GpuResourceKey) -> Result<(), Self::Error> { Ok(()) }
-    fn execute_matte(&mut self, _target: GpuResourceKey, _source: GpuResourceKey, _output: GpuResourceKey, _mode: crate::doc::store::MatteMode) -> Result<(), Self::Error> { Ok(()) }
-}
 
 impl<X> GpuBackend for EngineGpuBackend<'_, X>
 where X: EngineCrossExecutor<Error = EngineGpuBackendError> {
