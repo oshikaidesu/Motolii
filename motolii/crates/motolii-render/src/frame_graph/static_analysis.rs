@@ -246,7 +246,9 @@ pub fn domain(kind: NodeKind) -> StaticDomain {
         | NodeKind::Relation
         | NodeKind::RelationSet => StaticDomain::Property,
 
-        NodeKind::TextContent        | NodeKind::ShapeGeometry        | NodeKind::MediaExtent
+        NodeKind::TextContent
+        | NodeKind::ShapeGeometry
+        | NodeKind::MediaExtent
         | NodeKind::MediaFrame
         | NodeKind::MeshSource
         | NodeKind::Material
@@ -255,7 +257,7 @@ pub fn domain(kind: NodeKind) -> StaticDomain {
 
         NodeKind::Layout
         | NodeKind::FlowWindow
-        Background
+        | NodeKind::GroupBackground
         | NodeKind::TextObstacle
         | NodeKind::TextShape
         | NodeKind::TextFlow => StaticDomain::Layout,
@@ -278,11 +280,10 @@ pub fn domain(kind: NodeKind) -> StaticDomain {
         NodeKind::SolverPlan => StaticDomain::Solver,
 
         NodeKind::CompositeContribution
-        Composite
+        | NodeKind::GroupComposite
         | NodeKind::SceneComposite => StaticDomain::Scene,
 
-        NodeKind::Camera  => StaticDomain::View,
-
+        NodeKind::Camera => StaticDomain::View,
         NodeKind::Custom(_) => StaticDomain::Other,
     }
 }
