@@ -16,6 +16,7 @@ pub(super) struct GpuResidentScene<'a> {
     pub content: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
     pub placement: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
     pub effects: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
+    pub image_sources: &'a crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentImageSource>,
 }
 
 impl GpuResidentScene<'_> {
@@ -38,6 +39,17 @@ impl GpuResidentScene<'_> {
     fn effects(&self, source: &SceneLayerValue) -> Option<crate::gpu_exec::ResidentEffectChain> {
         let (key, version) = crate::gpu_exec::effect_chain_key(source)?;
         self.effects.current(key, version).cloned()
+    }
+
+    fn image_source(
+        &self,
+        effect: crate::frame_graph::NodeKey,
+        instance: u32,
+        index: usize,
+    ) -> Option<crate::render::compositor::GpuTexture2D> {
+        let key = crate::gpu_exec::image_source_identity(effect, instance, index).key();
+        let version = self.graph.version(key)?;
+        self.image_sources.current(key, version).map(|resident| resident.texture.clone())
     }
 }
 
@@ -343,7 +355,7 @@ impl Engine {
                 );
                 (
                     direct_passes.into_iter().chain(plate_passes).collect(),
-                    self.frame_graph_image_sources(&source.image_sources, comp, projection_camera)?,
+                    self.frame_graph_image_sources(source, comp, projection_camera, resident)?,
                 )
             };
             // Stencil/Silhouette are matte sources, never compositor blend modes.
@@ -578,13 +590,21 @@ impl Engine {
 
     fn frame_graph_image_sources(
         &mut self,
-        rows: &[Vec<SceneImageSourceValue>],
+        layer: &SceneLayerValue,
         comp: CompSpec,
         camera: ResolvedCamera,
+        resident: Option<&GpuResidentScene<'_>>,
     ) -> Result<Vec<Vec<crate::render::compositor::GpuTexture2D>>, EngineError> {
-        rows.iter().map(|row| {
+        layer.image_sources.iter().enumerate().map(|(row_index, row)| {
+            let effect = layer.image_source_effects.get(row_index).copied();
             let mut textures = Vec::with_capacity(row.len());
-            for source in row {
+            for (source_index, source) in row.iter().enumerate() {
+                if let Some(texture) = effect.and_then(|effect| {
+                    resident.and_then(|resident| resident.image_source(effect, layer.instance, source_index))
+                }) {
+                    textures.push(texture);
+                    continue;
+                }
                 match self.frame_graph_image_source(source, comp, camera)? {
                     Some(texture) => textures.push(texture),
                     None => {
