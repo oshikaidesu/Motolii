@@ -4,11 +4,13 @@
 //! resource/execution graph and deliberately does not preserve the old
 //! GpuScene/LayerWithPasses orchestration contract.
 
+mod executor;
 mod graph;
 mod lowerer;
 mod planner;
 mod types;
 
+pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
 pub(crate) use graph::{GpuGraphError, GpuResourceDelta, GpuResourceGraph};
 pub(crate) use lowerer::{
     GpuContributionInput, GpuContributionResources, GpuLowerer, VersionedSemantic,
