@@ -1,5 +1,5 @@
 use crate::frame_graph::{
-    CanonicalEncoder, EffectValue, EvaluatedFrame, SceneContentValue, SceneLayerValue, SceneProgram,
+    CanonicalEncoder, EvaluatedFrame, SceneContentValue, SceneLayerValue, SceneProgram,
     SceneValue, TransformValue,
 };
 
@@ -15,6 +15,7 @@ pub(crate) enum SemanticAdapterError {
     Encode(crate::frame_graph::CanonicalError),
     MissingContribution(crate::doc::store::LayerId),
     MissingTransform(crate::doc::store::LayerId),
+    EffectIdentityMismatch(crate::doc::store::LayerId),
 }
 
 impl From<crate::frame_graph::CanonicalError> for SemanticAdapterError {
@@ -69,12 +70,8 @@ impl<'a> SemanticGpuAdapter<'a> {
             ).key())
         });
 
-        let effects = self.program.effects().binding(layer.layer)
-            .map(|binding| binding.effects.iter().filter_map(|node| {
-                let value = self.frame.value(*node)?.downcast_ref::<EffectValue>()?;
-                Some(VersionedSemantic { node: *node, version: effect_version(value) })
-            }).collect())
-            .unwrap_or_default();
+        let direct_effects = versioned_effects(layer.layer, &layer.effect_keys, &layer.effects)?;
+        let after_effects = versioned_effects(layer.layer, &layer.after_effect_keys, &layer.after_effects)?;
 
         let masks = self.program.masks().binding(layer.layer)
             .map(|binding| binding.masks.iter().filter_map(|node| {
@@ -91,7 +88,8 @@ impl<'a> SemanticGpuAdapter<'a> {
             instance: layer.instance,
             content,
             placement,
-            effects,
+            direct_effects,
+            after_effects,
             masks,
             matte_source,
             plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
@@ -151,11 +149,25 @@ fn content_version(value: &SceneContentValue) -> GpuResourceVersion {
     hash_encoded(encoded)
 }
 
-fn effect_version(value: &EffectValue) -> GpuResourceVersion {
+fn versioned_effects(
+    layer: crate::doc::store::LayerId,
+    keys: &[crate::frame_graph::NodeKey],
+    values: &[crate::picture::resolved::ResolvedEffect],
+) -> Result<Vec<VersionedSemantic>, SemanticAdapterError> {
+    if keys.len() != values.len() {
+        return Err(SemanticAdapterError::EffectIdentityMismatch(layer));
+    }
+    keys.iter().copied().zip(values).map(|(node, value)| {
+        Ok(VersionedSemantic { node, version: effect_version(value)? })
+    }).collect()
+}
+
+fn effect_version(value: &crate::picture::resolved::ResolvedEffect) -> Result<GpuResourceVersion, SemanticAdapterError> {
     let mut encoded = CanonicalEncoder::new();
-    let bytes = format!("{value:?}");
-    let _ = encoded.string(&bytes);
-    hash_encoded(encoded)
+    encoded.string(&value.plugin_id)?;
+    let bytes = serde_json::to_vec(&(value.scope, &value.params)).unwrap_or_default();
+    encoded.bytes(&bytes)?;
+    Ok(hash_encoded(encoded))
 }
 
 fn mask_version(value: &crate::frame_graph::MaskValue) -> GpuResourceVersion {
