@@ -49,6 +49,7 @@ pub struct StaticCluster {
     pub signature: StaticClusterSignature,
     pub nodes: Vec<NodeKey>,
     pub kinds: BTreeSet<NodeKind>,
+    pub output_types: BTreeSet<&'static str>,
     pub upstream: BTreeSet<StaticClusterId>,
     pub downstream: BTreeSet<StaticClusterId>,
 }
@@ -71,22 +72,31 @@ impl StaticClusterReport {
         self.clusters.iter().filter(move |cluster| cluster.kinds.contains(&kind))
     }
 
+    pub fn observe_frame(&mut self, frame: &super::EvaluatedFrame) {
+        for (node, cluster_id) in &self.node_cluster {
+            let Some(value) = frame.value(*node) else { continue };
+            self.clusters[cluster_id.0].output_types.insert(value.type_name());
+        }
+    }
+
     pub fn to_markdown(&self) -> String {
         let mut out = String::from(
-            "| Cluster | Domain | Time | Temporal edge | Dynamic | Quality | Kinds | Nodes | Upstream | Downstream |\n|---:|---|---|---|---|---|---|---:|---|---|\n",
+            "| Cluster | Domain | Time | Temporal edge | Dynamic | Quality | Output types | Kinds | Nodes | Upstream | Downstream |\n|---:|---|---|---|---|---|---|---|---:|---|---|\n",
         );
         for cluster in &self.clusters {
             let kinds = cluster.kinds.iter().map(|kind| format!("{kind:?}")).collect::<Vec<_>>().join(", ");
             let upstream = cluster.upstream.iter().map(|id| id.0.to_string()).collect::<Vec<_>>().join(", ");
             let downstream = cluster.downstream.iter().map(|id| id.0.to_string()).collect::<Vec<_>>().join(", ");
+            let output_types = cluster.output_types.iter().copied().collect::<Vec<_>>().join(", ");
             out.push_str(&format!(
-                "| {} | {:?} | {:?} | {} | {} | {:?} | {} | {} | {} | {} |\n",
+                "| {} | {:?} | {:?} | {} | {} | {:?} | {} | {} | {} | {} | {} |\n",
                 cluster.id.0,
                 cluster.signature.domain,
                 cluster.signature.time,
                 cluster.signature.temporal_edge,
                 format!("{:?}", cluster.signature.dynamic),
                 cluster.signature.quality,
+                output_types,
                 kinds,
                 cluster.nodes.len(),
                 upstream,
@@ -153,6 +163,7 @@ fn build_report(
             signature,
             nodes,
             kinds,
+            output_types: BTreeSet::new(),
             upstream: BTreeSet::new(),
             downstream: BTreeSet::new(),
         });
