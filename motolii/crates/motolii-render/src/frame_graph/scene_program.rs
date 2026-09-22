@@ -40,33 +40,38 @@ pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
 impl SceneValue {
     /// Authoring layer as evaluated by the FrameGraph. Plates and placement
-    /// copies are an execution/semantic detail; editor callers ask by LayerId
-    /// and get the original instance when one exists.
+    /// copies are execution/semantic details; editor callers ask by LayerId
+    /// and prefer the original non-Plate instance when one exists.
     pub fn layer(&self, id: LayerId) -> Option<&SceneLayerValue> {
-        fn find<'a>(
+        fn visit<'a>(
             layer: &'a SceneLayerValue,
             id: LayerId,
-            fallback: &mut Option<&'a SceneLayerValue>,
-        ) -> Option<&'a SceneLayerValue> {
+            best: &mut Option<(u8, &'a SceneLayerValue)>,
+        ) {
             if layer.layer == id && !layer.ghost {
-                if layer.instance == 0 { return Some(layer); }
-                if fallback.is_none() { *fallback = Some(layer); }
+                let rank = match (&layer.content, layer.instance) {
+                    (SceneContentValue::Plate(_), _) => 1,
+                    (_, 0) => 3,
+                    _ => 2,
+                };
+                if best.as_ref().is_none_or(|(current, _)| rank > *current) {
+                    *best = Some((rank, layer));
+                }
             }
             if let SceneContentValue::Plate(plate) = &layer.content {
                 for member in &plate.members {
                     if let Some(child) = member.layer.as_ref() {
-                        if let Some(found) = find(child, id, fallback) { return Some(found); }
+                        visit(child, id, best);
                     }
                 }
             }
-            None
         }
 
-        let mut fallback = None;
+        let mut best = None;
         for layer in &self.layers {
-            if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
+            visit(layer, id, &mut best);
         }
-        fallback
+        best.map(|(_, layer)| layer)
     }
 }
 
