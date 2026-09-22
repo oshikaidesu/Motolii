@@ -61,6 +61,8 @@ pub struct StaticClusterReport {
     pub node_cluster: BTreeMap<NodeKey, StaticClusterId>,
     pub absent_builtin_kinds: BTreeSet<NodeKind>,
     pub merge_candidates: Vec<(NodeKey, NodeKey)>,
+    pub passthrough_candidates: Vec<(NodeKey, NodeKey)>,
+    pub adapter_candidates: Vec<(NodeKey, NodeKey)>,
 }
 
 impl StaticClusterReport {
@@ -81,6 +83,32 @@ impl StaticClusterReport {
                 self.clusters[cluster_id.0].input_types.extend(types.iter().copied());
             }
         }
+        self.refresh_type_candidates(frame);
+    }
+
+    fn refresh_type_candidates(&mut self, frame: &super::EvaluatedFrame) {
+        self.passthrough_candidates.clear();
+        self.adapter_candidates.clear();
+        for (&to, &to_cluster) in &self.node_cluster {
+            let Some(to_inputs) = frame.input_types(to) else { continue };
+            if to_inputs.len() != 1 { continue; }
+            let Some(to_value) = frame.value(to) else { continue };
+            let Some(cluster) = self.clusters.get(to_cluster.0) else { continue };
+            for &from in &cluster.nodes {
+                if from == to { continue; }
+                let Some(from_value) = frame.value(from) else { continue };
+                if from_value.type_name() != to_inputs[0] { continue; }
+                if from_value.type_name() == to_value.type_name() {
+                    self.passthrough_candidates.push((from, to));
+                } else {
+                    self.adapter_candidates.push((from, to));
+                }
+            }
+        }
+        self.passthrough_candidates.sort_unstable();
+        self.passthrough_candidates.dedup();
+        self.adapter_candidates.sort_unstable();
+        self.adapter_candidates.dedup();
     }
 
     pub fn to_markdown(&self) -> String {
@@ -114,6 +142,14 @@ impl StaticClusterReport {
             for kind in &self.absent_builtin_kinds {
                 out.push_str(&format!("- {kind:?}\n"));
             }
+        }
+        if !self.passthrough_candidates.is_empty() {
+            out.push_str("\n## Observed pass-through candidates\n\n");
+            for (from, to) in &self.passthrough_candidates { out.push_str(&format!("- {from:?} -> {to:?}\n")); }
+        }
+        if !self.adapter_candidates.is_empty() {
+            out.push_str("\n## Observed single-input adapter candidates\n\n");
+            for (from, to) in &self.adapter_candidates { out.push_str(&format!("- {from:?} -> {to:?}\n")); }
         }
         if !self.merge_candidates.is_empty() {
             out.push_str("\n## Linear merge candidates\n\n");
@@ -219,7 +255,7 @@ fn build_report(
         merge_candidates.push((from, to));
     }
 
-    StaticClusterReport { clusters, node_cluster, absent_builtin_kinds, merge_candidates }
+    StaticClusterReport { clusters, node_cluster, absent_builtin_kinds, merge_candidates, passthrough_candidates: Vec::new(), adapter_candidates: Vec::new() }
 }
 
 /// Conservative static capability map for SceneProgram.
