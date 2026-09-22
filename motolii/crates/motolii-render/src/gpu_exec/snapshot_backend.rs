@@ -1,5 +1,5 @@
 use crate::doc::core::{CompSpec, ResolvedCamera};
-use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneValue};
+use crate::frame_graph::{SceneContentValue, SceneImageSourceValue};
 use crate::render::compositor::GpuTexture2D;
 
 use super::resource_store::GpuResourceStore;
@@ -50,33 +50,20 @@ impl crate::render::engine::Engine {
                         SceneContentValue::Media { source, time } => self.file_content_for(
                             &source.path, *time, *layer, comp,
                         )?.0,
-                        SceneContentValue::Plate(plate) => {
-                            let nested = SceneValue {
-                                layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
-                            };
-                            let prepared = self.gpu_executable_scene(&nested, comp, camera)?;
-                            if prepared.layers.is_empty() { return Ok(None); }
-                            let (texture, _) = self.compositor.render_to_texture(
-                                comp,
-                                camera,
-                                &prepared.layers,
-                                crate::render::compositor::NO_BACKGROUND,
-                            )?;
-                            return Ok(self.compositor.import_premultiplied(&texture).ok());
-                        }
+                        // Plate is already a composition resource. A snapshot
+                        // backend must not recursively rebuild its member scene.
+                        SceneContentValue::Plate(_) => return Ok(None),
                     };
                     let Some(texture) = content.and_then(|content| content.texture().cloned()) else {
                         return Ok(None);
                     };
                     self.compositor.snapshot_texture(&texture)
                 }
-                SceneImageSourceValue::Scene { scene, background, .. } => {
-                    let prepared = self.gpu_executable_scene(scene, comp, camera)?;
-                    let (texture, _) = self.compositor.render_to_texture(
-                        comp, camera, &prepared.layers, *background,
-                    )?;
-                    self.compositor.import_premultiplied(&texture).ok()
-                }
+                // Scene-valued image inputs require an explicit composite
+                // resource producer. Recursive whole-scene execution is forbidden
+                // here; absence remains a hard miss until that producer installs
+                // the snapshot.
+                SceneImageSourceValue::Scene { .. } => return Ok(None),
             };
             Ok(texture)
         })();
