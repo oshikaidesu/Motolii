@@ -230,7 +230,7 @@ fn a_tilted_planar_layer_keeps_a_facing_frame_and_its_handles_write_scale_and_ro
         request(&mut rt,json!({"op":"setAttrs","layers":[layer.0],"patch":{"projection":projection}}));
         rt.viewer.user_camera=observer;
         let time=rt.time().unwrap();
-        rt.engine.frame_graph_editor_layers(&rt.doc.view(),time).unwrap();
+        rt.engine.frame_graph_editor_scene(&rt.doc.view(),time).unwrap();
         let bounds=rt.bounds_seen(layer,View::User).unwrap();
         let c:Vec<[f64;2]>=serde_json::from_value(bounds["corners"].clone()).unwrap();
         assert_eq!(c.len(),4,"{projection}: a planar layer gets the 4-corner frame");
