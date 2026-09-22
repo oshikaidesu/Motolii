@@ -334,18 +334,14 @@ impl Engine {
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
+        let _plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
         let camera = camera_override.unwrap_or(document_camera);
-        let mut layers = prepared.layers.clone();
+        let mut layers = self.prepare_frame_graph_layers(&state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
@@ -362,17 +358,13 @@ impl Engine {
         include_background: bool,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
+        let _plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
-        let mut layers = prepared.layers.clone();
+        let mut layers = self.prepare_frame_graph_layers(&state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
@@ -596,6 +588,40 @@ impl Engine {
         Ok(())
     }
 
+    fn prepare_frame_graph_layers(
+        &mut self,
+        state: &EngineFrameGraph,
+        time: RationalTime,
+        document_camera: ResolvedCamera,
+    ) -> Result<Vec<crate::render::compositor::LayerWithPasses>, EngineError> {
+        let frame = state.frame.as_ref().ok_or_else(|| EngineError::Store("FrameGraph evaluated frame is missing".into()))?;
+        let scene = frame.value(state.scene)
+            .and_then(|value| value.downcast_ref::<SceneValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        let solver = frame.value(state.solver)
+            .and_then(|value| value.downcast_ref::<SolverPlanValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph solver value is missing".into()))?;
+        let overlays = frame.value(state.overlay)
+            .and_then(|value| value.downcast_ref::<OverlaySetValue>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph overlay value is missing".into()))?;
+        self.install_frame_graph_overlays(&overlays);
+        let frame_number = time.try_to_frame_round(state.fps).unwrap_or(0) as f32;
+        self.compositor.clock = Some([
+            time.as_seconds_f64() as f32,
+            state.fps.den() as f32 / state.fps.num() as f32,
+            frame_number,
+        ]);
+        Ok(self.prepare_gpu_scene_with_solver(
+            scene,
+            solver,
+            state.comp,
+            document_camera,
+            time,
+            state.fps,
+        )?.layers)
+    }
+
     fn render_frame_graph_projection(
         &mut self,
         state: &EngineFrameGraph,
@@ -605,32 +631,17 @@ impl Engine {
         window: crate::render::compositor::Window,
         projection: crate::frame_graph::ViewProjection,
     ) -> Result<(), EngineError> {
-        let root = match projection {
-            crate::frame_graph::ViewProjection::Camera => state.camera,
-            crate::frame_graph::ViewProjection::Stage => state.stage,
-            _ => return Err(EngineError::Store("Unsupported playback projection".into())),
-        };
-        let projected = state.frame.as_ref()
-            .and_then(|frame| frame.value(root))
-            .and_then(|value| value.downcast_ref::<Arc<Projection>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph projection is missing".into()))?;
-        let expected = if projection == crate::frame_graph::ViewProjection::Camera {
-            ProjectionRole::Camera
-        } else {
-            ProjectionRole::Stage
-        };
-        if projected.role != expected {
-            return Err(EngineError::Store("FrameGraph projection role mismatch".into()));
+        if !matches!(projection, crate::frame_graph::ViewProjection::Camera | crate::frame_graph::ViewProjection::Stage) {
+            return Err(EngineError::Store("Unsupported playback projection".into()));
         }
-
+        let _plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Present)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        let mut layers = projected.scene.layers.clone();
+        let mut layers = self.prepare_frame_graph_layers(state, state.frame.as_ref().map(|f| f.time()).unwrap_or(RationalTime::ZERO), document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera =
                 if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
