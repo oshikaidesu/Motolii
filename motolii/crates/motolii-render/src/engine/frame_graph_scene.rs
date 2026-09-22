@@ -145,7 +145,7 @@ impl Engine {
         })
     }
 
-    pub(super) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+    pub(crate) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
         #[derive(Clone, Copy)]
         struct Entry {
             layer: LayerId,
@@ -482,7 +482,7 @@ impl Engine {
         ))
     }
 
-    fn set_frame_graph_source_clock(&mut self, time: crate::doc::core::RationalTime) {
+    pub(crate) fn set_frame_graph_source_clock(&mut self, time: crate::doc::core::RationalTime) {
         let delta = self.compositor.clock.map_or(1.0 / 30.0, |clock| clock[1].max(1.0e-9));
         let frame = (time.as_seconds_f64() as f32 / delta).round();
         self.compositor.clock = Some([time.as_seconds_f64() as f32, delta, frame]);
