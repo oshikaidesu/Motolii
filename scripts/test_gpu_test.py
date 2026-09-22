@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
 
 
@@ -31,6 +33,42 @@ class GpuTestRunnerTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ["metal", "probe-adapter"])
+
+    @unittest.skipIf(os.name == "nt", "POSIX process-group regression")
+    def test_timeout_kills_sigterm_ignoring_grandchild(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            pid_file = Path(temp) / "child.pid"
+            child_code = (
+                "import os,pathlib,signal,time;"
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN);"
+                f"pathlib.Path({os.fspath(pid_file)!r}).write_text(str(os.getpid()));"
+                "time.sleep(30)"
+            )
+            parent_code = (
+                "import pathlib,subprocess,sys,time;"
+                f"p=subprocess.Popen([sys.executable,'-c',{child_code!r}]);"
+                f"path=pathlib.Path({os.fspath(pid_file)!r});"
+                "deadline=time.monotonic()+5;"
+                "exec('while not path.exists() and time.monotonic()<deadline:\\n time.sleep(0.01)');"
+                "time.sleep(30)"
+            )
+            result = self.run_runner(
+                "--backend", "vulkan",
+                "--timeout-seconds", "0.5",
+                "--", sys.executable, "-c", parent_code,
+            )
+            self.assertEqual(result.returncode, 124, result.stderr)
+            self.assertTrue(pid_file.exists(), result.stderr)
+            pid = int(pid_file.read_text())
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail(f"SIGTERM-ignoring child {pid} survived runner timeout")
 
     def test_timeout_is_a_distinct_failure_instead_of_a_hang(self) -> None:
         result = self.run_runner(
