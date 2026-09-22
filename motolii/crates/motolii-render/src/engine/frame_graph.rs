@@ -35,6 +35,7 @@ pub(super) struct EngineFrameGraph {
     gpu_scene_root: Option<crate::gpu_exec::GpuSceneRoot>,
     gpu_present_sink: Option<crate::gpu_exec::GpuSinkRoot>,
     gpu_readback_sink: Option<crate::gpu_exec::GpuSinkRoot>,
+    gpu_operations: crate::gpu_exec::GpuOperationTable<crate::gpu_exec::EngineGpuOperation>,
 }
 
 impl EngineFrameGraph {
@@ -52,7 +53,7 @@ impl EngineFrameGraph {
         let nodes: Vec<_> = program.nodes().collect();
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, solver, overlay])
             .map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
     fn plan_sink(&self, kind: crate::gpu_exec::GpuSinkKind) -> Result<crate::gpu_exec::GpuExecutionPlan, EngineError> {
@@ -155,6 +156,20 @@ impl EngineFrameGraph {
             self.gpu_scene_root = Some(scene_root);
             self.gpu_present_sink = Some(present);
             self.gpu_readback_sink = Some(readback);
+            // Concrete resident backends have already materialized ordinary
+            // resources during lowering. Register every logical pass so the
+            // executor validates the complete plan instead of rediscovering work.
+            let pass_ops: Vec<_> = self.gpu_resources.passes().map(|(key, pass)| {
+                let op = match pass.identity.kind {
+                    crate::gpu_exec::GpuPassKind::Present => crate::gpu_exec::EngineGpuOperation::Present,
+                    crate::gpu_exec::GpuPassKind::Readback => crate::gpu_exec::EngineGpuOperation::Readback,
+                    _ => crate::gpu_exec::EngineGpuOperation::Resident,
+                };
+                (key, op)
+            }).collect();
+            for (key, op) in pass_ops {
+                self.gpu_operations.install(key, op);
+            }
             self.gpu_resources.retire_temporal(self.generation);
         }
         self.frame = Some(evaluated);
