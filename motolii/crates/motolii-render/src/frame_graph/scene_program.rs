@@ -73,6 +73,22 @@ impl SceneValue {
         }
         best.map(|(_, layer)| layer)
     }
+
+    pub fn for_each_layer<'a>(&'a self, mut visit: impl FnMut(&'a SceneLayerValue)) {
+        fn walk<'a>(layer: &'a SceneLayerValue, visit: &mut dyn FnMut(&'a SceneLayerValue)) {
+            visit(layer);
+            if let SceneContentValue::Plate(plate) = &layer.content {
+                for member in &plate.members {
+                    if let Some(child) = member.layer.as_ref() {
+                        walk(child, visit);
+                    }
+                }
+            }
+        }
+        for layer in &self.layers {
+            walk(layer, &mut visit);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -103,6 +119,9 @@ mod scene_value_lookup_tests {
         let found = scene.layer(LayerId(7)).expect("authored layer inside plate");
         assert!(!matches!(found.content, SceneContentValue::Plate(_)));
         assert_eq!(found.instance, 0);
+        let mut seen = 0;
+        scene.for_each_layer(|_| seen += 1);
+        assert_eq!(seen, 2);
     }
 }
 

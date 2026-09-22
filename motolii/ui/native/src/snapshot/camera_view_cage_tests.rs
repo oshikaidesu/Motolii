@@ -264,7 +264,7 @@ fn a_tilted_planar_layer_keeps_a_facing_frame_and_its_handles_write_scale_and_ro
         let view=rt.doc.view();
         let scene=rt.engine.frame_graph_cached_scene(&view,time).unwrap();
         let r=scene.layer(layer).unwrap();
-        let b=rt.engine.selected_scene_layer_bounds_in(&view,&scene.layers,layer,time).unwrap();
+        let b=rt.engine.selected_scene_layer_bounds_in(&view,scene,layer,time).unwrap();
         let projected=crate::doc::core::projected_screen_corners(comp,rt.engine.resolve_camera(&view,time).unwrap(),observer,r.projection,crate::doc::core::depth_scaled(r.transform.spatial),b.min,b.max);
         for p in projected{assert!(c[0][0]-1e-3<=p.x as f64&&p.x as f64<=c[2][0]+1e-3&&c[0][1]-1e-3<=p.y as f64&&p.y as f64<=c[2][1]+1e-3,"{projection}: corner {p:?} outside the frame {c:?}");}
         assert!((c[1][0]-c[0][0])>1.0&&(c[3][1]-c[0][1])>1.0,"{projection}: the frame is not edge-on even though the plane may be");

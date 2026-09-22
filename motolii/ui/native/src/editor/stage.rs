@@ -126,8 +126,8 @@ fn selection_geom_scene(
     let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
     let rotation = f64_at(view, layer, property::ROTATION, rt, 0.0);
-    let local_bounds = engine.selected_scene_layer_bounds_in(view, &scene.layers, layer, rt)?;
-    let local_outline = engine.selected_scene_layer_outline_in(view, &scene.layers, layer, rt).unwrap_or_else(|| local_bounds.corners().to_vec());
+    let local_bounds = engine.selected_scene_layer_bounds_in(view, scene, layer, rt)?;
+    let local_outline = engine.selected_scene_layer_outline_in(view, scene, layer, rt).unwrap_or_else(|| local_bounds.corners().to_vec());
     let [w0, h0, _] = local_bounds.size();
     let natural = (w0 as f64, h0 as f64);
     let box_ = (

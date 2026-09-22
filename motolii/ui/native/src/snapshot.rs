@@ -111,7 +111,7 @@ impl EditorRuntime{
             if matches!(layer.source,LayerSource::Camera|LayerSource::Stage){continue}
             let Some(world)=worlds.get(&id) else{continue};
             let attrs=view.attrs(id).map_err(e)?.unwrap_or_default();
-            let local=self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
+            let local=self.engine.selected_scene_layer_bounds_in(&view,scene,id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
             let center=world.transform_point3(local)-target;
             let parent=attrs.parent.and_then(|parent|worlds.get(&parent).copied()).unwrap_or(glam::Affine3A::IDENTITY);
             let inverse=parent.inverse();
@@ -130,7 +130,7 @@ impl EditorRuntime{
         let scene=self.engine.frame_graph_editor_scene(&view,time).map_err(e)?;
         let Some(layer)=scene.layer(id) else{return Ok(None)};
         let world=layer.transform.spatial;
-        let Some(b)=self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time) else{return Ok(None)};
+        let Some(b)=self.engine.selected_scene_layer_bounds_in(&view,&scene,id,time) else{return Ok(None)};
         let centre=world.transform_point3(glam::Vec3::from(b.center()));
         let radius=(0..8).map(|i|world.transform_point3(glam::vec3(if i&1==0{b.min[0]}else{b.max[0]},if i&2==0{b.min[1]}else{b.max[1]},if i&4==0{b.min[2]}else{b.max[2]})).distance(centre)).fold(0.0,f32::max);
         Ok(Some((centre,radius)))
@@ -174,7 +174,7 @@ impl EditorRuntime{
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
             if meta.source!=LayerSource::Camera || view.attrs(id).map_err(e)?.unwrap_or_default().hidden || !meta.timing.covers(self.viewer.frame){continue}
-            let camera=self.engine.camera_of_scene_layer_in(&view,&scene.layers,id,time).map_err(e)?;
+            let camera=self.engine.camera_of_scene_layer_in(&view,scene,id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
             let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
@@ -225,14 +225,14 @@ impl EditorRuntime{
         let Eye{time,comp,camera,observer,document}=*eye;
         let r=scene.layer(layer)?;
         let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
-        let b=self.engine.selected_scene_layer_bounds_in(view,&scene.layers,layer,time)?;
+        let b=self.engine.selected_scene_layer_bounds_in(view,scene,layer,time)?;
         let world=crate::doc::core::depth_scaled(r.transform.spatial);
         let corners:Vec<_>=match (self.viewer.selection_bounds.get(&seen).and_then(|m|m.get(&layer)),r.projection){
             (Some(&[x0,y0,x1,y1]),_)=>vec![[x0 as f64,y0 as f64],[x1 as f64,y0 as f64],[x1 as f64,y1 as f64],[x0 as f64,y1 as f64]],
             (None,projection)=>match projection{
             LayerProjection::ThreeD=>crate::doc::core::projected_screen_corners(comp,camera,observer,r.projection,world,b.min,b.max).iter().map(|p|[p.x as f64,p.y as f64]).collect(),
             _=>{
-                let outline=self.engine.selected_scene_layer_outline_in(view,&scene.layers,layer,time).unwrap_or_else(||b.corners().to_vec());
+                let outline=self.engine.selected_scene_layer_outline_in(view,scene,layer,time).unwrap_or_else(||b.corners().to_vec());
                 crate::doc::core::facing_frame(comp,camera,observer,r.projection,world,b.min,b.max,&outline).iter().map(|p|[p.x as f64,p.y as f64]).collect()
             }
         }};

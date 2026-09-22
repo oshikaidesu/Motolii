@@ -183,7 +183,7 @@ impl EditorRuntime{
                 if patch.projection.is_some(){
                     let at=self.time()?;
                     let centers:Vec<_>={let view=self.doc.view();let scene=self.engine.frame_graph_editor_scene(&view,at).map_err(e)?;
-                        layers.iter().map(|&id|(id,self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
+                        layers.iter().map(|&id|(id,self.engine.selected_scene_layer_bounds_in(&view,&scene,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
             "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"roundedRectangle"=>editor::create::NewKind::RoundedRectangle,"ellipse"=>editor::create::NewKind::Ellipse,"star"=>editor::create::NewKind::Star,"polygon"=>editor::create::NewKind::Polygon,"line"=>editor::create::NewKind::Line,"bezier"=>editor::create::NewKind::Bezier,"null"=>editor::create::NewKind::Null,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,"particles"=>editor::create::NewKind::Particles,k=>match k.strip_prefix("background:"){Some(id)=>editor::create::background(id)?,None=>editor::create::primitive(k)?}};let family=j["family"].as_str().map(str::to_owned);self.create_layer(kind,j["visibleFrames"].as_i64(),family.as_deref())?;}
@@ -497,7 +497,7 @@ mod poster_probe {
             eprintln!("({x},{y}) = {:?}",&pixels[i..i+4]);
         }
         let scene=rt.engine.frame_graph_editor_scene(&view,time).unwrap();
-        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
+        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_scene_layer_bounds_in(&view,&scene,id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
     }
 }
 

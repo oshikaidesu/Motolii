@@ -43,74 +43,29 @@ pub(super) fn group_local_bounds(
 }
 
 
-fn semantic_scene_layer<'a>(
-    layers: &'a [crate::frame_graph::SceneLayerValue],
-    id: LayerId,
-) -> Option<&'a crate::frame_graph::SceneLayerValue> {
-    fn find<'a>(
-        layer: &'a crate::frame_graph::SceneLayerValue,
-        id: LayerId,
-        fallback: &mut Option<&'a crate::frame_graph::SceneLayerValue>,
-    ) -> Option<&'a crate::frame_graph::SceneLayerValue> {
-        if layer.layer == id && !layer.ghost {
-            if layer.instance == 0 { return Some(layer); }
-            if fallback.is_none() { *fallback = Some(layer); }
-        }
-        if let crate::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
-            for member in &plate.members {
-                if let Some(child) = member.layer.as_ref() {
-                    if let Some(found) = find(child, id, fallback) { return Some(found); }
-                }
-            }
-        }
-        None
-    }
-    let mut fallback = None;
-    for layer in layers {
-        if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
-    }
-    fallback
-}
-
-fn collect_scene_layers<'a>(
-    layers: &'a [crate::frame_graph::SceneLayerValue],
-    out: &mut Vec<&'a crate::frame_graph::SceneLayerValue>,
-) {
-    for layer in layers {
-        out.push(layer);
-        if let crate::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
-            for member in &plate.members {
-                if let Some(child) = member.layer.as_ref() {
-                    collect_scene_layers(std::slice::from_ref(child), out);
-                }
-            }
-        }
-    }
-}
-
 pub(super) fn group_scene_local_bounds(
     view: &StoreView<'_>,
-    scene: &[crate::frame_graph::SceneLayerValue],
+    scene: &crate::frame_graph::SceneValue,
     group: LayerId,
     mut leaf_bounds: impl FnMut(&crate::frame_graph::SceneLayerValue) -> Option<crate::render::media::SpatialBounds>,
 ) -> Option<crate::render::media::SpatialBounds> {
-    let group_world = semantic_scene_layer(scene, group)?.transform.spatial;
+    let group_world = scene.layer(group)?.transform.spatial;
     if !group_world.is_finite() || group_world.matrix3.determinant() == 0.0 { return None; }
     let local_from_world = group_world.inverse();
     if !local_from_world.is_finite() { return None; }
     let parents: HashMap<_, _> = view.layers().into_iter().filter_map(|layer| {
         Some((layer, view.attrs(layer).ok().flatten()?.parent?))
     }).collect();
-    let mut all = Vec::new();
-    collect_scene_layers(scene, &mut all);
-    let matte_sources: std::collections::HashSet<_> = all.iter()
-        .filter(|layer| !layer.clip_to_below)
-        .filter_map(|layer| layer.matte.map(|matte| matte.layer))
-        .collect();
+    let mut matte_sources = std::collections::HashSet::new();
+    scene.for_each_layer(|layer| {
+        if !layer.clip_to_below {
+            if let Some(matte) = layer.matte { matte_sources.insert(matte.layer); }
+        }
+    });
     let mut points = Vec::new();
-    for leaf in all {
+    scene.for_each_layer(|leaf| {
         if matches!(leaf.source, LayerSource::Camera | LayerSource::Stage | LayerSource::Group | LayerSource::Null)
-            || leaf.opacity <= 0.0 || matte_sources.contains(&leaf.layer) { continue; }
+            || leaf.opacity <= 0.0 || matte_sources.contains(&leaf.layer) { return; }
         let mut parent = parents.get(&leaf.layer).copied();
         let mut visited = std::collections::HashSet::new();
         let mut descendant = false;
@@ -119,8 +74,8 @@ pub(super) fn group_scene_local_bounds(
             if !visited.insert(id) { break; }
             parent = parents.get(&id).copied();
         }
-        if !descendant { continue; }
-        let Some(bounds) = leaf_bounds(leaf) else { continue; };
+        if !descendant { return; }
+        let Some(bounds) = leaf_bounds(leaf) else { return; };
         let local = local_from_world * leaf.transform.spatial;
         for x in [bounds.min[0], bounds.max[0]] {
             for y in [bounds.min[1], bounds.max[1]] {
@@ -129,7 +84,7 @@ pub(super) fn group_scene_local_bounds(
                 }
             }
         }
-    }
+    });
     crate::render::media::SpatialBounds::from_points(points).ok()
 }
 
@@ -139,11 +94,11 @@ impl Engine {
     pub fn selected_scene_layer_bounds_in(
         &self,
         view: &StoreView<'_>,
-        scene: &[crate::frame_graph::SceneLayerValue],
+        scene: &crate::frame_graph::SceneValue,
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<crate::render::media::SpatialBounds> {
-        let layer = semantic_scene_layer(scene, layer_id)?;
+        let layer = scene.layer(layer_id)?;
         if layer.source == LayerSource::Group {
             return group_scene_local_bounds(view, scene, layer_id, |leaf| self.scene_leaf_local_bounds(leaf));
         }
@@ -153,11 +108,11 @@ impl Engine {
     pub fn selected_scene_layer_outline_in(
         &self,
         view: &StoreView<'_>,
-        scene: &[crate::frame_graph::SceneLayerValue],
+        scene: &crate::frame_graph::SceneValue,
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<Vec<glam::Vec3>> {
-        let layer = semantic_scene_layer(scene, layer_id)?;
+        let layer = scene.layer(layer_id)?;
         let bounds = self.selected_scene_layer_bounds_in(view, scene, layer_id, t)?;
         let spatial = match &layer.source {
             LayerSource::File { path, .. } if crate::render::media::is_mesh_path(path) => {
@@ -186,7 +141,7 @@ impl Engine {
     pub fn camera_of_scene_layer_in(
         &self,
         view: &StoreView<'_>,
-        scene: &[crate::frame_graph::SceneLayerValue],
+        scene: &crate::frame_graph::SceneValue,
         id: LayerId,
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
@@ -196,7 +151,7 @@ impl Engine {
         let (Some(bounds), Some(comp), Some(target_layer)) = (
             self.selected_scene_layer_bounds_in(view, scene, target, t),
             view.composition().map_err(store)?,
-            semantic_scene_layer(scene, target),
+            scene.layer(target),
         ) else { return Ok(camera) };
         let point = target_layer.transform.spatial.transform_point3(glam::Vec3::from(bounds.center()));
         let comp = comp.spec();
@@ -258,7 +213,7 @@ impl Engine {
         t: RationalTime,
     ) -> Option<[f32; 2]> {
         let scene = self.frame_graph_cached_scene(view, t)?;
-        self.selected_scene_layer_bounds_in(view, &scene.layers, layer_id, t).map(|bounds| bounds.size_xy())
+        self.selected_scene_layer_bounds_in(view, scene, layer_id, t).map(|bounds| bounds.size_xy())
     }
 
     /// 解いた層の一覧を持っている側(Stage の paint)は、層ごとに解き直さない。
