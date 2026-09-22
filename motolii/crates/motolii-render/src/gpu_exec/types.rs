@@ -9,6 +9,8 @@ pub(crate) enum GpuResourceClass {
     Content,
     Placement,
     Effect,
+    ImageSource,
+    Snapshot,
     Mask,
     Matte,
     Plate,
@@ -90,6 +92,9 @@ impl GpuResourceVersion {
 pub(crate) enum GpuResourceLifetime {
     Persistent,
     Temporal { retain_generations: u16 },
+    /// Stateful recurrence such as feedback. It survives ordinary frame
+    /// advancement and is invalidated/restored explicitly by its owner.
+    History,
     Frame,
 }
 
