@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextFlowProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextFlowProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
 use super::ghost_program::{GhostProgram, GhostProgramError};
 use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
 use super::scene_policy::ScenePolicy;
@@ -13,7 +13,7 @@ pub enum SceneContentValue {
     None,
     Text(TextShapeValue),
     Shape(Vec<ShapeNode>),
-    Material(MaterialValue),
+    Material(MediaSourceValue),
     Media { source: MediaSourceValue, time: RationalTime },
     Particles(ParticleValue),
     Plate(ScenePlateValue),
@@ -150,7 +150,7 @@ impl SceneNodeProgram {
             let (content_key, kind) = match meta.source {
                 LayerSource::Text => (text.binding(layer).map(|binding| binding.shape), 1),
                 LayerSource::Shape => (content.binding(layer).and_then(|binding| binding.content), 2),
-                LayerSource::File { .. } => (content.binding(layer).and_then(|binding| binding.material.or(binding.content)), 3),
+                LayerSource::File { .. } => (content.binding(layer).and_then(|binding| binding.content), 3),
                 LayerSource::Group => (groups.binding(layer), 2),
                 LayerSource::Particles => (particle_program.binding(layer).map(|binding| binding.particles), 4),
                 _ => (None, 0),
@@ -280,7 +280,7 @@ impl SceneNodeProgram {
                     (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (3, Some(index)) => {
                         let value = inputs.at(index).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
-                        if let Some(material) = value.downcast_ref::<MaterialValue>() {
+                        if let Some(material) = value.downcast_ref::<MediaSourceValue>() {
                             SceneContentValue::Material(material.clone())
                         } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
                             match frame.time {
@@ -592,7 +592,7 @@ fn sampled_content(
         (3, Some(index)) => {
             let value = sampled_value(inputs, index, sample_indices, sample_start)
                 .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
-            if let Some(material) = value.downcast_ref::<MaterialValue>() {
+            if let Some(material) = value.downcast_ref::<MediaSourceValue>() {
                 SceneContentValue::Material(material.clone())
             } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
                 match frame.time {
