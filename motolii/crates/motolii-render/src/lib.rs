@@ -8,6 +8,7 @@ pub mod export;
 pub mod extensions;
 pub mod frame_graph;
 pub mod render_graph;
+pub mod render_backend;
 pub mod render_lowering;
 pub mod media;
 pub mod playback;
