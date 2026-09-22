@@ -126,6 +126,7 @@ fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Res
             };
             ImageInput::Raster { id: *layer, source, time: *time, namespace: *namespace }
         }
+        SceneImageSourceValue::Refused { layer } => ImageInput::Refused { layer: *layer },
         SceneImageSourceValue::Scene { scene, background, time, namespace } => ImageInput::Graph {
             graph: Arc::new(lower_scene(scene, catalog)?),
             background: *background,

@@ -491,6 +491,10 @@ impl Engine {
     ) -> Result<Option<crate::render::compositor::GpuTexture2D>, EngineError> {
         let (time, namespace) = match input {
             ImageInput::Absent => return Ok(None),
+            ImageInput::Refused { layer } => {
+                self.layer_failures.push(format!("指した層 {} の絵が無い(自分自身か、無い層)", layer.0));
+                return Ok(None);
+            }
             ImageInput::Raster { time, namespace, .. } | ImageInput::Graph { time, namespace, .. } => (*time, *namespace),
         };
         let previous_clock = self.compositor.clock;
@@ -498,7 +502,7 @@ impl Engine {
         self.feedback_namespace = namespace;
         self.set_frame_graph_source_clock(time);
         let result = (|| match input {
-            ImageInput::Absent => Ok(None),
+            ImageInput::Absent | ImageInput::Refused { .. } => Ok(None),
             ImageInput::Raster { id, source, .. } => {
                 let (content, _) = self.execute_raster(*id, *id, source, None, comp, camera)?;
                 let Some(texture) = content.and_then(|content| content.texture().cloned()) else {

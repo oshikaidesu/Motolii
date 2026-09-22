@@ -37,6 +37,8 @@ pub enum RasterSource {
 #[derive(Clone)]
 pub enum ImageInput {
     Absent,
+    /// A named layer that cannot be read; reported, never substituted.
+    Refused { layer: LayerId },
     Raster { id: LayerId, source: RasterSource, time: RationalTime, namespace: u64 },
     Graph { graph: Arc<RenderGraph>, background: [f32; 4], absent_when_empty: bool, time: RationalTime, namespace: u64 },
 }

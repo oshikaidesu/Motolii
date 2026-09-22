@@ -30,6 +30,8 @@ pub struct ScenePlateValue {
 pub enum SceneImageSourceValue {
     Content { layer: LayerId, content: SceneContentValue, time: RationalTime, namespace: u64 },
     Scene { scene: SceneValue, background: [f32; 4], time: RationalTime, namespace: u64 },
+    /// A named layer that cannot be read: the consumer itself, or absent.
+    Refused { layer: LayerId },
 }
 
 #[derive(Clone, Debug, PartialEq)]
