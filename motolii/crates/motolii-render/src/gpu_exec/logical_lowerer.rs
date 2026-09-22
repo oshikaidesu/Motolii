@@ -1,5 +1,7 @@
+use std::hash::{Hash, Hasher};
+
 use super::graph::{GpuGraphError, GpuResourceGraph};
-use super::lowerer::{GpuContributionInput, GpuContributionResources, GpuLowerer};
+use super::lowerer::{GpuContributionInput, GpuContributionResources, GpuImageSourceKind, GpuLowerer, VersionedSemantic};
 use super::types::{
     GpuIdentitySource, GpuPassDesc, GpuPassIdentity, GpuPassKind, GpuResourceClass,
     GpuResourceDesc, GpuResourceIdentity, GpuResourceKey, GpuResourceLifetime,
@@ -24,20 +26,36 @@ pub(crate) struct LogicalGpuLowerer;
 impl LogicalGpuLowerer {
     fn resource(
         graph: &mut GpuResourceGraph,
-        semantic: super::lowerer::VersionedSemantic,
+        semantic: VersionedSemantic,
         class: GpuResourceClass,
         slot: u32,
         dependencies: Vec<GpuResourceKey>,
     ) -> Result<GpuResourceKey, GpuGraphError> {
-        let desc = GpuResourceDesc {
-            identity: GpuResourceIdentity {
+        Self::resource_with_lifetime(
+            graph,
+            GpuResourceIdentity {
                 source: GpuIdentitySource::Semantic(semantic.node),
                 class,
                 slot,
             },
-            version: semantic.version,
+            semantic.version,
             dependencies,
-            lifetime: GpuResourceLifetime::Persistent,
+            GpuResourceLifetime::Persistent,
+        )
+    }
+
+    fn resource_with_lifetime(
+        graph: &mut GpuResourceGraph,
+        identity: GpuResourceIdentity,
+        version: super::types::GpuResourceVersion,
+        dependencies: Vec<GpuResourceKey>,
+        lifetime: GpuResourceLifetime,
+    ) -> Result<GpuResourceKey, GpuGraphError> {
+        let desc = GpuResourceDesc {
+            identity,
+            version,
+            dependencies,
+            lifetime,
             alias_class: None,
             estimated_bytes: 0,
         };
@@ -60,6 +78,47 @@ impl LogicalGpuLowerer {
             side_effect: false,
         })
     }
+    fn effect_image_resources(
+        graph: &mut GpuResourceGraph,
+        input: &GpuContributionInput,
+        effect: VersionedSemantic,
+    ) -> Result<Vec<GpuResourceKey>, GpuGraphError> {
+        let Some(images) = input.effect_images.iter().find(|images| images.effect == effect.node) else {
+            return Ok(Vec::new());
+        };
+        let mut out = Vec::with_capacity(images.sources.len());
+        for (index, source) in images.sources.iter().copied().enumerate() {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            effect.node.hash(&mut hasher);
+            input.instance.hash(&mut hasher);
+            index.hash(&mut hasher);
+            let identity = GpuResourceIdentity::synthetic(
+                hasher.finish(),
+                GpuResourceClass::ImageSource,
+                0,
+            );
+            let output = Self::resource_with_lifetime(
+                graph,
+                identity,
+                source.version,
+                Vec::new(),
+                source.lifetime,
+            )?;
+            Self::producer(
+                graph,
+                output.0 ^ 0x494d47535243,
+                match source.kind {
+                    GpuImageSourceKind::Content => GpuPassKind::Copy,
+                    GpuImageSourceKind::Scene => GpuPassKind::Composite,
+                },
+                Vec::new(),
+                vec![output],
+            )?;
+            out.push(output);
+        }
+        Ok(out)
+    }
+
 }
 
 impl GpuLowerer for LogicalGpuLowerer {
@@ -101,7 +160,8 @@ impl GpuLowerer for LogicalGpuLowerer {
 
         let mut current = content;
         for (index, effect) in input.effects.iter().copied().enumerate() {
-            let reads = current.into_iter().collect::<Vec<_>>();
+            let mut reads = current.into_iter().collect::<Vec<_>>();
+            reads.extend(Self::effect_image_resources(graph, input, effect)?);
             let output = Self::resource(
                 graph,
                 effect,
@@ -151,6 +211,26 @@ impl GpuLowerer for LogicalGpuLowerer {
                 graph,
                 plate.node.as_u64() ^ 0x504c415445,
                 GpuPassKind::Composite,
+                reads,
+                vec![output],
+            )?;
+            current = Some(output);
+        }
+
+        for (index, effect) in input.after_effects.iter().copied().enumerate() {
+            let mut reads = current.into_iter().collect::<Vec<_>>();
+            reads.extend(Self::effect_image_resources(graph, input, effect)?);
+            let output = Self::resource(
+                graph,
+                effect,
+                GpuResourceClass::Effect,
+                0x8000_0000u32 | index as u32,
+                reads.clone(),
+            )?;
+            Self::producer(
+                graph,
+                effect.node.as_u64() ^ 0x4146544552 ^ index as u64,
+                GpuPassKind::Render,
                 reads,
                 vec![output],
             )?;
@@ -231,6 +311,8 @@ mod tests {
             content: Some(semantic(2, 10)),
             placement: semantic(3, 20),
             effects: vec![],
+            after_effects: vec![],
+            effect_images: vec![],
             masks: vec![],
             matte_source: None,
             plate: None,
