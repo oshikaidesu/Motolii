@@ -434,46 +434,6 @@ impl Engine {
         result.map(|()| true)
     }
 
-    pub fn render_resolved_to_texture(
-        &mut self,
-        view: &StoreView<'_>,
-        comp: CompSpec,
-        background: [f32; 4],
-        camera: ResolvedCamera,
-        t: RationalTime,
-        resolved: &[ResolvedLayer],
-        text_documents: &HashMap<LayerId, TextDocument>,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        self.render_resolved_to_texture_with_shapes(
-            view,
-            comp,
-            background,
-            camera,
-            t,
-            resolved,
-            text_documents,
-            &HashMap::new(),
-        )
-    }
-
-    pub fn render_resolved_to_texture_with_shapes(
-        &mut self,
-        view: &StoreView<'_>,
-        comp: CompSpec,
-        background: [f32; 4],
-        camera: ResolvedCamera,
-        t: RationalTime,
-        resolved: &[ResolvedLayer],
-        text_documents: &HashMap<LayerId, TextDocument>,
-        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        let layers =
-            self.layers_from_resolved(view, comp, camera, camera, t, resolved, text_documents, shape_documents)?;
-        Ok(self
-            .compositor
-            .render_to_texture(comp, camera, &layers, background)?)
-    }
-
     pub fn render_frame_to_texture(
         &mut self,
         view: &StoreView<'_>,
