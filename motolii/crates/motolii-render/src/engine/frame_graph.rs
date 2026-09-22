@@ -595,7 +595,8 @@ impl Engine {
         state: &EngineFrameGraph,
         now: i64,
     ) -> Option<i64> {
-        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        let seen = self.gpu_history.seen().collect::<Vec<_>>();
+        self.gpu_history.begin_frame();
         let mut unique = HashSet::new();
         let mut start: Option<i64> = None;
         for key in seen.into_iter().filter(|key| unique.insert(*key)) {
