@@ -106,35 +106,6 @@ fn f64_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, de
         _ => default,
     }
 }
-fn scene_layer<'a>(
-    scene: &'a crate::render::frame_graph::SceneValue,
-    id: LayerId,
-) -> Option<&'a crate::render::frame_graph::SceneLayerValue> {
-    fn find<'a>(
-        layer: &'a crate::render::frame_graph::SceneLayerValue,
-        id: LayerId,
-        fallback: &mut Option<&'a crate::render::frame_graph::SceneLayerValue>,
-    ) -> Option<&'a crate::render::frame_graph::SceneLayerValue> {
-        if layer.layer == id && !layer.ghost {
-            if layer.instance == 0 { return Some(layer); }
-            if fallback.is_none() { *fallback = Some(layer); }
-        }
-        if let crate::render::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
-            for member in &plate.members {
-                if let Some(child) = member.layer.as_ref() {
-                    if let Some(found) = find(child, id, fallback) { return Some(found); }
-                }
-            }
-        }
-        None
-    }
-    let mut fallback = None;
-    for layer in &scene.layers {
-        if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
-    }
-    fallback
-}
-
 fn selection_geom_scene(
     engine: &Engine,
     view: &StoreView<'_>,
@@ -165,7 +136,7 @@ fn selection_geom_scene(
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
-    let evaluated = scene_layer(scene, layer)?;
+    let evaluated = scene.layer(layer)?;
     let placement = crate::doc::core::LayerPlacement {
         transform: evaluated.transform.affine,
         world_transform: Some(evaluated.transform.spatial),
@@ -673,7 +644,7 @@ impl CageDrag {
         if mode == GizmoMode::Move {
             for (id, g) in std::iter::once((layer, &geom)).chain(drag.others.iter().map(|(id, g)| (*id, g))) {
                 let parent = match view.attrs(id).map_err(|e| e.to_string())?.and_then(|a| a.parent) {
-                    Some(id) => scene_layer(&scene, id).map(|layer| layer.transform.spatial).ok_or_else(|| format!("Parent layer {} is not present in the FrameGraph scene", id.0))?,
+                    Some(id) => scene.layer(id).map(|layer| layer.transform.spatial).ok_or_else(|| format!("Parent layer {} is not present in the FrameGraph scene", id.0))?,
                     None => glam::Affine3A::IDENTITY,
                 };
                 let mapping = translation_map(&fit, g, parent, start);
@@ -694,7 +665,7 @@ impl CageDrag {
                     false
                 };
                 for other_id in view.layers() {
-                    let Some(other)=scene_layer(&scene,other_id) else{continue};
+                    let Some(other)=scene.layer(other_id) else{continue};
                     if other.opacity <= 0.0 { continue }
                     if matches!(other.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) { continue }
                     if ids.iter().any(|id| related(*id, other_id) || related(other_id, *id)) { continue }
