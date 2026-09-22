@@ -129,6 +129,7 @@ pub struct Engine {
     gpu_content_cache: HashMap<gpu_exec::GpuContentCacheKey, frame_graph_scene::CachedGpuContent>,
     gpu_content_cache_hits: u64,
     gpu_content_cache_misses: u64,
+    last_gpu_plan: gpu_exec::GpuExecutionPlan,
     /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
     /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
     /// 直前に**実際に解いた**拍の中身(相ごと・層の種類ごと)。memo に当たった面では空。
@@ -246,6 +247,7 @@ impl Engine {
             gpu_content_cache: Default::default(),
             gpu_content_cache_hits: 0,
             gpu_content_cache_misses: 0,
+            last_gpu_plan: Default::default(),
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
@@ -331,6 +333,26 @@ impl Engine {
         )
     }
 
+    /// (planned passes, planned readbacks) for the most recently requested sink.
+    pub fn gpu_execution_plan_stats(&self) -> (usize, usize) {
+        (
+            self.last_gpu_plan.passes.len(),
+            self.last_gpu_plan.passes.iter()
+                .filter(|pass| pass.kind == gpu_exec::GpuPassKind::Readback)
+                .count(),
+        )
+    }
+
+    fn update_gpu_execution_plan(
+        &mut self,
+        root: Option<gpu_exec::GpuResourceId>,
+        sink: gpu_exec::GpuSink,
+    ) {
+        self.last_gpu_plan = root
+            .map(|root| self.gpu_resource_graph.plan(root, sink))
+            .unwrap_or_default();
+    }
+
     /// Stage で選ばれている層の mask の番号(1..=255)。選ばれていなければ 0。
     fn outline_id(&self, id: LayerId) -> u8 {
         self.outline_layers.iter().position(|l| *l == id).map_or(0, |i| i as u8 + 1)
@@ -355,6 +377,7 @@ impl Engine {
             gpu_content_cache: Default::default(),
             gpu_content_cache_hits: 0,
             gpu_content_cache_misses: 0,
+            last_gpu_plan: Default::default(),
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
