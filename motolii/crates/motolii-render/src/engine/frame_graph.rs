@@ -596,12 +596,16 @@ impl Engine {
         let mut start: Option<i64> = None;
         for key in seen.into_iter().filter(|key| unique.insert(*key)) {
             let Some(have) = self.compositor.feedback_frame(key) else { continue };
-            if have == now && !self.compositor.feedback_is_fresh(key) {
+            if crate::gpu_exec::history_is_current(
+                have,
+                now,
+                self.compositor.feedback_is_fresh(key),
+            ) {
                 continue;
             }
             let in_point = state.in_points.get(&key.layer).copied().unwrap_or(0);
-            let from = self.compositor.feedback_restore(key, now - 1)
-                .map_or(in_point, |checkpoint| checkpoint + 1);
+            let checkpoint = self.compositor.feedback_restore(key, now - 1);
+            let from = crate::gpu_exec::history_replay_from(in_point, checkpoint);
             if from < now {
                 start = Some(start.map_or(from, |current| current.min(from)));
             }
