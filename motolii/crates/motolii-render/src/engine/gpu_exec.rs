@@ -187,6 +187,53 @@ impl GpuResourceGraph {
         stats
     }
 
+    pub(crate) fn plan(&self, root: GpuResourceId, sink: GpuSink) -> GpuExecutionPlan {
+        fn visit(
+            graph: &GpuResourceGraph,
+            id: GpuResourceId,
+            emitted: &mut BTreeSet<GpuResourceId>,
+            plan: &mut GpuExecutionPlan,
+        ) {
+            if !emitted.insert(id) {
+                return;
+            }
+            let Some(resource) = graph.resources.get(&id) else { return };
+            for dependency in &resource.dependencies {
+                visit(graph, *dependency, emitted, plan);
+            }
+            let kind = match resource.kind {
+                GpuResourceKind::Content => GpuPassKind::Raster,
+                GpuResourceKind::Placement => GpuPassKind::Upload,
+                GpuResourceKind::Effect
+                | GpuResourceKind::Mask
+                | GpuResourceKind::Clip
+                | GpuResourceKind::Matte
+                | GpuResourceKind::Plate => GpuPassKind::Effect,
+                GpuResourceKind::History => GpuPassKind::Compute,
+                GpuResourceKind::Composite => GpuPassKind::Composite,
+                GpuResourceKind::Sink => return,
+            };
+            plan.push(GpuPass {
+                kind,
+                reads: resource.dependencies.clone(),
+                writes: vec![id],
+            });
+        }
+
+        let mut plan = GpuExecutionPlan::default();
+        let mut emitted = BTreeSet::new();
+        visit(self, root, &mut emitted, &mut plan);
+        plan.push(GpuPass {
+            kind: match sink {
+                GpuSink::Preview | GpuSink::Stage | GpuSink::Offscreen => GpuPassKind::Present,
+                GpuSink::Export | GpuSink::Headless => GpuPassKind::Readback,
+            },
+            reads: vec![root],
+            writes: Vec::new(),
+        });
+        plan
+    }
+
     fn rebuild_downstream(&mut self) {
         self.downstream.clear();
         for resource in self.resources.values() {
@@ -221,6 +268,7 @@ pub(crate) struct GpuPass {
 pub(crate) enum GpuSink {
     Preview,
     Stage,
+    Offscreen,
     Export,
     Headless,
 }
@@ -350,4 +398,41 @@ mod tests {
         assert!(graph.get(GpuResourceId::raw(1)).is_some());
         assert!(graph.get(GpuResourceId::raw(2)).is_some());
     }
+
+    #[test]
+    fn planner_orders_dependencies_before_composite_and_preview_never_reads_back() {
+        let mut graph = GpuResourceGraph::default();
+        graph.upsert(desc(1, GpuResourceKind::Content, &[], GpuResidency::Retained));
+        graph.upsert(desc(2, GpuResourceKind::Placement, &[1], GpuResidency::Frame));
+        graph.upsert(desc(3, GpuResourceKind::Composite, &[2], GpuResidency::Frame));
+
+        let plan = graph.plan(GpuResourceId::raw(3), GpuSink::Preview);
+        let kinds: Vec<_> = plan.passes.iter().map(|pass| pass.kind).collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                GpuPassKind::Raster,
+                GpuPassKind::Upload,
+                GpuPassKind::Composite,
+                GpuPassKind::Present,
+            ]
+        );
+        assert!(!kinds.contains(&GpuPassKind::Readback));
+    }
+
+    #[test]
+    fn export_differs_from_preview_only_at_the_sink_pass() {
+        let mut graph = GpuResourceGraph::default();
+        graph.upsert(desc(1, GpuResourceKind::Content, &[], GpuResidency::Retained));
+        graph.upsert(desc(2, GpuResourceKind::Composite, &[1], GpuResidency::Frame));
+
+        let preview = graph.plan(GpuResourceId::raw(2), GpuSink::Preview);
+        let export = graph.plan(GpuResourceId::raw(2), GpuSink::Export);
+
+        assert_eq!(&preview.passes[..preview.passes.len()-1], &export.passes[..export.passes.len()-1]);
+        assert_eq!(preview.passes.last().unwrap().kind, GpuPassKind::Present);
+        assert_eq!(export.passes.last().unwrap().kind, GpuPassKind::Readback);
+    }
+
 }
