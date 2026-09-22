@@ -22,11 +22,21 @@ impl Document {
                 at,
             )?;
         }
+        for property in view.camera_properties() {
+            if let Some(source) = view.camera_property_source(&property)? {
+                out.copy_property_source(Document::composition_path(), &property, source, at)?;
+            }
+        }
 
         for layer in view.layers() {
             out.write(Intent::AddLayer(layer), at)?;
             for (component, json) in view.track_json_components(&layer.entity_path())? {
                 out.copy_track_json(layer.entity_path(), component, archetype_layer(), json, at)?;
+            }
+            for property in view.properties(layer) {
+                if let Some(source) = view.property_source(layer, &property)? {
+                    out.copy_property_source(layer.entity_path(), &property, source, at)?;
+                }
             }
         }
 
