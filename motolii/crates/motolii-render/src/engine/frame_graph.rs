@@ -105,12 +105,17 @@ impl EngineFrameGraph {
             let placement_version = self.gpu_resources.version(resources.placement)
                 .ok_or_else(|| EngineError::Store("GPU placement version missing".into()))?;
             let Some(placement) = self.gpu_placement.current(resources.placement, placement_version).copied() else { continue };
-            let effects = crate::gpu_exec::effect_chain_key(layer)
-                .and_then(|(key, version)| self.gpu_effects.current(key, version).cloned())
-                .unwrap_or_else(|| crate::gpu_exec::ResidentEffectChain {
-                    passes: crate::render::engine::translate::translate_effect_passes(&layer.effects),
-                    plate_passes: crate::render::engine::translate::translate_plate_passes(&layer.after_effects),
-                });
+            let effects = layer.content_key.and_then(|first| {
+                let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
+                    first,
+                    crate::gpu_exec::GpuResourceClass::Effect,
+                    layer.instance,
+                );
+                self.gpu_effects.get_any(identity.key()).map(|(_, value)| value.clone())
+            }).unwrap_or_else(|| crate::gpu_exec::ResidentEffectChain {
+                passes: crate::render::engine::translate::translate_effect_passes(&layer.effects),
+                plate_passes: crate::render::engine::translate::translate_plate_passes(&layer.after_effects),
+            });
             let mut pass_sources = Vec::with_capacity(resources.snapshot_rows.len());
             for row in &resources.snapshot_rows {
                 let mut textures = Vec::with_capacity(row.len());
@@ -218,14 +223,36 @@ impl EngineFrameGraph {
                     placement,
                 );
                 self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
-                if let Some((effect_key, effect_version)) = crate::gpu_exec::effect_chain_key(layer) {
+                if let Some(first) = layer.content_key {
+                    let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
+                        first,
+                        crate::gpu_exec::GpuResourceClass::Effect,
+                        layer.instance,
+                    );
+                    let mut encoded = crate::frame_graph::CanonicalEncoder::new();
+                    let _ = encoded.string(&format!("{:?}{:?}", layer.effects, layer.after_effects));
+                    let effect_version = crate::gpu_exec::GpuResourceVersion::from_canonical(&encoded);
+                    let mut passes = crate::render::engine::translate::translate_effect_passes(&layer.effects);
+                    let direct_screen = passes.iter()
+                        .any(|pass| pass.reads_backdrop || pass.reads_composite())
+                        .then_some([self.comp.width, self.comp.height]);
+                    crate::render::engine::translate::stamp_feedback(
+                        &mut passes, layer.layer, layer.instance, 0, direct_screen, 0,
+                    );
+                    let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&layer.after_effects);
+                    let plate_screen = plate_passes.iter()
+                        .any(|pass| pass.reads_backdrop || pass.reads_composite())
+                        .then_some([self.comp.width, self.comp.height]);
+                    crate::render::engine::translate::stamp_feedback(
+                        &mut plate_passes, layer.layer, layer.instance, 1, plate_screen, 0,
+                    );
                     let _ = crate::gpu_exec::resident_effect_chain(
                         &mut self.gpu_effects,
-                        effect_key,
+                        identity.key(),
                         effect_version,
                         self.generation,
-                        layer,
-                        [self.comp.width, self.comp.height],
+                        passes,
+                        plate_passes,
                     );
                 }
                 if let Some(content_key) = resources.content {
