@@ -468,7 +468,7 @@ impl Engine {
     /// `load_from_bytes(.., "video/mp4", ..)` が必ず落ちて**絵が出ない**。
     ///
     /// 覚えるのは texture_manager に任せる。当たれば読み込みも起きない。
-    fn still_texture_for(
+    pub(in crate::engine) fn still_texture_for(
         &mut self,
         path: &str,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
