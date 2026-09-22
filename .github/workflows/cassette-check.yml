@@ -11,7 +11,7 @@ jobs:
       - name: Install native build/runtime dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y             pkg-config nasm             libavutil-dev libavcodec-dev libavformat-dev libavdevice-dev             libavfilter-dev libswscale-dev libswresample-dev             mesa-vulkan-drivers
+          sudo apt-get install -y             pkg-config nasm             libavutil-dev libavcodec-dev libavformat-dev libavdevice-dev             libavfilter-dev libswscale-dev libswresample-dev             mesa-vulkan-drivers libasound2-dev libudev-dev
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo check -p motolii-render
       - run: cargo test -p motolii-render render_lowering --lib
