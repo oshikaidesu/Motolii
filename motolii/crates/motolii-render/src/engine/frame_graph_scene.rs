@@ -177,9 +177,15 @@ impl Engine {
                 (Some(content), natural, padding, frame, true)
             } else if let Some((content, natural)) = overlay_content {
                 (Some(content), natural, 0, None, false)
+            } else if let Some(resident) = self.frame_graph_resident_content(source) {
+                (Some(resident.content), resident.natural, 0, None, false)
             } else {
                 let (content, natural) = match &source.content {
                 SceneContentValue::None => continue,
+                // Resident leaf content is the production owner for these
+                // semantic values. Reaching this fallback means the new
+                // backend could not materialize the resource; keep the bridge
+                // temporarily for special force-picture/extrusion cases.
                 SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
                 SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
                 SceneContentValue::Shape(shapes) => {
