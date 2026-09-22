@@ -224,6 +224,10 @@ mod tests {
             Intent::SetConstant { layer: cube, property: opacity.clone(), value: Value::F64(0.75) },
         ]).unwrap();
         let program = SceneProgram::compile(&doc.view()).unwrap();
+        let transform_binding = program.transforms().binding(cube).unwrap();
+        let public_roots: std::collections::BTreeSet<_> = program.roots().collect();
+        assert!(public_roots.contains(&transform_binding.local));
+        assert!(public_roots.contains(&transform_binding.world));
         let mut clusters = program.static_clusters().unwrap();
         assert!(clusters.clusters_with_kind(super::NodeKind::SceneComposite).next().is_some());
         let effect_images = clusters.clusters_with_kind(super::NodeKind::EffectImages).next().expect("lookbehind cluster");
