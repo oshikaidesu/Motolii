@@ -32,7 +32,7 @@ impl Compositor {
             label: Some("motolii-clipping-source-atop"),
         });
         let Self { ctx, blend_vism, effect_scratch, .. } = self;
-        blend_vism.record_over(
+        blend_vism.get(ctx).record_over(
             ctx, &mut encoder, effect_scratch, &[&base_view, &upper_view], &output_view,
             &[("mode".to_owned(), mode as f32)], [width as f32, height as f32],
         );
@@ -364,7 +364,7 @@ impl Compositor {
             // 下は読まない — 効果の結果で置き換える。
             const COPY: u32 = 1;
             let Self { ctx, blend_vism, effect_scratch, .. } = self;
-            blend_vism.record_over(
+            blend_vism.get(ctx).record_over(
                 ctx, encoder, effect_scratch,
                 &[&dst_view, &src_view], &out_view,
                 &[("mode".to_owned(), COPY as f32)], window,
@@ -400,7 +400,7 @@ impl Compositor {
                     })
                 });
                 let Self { ctx, blend_vism, effect_scratch, .. } = self;
-                blend_vism.record_over(
+                blend_vism.get(ctx).record_over(
                     ctx,
                     encoder,
                     effect_scratch,

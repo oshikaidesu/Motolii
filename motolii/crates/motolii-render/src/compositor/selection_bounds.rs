@@ -116,7 +116,7 @@ impl SelectionBounds {
     pub(crate) fn record(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, mask: &wgpu::TextureView, size: [u32; 2]) {
         // 前の読み戻しがまだ map 中なら、staging へは書けない。待って取り込む。
         if self.mapped.load(Ordering::Acquire) == 1 {
-            let _ = device.poll(wgpu::PollType::wait_indefinitely());
+            let _ = super::device::wait_for_gpu(device, "selection-bounds-before-copy");
         }
         if self.mapped.load(Ordering::Acquire) == 2 {
             self.staging.unmap();
@@ -155,7 +155,7 @@ impl SelectionBounds {
     /// 届いていれば id ごとの `[x0, y0, x1, y1]`(画素、x1・y1 は外側)。届く前なら `None`。
     pub(crate) fn take(&mut self, device: &wgpu::Device) -> Option<Vec<(u8, [f32; 4])>> {
         if self.mapped.load(Ordering::Acquire) == 1 {
-            let _ = device.poll(wgpu::PollType::wait_indefinitely());
+            let _ = super::device::wait_for_gpu(device, "selection-bounds-readback");
         }
         if self.mapped.load(Ordering::Acquire) != 2 {
             return None;
@@ -209,7 +209,7 @@ mod reduction_tests {
         bounds.record(&device, &mut encoder, &view, [w, h]);
         queue.submit([encoder.finish()]);
         bounds.schedule_map();
-        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        crate::compositor::device::wait_for_gpu(&device, "selection-bounds-test").unwrap();
         let found = bounds.take(&device).expect("mapped after the wait");
         assert_eq!(found, vec![(3u8, [10.0, 5.0, 20.0, 8.0])]);
     }

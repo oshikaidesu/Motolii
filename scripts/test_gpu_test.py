@@ -24,7 +24,7 @@ class GpuTestRunnerTest(unittest.TestCase):
         )
 
     def test_sets_requested_backend_and_adapter(self) -> None:
-        code = "import os; print(os.environ.get('WGPU_BACKEND')); print(os.environ.get('WGPU_ADAPTER_NAME'))"
+        code = "import os; print(os.environ.get('WGPU_BACKEND')); print(os.environ.get('WGPU_ADAPTER_NAME')); print(os.environ.get('MOTOLII_GPU_TEST')); print(os.environ.get('IS_IN_RERUN_WORKSPACE'))"
         result = self.run_runner(
             "--backend", "metal",
             "--adapter", "probe-adapter",
@@ -32,7 +32,12 @@ class GpuTestRunnerTest(unittest.TestCase):
             "--", sys.executable, "-c", code,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ["metal", "probe-adapter"])
+        self.assertEqual(result.stdout.splitlines(), ["metal", "probe-adapter", "1", "no"])
+
+    def test_disk_shaders_are_an_explicit_build_mode(self) -> None:
+        result = self.run_runner("--shaders", "disk", "--", sys.executable, "-c", "import os; print(os.environ['IS_IN_RERUN_WORKSPACE'])")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "yes")
 
     @unittest.skipIf(os.name == "nt", "POSIX process-group regression")
     def test_timeout_kills_sigterm_ignoring_grandchild(self) -> None:

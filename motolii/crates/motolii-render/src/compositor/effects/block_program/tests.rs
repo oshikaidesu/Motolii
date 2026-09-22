@@ -171,7 +171,7 @@ fn the_world_pass_hands_scale_and_tint_to_the_drawing_side() {
     encoder.copy_buffer_to_buffer(&motion, 0, &staging, 0, 64);
     queue.submit([encoder.finish()]);
     staging.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    crate::compositor::device::wait_for_gpu(device, "block-program-test").unwrap();
     let words: Vec<f32> = staging.slice(..).get_mapped_range().chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
     staging.unmap();
     assert_eq!(&words[0..3], &[3.0, 0.0, 0.0], "offset in world");
@@ -200,7 +200,7 @@ fn the_rope_pass_writes_the_bellies_of_a_cubic_behind_the_things() {
     encoder.copy_buffer_to_buffer(&motion, 0, &staging, 0, 4 * 64);
     queue.submit([encoder.finish()]);
     staging.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    crate::compositor::device::wait_for_gpu(device, "block-program-test").unwrap();
     let w: Vec<f32> = staging.slice(..).get_mapped_range().chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
     staging.unmap();
     let v = |i: usize| [w[i * 4], w[i * 4 + 1], w[i * 4 + 2], w[i * 4 + 3]];

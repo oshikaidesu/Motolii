@@ -114,10 +114,7 @@ impl Compositor {
         self.ctx.queue.submit([command_buffer]);
 
         self.ctx.begin_frame();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        crate::compositor::device::wait_for_gpu(&self.ctx.device, "basic-final-readback")?;
         timing.gpu_us = gpu_start.elapsed().as_micros();
 
         let readback_start = std::time::Instant::now();

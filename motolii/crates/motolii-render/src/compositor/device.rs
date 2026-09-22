@@ -3,6 +3,17 @@ use re_renderer::RenderContext;
 
 use crate::render::compositor::*;
 
+pub(crate) fn wait_for_gpu(device: &wgpu::Device, stage: &str) -> Result<(), CompositorError> {
+    let test_host = cfg!(test) || std::env::var("MOTOLII_GPU_TEST").as_deref() == Ok("1");
+    let timeout = test_host.then_some(std::time::Duration::from_secs(30));
+    if test_host { eprintln!("MOTOLII_GPU_WAIT stage={stage} submission=latest timeout=30s"); }
+    let result = device.poll(wgpu::PollType::Wait { submission_index: None, timeout })
+        .map(|_| ())
+        .map_err(|error| CompositorError::Draw(format!("GPU wait stage={stage} submission=latest: {error}")));
+    if test_host { if let Err(error) = &result { panic!("{error}"); } }
+    result
+}
+
 impl Compositor {
     pub fn headless() -> Result<Self, CompositorError> {
         let gpu = headless::HeadlessGpu::new()?;
@@ -22,21 +33,28 @@ impl Compositor {
     ) -> Result<Self, CompositorError> {
         // 棚の検証は、この device が本当に持っている物で行う(`Capabilities::all()` は嘘)。棚は device の後に組まれる。
         effects::block_program::note_device(&device);
+        #[cfg(test)]
+        eprintln!("MOTOLII_COMPOSITOR_INIT phase=render_context");
         let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
+        #[cfg(test)]
+        eprintln!("MOTOLII_COMPOSITOR_INIT phase=catalog");
         let catalog = super::catalog_snapshot();
-        let effect_programs = catalog.definitions.iter().filter(|d| (d.manifest.expose || d.manifest.stage == effects::IsfStage::Warp) && matches!(d.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp))
-            .map(|d| (d.plugin_id().to_owned(), effects::EffectProgram::compile(&ctx, d))).collect();
-        let builtin = |name: &str| -> Result<effects::EffectProgram, CompositorError> {
+        let effect_programs = Default::default();
+        let builtin = |name: &str| -> Result<effects::LazyEffectProgram, CompositorError> {
             let definition = catalog.definitions.iter().find(|d| d.source.name == name)
                 .ok_or_else(|| CompositorError::Effect(format!("missing validated {name} program (catalog: {})", catalog.errors.join("; "))))?;
-            Ok(effects::EffectProgram::compile(&ctx, definition))
+            Ok(effects::LazyEffectProgram::new(definition.clone()))
         };
         let blend_vism = builtin("blend")?;
         let matte_vism = builtin("matte")?;
 
+        #[cfg(test)]
+        eprintln!("MOTOLII_COMPOSITOR_INIT phase=selection_bounds");
         let selection_bounds = selection_bounds::SelectionBounds::new(&ctx.device, re_renderer::OutlineMaskProcessor::mask_sample_count(ctx.device_caps().tier) > 1);
+        #[cfg(test)]
+        eprintln!("MOTOLII_COMPOSITOR_INIT phase=ready cached_effects=0");
         Ok(Self {
             ctx,
             window: crate::render::compositor::Window { width: 0, height: 0, roi: [0.0; 4], projection_camera: None },
@@ -101,13 +119,11 @@ impl Compositor {
         self.baked_effects.clear(&mut self.effect_scratch);
         for definition in changed {
             if !matches!(definition.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp) { continue; }
-            let program = effects::EffectProgram::compile(&self.ctx, definition);
             match definition.source.name.as_str() {
-                "blend" => self.blend_vism = program,
-                "matte" => { self.matte_vism = program; self.coverage_programs.clear(); }
+                "blend" => self.blend_vism = effects::LazyEffectProgram::new((*definition).clone()),
+                "matte" => { self.matte_vism = effects::LazyEffectProgram::new((*definition).clone()); self.coverage_programs.clear(); }
                 // 棚に出さない warp も段の契約として組む(turbulent_warp は退役後も material.rs の試験が使う)。
-                _ if definition.manifest.expose || definition.manifest.stage == effects::IsfStage::Warp => { self.effect_programs.insert(definition.plugin_id().to_owned(), program); }
-                _ => {}
+                _ => { self.effect_programs.remove(definition.plugin_id()); }
             }
         }
         self.catalog = next;
@@ -197,8 +213,8 @@ impl Compositor {
         let slice = staging.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
-        self.ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| CompositorError::Draw(e.to_string()))?;
-        rx.recv().map_err(|e| CompositorError::Draw(e.to_string()))?.map_err(|e| CompositorError::Draw(e.to_string()))?;
+        wait_for_gpu(&self.ctx.device, "texture-readback")?;
+        rx.recv_timeout(std::time::Duration::from_secs(30)).map_err(|e| CompositorError::Draw(format!("texture-readback map callback: {e}")))?.map_err(|e| CompositorError::Draw(e.to_string()))?;
         let data = slice.get_mapped_range();
         let mut out = Vec::with_capacity((row * height) as usize);
         for y in 0..height as usize {
