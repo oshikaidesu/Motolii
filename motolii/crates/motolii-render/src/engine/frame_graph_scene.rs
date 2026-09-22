@@ -287,7 +287,7 @@ impl Engine {
                 );
                 (
                     direct_passes.into_iter().chain(plate_passes).collect(),
-                    self.frame_graph_image_sources(&source.image_sources, comp, projection_camera)?,
+                    self.frame_graph_snapshot_rows(source, comp, projection_camera)?,
                 )
             };
             // Stencil/Silhouette are matte sources, never compositor blend modes.
@@ -518,98 +518,6 @@ impl Engine {
             picture.padding,
             picture.frame,
         ))
-    }
-
-    fn frame_graph_image_sources(
-        &mut self,
-        rows: &[Vec<SceneImageSourceValue>],
-        comp: CompSpec,
-        camera: ResolvedCamera,
-    ) -> Result<Vec<Vec<crate::render::compositor::GpuTexture2D>>, EngineError> {
-        rows.iter().map(|row| {
-            let mut textures = Vec::with_capacity(row.len());
-            for source in row {
-                match self.frame_graph_image_source(source, comp, camera)? {
-                    Some(texture) => textures.push(texture),
-                    None => {
-                        textures.clear();
-                        break;
-                    }
-                }
-            }
-            Ok(textures)
-        }).collect()
-    }
-
-    fn frame_graph_image_source(
-        &mut self,
-        source: &SceneImageSourceValue,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-    ) -> Result<Option<crate::render::compositor::GpuTexture2D>, EngineError> {
-        match source {
-            SceneImageSourceValue::Content { layer, content, time, namespace } => {
-                let previous_clock = self.compositor.clock;
-                let previous_namespace = self.feedback_namespace;
-                self.feedback_namespace = *namespace;
-                self.set_frame_graph_source_clock(*time);
-                let result = (|| {
-                let content = match content {
-                    SceneContentValue::None => return Ok(None),
-                    SceneContentValue::Text(text) => self.shape_texture_from_shapes(
-                        &text.shapes(), *layer, false, 0.05, comp, None, false,
-                    )?.0,
-                    SceneContentValue::Shape(shapes) => self.shape_texture_from_shapes(
-                        shapes, *layer, false, 0.05, comp, None, false,
-                    )?.0,
-                    SceneContentValue::Material(_) | SceneContentValue::Particles(_) => return Ok(None),
-                    SceneContentValue::Media { source, time } => {
-                        self.file_content_for(&source.path, *time, *layer, comp)?.0
-                    }
-                    SceneContentValue::Plate(plate) => {
-                        let nested = SceneValue {
-                            layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
-                        };
-                        let prepared = self.prepare_gpu_scene(&nested, comp, camera)?;
-                        if prepared.layers.is_empty() { return Ok(None); }
-                        let (texture, _) = self.compositor.render_to_texture(
-                            comp,
-                            camera,
-                            &prepared.layers,
-                            crate::render::compositor::NO_BACKGROUND,
-                        )?;
-                        return Ok(self.compositor.import_premultiplied(&texture).ok());
-                    }
-                };
-                let Some(texture) = content.and_then(|content| content.texture().cloned()) else {
-                    return Ok(None);
-                };
-                Ok(self.compositor.snapshot_texture(&texture))
-                })();
-                self.compositor.clock = previous_clock;
-                self.feedback_namespace = previous_namespace;
-                result
-            }
-            SceneImageSourceValue::Scene { scene, background, time, namespace } => {
-                let previous_clock = self.compositor.clock;
-                let previous_namespace = self.feedback_namespace;
-                self.feedback_namespace = *namespace;
-                self.set_frame_graph_source_clock(*time);
-                let result = (|| {
-                let prepared = self.prepare_gpu_scene(scene, comp, camera)?;
-                let (texture, _) = self.compositor.render_to_texture(
-                    comp,
-                    camera,
-                    &prepared.layers,
-                    *background,
-                )?;
-                Ok(self.compositor.import_premultiplied(&texture).ok())
-                })();
-                self.compositor.clock = previous_clock;
-                self.feedback_namespace = previous_namespace;
-                result
-            }
-        }
     }
 
     fn set_frame_graph_source_clock(&mut self, time: crate::doc::core::RationalTime) {
