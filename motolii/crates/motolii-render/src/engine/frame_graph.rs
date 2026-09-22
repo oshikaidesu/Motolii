@@ -306,6 +306,10 @@ impl Engine {
             .copied()
             .unwrap_or_default();
         let camera = camera_override.unwrap_or(document_camera);
+        self.update_gpu_execution_plan(
+            prepared.composite_resource,
+            super::gpu_exec::GpuSink::Export,
+        );
         let mut layers = prepared.layers.clone();
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
@@ -330,6 +334,10 @@ impl Engine {
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        self.update_gpu_execution_plan(
+            prepared.composite_resource,
+            super::gpu_exec::GpuSink::Offscreen,
+        );
         let mut layers = prepared.layers.clone();
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
@@ -441,6 +449,14 @@ impl Engine {
         }
         let prepared = state.prepared.as_ref()
             .ok_or_else(|| EngineError::Store("GPU lowering result is missing".into()))?;
+        self.update_gpu_execution_plan(
+            prepared.composite_resource,
+            match projection {
+                crate::frame_graph::ViewProjection::Camera => super::gpu_exec::GpuSink::Preview,
+                crate::frame_graph::ViewProjection::Stage => super::gpu_exec::GpuSink::Stage,
+                _ => unreachable!("projection checked above"),
+            },
+        );
 
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
