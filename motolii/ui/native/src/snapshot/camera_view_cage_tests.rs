@@ -200,7 +200,7 @@ fn the_cage_contains_the_drawn_mesh_under_the_scene_camera(){
         if projection!="3D" { continue; }
         // 3 軸ギズモは層の anchor(観測者で写した点)に立ち、描いた層の上に乗る。
         let view=rt.doc.view();
-        let world=motolii_render::picture::resolve::transform::world_transform3d(&view, mesh,time).unwrap();
+        let world=rt.engine.frame_graph_cached_scene(&view,time).unwrap().layer(mesh).unwrap().transform.spatial;
         let anchor=match view.value_at(mesh,&PropertyId::new(property::ANCHOR).unwrap(),time).unwrap(){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
         let projection=crate::doc::core::camera_projection(comp,rt.view_camera(View::Camera).unwrap());
         let c=projection.projection_matrix()*projection.view_matrix()*world.transform_point3(glam::vec3(anchor[0]as f32,anchor[1]as f32,0.0)).extend(1.0);
@@ -237,10 +237,10 @@ fn a_tilted_planar_layer_keeps_a_facing_frame_and_its_handles_write_scale_and_ro
         assert!((c[0][1]-c[1][1]).abs()<1e-3&&(c[1][0]-c[2][0]).abs()<1e-3&&(c[2][1]-c[3][1]).abs()<1e-3&&(c[3][0]-c[0][0]).abs()<1e-3,"{projection}: the frame faces the observer: {c:?}");
         assert!(c[0][0]<c[1][0]&&c[0][1]<c[3][1],"{projection}: nw, ne, se, sw: {c:?}");
         let view=rt.doc.view();
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, time).unwrap();
-        let r=resolved.iter().find(|r|r.id==layer).unwrap();
-        let b=rt.engine.selected_layer_bounds_in(&view,&resolved,layer,time).unwrap();
-        let projected=crate::doc::core::projected_screen_corners(comp,rt.engine.resolve_camera(&view,time).unwrap(),observer,r.projection,crate::doc::core::depth_scaled(r.placement.world_transform.unwrap()),b.min,b.max);
+        let scene=rt.engine.frame_graph_cached_scene(&view,time).unwrap();
+        let r=scene.layer(layer).unwrap();
+        let b=rt.engine.selected_scene_layer_bounds_in(&view,&scene.layers,layer,time).unwrap();
+        let projected=crate::doc::core::projected_screen_corners(comp,rt.engine.resolve_camera(&view,time).unwrap(),observer,r.projection,crate::doc::core::depth_scaled(r.transform.spatial),b.min,b.max);
         for p in projected{assert!(c[0][0]-1e-3<=p.x as f64&&p.x as f64<=c[2][0]+1e-3&&c[0][1]-1e-3<=p.y as f64&&p.y as f64<=c[2][1]+1e-3,"{projection}: corner {p:?} outside the frame {c:?}");}
         assert!((c[1][0]-c[0][0])>1.0&&(c[3][1]-c[0][1])>1.0,"{projection}: the frame is not edge-on even though the plane may be");
         // 角を外へ引く → scale が伸びる。
