@@ -77,13 +77,14 @@ fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, ste
     build_paths(shapes, canvas, tolerance, step, false)
 }
 
-/// Shapes the GPU can fill exactly from their curves: solid fills only, no strokes (an exact fill
-/// is drawn after tessellated paint, so mixing would reorder it), and no field bending the outline.
+/// Shapes the GPU can paint exactly from their curves: every fill and stroke is one colour (exact
+/// paint is drawn after tessellated paint, so a layer is all one or the other), and no field bends
+/// the outline.
 fn fills_exactly(shapes: &[ShapeNode], step: Option<f32>) -> Result<bool, CompositorError> {
     if step.is_some() { return Ok(false); }
     let leaves = crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))?;
     Ok(leaves.iter().all(|shape| {
-        shape.stroke.as_ref().is_none_or(|s| s.hidden)
+        shape.stroke.as_ref().is_none_or(|s| s.hidden || matches!(s.brush, Brush::Solid(_)))
             && shape.fill.as_ref().is_none_or(|f| f.hidden || matches!(f.brush, Brush::Solid(_)))
     }))
 }
@@ -109,7 +110,10 @@ fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Opti
                     miter_limit: stroke.miter_limit as f32,
                     dash: stroke.dash.as_ref().map(|d| (d.pattern.iter().map(|v| *v as f32).collect(), d.offset as f32)),
                 };
-                b.stroke(&outline, &s, &*paint(&stroke.brush, stroke.opacity * instance.opacity, origin));
+                match (&stroke.brush, exact) {
+                    (Brush::Solid(c), true) => b.stroke_exact(&outline, &s, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(stroke.opacity * instance.opacity)])),
+                    _ => b.stroke(&outline, &s, &*paint(&stroke.brush, stroke.opacity * instance.opacity, origin)),
+                }
             }
         }
     }

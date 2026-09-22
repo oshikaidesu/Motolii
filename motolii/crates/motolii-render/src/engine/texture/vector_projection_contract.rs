@@ -216,3 +216,40 @@ fn an_exact_fill_stays_a_true_circle_at_any_magnification() {
     }
     assert_eq!(wrong, 0, "pixels on the wrong side of the true circle");
 }
+
+/// A solid stroke is its outline as curves, filled exactly: a ring stays a true ring when magnified.
+#[test]
+fn an_exact_stroke_stays_a_true_ring_at_any_magnification() {
+    use crate::doc::vector::{LineCap, LineJoin, Stroke};
+    let scale = 40.0;
+    let mut doc = circle(16.0, scale as f64, false);
+    let mut shapes = doc.view().shapes(LayerId(1)).unwrap();
+    if let ShapeNode::Leaf(shape) = &mut shapes[0] {
+        shape.fill = None;
+        shape.stroke = Some(Stroke { brush: Brush::Solid(Rgb { r: 0.0, g: 0.0, b: 0.0 }), width: 2.0, cap: LineCap::Butt, join: LineJoin::Miter, miter_limit: 4.0, opacity: 1.0, hidden: false, dash: None });
+    }
+    let canvas = content_canvas(&shapes).unwrap().unwrap();
+    doc.apply_all([
+        Intent::SetShapes { layer: LayerId(1), shapes },
+        Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::ANCHOR).unwrap(), value: Value::Vec2([canvas.origin_x as f64, canvas.origin_y as f64]) },
+    ]).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert!(
+        engine.shape_textures.values().any(|c| matches!(&c.texture, LayerContent::Model(m) if m.vertices.len() % 4 == 0 && m.vertices.len() <= 8)),
+        "a solid stroke is drawn as quads over its outline curves, not a tessellation",
+    );
+    let (center, radius, half) = (glam::vec2(256.0, 256.0), 8.0 * scale, 1.0 * scale);
+    let mut wrong = 0;
+    for y in 0..512usize {
+        for x in 0..512usize {
+            let band = (glam::vec2(x as f32 + 0.5, y as f32 + 0.5) - center).length() - radius;
+            let distance = band.abs() - half;
+            if distance.abs() < 1.5 { continue; }
+            let ink = pixels[(y * 512 + x) * 4] < 128;
+            if ink != (distance < 0.0) { wrong += 1; }
+        }
+    }
+    assert_eq!(wrong, 0, "pixels on the wrong side of the true ring");
+}
