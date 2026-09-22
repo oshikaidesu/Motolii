@@ -8,11 +8,14 @@ use super::{NodeKey, WorkKey};
 /// A completed node result. The graph only owns its identity and lifetime;
 /// node adapters own the concrete CPU or GPU value type.
 #[derive(Clone)]
-pub struct NodeValue(Arc<dyn Any + Send + Sync>);
+pub struct NodeValue {
+    value: Arc<dyn Any + Send + Sync>,
+    type_name: &'static str,
+}
 
 impl fmt::Debug for NodeValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("NodeValue(..)")
+        f.debug_struct("NodeValue").field("type_name", &self.type_name).finish()
     }
 }
 
@@ -21,11 +24,18 @@ impl NodeValue {
     where
         T: Any + Send + Sync,
     {
-        Self(Arc::new(value))
+        Self {
+            value: Arc::new(value),
+            type_name: std::any::type_name::<T>(),
+        }
     }
 
     pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
-        self.0.downcast_ref()
+        self.value.downcast_ref()
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        self.type_name
     }
 }
 
