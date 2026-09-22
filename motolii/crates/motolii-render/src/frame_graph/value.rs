@@ -53,6 +53,7 @@ pub struct EvaluatedFrame {
     pub(crate) values: BTreeMap<NodeKey, NodeValue>,
     pub(crate) executed: Vec<NodeKey>,
     pub(crate) reused: Vec<NodeKey>,
+    pub(crate) input_types: BTreeMap<NodeKey, Vec<&'static str>>,
 }
 
 impl EvaluatedFrame {
@@ -79,6 +80,9 @@ impl EvaluatedFrame {
     }
     pub fn reused_nodes(&self) -> &[NodeKey] {
         &self.reused
+    }
+    pub fn input_types(&self, key: NodeKey) -> Option<&[&'static str]> {
+        self.input_types.get(&key).map(Vec::as_slice)
     }
 }
 
