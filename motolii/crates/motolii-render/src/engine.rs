@@ -7,7 +7,6 @@ pub mod strokes;
 mod analysis;
 #[cfg(test)]
 mod analysis_contracts;
-mod motion;
 mod overlay;
 #[cfg(test)]
 mod motion_contracts;
@@ -176,7 +175,7 @@ pub struct Engine {
     containers: HashMap<String, ContainerInfo>,
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
-    /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
+    /// このコマの粒子の層の点。
     particle_frames: HashMap<LayerId, ParticleFrame>,
     /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
     overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
