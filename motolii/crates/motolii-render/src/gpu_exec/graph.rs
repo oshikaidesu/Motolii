@@ -135,6 +135,8 @@ impl GpuResourceGraph {
         self.resources.get(&key).map(|record| &record.desc)
     }
 
+    pub fn passes(&self) -> impl Iterator<Item = (GpuPassKey, &GpuPassDesc)> { self.passes.iter().map(|(key, pass)| (*key, pass)) }
+
     pub fn pass(&self, key: GpuPassKey) -> Option<&GpuPassDesc> {
         self.passes.get(&key)
     }
