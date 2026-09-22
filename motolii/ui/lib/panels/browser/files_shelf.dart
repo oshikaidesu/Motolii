@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
@@ -28,15 +29,17 @@ class FilesShelf extends BrowserShelf {
   List<Map<String, dynamic>> listing = [];
   String? listingError;
 
-  static String get _home => Platform.environment['HOME'] ?? '/';
-  static Map<String, String> get _places => {
-    'Home': _home,
-    'Desktop': '$_home/Desktop',
-    'Downloads': '$_home/Downloads',
-    'Pictures': '$_home/Pictures',
-    'Movies': '$_home/Movies',
-    'Music': '$_home/Music',
-  };
+  static String get _home => kIsWeb ? '/' : Platform.environment['HOME'] ?? '/';
+  static Map<String, String> get _places => kIsWeb
+      ? const {}
+      : {
+          'Home': _home,
+          'Desktop': '$_home/Desktop',
+          'Downloads': '$_home/Downloads',
+          'Pictures': '$_home/Pictures',
+          'Movies': '$_home/Movies',
+          'Music': '$_home/Music',
+        };
 
   @override
   List<String> rails(BrowserHost host) => _places.keys.toList();
@@ -116,7 +119,7 @@ class FilesShelf extends BrowserShelf {
         ].join(' · '),
         if (path != null) fileFact(path),
       ],
-      if (path != null) homely(File(path).parent.path),
+      if (path != null) homely(fileParent(path)),
     ];
   }
 
@@ -196,7 +199,7 @@ class FilesShelf extends BrowserShelf {
             'Forward',
             folderForward.isEmpty ? null : () => _forward(host),
           ),
-          step(Glyph.arrow_upward, 'Up', () => _up(host)),
+          step(Glyph.arrow_upward, 'Up', kIsWeb ? null : () => _up(host)),
           const SizedBox(width: EditorMetrics.s4),
           Expanded(
             child: SingleChildScrollView(
@@ -264,6 +267,7 @@ class FilesShelf extends BrowserShelf {
   }
 
   void _up(BrowserHost host) {
+    if (kIsWeb) return;
     final parent = Directory(folder!).parent.path;
     if (parent != folder) _go(host, parent);
   }
@@ -273,6 +277,11 @@ class FilesShelf extends BrowserShelf {
   /// synchronous: a folder of a few hundred entries lists in a millisecond,
   /// and the answer is on screen in the same frame as the press.
   void _read(BrowserHost host) {
+    if (kIsWeb) {
+      listing = const [];
+      listingError = 'Files are unavailable in browser';
+      return;
+    }
     final path = folder;
     if (path == null) return;
     final allowed = (host.controller.state['importExtensions'] as List? ?? [])
