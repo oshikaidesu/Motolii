@@ -106,10 +106,39 @@ fn f64_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, de
         _ => default,
     }
 }
-fn selection_geom_resolved(
+fn scene_layer<'a>(
+    scene: &'a crate::render::frame_graph::SceneValue,
+    id: LayerId,
+) -> Option<&'a crate::render::frame_graph::SceneLayerValue> {
+    fn find<'a>(
+        layer: &'a crate::render::frame_graph::SceneLayerValue,
+        id: LayerId,
+        fallback: &mut Option<&'a crate::render::frame_graph::SceneLayerValue>,
+    ) -> Option<&'a crate::render::frame_graph::SceneLayerValue> {
+        if layer.layer == id && !layer.ghost {
+            if layer.instance == 0 { return Some(layer); }
+            if fallback.is_none() { *fallback = Some(layer); }
+        }
+        if let crate::render::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
+            for member in &plate.members {
+                if let Some(child) = member.layer.as_ref() {
+                    if let Some(found) = find(child, id, fallback) { return Some(found); }
+                }
+            }
+        }
+        None
+    }
+    let mut fallback = None;
+    for layer in &scene.layers {
+        if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
+    }
+    fallback
+}
+
+fn selection_geom_scene(
     engine: &Engine,
     view: &StoreView<'_>,
-    resolved: &[crate::render::picture::resolved::ResolvedLayer],
+    scene: &crate::render::frame_graph::SceneValue,
     layer: LayerId,
     rt: RationalTime,
 ) -> Option<SelGeom> {
@@ -126,8 +155,8 @@ fn selection_geom_resolved(
     let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
     let rotation = f64_at(view, layer, property::ROTATION, rt, 0.0);
-    let local_bounds = engine.selected_layer_bounds_in(view, resolved, layer, rt)?;
-    let local_outline = engine.selected_layer_outline_in(view, resolved, layer, rt).unwrap_or_else(|| local_bounds.corners().to_vec());
+    let local_bounds = engine.selected_scene_layer_bounds_in(view, &scene.layers, layer, rt)?;
+    let local_outline = engine.selected_scene_layer_outline_in(view, &scene.layers, layer, rt).unwrap_or_else(|| local_bounds.corners().to_vec());
     let [w0, h0, _] = local_bounds.size();
     let natural = (w0 as f64, h0 as f64);
     let box_ = (
@@ -136,10 +165,20 @@ fn selection_geom_resolved(
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
-    let evaluated = resolved.iter().find(|l| l.id == layer && !l.ghost)?;
+    let evaluated = scene_layer(scene, layer)?;
+    let placement = crate::doc::core::LayerPlacement {
+        transform: evaluated.transform.affine,
+        world_transform: Some(evaluated.transform.spatial),
+        order: i32::from(evaluated.order),
+        opacity: evaluated.opacity,
+        z: evaluated.transform.spatial.translation.z,
+        rotation_x: 0.0,
+        rotation_y: 0.0,
+        plane: None,
+    };
     Some(SelGeom {
         projection: evaluated.projection,
-        placement: evaluated.placement,
+        placement,
         z,
         rotation_x,
         rotation_y,
@@ -618,8 +657,8 @@ impl CageDrag {
         let layer=*ids.last().ok_or("Select a layer")?;
         let view=doc.view().without_transients();
         if let Some(reason)=crate::editor::functions::lens::edit_rejection(&view,layer).map_err(|e|e.to_string())?{return Err(reason.into())}
-        let resolved=engine.frame_graph_editor_layers(&view,at).map_err(|e|e.to_string())?;
-        let geom=selection_geom_resolved(engine,&view,&resolved,layer,at).ok_or("Selected layer bounds are unavailable")?;
+        let scene=engine.frame_graph_editor_scene(&view,at).map_err(|e|e.to_string())?;
+        let geom=selection_geom_scene(engine,&view,&scene,layer,at).ok_or("Selected layer bounds are unavailable")?;
         let mode=match mode {"move"=>GizmoMode::Move,"rotate"=>GizmoMode::Rotate,"scale"=>match handle {
             "nw"=>GizmoMode::ScaleCorner{sx:false,sy:false},"ne"=>GizmoMode::ScaleCorner{sx:true,sy:false},"sw"=>GizmoMode::ScaleCorner{sx:false,sy:true},"se"=>GizmoMode::ScaleCorner{sx:true,sy:true},
             "n"=>GizmoMode::ScaleEdge{axis_x:false,positive:false},"s"=>GizmoMode::ScaleEdge{axis_x:false,positive:true},"w"=>GizmoMode::ScaleEdge{axis_x:true,positive:false},"e"=>GizmoMode::ScaleEdge{axis_x:true,positive:true},_=>return Err("Unknown scale handle".into())},_=>return Err("Unsupported stage mode".into())};
@@ -627,14 +666,14 @@ impl CageDrag {
         let map=if geom.projection==LayerProjection::ThreeD{plane_map(&fit,&geom)}else{frame_map(&fit,&geom,mode==GizmoMode::Rotate)};let(u,v)=map.to_uv(start[0],start[1]);
         if !u.is_finite()||!v.is_finite(){return Err("Selected plane is edge-on".into())}
         let(bx,by,bw,bh)=geom.box_;let grab=rotate_around(geom.position,geom.rotation,(bx+u*bw,by+v*bh));
-        let mut others=Vec::new();for &id in ids{if id!=layer&&crate::editor::functions::lens::edit_rejection(&view,id).map_err(|e|e.to_string())?.is_none(){if let Some(g)=selection_geom_resolved(engine,&view,&resolved,id,at){others.push((id,g));}}}
+        let mut others=Vec::new();for &id in ids{if id!=layer&&crate::editor::functions::lens::edit_rejection(&view,id).map_err(|e|e.to_string())?.is_none(){if let Some(g)=selection_geom_scene(engine,&view,&scene,id,at){others.push((id,g));}}}
         let mut original_values=Vec::new();for(id,g)in std::iter::once((layer,&geom)).chain(others.iter().map(|(id,g)|(*id,g))){for(name,value)in[(property::POSITION,Value::Vec2([g.position.0,g.position.1])),(property::SCALE,Value::Vec2([g.box_.2/g.natural.0,g.box_.3/g.natural.1])),(property::ROTATION,Value::F64(g.rotation)),(property::ROTATION_X,Value::F64(g.rotation_x)),(property::ROTATION_Y,Value::F64(g.rotation_y)),(property::POSITION_Z,Value::F64(g.z))]{original_values.push((id,PropertyId::new(name).map_err(|e|e.to_string())?,value));}}
         let drag=GizmoDrag{owner:0,layer,mode,grab,orig_position:geom.position,orig_rotation:geom.rotation,orig_rotation_xy:(geom.rotation_x,geom.rotation_y),orig_z:geom.z,anchor:geom.anchor,natural:geom.natural,local_bounds:geom.local_bounds,orig_box:geom.box_,fit_z:geom.z,projection:geom.projection,orig_placement:geom.placement,last:None,preview:Vec::new(),original_values,at,others};
         let mut moves = Vec::new();
         if mode == GizmoMode::Move {
             for (id, g) in std::iter::once((layer, &geom)).chain(drag.others.iter().map(|(id, g)| (*id, g))) {
                 let parent = match view.attrs(id).map_err(|e| e.to_string())?.and_then(|a| a.parent) {
-                    Some(id) => motolii_render::picture::resolve::transform::world_transform3d(&view, id, at).map_err(|e| e.to_string())?,
+                    Some(id) => scene_layer(&scene, id).map(|layer| layer.transform.spatial).ok_or_else(|| format!("Parent layer {} is not present in the FrameGraph scene", id.0))?,
                     None => glam::Affine3A::IDENTITY,
                 };
                 let mapping = translation_map(&fit, g, parent, start);
@@ -654,10 +693,12 @@ impl CageDrag {
                     while let Some(x) = up { if x == b { return true } up = view.attrs(x).ok().flatten().and_then(|t| t.parent); guard += 1; if guard > 64 { break } }
                     false
                 };
-                for other in resolved.iter().filter(|l| !l.ghost && l.copy == 0 && l.placement.opacity > 0.0) {
+                for other_id in view.layers() {
+                    let Some(other)=scene_layer(&scene,other_id) else{continue};
+                    if other.opacity <= 0.0 { continue }
                     if matches!(other.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) { continue }
-                    if ids.iter().any(|id| related(*id, other.id) || related(other.id, *id)) { continue }
-                    if let Some(g) = selection_geom_resolved(engine, &view, &resolved, other.id, at) {
+                    if ids.iter().any(|id| related(*id, other_id) || related(other_id, *id)) { continue }
+                    if let Some(g) = selection_geom_scene(engine, &view, &scene, other_id, at) {
                         let (x, y, w, h) = g.box_;
                         if g.rotation.abs() < 1e-6 && w.is_finite() && h.is_finite() { snap_targets.push([x, y, x + w, y + h]); }
                     }
