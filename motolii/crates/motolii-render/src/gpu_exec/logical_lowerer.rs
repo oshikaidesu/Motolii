@@ -92,6 +92,13 @@ impl GpuLowerer for LogicalGpuLowerer {
         graph: &mut GpuResourceGraph,
         input: &GpuContributionInput,
     ) -> Result<GpuContributionResources, Self::Error> {
+        // The output identity is fixed in phase 1. Cross-contribution work
+        // must refer to this key rather than searching SceneValue/LayerId.
+        let contribution = GpuResourceIdentity {
+            source: GpuIdentitySource::Semantic(input.contribution.node),
+            class: GpuResourceClass::Composite,
+            slot: input.instance,
+        }.key();
         let content = if let Some(content) = input.content {
             let key = Self::resource(graph, content, GpuResourceClass::Content, input.instance, vec![])?;
             Self::producer(
@@ -256,6 +263,7 @@ impl GpuLowerer for LogicalGpuLowerer {
         Ok(GpuContributionResources {
             content,
             placement,
+            contribution,
             final_image_or_geometry: current,
         })
     }
