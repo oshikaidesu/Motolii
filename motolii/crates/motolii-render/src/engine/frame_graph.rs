@@ -33,6 +33,8 @@ pub(super) struct EngineFrameGraph {
     gpu_snapshots: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentSnapshot>,
     gpu_processed: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentProcessedLayer>,
     gpu_composites: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentCompositeLayer>,
+    gpu_contributions: Vec<crate::gpu_exec::GpuContributionResources>,
+    gpu_scene_outputs: Vec<crate::gpu_exec::GpuResourceKey>,
     gpu_scene_root: Option<crate::gpu_exec::GpuSceneRoot>,
     gpu_present_sink: Option<crate::gpu_exec::GpuSinkRoot>,
     gpu_readback_sink: Option<crate::gpu_exec::GpuSinkRoot>,
@@ -54,7 +56,7 @@ impl EngineFrameGraph {
         let nodes: Vec<_> = program.nodes().collect();
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, solver, overlay])
             .map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_contributions: Vec::new(), gpu_scene_outputs: Vec::new(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
     fn plan_sink(&self, kind: crate::gpu_exec::GpuSinkKind) -> Result<crate::gpu_exec::GpuExecutionPlan, EngineError> {
@@ -120,20 +122,17 @@ impl EngineFrameGraph {
                 self.gpu_lowerer.declare_contribution(&mut self.gpu_resources, input)
                     .map_err(|error| EngineError::Store(format!("GPU contribution declaration: {error:?}")))?;
             }
-            // Phase 2: lower producers and cross-contribution edges.
-            let mut ordered_outputs = Vec::with_capacity(inputs.len());
+            // Phase 2: lower only per-contribution producers. No relation may
+            // inspect another contribution until every prepared output exists.
+            let mut lowered = Vec::with_capacity(inputs.len());
             for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
-                let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
-                // Scene ordering is expressed in terms of the stable declared
-                // contribution outputs. Concrete backends must not rebuild
-                // this mapping by scanning SceneValue/LayerId.
-                if resources.final_image_or_geometry.is_some() {
-                    ordered_outputs.push(resources.contribution);
-                }
-                for (pass, operation) in resources.operations {
+                let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input)
+                    .map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+                for (pass, operation) in resources.operations.iter().copied() {
                     self.gpu_operations.install(pass, operation);
                 }
-                let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
+                let placement_version = self.gpu_resources.version(resources.placement)
+                    .ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
                 let _ = crate::gpu_exec::resident_placement(
                     &mut self.gpu_placement,
                     resources.placement,
@@ -153,7 +152,8 @@ impl EngineFrameGraph {
                     );
                 }
                 if let Some(content_key) = resources.content {
-                    let version = self.gpu_resources.version(content_key).ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
+                    let version = self.gpu_resources.version(content_key)
+                        .ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
                     let _ = engine.gpu_resident_content(
                         &mut self.gpu_content,
                         content_key,
@@ -165,11 +165,24 @@ impl EngineFrameGraph {
                     )?;
                     self.gpu_resources.mark_resident(content_key, version, self.generation);
                 }
+                lowered.push(resources);
             }
+
+            // Phase 3: connect clip/matte consumption using the prepared
+            // resource keys. The semantic LayerId mapping has already ended.
+            let relations = self.gpu_lowerer
+                .lower_relations(&mut self.gpu_resources, &inputs, &lowered)
+                .map_err(|error| EngineError::Store(format!("GPU relation lowering: {error:?}")))?;
+            for (pass, operation) in relations.operations.iter().copied() {
+                self.gpu_operations.install(pass, operation);
+            }
+            self.gpu_contributions = lowered;
+            self.gpu_scene_outputs = relations.ordered_outputs;
+
             let scene_root = crate::gpu_exec::lower_scene_root(
                 &mut self.gpu_resources,
                 self.scene,
-                &ordered_outputs,
+                &self.gpu_scene_outputs,
             ).map_err(|error| EngineError::Store(format!("GPU scene root: {error:?}")))?;
             let present = crate::gpu_exec::lower_sink(
                 &mut self.gpu_resources,
