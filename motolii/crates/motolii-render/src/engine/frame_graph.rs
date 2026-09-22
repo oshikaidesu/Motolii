@@ -378,7 +378,7 @@ impl Engine {
             .copied()
             .unwrap_or_default();
         let camera = camera_override.unwrap_or(document_camera);
-        let mut layers = self.prepare_frame_graph_layers(&state, time, document_camera)?;
+        let mut layers = self.prepare_frame_graph_layers(&mut state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
@@ -401,7 +401,7 @@ impl Engine {
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
-        let mut layers = self.prepare_frame_graph_layers(&state, time, document_camera)?;
+        let mut layers = self.prepare_frame_graph_layers(&mut state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
