@@ -590,7 +590,7 @@ impl Engine {
         comp: CompSpec,
         t: RationalTime,
         fps: crate::doc::store::Fps,
-        prepared: &mut super::frame_graph_scene::PreparedScene,
+        prepared: &mut super::frame_graph_scene::crate::gpu_exec::ExecutableScene,
     ) -> Result<(), EngineError> {
         let block_ids: Vec<String> = self.compositor.catalog.definitions.iter()
             .filter(|definition| definition.manifest.stage == IsfStage::Block)
