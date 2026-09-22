@@ -86,7 +86,7 @@ impl LogicalGpuLowerer {
         };
         let mut out = Vec::with_capacity(images.sources.len());
         for (index, source) in images.sources.iter().copied().enumerate() {
-            let identity = image_source_identity(effect.node, input.instance, index);
+            let identity = image_source_identity(effect.node, input.layer, input.instance, index);
             let output = Self::resource_with_lifetime(
                 graph,
                 identity,
@@ -307,6 +307,7 @@ mod tests {
         let effect = semantic(20, 1);
         let mut first = GpuContributionInput {
             contribution: semantic(21, 1),
+            layer: crate::doc::store::LayerId(21),
             instance: 0,
             content: Some(semantic(22, 1)),
             placement: semantic(23, 1),
@@ -347,6 +348,7 @@ mod tests {
         let mut lowerer = LogicalGpuLowerer;
         let first = GpuContributionInput {
             contribution: semantic(1, 1),
+            layer: crate::doc::store::LayerId(1),
             instance: 0,
             content: Some(semantic(2, 10)),
             placement: semantic(3, 20),
