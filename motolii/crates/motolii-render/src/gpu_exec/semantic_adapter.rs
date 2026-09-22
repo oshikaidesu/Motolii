@@ -7,7 +7,7 @@ use crate::frame_graph::{
 // rather than in the semantic programs so GPU residency policy cannot leak
 // back into semantic evaluation.
 
-use super::lowerer::{GpuContributionInput, VersionedSemantic};
+use super::lowerer::{GpuContributionInput, VersionedEffect, VersionedSemantic};
 use super::types::GpuResourceVersion;
 
 #[derive(Debug)]
@@ -61,6 +61,19 @@ impl<'a> SemanticGpuAdapter<'a> {
             version: transform_version(&layer.transform)?,
         };
 
+        // Blend/projection have no dedicated program binding of their own;
+        // like `plate`, they anchor to the contribution node. Their version
+        // is what actually decides GPU-visible invalidation.
+        let blend = VersionedSemantic {
+            node: contribution,
+            version: blend_version(layer.blend),
+        };
+        let projection = VersionedSemantic {
+            node: contribution,
+            version: projection_version(layer.projection),
+        };
+        let is_file_source = matches!(layer.source, crate::doc::store::LayerSource::File { .. });
+
         let relation_source = layer.matte.and_then(|matte| {
             let source = self.program.contribution(matte.layer)?;
             Some(super::types::GpuResourceIdentity::semantic(
@@ -90,6 +103,9 @@ impl<'a> SemanticGpuAdapter<'a> {
             instance: layer.instance,
             content,
             placement,
+            blend,
+            projection,
+            is_file_source,
             direct_effects,
             after_effects,
             image_sources: layer.image_sources.clone(),
@@ -135,8 +151,8 @@ fn content_version(value: &SceneContentValue) -> GpuResourceVersion {
             let _ = encoded.bytes(&bytes);
         }
         SceneContentValue::Material(material) => {
-            encoded.u8(3).u64(material.source.version);
-            let _ = encoded.string(&material.source.path);
+            encoded.u8(3).u64(material.version);
+            let _ = encoded.string(&material.path);
         }
         SceneContentValue::Media { source, time } => {
             encoded.u8(4).u64(source.version).rational_time(*time);
@@ -160,13 +176,32 @@ fn versioned_effects(
     layer: crate::doc::store::LayerId,
     keys: &[crate::frame_graph::NodeKey],
     values: &[crate::picture::resolved::ResolvedEffect],
-) -> Result<Vec<VersionedSemantic>, SemanticAdapterError> {
+) -> Result<Vec<VersionedEffect>, SemanticAdapterError> {
     if keys.len() != values.len() {
         return Err(SemanticAdapterError::EffectIdentityMismatch(layer));
     }
     keys.iter().copied().zip(values).map(|(node, value)| {
-        Ok(VersionedSemantic { node, version: effect_version(value)? })
+        Ok(VersionedEffect {
+            semantic: VersionedSemantic { node, version: effect_version(value)? },
+            value: value.clone(),
+        })
     }).collect()
+}
+
+fn blend_version(value: crate::doc::store::BlendMode) -> GpuResourceVersion {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u8(value as u8);
+    hash_encoded(encoded)
+}
+
+/// HARD CONSTRAINT: this hashes only the declared `LayerProjection` enum
+/// value as authored in the Document. It must never be derived from
+/// geometry, transform, or camera state — projection is always an explicit
+/// authoring-time pin, never auto-inferred.
+fn projection_version(value: crate::doc::store::LayerProjection) -> GpuResourceVersion {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u8(value as u8);
+    hash_encoded(encoded)
 }
 
 fn effect_version(value: &crate::picture::resolved::ResolvedEffect) -> Result<GpuResourceVersion, SemanticAdapterError> {

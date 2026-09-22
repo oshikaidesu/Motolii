@@ -60,7 +60,7 @@ impl crate::render::engine::Engine {
                 content.map(|content| ResidentContent { content, natural })
             }
             SceneContentValue::Material(material) => {
-                let (content, natural) = self.mesh_content_for(&material.source.path, comp)?;
+                let (content, natural) = self.mesh_content_for(&material.path, comp)?;
                 content.map(|content| ResidentContent { content, natural })
             }
             SceneContentValue::Media { source, time } => {

@@ -4,6 +4,8 @@
 //! resource/execution graph and deliberately does not preserve the old
 //! GpuScene/LayerWithPasses orchestration contract.
 
+mod blend_backend;
+mod blend_projection;
 mod composite_backend;
 mod content_backend;
 mod contribution_backend;
@@ -17,6 +19,7 @@ mod lowerer;
 mod logical_lowerer;
 mod planner;
 mod placement_backend;
+mod projection_backend;
 mod scene_root;
 mod semantic_adapter;
 mod snapshot_backend;
@@ -25,6 +28,8 @@ mod telemetry;
 mod types;
 mod visibility;
 
+pub(crate) use blend_backend::ResidentBlend;
+pub(crate) use blend_projection::GpuBlendProjectionResidency;
 pub(crate) use composite_backend::ResidentCompositeLayer;
 pub(crate) use content_backend::ResidentContent;
 pub(crate) use engine_backend::{EngineCrossExecutor, EngineGpuBackend, EngineGpuBackendError, EngineGpuOperation, EngineCrossContext};
@@ -43,6 +48,7 @@ pub(crate) use snapshot_backend::ResidentSnapshot;
 pub(crate) use scene_root::{lower_scene_root, lower_sink, GpuSceneRoot, GpuSinkKind, GpuSinkRoot};
 pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
 pub(crate) use placement_backend::{resident_placement, ResidentPlacement};
+pub(crate) use projection_backend::ResidentProjection;
 pub(crate) use planner::{
     GpuExecutionPlan, GpuPlanError, GpuPlanner, GpuResourceInterval,
 };

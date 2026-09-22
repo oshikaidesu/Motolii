@@ -325,11 +325,41 @@ impl GpuLowerer for LogicalGpuLowerer {
             vec![placement],
         )?;
 
+        let blend = Self::resource(
+            graph,
+            input.blend,
+            GpuResourceClass::Blend,
+            input.instance,
+            vec![],
+        )?;
+        Self::producer(
+            graph,
+            input.blend.node.as_u64() ^ 0x424c454e44 ^ u64::from(input.instance),
+            GpuPassKind::Upload,
+            vec![],
+            vec![blend],
+        )?;
+
+        let projection = Self::resource(
+            graph,
+            input.projection,
+            GpuResourceClass::Projection,
+            input.instance,
+            vec![],
+        )?;
+        Self::producer(
+            graph,
+            input.projection.node.as_u64() ^ 0x50524f4a4543 ^ u64::from(input.instance),
+            GpuPassKind::Upload,
+            vec![],
+            vec![projection],
+        )?;
+
         let operations = Vec::new();
         let mut snapshot_rows = Vec::with_capacity(input.direct_effects.len());
         let mut current = content;
 
-        for (index, effect) in input.direct_effects.iter().copied().enumerate() {
+        for (index, effect) in input.direct_effects.iter().enumerate() {
             let mut reads = current.into_iter().collect::<Vec<_>>();
             let mut snapshots = Vec::new();
             if let Some(row) = input.image_sources.get(index) {
@@ -337,7 +367,7 @@ impl GpuLowerer for LogicalGpuLowerer {
                     let resources = super::image_source::lower_image_source(
                         graph,
                         &super::image_source::GpuImageSourceInput {
-                            effect: effect.node,
+                            effect: effect.semantic.node,
                             pass_slot: index as u32,
                             image_slot: image_slot as u32,
                             source,
@@ -350,14 +380,14 @@ impl GpuLowerer for LogicalGpuLowerer {
             snapshot_rows.push(snapshots);
             let output = Self::resource(
                 graph,
-                effect,
+                effect.semantic,
                 GpuResourceClass::Effect,
                 index as u32,
                 reads.clone(),
             )?;
             Self::producer(
                 graph,
-                effect.node.as_u64() ^ index as u64,
+                effect.semantic.node.as_u64() ^ index as u64,
                 GpuPassKind::Render,
                 reads,
                 vec![output],
@@ -404,37 +434,40 @@ impl GpuLowerer for LogicalGpuLowerer {
         }
 
         // Placement is a separate resource; this node is only the placed
-        // contribution before after-effects.
+        // contribution before after-effects. Blend/projection are read here
+        // too so a change to either invalidates the placed output, exactly
+        // like a placement change does.
         if let Some(source) = current {
+            let reads = vec![source, placement, blend, projection];
             let output = Self::resource(
                 graph,
                 input.contribution,
                 GpuResourceClass::Composite,
                 input.instance | 0x1000_0000,
-                vec![source, placement],
+                reads.clone(),
             )?;
             Self::producer(
                 graph,
                 input.contribution.node.as_u64() ^ 0x504c41434544 ^ u64::from(input.instance),
                 GpuPassKind::Composite,
-                vec![source, placement],
+                reads,
                 vec![output],
             )?;
             current = Some(output);
         }
 
-        for (index, effect) in input.after_effects.iter().copied().enumerate() {
+        for (index, effect) in input.after_effects.iter().enumerate() {
             let reads = current.into_iter().collect::<Vec<_>>();
             let output = Self::resource(
                 graph,
-                effect,
+                effect.semantic,
                 GpuResourceClass::Effect,
                 0x8000_0000u32 | index as u32,
                 reads.clone(),
             )?;
             Self::producer(
                 graph,
-                effect.node.as_u64() ^ 0x4146544552 ^ index as u64,
+                effect.semantic.node.as_u64() ^ 0x4146544552 ^ index as u64,
                 GpuPassKind::Render,
                 reads,
                 vec![output],
@@ -467,6 +500,8 @@ impl GpuLowerer for LogicalGpuLowerer {
         Ok(GpuContributionResources {
             content,
             placement,
+            blend,
+            projection,
             contribution,
             prepared,
             snapshot_rows,
@@ -495,6 +530,9 @@ mod tests {
             instance: 0,
             content: Some(semantic(content, 10)),
             placement: semantic(tag + 100, 20),
+            blend: semantic(tag + 200, 30),
+            projection: semantic(tag + 300, 40),
+            is_file_source: false,
             direct_effects: vec![],
             after_effects: vec![],
             image_sources: vec![],

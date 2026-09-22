@@ -14,6 +14,16 @@ pub(crate) struct VersionedSemantic {
     pub version: GpuResourceVersion,
 }
 
+/// An effect's version handle plus the resolved parameters it was hashed
+/// from. Backends that need real effect parameters (not just a cache key)
+/// read `value`; the graph/version bookkeeping still flows through `semantic`
+/// exactly like every other `VersionedSemantic` consumer.
+#[derive(Clone, Debug)]
+pub(crate) struct VersionedEffect {
+    pub semantic: VersionedSemantic,
+    pub value: crate::picture::resolved::ResolvedEffect,
+}
+
 /// Per-contribution lowering input. The semantic adapter constructs these from
 /// contribution/content/transform/effect/mask bindings. The GPU lowerer never
 /// receives StoreView or the whole Document.
@@ -23,8 +33,18 @@ pub(crate) struct GpuContributionInput {
     pub instance: u32,
     pub content: Option<VersionedSemantic>,
     pub placement: VersionedSemantic,
-    pub direct_effects: Vec<VersionedSemantic>,
-    pub after_effects: Vec<VersionedSemantic>,
+    /// Blend mode is always an explicit authoring value. Its version hashes
+    /// only the declared `BlendMode`, never derived render state.
+    pub blend: VersionedSemantic,
+    /// Projection is always an explicit authoring-time pin. HARD CONSTRAINT:
+    /// its version hashes only the declared `LayerProjection`, never
+    /// evaluated/resolved geometry, transform, or camera state.
+    pub projection: VersionedSemantic,
+    /// Plain derived payload, same shape/treatment as `stencil`: computed
+    /// once at the semantic adapter lowering stage from `LayerSource`.
+    pub is_file_source: bool,
+    pub direct_effects: Vec<VersionedEffect>,
+    pub after_effects: Vec<VersionedEffect>,
     pub image_sources: Vec<Vec<crate::frame_graph::SceneImageSourceValue>>,
     pub masks: Vec<VersionedSemantic>,
     /// Explicit cross-contribution dependency. The semantic adapter resolves
@@ -48,6 +68,8 @@ pub(crate) struct GpuContributionInput {
 pub(crate) struct GpuContributionResources {
     pub content: Option<GpuResourceKey>,
     pub placement: GpuResourceKey,
+    pub blend: GpuResourceKey,
+    pub projection: GpuResourceKey,
     /// Stable contribution output declared before cross-contribution edges are
     /// connected. Matte/clip/composition backends must address this resource
     /// directly instead of rediscovering layers from SceneValue.

@@ -8,6 +8,8 @@ use crate::frame_graph::NodeKey;
 pub(crate) enum GpuResourceClass {
     Content,
     Placement,
+    Blend,
+    Projection,
     Effect,
     ImageSource,
     Snapshot,

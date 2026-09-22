@@ -29,6 +29,7 @@ pub(super) struct EngineFrameGraph {
     gpu_lowerer: crate::gpu_exec::LogicalGpuLowerer,
     gpu_content: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
     gpu_placement: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
+    gpu_blend_projection: crate::gpu_exec::GpuBlendProjectionResidency,
     gpu_effects: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
     gpu_snapshots: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentSnapshot>,
     gpu_composites: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentCompositeLayer>,
@@ -55,7 +56,7 @@ impl EngineFrameGraph {
         let nodes: Vec<_> = program.nodes().collect();
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, solver, overlay])
             .map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_composites: Default::default(), gpu_contributions: Vec::new(), gpu_scene_outputs: Vec::new(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_blend_projection: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_composites: Default::default(), gpu_contributions: Vec::new(), gpu_scene_outputs: Vec::new(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
     fn plan_sink(&self, kind: crate::gpu_exec::GpuSinkKind) -> Result<crate::gpu_exec::GpuExecutionPlan, EngineError> {
@@ -89,6 +90,8 @@ impl EngineFrameGraph {
         let scene = frame.value(self.scene)
             .and_then(|value| value.downcast_ref::<SceneValue>())
             .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        // Stage selection is editor state, not document data: plain passthrough, never node-ified.
+        let outline_index: HashMap<LayerId, u8> = engine.outline_order.iter().take(255).enumerate().map(|(index, id)| (*id, (index + 1) as u8)).collect();
         for (layer, resources) in scene.layers.iter().zip(self.gpu_contributions.iter()) {
             let Some(output) = resources.prepared else { continue };
             let version = self.gpu_resources.version(output)
@@ -105,6 +108,9 @@ impl EngineFrameGraph {
             let placement_version = self.gpu_resources.version(resources.placement)
                 .ok_or_else(|| EngineError::Store("GPU placement version missing".into()))?;
             let Some(placement) = self.gpu_placement.current(resources.placement, placement_version).copied() else { continue };
+            let Some((blend, projection)) = self.gpu_blend_projection.fetch(&self.gpu_resources, resources.blend, resources.projection) else { continue };
+            let is_file_source = matches!(layer.source, crate::doc::store::LayerSource::File { .. });
+            let outline = outline_index.get(&layer.layer).copied().unwrap_or(0);
             let effects = layer.content_key.and_then(|first| {
                 let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
                     first,
@@ -136,6 +142,11 @@ impl EngineFrameGraph {
                 layer,
                 content,
                 placement,
+                blend,
+                projection,
+                is_file_source,
+                &layer.effects,
+                outline,
                 effects,
                 pass_sources,
                 self.comp,
@@ -223,6 +234,8 @@ impl EngineFrameGraph {
                     placement,
                 );
                 self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
+                self.gpu_blend_projection.install(&mut self.gpu_resources, self.generation, resources.blend, resources.projection, layer.blend, layer.projection)
+                    .ok_or_else(|| EngineError::Store("GPU blend/projection resource version missing".into()))?;
                 if let Some(first) = layer.content_key {
                     let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
                         first,
