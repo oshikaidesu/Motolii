@@ -31,6 +31,7 @@ pub(super) struct EngineFrameGraph {
     gpu_lowerer: crate::gpu_exec::LogicalGpuLowerer,
     gpu_content: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
     gpu_placement: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
+    gpu_effects: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
 }
 
 impl EngineFrameGraph {
@@ -57,7 +58,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -98,6 +99,16 @@ impl EngineFrameGraph {
                     layer,
                 );
                 self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
+                if let Some((effect_key, effect_version)) = crate::gpu_exec::effect_chain_key(layer) {
+                    let _ = crate::gpu_exec::resident_effect_chain(
+                        &mut self.gpu_effects,
+                        effect_key,
+                        effect_version,
+                        self.generation,
+                        layer,
+                        [self.comp.width, self.comp.height],
+                    );
+                }
                 if let Some(content_key) = resources.content {
                     let version = self.gpu_resources.version(content_key).ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
                     let _ = engine.gpu_resident_content(
@@ -377,6 +388,15 @@ impl Engine {
             state.measured = false;
         }
         Ok(state)
+    }
+
+    pub(in crate::engine) fn frame_graph_resident_effects(
+        &self,
+        source: &crate::frame_graph::SceneLayerValue,
+    ) -> Option<crate::gpu_exec::ResidentEffectChain> {
+        let state = self.frame_graph.as_ref()?;
+        let (key, version) = crate::gpu_exec::effect_chain_key(source)?;
+        state.gpu_effects.current(key, version).cloned()
     }
 
     pub(in crate::engine) fn frame_graph_resident_placement(
