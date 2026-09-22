@@ -1,5 +1,5 @@
 //! Product playback owner: compile once per revision, evaluate once per exact
-//! comp time, prepare one GPU scene, then branch only for final projection.
+//! comp time, then lower evaluated semantic values through the separate GPU control plane.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -85,6 +85,7 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
+        drop(executor);
 
         // GPU lowering is intentionally outside the semantic FrameGraph. The
         // semantic scheduler owns meaning/cache; the GPU control plane owns
