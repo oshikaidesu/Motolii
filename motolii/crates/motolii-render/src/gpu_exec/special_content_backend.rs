@@ -141,13 +141,13 @@ impl crate::render::engine::Engine {
         if solid.extent() > 0.0 && source.projection != crate::doc::store::LayerProjection::TwoD && source.masks.is_empty() {
             if let crate::render::compositor::LayerContent::Texture(texture) = &value.content {
                 value.content = self.gpu_extruded_content(
-                    source, texture.clone(), value.natural, comp, solid,
+                    source, texture.clone(), value.natural, solid,
                 )?;
             }
         }
         if !source.image_sources.is_empty() {
             value.content = match &value.content {
-                crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
+                crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(&texture)
                     .map(crate::render::compositor::LayerContent::Texture)
                     .unwrap_or_else(|| value.content.clone()),
                 crate::render::compositor::LayerContent::LinearTexture(texture) => self.compositor.snapshot_texture(texture)
