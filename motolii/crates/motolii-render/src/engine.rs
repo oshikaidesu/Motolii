@@ -166,7 +166,7 @@ pub struct Engine {
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
     outline_layers: Vec<LayerId>,
     /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
-    outline_order: Vec<LayerId>,
+    pub(crate) outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
