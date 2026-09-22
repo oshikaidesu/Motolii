@@ -597,7 +597,7 @@ impl Engine {
         }).collect()
     }
 
-    fn frame_graph_image_source(
+    pub(crate) fn frame_graph_image_source(
         &mut self,
         source: &SceneImageSourceValue,
         comp: CompSpec,
