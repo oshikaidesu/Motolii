@@ -2,8 +2,6 @@
 //! 層を本物で組んで読み戻し(Freeze と同じ道)、Blob Track の塊をコマごとに解いて `AnalysisInputs` に置く。
 //! ID を持続する・動きで拾う時は入点から 1 コマずつ解き、解いたコマは書類の版が変わるまで持つ(飛んでも辿っても同じ塊)。
 
-#[allow(unused_imports)]
-use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
