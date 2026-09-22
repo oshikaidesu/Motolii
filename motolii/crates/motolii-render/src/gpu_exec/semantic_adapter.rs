@@ -85,7 +85,10 @@ impl<'a> SemanticGpuAdapter<'a> {
             effects,
             masks,
             matte_source: None,
-            plate: None,
+            plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
+                node: contribution,
+                version: content_version(&layer.content),
+            }),
         })
     }
 }
