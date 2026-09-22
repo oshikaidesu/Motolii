@@ -31,7 +31,7 @@ mod visibility;
 
 pub(crate) use composite_backend::ResidentCompositeLayer;
 pub(crate) use content_backend::ResidentContent;
-pub(crate) use engine_backend::{EngineCrossExecutor, EngineGpuBackend, EngineGpuBackendError, EngineGpuOperation};
+pub(crate) use engine_backend::{EngineCrossExecutor, EngineGpuBackend, EngineGpuBackendError, EngineGpuOperation, ResidentCrossExecutor};
 pub(crate) use effect_backend::{effect_chain_key, resident_effect_chain, ResidentEffectChain};
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
 pub(crate) use history::{history_identity, GpuHistoryRegistry};
