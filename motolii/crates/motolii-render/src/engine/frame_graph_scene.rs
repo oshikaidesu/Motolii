@@ -10,6 +10,15 @@ pub(super) struct GpuSceneValue {
     pub layer_ids: Vec<LayerId>,
 }
 
+#[derive(Clone)]
+struct PreparedGpuContribution {
+    layer_id: LayerId,
+    layer: LayerWithPasses,
+    matte: Option<crate::doc::store::Matte>,
+    clip_to_below: bool,
+    stencil: bool,
+}
+
 impl Engine {
     pub(super) fn prepare_gpu_scene_with_solver(
         &mut self,
@@ -162,181 +171,20 @@ impl Engine {
         let mut layers = Vec::with_capacity(scene.layers.len());
         let mut entries = Vec::with_capacity(scene.layers.len());
         for source in &scene.layers {
-            let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
-            let solid = crate::render::engine::translate::translate_solid(&source.effects)
-                .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
-                .unwrap_or(crate::render::compositor::extrude::Solid { depth: source.depth, bevel: None });
-            let flat = solid.extent() <= 0.0;
-            let force_picture = clip_bases.contains(&source.layer) || !flat;
-            let overlay_content = source.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
-                .then(|| self.overlay_content(source.layer, comp))
-                .transpose()?
-                .flatten();
-            let frozen = self.frame_graph_frozen_content(source);
-            let (content, natural, frozen_padding, frozen_frame, frozen_hit) = if let Some((content, natural, padding, frame)) = frozen {
-                (Some(content), natural, padding, frame, true)
-            } else if let Some((content, natural)) = overlay_content {
-                (Some(content), natural, 0, None, false)
-            } else {
-                let (content, natural) = match &source.content {
-                SceneContentValue::None => continue,
-                SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
-                SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
-                SceneContentValue::Shape(shapes) => {
-                    let stretched;
-                    let shapes = if source.shape_stretch != [1.0, 1.0] {
-                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
-                        stretched.as_slice()
-                    } else {
-                        shapes.as_slice()
-                    };
-                    self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, source.shape_stretch == [1.0, 1.0])?
-                },
-                SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
-                SceneContentValue::Media { source: media, time } => {
-                    if source.environment && crate::render::media::is_still_image_path(&media.path) {
-                        self.environment_content_for(&media.path)?
-                    } else {
-                        self.file_content_for(&media.path, *time, source.layer, comp)?
-                    }
-                }
-                SceneContentValue::Particles(value) => {
-                    let frame = super::ParticleFrame::from_particles(&value.particles, value.turbulence, value.links);
-                    let natural = [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)];
-                    (
-                        Some(crate::render::compositor::LayerContent::Cloud {
-                            positions: frame.positions,
-                            colors: frame.colors,
-                            bounds: frame.bounds,
-                            point_size: 1.0,
-                            sizes: Some(frame.sizes),
-                            sprites: true,
-                            links: frame.links,
-                        }),
-                        natural,
-                    )
-                }
-                SceneContentValue::Plate(plate) => {
-                    let nested = SceneValue {
-                        layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
-                    };
-                    let prepared = self.prepare_gpu_scene(&nested, comp, projection_camera)?;
-                    if prepared.layers.is_empty() {
-                        (None, [comp.width as f32, comp.height as f32])
-                    } else {
-                        let placement = LayerPlacement {
-                            transform: glam::Affine2::IDENTITY,
-                            world_transform: None,
-                            opacity: 1.0,
-                            order: i32::from(source.order),
-                            z: 0.0,
-                            rotation_x: 0.0,
-                            rotation_y: 0.0,
-                            plane: None,
-                        };
-                        let baked = self.bake_isolated_layers(
-                            comp,
-                            projection_camera,
-                            prepared.layers,
-                            CompositeBlendMode::Normal,
-                            placement,
-                            plate.average,
-                        )?;
-                        (Some(baked.content), baked.size)
-                    }
-                }
-            };
-                (content, natural, 0, None, false)
-            };
-            let Some(mut content) = content else { continue };
-            if let crate::render::compositor::LayerContent::Texture(texture) = &content {
-                if !flat && source.projection != crate::doc::store::LayerProjection::TwoD && source.masks.is_empty() {
-                    content = self.frame_graph_extruded_content(source, texture.clone(), natural, comp, solid)?;
-                }
-            }
-            if !frozen_hit && !source.image_sources.is_empty() {
-                content = match &content {
-                    crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
-                        .map(crate::render::compositor::LayerContent::Texture)
-                        .unwrap_or_else(|| content.clone()),
-                    crate::render::compositor::LayerContent::LinearTexture(texture) => self.compositor.snapshot_texture(texture)
-                        .map(crate::render::compositor::LayerContent::LinearTexture)
-                        .unwrap_or_else(|| content.clone()),
-                    _ => content,
-                };
-            }
-            let placement = LayerPlacement {
-                transform: source.transform.affine,
-                world_transform: Some(source.transform.spatial),
-                order: i32::from(source.order),
-                opacity: source.opacity,
-                z: source.transform.spatial.translation.z,
-                rotation_x: 0.0,
-                rotation_y: 0.0,
-                plane: None,
-            };
-            let (passes, pass_sources) = if frozen_hit {
-                (Vec::new(), Vec::new())
-            } else {
-                let mut direct_passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
-                let direct_screen = (
-                    content.texture().is_none()
-                        || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
-                ).then_some([comp.width, comp.height]);
-                self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
-
-                let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
-                let plate_screen = plate_passes.iter()
-                    .any(|pass| pass.reads_backdrop || pass.reads_composite())
-                    .then_some([comp.width, comp.height]);
-                self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
-
-                (
-                    direct_passes.into_iter().chain(plate_passes).collect(),
-                    self.frame_graph_image_sources(&source.image_sources, comp, projection_camera)?,
-                )
-            };
-            // Stencil/Silhouette are matte sources, never compositor blend modes.
-            let blend_mode = if source.blend.is_stencil() {
-                CompositeBlendMode::Normal
-            } else {
-                crate::render::engine::translate::translate_blend_mode(source.blend)?
-            };
-            let layer = Layer {
-                content,
-                size: natural,
-                placement,
-                projection: source.projection,
+            let Some(contribution) = self.prepare_gpu_contribution(
+                source,
+                &clip_bases,
+                comp,
                 projection_camera,
-                blend_mode,
-                shading: self.compositor.surface_shading_for(&source.effects, false).map_err(EngineError::Store)?,
-                displace: crate::render::engine::translate::translate_point_displace(&source.effects),
-                clip: crate::render::engine::translate::translate_clip(&source.effects),
-                shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects),
-                outline: self.outline_id(source.layer),
-                frame: frozen_frame,
+            )? else {
+                continue;
             };
-            let layer = self.apply_masks_to_layer(layer, &source.masks, natural, frozen_frame)?;
-            let source_tick = match &source.content {
-                SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
-                _ => 0,
-            };
-            let layer = self.apply_material_domains_semantic(
-                layer,
-                source.layer,
-                &source.effects,
-                matches!(source.source, crate::doc::store::LayerSource::File { .. }),
-                source_tick,
-                natural,
-                frozen_frame,
-            )?;
-            let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
-            layers.push(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
+            layers.push(contribution.layer);
             entries.push(Entry {
-                layer: source.layer,
-                matte: source.matte,
-                clip_to_below: source.clip_to_below,
-                stencil: source.blend.is_stencil(),
+                layer: contribution.layer_id,
+                matte: contribution.matte,
+                clip_to_below: contribution.clip_to_below,
+                stencil: contribution.stencil,
             });
         }
 
@@ -420,6 +268,204 @@ impl Engine {
         let layers = kept.into_iter().map(|(_, layer)| layer).collect();
 
         Ok(GpuSceneValue { layers, layer_ids })
+    }
+
+
+    /// Lower one semantic scene contribution into GPU-facing resources.
+    ///
+    /// Whole-scene dependency resolution (clip/matte consumption and final
+    /// ordering) intentionally stays outside this function. Expensive content
+    /// preparation now has a per-contribution ownership boundary so the next
+    /// migration wave can retain/cache it independently from placement.
+    fn prepare_gpu_contribution(
+        &mut self,
+        source: &SceneLayerValue,
+        clip_bases: &std::collections::HashSet<LayerId>,
+        comp: CompSpec,
+        projection_camera: ResolvedCamera,
+    ) -> Result<Option<PreparedGpuContribution>, EngineError> {
+            let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
+            let solid = crate::render::engine::translate::translate_solid(&source.effects)
+                .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
+                .unwrap_or(crate::render::compositor::extrude::Solid { depth: source.depth, bevel: None });
+            let flat = solid.extent() <= 0.0;
+            let force_picture = clip_bases.contains(&source.layer) || !flat;
+            let overlay_content = source.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
+                .then(|| self.overlay_content(source.layer, comp))
+                .transpose()?
+                .flatten();
+            let frozen = self.frame_graph_frozen_content(source);
+            let (content, natural, frozen_padding, frozen_frame, frozen_hit) = if let Some((content, natural, padding, frame)) = frozen {
+                (Some(content), natural, padding, frame, true)
+            } else if let Some((content, natural)) = overlay_content {
+                (Some(content), natural, 0, None, false)
+            } else {
+                let (content, natural) = match &source.content {
+                SceneContentValue::None => return Ok(None),
+                SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
+                SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
+                SceneContentValue::Shape(shapes) => {
+                    let stretched;
+                    let shapes = if source.shape_stretch != [1.0, 1.0] {
+                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                        stretched.as_slice()
+                    } else {
+                        shapes.as_slice()
+                    };
+                    self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, source.shape_stretch == [1.0, 1.0])?
+                },
+                SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
+                SceneContentValue::Media { source: media, time } => {
+                    if source.environment && crate::render::media::is_still_image_path(&media.path) {
+                        self.environment_content_for(&media.path)?
+                    } else {
+                        self.file_content_for(&media.path, *time, source.layer, comp)?
+                    }
+                }
+                SceneContentValue::Particles(value) => {
+                    let frame = super::ParticleFrame::from_particles(&value.particles, value.turbulence, value.links);
+                    let natural = [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)];
+                    (
+                        Some(crate::render::compositor::LayerContent::Cloud {
+                            positions: frame.positions,
+                            colors: frame.colors,
+                            bounds: frame.bounds,
+                            point_size: 1.0,
+                            sizes: Some(frame.sizes),
+                            sprites: true,
+                            links: frame.links,
+                        }),
+                        natural,
+                    )
+                }
+                SceneContentValue::Plate(plate) => {
+                    let nested = SceneValue {
+                        layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
+                    };
+                    let prepared = self.prepare_gpu_scene(&nested, comp, projection_camera)?;
+                    if prepared.layers.is_empty() {
+                        (None, [comp.width as f32, comp.height as f32])
+                    } else {
+                        let placement = LayerPlacement {
+                            transform: glam::Affine2::IDENTITY,
+                            world_transform: None,
+                            opacity: 1.0,
+                            order: i32::from(source.order),
+                            z: 0.0,
+                            rotation_x: 0.0,
+                            rotation_y: 0.0,
+                            plane: None,
+                        };
+                        let baked = self.bake_isolated_layers(
+                            comp,
+                            projection_camera,
+                            prepared.layers,
+                            CompositeBlendMode::Normal,
+                            placement,
+                            plate.average,
+                        )?;
+                        (Some(baked.content), baked.size)
+                    }
+                }
+            };
+                (content, natural, 0, None, false)
+            };
+            let Some(mut content) = content else { return Ok(None) };
+            if let crate::render::compositor::LayerContent::Texture(texture) = &content {
+                if !flat && source.projection != crate::doc::store::LayerProjection::TwoD && source.masks.is_empty() {
+                    content = self.frame_graph_extruded_content(source, texture.clone(), natural, comp, solid)?;
+                }
+            }
+            if !frozen_hit && !source.image_sources.is_empty() {
+                content = match &content {
+                    crate::render::compositor::LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
+                        .map(crate::render::compositor::LayerContent::Texture)
+                        .unwrap_or_else(|| content.clone()),
+                    crate::render::compositor::LayerContent::LinearTexture(texture) => self.compositor.snapshot_texture(texture)
+                        .map(crate::render::compositor::LayerContent::LinearTexture)
+                        .unwrap_or_else(|| content.clone()),
+                    _ => content,
+                };
+            }
+            let placement = LayerPlacement {
+                transform: source.transform.affine,
+                world_transform: Some(source.transform.spatial),
+                order: i32::from(source.order),
+                opacity: source.opacity,
+                z: source.transform.spatial.translation.z,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
+                plane: None,
+            };
+            let (passes, pass_sources) = if frozen_hit {
+                (Vec::new(), Vec::new())
+            } else {
+                let mut direct_passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
+                let direct_screen = (
+                    content.texture().is_none()
+                        || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
+                ).then_some([comp.width, comp.height]);
+                self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
+
+                let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
+                let plate_screen = plate_passes.iter()
+                    .any(|pass| pass.reads_backdrop || pass.reads_composite())
+                    .then_some([comp.width, comp.height]);
+                self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
+
+                (
+                    direct_passes.into_iter().chain(plate_passes).collect(),
+                    self.frame_graph_image_sources(&source.image_sources, comp, projection_camera)?,
+                )
+            };
+            // Stencil/Silhouette are matte sources, never compositor blend modes.
+            let blend_mode = if source.blend.is_stencil() {
+                CompositeBlendMode::Normal
+            } else {
+                crate::render::engine::translate::translate_blend_mode(source.blend)?
+            };
+            let layer = Layer {
+                content,
+                size: natural,
+                placement,
+                projection: source.projection,
+                projection_camera,
+                blend_mode,
+                shading: self.compositor.surface_shading_for(&source.effects, false).map_err(EngineError::Store)?,
+                displace: crate::render::engine::translate::translate_point_displace(&source.effects),
+                clip: crate::render::engine::translate::translate_clip(&source.effects),
+                shadow: crate::render::engine::translate::translate_cast_shadow(&source.effects),
+                outline: self.outline_id(source.layer),
+                frame: frozen_frame,
+            };
+            let layer = self.apply_masks_to_layer(layer, &source.masks, natural, frozen_frame)?;
+            let source_tick = match &source.content {
+                SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
+                _ => 0,
+            };
+            let layer = self.apply_material_domains_semantic(
+                layer,
+                source.layer,
+                &source.effects,
+                matches!(source.source, crate::doc::store::LayerSource::File { .. }),
+                source_tick,
+                natural,
+                frozen_frame,
+            )?;
+            let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
+        Ok(Some(PreparedGpuContribution {
+            layer_id: source.layer,
+            layer: LayerWithPasses {
+                layer,
+                passes,
+                padding: frozen_padding,
+                pass_sources,
+                cut: Vec::new(),
+            },
+            matte: source.matte,
+            clip_to_below: source.clip_to_below,
+            stencil: source.blend.is_stencil(),
+        }))
     }
 
 
