@@ -13,6 +13,7 @@ mod image_source;
 mod lowerer;
 mod logical_lowerer;
 mod planner;
+mod process_backend;
 mod placement_backend;
 mod semantic_adapter;
 mod snapshot_backend;
@@ -35,6 +36,7 @@ pub(crate) use resource_store::{GpuOperationTable, GpuResourceStore};
 pub(crate) use snapshot_backend::ResidentSnapshot;
 pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
 pub(crate) use placement_backend::{resident_placement, ResidentPlacement};
+pub(crate) use process_backend::ResidentProcessedLayer;
 pub(crate) use planner::{
     GpuExecutionPlan, GpuPlanError, GpuPlanner, GpuResourceInterval,
 };
