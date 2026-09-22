@@ -167,6 +167,7 @@ impl CompiledGraph {
             values: scheduled.values,
             executed: scheduled.executed,
             reused: scheduled.reused,
+            work_keys: scheduled.work_keys,
         })
     }
 
