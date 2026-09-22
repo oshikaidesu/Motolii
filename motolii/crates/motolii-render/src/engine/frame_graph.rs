@@ -402,57 +402,45 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let scene = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.scene))
-            .and_then(|value| value.downcast_ref::<SceneValue>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        // Supported cassette scenes evaluate semantic roots only. GpuScene is not
+        // present in this topology, so the reference GPU semantic node cannot run
+        // accidentally before lowering.
+        let composition = view.composition().map_err(store)?.ok_or(EngineError::NoComposition)?;
+        let (scene, document_camera, comp, _) =
+            self.evaluate_frame_graph_semantics(view, time)?;
         let graph = crate::render_lowering::lower_scene(&scene)
             .map_err(|_| EngineError::Store("Render lowering failed".into()))?;
 
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
+        if let Some(mut layers) = self.cassette_plain_layers(&scene, comp, document_camera)? {
+            // Lowering remains authoritative even though concrete resources are
+            // produced by existing host helpers during this migration slice.
+            if !scene.layers.is_empty()
+                && !graph.work().iter().any(|work| matches!(
+                    work,
+                    crate::render_graph::RenderWork::Composite { .. }
+                ))
+            {
+                return Err(EngineError::Store("RenderGraph composite work is missing".into()));
+            }
+            for layer in &mut layers {
+                layer.layer.projection_camera = document_camera;
+            }
+            let camera = camera_override.unwrap_or(document_camera);
+            let background = if include_background {
+                composition.background
+            } else {
+                crate::render::compositor::NO_BACKGROUND
+            };
+            return self
+                .compositor
+                .render_with_effects(comp, camera, &layers, background)
+                .map_err(Into::into);
+        }
 
-        let mut layers = if let Some(layers) = self.cassette_plain_layers(&scene, state.comp, document_camera)? {
-            layers
-        } else {
-            let prepared = state.frame.as_ref()
-                .and_then(|frame| frame.value(state.gpu))
-                .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-                .cloned()
-                .ok_or_else(|| EngineError::Store("GpuScene reference resources are missing".into()))?;
-
-            // Unsupported resource kinds still use the frozen oracle, but order is
-            // taken from the lowered RenderGraph so semantic ownership does not
-            // move back into the backend.
-            let composite = graph.work().iter().find_map(|work| match work {
-                crate::render_graph::RenderWork::Composite { items, .. } => Some(items),
-                _ => None,
-            }).ok_or_else(|| EngineError::Store("RenderGraph composite work is missing".into()))?;
-            let order: std::collections::HashMap<_, _> = composite.iter()
-                .enumerate().map(|(index, item)| (item.layer, index)).collect();
-            let mut paired: Vec<_> = prepared.layer_ids.iter().copied()
-                .zip(prepared.layers.iter().cloned())
-                .collect();
-            paired.sort_by_key(|(id, _)| order.get(id).copied().unwrap_or(usize::MAX));
-            paired.into_iter().map(|(_, layer)| layer).collect()
-        };
-
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        for layer in &mut layers { layer.layer.projection_camera = document_camera; }
-        let camera = camera_override.unwrap_or(document_camera);
-        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
-        let pixels = self.compositor.render_with_effects(state.comp, camera, &layers, background)?;
-        self.frame_graph = Some(state);
-        Ok(pixels)
+        // Complex semantics still use the frozen oracle until their corresponding
+        // render work families are lowered. Plain Text/Shape/Media/Mesh/Particles
+        // never enter this branch.
+        self.render_frame_graph_pixels(view, time, include_background, camera_override)
     }
 
     pub(in crate::engine) fn render_frame_graph_pixels(
