@@ -347,13 +347,22 @@ impl Engine {
                 (Vec::new(), Vec::new())
             } else {
                 let resident_effects = resident.and_then(|resident| resident.effects(source));
-                let (direct_passes, plate_passes) = resident_effects.map_or_else(
+                let (mut direct_passes, mut plate_passes) = resident_effects.map_or_else(
                     || (
                         crate::render::engine::translate::translate_effect_passes(&source.effects),
                         crate::render::engine::translate::translate_plate_passes(&source.after_effects),
                     ),
                     |resident| (resident.passes, resident.plate_passes),
                 );
+                let direct_screen = (
+                    content.texture().is_none()
+                        || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
+                ).then_some([comp.width, comp.height]);
+                self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
+                let plate_screen = plate_passes.iter()
+                    .any(|pass| pass.reads_backdrop || pass.reads_composite())
+                    .then_some([comp.width, comp.height]);
+                self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
                 (
                     direct_passes.into_iter().chain(plate_passes).collect(),
                     self.frame_graph_image_sources(source, comp, projection_camera, resident)?,
