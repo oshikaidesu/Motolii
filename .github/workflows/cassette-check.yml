@@ -8,9 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install native build/runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y             pkg-config nasm             libavutil-dev libavcodec-dev libavformat-dev libavdevice-dev             libavfilter-dev libswscale-dev libswresample-dev             mesa-vulkan-drivers
       - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt-get update && sudo apt-get install -y libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswscale-dev libswresample-dev
       - run: cargo check -p motolii-render
       - run: cargo test -p motolii-render render_lowering --lib
       - run: cargo test -p motolii-render render_backend --lib
-      - run: cargo test -p motolii-render plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation --lib -- --nocapture
+      - name: Prove the cassette path produces real pixels
+        env:
+          WGPU_BACKEND: vulkan
+        run: cargo test -p motolii-render plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation --lib -- --nocapture
