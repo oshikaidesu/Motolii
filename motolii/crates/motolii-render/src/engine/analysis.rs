@@ -2,8 +2,6 @@
 //! 層を本物で組んで読み戻し(Freeze と同じ道)、Blob Track の塊をコマごとに解いて `AnalysisInputs` に置く。
 //! ID を持続する・動きで拾う時は入点から 1 コマずつ解き、解いたコマは書類の版が変わるまで持つ(飛んでも辿っても同じ塊)。
 
-#[allow(unused_imports)]
-use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
@@ -94,7 +92,7 @@ impl Engine {
         ]);
         let picture = (|| {
             let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
-            let prepared = self.gpu_executable_scene(&scene, comp, ResolvedCamera::default())?;
+            let prepared = self.prepare_gpu_scene(&scene, comp, ResolvedCamera::default())?;
             let Some(layer) = prepared.layers.first() else { return Ok(None); };
             self.layer_with_passes_linear_picture(layer)
         })();
@@ -248,7 +246,7 @@ impl Engine {
                 .cloned()
                 .collect(),
         };
-        let prepared = self.gpu_executable_scene(&below, comp, camera)?;
+        let prepared = self.prepare_gpu_scene(&below, comp, camera)?;
         let picture = if prepared.layers.is_empty() {
             None
         } else {
@@ -361,16 +359,6 @@ impl Engine {
         }
     }
 
-    /// Compatibility projection for tests/tools that still consume ResolvedLayer.
-    /// Product meaning is evaluated by FrameGraph first; this must never re-enter
-    /// the legacy StoreView + analysis_inputs + resolved_layers owner.
-    pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        self.resolve_tally.clear();
-        self.resolve_worst.clear();
-        let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
-        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
-    }
-
     /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、
     /// semantic Scene/TextFlow の最終値から測る。診断のために legacy resolve を再実行しない。
     pub fn continuity_samples(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<(String, [f32; 2])>, EngineError> {
@@ -407,7 +395,7 @@ impl Engine {
                         .map(|bounds| bounds.map(|value| value as f32))
                 }
                 crate::frame_graph::SceneContentValue::Media { source, .. }
-                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MediaSourceValue { source }) => {
+                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => {
                     self.material_extent(&source.path, comp).map(|extent| [0.0, 0.0, extent[0], extent[1]])
                 }
                 crate::frame_graph::SceneContentValue::Plate(_) => Some([0.0, 0.0, comp.width as f32, comp.height as f32]),
@@ -482,7 +470,7 @@ fn semantic_extent(engine: &mut Engine, layer: &crate::frame_graph::SceneLayerVa
     match &layer.content {
         crate::frame_graph::SceneContentValue::Text(text) => crate::picture::shapes_ops::content_canvas(&text.shapes()).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
         crate::frame_graph::SceneContentValue::Shape(shapes) => crate::picture::shapes_ops::content_canvas(shapes).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
-        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MediaSourceValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
+        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
         crate::frame_graph::SceneContentValue::Particles(value) => {
             let mut hi = glam::Vec2::ZERO;
             for particle in &value.particles { hi = hi.max(glam::Vec2::new(particle.position[0], particle.position[1])); }
