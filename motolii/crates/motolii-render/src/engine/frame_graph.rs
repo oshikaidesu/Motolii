@@ -402,44 +402,31 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
-        // Supported cassette scenes evaluate semantic roots only. GpuScene is not
-        // present in this topology, so the reference GPU semantic node cannot run
-        // accidentally before lowering.
-        let composition = view.composition().map_err(store)?.ok_or(EngineError::NoComposition)?;
-        let (scene, document_camera, comp, _) =
+        // Important: the supported cassette path evaluates only semantic roots.
+        // It must not construct/evaluate NodeKind::GpuScene just to discover
+        // whether the new lowering/backend path can render the scene.
+        let (scene, document_camera, comp, _fps) =
             self.evaluate_frame_graph_semantics(view, time)?;
-        let graph = crate::render_lowering::lower_scene(&scene)
+        let _graph = crate::render_lowering::lower_scene(&scene)
             .map_err(|_| EngineError::Store("Render lowering failed".into()))?;
 
         if let Some(mut layers) = self.cassette_plain_layers(&scene, comp, document_camera)? {
-            // Lowering remains authoritative even though concrete resources are
-            // produced by existing host helpers during this migration slice.
-            if !scene.layers.is_empty()
-                && !graph.work().iter().any(|work| matches!(
-                    work,
-                    crate::render_graph::RenderWork::Composite { .. }
-                ))
-            {
-                return Err(EngineError::Store("RenderGraph composite work is missing".into()));
-            }
             for layer in &mut layers {
                 layer.layer.projection_camera = document_camera;
             }
             let camera = camera_override.unwrap_or(document_camera);
             let background = if include_background {
-                composition.background
+                view.composition().map_err(store)?
+                    .map_or(crate::render::compositor::NO_BACKGROUND, |c| c.background)
             } else {
                 crate::render::compositor::NO_BACKGROUND
             };
-            return self
-                .compositor
-                .render_with_effects(comp, camera, &layers, background)
+            return self.compositor.render_with_effects(comp, camera, &layers, background)
                 .map_err(Into::into);
         }
 
-        // Complex semantics still use the frozen oracle until their corresponding
-        // render work families are lowered. Plain Text/Shape/Media/Mesh/Particles
-        // never enter this branch.
+        // Unsupported semantics remain on the frozen reference path until their
+        // Raster/Filter/Composite work has been migrated with parity evidence.
         self.render_frame_graph_pixels(view, time, include_background, camera_override)
     }
 
