@@ -300,7 +300,7 @@ impl Engine {
         super::translate::stamp_feedback(passes, layer, copy, chain, screen, self.feedback_namespace);
         // 本番の鍵だけ辿り直しの対象(別の時刻の列は自分の列で進む)。
         if self.feedback_namespace == 0 {
-            self.feedback_keys_seen.extend(passes.iter().filter_map(|p| p.feedback));
+            for key in passes.iter().filter_map(|p| p.feedback) { self.gpu_history.observe(key); }
         }
     }
 
@@ -332,7 +332,7 @@ impl Engine {
             return Ok(layers);
         }
         self.compositor.feedback_set_revision(view.revision_key());
-        self.feedback_keys_seen.clear();
+        self.gpu_history.begin_frame();
         self.prepare_blocks(view, comp, t, resolved)?;
         let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
         let seen = std::mem::take(&mut self.feedback_keys_seen);
@@ -349,7 +349,7 @@ impl Engine {
         let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
         self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
         self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
-        self.feedback_keys_seen.clear();
+        self.gpu_history.begin_frame();
         Ok(layers)
     }
 
