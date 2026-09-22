@@ -6,6 +6,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "motolii/crates/motolii-render/**"
+      - "motolii/ui/native/**"
       - ".github/workflows/gpu-control-plane-check.yml"
   workflow_dispatch:
 
@@ -25,3 +26,8 @@ jobs:
         run: cargo test -p motolii-render --lib gpu_exec:: -- --nocapture
       - name: Test FrameGraph static clustering
         run: cargo test -p motolii-render --lib frame_graph::static_analysis:: -- --nocapture
+      - name: Test SceneProgram output-type inventory
+        run: cargo test -p motolii-render --lib frame_graph::program::tests::one_revision_program_evaluates_authored_values_and_shared_content_without_store_reads -- --nocapture
+      - name: Check native UI against FrameGraph public surface
+        if: runner.os == 'macOS'
+        run: cargo check -p motolii-ui
