@@ -6,6 +6,13 @@ use super::types::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct GpuGraphStats {
+    pub resources: usize,
+    pub resident: usize,
+    pub passes: usize,
+}
+
 pub(crate) enum GpuResourceDelta {
     Inserted,
     Unchanged,
@@ -195,6 +202,14 @@ impl GpuResourceGraph {
             {
                 record.resident_version = None;
             }
+        }
+    }
+
+    pub fn stats(&self) -> GpuGraphStats {
+        GpuGraphStats {
+            resources: self.resources.len(),
+            resident: self.resources.values().filter(|record| record.resident_version == Some(record.desc.version)).count(),
+            passes: self.passes.len(),
         }
     }
 
