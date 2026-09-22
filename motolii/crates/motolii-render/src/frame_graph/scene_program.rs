@@ -344,7 +344,9 @@ impl SceneNodeProgram {
                         plate.effects.clear();
                         plate.after_effect_keys = after_keys.clone();
                         plate.after_effects = after;
-                        plate.masks.clear();
+                        plate.mask_keys.clear();
+                        plate.mask_keys.clear();
+                plate.masks.clear();
                         plate.transform = TransformValue {
                             affine: glam::Affine2::IDENTITY,
                             spatial: glam::Affine3A::IDENTITY,
@@ -453,6 +455,7 @@ impl SceneNodeProgram {
                         plate.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(*layer), members, average: false });
                 plate.effects.clear();
                 plate.after_effects = after;
+                plate.mask_keys.clear();
                 plate.masks.clear();
                 plate.transform = TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY };
                 plate.opacity = 1.0;
