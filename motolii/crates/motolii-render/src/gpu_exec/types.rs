@@ -67,9 +67,7 @@ pub(crate) struct GpuResourceVersion(pub(crate) u64);
 
 impl GpuResourceVersion {
     pub fn as_u64(self) -> u64 { self.0 }
-}
 
-impl GpuResourceVersion {
     pub const STATIC: Self = Self(0);
 
     pub fn new(value: u64) -> Self {
