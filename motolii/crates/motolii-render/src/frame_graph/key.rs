@@ -144,6 +144,23 @@ pub enum NodeKind {
     Custom(u16),
 }
 
+
+impl NodeKind {
+    pub const BUILTINS: &'static [NodeKind] = &[
+        NodeKind::PropertyConstant, NodeKind::PropertyTrack, NodeKind::PropertyLink, NodeKind::PropertySum,
+        NodeKind::ResolvedWorld, NodeKind::TextDocuments, NodeKind::ShapeDocuments, NodeKind::DocumentCamera,
+        NodeKind::SharedScene, NodeKind::TextContent, NodeKind::TextStyle, NodeKind::TextShape, NodeKind::TextObstacle,
+        NodeKind::TextFlow, NodeKind::ShapeGeometry, NodeKind::ShapeMesh, NodeKind::Group, NodeKind::Layout,
+        NodeKind::FlowWindow, NodeKind::GroupBackground, NodeKind::MediaExtent, NodeKind::MeshSource, NodeKind::Material,
+        NodeKind::MediaFrame, NodeKind::AnalysisRequest, NodeKind::AnalysisBlob, NodeKind::AnalysisOverlay,
+        NodeKind::OverlaySet, NodeKind::Visibility, NodeKind::ParticleBirths, NodeKind::Particle, NodeKind::TemporalCopy,
+        NodeKind::PlacementSet, NodeKind::MotionMeasure, NodeKind::MotionSamples, NodeKind::Relation, NodeKind::RelationSet,
+        NodeKind::SolverPlan, NodeKind::Transform, NodeKind::WorldTransform, NodeKind::Camera, NodeKind::CameraProjection,
+        NodeKind::CompositeContribution, NodeKind::GroupComposite, NodeKind::EffectImages, NodeKind::SceneComposite,
+        NodeKind::Effect, NodeKind::Mask,
+    ];
+}
+
 /// A content-addressed node identity. `parameters` must be the complete,
 /// canonical input encoding for the node kind; callers must not substitute a
 /// layer id or document revision for those inputs.
