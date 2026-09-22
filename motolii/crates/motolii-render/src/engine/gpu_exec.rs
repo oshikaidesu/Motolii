@@ -27,6 +27,20 @@ impl GpuResourceId {
         Self(hasher.finish())
     }
 
+    pub(crate) fn from_dependencies(
+        kind: GpuResourceKind,
+        dependencies: impl IntoIterator<Item = GpuResourceId>,
+        discriminator: u64,
+    ) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        kind.hash(&mut hasher);
+        for dependency in dependencies {
+            dependency.hash(&mut hasher);
+        }
+        discriminator.hash(&mut hasher);
+        Self(hasher.finish())
+    }
+
     #[cfg(test)]
     fn raw(value: u64) -> Self { Self(value) }
 }
@@ -37,6 +51,7 @@ pub(crate) enum GpuResourceKind {
     Placement,
     Effect,
     Mask,
+    Clip,
     Matte,
     Plate,
     History,
