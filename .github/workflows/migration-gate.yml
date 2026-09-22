@@ -1,0 +1,21 @@
+name: migration-gate
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+jobs:
+  static-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: FrameGraph migration inventory
+        run: |
+          if [ -f scripts/framegraph-migration-inventory.py ]; then
+            python3 scripts/framegraph-migration-inventory.py --fail-on-product-owner
+          else
+            echo "migration inventory not present on this ref; skipping until merged"
+          fi
+      - name: Main migration handoff exists
+        run: test -f docs/stage5/current-migration.md
