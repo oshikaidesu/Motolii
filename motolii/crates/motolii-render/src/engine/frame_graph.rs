@@ -30,6 +30,7 @@ pub(super) struct EngineFrameGraph {
     gpu_resources: crate::gpu_exec::GpuResourceGraph,
     gpu_lowerer: crate::gpu_exec::LogicalGpuLowerer,
     gpu_content: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
+    gpu_placement: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
 }
 
 impl EngineFrameGraph {
@@ -56,7 +57,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -88,6 +89,15 @@ impl EngineFrameGraph {
             let inputs = adapter.contributions(scene).map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
             for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
                 let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+                let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
+                let _ = crate::gpu_exec::resident_placement(
+                    &mut self.gpu_placement,
+                    resources.placement,
+                    placement_version,
+                    self.generation,
+                    layer,
+                );
+                self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
                 if let Some(content_key) = resources.content {
                     let version = self.gpu_resources.version(content_key).ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
                     let _ = engine.gpu_resident_content(
@@ -367,6 +377,20 @@ impl Engine {
             state.measured = false;
         }
         Ok(state)
+    }
+
+    pub(in crate::engine) fn frame_graph_resident_placement(
+        &self,
+        source: &crate::frame_graph::SceneLayerValue,
+    ) -> Option<crate::gpu_exec::ResidentPlacement> {
+        let state = self.frame_graph.as_ref()?;
+        let node = state.program.transforms().binding(source.layer)?.world;
+        let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
+            node,
+            crate::gpu_exec::GpuResourceClass::Placement,
+            source.instance,
+        );
+        state.gpu_placement.get_any(identity.key()).map(|(_, value)| *value)
     }
 
     pub(in crate::engine) fn frame_graph_resident_content(
