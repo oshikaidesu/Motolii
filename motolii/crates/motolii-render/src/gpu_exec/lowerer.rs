@@ -35,6 +35,10 @@ pub(crate) struct GpuContributionInput {
     /// producing an ordinary matte result for the current contribution.
     pub clip_base: Option<GpuResourceKey>,
     pub clip_to_below: bool,
+    /// Concrete relation mode is payload, not discovery input. The adapter
+    /// resolves it once; backends execute the planned edge without consulting
+    /// SceneValue again.
+    pub matte_mode: Option<crate::doc::store::MatteMode>,
     pub stencil: bool,
     pub plate: Option<VersionedSemantic>,
 }
