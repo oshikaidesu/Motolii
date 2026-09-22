@@ -523,30 +523,6 @@ impl Engine {
         Ok(state)
     }
 
-    pub(crate) fn frame_graph_process_mask_flatten(
-        &mut self,
-        source: &crate::frame_graph::SceneLayerValue,
-        layer: crate::render::compositor::Layer,
-        natural: [f32; 2],
-        frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
-        comp: crate::doc::core::CompSpec,
-        camera: crate::render::engine::ResolvedCamera,
-    ) -> Result<crate::render::compositor::Layer, EngineError> {
-        let mut state = self.frame_graph.take().ok_or_else(|| EngineError::Store("frame graph state missing".into()))?;
-        let result = self.gpu_process_mask_flatten(
-            &mut state.gpu_processed,
-            source,
-            layer,
-            natural,
-            frame,
-            comp,
-            camera,
-            state.generation,
-        );
-        self.frame_graph = Some(state);
-        result
-    }
-
     pub(crate) fn frame_graph_snapshot_rows(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
