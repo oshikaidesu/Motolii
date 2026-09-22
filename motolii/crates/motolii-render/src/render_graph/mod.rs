@@ -5,4 +5,4 @@
 
 pub mod work;
 
-pub use work::{CompositeItem, RenderGraph, RenderWork, ResourceId, ResourceSource};
+pub use work::{Composed, Extrusion, ImageInput, LayerWork, MaterialRecipe, RasterSource, RenderGraph};

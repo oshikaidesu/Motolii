@@ -43,6 +43,41 @@ impl SurfaceShading {
     }
 }
 
+/// Which field/surface programs a material uses and with what values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceRecipe {
+    pub field: Option<String>,
+    pub surface: Option<String>,
+    pub params: [f32; PARAM_SLOTS],
+    pub reads_backdrop: bool,
+    pub backdrop_roughness: f32,
+    pub unlit: bool,
+}
+
+impl SurfaceRecipe {
+    pub(crate) fn from_effects(effects: &[ResolvedEffect], catalog: &super::catalog::CatalogSnapshot, unlit: bool) -> Self {
+        let (field, surface) = hooks(effects, &catalog.definitions);
+        let params = params(effects, field, surface);
+        let offset = field.map_or(0, |d| d.manifest.param_inputs().count());
+        let reads_backdrop = surface.is_some_and(|d| {
+            d.manifest.backdrop_input.as_ref().map_or(true, |name| {
+                d.manifest.param_inputs().position(|p| &p.name == name)
+                    .is_none_or(|i| params[offset + i] != 0.0)
+            })
+        });
+        let backdrop_roughness = surface.and_then(|d| {
+            let name = d.manifest.backdrop_blur_input.as_ref()?;
+            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
+            Some(params[offset + i].clamp(0.0, 1.0))
+        }).unwrap_or(1.0);
+        Self {
+            field: field.map(|d| d.plugin_id().to_string()),
+            surface: surface.map(|d| d.plugin_id().to_string()),
+            params, reads_backdrop, backdrop_roughness, unlit,
+        }
+    }
+}
+
 /// 効果列から hook を拾う。同じ stage が複数あれば下(後)が勝つ。
 pub(crate) fn hooks<'a>(effects: &'a [ResolvedEffect], definitions: &'a [VismDefinition]) -> (Option<&'a VismDefinition>, Option<&'a VismDefinition>) {
     let mut field = None;
@@ -161,36 +196,30 @@ impl crate::render::compositor::Compositor {
 
     pub(crate) fn surface_shading_for(&mut self, effects: &[crate::picture::resolved::ResolvedEffect], unlit: bool) -> Result<SurfaceShading, String> {
         self.refresh_catalog_programs();
+        let recipe = SurfaceRecipe::from_effects(effects, &self.catalog, unlit);
+        self.surface_shading_from(&recipe)
+    }
+
+    pub(crate) fn surface_shading_from(&mut self, recipe: &SurfaceRecipe) -> Result<SurfaceShading, String> {
+        self.refresh_catalog_programs();
         let catalog = self.catalog.clone();
-        let (field, surface) = hooks(effects, &catalog.definitions);
-        if !unlit && field.is_none() && surface.is_none() {
+        let find = |id: &Option<String>| id.as_ref().and_then(|id| catalog.definitions.iter().find(|d| d.plugin_id() == id));
+        let (field, surface) = (find(&recipe.field), find(&recipe.surface));
+        if !recipe.unlit && field.is_none() && surface.is_none() {
             return Ok(SurfaceShading::default());
         }
-        let key = format!("{unlit}|{}|{}|{}", field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
+        let key = format!("{}|{}|{}|{}", recipe.unlit, field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
         let program = match self.surface_programs.get(&key) {
             Some(program) => program.clone(),
             None => {
                 let mut desc = program_desc(field, surface)?;
-                if unlit && surface.is_none() { desc.surface = Some("fn motolii_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }".into()); }
+                if recipe.unlit && surface.is_none() { desc.surface = Some("fn motolii_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }".into()); }
                 let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
                 self.surface_programs.insert(key, program.clone());
                 program
             }
         };
-        let params = params(effects, field, surface);
-        let offset = field.map_or(0, |d| d.manifest.param_inputs().count());
-        let reads_backdrop = surface.is_some_and(|d| {
-            d.manifest.backdrop_input.as_ref().map_or(true, |name| {
-                d.manifest.param_inputs().position(|p| &p.name == name)
-                    .is_none_or(|i| params[offset + i] != 0.0)
-            })
-        });
-        let backdrop_roughness = surface.and_then(|d| {
-            let name = d.manifest.backdrop_blur_input.as_ref()?;
-            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
-            Some(params[offset + i].clamp(0.0, 1.0))
-        }).unwrap_or(1.0);
-        Ok(SurfaceShading { program: Some(program), params, reads_backdrop, backdrop_roughness, grid_hint: 0 })
+        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0 })
     }
 
 }

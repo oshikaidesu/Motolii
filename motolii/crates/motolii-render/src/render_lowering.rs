@@ -1,87 +1,222 @@
-//! The only intended bridge from evaluated Motolii semantics to backend-neutral
-//! render work. The existing GpuScene path remains the rendering oracle.
+//! The only bridge from evaluated Motolii semantics to backend-neutral render
+//! work. Every Motolii meaning a picture depends on is decided here; backends
+//! execute the resulting graph without reading semantic values.
 
-use crate::frame_graph::{SceneContentValue, SceneValue};
-use crate::render_graph::{CompositeItem, RenderGraph, RenderWork, ResourceId, ResourceSource};
+use std::sync::Arc;
+
+use crate::doc::core::LayerPlacement;
+use crate::doc::store::{LayerId, LayerProjection, LayerSource};
+use crate::frame_graph::{plan_composite, PlannedContribution, SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneValue};
+use crate::render::compositor::effects::catalog::CatalogSnapshot;
+use crate::render::compositor::effects::surface_program::SurfaceRecipe;
+use crate::render::compositor::extrude::Solid;
+use crate::render::engine::translate;
+use crate::render_graph::{Composed, Extrusion, ImageInput, LayerWork, RasterSource, RenderGraph};
 
 #[derive(Debug)]
-pub enum RenderLoweringError { Unsupported }
+pub enum RenderLoweringError {
+    Unsupported(String),
+}
 
-fn resource_for(content: &SceneContentValue) -> Option<(ResourceSource, bool)> {
-    match content {
-        SceneContentValue::None => None,
-        SceneContentValue::Text(_) => Some((ResourceSource::Text, true)),
-        SceneContentValue::Shape(_) => Some((ResourceSource::Shape, true)),
-        SceneContentValue::Material(material) => Some((ResourceSource::Material { path: material.source.path.clone() }, false)),
-        SceneContentValue::Media { source, .. } => Some((ResourceSource::Media { path: source.path.clone() }, false)),
-        SceneContentValue::Particles(_) => Some((ResourceSource::Particles, true)),
-        SceneContentValue::Plate(_) => Some((ResourceSource::Plate, true)),
+impl std::fmt::Display for RenderLoweringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self { Self::Unsupported(message) => f.write_str(message) }
     }
 }
 
-/// Lower evaluated scene meaning into resource work followed by one ordered
-/// composite. Resource ids are local to this graph and deliberately unrelated to
-/// semantic NodeKey identity.
-pub fn lower_scene(scene: &SceneValue) -> Result<RenderGraph, RenderLoweringError> {
-    if scene.layers.is_empty() { return Ok(RenderGraph::default()); }
-    let mut work = Vec::new();
-    let mut items = Vec::with_capacity(scene.layers.len());
-    let mut next = 1u64;
-    for layer in &scene.layers {
-        let resource = resource_for(&layer.content).map(|(source, raster)| {
-            let id = ResourceId(next); next += 1;
-            work.push(if raster {
-                RenderWork::Raster { source, output: id }
-            } else {
-                RenderWork::Transfer { source, output: id }
-            });
-            id
-        });
-        items.push(CompositeItem {
-            layer: layer.layer, resource, transform: layer.transform, opacity: layer.opacity,
-            projection: layer.projection, blend: layer.blend, order: layer.order,
-        });
+pub fn lower_scene(scene: &SceneValue, catalog: &CatalogSnapshot) -> Result<RenderGraph, RenderLoweringError> {
+    let plan = plan_composite(scene);
+    let clip_bases: std::collections::HashSet<usize> = plan.iter()
+        .flat_map(|planned| {
+            let mut groups = vec![&planned.group];
+            let mut matte = planned.matte.as_ref();
+            while let Some(m) = matte {
+                groups.push(&m.source.group);
+                matte = m.source.matte.as_ref();
+            }
+            groups
+        })
+        .filter(|group| !group.clips.is_empty())
+        .map(|group| group.base)
+        .collect();
+    let layers = scene.layers.iter().enumerate()
+        .map(|(index, layer)| lower_layer(layer, clip_bases.contains(&index), catalog))
+        .collect::<Result<_, _>>()?;
+    Ok(RenderGraph { layers, output: plan.iter().map(composed).collect() })
+}
+
+fn composed(planned: &PlannedContribution) -> Composed {
+    Composed {
+        base: planned.group.base,
+        atop: planned.group.clips.clone(),
+        mask: planned.matte.as_ref().map(|matte| (Box::new(composed(&matte.source)), translate::translate_matte_mode(matte.mode))),
     }
-    work.push(RenderWork::Composite { items, output: ResourceId(0) });
-    Ok(RenderGraph::new(work))
+}
+
+fn stretched(layer: &SceneLayerValue, shapes: &[crate::doc::store::ShapeNode]) -> Arc<Vec<crate::doc::store::ShapeNode>> {
+    Arc::new(if layer.shape_stretch != [1.0, 1.0] {
+        crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch)
+    } else {
+        shapes.to_vec()
+    })
+}
+
+fn raster(layer: &SceneLayerValue, picture: bool, catalog: &CatalogSnapshot) -> Result<RasterSource, RenderLoweringError> {
+    Ok(match &layer.content {
+        SceneContentValue::None => RasterSource::None,
+        SceneContentValue::Text(text) if picture => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: true },
+        SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: Arc::new(text.shapes()) },
+        SceneContentValue::Shape(shapes) => RasterSource::Vector {
+            shapes: stretched(layer, shapes),
+            vector: !picture,
+            remember: layer.shape_stretch == [1.0, 1.0],
+        },
+        SceneContentValue::Material(material) => RasterSource::Mesh { path: material.source.path.clone() },
+        SceneContentValue::Media { source, .. } if layer.environment && crate::render::media::is_still_image_path(&source.path) => {
+            RasterSource::EnvironmentMap { path: source.path.clone() }
+        }
+        SceneContentValue::Media { source, time } => RasterSource::Image { path: source.path.clone(), time: *time },
+        SceneContentValue::Particles(value) => {
+            let frame = crate::render::engine::ParticleFrame::from_particles(&value.particles, value.turbulence, value.links);
+            RasterSource::Points { positions: frame.positions, colors: frame.colors, sizes: frame.sizes, bounds: frame.bounds, links: frame.links }
+        }
+        SceneContentValue::Plate(plate) => RasterSource::Isolate {
+            graph: Arc::new(lower_scene(&plate_scene(plate), catalog)?),
+            average: plate.average,
+        },
+    })
+}
+
+fn plate_scene(plate: &crate::frame_graph::ScenePlateValue) -> SceneValue {
+    SceneValue { layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect() }
+}
+
+fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Result<ImageInput, RenderLoweringError> {
+    Ok(match source {
+        SceneImageSourceValue::Content { layer, content, time, namespace } => {
+            let source = match content {
+                SceneContentValue::None | SceneContentValue::Material(_) | SceneContentValue::Particles(_) => return Ok(ImageInput::Absent),
+                SceneContentValue::Text(text) => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: false },
+                SceneContentValue::Shape(shapes) => RasterSource::Vector { shapes: Arc::new(shapes.clone()), vector: false, remember: false },
+                SceneContentValue::Media { source, time } => RasterSource::Image { path: source.path.clone(), time: *time },
+                SceneContentValue::Plate(plate) => return Ok(ImageInput::Graph {
+                    graph: Arc::new(lower_scene(&plate_scene(plate), catalog)?),
+                    background: crate::render::compositor::NO_BACKGROUND,
+                    absent_when_empty: true,
+                    time: *time,
+                    namespace: *namespace,
+                }),
+            };
+            ImageInput::Raster { id: *layer, source, time: *time, namespace: *namespace }
+        }
+        SceneImageSourceValue::Scene { scene, background, time, namespace } => ImageInput::Graph {
+            graph: Arc::new(lower_scene(scene, catalog)?),
+            background: *background,
+            absent_when_empty: false,
+            time: *time,
+            namespace: *namespace,
+        },
+    })
+}
+
+fn lower_layer(layer: &SceneLayerValue, clip_base: bool, catalog: &CatalogSnapshot) -> Result<LayerWork, RenderLoweringError> {
+    let solid = translate::translate_solid(&layer.effects)
+        .map(|solid| if solid.depth > 0.0 { solid } else { Solid { depth: layer.depth, ..solid } })
+        .unwrap_or(Solid { depth: layer.depth, bevel: None });
+    let flat = solid.extent() <= 0.0;
+    let extrude = (!flat && layer.projection != LayerProjection::TwoD && layer.masks.is_empty()).then(|| Extrusion {
+        solid,
+        outline: match &layer.content {
+            SceneContentValue::Text(text) => Some(Arc::new(text.shapes())),
+            SceneContentValue::Shape(shapes) => Some(stretched(layer, shapes)),
+            _ => None,
+        },
+        stretch: layer.shape_stretch,
+    });
+    let blend = if layer.blend.is_stencil() {
+        crate::render::compositor::BlendMode::Normal
+    } else {
+        translate::translate_blend_mode(layer.blend).map_err(|error| RenderLoweringError::Unsupported(error.to_string()))?
+    };
+    Ok(LayerWork {
+        id: layer.layer,
+        instance: layer.instance,
+        content_key: LayerId(layer.content_key.map_or(0, |key| key.as_u64())),
+        content: raster(layer, clip_base || !flat, catalog)?,
+        host_picture: layer.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id)),
+        freeze: (layer.freeze_eligible && !layer.ghost && layer.instance == 0).then_some(layer.timing_start),
+        extrude,
+        placement: LayerPlacement {
+            transform: layer.transform.affine,
+            world_transform: Some(layer.transform.spatial),
+            order: i32::from(layer.order),
+            opacity: layer.opacity,
+            z: layer.transform.spatial.translation.z,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
+            plane: None,
+        },
+        projection: layer.projection,
+        blend,
+        surface: SurfaceRecipe::from_effects(&layer.effects, catalog, false),
+        displace: translate::translate_point_displace(&layer.effects),
+        clip: translate::translate_clip(&layer.effects),
+        shadow: translate::translate_cast_shadow(&layer.effects),
+        passes: translate::translate_effect_passes(&layer.effects),
+        after_passes: translate::translate_plate_passes(&layer.after_effects),
+        image_inputs: layer.image_sources.iter()
+            .map(|row| row.iter().map(|source| image_input(source, catalog)).collect())
+            .collect::<Result<_, _>>()?,
+        masks: layer.masks.clone(),
+        material: crate::render::engine::material::material_recipe(&layer.effects, catalog).map_err(RenderLoweringError::Unsupported)?,
+        source_is_file: matches!(layer.source, LayerSource::File { .. }),
+        source_tick: match &layer.content {
+            SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
+            _ => 0,
+        },
+        isolate: layer.flatten,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::doc::store::{BlendMode, LayerId, LayerProjection, LayerSource};
-    use crate::frame_graph::{SceneLayerValue, TransformValue};
+    use crate::doc::store::{BlendMode, Matte, MatteMode};
+    use crate::frame_graph::TransformValue;
+    use crate::render_backend::{CountingBackend, RenderBackend};
 
-    fn layer(content: SceneContentValue) -> SceneLayerValue {
+    fn layer(id: u64) -> SceneLayerValue {
         SceneLayerValue {
-            layer: LayerId(7), instance: 0, source: LayerSource::Null,
+            layer: LayerId(id), instance: 0, source: LayerSource::Null,
             transform: TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY },
-            content_key: None, content, effects: Vec::new(), after_effects: Vec::new(),
+            content_key: None, content: SceneContentValue::Shape(Vec::new()), effects: Vec::new(), after_effects: Vec::new(),
             image_sources: Vec::new(), masks: Vec::new(), matte: None, clip_to_below: false,
             flatten: false, environment: false, ghost: false, freeze_eligible: false,
-            timing_start: 0, opacity: 0.5, projection: LayerProjection::TwoD,
-            blend: BlendMode::Normal, order: 3, shape_stretch: [1.0, 1.0], depth: 0.0,
+            timing_start: 0, opacity: 1.0, projection: LayerProjection::TwoD,
+            blend: BlendMode::Normal, order: 0, shape_stretch: [1.0, 1.0], depth: 0.0,
         }
     }
 
     #[test]
-    fn empty_scene_lowers_without_backend_knowledge() {
-        assert!(lower_scene(&SceneValue::default()).unwrap().is_empty());
+    fn composition_rules_arrive_as_generic_masks_and_atop_lists() {
+        let catalog = crate::render::compositor::catalog_snapshot();
+        let clip = SceneLayerValue { clip_to_below: true, matte: Some(Matte { layer: LayerId(1), mode: MatteMode::Alpha }), ..layer(2) };
+        let target = SceneLayerValue { matte: Some(Matte { layer: LayerId(4), mode: MatteMode::InvertedLuma }), ..layer(3) };
+        let stencil = SceneLayerValue { blend: BlendMode::StencilAlpha, ..layer(5) };
+        let scene = SceneValue { layers: vec![layer(1), clip, target, layer(4), stencil] };
+        let graph = lower_scene(&scene, &catalog).unwrap();
+        let plain = |base| Composed { base, atop: Vec::new(), mask: None };
+        assert_eq!(graph.output, vec![
+            Composed { base: 0, atop: vec![1], mask: None },
+            Composed { mask: Some((Box::new(plain(3)), crate::render::compositor::MatteMode::InvertedLuma)), ..plain(2) },
+        ]);
+        assert!(matches!(graph.layers[0].content, RasterSource::Vector { vector: false, .. }), "a clipping base rasterizes as a picture");
+        assert_eq!(graph.layers[4].blend, crate::render::compositor::BlendMode::Normal);
+        assert_eq!(CountingBackend.execute(&graph).unwrap(), (5, 2));
     }
 
     #[test]
-    fn contentless_scene_still_lowers_ordered_composite() {
-        let graph = lower_scene(&SceneValue { layers: vec![layer(SceneContentValue::None)] }).unwrap();
-        let [RenderWork::Composite { items, .. }] = graph.work() else { panic!("expected composite") };
-        assert_eq!(items[0].resource, None);
-        assert_eq!(items[0].opacity, 0.5);
-    }
-
-    #[test]
-    fn semantic_content_becomes_resource_work_before_composite() {
-        let graph = lower_scene(&SceneValue { layers: vec![layer(SceneContentValue::Shape(Vec::new()))] }).unwrap();
-        assert!(matches!(graph.work()[0], RenderWork::Raster { source: ResourceSource::Shape, output: ResourceId(1) }));
-        let RenderWork::Composite { items, .. } = &graph.work()[1] else { panic!("expected composite") };
-        assert_eq!(items[0].resource, Some(ResourceId(1)));
+    fn an_empty_scene_lowers_to_an_empty_graph() {
+        assert!(lower_scene(&SceneValue::default(), &crate::render::compositor::catalog_snapshot()).unwrap().is_empty());
     }
 }

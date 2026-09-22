@@ -75,7 +75,7 @@ impl Engine {
 
     pub(in crate::engine) fn apply_material_domains_semantic(
         &mut self,
-        mut layer: Layer,
+        layer: Layer,
         layer_id: crate::doc::store::LayerId,
         effects: &[ResolvedEffect],
         source_is_file: bool,
@@ -83,16 +83,21 @@ impl Engine {
         natural: [f32; 2],
         source_frame: Option<ImageFrame>,
     ) -> Result<Layer, EngineError> {
-        let mut spatial_seen = false;
-        for effect in effects {
-            match self.compositor.catalog.descriptors.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
-                Some(EffectStage::Field | EffectStage::Surface) => spatial_seen = true,
-                Some(EffectStage::Warp) if spatial_seen => return Err(EngineError::Store("2D warps must precede spatial effects in one material".into())),
-                _ => {},
-            }
-        }
-        let warps = super::translate::translate_image_effects(effects, EffectStage::Warp);
-        let spatial = self.compositor.catalog.descriptors.iter().any(|d| d.stage == EffectStage::Field && effects.iter().any(|e| e.plugin_id == d.plugin_id));
+        let recipe = material_recipe(effects, &self.compositor.catalog).map_err(EngineError::Store)?;
+        self.apply_material_recipe(layer, layer_id, &recipe, source_is_file, source_tick, natural, source_frame)
+    }
+
+    pub(in crate::engine) fn apply_material_recipe(
+        &mut self,
+        mut layer: Layer,
+        layer_id: crate::doc::store::LayerId,
+        recipe: &MaterialRecipe,
+        source_is_file: bool,
+        source_tick: i64,
+        natural: [f32; 2],
+        source_frame: Option<ImageFrame>,
+    ) -> Result<Layer, EngineError> {
+        let (warps, spatial) = (recipe.warps.clone(), recipe.spatial);
         if warps.is_empty() && !spatial && source_frame.is_none() { self.materials.remove(&layer_id); return Ok(layer); }
         let Some(source) = layer.content.texture().cloned() else {
             if !warps.is_empty() { return Err(EngineError::Store("2D warp requires a planar material".into())); }
@@ -334,4 +339,24 @@ mod domain_contract {
         }
 
     }
+}
+
+pub(crate) use crate::render_graph::MaterialRecipe;
+
+pub(crate) fn material_recipe(
+    effects: &[ResolvedEffect],
+    catalog: &crate::render::compositor::effects::catalog::CatalogSnapshot,
+) -> Result<MaterialRecipe, String> {
+    let mut spatial_seen = false;
+    for effect in effects {
+        match catalog.descriptors.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
+            Some(EffectStage::Field | EffectStage::Surface) => spatial_seen = true,
+            Some(EffectStage::Warp) if spatial_seen => return Err("2D warps must precede spatial effects in one material".into()),
+            _ => {},
+        }
+    }
+    Ok(MaterialRecipe {
+        warps: super::translate::translate_image_effects(effects, EffectStage::Warp),
+        spatial: catalog.descriptors.iter().any(|d| d.stage == EffectStage::Field && effects.iter().any(|e| e.plugin_id == d.plugin_id)),
+    })
 }

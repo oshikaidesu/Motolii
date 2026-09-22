@@ -223,7 +223,7 @@ impl EditorRuntime{
     }
     fn bounds_from(&self,view:&crate::doc::store::StoreView<'_>,eye:&Eye,scene:&crate::render::frame_graph::SceneValue,layer:LayerId,seen:View)->Option<Json>{
         let Eye{time,comp,camera,observer,document}=*eye;
-        let r=scene_layer(scene,layer)?;
+        let r=scene.layer(layer)?;
         let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
         let b=self.engine.selected_scene_layer_bounds_in(view,&scene.layers,layer,time)?;
         let world=crate::doc::core::depth_scaled(r.transform.spatial);
