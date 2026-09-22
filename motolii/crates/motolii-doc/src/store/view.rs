@@ -189,6 +189,7 @@ impl<'a> StoreView<'a> {
     pub fn revision_key(&self) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.db.store_id().hash(&mut hasher);
         format!("{:?}", self.db.generation()).hash(&mut hasher);
         self.at.hash(&mut hasher);
         self.ignore_transients.hash(&mut hasher);
