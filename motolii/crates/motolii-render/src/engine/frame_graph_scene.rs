@@ -310,7 +310,7 @@ impl Engine {
                 outline: self.outline_id(source.layer),
                 frame: frozen_frame,
             };
-            let layer = self.apply_masks_to_layer(layer, &source.masks, natural, frozen_frame)?;
+            let layer = self.frame_graph_process_mask_flatten(source, layer, natural, frozen_frame, comp, projection_camera)?;
             let source_tick = match &source.content {
                 SceneContentValue::Media { time, .. } => (time.as_seconds_f64() * 1_000_000.0).round() as i64,
                 _ => 0,
@@ -324,7 +324,6 @@ impl Engine {
                 natural,
                 frozen_frame,
             )?;
-            let layer = self.flatten_if_asked(comp, projection_camera, layer, source.flatten)?;
             layers.push(LayerWithPasses { layer, passes, padding: frozen_padding, pass_sources, cut: Vec::new() });
             entries.push(Entry {
                 layer: source.layer,
