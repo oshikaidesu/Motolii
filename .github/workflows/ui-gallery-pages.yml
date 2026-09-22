@@ -1,0 +1,85 @@
+name: UI Gallery
+
+on:
+  pull_request:
+    paths:
+      - 'motolii/ui/**'
+      - '.github/workflows/ui-gallery-pages.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'motolii/ui/**'
+      - '.github/workflows/ui-gallery-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ui-gallery-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.2
+          cache: true
+
+      - name: Get packages
+        working-directory: motolii/ui
+        run: flutter pub get
+
+      - name: Check gallery formatting
+        working-directory: motolii/ui
+        run: dart format --output=none --set-exit-if-changed lib/gallery_main.dart
+
+      - name: Prepare CI build directory
+        working-directory: motolii/ui
+        run: |
+          rm -f build
+          mkdir -p build
+
+      - name: Analyze gallery
+        working-directory: motolii/ui
+        run: flutter analyze lib/gallery_main.dart
+
+      - name: Check workspace host
+        working-directory: motolii/ui
+        run: flutter test test/workspace_host_contract_test.dart
+
+      - name: Build gallery
+        working-directory: motolii/ui
+        run: flutter build web --release --target lib/gallery_main.dart --base-href "/Motolii/"
+
+      - name: Configure Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: motolii/ui/build/web
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
