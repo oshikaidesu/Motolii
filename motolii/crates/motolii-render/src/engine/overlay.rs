@@ -366,7 +366,7 @@ pub(crate) fn overlay_shapes_with(params: &Params, marks: &[BlobMark], pushes: &
 
 impl Engine {
     /// Track Overlay を持つ層の中身(comp 大、左上が層の位置)。Show Mask なら解析の二値。
-    pub(super) fn overlay_content(&mut self, layer: LayerId, comp: CompSpec) -> Result<Option<(LayerContent, [f32; 2])>, EngineError> {
+    pub(crate) fn overlay_content(&mut self, layer: LayerId, comp: CompSpec) -> Result<Option<(LayerContent, [f32; 2])>, EngineError> {
         // 物理の可視は、絵を組む途中で解き手を進めてから読む(そうしないと 1 コマ遅れる・空になる)。
         if self.overlay_frames.get(&layer).is_some_and(|f| f.physics) {
             self.solve_physics_now();
