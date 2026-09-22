@@ -10,6 +10,7 @@ use super::gpu_exec::{GpuContentCacheKey, GpuResidency, GpuResourceDesc, GpuReso
 pub(super) struct GpuSceneValue {
     pub layers: Vec<LayerWithPasses>,
     pub layer_ids: Vec<LayerId>,
+    pub composite_resource: Option<GpuResourceId>,
 }
 
 #[derive(Clone)]
@@ -19,6 +20,8 @@ struct PreparedGpuContribution {
     matte: Option<crate::doc::store::Matte>,
     clip_to_below: bool,
     stencil: bool,
+    content_resource: Option<GpuResourceId>,
+    placement_resource: GpuResourceId,
 }
 
 #[derive(Clone)]
@@ -169,6 +172,7 @@ impl Engine {
             matte: Option<crate::doc::store::Matte>,
             clip_to_below: bool,
             stencil: bool,
+            resource: GpuResourceId,
         }
 
         let clip_bases: std::collections::HashSet<_> = scene.layers.iter()
@@ -193,6 +197,7 @@ impl Engine {
                 matte: contribution.matte,
                 clip_to_below: contribution.clip_to_below,
                 stencil: contribution.stencil,
+                resource: contribution.placement_resource,
             });
         }
 
@@ -217,7 +222,23 @@ impl Engine {
                 continue;
             };
             match self.clip_onto_base(layers[base_index].clone(), &layers[index].layer, &layers[index].passes)? {
-                Some(clipped) => layers[base_index] = clipped,
+                Some(clipped) => {
+                    layers[base_index] = clipped;
+                    let dependencies = [entries[base_index].resource, entry.resource];
+                    let resource = GpuResourceId::from_dependencies(
+                        GpuResourceKind::Clip,
+                        dependencies,
+                        entry.layer.0,
+                    );
+                    self.gpu_resource_graph.upsert(GpuResourceDesc::new(
+                        resource,
+                        GpuResourceKind::Clip,
+                        None,
+                        dependencies,
+                        GpuResidency::Frame,
+                    ));
+                    entries[base_index].resource = resource;
+                },
                 None => self.layer_failures.push(format!(
                     "layer {} clips to a base without a texture (point cloud / model bases are not clippable)",
                     entry.layer.0
@@ -262,6 +283,20 @@ impl Engine {
                 pass_sources: Vec::new(),
                 cut: Vec::new(),
             };
+            let dependencies = [entries[index].resource, entries[source_index].resource];
+            let resource = GpuResourceId::from_dependencies(
+                GpuResourceKind::Matte,
+                dependencies,
+                entries[index].layer.0,
+            );
+            self.gpu_resource_graph.upsert(GpuResourceDesc::new(
+                resource,
+                GpuResourceKind::Matte,
+                None,
+                dependencies,
+                GpuResidency::Frame,
+            ));
+            entries[index].resource = resource;
         }
 
         let kept: Vec<_> = layers.into_iter().enumerate()
@@ -270,12 +305,28 @@ impl Engine {
                     && !entries[*index].stencil
                     && !matte_sources.contains(&entries[*index].layer)
             })
-            .map(|(index, layer)| (entries[index].layer, layer))
+            .map(|(index, layer)| (entries[index].layer, entries[index].resource, layer))
             .collect();
-        let layer_ids = kept.iter().map(|(layer, _)| *layer).collect();
-        let layers = kept.into_iter().map(|(_, layer)| layer).collect();
+        let layer_ids = kept.iter().map(|(layer, _, _)| *layer).collect();
+        let composite_dependencies: Vec<_> = kept.iter().map(|(_, resource, _)| *resource).collect();
+        let composite_resource = (!composite_dependencies.is_empty()).then(|| {
+            let resource = GpuResourceId::from_dependencies(
+                GpuResourceKind::Composite,
+                composite_dependencies.iter().copied(),
+                composite_dependencies.len() as u64,
+            );
+            self.gpu_resource_graph.upsert(GpuResourceDesc::new(
+                resource,
+                GpuResourceKind::Composite,
+                None,
+                composite_dependencies.iter().copied(),
+                GpuResidency::Frame,
+            ));
+            resource
+        });
+        let layers = kept.into_iter().map(|(_, _, layer)| layer).collect();
 
-        Ok(GpuSceneValue { layers, layer_ids })
+        Ok(GpuSceneValue { layers, layer_ids, composite_resource })
     }
 
 
@@ -461,6 +512,8 @@ impl Engine {
             matte: source.matte,
             clip_to_below: source.clip_to_below,
             stencil: source.blend.is_stencil(),
+            content_resource,
+            placement_resource,
         }))
     }
 
