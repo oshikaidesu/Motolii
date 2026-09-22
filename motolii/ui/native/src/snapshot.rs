@@ -57,34 +57,6 @@ fn source_kind(source:&LayerSource)->&'static str{match source{
 struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera,document:crate::doc::core::ResolvedCamera}
 use crate::viewer::View;
 
-fn scene_layer<'a>(
-    scene: &'a crate::render::frame_graph::SceneValue,
-    id: LayerId,
-) -> Option<&'a crate::render::frame_graph::SceneLayerValue> {
-    fn find<'a>(
-        layer: &'a crate::render::frame_graph::SceneLayerValue,
-        id: LayerId,
-        fallback: &mut Option<&'a crate::render::frame_graph::SceneLayerValue>,
-    ) -> Option<&'a crate::render::frame_graph::SceneLayerValue> {
-        if layer.layer == id && !layer.ghost {
-            if layer.instance == 0 { return Some(layer); }
-            if fallback.is_none() { *fallback = Some(layer); }
-        }
-        if let crate::render::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
-            for member in &plate.members {
-                if let Some(child) = member.layer.as_ref() {
-                    if let Some(found) = find(child, id, fallback) { return Some(found); }
-                }
-            }
-        }
-        None
-    }
-    let mut fallback = None;
-    for layer in &scene.layers {
-        if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
-    }
-    fallback
-}
 impl EditorRuntime{
     pub(crate) fn view_camera(&mut self,view:View)->Result<crate::doc::core::ResolvedCamera,String>{
         if view==View::User{return Ok(self.viewer.user_camera)}
@@ -131,11 +103,11 @@ impl EditorRuntime{
         let camera_layer=motolii_render::picture::resolve::camera::active_camera_layer(&view, time).map_err(e)?;
         let target_layer=camera_layer.map(|id|motolii_render::picture::resolve::camera::camera_target_layer(&view, id,time)).transpose().map_err(e)?.flatten();
         let worlds:std::collections::HashMap<LayerId,glam::Affine3A>=view.layers().into_iter()
-            .filter_map(|id|scene_layer(scene,id).map(|layer|(id,layer.transform.spatial)))
+            .filter_map(|id|scene.layer(id).map(|layer|(id,layer.transform.spatial)))
             .collect();
         let mut items=Vec::new();
         for id in view.layers() {
-            let Some(layer)=scene_layer(scene,id) else{continue};
+            let Some(layer)=scene.layer(id) else{continue};
             if matches!(layer.source,LayerSource::Camera|LayerSource::Stage){continue}
             let Some(world)=worlds.get(&id) else{continue};
             let attrs=view.attrs(id).map_err(e)?.unwrap_or_default();
@@ -156,7 +128,7 @@ impl EditorRuntime{
     pub(crate) fn focus_sphere(&mut self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
         let time=self.time()?;let view=self.doc.view();
         let scene=self.engine.frame_graph_editor_scene(&view,time).map_err(e)?;
-        let Some(layer)=scene_layer(&scene,id) else{return Ok(None)};
+        let Some(layer)=scene.layer(id) else{return Ok(None)};
         let world=layer.transform.spatial;
         let Some(b)=self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time) else{return Ok(None)};
         let centre=world.transform_point3(glam::Vec3::from(b.center()));
