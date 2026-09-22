@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::doc::store::StoreView;
+use crate::doc::store::{LayerId, StoreView};
 
 use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, OverlayProgram, OverlayProgramError, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextFlowProgram, TextFlowProgramError, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
@@ -121,6 +121,12 @@ impl SceneProgram {
     pub fn base_scene(&self) -> SceneProgramNodes { self.scene.output() }
     pub fn camera(&self) -> NodeKey { self.camera.key() }
     pub fn visibility(&self) -> &VisibilityProgram { &self.visibility }
+    pub fn effects(&self) -> &EffectProgram { &self.effects }
+    pub fn masks(&self) -> &MaskProgram { &self.masks }
+    pub fn contribution(&self, layer: LayerId) -> Option<NodeKey> { self.scene.binding(layer) }
+    pub fn contributions(&self) -> impl ExactSizeIterator<Item = (LayerId, NodeKey)> + '_ {
+        self.scene.bindings()
+    }
     pub fn placements(&self) -> &PlacementProgram { &self.placements }
     pub fn motion(&self) -> &MotionProgram { &self.motion }
     pub fn particles(&self) -> &ParticleProgram { &self.particles }
