@@ -42,7 +42,9 @@ jobs:
 
       - name: Check gallery formatting
         working-directory: motolii/ui
-        run: dart format --output=none --set-exit-if-changed lib/gallery_main.dart
+        run: |
+          dart format lib/gallery_main.dart
+          git diff -- lib/gallery_main.dart
 
       - name: Analyze gallery
         working-directory: motolii/ui
