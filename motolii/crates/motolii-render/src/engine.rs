@@ -130,7 +130,7 @@ pub struct Engine {
     layout_flow: std::rc::Rc<crate::picture::flow::FlowCache>,
     pub(crate) compositor: Compositor,
     materials: HashMap<LayerId, material::MaterialCache>,
-    probes: HashMap<String, MediaInfo>,
+    pub(crate) probes: HashMap<String, MediaInfo>,
     text_textures: HashMap<TextCacheKey, TextTexture>,
     /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
     text_order: std::collections::VecDeque<TextCacheKey>,
