@@ -952,8 +952,7 @@ impl Engine {
     /// 祖先の箱の切り(`MaskFrame::Box`)を、ブロックのずれの後に箱の枠で掛ける層か: 解き手が動かす、平らに置かれた、
     /// 本番の組み(辿り直しの中でない)。
     pub(super) fn cut_after_motion(&self, layer: &ResolvedLayer) -> bool {
-        !self.feedback_replaying
-            && self.blocks.moves(layer.id)
+        self.blocks.moves(layer.id)
             && layer.placement.z == 0.0 && layer.placement.rotation_x == 0.0 && layer.placement.rotation_y == 0.0
             && layer.masks.iter().any(|m| m.frame == MaskFrame::Box)
     }
