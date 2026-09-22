@@ -22,7 +22,7 @@ mod types;
 pub(crate) use content_backend::ResidentContent;
 pub(crate) use effect_backend::{effect_chain_key, resident_effect_chain, ResidentEffectChain};
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
-pub(crate) use image_source::{lower_image_source, GpuImageSourceInput, GpuImageSourceResources};
+pub(crate) use image_source::{lower_image_source, snapshot_identity, snapshot_version, GpuImageSourceInput, GpuImageSourceResources};
 pub(crate) use graph::{GpuGraphError, GpuGraphStats, GpuResourceDelta, GpuResourceGraph};
 pub(crate) use logical_lowerer::{LogicalGpuLowerer, LogicalLowerError};
 pub(crate) use lowerer::GpuLowerer;
