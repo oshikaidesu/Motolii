@@ -72,6 +72,10 @@ impl<Op> GpuOperationTable<Op> {
     pub fn get(&self, pass: GpuPassKey) -> Option<&Op> { self.operations.get(&pass) }
     pub fn get_mut(&mut self, pass: GpuPassKey) -> Option<&mut Op> { self.operations.get_mut(&pass) }
     pub fn remove(&mut self, pass: GpuPassKey) -> Option<Op> { self.operations.remove(&pass) }
+    pub fn contains(&self, pass: GpuPassKey) -> bool { self.operations.contains_key(&pass) }
+    pub fn retain(&mut self, mut keep: impl FnMut(GpuPassKey) -> bool) {
+        self.operations.retain(|key, _| keep(*key));
+    }
     pub fn len(&self) -> usize { self.operations.len() }
 }
 
