@@ -362,22 +362,36 @@ impl Engine {
         projection_camera: ResolvedCamera,
     ) -> Result<Option<PreparedGpuContribution>, EngineError> {
             let content_resource = source.content_key.map(|semantic| {
-                let id = GpuResourceId::from_parts(GpuResourceKind::Content, semantic, 0);
+                let work = self.gpu_work_keys.get(&semantic).copied();
+                let id = work
+                    .map(|work| GpuResourceId::from_work(GpuResourceKind::Content, work, 0))
+                    .unwrap_or_else(|| GpuResourceId::from_parts(GpuResourceKind::Content, semantic, 0));
+                let residency = if work.is_some_and(|work| work.is_time_dependent()) {
+                    GpuResidency::Temporal
+                } else {
+                    GpuResidency::Retained
+                };
                 self.gpu_resource_graph.upsert(GpuResourceDesc::new(
                     id,
                     GpuResourceKind::Content,
                     Some(semantic),
                     [],
-                    GpuResidency::Retained,
+                    residency,
                 ));
                 id
             });
             let placement_discriminator = source.layer.0.rotate_left(32) ^ u64::from(source.instance);
-            let placement_resource = GpuResourceId::from_parts(
-                GpuResourceKind::Placement,
-                source.transform_key,
-                placement_discriminator,
-            );
+            let placement_resource = self.gpu_work_keys.get(&source.transform_key).copied()
+                .map(|work| GpuResourceId::from_work(
+                    GpuResourceKind::Placement,
+                    work,
+                    placement_discriminator,
+                ))
+                .unwrap_or_else(|| GpuResourceId::from_parts(
+                    GpuResourceKind::Placement,
+                    source.transform_key,
+                    placement_discriminator,
+                ));
             self.gpu_resource_graph.upsert(GpuResourceDesc::new(
                 placement_resource,
                 GpuResourceKind::Placement,
@@ -406,6 +420,9 @@ impl Engine {
                 let (content, natural) = if let Some(cache_key) = cache_key {
                     if let Some(cached) = self.gpu_content_cache.get(&cache_key).cloned() {
                         self.gpu_content_cache_hits += 1;
+                        if let Some(resource) = content_resource {
+                            self.gpu_resource_graph.mark_resident(resource);
+                        }
                         (Some(cached.content), cached.natural)
                     } else {
                         self.gpu_content_cache_misses += 1;
@@ -421,6 +438,9 @@ impl Engine {
                                 content: content.clone(),
                                 natural,
                             });
+                            if let Some(resource) = content_resource {
+                                self.gpu_resource_graph.mark_resident(resource);
+                            }
                         }
                         built
                     }
