@@ -30,6 +30,10 @@ pub(crate) struct GpuContributionInput {
     /// Explicit cross-contribution dependency. The semantic adapter resolves
     /// authoring LayerId to a stable contribution resource exactly once.
     pub matte_source: Option<GpuResourceKey>,
+    /// Explicit clip/base contribution edge. Kept separate from matte because
+    /// clip consumes the current contribution into its base rather than
+    /// producing an ordinary matte result for the current contribution.
+    pub clip_base: Option<GpuResourceKey>,
     pub clip_to_below: bool,
     pub stencil: bool,
     pub plate: Option<VersionedSemantic>,
