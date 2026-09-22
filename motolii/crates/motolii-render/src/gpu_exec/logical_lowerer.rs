@@ -1,7 +1,5 @@
-use std::hash::{Hash, Hasher};
-
 use super::graph::{GpuGraphError, GpuResourceGraph};
-use super::lowerer::{GpuContributionInput, GpuContributionResources, GpuImageSourceKind, GpuLowerer, VersionedSemantic};
+use super::lowerer::{image_source_identity, GpuContributionInput, GpuContributionResources, GpuImageSourceKind, GpuLowerer, VersionedSemantic};
 use super::types::{
     GpuIdentitySource, GpuPassDesc, GpuPassIdentity, GpuPassKind, GpuResourceClass,
     GpuResourceDesc, GpuResourceIdentity, GpuResourceKey, GpuResourceLifetime,
@@ -88,15 +86,7 @@ impl LogicalGpuLowerer {
         };
         let mut out = Vec::with_capacity(images.sources.len());
         for (index, source) in images.sources.iter().copied().enumerate() {
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            effect.node.hash(&mut hasher);
-            input.instance.hash(&mut hasher);
-            index.hash(&mut hasher);
-            let identity = GpuResourceIdentity::synthetic(
-                hasher.finish(),
-                GpuResourceClass::ImageSource,
-                0,
-            );
+            let identity = image_source_identity(effect.node, input.instance, index);
             let output = Self::resource_with_lifetime(
                 graph,
                 identity,
