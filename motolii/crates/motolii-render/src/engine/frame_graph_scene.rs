@@ -4,12 +4,6 @@ use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneLayerVal
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
 
-#[derive(Clone)]
-pub(crate) struct PreparedScene {
-    pub layers: Vec<LayerWithPasses>,
-    pub layer_ids: Vec<LayerId>,
-}
-
 impl Engine {
     pub(super) fn prepare_execution_scene_with_solver(
         &mut self,
@@ -19,7 +13,7 @@ impl Engine {
         projection_camera: ResolvedCamera,
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
-    ) -> Result<PreparedScene, EngineError> {
+    ) -> Result<crate::gpu_exec::ExecutableScene, EngineError> {
         let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
@@ -29,7 +23,7 @@ impl Engine {
             // contributions that cannot feed analysis/matte/solver work.
             let planned = self.plan_frame_graph_scene(scene, solver, comp, projection_camera);
             let scene = planned.as_ref().unwrap_or(scene);
-            let mut prepared = self.prepare_execution_scene(scene, comp, projection_camera)?;
+            let mut prepared = self.gpu_executable_scene(scene, comp, projection_camera)?;
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
             return Ok(prepared);
         }
@@ -43,10 +37,10 @@ impl Engine {
                 .cloned()
                 .collect(),
         };
-        let mut base = self.prepare_execution_scene(&base_scene, comp, projection_camera)?;
+        let mut base = self.gpu_executable_scene(&base_scene, comp, projection_camera)?;
         self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut base)?;
 
-        let mut prepared = self.prepare_execution_scene(scene, comp, projection_camera)?;
+        let mut prepared = self.gpu_executable_scene(scene, comp, projection_camera)?;
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
             self.attach_block_id(id, &mut layer.layer, comp);
         }
@@ -144,83 +138,6 @@ impl Engine {
                 .collect(),
         })
     }
-
-    pub(crate) fn prepare_execution_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<PreparedScene, EngineError> {
-        #[derive(Clone, Copy)]
-        struct Entry {
-            layer: LayerId,
-            matte: Option<crate::doc::store::Matte>,
-            clip_to_below: bool,
-            stencil: bool,
-        }
-
-        let clip_bases: std::collections::HashSet<_> = scene.layers.iter()
-            .filter(|layer| layer.clip_to_below)
-            .filter_map(|layer| layer.matte.map(|matte| matte.layer))
-            .collect();
-
-        let mut layers = Vec::with_capacity(scene.layers.len());
-        let mut entries = Vec::with_capacity(scene.layers.len());
-        for source in &scene.layers {
-            let solid = crate::render::engine::translate::translate_solid(&source.effects)
-                .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
-                .unwrap_or(crate::render::compositor::extrude::Solid { depth: source.depth, bevel: None });
-            let force_picture = clip_bases.contains(&source.layer) || solid.extent() > 0.0;
-            let resident = self.frame_graph_resident_content(source);
-            let Some((resident, frozen_padding, frozen_frame, frozen_hit)) = self.gpu_special_content(
-                source,
-                resident,
-                force_picture,
-                comp,
-                projection_camera,
-            )? else { continue; };
-            let content = resident.content;
-            let natural = resident.natural;
-            let placement = self.frame_graph_resident_placement(source)
-                .unwrap_or_else(|| crate::gpu_exec::ResidentPlacement::from_scene(source));
-            let effects = self.frame_graph_resident_effects(source).unwrap_or_else(|| {
-                let mut passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
-                let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
-                crate::render::engine::translate::stamp_feedback(&mut passes, source.layer, source.instance, 0, None, 0);
-                crate::render::engine::translate::stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, None, 0);
-                crate::gpu_exec::ResidentEffectChain { passes, plate_passes }
-            });
-            let pass_sources = if frozen_hit {
-                Vec::new()
-            } else {
-                self.frame_graph_snapshot_rows(source, comp, projection_camera)?
-            };
-            let resident = crate::gpu_exec::ResidentContent { content, natural };
-            let mut prepared = self.gpu_contribution_layer(
-                source,
-                resident,
-                placement,
-                effects,
-                pass_sources,
-                comp,
-                projection_camera,
-            )?;
-            prepared.padding = frozen_padding;
-            prepared.layer.frame = frozen_frame;
-            layers.push(prepared);
-            entries.push(Entry {
-                layer: source.layer,
-                matte: source.matte,
-                clip_to_below: source.clip_to_below,
-                stencil: source.blend.is_stencil(),
-            });
-        }
-
-        let (layers, layer_ids) = self.gpu_cross_contributions(
-            scene,
-            layers,
-            comp,
-            projection_camera,
-        )?;
-
-        Ok(PreparedScene { layers, layer_ids })
-    }
-
 
     pub(crate) fn frame_graph_extruded_content(
         &mut self,
