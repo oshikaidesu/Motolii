@@ -68,6 +68,7 @@ pub(crate) struct GpuContributionInput {
 pub(crate) struct GpuContributionResources {
     pub content: Option<GpuResourceKey>,
     pub placement: GpuResourceKey,
+    pub image_sources: Vec<GpuResourceKey>,
     pub final_image_or_geometry: Option<GpuResourceKey>,
 }
 
