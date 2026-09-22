@@ -15,6 +15,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 
 
 EX_TIMEOUT = 124
@@ -51,6 +52,25 @@ def command_argv(raw: list[str]) -> list[str]:
     return [str(Path(executable).resolve()), *raw[1:]]
 
 
+def process_group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def wait_for_process_group_exit(pgid: int, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not process_group_alive(pgid):
+            return True
+        time.sleep(0.05)
+    return not process_group_alive(pgid)
+
+
 def stop_process_tree(process: subprocess.Popen[bytes]) -> None:
     if os.name == "nt":
         subprocess.run(
@@ -59,17 +79,39 @@ def stop_process_tree(process: subprocess.Popen[bytes]) -> None:
             stderr=subprocess.DEVNULL,
             check=False,
         )
+        try:
+            process.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            pass
         return
+
+    # start_new_session=True makes the child's pid the process-group id. The
+    # group can outlive its leader, so waiting only for the parent is wrong:
+    # a grandchild may ignore SIGTERM and remain after the runner returns 124.
+    pgid = process.pid
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:
         return
+
+    if not wait_for_process_group_exit(pgid, 3.0):
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        wait_for_process_group_exit(pgid, 3.0)
+
+    # Reap the direct child independently of group lifetime.
     try:
-        process.wait(timeout=3.0)
+        process.wait(timeout=1.0)
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            process.kill()
         except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
             pass
 
 
@@ -106,10 +148,6 @@ def main() -> int:
             flush=True,
         )
         stop_process_tree(process)
-        try:
-            process.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            pass
         return EX_TIMEOUT
 
 
