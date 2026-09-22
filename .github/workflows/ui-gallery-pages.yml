@@ -50,6 +50,14 @@ jobs:
           rm -f build
           mkdir -p build
 
+      - name: Enforce gallery boundary
+        working-directory: motolii/ui
+        run: |
+          if grep -E "^import '.*(foundation|panels|workspace)/" lib/gallery_main.dart; then
+            echo "gallery_main.dart must render EditorApp, not compose product UI"
+            exit 1
+          fi
+
       - name: Analyze gallery
         working-directory: motolii/ui
         run: flutter analyze lib/gallery_main.dart
