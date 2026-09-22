@@ -1,5 +1,5 @@
 use crate::frame_graph::{
-    CanonicalEncoder, EffectValue, EvaluatedFrame, SceneContentValue, SceneLayerValue, SceneProgram,
+    CanonicalEncoder, EvaluatedFrame, SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneProgram,
     SceneValue, TransformValue,
 };
 
@@ -7,7 +7,7 @@ use crate::frame_graph::{
 // rather than in the semantic programs so GPU residency policy cannot leak
 // back into semantic evaluation.
 
-use super::lowerer::{GpuContributionInput, VersionedSemantic};
+use super::lowerer::{GpuContributionInput, GpuEffectImages, GpuImageSourceKind, VersionedImageSource, VersionedSemantic};
 use super::types::GpuResourceVersion;
 
 #[derive(Debug)]
@@ -15,6 +15,8 @@ pub(crate) enum SemanticAdapterError {
     Encode(crate::frame_graph::CanonicalError),
     MissingContribution(crate::doc::store::LayerId),
     MissingTransform(crate::doc::store::LayerId),
+    EffectIdentityMismatch(crate::doc::store::LayerId),
+    ImageSourceIdentityMismatch(crate::doc::store::LayerId),
 }
 
 impl From<crate::frame_graph::CanonicalError> for SemanticAdapterError {
@@ -57,7 +59,7 @@ impl<'a> SemanticGpuAdapter<'a> {
 
         let placement = VersionedSemantic {
             node: transform.world,
-            version: transform_version(&layer.transform)?,
+            version: placement_version(layer)?,
         };
 
         let matte_source = layer.matte.and_then(|matte| {
@@ -69,12 +71,33 @@ impl<'a> SemanticGpuAdapter<'a> {
             ).key())
         });
 
-        let effects = self.program.effects().binding(layer.layer)
-            .map(|binding| binding.effects.iter().filter_map(|node| {
-                let value = self.frame.value(*node)?.downcast_ref::<EffectValue>()?;
-                Some(VersionedSemantic { node: *node, version: effect_version(value) })
-            }).collect())
-            .unwrap_or_default();
+        if layer.effect_keys.len() != layer.effects.len() || layer.after_effect_keys.len() != layer.after_effects.len() {
+            return Err(SemanticAdapterError::EffectIdentityMismatch(layer.layer));
+        }
+        let effects = layer.effect_keys.iter().copied().zip(layer.effects.iter())
+            .map(|(node, value)| VersionedSemantic { node, version: resolved_effect_version(value) })
+            .collect();
+        let after_effects = layer.after_effect_keys.iter().copied().zip(layer.after_effects.iter())
+            .map(|(node, value)| VersionedSemantic { node, version: resolved_effect_version(value) })
+            .collect();
+
+        if layer.image_source_effects.len() != layer.image_sources.len() {
+            return Err(SemanticAdapterError::ImageSourceIdentityMismatch(layer.layer));
+        }
+        let effect_images = layer.image_source_effects.iter().copied().zip(layer.image_sources.iter())
+            .map(|(effect, sources)| {
+                let sources = sources.iter().map(|source| {
+                    Ok(VersionedImageSource {
+                        version: image_source_version(source)?,
+                        lifetime: image_source_lifetime(source),
+                        kind: match source {
+                            SceneImageSourceValue::Content { .. } => GpuImageSourceKind::Content,
+                            SceneImageSourceValue::Scene { .. } => GpuImageSourceKind::Scene,
+                        },
+                    })
+                }).collect::<Result<Vec<_>, SemanticAdapterError>>()?;
+                Ok(GpuEffectImages { effect, sources })
+            }).collect::<Result<Vec<_>, SemanticAdapterError>>()?;
 
         let masks = self.program.masks().binding(layer.layer)
             .map(|binding| binding.masks.iter().filter_map(|node| {
@@ -92,6 +115,8 @@ impl<'a> SemanticGpuAdapter<'a> {
             content,
             placement,
             effects,
+            after_effects,
+            effect_images,
             masks,
             matte_source,
             plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
@@ -151,11 +176,69 @@ fn content_version(value: &SceneContentValue) -> GpuResourceVersion {
     hash_encoded(encoded)
 }
 
-fn effect_version(value: &EffectValue) -> GpuResourceVersion {
+fn resolved_effect_version(value: &crate::picture::resolved::ResolvedEffect) -> GpuResourceVersion {
     let mut encoded = CanonicalEncoder::new();
     let bytes = format!("{value:?}");
     let _ = encoded.string(&bytes);
     hash_encoded(encoded)
+}
+
+fn placement_version(layer: &SceneLayerValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u64(placement_version(layer)?.as_u64());
+    encoded.f32(layer.opacity)?;
+    encoded.i16(layer.order);
+    Ok(hash_encoded(encoded))
+}
+
+fn image_source_lifetime(value: &SceneImageSourceValue) -> super::types::GpuResourceLifetime {
+    let namespace = match value {
+        SceneImageSourceValue::Content { namespace, .. } | SceneImageSourceValue::Scene { namespace, .. } => *namespace,
+    };
+    if namespace == 0 {
+        super::types::GpuResourceLifetime::Persistent
+    } else {
+        // Lookbehind snapshots are immutable and bounded. Feedback recurrence
+        // uses History resources instead and is intentionally not modeled here.
+        super::types::GpuResourceLifetime::Temporal { retain_generations: 8 }
+    }
+}
+
+fn image_source_version(value: &SceneImageSourceValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
+    let mut encoded = CanonicalEncoder::new();
+    match value {
+        SceneImageSourceValue::Content { layer, content, time, namespace } => {
+            encoded.u8(0).u64(layer.0).rational_time(*time).u64(*namespace);
+            encoded.u64(content_version(content).as_u64());
+        }
+        SceneImageSourceValue::Scene { scene, background, time, namespace } => {
+            encoded.u8(1).rational_time(*time).u64(*namespace).u64(scene.layers.len() as u64);
+            for component in background { encoded.f32(*component)?; }
+            for layer in &scene.layers {
+                encoded.u64(layer_visual_version(layer)?.as_u64());
+            }
+        }
+    }
+    Ok(hash_encoded(encoded))
+}
+
+fn layer_visual_version(layer: &SceneLayerValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u64(layer.layer.0).u32(layer.instance);
+    encoded.u64(content_version(&layer.content).as_u64());
+    encoded.u64(transform_version(&layer.transform)?.as_u64());
+    encoded.f32(layer.opacity)?;
+    encoded.i16(layer.order);
+    encoded.f32(layer.depth)?;
+    for component in layer.shape_stretch { encoded.f32(component)?; }
+    encoded.bool(layer.flatten).bool(layer.environment).bool(layer.ghost).bool(layer.clip_to_below);
+    let _ = encoded.string(&format!("{:?}", layer.projection));
+    let _ = encoded.string(&format!("{:?}", layer.blend));
+    let _ = encoded.string(&format!("{:?}", layer.matte));
+    for effect in &layer.effects { encoded.u64(resolved_effect_version(effect).as_u64()); }
+    for effect in &layer.after_effects { encoded.u64(resolved_effect_version(effect).as_u64()); }
+    let _ = encoded.string(&format!("{:?}", layer.masks));
+    Ok(hash_encoded(encoded))
 }
 
 fn mask_version(value: &crate::frame_graph::MaskValue) -> GpuResourceVersion {
