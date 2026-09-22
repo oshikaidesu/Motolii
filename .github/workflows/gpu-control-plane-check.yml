@@ -18,6 +18,6 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev
       - name: Check motolii-render
         run: cargo check -p motolii-render --lib
