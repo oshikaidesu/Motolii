@@ -554,7 +554,9 @@ class _EditorWindowState extends State<EditorWindow> {
                         builder: (_, doc, __) => _StatusLine(
                           // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
                           text:
-                              message ?? freezeNotice(doc) ?? effectsNotice(doc),
+                              message ??
+                              freezeNotice(doc) ??
+                              effectsNotice(doc),
                         ),
                       ),
                 ),

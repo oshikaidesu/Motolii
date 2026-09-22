@@ -48,9 +48,6 @@ jobs:
           lib/app/editor_app.dart
           lib/app/editor_window.dart
           lib/session/editor_session.dart
-          lib/bridge/native_frames.dart
-          lib/bridge/native_frames_ffi.dart
-          lib/bridge/native_frames_stub.dart
 
       - name: Prepare CI build directory
         working-directory: motolii/ui
