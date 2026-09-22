@@ -9,6 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libavutil-dev libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libswscale-dev libswresample-dev
       - run: cargo check -p motolii-render
       - run: cargo test -p motolii-render render_lowering --lib
       - run: cargo test -p motolii-render render_backend --lib
