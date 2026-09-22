@@ -10,6 +10,7 @@ mod graph;
 mod lowerer;
 mod logical_lowerer;
 mod planner;
+mod placement_backend;
 mod semantic_adapter;
 mod resource_store;
 mod telemetry;
@@ -25,6 +26,7 @@ pub(crate) use lowerer::{
 };
 pub(crate) use resource_store::{GpuOperationTable, GpuResourceStore};
 pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
+pub(crate) use placement_backend::{resident_placement, ResidentPlacement};
 pub(crate) use planner::{
     GpuExecutionPlan, GpuPlanError, GpuPlanner, GpuResourceInterval,
 };
