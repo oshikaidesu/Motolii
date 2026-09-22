@@ -56,7 +56,7 @@ impl Engine {
             fps.den() as f32 / fps.num() as f32,
             frame,
         ]);
-        let prepared = self.prepare_gpu_scene(
+        let prepared = self.prepare_gpu_pictures(
             &crate::frame_graph::SceneValue { layers: vec![target] },
             comp,
             camera,

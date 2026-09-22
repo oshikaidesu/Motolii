@@ -32,8 +32,15 @@ pub fn lower_scene(scene: &SceneValue, catalog: &CatalogSnapshot) -> Result<Rend
     lower(scene, catalog, false)
 }
 
-/// `averaged`: every contribution is summed into an averaging plate.
-fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, averaged: bool) -> Result<RenderGraph, RenderLoweringError> {
+/// Every contribution drawn as a material-space picture, for a host that reads
+/// the pixels back (freeze, analysis).
+pub fn lower_scene_as_pictures(scene: &SceneValue, catalog: &CatalogSnapshot) -> Result<RenderGraph, RenderLoweringError> {
+    lower(scene, catalog, true)
+}
+
+/// `pictures`: every contribution needs pixels in material space (summed by an
+/// averaging plate, or read back by the host).
+fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, pictures: bool) -> Result<RenderGraph, RenderLoweringError> {
     let plan = plan_composite(scene);
     let clip_bases: std::collections::HashSet<usize> = plan.iter()
         .flat_map(|planned| {
@@ -49,7 +56,7 @@ fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, averaged: bool) -> Resul
         .map(|group| group.base)
         .collect();
     let layers = scene.layers.iter().enumerate()
-        .map(|(index, layer)| lower_layer(layer, clip_bases.contains(&index), averaged, catalog))
+        .map(|(index, layer)| lower_layer(layer, clip_bases.contains(&index), pictures, catalog))
         .collect::<Result<_, _>>()?;
     Ok(RenderGraph { layers, output: plan.iter().map(composed).collect() })
 }
@@ -129,7 +136,7 @@ fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Res
     })
 }
 
-fn lower_layer(layer: &SceneLayerValue, clip_base: bool, averaged: bool, catalog: &CatalogSnapshot) -> Result<LayerWork, RenderLoweringError> {
+fn lower_layer(layer: &SceneLayerValue, clip_base: bool, picture: bool, catalog: &CatalogSnapshot) -> Result<LayerWork, RenderLoweringError> {
     let solid = translate::translate_solid(&layer.effects)
         .map(|solid| if solid.depth > 0.0 { solid } else { Solid { depth: layer.depth, ..solid } })
         .unwrap_or(Solid { depth: layer.depth, bevel: None });
@@ -148,9 +155,9 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, averaged: bool, catalog
     let passes = translate::translate_effect_passes(&layer.effects);
     let needs_warp = has_stage(crate::render::compositor::EffectStage::Warp);
     let needs_field = has_stage(crate::render::compositor::EffectStage::Field) && !needs_warp;
-    // A pass that reads neighbouring pixels, or an averaging plate, needs a
-    // picture in material space; a pointwise pass can shade the outline itself.
-    let needs_image = passes.iter().any(|pass| pass.padding() > 0) || averaged;
+    // A pass that reads neighbouring pixels needs a picture in material space;
+    // a pointwise pass can shade the outline itself.
+    let needs_image = passes.iter().any(|pass| pass.padding() > 0) || picture;
     let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image && !clip_base;
     let blend = if layer.blend.is_stencil() {
         crate::render::compositor::BlendMode::Normal

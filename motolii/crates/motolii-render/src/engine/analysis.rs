@@ -92,7 +92,7 @@ impl Engine {
         ]);
         let picture = (|| {
             let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
-            let prepared = self.prepare_gpu_scene(&scene, comp, ResolvedCamera::default())?;
+            let prepared = self.prepare_gpu_pictures(&scene, comp, ResolvedCamera::default())?;
             let Some(layer) = prepared.layers.first() else { return Ok(None); };
             self.layer_with_passes_linear_picture(layer)
         })();

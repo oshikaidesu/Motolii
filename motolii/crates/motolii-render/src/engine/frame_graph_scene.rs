@@ -156,6 +156,15 @@ impl Engine {
         self.execute_render_graph(&graph, comp, projection_camera)
     }
 
+    /// The scene's contributions as material-space pictures the host reads back.
+    pub(super) fn prepare_gpu_pictures(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+        self.compositor.refresh_catalog_programs();
+        let catalog = self.compositor.catalog.clone();
+        let graph = crate::render_lowering::lower_scene_as_pictures(scene, &catalog)
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        self.execute_render_graph(&graph, comp, projection_camera)
+    }
+
     /// Cassette executor: reads only the backend-neutral graph.
     pub(super) fn execute_render_graph(&mut self, graph: &RenderGraph, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
         let mut prepared = Vec::with_capacity(graph.layers.len());
