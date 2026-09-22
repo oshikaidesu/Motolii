@@ -1,7 +1,6 @@
-use crate::doc::core::CompSpec;
+use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneValue};
 use crate::render::compositor::GpuTexture2D;
-use crate::render::engine::ResolvedCamera;
 
 use super::resource_store::GpuResourceStore;
 use super::types::{GpuResourceKey, GpuResourceVersion};
