@@ -55,6 +55,10 @@ pub(crate) struct GpuContributionResources {
     /// Per-contribution output before cross-contribution relations. Clip/matte
     /// are lowered only after every contribution has reached this stage.
     pub prepared: Option<GpuResourceKey>,
+    /// Snapshot resource keys grouped exactly like the effect image-source rows.
+    /// Concrete contribution materialization reads these stores directly; it
+    /// never rediscovers temporal sources from SceneLayerValue.
+    pub snapshot_rows: Vec<Vec<GpuResourceKey>>,
     pub operations: Vec<(super::types::GpuPassKey, super::engine_backend::EngineGpuOperation)>,
 }
 
