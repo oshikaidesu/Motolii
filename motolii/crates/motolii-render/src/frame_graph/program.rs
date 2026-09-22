@@ -220,6 +220,10 @@ mod tests {
             Intent::SetConstant { layer: cube, property: opacity.clone(), value: Value::F64(0.75) },
         ]).unwrap();
         let program = SceneProgram::compile(&doc.view()).unwrap();
+        let clusters = program.static_clusters().unwrap();
+        assert!(clusters.clusters_with_kind(super::NodeKind::SceneComposite).next().is_some());
+        let effect_images = clusters.clusters_with_kind(super::NodeKind::EffectImages).next().expect("lookbehind cluster");
+        assert_eq!(effect_images.signature.dynamic, super::StaticDynamicClass::TemporalSample);
         let topology = GraphTopology::try_new(program.nodes(), program.roots().collect()).unwrap();
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
         let mut executor = Executor(&program);
