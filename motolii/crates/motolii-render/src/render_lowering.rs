@@ -155,9 +155,9 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, picture: bool, catalog:
     let passes = translate::translate_effect_passes(&layer.effects);
     let needs_warp = has_stage(crate::render::compositor::EffectStage::Warp);
     let needs_field = has_stage(crate::render::compositor::EffectStage::Field) && !needs_warp;
-    // A pass that reads neighbouring pixels needs a picture in material space;
-    // a pointwise pass can shade the outline itself.
-    let needs_image = passes.iter().any(|pass| pass.padding() > 0) || picture;
+    // A pass that reads neighbouring pixels, or any pass after a field, needs a
+    // picture in material space; a pointwise pass alone can shade the outline.
+    let needs_image = passes.iter().any(|pass| pass.padding() > 0) || (needs_field && !passes.is_empty()) || picture;
     let vector = flat && layer.masks.is_empty() && !needs_warp && !needs_image && !clip_base;
     let blend = if layer.blend.is_stencil() {
         crate::render::compositor::BlendMode::Normal
