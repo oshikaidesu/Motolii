@@ -1,7 +1,6 @@
-use crate::doc::core::{CompSpec, LayerPlacement};
+use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 use crate::frame_graph::{SceneLayerValue, ScenePlateValue, SceneValue};
 use crate::render::compositor::{BlendMode as CompositeBlendMode, LayerContent, LayerWithPasses};
-use crate::render::engine::ResolvedCamera;
 
 use super::resource_store::GpuResourceStore;
 use super::types::{GpuIdentitySource, GpuResourceClass, GpuResourceIdentity, GpuResourceVersion};
