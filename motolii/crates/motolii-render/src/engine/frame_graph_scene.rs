@@ -227,88 +227,86 @@ impl Engine {
                 .transpose()?
                 .flatten();
             let frozen = self.frame_graph_frozen_content(source);
+            let resident_content = if force_picture {
+                None
+            } else {
+                resident.and_then(|resident| resident.content(source))
+            };
             let (content, natural, frozen_padding, frozen_frame, frozen_hit) = if let Some((content, natural, padding, frame)) = frozen {
                 (Some(content), natural, padding, frame, true)
             } else if let Some((content, natural)) = overlay_content {
                 (Some(content), natural, 0, None, false)
-            } else if !force_picture {
-                if let Some(resident_content) = resident.and_then(|resident| resident.content(source)) {
-                    (Some(resident_content.content), resident_content.natural, 0, None, false)
-                } else {
-                    let (content, natural) = match &source.content {
+            } else if let Some(resident_content) = resident_content {
+                (Some(resident_content.content), resident_content.natural, 0, None, false)
             } else {
                 let (content, natural) = match &source.content {
-                SceneContentValue::None => continue,
-                // Resident leaf content is the production owner for these
-                // semantic values. Reaching this fallback means the new
-                // backend could not materialize the resource; keep the bridge
-                // temporarily for special force-picture/extrusion cases.
-                SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
-                SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
-                SceneContentValue::Shape(shapes) => {
-                    let stretched;
-                    let shapes = if source.shape_stretch != [1.0, 1.0] {
-                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
-                        stretched.as_slice()
-                    } else {
-                        shapes.as_slice()
-                    };
-                    self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, source.shape_stretch == [1.0, 1.0])?
-                },
-                SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
-                SceneContentValue::Media { source: media, time } => {
-                    if source.environment && crate::render::media::is_still_image_path(&media.path) {
-                        self.environment_content_for(&media.path)?
-                    } else {
-                        self.file_content_for(&media.path, *time, source.layer, comp)?
-                    }
-                }
-                SceneContentValue::Particles(value) => {
-                    let frame = super::ParticleFrame::from_particles(&value.particles, value.turbulence, value.links);
-                    let natural = [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)];
-                    (
-                        Some(crate::render::compositor::LayerContent::Cloud {
-                            positions: frame.positions,
-                            colors: frame.colors,
-                            bounds: frame.bounds,
-                            point_size: 1.0,
-                            sizes: Some(frame.sizes),
-                            sprites: true,
-                            links: frame.links,
-                        }),
-                        natural,
-                    )
-                }
-                SceneContentValue::Plate(plate) => {
-                    let nested = SceneValue {
-                        layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
-                    };
-                    let prepared = self.prepare_gpu_scene(&nested, comp, projection_camera)?;
-                    if prepared.layers.is_empty() {
-                        (None, [comp.width as f32, comp.height as f32])
-                    } else {
-                        let placement = LayerPlacement {
-                            transform: glam::Affine2::IDENTITY,
-                            world_transform: None,
-                            opacity: 1.0,
-                            order: i32::from(source.order),
-                            z: 0.0,
-                            rotation_x: 0.0,
-                            rotation_y: 0.0,
-                            plane: None,
+                    SceneContentValue::None => continue,
+                    SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
+                    SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
+                    SceneContentValue::Shape(shapes) => {
+                        let stretched;
+                        let shapes = if source.shape_stretch != [1.0, 1.0] {
+                            stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                            stretched.as_slice()
+                        } else {
+                            shapes.as_slice()
                         };
-                        let baked = self.bake_isolated_layers(
-                            comp,
-                            projection_camera,
-                            prepared.layers,
-                            CompositeBlendMode::Normal,
-                            placement,
-                            plate.average,
-                        )?;
-                        (Some(baked.content), baked.size)
+                        self.shape_texture_from_shapes(shapes, key, !force_picture, 0.05, comp, None, source.shape_stretch == [1.0, 1.0])?
+                    },
+                    SceneContentValue::Material(material) => self.mesh_content_for(&material.source.path, comp)?,
+                    SceneContentValue::Media { source: media, time } => {
+                        if source.environment && crate::render::media::is_still_image_path(&media.path) {
+                            self.environment_content_for(&media.path)?
+                        } else {
+                            self.file_content_for(&media.path, *time, source.layer, comp)?
+                        }
                     }
-                }
-            };
+                    SceneContentValue::Particles(value) => {
+                        let frame = super::ParticleFrame::from_particles(&value.particles, value.turbulence, value.links);
+                        let natural = [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)];
+                        (
+                            Some(crate::render::compositor::LayerContent::Cloud {
+                                positions: frame.positions,
+                                colors: frame.colors,
+                                bounds: frame.bounds,
+                                point_size: 1.0,
+                                sizes: Some(frame.sizes),
+                                sprites: true,
+                                links: frame.links,
+                            }),
+                            natural,
+                        )
+                    }
+                    SceneContentValue::Plate(plate) => {
+                        let nested = SceneValue {
+                            layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
+                        };
+                        let prepared = self.prepare_gpu_scene_resident(&nested, comp, projection_camera, resident)?;
+                        if prepared.layers.is_empty() {
+                            (None, [comp.width as f32, comp.height as f32])
+                        } else {
+                            let placement = LayerPlacement {
+                                transform: glam::Affine2::IDENTITY,
+                                world_transform: None,
+                                opacity: 1.0,
+                                order: i32::from(source.order),
+                                z: 0.0,
+                                rotation_x: 0.0,
+                                rotation_y: 0.0,
+                                plane: None,
+                            };
+                            let baked = self.bake_isolated_layers(
+                                comp,
+                                projection_camera,
+                                prepared.layers,
+                                CompositeBlendMode::Normal,
+                                placement,
+                                plate.average,
+                            )?;
+                            (Some(baked.content), baked.size)
+                        }
+                    }
+                };
                 (content, natural, 0, None, false)
             };
             let Some(mut content) = content else { continue };
@@ -328,14 +326,15 @@ impl Engine {
                     _ => content,
                 };
             }
-            let placement = self.frame_graph_resident_placement(source)
+            let placement = resident
+                .and_then(|resident| resident.placement(source))
                 .map(|resident| resident.placement)
                 .unwrap_or_else(|| crate::gpu_exec::ResidentPlacement::from_scene(source).placement);
             let (passes, pass_sources) = if frozen_hit {
                 (Vec::new(), Vec::new())
             } else {
-                let resident = self.frame_graph_resident_effects(source);
-                let (direct_passes, plate_passes) = resident.map_or_else(
+                let resident_effects = resident.and_then(|resident| resident.effects(source));
+                let (direct_passes, plate_passes) = resident_effects.map_or_else(
                     || (
                         crate::render::engine::translate::translate_effect_passes(&source.effects),
                         crate::render::engine::translate::translate_plate_passes(&source.after_effects),
