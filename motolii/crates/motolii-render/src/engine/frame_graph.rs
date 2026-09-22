@@ -328,25 +328,8 @@ impl Engine {
         Ok(state)
     }
 
-    pub fn resolved_for(&self, view: &StoreView<'_>, time: RationalTime) -> Option<Vec<ResolvedLayer>> {
-        let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
-        let scene = state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()?;
-        Some(resolved_layers_from_scene(scene, time, state.fps))
-    }
-
     pub(super) fn semantic_layer_for(&self, view: &StoreView<'_>, time: RationalTime, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
-        let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
-        let scene = state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()?;
-        fn find(layer: &crate::frame_graph::SceneLayerValue, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
-            if layer.layer == id && !layer.ghost { return Some(layer); }
-            if let crate::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
-                return plate.members.iter().filter_map(|member| member.layer.as_ref()).find_map(|layer| find(layer, id));
-            }
-            None
-        }
-        scene.layers.iter().find_map(|layer| find(layer, id))
+        self.frame_graph_cached_scene(view, time)?.layer(id)
     }
 
     #[allow(clippy::too_many_arguments)]
