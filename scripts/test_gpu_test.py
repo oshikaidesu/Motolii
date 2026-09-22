@@ -38,15 +38,14 @@ class GpuTestRunnerTest(unittest.TestCase):
     def test_timeout_kills_sigterm_ignoring_grandchild(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             pid_file = Path(temp) / "child.pid"
-            child_code = (
-                "import os,pathlib,signal,time;"
-                "signal.signal(signal.SIGTERM, signal.SIG_IGN);"
-                f"pathlib.Path({os.fspath(pid_file)!r}).write_text(str(os.getpid()));"
-                "time.sleep(30)"
+            child_script = (
+                "trap '' TERM; "
+                f"echo $$ > {subprocess.list2cmdline([os.fspath(pid_file)])}; "
+                "exec sleep 30"
             )
             parent_code = (
-                "import pathlib,subprocess,sys,time;"
-                f"p=subprocess.Popen([sys.executable,'-c',{child_code!r}]);"
+                "import pathlib,subprocess,time;"
+                f"subprocess.Popen(['/bin/sh','-c',{child_script!r}]);"
                 f"path=pathlib.Path({os.fspath(pid_file)!r});"
                 "deadline=time.monotonic()+5;"
                 "exec('while not path.exists() and time.monotonic()<deadline:\\n time.sleep(0.01)');"
@@ -54,7 +53,7 @@ class GpuTestRunnerTest(unittest.TestCase):
             )
             result = self.run_runner(
                 "--backend", "vulkan",
-                "--timeout-seconds", "0.5",
+                "--timeout-seconds", "1.0",
                 "--", sys.executable, "-c", parent_code,
             )
             self.assertEqual(result.returncode, 124, result.stderr)
