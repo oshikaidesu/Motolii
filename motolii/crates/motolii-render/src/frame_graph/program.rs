@@ -109,6 +109,11 @@ impl SceneProgram {
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
+    pub fn static_clusters(&self) -> Result<super::StaticClusterReport, super::TopologyError> {
+        let topology = super::GraphTopology::try_new(self.nodes(), self.roots().collect())?;
+        Ok(super::scene_static_clusters(&topology))
+    }
+
     pub fn roots(&self) -> impl ExactSizeIterator<Item = NodeKey> + '_ { self.roots.iter().copied() }
     pub fn analysis(&self) -> &AnalysisProgram { &self.analysis }
     pub fn properties(&self) -> &PropertyProgram { &self.properties }
