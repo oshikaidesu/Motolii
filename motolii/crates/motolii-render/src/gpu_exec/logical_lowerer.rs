@@ -157,6 +157,27 @@ impl GpuLowerer for LogicalGpuLowerer {
             current = Some(output);
         }
 
+        // Every contribution publishes a stable composite output. Matte and
+        // scene composition depend on this identity instead of searching a
+        // whole-scene layer vector.
+        if let Some(source) = current {
+            let output = Self::resource(
+                graph,
+                input.contribution,
+                GpuResourceClass::Composite,
+                input.instance,
+                vec![source, placement],
+            )?;
+            Self::producer(
+                graph,
+                input.contribution.node.as_u64() ^ 0x434f4d50 ^ u64::from(input.instance),
+                GpuPassKind::Composite,
+                vec![source, placement],
+                vec![output],
+            )?;
+            current = Some(output);
+        }
+
         if let Some(matte) = input.matte_source {
             let mut reads = current.into_iter().collect::<Vec<_>>();
             reads.push(matte);
