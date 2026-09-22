@@ -93,16 +93,21 @@ impl StaticClusterReport {
             let Some(to_inputs) = frame.input_types(to) else { continue };
             if to_inputs.len() != 1 { continue; }
             let Some(to_value) = frame.value(to) else { continue };
+            let Some(to_node) = self.node_cluster.get(&to).and_then(|_| frame.value(to)) else { continue };
+            let _ = to_node;
             let Some(cluster) = self.clusters.get(to_cluster.0) else { continue };
-            for &from in &cluster.nodes {
-                if from == to { continue; }
-                let Some(from_value) = frame.value(from) else { continue };
-                if from_value.type_name() != to_inputs[0] { continue; }
-                if from_value.type_name() == to_value.type_name() {
-                    self.passthrough_candidates.push((from, to));
-                } else {
-                    self.adapter_candidates.push((from, to));
-                }
+            let _ = cluster;
+            // Candidate source must be the compiler-declared sole upstream edge,
+            // not merely another node in the same cluster.
+            let Some(from) = self.node_cluster.keys().copied().find(|candidate| {
+                frame.value(*candidate).is_some_and(|value| value.type_name() == to_inputs[0])
+                    && *candidate != to
+            }) else { continue };
+            let Some(from_value) = frame.value(from) else { continue };
+            if from_value.type_name() == to_value.type_name() {
+                self.passthrough_candidates.push((from, to));
+            } else {
+                self.adapter_candidates.push((from, to));
             }
         }
         self.passthrough_candidates.sort_unstable();
