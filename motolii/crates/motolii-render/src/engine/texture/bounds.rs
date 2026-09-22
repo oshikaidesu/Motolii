@@ -257,8 +257,8 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
-        let resolved = self.resolved_for(view, t)?;
-        self.selected_layer_size_in(view, &resolved, layer_id, t)
+        let scene = self.frame_graph_cached_scene(view, t)?;
+        self.selected_scene_layer_bounds_in(view, &scene.layers, layer_id, t).map(|bounds| bounds.size_xy())
     }
 
     /// 解いた層の一覧を持っている側(Stage の paint)は、層ごとに解き直さない。
