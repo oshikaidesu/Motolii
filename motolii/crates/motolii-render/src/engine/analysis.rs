@@ -407,7 +407,7 @@ impl Engine {
                         .map(|bounds| bounds.map(|value| value as f32))
                 }
                 crate::frame_graph::SceneContentValue::Media { source, .. }
-                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => {
+                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MediaSourceValue { source }) => {
                     self.material_extent(&source.path, comp).map(|extent| [0.0, 0.0, extent[0], extent[1]])
                 }
                 crate::frame_graph::SceneContentValue::Plate(_) => Some([0.0, 0.0, comp.width as f32, comp.height as f32]),
@@ -482,7 +482,7 @@ fn semantic_extent(engine: &mut Engine, layer: &crate::frame_graph::SceneLayerVa
     match &layer.content {
         crate::frame_graph::SceneContentValue::Text(text) => crate::picture::shapes_ops::content_canvas(&text.shapes()).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
         crate::frame_graph::SceneContentValue::Shape(shapes) => crate::picture::shapes_ops::content_canvas(shapes).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
-        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
+        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MediaSourceValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
         crate::frame_graph::SceneContentValue::Particles(value) => {
             let mut hi = glam::Vec2::ZERO;
             for particle in &value.particles { hi = hi.max(glam::Vec2::new(particle.position[0], particle.position[1])); }
