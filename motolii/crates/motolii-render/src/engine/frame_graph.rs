@@ -70,6 +70,8 @@ impl EngineFrameGraph {
 
     fn execute_pre_sink(
         &mut self,
+        engine: &mut Engine,
+        camera: ResolvedCamera,
         plan: &crate::gpu_exec::GpuExecutionPlan,
         sink: crate::gpu_exec::GpuSinkKind,
     ) -> Result<crate::gpu_exec::GpuExecutionStats, EngineError> {
@@ -79,9 +81,17 @@ impl EngineFrameGraph {
         }.ok_or_else(|| EngineError::Store("GPU sink root missing".into()))?.pass;
         let mut pre = plan.clone();
         pre.passes.retain(|pass| *pass != sink_pass);
+
+        let cross = crate::gpu_exec::EngineCrossContext {
+            engine,
+            resources: &mut self.gpu_composites,
+            generation: self.generation,
+            comp: self.comp,
+            camera,
+        };
         let mut backend = crate::gpu_exec::EngineGpuBackend {
             operations: &self.gpu_operations,
-            cross: crate::gpu_exec::NoCrossExecutor,
+            cross,
         };
         crate::gpu_exec::GpuExecutor.execute(
             &mut self.gpu_resources,
@@ -397,13 +407,13 @@ impl Engine {
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
-        let _stats = state.execute_pre_sink(&plan, crate::gpu_exec::GpuSinkKind::Readback)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
+        let _stats = state.execute_pre_sink(self, document_camera, &plan, crate::gpu_exec::GpuSinkKind::Readback)?;
         let camera = camera_override.unwrap_or(document_camera);
         let mut layers = self.prepare_frame_graph_layers(&mut state, time, document_camera)?;
         for layer in &mut layers {
@@ -422,12 +432,13 @@ impl Engine {
         include_background: bool,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let _plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
+        let _stats = state.execute_pre_sink(self, document_camera, &plan, crate::gpu_exec::GpuSinkKind::Readback)?;
         let mut layers = self.prepare_frame_graph_layers(&mut state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
@@ -698,13 +709,13 @@ impl Engine {
         if !matches!(projection, crate::frame_graph::ViewProjection::Camera | crate::frame_graph::ViewProjection::Stage) {
             return Err(EngineError::Store("Unsupported playback projection".into()));
         }
-        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Present)?;
-        let _stats = state.execute_pre_sink(&plan, crate::gpu_exec::GpuSinkKind::Present)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Present)?;
+        let _stats = state.execute_pre_sink(self, document_camera, &plan, crate::gpu_exec::GpuSinkKind::Present)?;
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
         let mut layers = self.prepare_frame_graph_layers(state, state.frame.as_ref().map(|f| f.time()).unwrap_or(RationalTime::ZERO), document_camera)?;
         for layer in &mut layers {
