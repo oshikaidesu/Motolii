@@ -335,7 +335,8 @@ impl Engine {
         self.gpu_history.begin_frame();
         self.prepare_blocks(view, comp, t, resolved)?;
         let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
-        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        let seen = self.gpu_history.seen().collect::<Vec<_>>();
+        self.gpu_history.begin_frame();
         if !self.replay_feedback(view, comp, camera, projection_camera, t, &seen)? {
             self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
             self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
