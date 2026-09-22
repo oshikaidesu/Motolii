@@ -185,7 +185,7 @@ fn resolved_effect_version(value: &crate::picture::resolved::ResolvedEffect) -> 
 
 fn placement_version(layer: &SceneLayerValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
     let mut encoded = CanonicalEncoder::new();
-    encoded.u64(placement_version(layer)?.as_u64());
+    encoded.u64(transform_version(&layer.transform)?.as_u64());
     encoded.f32(layer.opacity)?;
     encoded.i16(layer.order);
     Ok(hash_encoded(encoded))
