@@ -27,6 +27,8 @@ pub(super) struct EngineFrameGraph {
     generation: u64,
     prepare_us: u64,
     measured: bool,
+    gpu_resources: crate::gpu_exec::GpuResourceGraph,
+    gpu_lowerer: crate::gpu_exec::LogicalGpuLowerer,
 }
 
 impl EngineFrameGraph {
@@ -53,7 +55,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -80,6 +82,14 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
+        if let Some(scene) = evaluated.value(self.scene).and_then(|value| value.downcast_ref::<SceneValue>()) {
+            let adapter = crate::gpu_exec::SemanticGpuAdapter::new(&self.program, &evaluated);
+            let inputs = adapter.contributions(scene).map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
+            for input in &inputs {
+                self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+            }
+            self.gpu_resources.retire_temporal(self.generation);
+        }
         self.frame = Some(evaluated);
         Ok(())
     }
