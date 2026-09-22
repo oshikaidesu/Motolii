@@ -44,12 +44,12 @@ fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, pictures: bool) -> Resul
     let plan = plan_composite(scene);
     let clip_bases: std::collections::HashSet<usize> = plan.iter()
         .flat_map(|planned| {
-            let mut groups = vec![&planned.group];
-            let mut matte = planned.matte.as_ref();
-            while let Some(m) = matte {
-                groups.push(&m.source.group);
-                matte = m.source.matte.as_ref();
+            fn collect<'a>(planned: &'a PlannedContribution, groups: &mut Vec<&'a crate::frame_graph::ClipGroup>) {
+                groups.push(&planned.group);
+                for source in planned.matte.iter().flat_map(|matte| &matte.sources) { collect(source, groups); }
             }
+            let mut groups = Vec::new();
+            collect(planned, &mut groups);
             groups
         })
         .filter(|group| !group.clips.is_empty())
@@ -65,7 +65,7 @@ fn composed(planned: &PlannedContribution) -> Composed {
     Composed {
         base: planned.group.base,
         atop: planned.group.clips.clone(),
-        mask: planned.matte.as_ref().map(|matte| (Box::new(composed(&matte.source)), translate::translate_matte_mode(matte.mode))),
+        mask: planned.matte.as_ref().map(|matte| (matte.sources.iter().map(composed).collect(), translate::translate_matte_mode(matte.mode))),
     }
 }
 
@@ -235,7 +235,7 @@ mod tests {
         let plain = |base| Composed { base, atop: Vec::new(), mask: None };
         assert_eq!(graph.output, vec![
             Composed { base: 0, atop: vec![1], mask: None },
-            Composed { mask: Some((Box::new(plain(3)), crate::render::compositor::MatteMode::InvertedLuma)), ..plain(2) },
+            Composed { mask: Some((vec![plain(3)], crate::render::compositor::MatteMode::InvertedLuma)), ..plain(2) },
         ]);
         assert!(matches!(graph.layers[0].content, RasterSource::Vector { vector: false, .. }), "a clipping base rasterizes as a picture");
         assert_eq!(graph.layers[4].blend, crate::render::compositor::BlendMode::Normal);

@@ -89,12 +89,12 @@ pub struct LayerWork {
 }
 
 /// A picture built from contributions: a base, pictures drawn source-atop onto
-/// it, and optionally masked by another composed picture.
+/// it, and optionally masked by the union of other composed pictures.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Composed {
     pub base: usize,
     pub atop: Vec<usize>,
-    pub mask: Option<(Box<Composed>, MatteMode)>,
+    pub mask: Option<(Vec<Composed>, MatteMode)>,
 }
 
 #[derive(Clone, Default)]

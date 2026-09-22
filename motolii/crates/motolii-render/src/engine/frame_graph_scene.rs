@@ -367,10 +367,20 @@ impl Engine {
             groups.insert(composed.base, base);
         }
         let Some(base) = groups[&composed.base].clone() else { return Ok(None) };
-        let Some((mask, mode)) = &composed.mask else { return Ok(Some(base)) };
-        let Some(source) = self.realize_composed(graph, prepared, mask, groups, comp, camera)? else { return Ok(None) };
+        let Some((masks, mode)) = &composed.mask else { return Ok(Some(base)) };
+        let mut sources = Vec::with_capacity(masks.len());
+        for mask in masks {
+            if let Some(source) = self.realize_composed(graph, prepared, mask, groups, comp, camera)? { sources.push(source); }
+        }
+        let source = match sources.len() {
+            0 => return Ok(None),
+            1 => { let source = sources.remove(0); self.apply_effects_before_matte(comp, camera, source.layer, &source.passes)? }
+            _ => {
+                let placement = sources[0].layer.placement;
+                self.bake_isolated_layers(comp, camera, sources, CompositeBlendMode::Normal, placement, false)?
+            }
+        };
         let target = self.apply_effects_before_matte(comp, camera, base.layer, &base.passes)?;
-        let source = self.apply_effects_before_matte(comp, camera, source.layer, &source.passes)?;
         let layer = self.compositor.matte_layer(comp, camera, &target, &source, *mode)?;
         Ok(Some(LayerWithPasses { layer, passes: Vec::new(), padding: 0, pass_sources: Vec::new(), cut: Vec::new() }))
     }

@@ -14,9 +14,10 @@ pub struct ClipGroup {
     pub clips: Vec<usize>,
 }
 
+/// A matte reads everything its source layer draws: every instance of it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlannedMatte {
-    pub source: Box<PlannedContribution>,
+    pub sources: Vec<PlannedContribution>,
     pub mode: MatteMode,
 }
 
@@ -32,7 +33,7 @@ impl PlannedContribution {
     pub fn indices(&self) -> Vec<usize> {
         let mut out = vec![self.group.base];
         out.extend(&self.group.clips);
-        if let Some(matte) = &self.matte { out.extend(matte.source.indices()); }
+        if let Some(matte) = &self.matte { for source in &matte.sources { out.extend(source.indices()); } }
         out
     }
 }
@@ -41,6 +42,8 @@ impl PlannedContribution {
 pub fn plan_composite(scene: &SceneValue) -> Vec<PlannedContribution> {
     let layers = &scene.layers;
     let by_id: HashMap<LayerId, usize> = layers.iter().enumerate().map(|(index, layer)| (layer.layer, index)).collect();
+    let mut instances: HashMap<LayerId, Vec<usize>> = HashMap::new();
+    for (index, layer) in layers.iter().enumerate() { instances.entry(layer.layer).or_default().push(index); }
 
     let mut clips: Vec<Vec<usize>> = vec![Vec::new(); layers.len()];
     for (index, layer) in layers.iter().enumerate() {
@@ -56,7 +59,7 @@ pub fn plan_composite(scene: &SceneValue) -> Vec<PlannedContribution> {
         .collect();
 
     let planned: Vec<Option<PlannedContribution>> = (0..layers.len())
-        .map(|index| (!layers[index].clip_to_below).then(|| contribution(scene, &by_id, &clips, index, &mut Vec::new())).flatten())
+        .map(|index| (!layers[index].clip_to_below).then(|| contribution(scene, &instances, &clips, index, &mut Vec::new())).flatten())
         .collect();
 
     planned.into_iter().enumerate()
@@ -69,7 +72,7 @@ pub fn plan_composite(scene: &SceneValue) -> Vec<PlannedContribution> {
 /// cycle is cut where it closes: that source is read without its matte.
 fn contribution(
     scene: &SceneValue,
-    by_id: &HashMap<LayerId, usize>,
+    instances: &HashMap<LayerId, Vec<usize>>,
     clips: &[Vec<usize>],
     index: usize,
     path: &mut Vec<usize>,
@@ -78,11 +81,12 @@ fn contribution(
     let group = ClipGroup { base: index, clips: if layer.clip_to_below { Vec::new() } else { clips[index].clone() } };
     let matte = match layer.matte.filter(|_| !layer.clip_to_below) {
         Some(matte) if !path.contains(&index) => {
-            let &source = by_id.get(&matte.layer)?;
+            let sources = instances.get(&matte.layer)?;
             path.push(index);
-            let source_plan = contribution(scene, by_id, clips, source, path);
+            let planned: Vec<_> = sources.iter().filter_map(|&source| contribution(scene, instances, clips, source, path)).collect();
             path.pop();
-            Some(PlannedMatte { source: Box::new(source_plan?), mode: matte.mode })
+            if planned.is_empty() { return None; }
+            Some(PlannedMatte { sources: planned, mode: matte.mode })
         }
         _ => None,
     };
@@ -113,7 +117,7 @@ mod tests {
         PlannedContribution { group: ClipGroup { base, clips: Vec::new() }, matte: None }
     }
     fn masked(target: PlannedContribution, source: PlannedContribution) -> PlannedContribution {
-        PlannedContribution { matte: Some(PlannedMatte { source: Box::new(source), mode: MatteMode::Alpha }), ..target }
+        PlannedContribution { matte: Some(PlannedMatte { sources: vec![source], mode: MatteMode::Alpha }), ..target }
     }
 
     #[test]
@@ -140,7 +144,7 @@ mod tests {
     fn a_matte_cycle_is_cut_where_it_closes() {
         let scene = SceneValue { layers: vec![matted(1, 2), matted(2, 1)] };
         assert_eq!(plan_composite(&scene), Vec::new());
-        let seen = contribution(&scene, &[(LayerId(1), 0), (LayerId(2), 1)].into(), &[Vec::new(), Vec::new()], 0, &mut Vec::new());
+        let seen = contribution(&scene, &[(LayerId(1), vec![0]), (LayerId(2), vec![1])].into(), &[Vec::new(), Vec::new()], 0, &mut Vec::new());
         assert_eq!(seen, Some(masked(plain(0), masked(plain(1), plain(0)))));
     }
 
@@ -150,5 +154,13 @@ mod tests {
         let stencil = SceneLayerValue { blend: BlendMode::StencilAlpha, ..layer(4) };
         let scene = SceneValue { layers: vec![layer(1), clip(2), clip(3), stencil] };
         assert_eq!(plan_composite(&scene), vec![PlannedContribution { group: ClipGroup { base: 0, clips: vec![1, 2] }, matte: None }]);
+    }
+
+    #[test]
+    fn a_matte_reads_every_instance_of_its_source() {
+        let copy = |instance| SceneLayerValue { instance, ..layer(3) };
+        let scene = SceneValue { layers: vec![matted(2, 3), copy(0), copy(1)] };
+        let planned = plan_composite(&scene);
+        assert_eq!(planned, vec![PlannedContribution { group: ClipGroup { base: 0, clips: Vec::new() }, matte: Some(PlannedMatte { sources: vec![plain(1), plain(2)], mode: MatteMode::Alpha }) }]);
     }
 }
