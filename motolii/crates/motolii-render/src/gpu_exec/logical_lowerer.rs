@@ -475,7 +475,7 @@ mod tests {
     use super::*;
     use crate::frame_graph::{NodeIdentity, NodeKey, NodeKind};
     use crate::gpu_exec::planner::GpuPlanner;
-    use crate::gpu_exec::VersionedSemantic;
+    use crate::gpu_exec::{EngineGpuOperation, VersionedSemantic};
 
     fn semantic(tag: u16, version: u64) -> VersionedSemantic {
         VersionedSemantic {
@@ -546,7 +546,7 @@ mod tests {
         assert_ne!(relations.ordered_outputs[0], resources[0].prepared.unwrap());
         assert!(matches!(
             relations.operations.as_slice(),
-            [(_, super::super::engine_backend::EngineGpuOperation::Clip { .. })]
+            [(_, EngineGpuOperation::Clip { .. })]
         ));
     }
 }
