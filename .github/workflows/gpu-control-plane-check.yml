@@ -28,6 +28,8 @@ jobs:
         run: cargo test -p motolii-render --lib frame_graph::static_analysis:: -- --nocapture
       - name: Test SceneProgram output-type inventory
         run: cargo test -p motolii-render --lib frame_graph::program::tests::one_revision_program_evaluates_authored_values_and_shared_content_without_store_reads -- --nocapture
+      - name: Test authored layer lookup through generated plates
+        run: cargo test -p motolii-render --lib frame_graph::scene_program::scene_value_lookup_tests:: -- --nocapture
       - name: Check native UI against FrameGraph public surface
         if: runner.os == 'macOS'
         run: cargo check -p motolii-ui
