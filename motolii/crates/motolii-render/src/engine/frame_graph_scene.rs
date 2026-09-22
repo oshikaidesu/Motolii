@@ -277,19 +277,14 @@ impl Engine {
             let (passes, pass_sources) = if frozen_hit {
                 (Vec::new(), Vec::new())
             } else {
-                let mut direct_passes = crate::render::engine::translate::translate_effect_passes(&source.effects);
-                let direct_screen = (
-                    content.texture().is_none()
-                        || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
-                ).then_some([comp.width, comp.height]);
-                self.stamp_feedback(&mut direct_passes, source.layer, source.instance, 0, direct_screen);
-
-                let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&source.after_effects);
-                let plate_screen = plate_passes.iter()
-                    .any(|pass| pass.reads_backdrop || pass.reads_composite())
-                    .then_some([comp.width, comp.height]);
-                self.stamp_feedback(&mut plate_passes, source.layer, source.instance, 1, plate_screen);
-
+                let resident = self.frame_graph_resident_effects(source);
+                let (direct_passes, plate_passes) = resident.map_or_else(
+                    || (
+                        crate::render::engine::translate::translate_effect_passes(&source.effects),
+                        crate::render::engine::translate::translate_plate_passes(&source.after_effects),
+                    ),
+                    |resident| (resident.passes, resident.plate_passes),
+                );
                 (
                     direct_passes.into_iter().chain(plate_passes).collect(),
                     self.frame_graph_image_sources(&source.image_sources, comp, projection_camera)?,
