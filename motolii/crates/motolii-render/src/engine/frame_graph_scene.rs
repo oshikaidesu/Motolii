@@ -268,72 +268,12 @@ impl Engine {
             });
         }
 
-        let by_id: std::collections::HashMap<_, _> = entries.iter().enumerate()
-            .map(|(index, entry)| (entry.layer, index))
-            .collect();
-        let mut removed = vec![false; layers.len()];
-
-        // Clipping is source-atop onto the visible base. The upper contribution
-        // never reaches the final scene as a separate layer.
-        for index in 0..layers.len() {
-            let entry = entries[index];
-            if !entry.clip_to_below || entry.stencil {
-                continue;
-            }
-            let Some(base_id) = entry.matte.map(|matte| matte.layer) else {
-                removed[index] = true;
-                continue;
-            };
-            let Some(base_index) = by_id.get(&base_id).copied() else {
-                removed[index] = true;
-                continue;
-            };
-            match self.clip_onto_base(layers[base_index].clone(), &layers[index].layer, &layers[index].passes)? {
-                Some(clipped) => layers[base_index] = clipped,
-                None => self.layer_failures.push(format!(
-                    "layer {} clips to a base without a texture (point cloud / model bases are not clippable)",
-                    entry.layer.0
-                )),
-            }
-            removed[index] = true;
-        }
-
-        // Track mattes and stencils consume their source. A missing source means
-        // the target has no coverage and therefore contributes nothing.
-        let matte_sources: std::collections::HashSet<_> = scene.layers.iter()
-            .filter(|entry| !entry.clip_to_below)
-            .filter_map(|entry| entry.matte.map(|matte| matte.layer))
-            .collect();
-
-        for index in 0..layers.len() {
-            if removed[index] || entries[index].clip_to_below {
-                continue;
-            }
-            let Some(matte) = entries[index].matte else { continue };
-            let Some(source_index) = by_id.get(&matte.layer).copied() else {
-                removed[index] = true;
-                continue;
-            };
-            let semantic = &scene.layers[index];
-            layers[index] = self.frame_graph_matte(
-                semantic,
-                &layers[index],
-                &layers[source_index],
-                comp,
-                projection_camera,
-            )?;
-        }
-
-        let kept: Vec<_> = layers.into_iter().enumerate()
-            .filter(|(index, _)| {
-                !removed[*index]
-                    && !entries[*index].stencil
-                    && !matte_sources.contains(&entries[*index].layer)
-            })
-            .map(|(index, layer)| (entries[index].layer, layer))
-            .collect();
-        let layer_ids = kept.iter().map(|(layer, _)| *layer).collect();
-        let layers = kept.into_iter().map(|(_, layer)| layer).collect();
+        let (layers, layer_ids) = self.gpu_cross_contributions(
+            scene,
+            layers,
+            comp,
+            projection_camera,
+        )?;
 
         Ok(PreparedScene { layers, layer_ids })
     }
