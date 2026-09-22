@@ -29,6 +29,7 @@ pub(super) struct EngineFrameGraph {
     measured: bool,
     gpu_resources: crate::gpu_exec::GpuResourceGraph,
     gpu_lowerer: crate::gpu_exec::LogicalGpuLowerer,
+    gpu_content: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
 }
 
 impl EngineFrameGraph {
@@ -55,7 +56,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -85,8 +86,21 @@ impl EngineFrameGraph {
         if let Some(scene) = evaluated.value(self.scene).and_then(|value| value.downcast_ref::<SceneValue>()) {
             let adapter = crate::gpu_exec::SemanticGpuAdapter::new(&self.program, &evaluated);
             let inputs = adapter.contributions(scene).map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
-            for input in &inputs {
-                self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+            for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
+                let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+                if let Some(content_key) = resources.content {
+                    let version = self.gpu_resources.version(content_key).ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
+                    let _ = engine.gpu_resident_content(
+                        &mut self.gpu_content,
+                        content_key,
+                        version,
+                        self.generation,
+                        layer,
+                        self.comp,
+                        time,
+                    )?;
+                    self.gpu_resources.mark_resident(content_key, version, self.generation);
+                }
             }
             self.gpu_resources.retire_temporal(self.generation);
         }
