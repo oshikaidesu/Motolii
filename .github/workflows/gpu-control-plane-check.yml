@@ -23,3 +23,5 @@ jobs:
         run: cargo check -p motolii-render --lib
       - name: Test GPU control plane
         run: cargo test -p motolii-render --lib gpu_exec:: -- --nocapture
+      - name: Test FrameGraph static clustering
+        run: cargo test -p motolii-render --lib frame_graph::static_analysis:: -- --nocapture
