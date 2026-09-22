@@ -22,8 +22,8 @@ use re_types_core::{Component, SerializedComponentBatch};
 
 use motolii_doc::eval::Value;
 
-use motolii_doc::store::components::TrackJson;
-use motolii_doc::store::slot::PropertyLink;
+use motolii_doc::store::components::{descriptor_track, TrackJson};
+use motolii_doc::store::slot::{PropertyBase, PropertyLink, PropertySource};
 use motolii_doc::store::view::StoreView;
 use motolii_doc::store::{LayerAttrsPatch, Mask, Slot, SlotId, StoreError, EDIT_TIMELINE};
 
@@ -444,6 +444,35 @@ impl Document {
         };
         let batch = SerializedComponentBatch {
             descriptor,
+            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                .map_err(|e| StoreError::Chunk(e.to_string()))?,
+        };
+        self.ingest(path, vec![batch], at)
+    }
+
+    /// Copy one authored property source into a flattened/save document.
+    ///
+    /// Pure constants keep the typed Arrow component used by normal editing.
+    /// Tracks/slots/modulators (and unsupported constant kinds such as Path)
+    /// remain TrackJson because their full PropertySource structure must travel
+    /// together.
+    pub(crate) fn copy_property_source(
+        &mut self,
+        path: EntityPath,
+        property: &PropertyId,
+        source: PropertySource,
+        at: i64,
+    ) -> Result<(), StoreError> {
+        if source.modulators.is_empty() {
+            if let Some(PropertyBase::Constant(value)) = source.base.as_ref() {
+                if let Some(typed) = motolii_doc::store::value_components::constant_batch(property, value) {
+                    return self.ingest(path, vec![typed?], at);
+                }
+            }
+        }
+        let json = serde_json::to_string(&source)?;
+        let batch = SerializedComponentBatch {
+            descriptor: descriptor_track(property),
             array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                 .map_err(|e| StoreError::Chunk(e.to_string()))?,
         };
