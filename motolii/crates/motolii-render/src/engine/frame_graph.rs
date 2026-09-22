@@ -127,6 +127,9 @@ impl EngineFrameGraph {
                 if resources.final_image_or_geometry.is_some() {
                     ordered_outputs.push(resources.contribution);
                 }
+                for (pass, operation) in resources.operations {
+                    self.gpu_operations.install(pass, operation);
+                }
                 let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
                 let _ = crate::gpu_exec::resident_placement(
                     &mut self.gpu_placement,
@@ -192,7 +195,12 @@ impl EngineFrameGraph {
                 (key, op)
             }).collect();
             for (key, op) in pass_ops {
-                self.gpu_operations.install(key, op);
+                // Specific operations emitted by lowering own their pass.
+                // The compatibility Resident marker fills only passes whose
+                // concrete backend has not migrated yet.
+                if !self.gpu_operations.contains(key) {
+                    self.gpu_operations.install(key, op);
+                }
             }
             self.gpu_resources.retire_temporal(self.generation);
         }
