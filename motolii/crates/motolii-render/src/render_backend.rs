@@ -22,8 +22,8 @@ impl RenderBackend for CountingBackend {
 /// oracle. The host supplies concrete resource operations; this executor only
 /// understands RenderWork and ResourceId.
 pub struct ResourceBackend<'a, R, E> {
-    pub raster: &'a mut dyn FnMut(&ResourceSource) -> Result<R, E>,
-    pub transfer: &'a mut dyn FnMut(&ResourceSource) -> Result<R, E>,
+    pub raster: &'a mut (dyn for<'s> FnMut(&'s ResourceSource) -> Result<R, E> + 'a),
+    pub transfer: &'a mut (dyn for<'s> FnMut(&'s ResourceSource) -> Result<R, E> + 'a),
 }
 
 impl<R, E> ResourceBackend<'_, R, E> {
