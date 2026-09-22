@@ -60,6 +60,31 @@ impl StaticClusterReport {
     pub fn clusters_with_kind(&self, kind: NodeKind) -> impl Iterator<Item = &StaticCluster> {
         self.clusters.iter().filter(move |cluster| cluster.kinds.contains(&kind))
     }
+
+    pub fn to_markdown(&self) -> String {
+        let mut out = String::from(
+            "| Cluster | Domain | Time | Temporal edge | Dynamic inputs | Quality | Kinds | Nodes | Upstream | Downstream |\n             |---:|---|---|---|---|---|---|---:|---|---|\n",
+        );
+        for cluster in &self.clusters {
+            let kinds = cluster.kinds.iter().map(|kind| format!("{kind:?}")).collect::<Vec<_>>().join(", ");
+            let upstream = cluster.upstream.iter().map(|id| id.0.to_string()).collect::<Vec<_>>().join(", ");
+            let downstream = cluster.downstream.iter().map(|id| id.0.to_string()).collect::<Vec<_>>().join(", ");
+            out.push_str(&format!(
+                "| {} | {:?} | {:?} | {} | {} | {:?} | {} | {} | {} | {} |\n",
+                cluster.id.0,
+                cluster.signature.domain,
+                cluster.signature.time,
+                cluster.signature.temporal_edge,
+                cluster.signature.dynamic_inputs,
+                cluster.signature.quality,
+                kinds,
+                cluster.nodes.len(),
+                upstream,
+                downstream,
+            ));
+        }
+        out
+    }
 }
 
 /// Cluster a compiled topology without executing it.
@@ -243,6 +268,19 @@ mod tests {
         assert!(report.cluster_of(ghost.key()).unwrap().signature.temporal_edge);
         assert!(report.cluster_of(scene.key()).unwrap().signature.dynamic_inputs);
         assert_ne!(report.node_cluster[&ghost.key()], report.node_cluster[&transform.key()]);
+    }
+
+    #[test]
+    fn markdown_report_is_stable_and_contains_cluster_metadata() {
+        let source = node(NodeKind::PropertyConstant, vec![]);
+        let mut effect_id = NodeIdentity::new(NodeKind::EffectImages, vec![source.key()]);
+        effect_id.time_dependency = TimeDependency::Exact;
+        let effect = GraphNode::new(effect_id);
+        let topology = GraphTopology::try_new([source, effect.clone()], vec![effect.key()]).unwrap();
+        let markdown = scene_static_clusters(&topology).to_markdown();
+        assert!(markdown.contains("| Cluster | Domain | Time |"));
+        assert!(markdown.contains("Effect"));
+        assert!(markdown.contains("true"));
     }
 
     #[test]
