@@ -55,7 +55,6 @@ pub enum NodeKind {
     PropertySum,
     /// Canonical authored text content and its run/style references.
     TextContent,
-    /// Canonical text style/font input.  It is separate so equal styles can
     /// Shaped text paths/contours after the layout input is known.
     TextShape,
     /// One Shape Outside source expressed as comp-space obstacle polygons.
