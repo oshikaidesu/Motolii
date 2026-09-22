@@ -174,23 +174,35 @@ impl Engine {
             .copied()
     }
 
-    /// Editor read-model adapter. It evaluates the same production graph and
-    /// projects its semantic SceneValue into the temporary ResolvedLayer shape
-    /// still consumed by cage/bounds code. It never invokes the legacy resolver.
-    pub fn frame_graph_editor_layers(
+    /// Editor read model. Evaluate the production graph once and hand the
+    /// semantic scene to editor geometry directly. Do not project back through
+    /// ResolvedLayer: that would recreate the migration bridge we are deleting.
+    pub fn frame_graph_editor_scene(
         &mut self,
         view: &StoreView<'_>,
         time: RationalTime,
-    ) -> Result<Vec<ResolvedLayer>, EngineError> {
+    ) -> Result<SceneValue, EngineError> {
         let state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
         let scene = state.frame.as_ref()
             .and_then(|frame| frame.value(state.scene))
             .and_then(|value| value.downcast_ref::<SceneValue>())
             .cloned()
             .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
-        let layers = resolved_layers_from_scene(&scene, time, state.fps);
         self.frame_graph = Some(state);
-        Ok(layers)
+        Ok(scene)
+    }
+
+    /// Borrow the semantic scene already evaluated for this exact revision/time.
+    /// Read-only editor paths use this so Camera/Stage status never compiles a
+    /// second graph or asks the legacy resolver for a parallel scene.
+    pub fn frame_graph_cached_scene(
+        &self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+    ) -> Option<&SceneValue> {
+        let state = self.frame_graph.as_ref()?;
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()
     }
 
     pub(in crate::engine) fn evaluate_frame_graph_semantics(
