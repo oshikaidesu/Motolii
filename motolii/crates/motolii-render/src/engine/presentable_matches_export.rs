@@ -61,7 +61,7 @@ fn the_window_target_holds_the_same_bytes_as_the_export_readback() {
     engine.gpu_queue().submit([encoder.finish()]);
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, |_| {});
-    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    crate::compositor::wait_for_gpu(&device, "presentable-export-test").unwrap();
     let data = slice.get_mapped_range();
 
     let bgra = format!("{format:?}").starts_with("Bgra");

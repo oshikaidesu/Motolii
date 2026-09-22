@@ -139,8 +139,6 @@ pub struct Engine {
     layer_failures: Vec<String>,
     /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
     feedback_replaying: bool,
-    /// 解析の途中(層を 1 枚だけ組んで読み戻している間)。この間は物理を解かない。
-    analysing: bool,
     /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
     keyed_outlines: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>>,
     /// 形の覚え: 書類の版とコマが同じなら読み戻さない。止まった絵は 1 回だけ。
@@ -180,8 +178,6 @@ pub struct Engine {
     point_clouds: HashMap<String, PointCloudData>,
     /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
     particle_frames: HashMap<LayerId, ParticleFrame>,
-    /// Blob Track の解いた塊(層ごと、書類の版と取っ手が変わるまで)。
-    blob_tracks: HashMap<LayerId, analysis::BlobTrackState>,
     /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
     overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
     failed_point_clouds: HashMap<String, String>,
@@ -259,7 +255,6 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             particle_frames: HashMap::new(),
-            blob_tracks: HashMap::new(),
             overlay_frames: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
@@ -267,7 +262,6 @@ impl Engine {
             realtime: false,
             renders_since_video_purge: 0,
             feedback_replaying: false,
-            analysing: false,
             keyed_outlines: HashMap::new(),
             keyed_cache: HashMap::new(),
             feedback_window: None,
@@ -349,7 +343,6 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             particle_frames: HashMap::new(),
-            blob_tracks: HashMap::new(),
             overlay_frames: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
@@ -357,7 +350,6 @@ impl Engine {
             realtime: false,
             renders_since_video_purge: 0,
             feedback_replaying: false,
-            analysing: false,
             keyed_outlines: HashMap::new(),
             keyed_cache: HashMap::new(),
             feedback_window: None,

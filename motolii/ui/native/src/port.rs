@@ -102,7 +102,8 @@ impl EditorRuntime{
             for i in &mut intents{if let Intent::SetTextDocument{document,..}=i{for style in &mut document.styles{style.font=crate::doc::store::FontRef{family:family.into(),..Default::default()};}}}
         }
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
-            let camera = self.engine.resolve_camera(&view,self.time()?).map_err(e)?;
+            let camera_time=self.time()?;
+            let camera = self.engine.frame_graph_document_camera(&view,camera_time).map_err(e)?;
             for (name,value) in property::camera_values(&camera) {
                 intents.push(Intent::SetConstant { layer:id, property:PropertyId::new(name).map_err(e)?, value });
             }
@@ -181,8 +182,8 @@ impl EditorRuntime{
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
                 if patch.projection.is_some(){
                     let at=self.time()?;
-                    let centers:Vec<_>={let view=self.doc.view();let resolved=crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?;
-                        layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
+                    let centers:Vec<_>={let view=self.doc.view();let scene=self.engine.frame_graph_editor_scene(&view,at).map_err(e)?;
+                        layers.iter().map(|&id|(id,self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
             "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"roundedRectangle"=>editor::create::NewKind::RoundedRectangle,"ellipse"=>editor::create::NewKind::Ellipse,"star"=>editor::create::NewKind::Star,"polygon"=>editor::create::NewKind::Polygon,"line"=>editor::create::NewKind::Line,"bezier"=>editor::create::NewKind::Bezier,"null"=>editor::create::NewKind::Null,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,"particles"=>editor::create::NewKind::Particles,k=>match k.strip_prefix("background:"){Some(id)=>editor::create::background(id)?,None=>editor::create::primitive(k)?}};let family=j["family"].as_str().map(str::to_owned);self.create_layer(kind,j["visibleFrames"].as_i64(),family.as_deref())?;}
@@ -257,7 +258,7 @@ impl EditorRuntime{
             "pause"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.report_owners();self.clock_frame();}
             "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;self.viewer.picked_color=Some([px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0));self.viewer.pick_serial+=1;}
             "seek"=>{self.viewer.frame=integer(&j,"frame")?.max(0);self.viewer.clock.seek_frame(self.viewer.frame);self.playback_rendered_frame=None;}
-            "anchor"=>{let id=layer(&j)?;let b=self.bounds(id).ok_or("Bounds unavailable until rendered")?;let min:[f64;3]=serde_json::from_value(b["localMin"].clone()).map_err(e)?;let max:[f64;3]=serde_json::from_value(b["localMax"].clone()).map_err(e)?;let point=[min[0]+(max[0]-min[0])*num(&j,"xFraction")?,min[1]+(max[1]-min[1])*num(&j,"yFraction")?];let intents=editor::functions::placement::anchor_point_plan(&self.doc,id,self.time()?,point).map_err(e)?;self.apply(intents)?;}
+            "anchor"=>{let id=layer(&j)?;let b=self.bounds(id).ok_or("Bounds unavailable until rendered")?;let min:[f64;3]=serde_json::from_value(b["localMin"].clone()).map_err(e)?;let max:[f64;3]=serde_json::from_value(b["localMax"].clone()).map_err(e)?;let point=[min[0]+(max[0]-min[0])*num(&j,"xFraction")?,min[1]+(max[1]-min[1])*num(&j,"yFraction")?];let at=self.time()?;let local={let view=self.doc.view();self.engine.frame_graph_editor_scene(&view,at).map_err(e)?;self.engine.frame_graph_cached_transform(&view,at,id).map(|(local,_)|local.spatial).ok_or("FrameGraph transform is unavailable")?};let intents=editor::functions::placement::anchor_point_plan(&self.doc,id,at,point,local).map_err(e)?;self.apply(intents)?;}
             "freeze"=>{
                 let id=layer(&j)?;
                 if j["enabled"].as_bool().ok_or("Missing enabled")? {
@@ -304,7 +305,11 @@ impl EditorRuntime{
             // hover。掴まないので Document には触らず、ギズモの絵だけが変わる。
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
-                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera(seen)?,self.projection_camera(seen,ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection))?,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
+                let at=self.time()?;
+                let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
+                let observer=self.view_camera(seen)?;
+                let projection_camera=self.projection_camera(seen,projection)?;
+                let drag=editor::stage::DragSession::begin(&self.doc,&mut self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
@@ -491,7 +496,8 @@ mod poster_probe {
             let i=((y*comp.width+x)*4) as usize;
             eprintln!("({x},{y}) = {:?}",&pixels[i..i+4]);
         }
-        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&crate::render::picture::resolve::resolved_layers(&view, time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
+        let scene=rt.engine.frame_graph_editor_scene(&view,time).unwrap();
+        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
     }
 }
 

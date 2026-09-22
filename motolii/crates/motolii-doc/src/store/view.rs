@@ -137,6 +137,14 @@ impl<'a> StoreView<'a> {
         (self.programs.sampling)(plugin_id).is_some()
     }
 
+    pub fn sampling_program(&self, plugin_id: &str) -> Option<super::kind::SamplingProgram> {
+        (self.programs.sampling)(plugin_id)
+    }
+
+    pub fn snap_program(&self, plugin_id: &str) -> Option<super::kind::SnapProgram> {
+        (self.programs.snap)(plugin_id)
+    }
+
     pub fn placement_program(&self, plugin_id: &str) -> Option<super::kind::PlacementProgram> {
         match self.placement_programs {
             Some(programs) => programs.iter().find(|program| program.plugin_id == plugin_id).copied(),
@@ -214,6 +222,25 @@ impl<'a> StoreView<'a> {
             .unwrap_or(1)
     }
 
+    fn property_id_for_component(
+        path: &EntityPath,
+        component: re_types_core::ComponentIdentifier,
+    ) -> Option<PropertyId> {
+        if *path == composition_path() {
+            let name = component.as_str().strip_prefix("Composition:")?;
+            if matches!(name, "settings" | "markers" | "slots" | "assets" | "notebook") {
+                return None;
+            }
+            return PropertyId::camera(name).ok();
+        }
+        layer_id_of(path)?;
+        let name = component.as_str().strip_prefix("Layer:")?;
+        if crate::doc::store::property::RESERVED.contains(&name) {
+            return None;
+        }
+        PropertyId::new(name).ok()
+    }
+
     pub fn properties(&self, layer: LayerId) -> Vec<PropertyId> {
         let path = layer.entity_path();
         let engine = self.db.storage_engine();
@@ -222,13 +249,23 @@ impl<'a> StoreView<'a> {
         };
         let mut out: Vec<PropertyId> = components
             .iter()
-            .filter_map(|component| {
-                let name = component.as_str().strip_prefix("Layer:")?;
-                if crate::doc::store::property::RESERVED.contains(&name) {
-                    return None;
-                }
-                PropertyId::new(name).ok()
-            })
+            .copied()
+            .filter_map(|component| Self::property_id_for_component(&path, component))
+            .collect();
+        out.sort();
+        out
+    }
+
+    pub fn camera_properties(&self) -> Vec<PropertyId> {
+        let path = composition_path();
+        let engine = self.db.storage_engine();
+        let Some(components) = engine.store().schema().all_components_for_entity(&path) else {
+            return Vec::new();
+        };
+        let mut out: Vec<PropertyId> = components
+            .iter()
+            .copied()
+            .filter_map(|component| Self::property_id_for_component(&path, component))
             .collect();
         out.sort();
         out
@@ -249,6 +286,7 @@ impl<'a> StoreView<'a> {
             .iter()
             .copied()
             .filter(|component| *component != present)
+            .filter(|component| Self::property_id_for_component(path, *component).is_none())
         {
             let results = self.db.latest_at(&query, path, [component]);
             if results.component_batch_raw(component).is_none() {
@@ -259,10 +297,9 @@ impl<'a> StoreView<'a> {
                 .and_then(|batch| batch.into_iter().next())
             else {
                 return Err(StoreError::Property(format!(
-                    "component `{}` は値を持っているが `TrackJson` として読めない — \
-                     `Layer:present` 以外の component は flattened()/save() が\
-                     機械的に全部運ぶ前提なので、型が違う component が増えたらここで\
-                     気付く必要がある(黙って保存から消してはいけない)",
+                    "component `{}` は保存対象の構造値だが `TrackJson` として読めない — \
+                     property component は別経路で PropertySource として運ぶため、ここに\
+                     到達するのは構造 component の型不一致だけである",
                     component.as_str()
                 )));
             };

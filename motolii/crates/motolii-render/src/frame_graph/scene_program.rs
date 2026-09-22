@@ -1,60 +1,166 @@
 use std::collections::BTreeMap;
 
+use crate::doc::core::RationalTime;
 use crate::doc::store::{property, BlendMode, LayerId, LayerProjection, LayerSource, PropertyId, ShapeNode, StoreError, StoreView};
 
-use super::{ContentProgram, EffectProgram, EffectValue, EvaluationContext, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TextProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue};
+use super::{ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, MediaSourceValue, MotionProgram, MotionSamplesValue, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PlacementProgram, PlacementSetValue, PropertyProgram, TextFlowProgram, TextShapeValue, TimeDependency, TransformProgram, TransformValue, VisibilityProgram, VisibilityValue};
+use super::ghost_program::{GhostProgram, GhostProgramError};
+use super::group_composite_program::{GroupCompositeProgram, GroupCompositeProgramError, SceneFragmentValue};
+use super::scene_policy::ScenePolicy;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SceneContentValue { None, Text(TextShapeValue), Shape(Vec<ShapeNode>), Material(MaterialValue) }
+pub enum SceneContentValue {
+    None,
+    Text(TextShapeValue),
+    Shape(Vec<ShapeNode>),
+    Material(MaterialValue),
+    Media { source: MediaSourceValue, time: RationalTime },
+    Particles(ParticleValue),
+    Plate(ScenePlateValue),
+}
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneLayerValue { pub layer: LayerId, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16 }
+pub struct ScenePlateValue {
+    pub(crate) owner: Option<LayerId>,
+    pub(crate) members: Vec<SceneContributionValue>,
+    pub(crate) average: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SceneImageSourceValue {
+    Content { layer: LayerId, content: SceneContentValue, time: RationalTime, namespace: u64 },
+    Scene { scene: SceneValue, background: [f32; 4], time: RationalTime, namespace: u64 },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: LayerSource, pub transform: TransformValue, pub content_key: Option<NodeKey>, pub content: SceneContentValue, pub effects: Vec<crate::picture::resolved::ResolvedEffect>, pub after_effects: Vec<crate::picture::resolved::ResolvedEffect>, pub image_sources: Vec<Vec<SceneImageSourceValue>>, pub masks: Vec<crate::picture::resolved::ResolvedMask>, pub matte: Option<crate::doc::store::Matte>, pub clip_to_below: bool, pub flatten: bool, pub environment: bool, pub ghost: bool, pub freeze_eligible: bool, pub timing_start: i64, pub opacity: f32, pub projection: LayerProjection, pub blend: BlendMode, pub order: i16, pub shape_stretch: [f32; 2], pub depth: f32 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
+impl SceneValue {
+    /// Authoring layer as evaluated by the FrameGraph. Plates and placement
+    /// copies are an execution/semantic detail; editor callers ask by LayerId
+    /// and get the original instance when one exists.
+    pub fn layer(&self, id: LayerId) -> Option<&SceneLayerValue> {
+        fn find<'a>(
+            layer: &'a SceneLayerValue,
+            id: LayerId,
+            fallback: &mut Option<&'a SceneLayerValue>,
+        ) -> Option<&'a SceneLayerValue> {
+            if layer.layer == id && !layer.ghost {
+                if layer.instance == 0 { return Some(layer); }
+                if fallback.is_none() { *fallback = Some(layer); }
+            }
+            if let SceneContentValue::Plate(plate) = &layer.content {
+                for member in &plate.members {
+                    if let Some(child) = member.layer.as_ref() {
+                        if let Some(found) = find(child, id, fallback) { return Some(found); }
+                    }
+                }
+            }
+            None
+        }
+
+        let mut fallback = None;
+        for layer in &self.layers {
+            if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
+        }
+        fallback
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SceneContributionValue {
+    pub(crate) solo: bool,
+    pub(crate) layer: Option<SceneLayerValue>,
+}
+
 #[derive(Clone)]
-enum Recipe { Contribution { layer: LayerId, source: LayerSource, content: Option<usize>, opacity: Option<usize>, effects: Vec<(usize, bool)>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
+enum Recipe { Contribution { layer: LayerId, source: LayerSource, visibility: usize, content: Option<usize>, opacity: Option<usize>, blend_value: Option<usize>, matte_mode: Option<usize>, flow: Option<(usize, usize)>, depth: Option<usize>, effects: Vec<usize>, placement_effects: Vec<bool>, placement: Option<usize>, motion: Option<usize>, masks: Vec<usize>, matte: Option<crate::doc::store::Matte>, clip_to_below: bool, flatten: bool, environment: bool, frozen: bool, timing_start: i64, projection: LayerProjection, blend: BlendMode, order: i16, kind: u8 }, Composite }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneProgramNodes { pub scene: NodeKey }
 
 #[derive(Debug)]
-pub enum SceneNodeError { Store(StoreError), InvalidInput(NodeKind) }
+pub enum SceneNodeError { Store(StoreError), Ghost(String), GroupComposite(String), InvalidInput(NodeKind) }
 impl std::fmt::Display for SceneNodeError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{self:?}") } }
 impl std::error::Error for SceneNodeError {}
 impl From<StoreError> for SceneNodeError { fn from(value: StoreError) -> Self { Self::Store(value) } }
+impl From<GhostProgramError> for SceneNodeError { fn from(value: GhostProgramError) -> Self { Self::Ghost(value.to_string()) } }
+impl From<GroupCompositeProgramError> for SceneNodeError { fn from(value: GroupCompositeProgramError) -> Self { Self::GroupComposite(value.to_string()) } }
 
 pub struct SceneNodeProgram {
-    nodes: BTreeMap<NodeKey, GraphNode>, recipes: BTreeMap<NodeKey, Recipe>, bindings: BTreeMap<LayerId, NodeKey>, output: SceneProgramNodes,
+    nodes: BTreeMap<NodeKey, GraphNode>,
+    recipes: BTreeMap<NodeKey, Recipe>,
+    bindings: BTreeMap<LayerId, NodeKey>,
+    output: SceneProgramNodes,
+    policy: ScenePolicy,
+    ghost: GhostProgram,
+    group_composite: GroupCompositeProgram,
 }
 
 impl SceneNodeProgram {
-    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, text: &TextProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram) -> Result<Self, SceneNodeError> {
-        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new(); let mut ordered = Vec::new();
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram, content: &ContentProgram, transforms: &TransformProgram, flow_program: &FlowProgram, text: &TextFlowProgram, groups: &GroupBackgroundProgram, effect_program: &EffectProgram, mask_program: &MaskProgram, visibility_program: &VisibilityProgram, placement_program: &PlacementProgram, motion_program: &MotionProgram, particle_program: &ParticleProgram) -> Result<Self, SceneNodeError> {
+        let policy = ScenePolicy::compile(view)?;
+        let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut bindings = BTreeMap::new();
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
             if matches!(meta.source, LayerSource::Camera | LayerSource::Stage) { continue; }
             let Some(transform) = transforms.binding(layer).map(|binding| binding.world) else { continue };
-            let mut inputs = vec![transform];
+            let Some(visibility_key) = visibility_program.binding(layer).map(|binding| binding.node) else { continue };
+            let mut inputs = vec![transform, visibility_key];
+            let visibility = 1usize;
             let (content_key, kind) = match meta.source {
                 LayerSource::Text => (text.binding(layer).map(|binding| binding.shape), 1),
                 LayerSource::Shape => (content.binding(layer).and_then(|binding| binding.content), 2),
                 LayerSource::File { .. } => (content.binding(layer).and_then(|binding| binding.material.or(binding.content)), 3),
                 LayerSource::Group => (groups.binding(layer), 2),
+                LayerSource::Particles => (particle_program.binding(layer).map(|binding| binding.particles), 4),
                 _ => (None, 0),
             };
             let content_index = content_key.map(|key| { let at = inputs.len(); inputs.push(key); at });
             let opacity_key = properties.node_for(layer, &PropertyId::new(property::OPACITY).expect("known opacity"));
             let opacity = opacity_key.map(|key| { let at = inputs.len(); inputs.push(key); at });
+            let blend_value = properties.node_for(layer, &PropertyId::blend_mode()).map(|key| {
+                let at = inputs.len(); inputs.push(key); at
+            });
+            let matte_mode = properties.node_for(layer, &PropertyId::matte_mode()).map(|key| {
+                let at = inputs.len(); inputs.push(key); at
+            });
+            let flow = flow_program.binding(layer).map(|binding| {
+                let at = inputs.len(); inputs.push(flow_program.key()); (at, binding.index)
+            });
+            let depth = properties.node_for(layer, &PropertyId::new(property::DEPTH).expect("known depth")).map(|key| {
+                let at = inputs.len(); inputs.push(key); at
+            });
             let attrs = view.attrs(layer)?.unwrap_or_default();
             let matte = if attrs.clip_to_below { view.clipping_base(layer)?.map(|layer| crate::doc::store::Matte { layer, mode: crate::doc::store::MatteMode::Alpha }) } else { attrs.matte };
             let mut effect_inputs = Vec::new();
-            let mut current = Some(layer); let mut own = true;
-            while let Some(owner) = current {
-                if let Some(binding) = effect_program.binding(owner) { for key in &binding.effects { let at = inputs.len(); inputs.push(*key); effect_inputs.push((at, !own)); } }
-                current = view.attrs(owner)?.unwrap_or_default().parent; own = false;
+            let mut placement_effects = Vec::new();
+            if let Some(binding) = effect_program.binding(layer) {
+                let end = if meta.source == LayerSource::Group {
+                    binding.effects.iter().position(|key| effect_program.is_placement(*key)).unwrap_or(binding.effects.len())
+                } else {
+                    binding.effects.len()
+                };
+                for key in &binding.effects[..end] {
+                    let at = inputs.len();
+                    inputs.push(*key);
+                    effect_inputs.push(at);
+                    placement_effects.push(effect_program.is_placement(*key));
+                }
             }
+            let placement = placement_program.binding(layer).map(|binding| {
+                let at = inputs.len();
+                inputs.push(binding.node);
+                at
+            });
+            let motion = motion_program.binding(layer).map(|binding| {
+                let at = inputs.len();
+                inputs.push(binding.samples);
+                at
+            });
             let mut mask_inputs = Vec::new();
             if let Some(binding) = mask_program.binding(layer) { for key in &binding.masks { let at = inputs.len(); inputs.push(*key); mask_inputs.push(at); } }
             let mut identity = NodeIdentity::new(NodeKind::CompositeContribution, inputs);
@@ -63,61 +169,527 @@ impl SceneNodeProgram {
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
             identity.time_dependency = TimeDependency::Exact;
             let node = GraphNode::new(identity);
-            let non_group = meta.source != LayerSource::Group;
-            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, content: content_index, opacity, effects: effect_inputs, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
+            recipes.entry(node.key()).or_insert(Recipe::Contribution { layer, source: meta.source, visibility, content: content_index, opacity, blend_value, matte_mode, flow, depth, effects: effect_inputs, placement_effects, placement, motion, masks: mask_inputs, matte, clip_to_below: attrs.clip_to_below, flatten: attrs.flatten, environment: attrs.environment, frozen: attrs.frozen, timing_start: meta.timing.start, projection: attrs.projection, blend: attrs.blend_mode, order: meta.order, kind });
             nodes.entry(node.key()).or_insert(node.clone());
             bindings.insert(layer, node.key());
-            ordered.push((meta.order, non_group, layer.0, node.key()));
         }
-        // Preserve the established settle contract: authored order first, and
-        // a Group background immediately behind non-Group content at the same
-        // order. The composite input order then becomes the final depth rank.
-        ordered.sort_by_key(|(order, non_group, id, _)| (*order, *non_group, *id));
-        let inputs = ordered.into_iter().map(|(_, _, _, key)| key).collect();
+        let ghost = GhostProgram::compile(view, &bindings)?;
+        for node in ghost.nodes() {
+            nodes.insert(node.key(), node);
+        }
+        let mut hierarchy_bindings = bindings.clone();
+        for layer in view.layers() {
+            if let Some(key) = ghost.binding(layer) {
+                hierarchy_bindings.insert(layer, key);
+            }
+        }
+        let group_composite = GroupCompositeProgram::compile(view, effect_program, &hierarchy_bindings)?;
+        for node in group_composite.nodes() {
+            nodes.insert(node.key(), node);
+        }
+        let inputs = group_composite.roots().to_vec();
         let mut identity = NodeIdentity::new(NodeKind::SceneComposite, inputs);
         identity.time_dependency = TimeDependency::Exact;
         let scene = GraphNode::new(identity);
         recipes.insert(scene.key(), Recipe::Composite);
         nodes.insert(scene.key(), scene.clone());
-        Ok(Self { nodes, recipes, bindings, output: SceneProgramNodes { scene: scene.key() } })
+        Ok(Self { nodes, recipes, bindings, output: SceneProgramNodes { scene: scene.key() }, policy, ghost, group_composite })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
     pub fn output(&self) -> SceneProgramNodes { self.output }
     pub fn binding(&self, layer: LayerId) -> Option<NodeKey> { self.bindings.get(&layer).copied() }
 
-    pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, _context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
+    pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<Vec<DynamicInput>, SceneNodeError>> {
+        let recipe = self.recipes.get(&node.key())?;
+        let Recipe::Contribution { placement: Some(placement), .. } = recipe else {
+            return Some(Ok(Vec::new()));
+        };
+        let Some(set) = inputs.at(*placement).and_then(|value| value.downcast_ref::<PlacementSetValue>()) else {
+            return Some(Err(SceneNodeError::InvalidInput(node.identity().kind)));
+        };
+        let sample_indices = contribution_sample_indices(node, Some(*placement));
+        let mut requests = Vec::new();
+        for copy in &set.copies {
+            if copy.time_offset == RationalTime::ZERO || copy.transform.is_none() { continue; }
+            let Ok(at) = context.time.try_sub(copy.time_offset) else { continue };
+            for index in &sample_indices {
+                requests.push(DynamicInput { node: node.identity().inputs[*index], time: at });
+            }
+        }
+        Some(Ok(requests))
+    }
+
+    pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, SceneNodeError>> {
+        if let Some(value) = self.ghost.execute(node, inputs, context) {
+            return Some(value.map_err(Into::into));
+        }
+        if let Some(value) = self.group_composite.execute(node, inputs, context) {
+            return Some(value.map_err(Into::into));
+        }
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
-            Recipe::Contribution { layer, source, content, opacity, effects, masks, matte, clip_to_below, flatten, environment, projection, blend, order, kind } => (|| {
+            Recipe::Contribution { layer, source, visibility, content, opacity, blend_value, matte_mode, flow, depth, effects, placement_effects, placement, motion, masks, matte, clip_to_below, flatten, environment, frozen, timing_start, projection, blend, order, kind } => (|| {
+                let visible = inputs.at(*visibility).and_then(|value| value.downcast_ref::<VisibilityValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                if !visible.active {
+                    return Ok(NodeValue::new(SceneContributionValue { solo: visible.solo, layer: None }));
+                }
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 let content_key = content.map(|index| node.identity().inputs[index]);
-                let content = match (*kind, *content) {
+                let scene_content = match (*kind, *content) {
                     (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_ref::<TextShapeValue>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
-                    (3, Some(index)) => SceneContentValue::Material(inputs.at(index).and_then(|value| value.downcast_ref::<MaterialValue>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
+                    (3, Some(index)) => {
+                        let value = inputs.at(index).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                        if let Some(material) = value.downcast_ref::<MaterialValue>() {
+                            SceneContentValue::Material(material.clone())
+                        } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
+                            match frame.time {
+                                Some(time) => SceneContentValue::Media { source: frame.source.clone(), time },
+                                None => SceneContentValue::None,
+                            }
+                        } else {
+                            return Err(SceneNodeError::InvalidInput(node.identity().kind));
+                        }
+                    },
+                    (4, Some(index)) => SceneContentValue::Particles(
+                        inputs.at(index)
+                            .and_then(|value| value.downcast_ref::<ParticleValue>())
+                            .cloned()
+                            .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+                    ),
                     _ => SceneContentValue::None,
                 };
-                let opacity = opacity.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None }).unwrap_or(1.0).clamp(0.0, 1.0);
-                let mut direct = Vec::new(); let mut after = Vec::new();
-                for (index, inherited) in effects {
-                    let Some(effect) = inputs.at(*index).and_then(|value| value.downcast_ref::<EffectValue>()).and_then(|value| value.0.clone()) else { continue };
-                    if (*inherited && effect.scope == crate::doc::store::EffectScope::Whole) || (!*inherited && effect.scope == crate::doc::store::EffectScope::Whole) { after.push(effect); } else { direct.push(effect); }
+                let layer_opacity = opacity.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None }).unwrap_or(1.0).clamp(0.0, 1.0);
+                let layer_blend = match blend_value.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()) {
+                    Some(crate::doc::eval::Value::Enum(value)) => BlendMode::from_enum_value(*value).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+                    Some(_) => return Err(SceneNodeError::InvalidInput(node.identity().kind)),
+                    None => *blend,
+                };
+                let mut layer_matte = *matte;
+                if !*clip_to_below {
+                    if let (Some(matte), Some(value)) = (layer_matte.as_mut(), matte_mode.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())) {
+                        match value {
+                            crate::doc::eval::Value::Enum(value) => matte.mode = crate::doc::store::MatteMode::from_enum_value(*value).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+                            _ => return Err(SceneNodeError::InvalidInput(node.identity().kind)),
+                        }
+                    }
                 }
-                let masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
-                Ok(NodeValue::new(SceneLayerValue { layer: *layer, source: source.clone(), transform, content_key, content, effects: direct, after_effects: after, masks, matte: *matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, opacity, projection: *projection, blend: *blend, order: *order }))
+                let placement_set = placement.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<PlacementSetValue>());
+                let motion_samples = motion.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<MotionSamplesValue>());
+                // Legacy push_copies gives placement effects priority. Motion blur
+                // only expands the layer when no placement effect is active.
+                let placement_selected = placement_set.and_then(|set| set.selected_effect);
+                let motion_selected = placement_selected.is_none().then(|| motion_samples.and_then(|samples| samples.selected_effect)).flatten();
+                let selected = placement_selected.or(motion_selected);
+                let mut direct = Vec::new();
+                let mut after = Vec::new();
+                for (effect_index, input_index) in effects.iter().copied().enumerate() {
+                    let Some(effect) = inputs.at(input_index).and_then(|value| value.downcast_ref::<EffectValue>()).and_then(|value| value.0.clone()) else { continue };
+                    match selected {
+                        Some(selected) if effect_index == selected => {}
+                        Some(selected) if effect_index > selected => after.push(effect),
+                        _ => direct.push(effect),
+                    }
+                }
+                let layer_masks = masks.iter().map(|index| inputs.at(*index).and_then(|value| value.downcast_ref::<MaskValue>()).map(|value| value.0.clone()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))).collect::<Result<_, _>>()?;
+                let shape_stretch = flow.and_then(|(input, index)| inputs.at(input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).and_then(|flow| flow.slots.get(index)).copied().flatten()).map_or([1.0, 1.0], |slot| slot.stretch);
+                let layer_depth = depth.and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()).and_then(|value| match value { crate::doc::eval::Value::F64(value) if value.is_finite() => Some(*value as f32), _ => None }).unwrap_or(0.0).max(0.0);
+                let base = SceneLayerValue { layer: *layer, instance: 0, source: source.clone(), transform, content_key, content: scene_content, effects: direct, after_effects: Vec::new(), image_sources: Vec::new(), masks: layer_masks, matte: layer_matte, clip_to_below: *clip_to_below, flatten: *flatten, environment: *environment, ghost: false, freeze_eligible: *frozen, timing_start: *timing_start, opacity: layer_opacity, projection: *projection, blend: layer_blend, order: *order, shape_stretch, depth: layer_depth };
+
+                let Some(set) = placement_set.filter(|set| set.selected_effect.is_some()) else {
+                    if let Some(samples) = motion_samples.filter(|samples| samples.selected_effect.is_some()) {
+                        let mut members = Vec::new();
+                        if samples.transforms.is_empty() {
+                            let mut member = base.clone();
+                            member.matte = None;
+                            member.clip_to_below = false;
+                            members.push(SceneContributionValue { solo: visible.solo, layer: Some(member) });
+                        } else {
+                            let count = samples.transforms.len() as f32;
+                            for (sample_index, transform) in samples.transforms.iter().enumerate() {
+                                let mut member = base.clone();
+                                member.instance = sample_index as u32;
+                                member.freeze_eligible = false;
+                                member.transform = *transform;
+                                member.opacity = (member.opacity / count).clamp(0.0, 1.0);
+                                member.matte = None;
+                                member.clip_to_below = false;
+                                members.push(SceneContributionValue { solo: visible.solo, layer: Some(member) });
+                            }
+                        }
+                        if after.is_empty() && samples.transforms.is_empty() {
+                            // The sampling effect is a no-op at this frame.
+                            return Ok(NodeValue::new(SceneContributionValue {
+                                solo: visible.solo,
+                                layer: members.into_iter().next().and_then(|member| member.layer),
+                            }));
+                        }
+                        let mut plate = base;
+                        plate.content_key = None;
+                        plate.freeze_eligible = false;
+                        plate.content = SceneContentValue::Plate(ScenePlateValue {
+                            owner: Some(*layer),
+                            members,
+                            average: !samples.transforms.is_empty(),
+                        });
+                        plate.effects.clear();
+                        plate.after_effects = after;
+                        plate.masks.clear();
+                        plate.transform = TransformValue {
+                            affine: glam::Affine2::IDENTITY,
+                            spatial: glam::Affine3A::IDENTITY,
+                        };
+                        plate.opacity = 1.0;
+                        plate.projection = LayerProjection::TwoD;
+                        plate.flatten = false;
+                        plate.environment = false;
+                        plate.shape_stretch = [1.0, 1.0];
+                        plate.depth = 0.0;
+                        return Ok(NodeValue::new(SceneContributionValue {
+                            solo: visible.solo,
+                            layer: Some(plate),
+                        }));
+                    }
+                    return Ok(NodeValue::new(SceneContributionValue { solo: visible.solo, layer: Some(base) }));
+                };
+
+                let sample_indices = contribution_sample_indices(node, *placement);
+                let mut dynamic_start = node.identity().inputs.len();
+                let mut members = Vec::new();
+                for copy in &set.copies {
+                    let Some(copy_transform) = copy.transform else { continue };
+                    if copy.time_offset == RationalTime::ZERO {
+                        let mut layer = base.clone();
+                        layer.instance = copy.index;
+                        layer.freeze_eligible = false;
+                        layer.transform = copy_transform;
+                        layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                        members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
+                        continue;
+                    }
+
+                    let sample_start = dynamic_start;
+                    dynamic_start += sample_indices.len();
+                    let sampled_visibility = sampled_value(inputs, *visibility, &sample_indices, sample_start)
+                        .and_then(|value| value.downcast_ref::<VisibilityValue>())
+                        .copied()
+                        .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                    if !sampled_visibility.active { continue; }
+
+                    let mut layer = base.clone();
+                    layer.instance = copy.index;
+                    layer.freeze_eligible = false;
+                    layer.content = sampled_content(node, inputs, *kind, *content, &sample_indices, sample_start)?;
+                    layer.opacity = sampled_opacity(inputs, *opacity, &sample_indices, sample_start).unwrap_or(1.0).clamp(0.0, 1.0);
+                    layer.blend = sampled_blend(node, inputs, *blend_value, *blend, &sample_indices, sample_start)?;
+                    layer.matte = sampled_matte(
+                        node,
+                        inputs,
+                        *matte,
+                        *matte_mode,
+                        *clip_to_below,
+                        &sample_indices,
+                        sample_start,
+                    )?;
+                    layer.masks = sampled_masks(node, inputs, masks, &sample_indices, sample_start)?;
+                    layer.shape_stretch = sampled_flow_stretch(inputs, *flow, &sample_indices, sample_start).unwrap_or([1.0, 1.0]);
+                    layer.depth = sampled_number(inputs, *depth, &sample_indices, sample_start).unwrap_or(0.0).max(0.0);
+
+                    let (sampled_direct, sampled_selected) = sampled_effects(
+                        node,
+                        inputs,
+                        effects,
+                        placement_effects,
+                        &sample_indices,
+                        sample_start,
+                    )?;
+                    layer.effects = sampled_direct;
+
+                    if sampled_selected.is_some() {
+                        layer.transform = copy_transform;
+                        layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                    } else {
+                        // The placement effect was disabled at the sampled
+                        // source time. Legacy push_placements emits that sampled
+                        // layer unchanged instead of applying the current copy.
+                        layer.transform = sampled_value(inputs, 0, &sample_indices, sample_start)
+                            .and_then(|value| value.downcast_ref::<TransformValue>())
+                            .copied()
+                            .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                    }
+                    members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
+                }
+
+                if members.is_empty() {
+                    return Ok(NodeValue::new(SceneFragmentValue {
+                        contributions: vec![SceneContributionValue { solo: visible.solo, layer: None }],
+                    }));
+                }
+                if after.is_empty() {
+                    return Ok(NodeValue::new(SceneFragmentValue { contributions: members }));
+                }
+
+                // Effects below the placement effect see the copies as one picture.
+                // Matte/clip remain on the outer plate, matching the old build order.
+                for member in &mut members {
+                    if let Some(layer) = member.layer.as_mut() {
+                        layer.matte = None;
+                        layer.clip_to_below = false;
+                    }
+                }
+                let mut plate = base;
+                plate.content_key = None;
+                plate.freeze_eligible = false;
+                        plate.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(*layer), members, average: false });
+                plate.effects.clear();
+                plate.after_effects = after;
+                plate.masks.clear();
+                plate.transform = TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY };
+                plate.opacity = 1.0;
+                plate.projection = LayerProjection::TwoD;
+                plate.flatten = false;
+                plate.environment = false;
+                plate.shape_stretch = [1.0, 1.0];
+                plate.depth = 0.0;
+                Ok(NodeValue::new(SceneFragmentValue {
+                    contributions: vec![SceneContributionValue { solo: visible.solo, layer: Some(plate) }],
+                }))
             })(),
-            Recipe::Composite => inputs.iter().enumerate().map(|(rank, (_, value))| {
-                let mut layer = value.downcast_ref::<SceneLayerValue>().cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
-                // The compositor's depth key must describe the flattened scene,
-                // not the sibling-local authored order.  A child commonly has
-                // order 0 while its Group was created later; forwarding those
-                // raw values lets the Group background cover the child even
-                // though the graph inputs are already parent-before-child.
-                layer.order = i16::try_from(rank).unwrap_or(i16::MAX);
-                Ok(layer)
-            }).collect::<Result<Vec<_>, _>>().map(|layers| NodeValue::new(SceneValue { layers })),
+            Recipe::Composite => (|| {
+                let mut contributions = Vec::new();
+                for (_, value) in inputs.iter() {
+                    if let Some(contribution) = value.downcast_ref::<SceneContributionValue>() {
+                        contributions.push(contribution.clone());
+                    } else if let Some(fragment) = value.downcast_ref::<SceneFragmentValue>() {
+                        contributions.extend(fragment.contributions.iter().cloned());
+                    } else {
+                        return Err(SceneNodeError::InvalidInput(node.identity().kind));
+                    }
+                }
+                let any_solo = contributions.iter().any(contribution_has_solo);
+                let mut layers = Vec::new();
+                for contribution in contributions {
+                    let Some(mut layer) = filtered_layer(contribution, any_solo) else { continue };
+                    normalize_plate_orders(&mut layer);
+                    layer.order = i16::try_from(layers.len()).unwrap_or(i16::MAX);
+                    layers.push(layer);
+                }
+                self.policy.hand_out_stencils(&mut layers);
+                Ok(NodeValue::new(SceneValue { layers }))
+            })(),
         })
+    }
+}
+
+fn contribution_sample_indices(node: &GraphNode, placement: Option<usize>) -> Vec<usize> {
+    (0..node.identity().inputs.len()).filter(|index| Some(*index) != placement).collect()
+}
+
+fn sampled_value<'a>(inputs: &'a NodeInputs, original: usize, sample_indices: &[usize], sample_start: usize) -> Option<&'a NodeValue> {
+    sample_indices.iter().position(|index| *index == original).and_then(|offset| inputs.at(sample_start + offset))
+}
+
+
+fn sampled_flow_stretch(
+    inputs: &NodeInputs,
+    flow: Option<(usize, usize)>,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Option<[f32; 2]> {
+    let (input, index) = flow?;
+    sampled_value(inputs, input, sample_indices, sample_start)
+        .and_then(|value| value.downcast_ref::<FlowFrameValue>())
+        .and_then(|flow| flow.slots.get(index))
+        .copied()
+        .flatten()
+        .map(|slot| slot.stretch)
+}
+
+fn sampled_number(
+    inputs: &NodeInputs,
+    input: Option<usize>,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Option<f32> {
+    let input = input?;
+    sampled_value(inputs, input, sample_indices, sample_start)
+        .and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())
+        .and_then(|value| match value {
+            crate::doc::eval::Value::F64(value) if value.is_finite() => Some(*value as f32),
+            _ => None,
+        })
+}
+
+fn sampled_content(
+    node: &GraphNode,
+    inputs: &NodeInputs,
+    kind: u8,
+    content: Option<usize>,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Result<SceneContentValue, SceneNodeError> {
+    Ok(match (kind, content) {
+        (1, Some(index)) => SceneContentValue::Text(
+            sampled_value(inputs, index, sample_indices, sample_start)
+                .and_then(|value| value.downcast_ref::<TextShapeValue>())
+                .cloned()
+                .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+        ),
+        (2, Some(index)) => SceneContentValue::Shape(
+            sampled_value(inputs, index, sample_indices, sample_start)
+                .and_then(|value| value.downcast_ref::<Vec<ShapeNode>>())
+                .cloned()
+                .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+        ),
+        (3, Some(index)) => {
+            let value = sampled_value(inputs, index, sample_indices, sample_start)
+                .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+            if let Some(material) = value.downcast_ref::<MaterialValue>() {
+                SceneContentValue::Material(material.clone())
+            } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
+                match frame.time {
+                    Some(time) => SceneContentValue::Media { source: frame.source.clone(), time },
+                    None => SceneContentValue::None,
+                }
+            } else {
+                return Err(SceneNodeError::InvalidInput(node.identity().kind));
+            }
+        }
+        (4, Some(index)) => SceneContentValue::Particles(
+            sampled_value(inputs, index, sample_indices, sample_start)
+                .and_then(|value| value.downcast_ref::<ParticleValue>())
+                .cloned()
+                .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+        ),
+        _ => SceneContentValue::None,
+    })
+}
+
+fn sampled_opacity(inputs: &NodeInputs, opacity: Option<usize>, sample_indices: &[usize], sample_start: usize) -> Option<f32> {
+    opacity.and_then(|index| sampled_value(inputs, index, sample_indices, sample_start))
+        .and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())
+        .and_then(|value| match value { crate::doc::eval::Value::F64(value) => Some(*value as f32), _ => None })
+}
+
+fn sampled_blend(
+    node: &GraphNode,
+    inputs: &NodeInputs,
+    blend_value: Option<usize>,
+    default: BlendMode,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Result<BlendMode, SceneNodeError> {
+    match blend_value.and_then(|index| sampled_value(inputs, index, sample_indices, sample_start))
+        .and_then(|value| value.downcast_ref::<crate::doc::eval::Value>())
+    {
+        Some(crate::doc::eval::Value::Enum(value)) => BlendMode::from_enum_value(*value).ok_or(SceneNodeError::InvalidInput(node.identity().kind)),
+        Some(_) => Err(SceneNodeError::InvalidInput(node.identity().kind)),
+        None => Ok(default),
+    }
+}
+
+fn sampled_matte(
+    node: &GraphNode,
+    inputs: &NodeInputs,
+    mut matte: Option<crate::doc::store::Matte>,
+    matte_mode: Option<usize>,
+    clip_to_below: bool,
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Result<Option<crate::doc::store::Matte>, SceneNodeError> {
+    if !clip_to_below {
+        if let (Some(matte), Some(value)) = (
+            matte.as_mut(),
+            matte_mode.and_then(|index| sampled_value(inputs, index, sample_indices, sample_start))
+                .and_then(|value| value.downcast_ref::<crate::doc::eval::Value>()),
+        ) {
+            match value {
+                crate::doc::eval::Value::Enum(value) => {
+                    matte.mode = crate::doc::store::MatteMode::from_enum_value(*value)
+                        .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
+                }
+                _ => return Err(SceneNodeError::InvalidInput(node.identity().kind)),
+            }
+        }
+    }
+    Ok(matte)
+}
+
+fn sampled_masks(
+    node: &GraphNode,
+    inputs: &NodeInputs,
+    masks: &[usize],
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Result<Vec<crate::picture::resolved::ResolvedMask>, SceneNodeError> {
+    masks.iter().map(|index| {
+        sampled_value(inputs, *index, sample_indices, sample_start)
+            .and_then(|value| value.downcast_ref::<MaskValue>())
+            .map(|value| value.0.clone())
+            .ok_or(SceneNodeError::InvalidInput(node.identity().kind))
+    }).collect()
+}
+
+fn sampled_effects(
+    node: &GraphNode,
+    inputs: &NodeInputs,
+    effects: &[usize],
+    placement_effects: &[bool],
+    sample_indices: &[usize],
+    sample_start: usize,
+) -> Result<(Vec<crate::picture::resolved::ResolvedEffect>, Option<usize>), SceneNodeError> {
+    let mut values = Vec::with_capacity(effects.len());
+    for index in effects {
+        values.push(
+            sampled_value(inputs, *index, sample_indices, sample_start)
+                .and_then(|value| value.downcast_ref::<EffectValue>())
+                .map(|value| value.0.clone())
+                .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
+        );
+    }
+    let selected = values.iter().enumerate().find_map(|(index, value)| {
+        (placement_effects.get(index).copied().unwrap_or(false) && value.is_some()).then_some(index)
+    });
+    let direct = values.into_iter().enumerate().filter_map(|(index, value)| {
+        let effect = value?;
+        match selected {
+            Some(selected) if index >= selected => None,
+            _ => Some(effect),
+        }
+    }).collect();
+    Ok((direct, selected))
+}
+
+fn contribution_has_solo(contribution: &SceneContributionValue) -> bool {
+    if contribution.solo { return true; }
+    contribution.layer.as_ref().is_some_and(|layer| {
+        matches!(&layer.content, SceneContentValue::Plate(plate) if plate.members.iter().any(contribution_has_solo))
+    })
+}
+
+fn filtered_layer(mut contribution: SceneContributionValue, any_solo: bool) -> Option<SceneLayerValue> {
+    if any_solo && !contribution_has_solo(&contribution) { return None; }
+    let mut layer = contribution.layer.take()?;
+    if let SceneContentValue::Plate(plate) = &mut layer.content {
+        let members = std::mem::take(&mut plate.members);
+        plate.members = members.into_iter().filter_map(|member| {
+            let solo = member.solo;
+            filtered_layer(member, any_solo).map(|layer| SceneContributionValue { solo, layer: Some(layer) })
+        }).collect();
+        if plate.members.is_empty() { return None; }
+    }
+    Some(layer)
+}
+
+fn normalize_plate_orders(layer: &mut SceneLayerValue) {
+    if let SceneContentValue::Plate(plate) = &mut layer.content {
+        for (rank, member) in plate.members.iter_mut().enumerate() {
+            if let Some(member_layer) = member.layer.as_mut() {
+                normalize_plate_orders(member_layer);
+                member_layer.order = i16::try_from(rank).unwrap_or(i16::MAX);
+            }
+        }
     }
 }
 

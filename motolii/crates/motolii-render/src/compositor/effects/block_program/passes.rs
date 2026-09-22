@@ -680,7 +680,7 @@ pub fn read_state(device: &wgpu::Device, queue: &wgpu::Queue, world: &BlockWorld
     encoder.copy_buffer_to_buffer(world.state(), 0, &staging, 0, bytes);
     queue.submit([encoder.finish()]);
     staging.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    let _ = crate::compositor::device::wait_for_gpu(device, "block-state-readback");
     let out = offsets_from_bytes(&staging.slice(..).get_mapped_range());
     staging.unmap();
     out

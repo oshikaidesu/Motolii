@@ -26,6 +26,53 @@ mod tests {
     }
 
     #[test]
+    fn save_round_trips_a_typed_anchor_without_renderer_or_grid() {
+        let path = std::env::temp_dir().join(format!(
+            "motolii-anchor-save-{}-{}.rrd",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut doc = blank_project();
+        let layer = LayerId(7);
+        let anchor = PropertyId::new(property::ANCHOR).unwrap();
+        let exact = [12.345_678_901_234_5, -3.141_592_653_589_79];
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetConstant {
+                layer,
+                property: anchor.clone(),
+                value: Value::Vec2(exact),
+            },
+        ])
+        .unwrap();
+
+        // This exercises flattened()/save() only. No renderer, Grid, layout
+        // solver, or FrameGraph is needed for the failure that regressed here.
+        doc.save(&path).unwrap();
+        let recording = Recording::load(&path).unwrap();
+        let editor = Document::load(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+
+        assert_eq!(
+            recording
+                .view()
+                .value_at(layer, &anchor, RationalTime::ZERO)
+                .unwrap(),
+            Some(Value::Vec2(exact))
+        );
+        assert_eq!(
+            editor
+                .view()
+                .value_at(layer, &anchor, RationalTime::ZERO)
+                .unwrap(),
+            Some(Value::Vec2(exact))
+        );
+    }
+
+    #[test]
     fn saved_recording_and_editor_load_the_same_values() {
         let path = std::env::temp_dir().join(format!(
             "motolii-recording-{}-{}.rrd",

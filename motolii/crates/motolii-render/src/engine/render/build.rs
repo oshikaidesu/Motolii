@@ -176,7 +176,7 @@ impl Engine {
                 // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
                 // 解き手が動かす物は、書類の位置で間引かない(画面の外から入って来る)。
                 // 解析で 1 枚だけ組んでいる間も間引かない(絵がどこに居ても透過を読みたい)。
-                if !needs_auxiliary_views && !self.analysing && layer.matte.is_none() && !layer.clip_to_below && !self.blocks.moves(layer.id) && offscreen(comp, camera, &built, &passes) {
+                if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && !self.blocks.moves(layer.id) && offscreen(comp, camera, &built, &passes) {
                     continue;
                 }
                 (built, passes)
@@ -312,7 +312,7 @@ impl Engine {
     /// 平面へ収める。3D の素材を comp の絵へ一度焼き、以後は板として扱う
     /// (裁定 2026-08-30「平面に収めるのは選択肢」)。焼いた層にも blend・matte・
     /// エフェクトは今まで通り効く。
-    fn flatten_if_asked(
+    pub(in crate::engine) fn flatten_if_asked(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
@@ -396,7 +396,7 @@ impl Engine {
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。`average` なら写しを足す
     /// (Motion Blur: 各写しの不透明度は 1/枚数なので、足すと平均になる)。
-    pub(super) fn bake_isolated_layers(
+    pub(in crate::engine) fn bake_isolated_layers(
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,

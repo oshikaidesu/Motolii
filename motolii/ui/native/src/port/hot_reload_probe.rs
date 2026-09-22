@@ -29,13 +29,13 @@ fn saving_a_vism_file_reaches_the_window() {
     let woke = Arc::new(AtomicBool::new(false));
     let flag = woke.clone();
     let _watch = crate::render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release)).unwrap();
-    let ids = |rt: &crate::EditorRuntime| -> Vec<String> {
+    let ids = |rt: &mut crate::EditorRuntime| -> Vec<String> {
         rt.status_response(None, None).unwrap()["catalog"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap().to_owned()).collect()
     };
-    let errors = |rt: &crate::EditorRuntime| -> Vec<String> {
+    let errors = |rt: &mut crate::EditorRuntime| -> Vec<String> {
         rt.status_response(None, None).unwrap()["catalogErrors"].as_array().unwrap().iter().map(|e| e.as_str().unwrap().to_owned()).collect()
     };
-    assert!(!ids(&rt).contains(&"probe.zz_hot".to_owned()));
+    assert!(!ids(&mut rt).contains(&"probe.zz_hot".to_owned()));
 
     // 1. 新しい効果を保存 → 見張りが起きる → 読み直せば棚に載り、絵の鍵(世代)が動く。
     std::fs::write(&file.0, "/*{ \"ID\": \"probe.zz_hot\", \"LABEL\": \"Hot\", \"STAGE\": \"pass\", \"INPUTS\": [ { \"NAME\": \"inputImage\", \"TYPE\": \"image\" } ] }*/\nvoid main() { gl_FragColor = IMG_THIS_PIXEL(inputImage).bgra; }\n").unwrap();
@@ -44,21 +44,21 @@ fn saving_a_vism_file_reaches_the_window() {
     rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
     assert!(crate::render::engine::catalog_generation() > before, "世代が進まない");
     assert_ne!(rt.image_key(), key, "絵の鍵が世代を含んでいない");
-    assert!(ids(&rt).contains(&"probe.zz_hot".to_owned()), "{:?}", ids(&rt));
-    assert!(errors(&rt).iter().all(|e| !e.contains("zz_hot_probe")), "{:?}", errors(&rt));
+    assert!(ids(&mut rt).contains(&"probe.zz_hot".to_owned()), "{:?}", ids(&mut rt));
+    assert!(errors(&mut rt).iter().all(|e| !e.contains("zz_hot_probe")), "{:?}", errors(&mut rt));
 
     // 2. 壊して保存 → 前の物が残り、理由が名前付きで出る。
     a_moment();
     std::fs::write(&file.0, "/*{ \"ID\": \"probe.zz_hot\", \"STAGE\": \"pass\", \"INPUTS\": [ { \"NAME\": \"inputImage\", \"TYPE\": \"image\" } ] }*/\nvoid main() { gl_FragColor = ; }\n").unwrap();
     assert!(await_wake(&woke));
     rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
-    assert!(ids(&rt).contains(&"probe.zz_hot".to_owned()), "壊した瞬間に棚から消えた");
-    assert!(errors(&rt).iter().any(|e| e.starts_with("zz_hot_probe:")), "{:?}", errors(&rt));
+    assert!(ids(&mut rt).contains(&"probe.zz_hot".to_owned()), "壊した瞬間に棚から消えた");
+    assert!(errors(&mut rt).iter().any(|e| e.starts_with("zz_hot_probe:")), "{:?}", errors(&mut rt));
 
     // 3. 消す → 理由が「source removed」に変わる。
     a_moment();
     std::fs::remove_file(&file.0).unwrap();
     assert!(await_wake(&woke));
     rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
-    assert!(errors(&rt).iter().any(|e| e.contains("zz_hot_probe") && e.contains("source removed")), "{:?}", errors(&rt));
+    assert!(errors(&mut rt).iter().any(|e| e.contains("zz_hot_probe") && e.contains("source removed")), "{:?}", errors(&mut rt));
 }

@@ -81,7 +81,7 @@ impl Engine {
             // 他の層の入力になる物は消さない。解き手が動かす物も消さない — 画面の外から入って来る
             // (利用者 2026-09-16 の見本: 上から降ってくる切り抜き)。
             let feeds_others = matte_sources.contains(&layer.id) || layer.matte.is_some() || layer.clip_to_below
-                || self.blocks.moves(layer.id) || self.analysing;
+                || self.blocks.moves(layer.id);
             let Some((rect, axis_aligned)) = self.media_screen_rect(comp, camera, layer) else { continue };
             let plain = layer.effects.is_empty() && layer.after_effects.is_empty() && layer.masks.is_empty();
             let offscreen = rect[2] < 0.0 || rect[3] < 0.0 || rect[0] > screen[2] || rect[1] > screen[3];
@@ -123,27 +123,113 @@ impl Engine {
         let now_frame = t.try_to_frame_floor(fps).map_err(|e| EngineError::Time(e.to_string()))?;
         let ahead = RationalTime::try_from_frame(now_frame + WARM_AHEAD_FRAMES, fps)
             .map_err(|e| EngineError::Time(e.to_string()))?;
-        let now_ids: HashSet<LayerId> = crate::picture::resolve::resolved_layers(view, t)
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .iter()
-            .map(|layer| layer.id)
-            .collect();
-        let upcoming = crate::picture::resolve::resolved_layers(view, ahead)
+
+        // Warming is execution policy, not a second document resolver. Evaluate
+        // only the graph values needed to decide whether a timed media source
+        // participates now and at the look-ahead time.
+        let properties = crate::frame_graph::PropertyProgram::compile(view)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let visibility = crate::frame_graph::VisibilityProgram::compile(view, &properties)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let content = crate::frame_graph::ContentProgram::compile(view, &properties)
             .map_err(|e| EngineError::Store(e.to_string()))?;
 
-        let failures = std::mem::take(&mut self.layer_failures);
-        let was_realtime = self.realtime;
-        self.realtime = true;
-        for layer in upcoming.iter().filter(|layer| !now_ids.contains(&layer.id)) {
-            let LayerSource::File { path, .. } = &layer.source else { continue };
+        let mut targets = Vec::new();
+        let mut roots = Vec::new();
+        for layer in view.layers() {
+            let Some(meta) = view.meta(layer).map_err(|e| EngineError::Store(e.to_string()))? else { continue };
+            let LayerSource::File { path, .. } = &meta.source else { continue };
             if crate::render::media::is_still_image_path(path)
                 || crate::render::media::is_audio_path(path)
-                || crate::render::media::is_mesh_path(&path)
+                || crate::render::media::is_mesh_path(path)
                 || crate::render::media::is_point_cloud_path(path)
             {
                 continue;
             }
-            let _ = self.media_texture_for(&path, layer.source_time, layer.id);
+            let Some(visible) = visibility.binding(layer).map(|binding| binding.node) else { continue };
+            let Some(media) = content.binding(layer).and_then(|binding| binding.content) else { continue };
+            roots.push(visible);
+            roots.push(media);
+            targets.push((layer, visible, media));
+        }
+        if targets.is_empty() { return Ok(()); }
+
+        let nodes = properties.nodes().chain(visibility.nodes()).chain(content.nodes());
+        let topology = crate::frame_graph::GraphTopology::try_new(nodes, roots)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let mut graph = crate::frame_graph::CompiledGraph::with_topology(
+            crate::frame_graph::GraphRevision::new(view.revision_key()),
+            topology,
+        );
+
+        struct WarmExecutor<'a> {
+            properties: &'a crate::frame_graph::PropertyProgram,
+            visibility: &'a crate::frame_graph::VisibilityProgram,
+            content: &'a crate::frame_graph::ContentProgram,
+        }
+        impl crate::frame_graph::NodeExecutor for WarmExecutor<'_> {
+            type Error = EngineError;
+            fn execute(
+                &mut self,
+                node: &crate::frame_graph::GraphNode,
+                inputs: crate::frame_graph::NodeInputs,
+                context: crate::frame_graph::EvaluationContext,
+            ) -> Result<crate::frame_graph::NodeValue, Self::Error> {
+                if let Some(value) = self.properties.execute(node, &inputs, &context) {
+                    return value.map_err(|e| EngineError::Store(e.to_string()));
+                }
+                if let Some(value) = self.visibility.execute(node, &inputs, &context) {
+                    return value.map_err(|e| EngineError::Store(e.to_string()));
+                }
+                if let Some(value) = self.content.execute(node, &inputs, &context) {
+                    return value.map_err(|e| EngineError::Store(e.to_string()));
+                }
+                Err(EngineError::Store(format!("warm-up graph does not support {:?}", node.identity().kind)))
+            }
+        }
+        let mut executor = WarmExecutor { properties: &properties, visibility: &visibility, content: &content };
+        let now = graph.evaluate(
+            &mut executor,
+            t,
+            crate::frame_graph::FrameQuality::Preview { scale: 1 },
+            crate::frame_graph::Generation::new(1),
+        )?;
+        let future = graph.evaluate(
+            &mut executor,
+            ahead,
+            crate::frame_graph::FrameQuality::Preview { scale: 1 },
+            crate::frame_graph::Generation::new(2),
+        )?;
+
+        let any_solo = |frame: &crate::frame_graph::EvaluatedFrame| {
+            targets.iter().any(|(_, visible, _)| {
+                frame.value(*visible)
+                    .and_then(|value| value.downcast_ref::<crate::frame_graph::VisibilityValue>())
+                    .is_some_and(|value| value.solo)
+            })
+        };
+        let now_solo = any_solo(&now);
+        let future_solo = any_solo(&future);
+        let participates = |frame: &crate::frame_graph::EvaluatedFrame, visible: crate::frame_graph::NodeKey, solo_gate: bool| {
+            frame.value(visible)
+                .and_then(|value| value.downcast_ref::<crate::frame_graph::VisibilityValue>())
+                .is_some_and(|value| value.active && (!solo_gate || value.solo))
+        };
+        let now_ids: HashSet<LayerId> = targets.iter()
+            .filter(|(_, visible, _)| participates(&now, *visible, now_solo))
+            .map(|(layer, _, _)| *layer)
+            .collect();
+
+        let failures = std::mem::take(&mut self.layer_failures);
+        let was_realtime = self.realtime;
+        self.realtime = true;
+        for (layer, visible, media) in targets {
+            if now_ids.contains(&layer) || !participates(&future, visible, future_solo) { continue; }
+            let Some(frame) = future.value(media)
+                .and_then(|value| value.downcast_ref::<crate::frame_graph::MediaFrameValue>())
+            else { continue };
+            let Some(source_time) = frame.time else { continue };
+            let _ = self.media_texture_for(&frame.source.path, source_time, layer);
         }
         self.realtime = was_realtime;
         self.layer_failures = failures;

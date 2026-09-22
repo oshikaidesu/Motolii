@@ -1,14 +1,25 @@
 use std::collections::BTreeMap;
 
-use crate::doc::store::{LayerId, LayerSource, ShapeNode, StoreError, StoreView, TextDocument};
+use crate::doc::core::{Fps, RationalTime};
+use crate::doc::eval::{KeyframeTrack, Value};
+use crate::doc::store::{property, LayerId, LayerSource, LayerTiming, PropertyId, ShapeNode, StoreError, StoreView, TextDocument};
 
-use super::{EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, TimeDependency};
+use super::{EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MediaSourceValue { pub path: String, pub fingerprint: Option<String>, pub version: u64 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MaterialValue { pub source: MediaSourceValue }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MediaExtentValue { pub source: MediaSourceValue, pub size: [f32; 3] }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MediaFrameValue {
+    pub source: MediaSourceValue,
+    pub time: Option<RationalTime>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContentBinding {
@@ -24,7 +35,13 @@ enum Recipe {
     Shape(Vec<ShapeNode>),
     MediaExtent(MediaSourceValue),
     Mesh(MediaSourceValue),
-    MediaFrame(MediaSourceValue),
+    MediaFrame {
+        source: MediaSourceValue,
+        timing: LayerTiming,
+        fps: Option<Fps>,
+        speed_track: Option<KeyframeTrack>,
+        remap: Option<usize>,
+    },
     Material,
 }
 
@@ -44,8 +61,9 @@ pub struct ContentProgram {
 }
 
 impl ContentProgram {
-    pub fn compile(view: &StoreView<'_>) -> Result<Self, ContentProgramError> {
+    pub fn compile(view: &StoreView<'_>, properties: &PropertyProgram) -> Result<Self, ContentProgramError> {
         let mut program = Self { nodes: BTreeMap::new(), recipes: BTreeMap::new(), bindings: BTreeMap::new() };
+        let fps = view.composition()?.map(|composition| composition.fps);
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
             let mut binding = ContentBinding { layer, content: None, extent: None, material: None };
@@ -69,7 +87,41 @@ impl ContentProgram {
                         binding.content = Some(mesh);
                         binding.material = Some(program.intern(NodeKind::Material, vec![mesh], vec![], false, Recipe::Material));
                     } else {
-                        binding.content = Some(program.intern_versioned(NodeKind::MediaFrame, vec![], parameters, true, vec![version], Recipe::MediaFrame(source)));
+                        let speed_track = view.track(layer, &PropertyId::new(property::SPEED)?)?;
+                        let remap_key = properties.node_for(layer, &PropertyId::new(property::TIME_REMAP)?);
+                        let mut inputs = Vec::new();
+                        let remap = remap_key.map(|key| {
+                            let index = inputs.len();
+                            inputs.push(key);
+                            index
+                        });
+                        let mut media_parameters = parameters;
+                        media_parameters.extend_from_slice(&meta.timing.start.to_be_bytes());
+                        media_parameters.extend_from_slice(&meta.timing.duration.to_be_bytes());
+                        media_parameters.extend_from_slice(&meta.timing.source_in.to_be_bytes());
+                        media_parameters.extend_from_slice(&meta.timing.speed.num().to_be_bytes());
+                        media_parameters.extend_from_slice(&meta.timing.speed.den().to_be_bytes());
+                        if let Some(fps) = fps {
+                            media_parameters.extend_from_slice(&fps.num().to_be_bytes());
+                            media_parameters.extend_from_slice(&fps.den().to_be_bytes());
+                        }
+                        if let Some(track) = &speed_track {
+                            media_parameters.extend(serde_json::to_vec(track)?);
+                        }
+                        binding.content = Some(program.intern_versioned(
+                            NodeKind::MediaFrame,
+                            inputs,
+                            media_parameters,
+                            true,
+                            vec![version],
+                            Recipe::MediaFrame {
+                                source,
+                                timing: meta.timing,
+                                fps,
+                                speed_track,
+                                remap,
+                            },
+                        ));
                     }
                 }
                 _ => {}
@@ -83,13 +135,51 @@ impl ContentProgram {
     pub fn binding(&self, layer: LayerId) -> Option<&ContentBinding> { self.bindings.get(&layer) }
     pub fn bindings(&self) -> impl ExactSizeIterator<Item = &ContentBinding> { self.bindings.values() }
 
+    pub fn extent_source(&self, key: NodeKey) -> Option<&MediaSourceValue> {
+        match self.recipes.get(&key) {
+            Some(Recipe::MediaExtent(source)) => Some(source),
+            _ => None,
+        }
+    }
+
     pub fn execute(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<NodeValue, ContentProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
             Recipe::Text(value) => Ok(NodeValue::new(value.clone())),
             Recipe::Shape(value) => Ok(NodeValue::new(value.clone())),
-            Recipe::MediaExtent(value) | Recipe::Mesh(value) => Ok(NodeValue::new(value.clone())),
-            Recipe::MediaFrame(value) => Ok(NodeValue::new((value.clone(), context.time))),
+            Recipe::MediaExtent(value) => Ok(NodeValue::new(MediaExtentValue { source: value.clone(), size: [0.0; 3] })),
+            Recipe::Mesh(value) => Ok(NodeValue::new(value.clone())),
+            Recipe::MediaFrame { source, timing, fps, speed_track, remap } => {
+                let result = (|| {
+                    let Some(fps) = *fps else {
+                        return Ok(MediaFrameValue { source: source.clone(), time: None });
+                    };
+                    let comp_frame = context.time.try_to_frame_floor(fps)
+                        .map_err(|error| StoreError::Property(error.to_string()))?;
+                    let Some(mut source_frame) = timing.source_frame(comp_frame) else {
+                        return Ok(MediaFrameValue { source: source.clone(), time: None });
+                    };
+                    if let Some(track) = speed_track {
+                        if let Some(frame) = timing.source_frame_with_speed_track(comp_frame, track, fps)? {
+                            source_frame = frame;
+                        }
+                    }
+                    if let Some(index) = remap {
+                        match inputs.at(*index).and_then(|value| value.downcast_ref::<Value>()) {
+                            Some(Value::F64(value)) => source_frame = value.floor() as i64,
+                            Some(_) => return Err(StoreError::Property(format!(
+                                "{} に数値でない値が入っている",
+                                property::TIME_REMAP
+                            ))),
+                            None => {}
+                        }
+                    }
+                    let time = RationalTime::try_from_frame(source_frame, fps)
+                        .map_err(|error| StoreError::Property(error.to_string()))?;
+                    Ok(MediaFrameValue { source: source.clone(), time: Some(time) })
+                })();
+                result.map(NodeValue::new).map_err(ContentProgramError::from)
+            },
             Recipe::Material => inputs.at(0).and_then(|value| value.downcast_ref::<MediaSourceValue>()).cloned()
                 .map(|source| NodeValue::new(MaterialValue { source }))
                 .ok_or(ContentProgramError::InvalidInput(node.identity().kind)),
@@ -143,7 +233,8 @@ mod tests {
                 Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: "/builtins/cube-v1.obj".into(), fingerprint: Some("cube-v1".into()) }, order: n as i16, timing: LayerTiming::place(0, None, 180) } },
             ]).unwrap();
         }
-        let program = ContentProgram::compile(&doc.view()).unwrap();
+        let properties = PropertyProgram::compile(&doc.view()).unwrap();
+        let program = ContentProgram::compile(&doc.view(), &properties).unwrap();
         assert_eq!(program.nodes().filter(|node| node.identity().kind == NodeKind::MeshSource).count(), 1);
         assert_eq!(program.nodes().filter(|node| node.identity().kind == NodeKind::Material).count(), 1);
         let mesh: std::collections::BTreeSet<_> = program.bindings().filter_map(|binding| binding.content).collect();

@@ -189,12 +189,14 @@ pub struct Snapping {
 }
 
 /// 取っ手の値から Snapping を読む効果。
+#[derive(Clone, Copy)]
 pub struct SnapProgram {
     pub plugin_id: &'static str,
     pub snapping: fn(&str, &[(String, Value)]) -> Option<Snapping>,
 }
 
 /// 取っ手の値から Shutter を読む効果。`plugin_id` が合う効果に 1 つ。
+#[derive(Clone, Copy)]
 pub struct SamplingProgram {
     pub plugin_id: &'static str,
     pub shutter: fn(&[(String, Value)]) -> Option<Shutter>,

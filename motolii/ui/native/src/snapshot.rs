@@ -56,9 +56,12 @@ fn source_kind(source:&LayerSource)->&'static str{match source{
 #[derive(Clone,Copy)]
 struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera,document:crate::doc::core::ResolvedCamera}
 use crate::viewer::View;
+
 impl EditorRuntime{
-    pub(crate) fn view_camera(&self,view:View)->Result<crate::doc::core::ResolvedCamera,String>{
-        match view{View::User=>Ok(self.viewer.user_camera),View::Camera=>self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e)}
+    pub(crate) fn view_camera(&mut self,view:View)->Result<crate::doc::core::ResolvedCamera,String>{
+        if view==View::User{return Ok(self.viewer.user_camera)}
+        let time=self.time()?;let doc=self.doc.view();
+        self.engine.frame_graph_document_camera(&doc,time).map_err(e)
     }
     /// view の描く窓。Camera は出力寸法そのもの、Stage はタブが置いた窓(未設定なら出力寸法)。
     pub(crate) fn window(&self,view:View)->Result<crate::render::engine::Window,String>{
@@ -67,8 +70,14 @@ impl EditorRuntime{
     }
     /// 層を置くカメラ。2D は出力の画面の物なのでどの view でも作中カメラの箱に貼り付く。
     /// 2.5D・3D は世界に居る: Stage は既定(Boxcam の Original Comp)、Camera は作中カメラ。
-    pub(crate) fn projection_camera(&self,view:View,projection:LayerProjection)->Result<crate::doc::core::ResolvedCamera,String>{
-        match (view,projection){(View::User,LayerProjection::TwoD)|(View::Camera,_)=>self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e),(View::User,_)=>Ok(Default::default())}
+    pub(crate) fn projection_camera(&mut self,view:View,projection:LayerProjection)->Result<crate::doc::core::ResolvedCamera,String>{
+        match (view,projection){
+            (View::User,LayerProjection::TwoD)|(View::Camera,_)=>{
+                let time=self.time()?;let doc=self.doc.view();
+                self.engine.frame_graph_document_camera(&doc,time).map_err(e)
+            }
+            (View::User,_)=>Ok(Default::default())
+        }
     }
     /// Flutter の Stage タブが窓を置く: 画素寸法と、comp 画像のどこを写すか。幅 0 は「隠れた」。
     pub(crate) fn set_stage_window(&mut self,j:&Json)->Result<bool,String>{
@@ -85,40 +94,43 @@ impl EditorRuntime{
         self.viewer.stage_window=next;
         Ok(changed)
     }
-    fn depth_layout(&self,resolved:&[crate::render::picture::resolved::ResolvedLayer])->Result<Json,String>{
+    fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
-        let seen=self.engine.resolve_camera_in(&view,resolved,time).map_err(e)?;
+        let seen=self.engine.resolve_camera(&view,time).map_err(e)?;
         let camera=crate::doc::core::camera_projection(comp,seen);
         let target=seen.target(comp);
         let camera_layer=motolii_render::picture::resolve::camera::active_camera_layer(&view, time).map_err(e)?;
         let target_layer=camera_layer.map(|id|motolii_render::picture::resolve::camera::camera_target_layer(&view, id,time)).transpose().map_err(e)?.flatten();
-        let worlds=motolii_render::picture::resolve::transform::world_transforms3d(&view, time).map_err(e)?;
+        let worlds:std::collections::HashMap<LayerId,glam::Affine3A>=view.layers().into_iter()
+            .filter_map(|id|scene.layer(id).map(|layer|(id,layer.transform.spatial)))
+            .collect();
         let mut items=Vec::new();
-        for layer in resolved {
-            // 配置効果の複製は層として 1 つ(元の姿)だけ並べる
-            if matches!(layer.source,LayerSource::Camera|LayerSource::Stage)||layer.copy!=0 {continue}
-            let Some(world)=worlds.get(&layer.id) else{continue};
-            let attrs=view.attrs(layer.id).map_err(e)?.unwrap_or_default();
-            let local=self.engine.selected_layer_bounds_in(&view,&resolved,layer.id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
+        for id in view.layers() {
+            let Some(layer)=scene.layer(id) else{continue};
+            if matches!(layer.source,LayerSource::Camera|LayerSource::Stage){continue}
+            let Some(world)=worlds.get(&id) else{continue};
+            let attrs=view.attrs(id).map_err(e)?.unwrap_or_default();
+            let local=self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
             let center=world.transform_point3(local)-target;
-            let parent=attrs.parent.and_then(|id|worlds.get(&id).copied()).unwrap_or(glam::Affine3A::IDENTITY);
+            let parent=attrs.parent.and_then(|parent|worlds.get(&parent).copied()).unwrap_or(glam::Affine3A::IDENTITY);
             let inverse=parent.inverse();
-            let get=|name|view.value_at(layer.id,&PropertyId::new(name).unwrap(),time).ok().flatten();
+            let get=|name|view.value_at(id,&PropertyId::new(name).unwrap(),time).ok().flatten();
             let position=match get(property::POSITION){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
             let z=match get(property::POSITION_Z){Some(Value::F64(v))=>v,_=>0.0};
-            items.push(json!({"id":layer.id.0,"name":attrs.name,"point":[center.x,center.z],"local":[position[0],position[1],z],"inverseX":inverse.transform_vector3(glam::Vec3::X).to_array(),"inverseZ":inverse.transform_vector3(glam::Vec3::Z).to_array(),"locked":attrs.locked || !inverse.is_finite(),"color":attrs.label_color}));
+            items.push(json!({"id":id.0,"name":attrs.name,"point":[center.x,center.z],"local":[position[0],position[1],z],"inverseX":inverse.transform_vector3(glam::Vec3::X).to_array(),"inverseZ":inverse.transform_vector3(glam::Vec3::Z).to_array(),"locked":attrs.locked || !inverse.is_finite(),"color":attrs.label_color}));
         }
         let eye=camera.eye-target;
         Ok(json!({"items":items,"halfFov":(camera.vertical_fov_radians*0.5).tan()*camera.aspect_ratio,
             "camera":{"point":[eye.x,eye.z],"layer":camera_layer.map(|l|l.0),"target":target_layer.map(|l|l.0),"orbit":seen.orbit_degrees,"distance":seen.distance_scale,"baseDistance":crate::doc::core::distance_from_camera(comp,0.0)}}))
     }
     /// 注視の球: 層の world 中心と、局所 bounds の 8 角を包む半径(rerun `focus_entity` の bounding sphere)。
-    pub(crate) fn focus_sphere(&self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
-        let view=self.doc.view();let time=self.time()?;
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, time).map_err(e)?;
-        let Some(world)=motolii_render::picture::resolve::transform::world_transforms3d(&view, time).map_err(e)?.get(&id).copied() else{return Ok(None)};
-        let Some(b)=self.engine.selected_layer_bounds_in(&view,&resolved,id,time) else{return Ok(None)};
+    pub(crate) fn focus_sphere(&mut self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
+        let time=self.time()?;let view=self.doc.view();
+        let scene=self.engine.frame_graph_editor_scene(&view,time).map_err(e)?;
+        let Some(layer)=scene.layer(id) else{return Ok(None)};
+        let world=layer.transform.spatial;
+        let Some(b)=self.engine.selected_scene_layer_bounds_in(&view,&scene.layers,id,time) else{return Ok(None)};
         let centre=world.transform_point3(glam::Vec3::from(b.center()));
         let radius=(0..8).map(|i|world.transform_point3(glam::vec3(if i&1==0{b.min[0]}else{b.max[0]},if i&2==0{b.min[1]}else{b.max[1]},if i&4==0{b.min[2]}else{b.max[2]})).distance(centre)).fold(0.0,f32::max);
         Ok(Some((centre,radius)))
@@ -145,26 +157,26 @@ impl EditorRuntime{
     pub(crate) fn spatial_gizmo(&self,seen:View)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
-        let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.viewer.selected_ids,time) else{return Ok(Json::Null)};
+        let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.viewer.selected_ids,time,|id|{
+            self.engine.frame_graph_cached_transform(&view,time,id).map(|(local,world)|(local.spatial,world.spatial))
+        }) else{return Ok(Json::Null)};
         let pointer=self.viewer.stage_pointer.filter(|_|self.viewer.stage_view==seen);
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera(seen)?,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
+        let camera=if seen==View::User{self.viewer.user_camera}else{self.engine.resolve_camera(&view,time).map_err(e)?};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
     /// Stage に置いた箱(Boxcam): Camera 層ごとの frustum と取っ手。Stage の comp 画像 px。
     fn camera_gizmos(&self)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, time).map_err(e)?;
+        let scene=self.engine.frame_graph_cached_scene(&view,time).ok_or("FrameGraph editor scene is not prepared")?;
         let mut gizmos=Vec::new();
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
             if meta.source!=LayerSource::Camera || view.attrs(id).map_err(e)?.unwrap_or_default().hidden || !meta.timing.covers(self.viewer.frame){continue}
-            let camera=self.engine.camera_of_layer_in(&view,&resolved,id,time).map_err(e)?;
+            let camera=self.engine.camera_of_scene_layer_in(&view,&scene.layers,id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
-            // 箱 = カメラが comp 面(z=0)のどこを見ているか: frustum の 4 本の稜線と comp 面の交わり。
-            // 正面(orbit 0・層ターゲット無し)ではそれが枠と同じ形の箱で、辺・角・取っ手で author できる。
-            // 回ったカメラでは面の上の台形になる。稜線が面へ届かない時だけ注視距離の角で代える。
             let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
             let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
             let corners=[glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
@@ -174,17 +186,12 @@ impl EditorRuntime{
                 let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
                 screen(if t>0.0{eye+ray*t}else{eye+ray})
             }).collect();
-            // 箱は注視面の 4 角が写れば描く。eye は観測者と同じ深さか後ろに居るのが普通で(正面の観測者は
-            // 既定のカメラと同じ距離に立つ)、写せない。eye と frustum の線は写せた時だけの飾り。
-            // Blender のカメラ: eye を頂点に、一定の表示距離へ置いた枠(四角錐)と、上を示す三角。
-            // 世界に置いた形なので観測者を回しても崩れない。eye が写せる時(観測者を回した時)に描く。
             let display=crate::doc::core::distance_from_camera(comp,0.0)*0.15;
             let fh=display*(projection.vertical_fov_radians*0.5).tan();let fw=fh*projection.aspect_ratio;
             let frustum:Vec<_>=[(-fw,-fh),(fw,-fh),(fw,fh),(-fw,fh)].into_iter().map(|(x,y)|screen(eye+rotation*glam::vec3(x,y,-display))).collect();
             let up=screen(eye+rotation*glam::vec3(0.0,-fh*1.7,-display));
             let eye=screen(eye);
             let authorable=camera.orbit_degrees==[0.0;2] && motolii_render::picture::resolve::camera::camera_target_layer(&view, id,time).map_err(e)?.is_none();
-            // 届かない角は null。2 角以上写れば箱を出し、Flutter は写った角だけ結ぶ。author できるのは 4 角揃った時だけ。
             let seen=corners.iter().filter(|c|c.is_some()).count();
             let pyramid=eye.is_some()&&frustum.iter().all(Option::is_some);
             if seen>=2||pyramid{gizmos.push(json!({"id":id.0,"points":corners,"eye":eye,"frustum":frustum,"up":up,"target":screen(camera.target(comp)),"authorable":authorable&&seen==4,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
@@ -196,14 +203,16 @@ impl EditorRuntime{
     pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{ self.bounds_seen(layer,View::Camera) }
     pub(crate) fn bounds_seen(&self,layer:LayerId,seen:View)->Option<Json>{
         let view=self.doc.view();let at=self.time().ok()?;
-        let resolved=match self.engine.resolved_for(&view,at){Some(r)=>r,None=>crate::render::picture::resolve::resolved_layers(&view,at).ok()?};
-        let index:std::collections::HashMap<LayerId,usize>=resolved.iter().enumerate().filter(|(_,r)|!r.ghost).map(|(i,r)|(r.id,i)).fold(std::collections::HashMap::new(),|mut m,(id,i)|{m.entry(id).or_insert(i);m});
-        self.bounds_from(&view,&self.eye(seen)?,resolved.as_slice(),&index,layer,seen)
+        let scene=self.engine.frame_graph_cached_scene(&view,at)?;
+        self.bounds_from(&view,&self.eye(seen)?,scene,layer,seen)
     }
     /// 見ている姿勢 —— comp・作中カメラ・その view の観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
     fn eye(&self,seen:View)->Option<Eye>{
         let view=self.doc.view();let time=self.time().ok()?;
-        Some(Eye{time,comp:view.composition().ok()??.spec(),camera:self.projection_camera(seen,LayerProjection::ThreeD).ok()?,observer:self.view_camera(seen).ok()?,document:self.engine.resolve_camera(&view,time).ok()?})
+        let document=self.engine.resolve_camera(&view,time).ok()?;
+        let camera=if seen==View::Camera{document}else{Default::default()};
+        let observer=if seen==View::Camera{document}else{self.viewer.user_camera};
+        Some(Eye{time,comp:view.composition().ok()??.spec(),camera,observer,document})
     }
     /// 描いた直後に GPU の mask から届いた範囲を、窓の px から comp 画像の px へ戻して取り込む。選択が変わるまで使う。
     pub(crate) fn take_selection_bounds(&mut self,seen:View,window:crate::render::engine::Window){
@@ -212,21 +221,18 @@ impl EditorRuntime{
             self.viewer.selection_bounds.insert(seen,found.into_iter().map(|(id,[x0,y0,x1,y1])|(id,[x+x0*sx,y+y0*sy,x+x1*sx,y+y1*sy])).collect());
         }
     }
-    fn bounds_from(&self,view:&crate::doc::store::StoreView<'_>,eye:&Eye,resolved:&[crate::render::picture::resolved::ResolvedLayer],at:&std::collections::HashMap<LayerId,usize>,layer:LayerId,seen:View)->Option<Json>{
+    fn bounds_from(&self,view:&crate::doc::store::StoreView<'_>,eye:&Eye,scene:&crate::render::frame_graph::SceneValue,layer:LayerId,seen:View)->Option<Json>{
         let Eye{time,comp,camera,observer,document}=*eye;
-        let r=resolved.get(*at.get(&layer)?)?;
-        // 2D は箱に貼り付いているので、どの view でも作中カメラで置く。
+        let r=scene_layer(scene,layer)?;
         let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
-        let b=self.engine.selected_layer_bounds_in(view,resolved,layer,time)?;
-        let world=crate::doc::core::depth_scaled(r.placement.world_transform?);
-        // 選ばれた層は絵そのもの(mask)の広がり: 透視・effect・変位込みで 1 px。届く前は写した点で包む。
-        // 2D・2.5D の籠は向きを持たない: こちらを向いた矩形。向きは Inspector が決める。
+        let b=self.engine.selected_scene_layer_bounds_in(view,&scene.layers,layer,time)?;
+        let world=crate::doc::core::depth_scaled(r.transform.spatial);
         let corners:Vec<_>=match (self.viewer.selection_bounds.get(&seen).and_then(|m|m.get(&layer)),r.projection){
             (Some(&[x0,y0,x1,y1]),_)=>vec![[x0 as f64,y0 as f64],[x1 as f64,y0 as f64],[x1 as f64,y1 as f64],[x0 as f64,y1 as f64]],
             (None,projection)=>match projection{
             LayerProjection::ThreeD=>crate::doc::core::projected_screen_corners(comp,camera,observer,r.projection,world,b.min,b.max).iter().map(|p|[p.x as f64,p.y as f64]).collect(),
             _=>{
-                let outline=self.engine.selected_layer_outline_in(view,resolved,layer,time).unwrap_or_else(||b.corners().to_vec());
+                let outline=self.engine.selected_scene_layer_outline_in(view,&scene.layers,layer,time).unwrap_or_else(||b.corners().to_vec());
                 crate::doc::core::facing_frame(comp,camera,observer,r.projection,world,b.min,b.max,&outline).iter().map(|p|[p.x as f64,p.y as f64]).collect()
             }
         }};
@@ -236,43 +242,37 @@ impl EditorRuntime{
     }
     /// 今の姿 —— 観測者と時刻で動く物。cache した行の上へ毎回これを載せる。
     /// `bounds` は Camera(出力)、`stageBounds` は Stage(観測者)で見た枠。
-    fn overlay_geometry(&self,view:&crate::doc::store::StoreView<'_>,row:&mut Json,eyes:&(Eye,Eye),resolved:&[crate::render::picture::resolved::ResolvedLayer],at:&std::collections::HashMap<LayerId,usize>,id:LayerId,live:bool)->Result<(),String>{
-        let position=self.position_in(view,id)?;let bounds=self.bounds_from(view,&eyes.0,resolved,at,id,View::Camera);
+    fn overlay_geometry(&self,view:&crate::doc::store::StoreView<'_>,row:&mut Json,eyes:&(Eye,Eye),scene:&crate::render::frame_graph::SceneValue,id:LayerId,live:bool)->Result<(),String>{
+        let position=self.position_in(view,id)?;let bounds=self.bounds_from(view,&eyes.0,scene,id,View::Camera);
         row["corners"]=json!(bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|if c.len()==8{vec![c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]}else{c.clone()}));
         row["x"]=json!(position[0]);row["y"]=json!(position[1]);
         if !live {row["anchorFraction"]=bounds.as_ref().map(|b|b["anchorFraction"].clone()).unwrap_or(Json::Null);}
         row["bounds"]=json!(bounds);
-        row["stageBounds"]=json!(self.bounds_from(view,&eyes.1,resolved,at,id,View::User));
+        row["stageBounds"]=json!(self.bounds_from(view,&eyes.1,scene,id,View::User));
         Ok(())
     }
-    pub(crate) fn build_status(&self)->Result<Json,String>{
-        let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;let at=self.time()?;
+    pub(crate) fn build_status(&mut self)->Result<Json,String>{
+        let at=self.time()?;let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;
         let catalog=crate::render::engine::known_effects();
-        // 描く側がこのコマで解いた物があればそれを使う(1 コマに 2 度解かない)。
-        let resolved=match self.engine.resolved_for(&view, at) {
-            Some(layers)=>layers,
-            None=>crate::render::picture::resolve::resolved_layers(&view, at).map_err(e)?,
-        };
+        let scene=self.engine.frame_graph_editor_scene(&view,at).map_err(e)?;
         let clipping=view.clipping_bases().map_err(e)?;
         let eyes=(self.eye(View::Camera).ok_or("No composition")?,self.eye(View::User).ok_or("No composition")?);
         // 再生中で Document が変わっていなければ、時刻で変わる物(値・枠)だけの軽い status にする。
         let revision=format!("{:?}",self.doc.revision());
         let live=self.viewer.clock.playing()&&self.full_status_revision.borrow().as_deref()==Some(revision.as_str());
-        // 層ごとに resolved を走査すると層数の 2 乗になる。索引を 1 回だけ作る。
-        let at_index:std::collections::HashMap<LayerId,usize>=resolved.iter().enumerate().filter(|(_,r)|!r.ghost).map(|(i,r)|(r.id,i)).fold(std::collections::HashMap::new(),|mut m,(id,i)|{m.entry(id).or_insert(i);m});
         // 並べ替えの鍵も 1 層 1 回。sort_by_key は比較のたびに鍵を引くので、store を O(n log n) 回叩いていた。
         let mut ids=view.layers();
         let order:std::collections::HashMap<LayerId,i16>=ids.iter().map(|id|(*id,view.meta(*id).ok().flatten().map_or(0,|m|m.order))).collect();
         ids.sort_by_key(|id|std::cmp::Reverse((order.get(id).copied().unwrap_or(0),id.0)));
         let mut layers=Vec::new();
-        let keys=self.layer_keys(&view,at,&resolved,&clipping,live)?;
+        let keys=self.layer_keys(&view,at,&scene,&clipping,live)?;
         // 軽い status で行(値・効果)を持つのは選択中の層だけ —— Inspector と Stage の枠が読む物。
         // 他の層は今の姿(枠・位置)だけ: Stage の当たり判定はそれで足りる。
         let wanted=|id:LayerId| !live||self.viewer.selected()==Some(id)||self.viewer.selected_ids.contains(&id);
         for id in ids{
             if !wanted(id){
                 let mut row=json!({"id":id.0});
-                self.overlay_geometry(&view,&mut row,&eyes,&resolved,&at_index,id,live)?;
+                self.overlay_geometry(&view,&mut row,&eyes,&scene,id,live)?;
                 layers.push(row);
                 continue;
             }
@@ -290,7 +290,7 @@ impl EditorRuntime{
                     built
                 }
             };
-            if let Some(mut row)=row {self.overlay_geometry(&view,&mut row,&eyes,&resolved,&at_index,id,live)?;layers.push(row);}
+            if let Some(mut row)=row {self.overlay_geometry(&view,&mut row,&eyes,&scene,id,live)?;layers.push(row);}
         }
         self.snapshot_cache.borrow_mut().rows.retain(|id,_|keys.contains_key(id));
         if live {
@@ -336,7 +336,7 @@ impl EditorRuntime{
         status["spatialGizmo"]=self.spatial_gizmo(View::Camera)?;
         status["stageSpatialGizmo"]=self.spatial_gizmo(View::User)?;
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
-        status["depthLayout"]=self.depth_layout(&resolved)?;
+        status["depthLayout"]=self.depth_layout(&scene)?;
         status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());
         status["primitives"]=json!(editor::create::primitives().iter().map(|p|json!({"id":p.id,"name":p.name})).collect::<Vec<_>>());
         status["animate"]=json!(self.viewer.animate!=Animate::Off);

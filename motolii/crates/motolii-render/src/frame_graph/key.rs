@@ -70,6 +70,10 @@ pub enum NodeKind {
     TextStyle,
     /// Shaped text paths/contours after the layout input is known.
     TextShape,
+    /// One Shape Outside source expressed as comp-space obstacle polygons.
+    TextObstacle,
+    /// Post-analysis text shaping with Shape Outside and glyph-transition time edges.
+    TextFlow,
     /// Authored vector geometry plus evaluated shape/fill properties.
     ShapeGeometry,
     /// Shape path tessellation/raster input.  The renderer chooses the value.
@@ -90,6 +94,34 @@ pub enum NodeKind {
     Material,
     /// A time-addressed media frame (video) or image source.
     MediaFrame,
+    /// Pure semantic request describing one Blob Track analysis source.
+    AnalysisRequest,
+    /// Host-evaluated blob analysis result, cached by exact graph time.
+    AnalysisBlob,
+    /// Host-evaluated Track Overlay analysis over the semantic scene.
+    AnalysisOverlay,
+    /// Exact-time table of Track Overlay analysis results.
+    OverlaySet,
+    /// Exact-time authored participation: hidden/solo/timing.
+    Visibility,
+    /// Per-frame cumulative emission state for a particle layer.
+    ParticleBirths,
+    /// Semantic particle positions/colors/sizes for the exact composition time.
+    Particle,
+    /// A fixed authored temporal duplicate (Ghost) of a scene contribution.
+    TemporalCopy,
+    /// Evaluated placement-effect outputs before they become scene copies.
+    PlacementSet,
+    /// Motion-blur shutter measurement; samples only the two shutter edges.
+    MotionMeasure,
+    /// Exact motion-blur transform samples selected by MotionMeasure.
+    MotionSamples,
+    /// Authored layer-to-layer relation inputs (Follow, connector, trace).
+    Relation,
+    /// Exact-time relation table consumed by motion/solver lowering.
+    RelationSet,
+    /// Exact-time block/physics inputs derived from graph values only.
+    SolverPlan,
     /// Authored local placement after layout.
     Transform,
     /// Inherited world placement.
@@ -100,6 +132,10 @@ pub enum NodeKind {
     CameraProjection,
     /// One authored layer's ordered contribution to the scene.
     CompositeContribution,
+    /// A Group scope over its direct children. It becomes a plate only when an evaluated Whole effect requires one.
+    GroupComposite,
+    /// Attaches named-layer and temporal image dependencies to evaluated effects.
+    EffectImages,
     /// The ordered shared scene before any view projection.
     SceneComposite,
     /// GPU-ready layer resources shared by every final projection.

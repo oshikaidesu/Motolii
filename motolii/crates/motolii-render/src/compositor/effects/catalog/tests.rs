@@ -131,7 +131,7 @@ fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
     assert!(error.is_none(), "GPU の検証に落ちた: {error:?}");
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, |_| {});
-    ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    crate::compositor::device::wait_for_gpu(&ctx.device, "catalog-test-readback").unwrap();
     let data = slice.get_mapped_range();
     [data[0], data[1], data[2], data[3]]
 }

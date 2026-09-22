@@ -70,10 +70,7 @@ impl Compositor {
         // submit の時計は `flush_pending` が持つ(1 コマに何度も出るため)。
         self.flush_pending();
         let wait_start = std::time::Instant::now();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        crate::compositor::device::wait_for_gpu(&self.ctx.device, "sequential-final-readback")?;
 
         self.measurement.wait_us = wait_start.elapsed().as_micros() as u64;
         let readback_start = std::time::Instant::now();

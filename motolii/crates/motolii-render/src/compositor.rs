@@ -6,6 +6,8 @@ use re_renderer::{RenderContext, Rgba};
 
 mod clip;
 mod device;
+#[cfg(test)]
+pub(crate) use device::wait_for_gpu;
 pub(crate) mod effects;
 mod environment;
 pub(crate) mod extrude;
@@ -433,10 +435,10 @@ pub struct Compositor {
     /// 状態を作った書類の指紋。変われば全部捨てて入点からやり直す(同じ時刻は同じ絵、の保証)。
     pub(crate) feedback_revision: u64,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
-    pub(crate) blend_vism: effects::EffectProgram,
+    pub(crate) blend_vism: effects::LazyEffectProgram,
     pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
-    pub(crate) matte_vism: effects::EffectProgram,
+    pub(crate) matte_vism: effects::LazyEffectProgram,
     /// 同じ matte を、生成器の出力 format ごとに組んだ物(生成器を素材の alpha に閉じ込める)。
     pub(crate) coverage_programs: std::collections::HashMap<wgpu::TextureFormat, effects::EffectProgram>,
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,

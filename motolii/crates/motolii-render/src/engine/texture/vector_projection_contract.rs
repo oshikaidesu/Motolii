@@ -138,7 +138,7 @@ fn a_clipped_vector_selection_uses_only_the_visible_half() {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
     });
     engine.render_frame_into_with_camera(&doc.view(), RationalTime::ZERO, &texture, Default::default(), true, &[LayerId(1)]).unwrap();
-    engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    crate::compositor::wait_for_gpu(engine.gpu_device(), "vector-selection-test").unwrap();
     let bounds = engine.take_selection_bounds().unwrap();
     let (_, b) = bounds.iter().find(|(id,_)| *id == LayerId(1)).unwrap();
     assert!((95.0..=97.0).contains(&b[0]) && (255.0..=257.0).contains(&b[2]), "the clipped circle's mask must stop at its center: {b:?}");

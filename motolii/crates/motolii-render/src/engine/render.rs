@@ -31,53 +31,9 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
-        let frame_start = std::time::Instant::now();
-        self.compositor.measurement = Default::default();
         self.layer_failures.clear();
         self.purge_idle_video_players();
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let mut stage = std::time::Instant::now();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        self.compositor.measurement.resolve_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let camera = match camera_override {
-            Some(camera) => camera,
-            None => self.resolve_camera_in(view, &resolved, t)?,
-        };
-        self.compositor.measurement.camera_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        self.compositor.measurement.text_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.compositor.measurement.shape_us = stage.elapsed().as_micros() as u64;
-        let layer_start = std::time::Instant::now();
-        let layers = self.layers_from_resolved(
-            view,
-            comp,
-            camera,
-            self.resolve_camera_in(view, &resolved, t)?,
-            t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        )?;
-
-        self.compositor.measurement.layer_build_us = layer_start.elapsed().as_micros() as u64;
-        let background_color = if include_background {
-            composition.background
-        } else {
-            crate::render::compositor::NO_BACKGROUND
-        };
-        let pixels = self.compositor.render_with_effects(comp, camera, &layers, background_color)?;
-        let m = &mut self.compositor.measurement;
-        m.total_us = frame_start.elapsed().as_micros() as u64;
-        m.prepare_us = m.total_us.saturating_sub(m.submit_us + m.wait_us + m.readback_us);
-        Ok(pixels)
+        self.render_frame_graph_pixels(view, t, include_background, camera_override)
     }
 
     /// 効果が宣言した時刻のずれごとに、**その時刻の層の絵**を用意する。
@@ -269,19 +225,61 @@ impl Engine {
     /// Freeze の 1 コマを焼く: 層を本物で組み、効果の列の出口(乗算済み線形)を読み戻して cache へ。
     /// 順に呼ぶ(feedback は 1 歩ずつ進む)。絵にならない層(網・点群)は false。
     pub fn freeze_bake_frame(&mut self, view: &StoreView<'_>, layer_id: LayerId, comp_frame: i64) -> Result<bool, EngineError> {
-        let composition = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let t = RationalTime::try_from_frame(comp_frame, composition.fps).map_err(|e| EngineError::Time(e.to_string()))?;
-        let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(|e| EngineError::Store(e.to_string()))?;
-        let Some(target) = resolved.iter().find(|l| l.id == layer_id && l.copy == 0 && !l.ghost).cloned() else { return Ok(false) };
+        let composition = view.composition()
+            .map_err(|error| EngineError::Store(error.to_string()))?
+            .ok_or(EngineError::NoComposition)?;
+        let t = RationalTime::try_from_frame(comp_frame, composition.fps)
+            .map_err(|error| EngineError::Time(error.to_string()))?;
+        let (scene, camera, comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
+        let Some(mut target) = scene.layers.into_iter().find(|layer| layer.layer == layer_id && layer.freeze_eligible && !layer.ghost) else {
+            return Ok(false);
+        };
+
+        // Freeze stores the material result before external coverage/composite
+        // semantics. Placement/opacity/blend/matte stay live when the cache is read.
+        target.matte = None;
+        target.clip_to_below = false;
+        target.blend = crate::doc::store::BlendMode::Normal;
+
         self.freezing = Some(layer_id);
-        let picture = self.layer_linear_picture(view, &resolved, &target, t, comp);
+        let previous_clock = self.compositor.clock;
+        let frame = t.try_to_frame_round(fps).unwrap_or(comp_frame) as f32;
+        self.compositor.clock = Some([
+            t.as_seconds_f64() as f32,
+            fps.den() as f32 / fps.num() as f32,
+            frame,
+        ]);
+        let prepared = self.prepare_gpu_scene(
+            &crate::frame_graph::SceneValue { layers: vec![target] },
+            comp,
+            camera,
+        );
+        self.compositor.clock = previous_clock;
         self.freezing = None;
-        let Some(picture) = picture? else { return Ok(false) };
-        let uploaded = self.compositor.upload_rgba16f("motolii-frozen", picture.bytes.clone(), picture.width, picture.height)?;
-        let start = view.meta(layer_id).map_err(|e| EngineError::Store(e.to_string()))?.map_or(0, |m| m.timing.start);
-        let frozen = super::frozen::FrozenFrame { texture: uploaded, natural: picture.natural, padding: picture.padding, frame: picture.frame };
-        self.frozen.remember(layer_id, comp_frame - start, frozen, Some(&picture.bytes)).map_err(|e| EngineError::Store(format!("Freeze の cache を書けない: {e}")))?;
+
+        let Some(layer) = prepared?.layers.into_iter().next() else { return Ok(false) };
+        let Some(picture) = self.layer_with_passes_linear_picture(&layer)? else { return Ok(false) };
+        let uploaded = self.compositor.upload_rgba16f(
+            "motolii-frozen",
+            picture.bytes.clone(),
+            picture.width,
+            picture.height,
+        )?;
+        let start = view.meta(layer_id)
+            .map_err(|error| EngineError::Store(error.to_string()))?
+            .map_or(0, |meta| meta.timing.start);
+        let frozen = super::frozen::FrozenFrame {
+            texture: uploaded,
+            natural: picture.natural,
+            padding: picture.padding,
+            frame: picture.frame,
+        };
+        self.frozen.remember(
+            layer_id,
+            comp_frame - start,
+            frozen,
+            Some(&picture.bytes),
+        ).map_err(|error| EngineError::Store(format!("Freeze の cache を書けない: {error}")))?;
         Ok(true)
     }
 
@@ -480,25 +478,7 @@ impl Engine {
         view: &StoreView<'_>,
         t: RationalTime,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        let camera = self.resolve_camera_in(view, &resolved, t)?;
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.render_resolved_to_texture_with_shapes(
-            view,
-            comp,
-            composition.background,
-            camera,
-            t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        )
+        self.render_frame_graph_to_texture_output(view, t, true)
     }
 
     pub fn render_frame_into(
@@ -507,28 +487,19 @@ impl Engine {
         t: RationalTime,
         target: &wgpu::Texture,
     ) -> Result<(), EngineError> {
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        let camera = self.resolve_camera_in(view, &resolved, t)?;
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        let layers = self.layers_from_resolved(
+        let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?.spec();
+        let camera = self.frame_graph_document_camera(view, t)?;
+        self.render_frame_graph_into_window(
             view,
-            comp,
-            camera,
-            self.resolve_camera_in(view, &resolved, t)?,
             t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        )?;
-        Ok(self
-            .compositor
-            .render_into(target, comp, camera, &layers, composition.background)?)
+            target,
+            camera,
+            true,
+            &[],
+            Window::output(comp),
+            crate::frame_graph::ViewProjection::Camera,
+        )
     }
 
     /// Render from an observation camera while retaining authored layer projection.
@@ -556,81 +527,32 @@ impl Engine {
         outline: &[LayerId],
         window: Window,
     ) -> Result<(), EngineError> {
-        let frame_start = std::time::Instant::now();
-        self.compositor.measurement = Default::default();
-        self.outline_layers = outline.iter().copied().take(255).collect();
-        self.outline_order = self.outline_layers.clone();
-        let composition = view
-            .composition()
-            .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?;
-        let comp = composition.spec();
-        let mut stage = std::time::Instant::now();
-        let resolved = self.resolved_with_analysis(view, t)?;
-        self.compositor.measurement.resolve_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let text_documents = collect_text_documents(view, &resolved, t)?;
-        self.compositor.measurement.text_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let shape_documents = collect_shape_documents(view, &resolved, t)?;
-        self.compositor.measurement.shape_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let document_camera = self.resolve_camera_in(view, &resolved, t)?;
-        self.compositor.measurement.camera_us = stage.elapsed().as_micros() as u64;
-        let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        self.feedback_window = Some(window);
-        stage = std::time::Instant::now();
-        let built = self.layers_from_resolved(
+        self.render_frame_graph_into_window(
             view,
-            comp,
-            camera,
-            projection_camera,
             t,
-            &resolved,
-            &text_documents,
-            &shape_documents,
-        );
-        self.compositor.measurement.layer_build_us = stage.elapsed().as_micros() as u64;
-        self.feedback_window = None;
-        let mut layers = built?;
-        // 2D は出力の画面の物: どの窓でも作中カメラの箱に貼り付き、箱と一緒に動く(Boxcam)。
-        // 2.5D と 3D は世界に居るので、窓の投影基準(Stage は既定)のまま。
-        for layer in &mut layers {
-            if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
-                layer.layer.projection_camera = document_camera;
-            }
-        }
-        let background_color = if include_background {
-            composition.background
-        } else {
-            crate::render::compositor::NO_BACKGROUND
-        };
-        let drawn = self.compositor.render_into_window(target, comp, camera, &layers, background_color, window);
-        self.outline_layers.clear();
-        self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
-        Ok(drawn?)
+            target,
+            camera,
+            include_background,
+            outline,
+            window,
+            crate::frame_graph::ViewProjection::Camera,
+        )
     }
-
 }
 
-pub(super) fn collect_text_documents(
-    view: &StoreView<'_>,
-    resolved: &[ResolvedLayer],
-    t: RationalTime,
-) -> Result<HashMap<LayerId, TextDocument>, EngineError> {
+// These adapters support the explicit `ResolvedLayer` oracle APIs below. The
+// production render entry points evaluate a FrameGraph scene before lowering.
+pub(super) fn collect_text_documents(view: &StoreView<'_>, resolved: &[ResolvedLayer], t: RationalTime) -> Result<HashMap<LayerId, TextDocument>, EngineError> {
     let mut documents = HashMap::new();
     for layer in resolved {
         if layer.source == LayerSource::Text {
-            if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, layer.id, t)
-                .map_err(|e| EngineError::Store(e.to_string()))?
-            {
+            if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, layer.id, t).map_err(|error| EngineError::Store(error.to_string()))? {
                 documents.insert(layer.id, document);
             }
-            // Text Morph の相手は見えていない層でもよい: 書類だけ持ってくる。
             let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
             if let Some((target, _)) = crate::extensions::text::morph(&effects) {
                 if !documents.contains_key(&target) {
-                    if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, target, t).map_err(|e| EngineError::Store(e.to_string()))? {
+                    if let Some(document) = crate::picture::resolve::text::resolved_text_document(view, target, t).map_err(|error| EngineError::Store(error.to_string()))? {
                         documents.insert(target, document);
                     }
                 }
@@ -640,19 +562,14 @@ pub(super) fn collect_text_documents(
     Ok(documents)
 }
 
-pub(super) fn collect_shape_documents(
-    view: &StoreView<'_>,
-    resolved: &[ResolvedLayer],
-    t: RationalTime,
-) -> Result<HashMap<LayerId, Vec<ShapeNode>>, EngineError> {
+pub(super) fn collect_shape_documents(view: &StoreView<'_>, resolved: &[ResolvedLayer], t: RationalTime) -> Result<HashMap<LayerId, Vec<ShapeNode>>, EngineError> {
     let mut documents = HashMap::new();
     for layer in resolved {
         if layer.source == LayerSource::Shape {
-            let shapes = crate::picture::shapes::shapes_at(view, layer.id, t)
-                .map_err(|e| EngineError::Store(e.to_string()))?;
+            let shapes = crate::picture::shapes::shapes_at(view, layer.id, t).map_err(|error| EngineError::Store(error.to_string()))?;
             documents.insert(layer.id, shown_shapes(&shapes, layer));
         } else if layer.source == LayerSource::Group {
-            if let Some(background) = crate::picture::boxes::background_shapes(view, layer.id, t).map_err(|e| EngineError::Store(e.to_string()))? {
+            if let Some(background) = crate::picture::boxes::background_shapes(view, layer.id, t).map_err(|error| EngineError::Store(error.to_string()))? {
                 documents.insert(layer.id, background);
             }
         }
@@ -660,7 +577,6 @@ pub(super) fn collect_shape_documents(
     Ok(documents)
 }
 
-/// パス効果を掛けた姿。配置の上下どちらに積んでも輪郭には同じに効く(輪郭は絵より先)。
 pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
     let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
     crate::extensions::pathop::with_effects(shapes, &effects)
@@ -668,32 +584,15 @@ pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<S
 
 pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
     [
-        if layer.declared_size[0] > 0.0 {
-            layer.declared_size[0]
-        } else {
-            natural[0]
-        },
-        if layer.declared_size[1] > 0.0 {
-            layer.declared_size[1]
-        } else {
-            natural[1]
-        },
+        if layer.declared_size[0] > 0.0 { layer.declared_size[0] } else { natural[0] },
+        if layer.declared_size[1] > 0.0 { layer.declared_size[1] } else { natural[1] },
     ]
 }
 
-#[cfg(test)]
-mod placement_contract;
-
-#[cfg(test)]
-mod projection_contract;
-
-/// 時刻を秒だけずらす(ミリ秒の分母で厳密に足す)。クリップの前へは行かない。
 fn shifted_by_seconds(t: RationalTime, offset: f32) -> RationalTime {
     const DEN: i64 = 1000;
     let num = (offset as f64 * DEN as f64).round() as i64;
-    let shifted = t
-        .num()
-        .checked_mul(DEN)
+    let shifted = t.num().checked_mul(DEN)
         .and_then(|scaled| num.checked_mul(t.den()).map(|by| scaled + by))
         .zip(t.den().checked_mul(DEN))
         .and_then(|(num, den)| RationalTime::try_new(num, den).ok());

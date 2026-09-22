@@ -4,16 +4,13 @@
 
 #[allow(unused_imports)]
 use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
-use std::collections::BTreeMap;
-
-use crate::doc::core::CompSpec;
+use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
 use crate::extensions::{blob, overlay};
 use crate::render::compositor::LayerContent;
-use crate::render::engine::render::{collect_shape_documents, collect_text_documents};
 use crate::render::engine::{Engine, EngineError};
-use crate::render::media::blob::{detect, mask, BlobSettings, BlobSource, BlobTracker};
+use crate::render::media::blob::{detect, mask, BlobSettings, BlobSource};
 
 /// 効果の列の出口を乗算済み線形 Rgba16Float で読み戻した 1 枚(Freeze の cache と Blob の解析が使う)。
 pub(crate) struct LinearPicture {
@@ -27,406 +24,437 @@ pub(crate) struct LinearPicture {
     pub(crate) frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
 }
 
-#[derive(Default)]
-pub(crate) struct BlobTrackState {
-    key: u64,
-    /// 次に解くコマ(入点から順に解く時)。
-    next_frame: i64,
-    tracker: BlobTracker,
-    previous: Option<(Vec<u8>, u32, u32)>,
-    marks: BTreeMap<i64, Vec<BlobMark>>,
-    /// コマごとの二値(キーの形)。直近の数コマだけ残す。物理の当たりと Show Mask が読む。
-    masks: BTreeMap<i64, (Vec<u8>, u32, u32)>,
-}
-
-impl BlobTrackState {
-    /// 直近のコマの二値(物理がキーの形を当たりに使う)。
-    pub(crate) fn latest_mask(&self) -> Option<(&[u8], u32, u32)> {
-        self.masks.values().next_back().map(|(bits, w, h)| (bits.as_slice(), *w, *h))
-    }
-}
-
 impl Engine {
-    /// 1 枚の層を本物で組み、効果の列の出口を乗算済み線形で読み戻す。絵にならない層(網・点群)は None。
-    pub(super) fn layer_linear_picture(&mut self, view: &StoreView<'_>, resolved: &[ResolvedLayer], target: &ResolvedLayer, t: RationalTime, comp: CompSpec) -> Result<Option<LinearPicture>, EngineError> {
-        let texts = collect_text_documents(view, std::slice::from_ref(target), t)?;
-        let shapes = collect_shape_documents(view, std::slice::from_ref(target), t)?;
-        let camera = self.resolve_camera_in(view, resolved, t)?;
-        let previous = self.material_picture.replace(target.id);
-        let layers = self.layers_from_resolved(view, comp, camera, camera, t, std::slice::from_ref(target), &texts, &shapes);
-        self.material_picture = previous;
-        let Some(lwp) = layers?.into_iter().next() else { return Ok(None) };
-        let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(&lwp))?;
-        let Some(texture) = textures.first().and_then(|c| c.texture()).cloned() else { return Ok(None) };
-        let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| EngineError::Store(e.to_string()))?.texture.clone();
-        // 効果の列の出口は乗算済み線形の Rgba16Float。列が空の層は素材のまま(非乗算 sRGB 等)なので同じ空間へ写す。
+    pub(super) fn layer_with_passes_linear_picture(
+        &mut self,
+        lwp: &crate::render::compositor::LayerWithPasses,
+    ) -> Result<Option<LinearPicture>, EngineError> {
+        let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(lwp))?;
+        let Some(texture) = textures.first().and_then(|content| content.texture()).cloned() else { return Ok(None) };
+        let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle())
+            .map_err(|error| EngineError::Store(error.to_string()))?.texture.clone();
         let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || raw.format().is_srgb();
         let (half, owned) = if raw.format() == wgpu::TextureFormat::Rgba16Float {
             (raw, None)
         } else {
-            let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-linear-picture-encode") });
+            let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("motolii-linear-picture-encode"),
+            });
             let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !linear, linear);
             self.compositor.pending.push(encoder.finish());
             (converted.clone(), Some(converted))
         };
         let bytes = self.compositor.read_texture_bytes(&half)?;
-        for (w, h, f, tx) in checked_out { self.compositor.effect_scratch.release(w, h, f, tx); }
+        for (width, height, format, texture) in checked_out {
+            self.compositor.effect_scratch.release(width, height, format, texture);
+        }
         let (width, height) = (half.width(), half.height());
-        if let Some(owned) = owned { self.compositor.effect_scratch.release(owned.width(), owned.height(), owned.format(), owned); }
-        Ok(Some(LinearPicture { bytes, width, height, natural: lwp.layer.size, padding: paddings[0], frame: lwp.layer.frame }))
+        if let Some(owned) = owned {
+            self.compositor.effect_scratch.release(owned.width(), owned.height(), owned.format(), owned);
+        }
+        Ok(Some(LinearPicture {
+            bytes,
+            width,
+            height,
+            natural: lwp.layer.size,
+            padding: paddings[0],
+            frame: lwp.layer.frame,
+        }))
     }
 
-    /// 解析の入力を解いてから、それを読む view で resolve する。解析の要る層が無ければ素の resolve と同じ。
+    pub(in crate::engine) fn frame_graph_blob_analysis(
+        &mut self,
+        request: &crate::frame_graph::BlobAnalysisRequestValue,
+        previous: Option<&crate::frame_graph::BlobAnalysisValue>,
+        t: RationalTime,
+        comp: CompSpec,
+        fps: crate::doc::store::Fps,
+    ) -> Result<crate::frame_graph::BlobAnalysisValue, EngineError> {
+        let mut tracker = previous.map(|value| value.tracker.clone()).unwrap_or_default();
+        let previous_pixels = previous.and_then(|value| value.previous.as_ref());
+
+        let mut inputs = AnalysisInputs::default();
+        let Some(source) = request.source.as_ref() else {
+            tracker.step(Vec::new(), &request.settings);
+            inputs.set_blobs(request.target, EffectId(0), t, Vec::new());
+            return Ok(crate::frame_graph::BlobAnalysisValue {
+                inputs,
+                tracker,
+                previous: None,
+                mask: None,
+            });
+        };
+
+        let previous_clock = self.compositor.clock;
+        let frame = t.try_to_frame_round(fps).unwrap_or(0) as f32;
+        self.compositor.clock = Some([
+            t.as_seconds_f64() as f32,
+            fps.den() as f32 / fps.num() as f32,
+            frame,
+        ]);
+        let picture = (|| {
+            let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
+            let prepared = self.prepare_gpu_scene(&scene, comp, ResolvedCamera::default())?;
+            let Some(layer) = prepared.layers.first() else { return Ok(None); };
+            self.layer_with_passes_linear_picture(layer)
+        })();
+        self.compositor.clock = previous_clock;
+        let Some(picture) = picture? else {
+            tracker.step(Vec::new(), &request.settings);
+            inputs.set_blobs(request.target, EffectId(0), t, Vec::new());
+            return Ok(crate::frame_graph::BlobAnalysisValue {
+                inputs,
+                tracker,
+                previous: None,
+                mask: None,
+            });
+        };
+
+        let (pixels, width, height, shrink) = shrink_to_srgb(&picture, request.detail);
+        let per_logical = picture.width as f32
+            / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0)
+            / shrink as f32;
+        let to_local = |point: [f32; 2]| {
+            glam::vec2(
+                point[0] / per_logical - picture.padding as f32,
+                point[1] / per_logical - picture.padding as f32,
+            )
+        };
+        let transform = source.transform.affine;
+        let comp_per_local = transform.matrix2.x_axis.length().max(1e-6);
+        let small = |px: f32| px / comp_per_local * per_logical;
+        let area = |value: u32| {
+            (value as f64 * f64::from(small(1.0)).powi(2))
+                .round()
+                .min(u32::MAX as f64) as u32
+        };
+        let scaled = BlobSettings {
+            min_area: area(request.settings.min_area),
+            max_area: area(request.settings.max_area),
+            max_move: small(request.settings.max_move),
+            separation: small(request.settings.separation as f32).round() as u32,
+            blur: small(request.settings.blur as f32).round() as u32,
+            ..request.settings
+        };
+        let previous_rgba = previous_pixels
+            .filter(|(_, old_width, old_height)| *old_width == width && *old_height == height)
+            .map(|(pixels, _, _)| pixels.as_slice());
+        let bits = mask(&pixels, width, height, previous_rgba, &scaled);
+        let regions = detect(&pixels, width, height, previous_rgba, &scaled);
+        let blobs = tracker.step(regions, &scaled);
+        let marks: Vec<BlobMark> = blobs.into_iter().map(|blob| {
+            let corners = [
+                [blob.region.min[0] as f32, blob.region.min[1] as f32],
+                [blob.region.max[0] as f32 + 1.0, blob.region.min[1] as f32],
+                [blob.region.min[0] as f32, blob.region.max[1] as f32 + 1.0],
+                [blob.region.max[0] as f32 + 1.0, blob.region.max[1] as f32 + 1.0],
+            ].map(|corner| transform.transform_point2(to_local(corner)));
+            let lo = corners.iter().fold(glam::Vec2::splat(f32::MAX), |acc, point| acc.min(*point));
+            let hi = corners.iter().fold(glam::Vec2::splat(f32::MIN), |acc, point| acc.max(*point));
+            let center = transform.transform_point2(to_local(blob.region.center));
+            BlobMark { id: blob.id, center: center.into(), size: (hi - lo).into(), age: blob.age }
+        }).collect();
+        inputs.set_blobs(request.target, EffectId(0), t, marks);
+
+        Ok(crate::frame_graph::BlobAnalysisValue {
+            inputs,
+            tracker,
+            previous: Some((pixels, width, height)),
+            mask: Some((bits.into_iter().map(|bit| u8::from(bit) * 255).collect(), width, height)),
+        })
+    }
+
+    pub(in crate::engine) fn frame_graph_overlay_analysis(
+        &mut self,
+        layer: LayerId,
+        parent: Option<LayerId>,
+        effect: &crate::picture::resolved::ResolvedEffect,
+        scene: &crate::frame_graph::SceneValue,
+        solver: &crate::frame_graph::SolverPlanValue,
+        camera: ResolvedCamera,
+        previous: Option<&crate::frame_graph::OverlayAnalysisValue>,
+        t: RationalTime,
+        comp: CompSpec,
+    ) -> Result<crate::frame_graph::OverlayAnalysisValue, EngineError> {
+        let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
+        let method = overlay::number_of(&params, "method").round() as i64;
+        let physics = effect.plugin_id == crate::extensions::overlay::PHYSICS_TRACE;
+        let own = scene.layers.iter().find(|candidate| candidate.layer == layer && candidate.instance == 0 && !candidate.ghost);
+        let own_order = own.map_or(i16::MAX, |candidate| candidate.order);
+        let own_z = own.map_or(0.0, |candidate| candidate.transform.spatial.translation.z);
+
+        if method == 2 {
+            if physics {
+                return Ok(crate::frame_graph::OverlayAnalysisValue {
+                    layer,
+                    marks: Vec::new(),
+                    mask: None,
+                    params,
+                    depths: None,
+                    pushes: Vec::new(),
+                    physics: true,
+                    tracker: Default::default(),
+                    previous: None,
+                });
+            }
+            let mut marks = Vec::new();
+            let mut depths = Vec::new();
+            let mut pushes = Vec::new();
+            for candidate in &scene.layers {
+                if candidate.layer == layer || candidate.order >= own_order || candidate.ghost {
+                    continue;
+                }
+                let relation_parent = solver.layers.get(&candidate.layer).and_then(|value| value.relation.parent);
+                if relation_parent != parent {
+                    continue;
+                }
+                let size = solver.layers.get(&candidate.layer).and_then(|value| value.size)
+                    .or_else(|| semantic_extent(self, candidate, comp));
+                let Some(size) = size.filter(|size| size[0] > 0.0 && size[1] > 0.0) else { continue };
+                let transform = candidate.transform.affine;
+                let corners = [
+                    glam::Vec2::ZERO,
+                    glam::vec2(size[0], 0.0),
+                    glam::Vec2::from(size),
+                    glam::vec2(0.0, size[1]),
+                ].map(|point| transform.transform_point2(point));
+                let lo = corners.iter().fold(glam::Vec2::MAX, |acc, point| acc.min(*point));
+                let hi = corners.iter().fold(glam::Vec2::MIN, |acc, point| acc.max(*point));
+                marks.push(BlobMark {
+                    id: marks.len() as u32,
+                    center: ((lo + hi) * 0.5).into(),
+                    size: (hi - lo).into(),
+                    age: 0,
+                });
+                depths.push(candidate.transform.spatial.translation.z - own_z);
+                pushes.push([0.0, 0.0]);
+            }
+            return Ok(crate::frame_graph::OverlayAnalysisValue {
+                layer,
+                marks,
+                mask: None,
+                params,
+                depths: own.filter(|candidate| candidate.projection == crate::doc::store::LayerProjection::ThreeD).map(|_| depths),
+                pushes,
+                physics: false,
+                tracker: Default::default(),
+                previous: None,
+            });
+        }
+
+        let below = crate::frame_graph::SceneValue {
+            layers: scene.layers.iter()
+                .filter(|candidate| candidate.layer != layer && candidate.order < own_order)
+                .cloned()
+                .collect(),
+        };
+        let prepared = self.prepare_gpu_scene(&below, comp, camera)?;
+        let picture = if prepared.layers.is_empty() {
+            None
+        } else {
+            let (texture, _view) = self.compositor.render_to_texture(
+                comp,
+                camera,
+                &prepared.layers,
+                crate::render::compositor::NO_BACKGROUND,
+            )?;
+            let mut encoder = self.compositor.ctx.device.create_command_encoder(
+                &wgpu::CommandEncoderDescriptor { label: Some("motolii-framegraph-overlay-analysis") },
+            );
+            let converted = self.compositor.convert_image_encoding(
+                &mut encoder,
+                &texture,
+                true,
+                !texture.format().is_srgb(),
+                true,
+            );
+            self.compositor.pending.push(encoder.finish());
+            let bytes = self.compositor.read_texture_bytes(&converted)?;
+            let (width, height) = (converted.width(), converted.height());
+            self.compositor.effect_scratch.release(width, height, converted.format(), converted);
+            Some(LinearPicture {
+                bytes,
+                width,
+                height,
+                natural: [comp.width as f32, comp.height as f32],
+                padding: 0,
+                frame: None,
+            })
+        };
+
+        let settings = overlay_settings_of(&params);
+        let detail = overlay::number_of(&params, "detail").round().clamp(120.0, 3840.0) as u32;
+        let mut tracker = previous.map(|value| value.tracker.clone()).unwrap_or_default();
+        let previous_pixels = previous.and_then(|value| value.previous.as_ref());
+
+        let Some(picture) = picture else {
+            tracker.step(Vec::new(), &settings);
+            return Ok(crate::frame_graph::OverlayAnalysisValue {
+                layer,
+                marks: Vec::new(),
+                mask: None,
+                params,
+                depths: None,
+                pushes: Vec::new(),
+                physics: false,
+                tracker,
+                previous: None,
+            });
+        };
+        let (pixels, width, height, shrink) = shrink_to_srgb(&picture, detail);
+        let previous_rgba = previous_pixels
+            .filter(|(_, old_width, old_height)| *old_width == width && *old_height == height)
+            .map(|(pixels, _, _)| pixels.as_slice());
+        let scaled = BlobSettings {
+            min_area: ((settings.min_area as f64) / (shrink as f64).powi(2)).round().max(0.0) as u32,
+            max_area: ((settings.max_area as f64) / (shrink as f64).powi(2)).round().min(u32::MAX as f64) as u32,
+            max_move: settings.max_move / shrink as f32,
+            separation: (settings.separation as f32 / shrink as f32).round() as u32,
+            blur: (settings.blur as f32 / shrink as f32).round() as u32,
+            ..settings
+        };
+        let bits = mask(&pixels, width, height, previous_rgba, &scaled);
+        let regions = detect(&pixels, width, height, previous_rgba, &scaled);
+        let blobs = tracker.step(regions, &scaled);
+        let marks = blobs.into_iter().map(|blob| BlobMark {
+            id: blob.id,
+            center: [blob.region.center[0] * shrink as f32, blob.region.center[1] * shrink as f32],
+            size: [
+                (blob.region.max[0] + 1 - blob.region.min[0]) as f32 * shrink as f32,
+                (blob.region.max[1] + 1 - blob.region.min[1]) as f32 * shrink as f32,
+            ],
+            age: blob.age,
+        }).collect();
+
+        Ok(crate::frame_graph::OverlayAnalysisValue {
+            layer,
+            marks,
+            mask: Some((bits.into_iter().map(|bit| u8::from(bit) * 255).collect(), width, height)),
+            params,
+            depths: None,
+            pushes: Vec::new(),
+            physics: false,
+            tracker,
+            previous: Some((pixels, width, height)),
+        })
+    }
+
+    pub(in crate::engine) fn install_frame_graph_overlays(
+        &mut self,
+        values: &crate::frame_graph::OverlaySetValue,
+    ) {
+        self.overlay_frames.clear();
+        for (layer, value) in &values.layers {
+            self.overlay_frames.insert(*layer, OverlayFrame {
+                marks: value.marks.clone(),
+                mask: value.mask.clone(),
+                params: value.params.clone(),
+                depths: value.depths.clone(),
+                pushes: value.pushes.clone(),
+                links: Vec::new(),
+                wells: Vec::new(),
+                contacts: Vec::new(),
+                velocities: Vec::new(),
+                hulls: Vec::new(),
+                physics: value.physics,
+            });
+        }
+    }
+
+    /// Compatibility projection for tests/tools that still consume ResolvedLayer.
+    /// Product meaning is evaluated by FrameGraph first; this must never re-enter
+    /// the legacy StoreView + analysis_inputs + resolved_layers owner.
     pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        use crate::picture::resolve::tally;
-        let view = view.clone().with_layout_solver(self.layout_solver());
-        let inputs = self.analysis_inputs(&view, t)?;
-        let resolve = |view: StoreView<'_>| crate::picture::resolve::resolved_layers(&view, t).map_err(|e| EngineError::Store(e.to_string()));
-        // 解いた拍だけ中を割る。memo に当たった面は空のまま(= 払っていない証拠)。
         self.resolve_tally.clear();
         self.resolve_worst.clear();
-        if !inputs.is_empty() {
-            tally::begin();
-            let out = resolve(view.clone().with_analysis(&inputs));
-            self.resolve_tally = tally::take();
-            self.resolve_worst = tally::take_worst();
-            return out;
-        }
-        tally::begin();
-        let layers = resolve(view.clone())?;
-        self.resolve_tally = tally::take();
-        self.resolve_worst = tally::take_worst();
-        Ok(layers)
+        let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
+        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
     }
 
-    /// 連続性の物差しの標本: 解析を読んだ view で解き、層の箱の角と文字の字の位置を画面の平面(px)で返す。
-    /// 鍵は `L<id> 名前.min` / `.max` / `.g<n>`(n は組んだ順の字)。関係の動きがコマごとに跳ばないかを測る。
+    /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、
+    /// semantic Scene/TextFlow の最終値から測る。診断のために legacy resolve を再実行しない。
     pub fn continuity_samples(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<(String, [f32; 2])>, EngineError> {
         let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
-        let inputs = self.analysis_inputs(view, t)?;
-        let view = if inputs.is_empty() { view.clone() } else { view.clone().with_analysis(&inputs) };
-        let Some(comp) = view.composition().map_err(store)? else { return Ok(Vec::new()) };
+        let (scene, camera, comp, _fps) = self.evaluate_frame_graph_semantics(view, t)?;
         let canvas = crate::picture::shapes_ops::Canvas { width: comp.width, height: comp.height, origin_x: 0, origin_y: 0 };
         let mut out = Vec::new();
-        // カメラの動き(注視点と、距離の対数を px 相当に)。
-        let camera = crate::picture::resolve::camera::resolve_camera(&view, t).map_err(store)?;
         out.push(("camera.center".to_owned(), camera.center));
         out.push(("camera.distance".to_owned(), [camera.distance_scale.max(1e-3).ln() * 300.0, camera.target_z]));
-        for layer in crate::picture::resolve::resolved_layers(&view, t).map_err(store)? {
-            // 見えない層(Opacity 0 の解析係など)の箱は動きとして読まない。
-            if layer.ghost || layer.copy != 0 || layer.placement.opacity <= 0.0 || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null) {
+
+        for layer in &scene.layers {
+            if layer.ghost || layer.instance != 0 || layer.opacity <= 0.0
+                || matches!(layer.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage | crate::doc::store::LayerSource::Null)
+            {
                 continue;
             }
-            let to_screen = |p: glam::Vec2| match layer.placement.world_transform {
-                Some(world) => world.transform_point3(p.extend(0.0)).truncate().to_array(),
-                None => layer.placement.transform.transform_point2(p).to_array(),
+            let world = layer.transform.spatial;
+            let to_screen = |point: glam::Vec2| world.transform_point3(point.extend(0.0)).truncate().to_array();
+            let name = view.attrs(layer.layer).map_err(store)?.unwrap_or_default().name;
+
+            let bounds = match &layer.content {
+                crate::frame_graph::SceneContentValue::Text(text) => {
+                    crate::picture::text_frame::line_box(&text.document, &text.shaped, &canvas)
+                }
+                crate::frame_graph::SceneContentValue::Shape(shapes) => {
+                    let stretched;
+                    let shapes = if layer.shape_stretch != [1.0, 1.0] {
+                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch);
+                        stretched.as_slice()
+                    } else {
+                        shapes.as_slice()
+                    };
+                    crate::picture::shapes_ops::content_bounds(shapes).ok().flatten()
+                        .map(|bounds| bounds.map(|value| value as f32))
+                }
+                crate::frame_graph::SceneContentValue::Media { source, .. }
+                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => {
+                    self.material_extent(&source.path, comp).map(|extent| [0.0, 0.0, extent[0], extent[1]])
+                }
+                crate::frame_graph::SceneContentValue::Plate(_) => Some([0.0, 0.0, comp.width as f32, comp.height as f32]),
+                _ => None,
             };
-            let name = view.attrs(layer.id).map_err(store)?.unwrap_or_default().name;
-            if let Some(b) = crate::picture::boxes::layer_box(&view, layer.id, t).map_err(store)? {
-                out.push((format!("L{} {name}.min", layer.id.0), to_screen(glam::vec2(b[0], b[1]))));
-                out.push((format!("L{} {name}.max", layer.id.0), to_screen(glam::vec2(b[2], b[3]))));
-                // 奥行きの向きの動き(世界の z と、中心の x)。
-                if let Some(world) = layer.placement.world_transform {
-                    let c = world.transform_point3(glam::vec3((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5, 0.0));
-                    out.push((format!("L{} {name}.z", layer.id.0), [c.z, 0.0]));
+            if let Some(bounds) = bounds {
+                out.push((format!("L{} {name}.min", layer.layer.0), to_screen(glam::vec2(bounds[0], bounds[1]))));
+                out.push((format!("L{} {name}.max", layer.layer.0), to_screen(glam::vec2(bounds[2], bounds[3]))));
+                let center = world.transform_point3(glam::vec3(
+                    (bounds[0] + bounds[2]) * 0.5,
+                    (bounds[1] + bounds[3]) * 0.5,
+                    0.0,
+                ));
+                out.push((format!("L{} {name}.z", layer.layer.0), [center.z, 0.0]));
+            }
+
+            let crate::frame_graph::SceneContentValue::Text(text) = &layer.content else { continue };
+            let content = text.document.content.eval(t);
+            let glyph_bytes: Vec<usize> = text.shaped.lines.iter()
+                .flat_map(|line| line.glyph_bytes.iter().copied())
+                .collect();
+            // TextFlow has already applied Shape Outside and transition offsets to
+            // contours. Use those final contours instead of reconstructing offsets
+            // through the legacy text resolver.
+            let mut glyph_points: std::collections::BTreeMap<usize, glam::Vec2> = std::collections::BTreeMap::new();
+            for (contour, glyph) in text.shaped.contours.iter().zip(&text.shaped.contour_glyphs) {
+                let lo = contour.vertices.iter().fold(glam::Vec2::splat(f32::MAX), |acc, vertex| {
+                    acc.min(glam::vec2(vertex.point.x as f32, vertex.point.y as f32))
+                });
+                if lo.is_finite() {
+                    glyph_points.entry(*glyph).and_modify(|point| *point = point.min(lo)).or_insert(lo);
                 }
             }
-            if layer.source == crate::doc::store::LayerSource::Text {
-                if let Some(document) = crate::picture::resolve::text::resolved_text_document(&view, layer.id, t).map_err(store)? {
-                    let content = document.content.eval(t).to_owned();
-                    if let Ok(Some(shaped)) = crate::picture::text_frame::shape_document_around(&document, t, &canvas, layer.flow_around.as_deref().map_or(&[], Vec::as_slice)) {
-                        let mut n = 0;
-                        for line in &shaped.lines {
-                            // 字は元の文字の byte で名付ける(組み直しても同じ字の軌跡)。空白は見えないので数えない。
-                            for (x, byte) in line.glyph_xs.iter().zip(&line.glyph_bytes) {
-                                if content.get(*byte..).and_then(|rest| rest.chars().next()).is_some_and(char::is_whitespace) {
-                                    n += 1;
-                                    continue;
-                                }
-                                let d = layer.glyph_offsets.as_ref().and_then(|o| o.get(n).copied()).unwrap_or([0.0, 0.0]);
-                                out.push((format!("L{} {name}.g{byte}", layer.id.0), to_screen(glam::vec2(*x + d[0], line.baseline_y + d[1]))));
-                                n += 1;
-                            }
-                        }
-                    }
+            for (glyph, byte) in glyph_bytes.into_iter().enumerate() {
+                if content.get(byte..).and_then(|rest| rest.chars().next()).is_some_and(char::is_whitespace) {
+                    continue;
+                }
+                if let Some(point) = glyph_points.get(&glyph) {
+                    out.push((format!("L{} {name}.g{byte}", layer.layer.0), to_screen(*point)));
                 }
             }
         }
         Ok(out)
     }
 
-    /// 効果を通した後の透過から、層ごとの形を取る(提案 2026-09-16、利用者「根本から解決する。
-    /// 将来的にはアルファで抜きたいためです。クロマキー以外のエフェクトで抜くようにもしたいから」)。
-    /// 当たりは「描かれた物の形」— 抜き方(クロマキー・マット・アルファ)を物理は知らなくていい。
-    fn alpha_outlines(&mut self, view: &StoreView<'_>, t: RationalTime, comp: CompSpec) -> Result<(), EngineError> {
-        let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
-        self.keyed_outlines.clear();
-        if !Self::has_file_layers(view)? { return Ok(()); }
-        let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(store)?;
-        let revision = {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            view.revision_key().hash(&mut h);
-            h.finish()
-        };
-        let frame = t.try_to_frame_round(view.composition().map_err(store)?.map_or(crate::doc::store::Fps::try_new(30, 1).unwrap(), |c| c.fps)).unwrap_or(0);
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            // 描かれる物はみな同じ道(利用者 2026-09-16「手段が違うだけでコアは一緒。その度に専門ツールを
-            // 作るべきでない」): 文字も絵も動画も、描かれた後の透過が形。形の層だけは書類の輪郭が正確で軽い。
-            // 効果の無い絵は箱で足りる(読み戻す価値が無い)。
-            // 文字と形はベクターの輪郭で足りる。読み戻すのは絵・動画で、形を変える効果が載った物だけ。
-            let (still, worth) = match &layer.source {
-                crate::doc::store::LayerSource::File { path, .. } => (crate::render::media::is_still_image_path(path), !layer.effects.is_empty()),
-                _ => (true, false),
-            };
-            if !worth {
-                continue;
-            }
-            if let Some((seen_revision, seen_frame, outline)) = self.keyed_cache.get(&layer.id) {
-                if *seen_revision == revision && (still || *seen_frame == frame) {
-                    self.keyed_outlines.insert(layer.id, outline.clone());
-                    continue;
-                }
-            }
-            let target = ResolvedLayer { matte: None, clip_to_below: false, ..layer.clone() };
-            let Some(picture) = self.layer_linear_picture(view, &resolved, &target, t, comp)? else { continue };
-            let (width, height) = (picture.width, picture.height);
-            if width == 0 || height == 0 {
-                continue;
-            }
-            // Rgba16Float の透過だけを見て二値にする。細かさは 192px で足りる(輪郭は方向ごとの最遠点)。
-            let step = (width.max(height) / 192).max(1);
-            let (w, h) = (width.div_ceil(step), height.div_ceil(step));
-            let mut bits = vec![0u8; (w * h) as usize];
-            for y in 0..h {
-                for x in 0..w {
-                    let (sx, sy) = (x * step, y * step);
-                    let index = ((sy * width + sx) * 8 + 6) as usize;
-                    let alpha = picture.bytes.get(index..index + 2)
-                        .map(|b| half::f16::from_le_bytes([b[0], b[1]]).to_f32())
-                        .unwrap_or(0.0);
-                    bits[(y * w + x) as usize] = u8::from(alpha > 0.5) * 255;
-                }
-            }
-            let points = crate::render::media::outline_from_mask(&bits, w, h);
-            if points.len() < 3 {
-                continue;
-            }
-            // 縮めた絵 → 素材の論理座標(余白を外す)。
-            let per_logical = width as f32 / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0);
-            let pad = picture.padding as f32;
-            let outline: Vec<[f32; 2]> = points.iter()
-                .map(|p| [p[0] * step as f32 / per_logical - pad, p[1] * step as f32 / per_logical - pad])
-                .collect();
-            let outline = std::sync::Arc::new(outline);
-            self.keyed_cache.insert(layer.id, (revision, frame, outline.clone()));
-            self.keyed_outlines.insert(layer.id, outline);
-        }
-        Ok(())
-    }
-
-    fn analysis_inputs(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<AnalysisInputs, EngineError> {
-        let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
-        let mut inputs = AnalysisInputs::default();
-        let Some(composition) = view.composition().map_err(store)? else { return Ok(inputs) };
-        let Ok(frame) = t.try_to_frame_round(composition.fps) else { return Ok(inputs) };
-        let mut seen = Vec::new();
-        self.overlay_frames.clear();
-        // 抜いた後の形を先に取る(この間は層を 1 枚ずつ組んで読み戻すので、物理は解かない)。
-        if !self.analysing && std::env::var("MOTOLII_NO_ALPHA_SHAPE").is_err() {
-            self.analysing = true;
-            let outlines = self.alpha_outlines(view, t, composition.spec());
-            self.analysing = false;
-            outlines?;
-        }
-        for layer in view.layers() {
-            let Some(meta) = view.meta(layer).map_err(store)? else { continue };
-            if !meta.timing.covers(frame) { continue; }
-            if let crate::doc::store::LayerSource::File { path, .. } = &meta.source {
-                if let Some(extent) = self.material_extent(path, composition.spec()) {
-                    inputs.set_extent(path, extent);
-                }
-            }
-            let effects = crate::picture::resolve::effects::resolved_effects(view, layer, t).map_err(store)?;
-            // Blob Track は指した層を、Track Overlay は下の合成を読む。
-            let (params, source, settings, detail, show_mask, overlay) = if let Some(effect) = effects.iter().find(|e| blob::is_blob_track(&e.plugin_id)) {
-                let source = LayerId(blob::number_of(&effect.params, "source").round().max(0.0) as u64);
-                if source.0 == 0 || source == layer { continue; }
-                (effect.params.clone(), Source::Layer(source), settings_of(&effect.params), blob::number_of(&effect.params, "detail"), false, false)
-            } else if let Some(found) = effects.iter().find(|e| overlay::is_track_overlay(&e.plugin_id)) {
-                let effect = &crate::picture::resolved::ResolvedEffect { plugin_id: found.plugin_id.clone(), params: overlay::with_defaults(&found.plugin_id, &found.params), scope: found.scope };
-                // Layers: 絵を読まず、下の層の箱をそのまま塊にする(同じ親で自分より下。Repeater の写しは 1 枚ずつ)。
-                if overlay::number_of(&effect.params, "method").round() as i64 == 2 {
-                    let resolved = crate::picture::resolve::resolved_layers(view, t).map_err(store)?;
-                    let scope = crate::picture::resolve::overlay_scope(view, layer, &resolved, t).map_err(store)?;
-                    let marks: Vec<BlobMark> = scope.iter().enumerate().map(|(k, (_, b))| BlobMark {
-                        id: k as u32,
-                        center: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5],
-                        size: [b[2] - b[0], b[3] - b[1]],
-                        age: 0,
-                    }).collect();
-                    // 3D の格子は物の奥行きも読む(自分の奥行きからの差)。
-                    let own = resolved.iter().find(|l| l.id == layer && l.copy == 0 && !l.ghost);
-                    let depths = own.filter(|l| l.projection == crate::doc::store::LayerProjection::ThreeD).and_then(|l| l.placement.world_transform).map(|w| {
-                        scope.iter().map(|(i, _)| resolved[*i].placement.world_transform.map_or(0.0, |o| o.translation.z) - w.translation.z).collect()
-                    });
-                    let mut pushes = scope.iter().map(|(i, _)| crate::picture::connect::pushed_on_screen(view, resolved[*i].id, t)).collect::<Result<Vec<_>, _>>().map_err(store)?;
-                    // 物理の可視は、下の層ではなく解き手が持っている物そのものから拾う
-                    // (箱の中の子は「下の層」に出て来ないため)。
-                    let physics = effect.plugin_id == crate::extensions::overlay::PHYSICS_TRACE;
-                    let mut marks = marks;
-                    let (mut links, mut wells) = (Vec::new(), Vec::new());
-                    if physics {
-                        // 中身は描く直前に取る(この時点ではまだ解いていない)。
-                        marks = Vec::new();
-                        pushes = Vec::new();
-                    }
-                    self.overlay_frames.insert(layer, OverlayFrame { marks, mask: None, params: effect.params.clone(), depths, pushes, links, wells, contacts: Vec::new(), velocities: Vec::new(), hulls: Vec::new(), physics });
-                    continue;
-                }
-                (effect.params.clone(), Source::Below(layer), overlay_settings_of(&effect.params), overlay::number_of(&effect.params, "detail"), overlay::switch_of(&effect.params, "show_mask"), true)
-            } else {
-                continue;
-            };
-            seen.push(layer);
-            let detail = detail.round().clamp(120.0, 3840.0) as u32;
-            let key = {
-                use std::hash::{Hash, Hasher};
-                let mut h = std::hash::DefaultHasher::new();
-                format!("{params:?}").hash(&mut h);
-                view.revision_key().hash(&mut h);
-                h.finish()
-            };
-            let mut state = self.blob_tracks.remove(&layer).unwrap_or_default();
-            if state.key != key {
-                state = BlobTrackState { key, next_frame: meta.timing.start, ..Default::default() };
-            }
-            let sequential = settings.persist || matches!(settings.source, BlobSource::Motion { .. });
-            // 移り方は少し前の時刻でも並べ直すので、その時刻の塊も置く(無いと前の時刻は避けない並びになる)。
-            let reach = crate::picture::motion_time::transition_reach(view, t).map_err(store)?;
-            if !overlay && reach > 0 && !sequential {
-                for f in (frame - reach).max(meta.timing.start)..frame {
-                    if !state.marks.contains_key(&f) {
-                        let marks = self.blob_frame(view, source, f, &settings, detail, show_mask, composition.spec(), composition.fps, &mut state)?;
-                        state.marks.insert(f, marks);
-                    }
-                }
-            }
-            if !state.marks.contains_key(&frame) {
-                if sequential {
-                    if state.next_frame > frame || state.next_frame < meta.timing.start {
-                        state = BlobTrackState { key, next_frame: meta.timing.start, ..Default::default() };
-                    }
-                    for f in state.next_frame..=frame {
-                        let marks = self.blob_frame(view, source, f, &settings, detail, show_mask, composition.spec(), composition.fps, &mut state)?;
-                        state.marks.insert(f, marks);
-                    }
-                    state.next_frame = frame + 1;
-                } else {
-                    let marks = self.blob_frame(view, source, frame, &settings, detail, show_mask, composition.spec(), composition.fps, &mut state)?;
-                    state.marks.insert(frame, marks);
-                }
-            }
-            let marks = state.marks.get(&frame).cloned().unwrap_or_default();
-            if overlay {
-                self.overlay_frames.insert(layer, OverlayFrame { marks, mask: state.masks.get(&frame).cloned(), params, depths: None, pushes: Vec::new(), links: Vec::new(), wells: Vec::new(), contacts: Vec::new(), velocities: Vec::new(), hulls: Vec::new(), physics: false });
-            } else {
-                for f in (frame - reach).max(meta.timing.start)..frame {
-                    if let (Some(past), Ok(at)) = (state.marks.get(&f), RationalTime::try_from_frame(f, composition.fps)) {
-                        inputs.set_blobs(layer, EffectId(0), at, past.clone());
-                    }
-                }
-                inputs.set_blobs(layer, EffectId(0), t, marks);
-            }
-            self.blob_tracks.insert(layer, state);
-        }
-        self.blob_tracks.retain(|layer, _| seen.contains(layer));
-        Ok(inputs)
-    }
-
-    /// 下の合成(自分より下の層たち、背景込み)を、効果の出口と同じ乗算済み線形で読み戻す。
-    fn below_picture(&mut self, view: &StoreView<'_>, layer: LayerId, at: RationalTime, comp: CompSpec) -> Result<Option<LinearPicture>, EngineError> {
-        let resolved = crate::picture::resolve::resolved_layers(view, at).map_err(|e| EngineError::Store(e.to_string()))?;
-        let texts = collect_text_documents(view, &resolved, at)?;
-        let shapes = collect_shape_documents(view, &resolved, at)?;
-        let Some(composite) = self.composite_at(view, at, &resolved, &texts, &shapes, comp, layer, crate::render::compositor::TimeSource::Below) else { return Ok(None) };
-        let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(composite.handle()).map_err(|e| EngineError::Store(e.to_string()))?.texture.clone();
-        let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-below-picture-encode") });
-        let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !raw.format().is_srgb(), true);
-        self.compositor.pending.push(encoder.finish());
-        let bytes = self.compositor.read_texture_bytes(&converted)?;
-        let (width, height) = (converted.width(), converted.height());
-        self.compositor.effect_scratch.release(width, height, converted.format(), converted);
-        Ok(Some(LinearPicture { bytes, width, height, natural: [comp.width as f32, comp.height as f32], padding: 0, frame: None }))
-    }
-
-    /// 1 コマ: 元の絵を読み戻し、縮めて塊を拾い、ID を振って comp の座標へ戻す。
-    #[allow(clippy::too_many_arguments)]
-    fn blob_frame(&mut self, view: &StoreView<'_>, source: Source, frame: i64, settings: &BlobSettings, detail: u32, keep_mask: bool, comp: CompSpec, fps: crate::doc::store::Fps, state: &mut BlobTrackState) -> Result<Vec<BlobMark>, EngineError> {
-        let at = RationalTime::try_from_frame(frame, fps).map_err(|e| EngineError::Time(e.to_string()))?;
-        let (picture, transform) = match source {
-            Source::Layer(id) => {
-                let resolved = crate::picture::resolve::resolved_layers(view, at).map_err(|e| EngineError::Store(e.to_string()))?;
-                let Some(target) = resolved.iter().find(|l| l.id == id && l.copy == 0 && !l.ghost).cloned() else {
-                    // 元の層が居ないコマ: 塊は無いまま 1 歩進める(見失いの数え)。
-                    state.previous = None;
-                    state.tracker.step(Vec::new(), settings);
-                    return Ok(Vec::new());
-                };
-                // 解析は元の層そのものの絵を読む。マットやクリップは合成の属性で、その相手がこの塊に依ることもある(動画を箱で切る)。
-                let target = ResolvedLayer { matte: None, clip_to_below: false, ..target };
-                (self.layer_linear_picture(view, &resolved, &target, at, comp)?, target.placement.transform)
-            }
-            Source::Below(layer) => (self.below_picture(view, layer, at, comp)?, glam::Affine2::IDENTITY),
-        };
-        let Some(picture) = picture else { return Ok(Vec::new()) };
-        let (pixels, width, height, shrink) = shrink_to_srgb(&picture, detail);
-        // 論理 px ↔ 縮めた絵の px。
-        let per_logical = picture.width as f32 / (picture.natural[0] + 2.0 * picture.padding as f32).max(1.0) / shrink as f32;
-        let to_local = |p: [f32; 2]| glam::vec2(p[0] / per_logical - picture.padding as f32, p[1] / per_logical - picture.padding as f32);
-        let comp_per_local = transform.matrix2.x_axis.length().max(1e-6);
-        let small = |px: f32| px / comp_per_local * per_logical;
-        let area = |a: u32| (a as f64 * f64::from(small(1.0)).powi(2)).round().min(u32::MAX as f64) as u32;
-        let scaled = BlobSettings {
-            min_area: area(settings.min_area),
-            max_area: area(settings.max_area),
-            max_move: small(settings.max_move),
-            separation: small(settings.separation as f32).round() as u32,
-            blur: small(settings.blur as f32).round() as u32,
-            ..*settings
-        };
-        let previous = state.previous.as_ref().filter(|(_, w, h)| *w == width && *h == height).map(|(p, _, _)| p.as_slice());
-        // 二値は Show Mask の時だけでなく、いつも残す(物理がキーの形を当たりに使う)。
-        // 覚えるのは直近の数コマだけ。
-        let _ = keep_mask;
-        let bits = mask(&pixels, width, height, previous, &scaled);
-        state.masks.insert(frame, (bits.iter().map(|b| u8::from(*b) * 255).collect(), width, height));
-        while state.masks.len() > 4 {
-            let Some(oldest) = state.masks.keys().next().copied() else { break };
-            state.masks.remove(&oldest);
-        }
-        let regions = detect(&pixels, width, height, previous, &scaled);
-        let blobs = state.tracker.step(regions, &scaled);
-        state.previous = Some((pixels, width, height));
-        Ok(blobs.into_iter().map(|b| {
-            let corners = [[b.region.min[0] as f32, b.region.min[1] as f32], [b.region.max[0] as f32 + 1.0, b.region.min[1] as f32], [b.region.min[0] as f32, b.region.max[1] as f32 + 1.0], [b.region.max[0] as f32 + 1.0, b.region.max[1] as f32 + 1.0]]
-                .map(|c| transform.transform_point2(to_local(c)));
-            let lo = corners.iter().fold(glam::Vec2::splat(f32::MAX), |a, c| a.min(*c));
-            let hi = corners.iter().fold(glam::Vec2::splat(f32::MIN), |a, c| a.max(*c));
-            let center = transform.transform_point2(to_local(b.region.center));
-            BlobMark { id: b.id, center: center.into(), size: (hi - lo).into(), age: b.age }
-        }).collect())
-    }
 }
 
-/// 解析する絵の出所。
-#[derive(Clone, Copy)]
-enum Source {
-    /// その層そのもの(Blob Track)。
-    Layer(LayerId),
-    /// その層より下の合成(Track Overlay、調整層と同じ)。
-    Below(LayerId),
-}
 
 /// Track Overlay のこのコマの塊と取っ手(描く側が箱・印を組む)。
 pub(crate) struct OverlayFrame {
@@ -450,6 +478,21 @@ pub(crate) struct OverlayFrame {
     pub(crate) physics: bool,
 }
 
+fn semantic_extent(engine: &mut Engine, layer: &crate::frame_graph::SceneLayerValue, comp: CompSpec) -> Option<[f32; 2]> {
+    match &layer.content {
+        crate::frame_graph::SceneContentValue::Text(text) => crate::picture::shapes_ops::content_canvas(&text.shapes()).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
+        crate::frame_graph::SceneContentValue::Shape(shapes) => crate::picture::shapes_ops::content_canvas(shapes).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
+        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
+        crate::frame_graph::SceneContentValue::Particles(value) => {
+            let mut hi = glam::Vec2::ZERO;
+            for particle in &value.particles { hi = hi.max(glam::Vec2::new(particle.position[0], particle.position[1])); }
+            Some([hi.x.max(1.0), hi.y.max(1.0)])
+        }
+        crate::frame_graph::SceneContentValue::Plate(_) => Some([comp.width as f32, comp.height as f32]),
+        crate::frame_graph::SceneContentValue::None => None,
+    }
+}
+
 fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
     let n = |name| overlay::number_of(params, name);
     let threshold = (n("threshold") / 100.0) as f32;
@@ -467,7 +510,7 @@ fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSet
     }
 }
 
-fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
+pub(crate) fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
     let n = |name| blob::number_of(params, name);
     let source = match n("mode").round() as i64 {
         1 => BlobSource::Motion { threshold: n("threshold") as f32 },
@@ -488,7 +531,7 @@ fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
 }
 
 /// 乗算済み線形 Rgba16Float を、長辺が上限に収まるよう箱で縮めて非乗算 sRGB の RGBA8 に。戻り値の最後は縮めた倍率。
-fn shrink_to_srgb(picture: &LinearPicture, long_side: u32) -> (Vec<u8>, u32, u32, u32) {
+pub(crate) fn shrink_to_srgb(picture: &LinearPicture, long_side: u32) -> (Vec<u8>, u32, u32, u32) {
     let shrink = picture.width.max(picture.height).div_ceil(long_side.max(1)).max(1);
     let (w, h) = (picture.width / shrink, picture.height / shrink);
     let texel = |x: u32, y: u32, c: usize| {

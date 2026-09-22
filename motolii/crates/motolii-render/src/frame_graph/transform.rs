@@ -4,7 +4,7 @@ use crate::doc::core::LayerPlacement;
 use crate::doc::eval::Value;
 use crate::doc::store::{property, LayerId, PropertyId, StoreError, StoreView};
 
-use super::{EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
+use super::{EvaluationContext, FlowFrameValue, FlowProgram, FlowSlot, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 const ROWS: [&str; 10] = [property::POSITION, property::ANCHOR, property::SCALE, property::ROTATION, property::SKEW, property::SKEW_AXIS, property::POSITION_Z, property::ROTATION_X, property::ROTATION_Y, property::SCALE_Z];
 
@@ -110,23 +110,39 @@ fn read_transform(node: &GraphNode, inputs: &NodeInputs, index: usize) -> Result
 }
 
 fn local_value(node: &GraphNode, inputs: &NodeInputs, slots: &[Option<usize>; 10], flow: Option<(usize, usize)>) -> Result<TransformValue, TransformProgramError> {
-    let value = |row: usize| slots[row].and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>());
-    let vec2 = |row: usize, default: [f32; 2]| match value(row) { Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32], None => default, _ => default };
-    let scalar = |row: usize, default: f32| match value(row) { Some(Value::F64(v)) => *v as f32, None => default, _ => default };
+    let values: [Option<&Value>; 10] = std::array::from_fn(|row| {
+        slots[row].and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>())
+    });
+    let flow = flow.and_then(|(input, index)| {
+        inputs.at(input)
+            .and_then(|value| value.downcast_ref::<FlowFrameValue>())
+            .and_then(|flow| flow.slots.get(index))
+            .copied()
+            .flatten()
+    });
+    compose_transform_value(values, flow).ok_or(TransformProgramError::InvalidInput(node.identity().kind))
+}
+
+pub(crate) fn compose_transform_value(values: [Option<&Value>; 10], flow: Option<FlowSlot>) -> Option<TransformValue> {
+    let vec2 = |row: usize, default: [f32; 2]| match values[row] {
+        Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32],
+        _ => default,
+    };
+    let scalar = |row: usize, default: f32| match values[row] {
+        Some(Value::F64(v)) if v.is_finite() => *v as f32,
+        _ => default,
+    };
     let mut position = vec2(0, [0.0; 2]);
     let mut anchor = vec2(1, [0.0; 2]);
     let mut scale = vec2(2, [1.0; 2]);
-    if let Some((input, index)) = flow {
-        if let Some(slot) = inputs.at(input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).and_then(|flow| flow.slots.get(index)).copied().flatten() {
-            position = [position[0] + slot.position[0], position[1] + slot.position[1]];
-            scale = [scale[0] * slot.scale[0], scale[1] * slot.scale[1]];
-            anchor = slot.anchor;
-        }
+    if let Some(slot) = flow {
+        position = [position[0] + slot.position[0], position[1] + slot.position[1]];
+        scale = [scale[0] * slot.scale[0], scale[1] * slot.scale[1]];
+        anchor = slot.anchor;
     }
     let affine = LayerPlacement::from_transform(anchor, position, scale, scalar(3, 0.0), scalar(4, 0.0), scalar(5, 0.0));
     let spatial = LayerPlacement::spatial_from_transform(affine, position, scalar(6, 0.0), scalar(7, 0.0), scalar(8, 0.0), scalar(9, 1.0));
-    if !affine.matrix2.is_finite() || !spatial.is_finite() { return Err(TransformProgramError::InvalidInput(node.identity().kind)); }
-    Ok(TransformValue { affine, spatial })
+    (affine.matrix2.is_finite() && spatial.is_finite()).then_some(TransformValue { affine, spatial })
 }
 
 #[cfg(test)]

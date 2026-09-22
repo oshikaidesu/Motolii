@@ -2,6 +2,7 @@
 //! S0 deliberately contains no renderer adapter: later lanes supply node
 //! evaluators and GPU submissions without changing these ownership rules.
 
+mod analysis_program;
 mod cache;
 mod canonical;
 mod camera_program;
@@ -11,30 +12,43 @@ mod effect_program;
 mod evaluate;
 mod flow_program;
 mod group_program;
+mod ghost_program;
+mod group_composite_program;
 mod initial;
 mod key;
+mod lookbehind_program;
 mod mask_program;
+mod motion_program;
+mod placement_program;
+mod particle_program;
+mod overlay_program;
 mod property;
+mod relation_program;
 mod program;
 mod scheduler;
 mod scene_program;
+mod scene_policy;
+mod solver_program;
 mod text_program;
+mod text_flow_program;
 mod topology;
 mod transform;
 mod value;
+mod visibility_program;
 
 use std::collections::BTreeSet;
 
 use crate::doc::core::RationalTime;
 use crate::doc::store::StoreView;
 
+pub use analysis_program::{AnalysisBinding, AnalysisProgram, AnalysisProgramError, BlobAnalysisRequestValue, BlobAnalysisValue};
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
 pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
-pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaSourceValue};
+pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaExtentValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
-pub use evaluate::{EvaluationContext, NodeExecutor, NodeInputs};
+pub use evaluate::{DynamicInput, EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
 pub use group_program::{GroupBackgroundProgram, GroupBackgroundProgramError};
 pub use initial::{
@@ -46,12 +60,21 @@ pub use key::{
     WorkKey,
 };
 pub use mask_program::{MaskBinding, MaskProgram, MaskProgramError, MaskValue};
+pub use lookbehind_program::{LookbehindProgram, LookbehindProgramError};
+pub use motion_program::{MotionBinding, MotionPlanValue, MotionProgram, MotionProgramError, MotionSamplesValue};
+pub use placement_program::{PlacementBinding, PlacementCopyValue, PlacementProgram, PlacementProgramError, PlacementSetValue};
+pub use particle_program::{ParticleBinding, ParticleProgram, ParticleProgramError, ParticleValue};
+pub use overlay_program::{OverlayAnalysisValue, OverlayProgram, OverlayProgramError, OverlaySetValue};
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
+pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationSetValue, RelationValue};
+pub use solver_program::{SolverLayerValue, SolverPlanValue, SolverProgram, SolverProgramError};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
 pub use text_program::{TextBinding, TextProgram, TextProgramError, TextShapeValue};
-pub use scene_program::{SceneContentValue, SceneLayerValue, SceneNodeError, SceneNodeProgram, SceneProgramNodes, SceneValue};
+pub use text_flow_program::{TextFlowBinding, TextFlowProgram, TextFlowProgramError};
+pub use scene_program::{SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneNodeError, SceneNodeProgram, ScenePlateValue, SceneProgramNodes, SceneValue};
+pub use visibility_program::{VisibilityBinding, VisibilityProgram, VisibilityProgramError, VisibilityValue};
 pub use value::{
     EvaluatedFrame, FrameState, Generation, GraphRevision, GraphStats, PublishedFrame,
     RenderTarget, Submission, ViewProjection,
@@ -294,6 +317,26 @@ mod tests {
         );
         assert_eq!(frame.reused_nodes(), &[unrelated.key()]);
         assert_eq!(compiled.stats().topology_compiles, 1);
+    }
+
+    #[test]
+    fn exposed_scene_and_camera_survive_cached_projection_on_seek_back() {
+        let scene = node(1, vec![]);
+        let camera = node(2, vec![]);
+        let gpu = node(3, vec![scene.key(), camera.key()]);
+        let projection = node(4, vec![gpu.key()]);
+        let outputs = vec![scene.key(), camera.key(), gpu.key(), projection.key()];
+        let topology = GraphTopology::try_new(
+            [scene, camera, gpu, projection], outputs.clone(),
+        ).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = EchoExecutor;
+        for (generation, time) in [RationalTime::ZERO, RationalTime::from_seconds(1), RationalTime::ZERO].into_iter().enumerate() {
+            let frame = graph.evaluate(&mut executor, time, FrameQuality::Export, Generation::new(generation as u64 + 1)).unwrap();
+            for key in &outputs { assert!(frame.value(*key).is_some(), "missing exposed output on seek: {key:?}"); }
+            if generation == 2 { assert!(frame.executed_nodes().is_empty()); }
+        }
+        assert_eq!(graph.stats().topology_compiles, 1);
     }
 
     #[test]

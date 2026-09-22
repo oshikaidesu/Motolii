@@ -1,3 +1,28 @@
+
+#[test]
+fn editor_geometry_has_no_legacy_resolver_backdoor() {
+    let files = [
+        ("snapshot.rs", include_str!("../snapshot.rs")),
+        ("port.rs", include_str!("../port.rs")),
+        ("editor/stage.rs", include_str!("../editor/stage.rs")),
+        ("editor/gizmo3d.rs", include_str!("../editor/gizmo3d.rs")),
+        ("editor/functions/placement.rs", include_str!("../editor/functions/placement.rs")),
+    ];
+    let banned = [
+        "frame_graph_editor_layers",
+        "resolved_for(",
+        "picture::resolve::resolved_layers",
+        "picture::resolve::transform::world_transform3d",
+        "picture::resolve::transform::world_transforms3d",
+        "picture::resolve::transform::local_transform3d",
+    ];
+    for (name, source) in files {
+        for symbol in banned {
+            assert!(!source.contains(symbol), "{name} reintroduced legacy editor scene evaluation through {symbol}");
+        }
+    }
+}
+
 use super::*;
 use crate::EditorRuntime;
 use std::ffi::{CStr,CString};
@@ -200,7 +225,7 @@ fn the_cage_contains_the_drawn_mesh_under_the_scene_camera(){
         if projection!="3D" { continue; }
         // 3 軸ギズモは層の anchor(観測者で写した点)に立ち、描いた層の上に乗る。
         let view=rt.doc.view();
-        let world=motolii_render::picture::resolve::transform::world_transform3d(&view, mesh,time).unwrap();
+        let world=rt.engine.frame_graph_cached_scene(&view,time).unwrap().layer(mesh).unwrap().transform.spatial;
         let anchor=match view.value_at(mesh,&PropertyId::new(property::ANCHOR).unwrap(),time).unwrap(){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
         let projection=crate::doc::core::camera_projection(comp,rt.view_camera(View::Camera).unwrap());
         let c=projection.projection_matrix()*projection.view_matrix()*world.transform_point3(glam::vec3(anchor[0]as f32,anchor[1]as f32,0.0)).extend(1.0);
@@ -230,28 +255,29 @@ fn a_tilted_planar_layer_keeps_a_facing_frame_and_its_handles_write_scale_and_ro
         request(&mut rt,json!({"op":"setAttrs","layers":[layer.0],"patch":{"projection":projection}}));
         rt.viewer.user_camera=observer;
         let time=rt.time().unwrap();
+        rt.engine.frame_graph_editor_scene(&rt.doc.view(),time).unwrap();
         let bounds=rt.bounds_seen(layer,View::User).unwrap();
         let c:Vec<[f64;2]>=serde_json::from_value(bounds["corners"].clone()).unwrap();
         assert_eq!(c.len(),4,"{projection}: a planar layer gets the 4-corner frame");
         assert!((c[0][1]-c[1][1]).abs()<1e-3&&(c[1][0]-c[2][0]).abs()<1e-3&&(c[2][1]-c[3][1]).abs()<1e-3&&(c[3][0]-c[0][0]).abs()<1e-3,"{projection}: the frame faces the observer: {c:?}");
         assert!(c[0][0]<c[1][0]&&c[0][1]<c[3][1],"{projection}: nw, ne, se, sw: {c:?}");
         let view=rt.doc.view();
-        let resolved=crate::render::picture::resolve::resolved_layers(&view, time).unwrap();
-        let r=resolved.iter().find(|r|r.id==layer).unwrap();
-        let b=rt.engine.selected_layer_bounds_in(&view,&resolved,layer,time).unwrap();
-        let projected=crate::doc::core::projected_screen_corners(comp,rt.engine.resolve_camera(&view,time).unwrap(),observer,r.projection,crate::doc::core::depth_scaled(r.placement.world_transform.unwrap()),b.min,b.max);
+        let scene=rt.engine.frame_graph_cached_scene(&view,time).unwrap();
+        let r=scene.layer(layer).unwrap();
+        let b=rt.engine.selected_scene_layer_bounds_in(&view,&scene.layers,layer,time).unwrap();
+        let projected=crate::doc::core::projected_screen_corners(comp,rt.engine.resolve_camera(&view,time).unwrap(),observer,r.projection,crate::doc::core::depth_scaled(r.transform.spatial),b.min,b.max);
         for p in projected{assert!(c[0][0]-1e-3<=p.x as f64&&p.x as f64<=c[2][0]+1e-3&&c[0][1]-1e-3<=p.y as f64&&p.y as f64<=c[2][1]+1e-3,"{projection}: corner {p:?} outside the frame {c:?}");}
         assert!((c[1][0]-c[0][0])>1.0&&(c[3][1]-c[0][1])>1.0,"{projection}: the frame is not edge-on even though the plane may be");
         // 角を外へ引く → scale が伸びる。
         let se=[c[2][0],c[2][1]];let nw=[c[0][0],c[0][1]];
-        let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"scale","se",se,time,observer,Default::default(),1.0,None).unwrap();
+        let drag=editor::stage::DragSession::begin(&rt.doc,&mut rt.engine,&[layer],"scale","se",se,time,observer,Default::default(),1.0,None).unwrap();
         let far=[nw[0]+(se[0]-nw[0])*2.0,nw[1]+(se[1]-nw[1])*2.0];
         let edits=drag.edits(&rt.doc,far,false,false,Animate::Off).unwrap();
         let scale=edits.iter().find_map(|i|match i{Intent::SetConstant{property,value:Value::Vec2(v),..} if *property==PropertyId::new(property::SCALE).unwrap()=>Some(*v),_=>None}).expect("scale edit");
         assert!(scale[0]>1.5&&scale[1]>1.5,"{projection}: pulling the corner out grows the layer: {scale:?}");
         // 上の取っ手を画面で 90° 回す → rotation が 90° 動く(相似で結ぶので画面の角度がそのまま値)。
         let top=[(c[0][0]+c[1][0])*0.5,c[0][1]-22.0];
-        let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"rotate","",top,time,observer,Default::default(),1.0,None).unwrap();
+        let drag=editor::stage::DragSession::begin(&rt.doc,&mut rt.engine,&[layer],"rotate","",top,time,observer,Default::default(),1.0,None).unwrap();
         // 回転の軸は anchor を写した点(取っ手と同じ写像: 中間奥行きの面の 4 角を anchor の比で結ぶ)。
         let m:Vec<[f64;2]>=(0..4).map(|i|[((projected[i].x+projected[i+4].x)*0.5)as f64,((projected[i].y+projected[i+4].y)*0.5)as f64]).collect();
         let f:[f64;2]=serde_json::from_value(bounds["anchorFraction"].clone()).unwrap();
