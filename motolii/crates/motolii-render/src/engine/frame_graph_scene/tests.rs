@@ -91,7 +91,7 @@ fn track_matte_source_is_auxiliary_not_a_second_draw_layer() {
 
     let scene = scene(&doc);
     let mut engine = Engine::new().unwrap();
-    let gpu = engine.prepare_execution_scene(
+    let gpu = engine.gpu_executable_scene(
         &scene,
         doc.view().composition().unwrap().unwrap().spec(),
         ResolvedCamera::default(),
@@ -114,7 +114,7 @@ fn clipping_folds_the_upper_picture_into_its_base() {
     assert!(engine.compositor.effect_programs.is_empty());
     assert!(!engine.compositor.blend_vism.is_compiled());
     assert!(!engine.compositor.matte_vism.is_compiled());
-    let gpu = engine.prepare_execution_scene(
+    let gpu = engine.gpu_executable_scene(
         &scene,
         doc.view().composition().unwrap().unwrap().spec(),
         ResolvedCamera::default(),
@@ -142,7 +142,7 @@ fn stencil_is_built_as_a_matte_source_and_never_drawn_itself() {
     );
 
     let mut engine = Engine::new().unwrap();
-    let gpu = engine.prepare_execution_scene(
+    let gpu = engine.gpu_executable_scene(
         &scene,
         doc.view().composition().unwrap().unwrap().spec(),
         ResolvedCamera::default(),
