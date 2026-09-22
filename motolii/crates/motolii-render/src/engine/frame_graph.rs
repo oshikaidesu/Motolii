@@ -88,19 +88,6 @@ impl EngineFrameGraph {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
 #[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
-struct SemanticExecutor<'a> { program: &'a SceneProgram }
-impl NodeExecutor for SemanticExecutor<'_> {
-    type Error = EngineError;
-
-    fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> {
-        self.program.dynamic_inputs(node, inputs, context).map_err(|error| EngineError::Store(error.to_string()))
-    }
-
-    fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
-        self.program.execute(node, &inputs, &context).map_err(|error| EngineError::Store(error.to_string()))
-    }
-}
-
 struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
     type Error = EngineError;
@@ -171,30 +158,20 @@ impl NodeExecutor for ProgramExecutor<'_> {
 }
 
 impl Engine {
-    /// Evaluate only the semantic camera branch. This is intentionally GPU-free:
-    /// native editor projection must share CameraProgram meaning without reviving
-    /// the legacy StoreView -> ResolvedLayer owner just to discover an observer.
-    pub(in crate::engine) fn frame_graph_camera(
+    /// Camera value already evaluated by the revision-scoped production graph.
+    /// Editor read paths use this after preparing the same frame; no second
+    /// SceneProgram/Graph is compiled just to discover the observer.
+    pub fn frame_graph_cached_camera(
         &self,
         view: &StoreView<'_>,
         time: RationalTime,
-    ) -> Result<ResolvedCamera, EngineError> {
-        let program = SceneProgram::compile(view).map_err(|error| EngineError::Store(error.to_string()))?;
-        let camera = program.camera();
-        let topology = GraphTopology::try_new(program.nodes(), vec![camera])
-            .map_err(|error| EngineError::Store(error.to_string()))?;
-        let mut graph = CompiledGraph::with_topology(GraphRevision::new(view.revision_key()), topology);
-        let mut executor = SemanticExecutor { program: &program };
-        let frame = graph.evaluate(
-            &mut executor,
-            time,
-            FrameQuality::Preview { scale: 1 },
-            Generation::new(1),
-        )?;
-        frame.value(camera)
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+    ) -> Option<ResolvedCamera> {
+        let state = self.frame_graph.as_ref()?;
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        state.frame.as_ref()?
+            .value(state.program.camera())?
+            .downcast_ref::<ResolvedCamera>()
             .copied()
-            .ok_or_else(|| EngineError::Store("FrameGraph camera is missing".into()))
     }
 
     /// Editor read-model adapter. It evaluates the same production graph and
@@ -251,7 +228,7 @@ impl Engine {
         Ok((scene, camera, composition.spec(), composition.fps))
     }
 
-    pub(in crate::engine) fn frame_graph_document_camera(
+    pub fn frame_graph_document_camera(
         &mut self,
         view: &StoreView<'_>,
         time: RationalTime,
