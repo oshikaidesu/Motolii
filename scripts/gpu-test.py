@@ -94,6 +94,13 @@ def stop_process_tree(process: subprocess.Popen[bytes]) -> None:
     except ProcessLookupError:
         return
 
+    # Reap a leader that exits promptly. Otherwise its zombie keeps the process
+    # group observable and can hide the real question: are descendants alive?
+    try:
+        process.wait(timeout=0.1)
+    except subprocess.TimeoutExpired:
+        pass
+
     if not wait_for_process_group_exit(pgid, 3.0):
         try:
             os.killpg(pgid, signal.SIGKILL)
