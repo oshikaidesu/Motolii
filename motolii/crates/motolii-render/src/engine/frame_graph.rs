@@ -279,9 +279,10 @@ impl Engine {
     /// This deliberately makes the new boundary draw real pixels before replacing
     /// resource preparation. The RenderGraph, not GpuScene, owns the ordered
     /// composite description on this path.
-    fn cassette_plain_still_layers(
+    fn cassette_plain_layers(
         &mut self,
         scene: &SceneValue,
+        comp: CompSpec,
         projection_camera: ResolvedCamera,
     ) -> Result<Option<Vec<crate::render::compositor::LayerWithPasses>>, EngineError> {
         use crate::frame_graph::SceneContentValue;
@@ -301,21 +302,63 @@ impl Engine {
                 return Ok(None);
             }
 
-            let SceneContentValue::Media { source: media, .. } = &source.content else {
-                if matches!(&source.content, SceneContentValue::None) {
-                    continue;
+            let (content, natural) = match &source.content {
+                SceneContentValue::None => continue,
+                SceneContentValue::Text(text) => {
+                    self.text_texture_from_shapes(&text.shapes(), source.layer, comp)?
                 }
-                return Ok(None);
+                SceneContentValue::Shape(shapes) => {
+                    let stretched;
+                    let shapes = if source.shape_stretch != [1.0, 1.0] {
+                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                        stretched.as_slice()
+                    } else {
+                        shapes.as_slice()
+                    };
+                    self.shape_texture_from_shapes(
+                        shapes,
+                        source.layer,
+                        true,
+                        0.05,
+                        comp,
+                        None,
+                        source.shape_stretch == [1.0, 1.0],
+                    )?
+                }
+                SceneContentValue::Material(material) => {
+                    self.mesh_content_for(&material.source.path, comp)?
+                }
+                SceneContentValue::Media { source: media, time } => {
+                    self.file_content_for(&media.path, *time, source.layer, comp)?
+                }
+                SceneContentValue::Particles(value) => {
+                    let frame = super::ParticleFrame::from_particles(
+                        &value.particles,
+                        value.turbulence,
+                        value.links,
+                    );
+                    let natural = [
+                        frame.bounds.max[0].max(1.0),
+                        frame.bounds.max[1].max(1.0),
+                    ];
+                    (
+                        Some(LayerContent::Cloud {
+                            positions: frame.positions,
+                            colors: frame.colors,
+                            bounds: frame.bounds,
+                            point_size: 1.0,
+                            sizes: Some(frame.sizes),
+                            sprites: true,
+                            links: frame.links,
+                        }),
+                        natural,
+                    )
+                }
+                // A plate is already a nested semantic composite. Keep it on the
+                // frozen oracle until RenderGraph owns nested composite resources.
+                SceneContentValue::Plate(_) => return Ok(None),
             };
-            if !crate::render::media::is_still_image_path(&media.path) {
-                return Ok(None);
-            }
-
-            let (content, natural) = self.still_texture_for(&media.path)?;
             let Some(content) = content else { continue };
-            if !matches!(&content, LayerContent::Texture(_)) {
-                return Ok(None);
-            }
 
             let placement = crate::doc::core::LayerPlacement {
                 transform: source.transform.affine,
@@ -374,7 +417,7 @@ impl Engine {
             .copied()
             .unwrap_or_default();
 
-        let mut layers = if let Some(layers) = self.cassette_plain_still_layers(&scene, document_camera)? {
+        let mut layers = if let Some(layers) = self.cassette_plain_layers(&scene, state.comp, document_camera)? {
             layers
         } else {
             let prepared = state.frame.as_ref()
