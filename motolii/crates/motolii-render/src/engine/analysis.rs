@@ -2,8 +2,6 @@
 //! 層を本物で組んで読み戻し(Freeze と同じ道)、Blob Track の塊をコマごとに解いて `AnalysisInputs` に置く。
 //! ID を持続する・動きで拾う時は入点から 1 コマずつ解き、解いたコマは書類の版が変わるまで持つ(飛んでも辿っても同じ塊)。
 
-#[allow(unused_imports)]
-use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
@@ -359,16 +357,6 @@ impl Engine {
                 physics: value.physics,
             });
         }
-    }
-
-    /// Compatibility projection for tests/tools that still consume ResolvedLayer.
-    /// Product meaning is evaluated by FrameGraph first; this must never re-enter
-    /// the legacy StoreView + analysis_inputs + resolved_layers owner.
-    pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        self.resolve_tally.clear();
-        self.resolve_worst.clear();
-        let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
-        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
     }
 
     /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、
