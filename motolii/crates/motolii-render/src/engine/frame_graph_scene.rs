@@ -4,7 +4,7 @@ use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneLayerVal
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
 
-use super::gpu_exec::{GpuContentCacheKey, GpuResidency, GpuResourceDesc, GpuResourceId, GpuResourceKind};
+use super::gpu_exec::{GpuContentCacheKey, GpuResidency, GpuResourceDesc, GpuResourceId, GpuResourceKind, GpuTransientClass};
 
 #[derive(Clone)]
 pub(super) struct GpuSceneValue {
@@ -230,13 +230,19 @@ impl Engine {
                         dependencies,
                         entry.layer.0,
                     );
-                    self.gpu_resource_graph.upsert(GpuResourceDesc::new(
-                        resource,
-                        GpuResourceKind::Clip,
-                        None,
-                        dependencies,
-                        GpuResidency::Frame,
-                    ));
+                    self.gpu_resource_graph.upsert(
+                        GpuResourceDesc::new(
+                            resource,
+                            GpuResourceKind::Clip,
+                            None,
+                            dependencies,
+                            GpuResidency::Frame,
+                        ).with_transient(GpuTransientClass {
+                            width: comp.width,
+                            height: comp.height,
+                            format: crate::render::compositor::BLEND_TARGET_FORMAT,
+                        })
+                    );
                     entries[base_index].resource = resource;
                 },
                 None => self.layer_failures.push(format!(
@@ -289,13 +295,19 @@ impl Engine {
                 dependencies,
                 entries[index].layer.0,
             );
-            self.gpu_resource_graph.upsert(GpuResourceDesc::new(
-                resource,
-                GpuResourceKind::Matte,
-                None,
-                dependencies,
-                GpuResidency::Frame,
-            ));
+            self.gpu_resource_graph.upsert(
+                GpuResourceDesc::new(
+                    resource,
+                    GpuResourceKind::Matte,
+                    None,
+                    dependencies,
+                    GpuResidency::Frame,
+                ).with_transient(GpuTransientClass {
+                    width: comp.width,
+                    height: comp.height,
+                    format: crate::render::compositor::BLEND_TARGET_FORMAT,
+                })
+            );
             entries[index].resource = resource;
         }
 
@@ -315,13 +327,19 @@ impl Engine {
                 composite_dependencies.iter().copied(),
                 composite_dependencies.len() as u64,
             );
-            self.gpu_resource_graph.upsert(GpuResourceDesc::new(
-                resource,
-                GpuResourceKind::Composite,
-                None,
-                composite_dependencies.iter().copied(),
-                GpuResidency::Frame,
-            ));
+            self.gpu_resource_graph.upsert(
+                GpuResourceDesc::new(
+                    resource,
+                    GpuResourceKind::Composite,
+                    None,
+                    composite_dependencies.iter().copied(),
+                    GpuResidency::Frame,
+                ).with_transient(GpuTransientClass {
+                    width: comp.width,
+                    height: comp.height,
+                    format: crate::render::compositor::BLEND_TARGET_FORMAT,
+                })
+            );
             resource
         });
         let layers = kept.into_iter().map(|(_, _, layer)| layer).collect();

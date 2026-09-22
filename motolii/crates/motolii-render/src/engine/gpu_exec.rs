@@ -66,6 +66,13 @@ pub(crate) enum GpuResidency {
     Temporal,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct GpuTransientClass {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) format: wgpu::TextureFormat,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuResourceDesc {
     pub(crate) id: GpuResourceId,
@@ -73,6 +80,7 @@ pub(crate) struct GpuResourceDesc {
     pub(crate) semantic: Option<NodeKey>,
     pub(crate) dependencies: Vec<GpuResourceId>,
     pub(crate) residency: GpuResidency,
+    pub(crate) transient: Option<GpuTransientClass>,
 }
 
 impl GpuResourceDesc {
@@ -86,7 +94,12 @@ impl GpuResourceDesc {
         let mut dependencies: Vec<_> = dependencies.into_iter().collect();
         dependencies.sort_unstable();
         dependencies.dedup();
-        Self { id, kind, semantic, dependencies, residency }
+        Self { id, kind, semantic, dependencies, residency, transient: None }
+    }
+
+    pub(crate) fn with_transient(mut self, transient: GpuTransientClass) -> Self {
+        self.transient = Some(transient);
+        self
     }
 }
 
@@ -234,6 +247,44 @@ impl GpuResourceGraph {
         plan
     }
 
+    pub(crate) fn allocate_transients(
+        &self,
+        plan: &GpuExecutionPlan,
+    ) -> GpuTransientAllocation {
+        let intervals = plan.resource_intervals();
+        let mut candidates: Vec<_> = intervals.iter()
+            .filter_map(|(resource, &(first, last))| {
+                self.resources.get(resource)
+                    .and_then(|desc| desc.transient.map(|class| (*resource, class, first, last)))
+            })
+            .collect();
+        candidates.sort_by_key(|(_, _, first, _)| *first);
+
+        let mut slot_state: Vec<(GpuTransientClass, usize)> = Vec::new();
+        let mut slots = BTreeMap::new();
+        for (resource, class, first, last) in candidates {
+            let reusable = slot_state.iter().enumerate()
+                .find(|(_, (slot_class, previous_last))| {
+                    *slot_class == class && *previous_last < first
+                })
+                .map(|(slot, _)| slot);
+            let slot = match reusable {
+                Some(slot) => {
+                    slot_state[slot].1 = last;
+                    slot
+                }
+                None => {
+                    let slot = slot_state.len();
+                    slot_state.push((class, last));
+                    slot
+                }
+            };
+            slots.insert(resource, slot);
+        }
+
+        GpuTransientAllocation { slots, slot_count: slot_state.len() }
+    }
+
     fn rebuild_downstream(&mut self) {
         self.downstream.clear();
         for resource in self.resources.values() {
@@ -244,6 +295,12 @@ impl GpuResourceGraph {
             }
         }
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GpuTransientAllocation {
+    pub(crate) slots: BTreeMap<GpuResourceId, usize>,
+    pub(crate) slot_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -433,6 +490,45 @@ mod tests {
         assert_eq!(&preview.passes[..preview.passes.len()-1], &export.passes[..export.passes.len()-1]);
         assert_eq!(preview.passes.last().unwrap().kind, GpuPassKind::Present);
         assert_eq!(export.passes.last().unwrap().kind, GpuPassKind::Readback);
+    }
+
+
+    #[test]
+    fn non_overlapping_equal_transients_share_one_slot() {
+        let mut graph = GpuResourceGraph::default();
+        let class = GpuTransientClass {
+            width: 1920,
+            height: 1080,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+        };
+        graph.upsert(desc(1, GpuResourceKind::Content, &[], GpuResidency::Retained));
+        graph.upsert(
+            GpuResourceDesc::new(
+                GpuResourceId::raw(2),
+                GpuResourceKind::Effect,
+                None,
+                [GpuResourceId::raw(1)],
+                GpuResidency::Frame,
+            ).with_transient(class)
+        );
+        graph.upsert(
+            GpuResourceDesc::new(
+                GpuResourceId::raw(3),
+                GpuResourceKind::Effect,
+                None,
+                [GpuResourceId::raw(2)],
+                GpuResidency::Frame,
+            ).with_transient(class)
+        );
+
+        let mut plan = GpuExecutionPlan::default();
+        plan.push(GpuPass { kind: GpuPassKind::Effect, reads: vec![], writes: vec![GpuResourceId::raw(2)] });
+        plan.push(GpuPass { kind: GpuPassKind::Effect, reads: vec![GpuResourceId::raw(2)], writes: vec![] });
+        plan.push(GpuPass { kind: GpuPassKind::Effect, reads: vec![], writes: vec![GpuResourceId::raw(3)] });
+
+        let allocation = graph.allocate_transients(&plan);
+        assert_eq!(allocation.slot_count, 1);
+        assert_eq!(allocation.slots[&GpuResourceId::raw(2)], allocation.slots[&GpuResourceId::raw(3)]);
     }
 
 }
