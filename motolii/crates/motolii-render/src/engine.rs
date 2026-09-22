@@ -19,7 +19,7 @@ mod texture;
 mod material;
 pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
-mod translate;
+pub(crate) mod translate;
 mod blocks;
 mod physics;
 mod frozen;
