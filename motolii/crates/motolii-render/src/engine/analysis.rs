@@ -361,16 +361,6 @@ impl Engine {
         }
     }
 
-    /// Compatibility projection for tests/tools that still consume ResolvedLayer.
-    /// Product meaning is evaluated by FrameGraph first; this must never re-enter
-    /// the legacy StoreView + analysis_inputs + resolved_layers owner.
-    pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        self.resolve_tally.clear();
-        self.resolve_worst.clear();
-        let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
-        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
-    }
-
     /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、
     /// semantic Scene/TextFlow の最終値から測る。診断のために legacy resolve を再実行しない。
     pub fn continuity_samples(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<(String, [f32; 2])>, EngineError> {
