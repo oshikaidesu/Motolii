@@ -986,7 +986,7 @@ impl Engine {
         self.attach_block_id(layer.id, built, comp);
     }
 
-    pub(in crate::engine) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec) {
+    pub(crate) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec) {
         // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
         // その物の comp → world の向き(組んだ素材の大きさが要るのでここでしか作れない)。
         let Some(&k) = self.blocks.slots.get(&layer) else {
