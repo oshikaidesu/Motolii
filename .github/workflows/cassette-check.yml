@@ -1,0 +1,14 @@
+name: cassette-check
+on:
+  push:
+    branches:
+      - gpt/render-cassette-bootstrap-20260922
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check -p motolii-render
+      - run: cargo test -p motolii-render render_lowering --lib
+      - run: cargo test -p motolii-render render_backend --lib
