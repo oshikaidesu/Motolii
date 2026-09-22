@@ -1,4 +1,4 @@
-use crate::doc::store::LayerId;
+use std::hash::{Hash, Hasher};
 use crate::frame_graph::SceneLayerValue;
 
 use super::resource_store::GpuResourceStore;
@@ -57,11 +57,18 @@ pub(crate) fn resident_effect_chain(
 }
 
 pub(crate) fn effect_chain_key(layer: &SceneLayerValue) -> Option<(GpuResourceKey, GpuResourceVersion)> {
-    let first = layer.content_key?;
-    let identity = super::types::GpuResourceIdentity::semantic(
-        first,
+    if layer.effect_keys.is_empty() && layer.after_effect_keys.is_empty() {
+        return None;
+    }
+    let mut identity_hasher = std::collections::hash_map::DefaultHasher::new();
+    layer.layer.hash(&mut identity_hasher);
+    layer.instance.hash(&mut identity_hasher);
+    layer.effect_keys.hash(&mut identity_hasher);
+    layer.after_effect_keys.hash(&mut identity_hasher);
+    let identity = super::types::GpuResourceIdentity::synthetic(
+        identity_hasher.finish(),
         super::types::GpuResourceClass::Effect,
-        layer.instance,
+        0,
     );
     let mut encoded = crate::frame_graph::CanonicalEncoder::new();
     let _ = encoded.string(&format!("{:?}{:?}", layer.effects, layer.after_effects));
