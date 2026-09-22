@@ -687,7 +687,7 @@ impl Engine {
                     projection_camera
                 };
         }
-        self.stamp_frame_graph_window_feedback(&mut layers, window);
+        self.gpu_stamp_window_feedback(&mut layers, window);
         let background = if include_background {
             state.background
         } else {
