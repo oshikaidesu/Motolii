@@ -263,7 +263,11 @@ impl EngineFrameGraph {
                         content_key,
                         version,
                         self.generation,
-                        layer,
+                        layer.layer,
+                        &layer.content,
+                        layer.shape_stretch,
+                        layer.environment,
+                        layer.content_key,
                         self.comp,
                         time,
                     )?;
