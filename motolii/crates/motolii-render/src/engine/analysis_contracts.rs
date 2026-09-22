@@ -77,8 +77,11 @@ fn kept_ids_follow_the_moving_square_and_land_the_same_however_you_arrive() {
     let doc = document(&path, true);
     let mut walker = Engine::new().unwrap();
     let ids = |engine: &mut Engine, frame: i64| {
-        let resolved = engine.resolved_with_analysis(&doc.view(), at(frame)).unwrap();
-        let mut marks: Vec<(u32, f32)> = resolved.iter().filter(|l| l.id == LayerId(2)).map(|l| (l.copy, l.placement.transform.translation.x)).collect();
+        let scene = engine.frame_graph_editor_scene(&doc.view(), at(frame)).unwrap();
+        let mut marks: Vec<(u32, f32)> = scene.layers.iter()
+            .filter(|layer| layer.layer == LayerId(2))
+            .map(|layer| (layer.instance, layer.transform.affine.transform_point2(glam::Vec2::ZERO).x))
+            .collect();
         marks.sort_by(|a, b| a.1.total_cmp(&b.1));
         marks.into_iter().map(|(id, _)| id).collect::<Vec<_>>()
     };
