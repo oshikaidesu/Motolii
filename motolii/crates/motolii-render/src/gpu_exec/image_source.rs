@@ -48,6 +48,21 @@ pub(crate) fn lower_image_source(
         alias_class: None,
         estimated_bytes: 0,
     })?;
+    let source_kind = match &input.source {
+        SceneImageSourceValue::Content { .. } => GpuPassKind::Upload,
+        SceneImageSourceValue::Scene { .. } => GpuPassKind::Composite,
+    };
+    graph.insert_pass(GpuPassDesc {
+        identity: GpuPassIdentity {
+            kind: source_kind,
+            tag: input.effect.as_u64() ^ 0x534f55524345 ^ u64::from(slot),
+            reads: Vec::new(),
+            writes: vec![source_key],
+        },
+        after: Vec::new(),
+        cacheable: false,
+        side_effect: false,
+    })?;
 
     let snapshot_identity = snapshot_identity(input.effect, input.pass_slot, input.image_slot);
     let snapshot_key = snapshot_identity.key();
