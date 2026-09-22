@@ -5,13 +5,13 @@ use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWit
 use crate::render::engine::{Engine, EngineError};
 
 #[derive(Clone)]
-pub(super) struct GpuSceneValue {
+pub(crate) struct PreparedScene {
     pub layers: Vec<LayerWithPasses>,
     pub layer_ids: Vec<LayerId>,
 }
 
 impl Engine {
-    pub(super) fn prepare_gpu_scene_with_solver(
+    pub(super) fn prepare_execution_scene_with_solver(
         &mut self,
         scene: &SceneValue,
         solver: &SolverPlanValue,
@@ -19,7 +19,7 @@ impl Engine {
         projection_camera: ResolvedCamera,
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
-    ) -> Result<GpuSceneValue, EngineError> {
+    ) -> Result<PreparedScene, EngineError> {
         let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
@@ -29,7 +29,7 @@ impl Engine {
             // contributions that cannot feed analysis/matte/solver work.
             let planned = self.plan_frame_graph_scene(scene, solver, comp, projection_camera);
             let scene = planned.as_ref().unwrap_or(scene);
-            let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+            let mut prepared = self.prepare_execution_scene(scene, comp, projection_camera)?;
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
             return Ok(prepared);
         }
@@ -43,10 +43,10 @@ impl Engine {
                 .cloned()
                 .collect(),
         };
-        let mut base = self.prepare_gpu_scene(&base_scene, comp, projection_camera)?;
+        let mut base = self.prepare_execution_scene(&base_scene, comp, projection_camera)?;
         self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut base)?;
 
-        let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+        let mut prepared = self.prepare_execution_scene(scene, comp, projection_camera)?;
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
             self.attach_block_id(id, &mut layer.layer, comp);
         }
@@ -145,7 +145,7 @@ impl Engine {
         })
     }
 
-    pub(crate) fn prepare_gpu_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+    pub(crate) fn prepare_execution_scene(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<PreparedScene, EngineError> {
         #[derive(Clone, Copy)]
         struct Entry {
             layer: LayerId,
@@ -375,7 +375,7 @@ impl Engine {
         let layer_ids = kept.iter().map(|(layer, _)| *layer).collect();
         let layers = kept.into_iter().map(|(_, layer)| layer).collect();
 
-        Ok(GpuSceneValue { layers, layer_ids })
+        Ok(PreparedScene { layers, layer_ids })
     }
 
 
