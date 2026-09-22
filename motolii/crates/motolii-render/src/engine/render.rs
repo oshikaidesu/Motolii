@@ -311,48 +311,6 @@ impl Engine {
     /// t の手前まで順に描いてから、t をもう一度組む。順再生と書き出しは 1 歩ずつなので何もしない。
     ///
     /// - 板の道(層の絵に焼く列)は**その層だけ**を辿り直す。
-    /// - 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持ち、**フレームを丸ごと**辿り直す。
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn layers_from_resolved(
-        &mut self,
-        view: &StoreView<'_>,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        projection_camera: ResolvedCamera,
-        t: RationalTime,
-        resolved: &[ResolvedLayer],
-        text_documents: &HashMap<LayerId, TextDocument>,
-        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
-    ) -> Result<Vec<LayerWithPasses>, EngineError> {
-        if self.feedback_replaying {
-            self.prepare_blocks(view, comp, t, resolved)?;
-            let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
-            self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
-            self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
-            return Ok(layers);
-        }
-        self.compositor.feedback_set_revision(view.revision_key());
-        self.gpu_history.begin_frame();
-        self.prepare_blocks(view, comp, t, resolved)?;
-        let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
-        let seen = self.gpu_history.seen().collect::<Vec<_>>();
-        self.gpu_history.begin_frame();
-        if !self.replay_feedback(view, comp, camera, projection_camera, t, &seen)? {
-            self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
-            self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
-            return Ok(layers);
-        }
-        // 辿り直しで状態が動いた: 焼いた絵は辿り直す前の物なので捨て、t をもう一度組む。
-        let c = &mut self.compositor;
-        c.baked_effects.clear(&mut c.effect_scratch);
-        self.stamp_clock(view, t);
-        self.prepare_blocks(view, comp, t, resolved)?;
-        let mut layers = self.build_layers(view, comp, camera, projection_camera, t, resolved, text_documents, shape_documents)?;
-        self.run_blocks(t, view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64()));
-        self.cut_moved_in_their_boxes(comp, camera, &mut layers)?;
-        self.gpu_history.begin_frame();
-        Ok(layers)
-    }
 
     /// 辿り直しが要る鍵があれば辿り直し、動かしたら true。
     #[allow(clippy::too_many_arguments)]
