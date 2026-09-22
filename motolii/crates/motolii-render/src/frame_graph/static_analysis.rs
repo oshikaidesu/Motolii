@@ -269,7 +269,6 @@ pub fn domain(kind: NodeKind) -> StaticDomain {
         | NodeKind::MediaExtent
         | NodeKind::MediaFrame
         | NodeKind::MeshSource
-        | NodeKind::Material
         | NodeKind::ParticleBirths
         | NodeKind::Particle => StaticDomain::Content,
 
