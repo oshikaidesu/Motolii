@@ -35,6 +35,9 @@ pub(super) struct EngineFrameGraph {
     gpu_snapshots: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentSnapshot>,
     gpu_processed: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentProcessedLayer>,
     gpu_composites: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentCompositeLayer>,
+    gpu_scene_root: Option<crate::gpu_exec::GpuSceneRoot>,
+    gpu_present_sink: Option<crate::gpu_exec::GpuSinkRoot>,
+    gpu_readback_sink: Option<crate::gpu_exec::GpuSinkRoot>,
 }
 
 impl EngineFrameGraph {
@@ -61,7 +64,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
@@ -98,8 +101,12 @@ impl EngineFrameGraph {
                     .map_err(|error| EngineError::Store(format!("GPU contribution declaration: {error:?}")))?;
             }
             // Phase 2: lower producers and cross-contribution edges.
+            let mut ordered_outputs = Vec::with_capacity(inputs.len());
             for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
                 let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input).map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+                if let Some(output) = resources.final_image_or_geometry {
+                    ordered_outputs.push(output);
+                }
                 let placement_version = self.gpu_resources.version(resources.placement).ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
                 let _ = crate::gpu_exec::resident_placement(
                     &mut self.gpu_placement,
@@ -133,6 +140,26 @@ impl EngineFrameGraph {
                     self.gpu_resources.mark_resident(content_key, version, self.generation);
                 }
             }
+            let scene_root = crate::gpu_exec::lower_scene_root(
+                &mut self.gpu_resources,
+                self.scene,
+                &ordered_outputs,
+            ).map_err(|error| EngineError::Store(format!("GPU scene root: {error:?}")))?;
+            let present = crate::gpu_exec::lower_sink(
+                &mut self.gpu_resources,
+                self.scene,
+                scene_root,
+                crate::gpu_exec::GpuSinkKind::Present,
+            ).map_err(|error| EngineError::Store(format!("GPU present sink: {error:?}")))?;
+            let readback = crate::gpu_exec::lower_sink(
+                &mut self.gpu_resources,
+                self.scene,
+                scene_root,
+                crate::gpu_exec::GpuSinkKind::Readback,
+            ).map_err(|error| EngineError::Store(format!("GPU readback sink: {error:?}")))?;
+            self.gpu_scene_root = Some(scene_root);
+            self.gpu_present_sink = Some(present);
+            self.gpu_readback_sink = Some(readback);
             self.gpu_resources.retire_temporal(self.generation);
         }
         self.frame = Some(evaluated);
