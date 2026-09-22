@@ -316,6 +316,7 @@ mod tests {
     struct Executor<'a>(&'a SceneProgram);
     impl NodeExecutor for Executor<'_> {
         type Error = SceneProgramError;
+        fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> { self.0.dynamic_inputs(node, inputs, context) }
         fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
             self.0.execute(node, &inputs, &context)
         }
