@@ -148,7 +148,7 @@ pub struct Engine {
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
     video_stream_namespace: u64,
     /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
-    feedback_namespace: u64,
+    pub(crate) feedback_namespace: u64,
     /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
     feedback_saw_composites: bool,
     /// Freeze の cache(層の投影の前の絵、書類の隣)。
