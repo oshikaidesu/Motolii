@@ -157,7 +157,9 @@ impl EditorRuntime{
     pub(crate) fn spatial_gizmo(&self,seen:View)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
-        let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.viewer.selected_ids,time) else{return Ok(Json::Null)};
+        let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.viewer.selected_ids,time,|id|{
+            self.engine.frame_graph_cached_transform(&view,time,id).map(|(local,world)|(local.spatial,world.spatial))
+        }) else{return Ok(Json::Null)};
         let pointer=self.viewer.stage_pointer.filter(|_|self.viewer.stage_view==seen);
         let camera=if seen==View::User{self.viewer.user_camera}else{self.engine.resolve_camera(&view,time).map_err(e)?};
         let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
