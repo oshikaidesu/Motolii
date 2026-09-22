@@ -325,6 +325,7 @@ impl AnalysisProgram {
                                 effects: resolved_effects,
                                 after_effect_keys: Vec::new(),
                                 after_effects: Vec::new(),
+                                image_source_effects: Vec::new(),
                                 image_sources: Vec::new(),
                                 masks: resolved_masks,
                                 matte: None,
