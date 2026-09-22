@@ -25,6 +25,7 @@ mod physics;
 mod frozen;
 mod frame_graph;
 mod frame_graph_scene;
+mod gpu_exec;
 
 use crate::doc::core::ResolvedCamera;
 use crate::render::compositor::{Compositor, CompositorError};
