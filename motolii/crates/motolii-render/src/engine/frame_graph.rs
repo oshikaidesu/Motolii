@@ -355,6 +355,10 @@ impl Engine {
         Ok(state)
     }
 
+    pub(in crate::engine) fn frame_graph_gpu_stats(&self) -> Option<crate::gpu_exec::GpuGraphStats> {
+        self.frame_graph.as_ref().map(|state| state.gpu_resources.stats())
+    }
+
     pub(super) fn semantic_layer_for(&self, view: &StoreView<'_>, time: RationalTime, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
         self.frame_graph_cached_scene(view, time)?.layer(id)
     }
