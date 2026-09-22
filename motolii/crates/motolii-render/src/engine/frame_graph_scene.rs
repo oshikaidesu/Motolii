@@ -541,7 +541,7 @@ impl Engine {
                         pass.feedback = Some(key);
                     }
                     if self.feedback_namespace == 0 {
-                        self.feedback_keys_seen.push(key);
+                        self.gpu_history.observe(key);
                     }
                 }
             }
