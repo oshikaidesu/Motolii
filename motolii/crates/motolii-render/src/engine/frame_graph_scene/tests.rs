@@ -149,3 +149,23 @@ fn stencil_is_built_as_a_matte_source_and_never_drawn_itself() {
     ).unwrap();
     assert_eq!(gpu.layers.len(), 1, "stencil itself is auxiliary");
 }
+
+#[test]
+fn a_lowered_matte_draws_real_pixels_through_the_cassette() {
+    let red = |mode| {
+        let mut doc = document();
+        let source = add_shape(&mut doc, 1, 1, Rgb { r: 1.0, g: 1.0, b: 1.0 });
+        let target = add_shape(&mut doc, 2, 0, Rgb { r: 1.0, g: 0.0, b: 0.0 });
+        doc.apply(Intent::SetAttrs {
+            layer: target,
+            patch: LayerAttrsPatch { matte: Some(Some(Matte { layer: source, mode })), ..Default::default() },
+        }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.render_with_camera_override(&doc.view(), crate::doc::core::RationalTime::ZERO, true, None).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert_eq!(pixels.len(), 64 * 64 * 4);
+        pixels.chunks_exact(4).filter(|p| p[0] > 200 && p[1] < 40 && p[2] < 40).count()
+    };
+    assert!(red(MatteMode::Alpha) > 0, "the target shows where its source covers");
+    assert_eq!(red(MatteMode::InvertedAlpha), 0, "and nowhere else");
+}

@@ -13,6 +13,10 @@ use crate::render::compositor::extrude::Solid;
 use crate::render::engine::translate;
 use crate::render_graph::{Composed, Extrusion, ImageInput, LayerWork, RasterSource, RenderGraph};
 
+mod blocks;
+
+pub use blocks::{plan_blocks, BlockBatch, BlockPlan, Placed};
+
 #[derive(Debug)]
 pub enum RenderLoweringError {
     Unsupported(String),

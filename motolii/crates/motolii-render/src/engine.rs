@@ -20,7 +20,7 @@ pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 pub(crate) mod translate;
 mod blocks;
-mod physics;
+pub(crate) mod physics;
 mod frozen;
 mod frame_graph;
 mod frame_graph_scene;
