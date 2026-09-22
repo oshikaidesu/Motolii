@@ -720,6 +720,50 @@ impl Engine {
 
 
 
+#[cfg(test)]
+mod cassette_tests {
+    use super::*;
+    use motolii_edit::{Document, Intent};
+    use crate::doc::store::{Composition, Fps};
+
+    #[test]
+    fn plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation() {
+        let dir = tempfile::tempdir().unwrap();
+        let image_path = dir.path().join("cassette-red.png");
+        image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 0, 0, 255]))
+            .save(&image_path)
+            .unwrap();
+
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 1,
+            background: [0.0, 0.0, 0.0, 1.0],
+        })).unwrap();
+        super::super::environment_tests::file_layer(&mut doc, 1, 0, &image_path);
+
+        let mut engine = Engine::new().unwrap();
+        let (scene, camera, comp, _) = engine
+            .evaluate_frame_graph_semantics(&doc.view(), RationalTime::ZERO)
+            .unwrap();
+        let cassette = engine
+            .cassette_plain_layers(&scene, comp, camera)
+            .unwrap()
+            .expect("plain still scene must be fully owned by the cassette path");
+        assert_eq!(cassette.len(), 1);
+
+        let pixels = engine
+            .render_with_camera_override(&doc.view(), RationalTime::ZERO, true, None)
+            .unwrap();
+        assert_eq!(pixels.len(), 64 * 64 * 4);
+        assert!(pixels.chunks_exact(4).any(|p| p[0] > 200 && p[1] < 40 && p[2] < 40));
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    }
+}
+
+
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }
 fn store(error: crate::doc::store::StoreError) -> EngineError { EngineError::Store(error.to_string()) }
 fn unsupported(kind: NodeKind) -> EngineError { EngineError::Store(format!("FrameGraph program executor does not support {kind:?}")) }
