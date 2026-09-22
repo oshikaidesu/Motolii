@@ -302,7 +302,7 @@ impl Engine {
             }
 
             let SceneContentValue::Media { source: media, .. } = &source.content else {
-                if matches!(source.content, SceneContentValue::None) {
+                if matches!(&source.content, SceneContentValue::None) {
                     continue;
                 }
                 return Ok(None);
@@ -313,7 +313,7 @@ impl Engine {
 
             let (content, natural) = self.still_texture_for(&media.path)?;
             let Some(content) = content else { continue };
-            if !matches!(content, LayerContent::Texture(_)) {
+            if !matches!(&content, LayerContent::Texture(_)) {
                 return Ok(None);
             }
 
