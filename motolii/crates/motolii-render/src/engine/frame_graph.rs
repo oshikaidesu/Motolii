@@ -267,6 +267,9 @@ impl Engine {
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
+        if camera != document_camera {
+            self.cut_outlines_for_view(&prepared, &mut layers, state.comp, camera)?;
+        }
         let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
         let pixels = self.compositor.render_with_effects(state.comp, camera, &layers, background)?;
         self.frame_graph = Some(state);
@@ -412,6 +415,9 @@ impl Engine {
                     projection_camera
                 };
             layer.layer.outline = self.outline_id(*id);
+        }
+        if projection_camera != document_camera {
+            self.cut_outlines_for_view(prepared, &mut layers, state.comp, projection_camera)?;
         }
         self.stamp_frame_graph_window_feedback(&mut layers, window);
         let background = if include_background {
