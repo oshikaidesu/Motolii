@@ -60,6 +60,15 @@ impl<'a> SemanticGpuAdapter<'a> {
             version: transform_version(&layer.transform)?,
         };
 
+        let matte_source = layer.matte.and_then(|matte| {
+            let source = self.program.contribution(matte.layer)?;
+            Some(super::types::GpuResourceIdentity::semantic(
+                source,
+                super::types::GpuResourceClass::Composite,
+                0,
+            ).key())
+        });
+
         let effects = self.program.effects().binding(layer.layer)
             .map(|binding| binding.effects.iter().filter_map(|node| {
                 let value = self.frame.value(*node)?.downcast_ref::<EffectValue>()?;
@@ -84,7 +93,7 @@ impl<'a> SemanticGpuAdapter<'a> {
             placement,
             effects,
             masks,
-            matte_source: None,
+            matte_source,
             plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
                 node: contribution,
                 version: content_version(&layer.content),
