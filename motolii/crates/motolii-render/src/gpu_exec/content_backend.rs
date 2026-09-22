@@ -67,10 +67,26 @@ impl crate::render::engine::Engine {
                 };
                 content.map(|content| ResidentContent { content, natural })
             }
-            // Particle payload is already an evaluated semantic frame, but its
-            // concrete cloud conversion still lives in the legacy engine owner.
-            // Keep it out of the leaf residency cut until that converter is moved.
-            SceneContentValue::Particles(_) => return Ok(None),
+            SceneContentValue::Particles(value) => {
+                let frame = crate::render::engine::ParticleFrame::from_particles(
+                    &value.particles,
+                    value.turbulence,
+                    value.links,
+                );
+                let natural = [frame.bounds.max[0].max(1.0), frame.bounds.max[1].max(1.0)];
+                Some(ResidentContent {
+                    content: crate::render::compositor::LayerContent::Cloud {
+                        positions: frame.positions,
+                        colors: frame.colors,
+                        bounds: frame.bounds,
+                        point_size: 1.0,
+                        sizes: Some(frame.sizes),
+                        sprites: true,
+                        links: frame.links,
+                    },
+                    natural,
+                })
+            },
             // Plate is a composition resource, not leaf content.
             SceneContentValue::Plate(_) => return Ok(None),
         };
