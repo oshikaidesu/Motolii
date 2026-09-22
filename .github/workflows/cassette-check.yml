@@ -12,3 +12,4 @@ jobs:
       - run: cargo check -p motolii-render
       - run: cargo test -p motolii-render render_lowering --lib
       - run: cargo test -p motolii-render render_backend --lib
+      - run: cargo test -p motolii-render plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation --lib -- --nocapture
