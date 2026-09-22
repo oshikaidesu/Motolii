@@ -4,6 +4,7 @@
 //! resource/execution graph and deliberately does not preserve the old
 //! GpuScene/LayerWithPasses orchestration contract.
 
+mod composite_backend;
 mod content_backend;
 mod effect_backend;
 mod executor;
@@ -21,6 +22,7 @@ mod resource_store;
 mod telemetry;
 mod types;
 
+pub(crate) use composite_backend::ResidentCompositeLayer;
 pub(crate) use content_backend::ResidentContent;
 pub(crate) use effect_backend::{effect_chain_key, resident_effect_chain, ResidentEffectChain};
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
