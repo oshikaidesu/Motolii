@@ -104,7 +104,11 @@ impl SceneProgram {
         let overlay = OverlayProgram::compile(view, &effects, lookbehind.key(), solver.key(), camera.key())?;
         let mut nodes = BTreeMap::new();
         for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(text_flow.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())).chain(overlay.nodes()) { nodes.insert(node.key(), node); }
-        let roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
+        let mut roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
+        for binding in transforms.bindings() {
+            roots.insert(binding.local);
+            roots.insert(binding.world);
+        }
         Ok(Self { analysis, properties, content, transforms, flow, text, text_flow, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, overlay, relations, solver, nodes, roots })
     }
 
