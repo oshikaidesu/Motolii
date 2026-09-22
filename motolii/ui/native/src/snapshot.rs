@@ -57,8 +57,10 @@ fn source_kind(source:&LayerSource)->&'static str{match source{
 struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera,document:crate::doc::core::ResolvedCamera}
 use crate::viewer::View;
 impl EditorRuntime{
-    pub(crate) fn view_camera(&self,view:View)->Result<crate::doc::core::ResolvedCamera,String>{
-        match view{View::User=>Ok(self.viewer.user_camera),View::Camera=>self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e)}
+    pub(crate) fn view_camera(&mut self,view:View)->Result<crate::doc::core::ResolvedCamera,String>{
+        if view==View::User{return Ok(self.viewer.user_camera)}
+        let time=self.time()?;let doc=self.doc.view();
+        self.engine.frame_graph_document_camera(&doc,time).map_err(e)
     }
     /// view の描く窓。Camera は出力寸法そのもの、Stage はタブが置いた窓(未設定なら出力寸法)。
     pub(crate) fn window(&self,view:View)->Result<crate::render::engine::Window,String>{
@@ -67,8 +69,14 @@ impl EditorRuntime{
     }
     /// 層を置くカメラ。2D は出力の画面の物なのでどの view でも作中カメラの箱に貼り付く。
     /// 2.5D・3D は世界に居る: Stage は既定(Boxcam の Original Comp)、Camera は作中カメラ。
-    pub(crate) fn projection_camera(&self,view:View,projection:LayerProjection)->Result<crate::doc::core::ResolvedCamera,String>{
-        match (view,projection){(View::User,LayerProjection::TwoD)|(View::Camera,_)=>self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e),(View::User,_)=>Ok(Default::default())}
+    pub(crate) fn projection_camera(&mut self,view:View,projection:LayerProjection)->Result<crate::doc::core::ResolvedCamera,String>{
+        match (view,projection){
+            (View::User,LayerProjection::TwoD)|(View::Camera,_)=>{
+                let time=self.time()?;let doc=self.doc.view();
+                self.engine.frame_graph_document_camera(&doc,time).map_err(e)
+            }
+            (View::User,_)=>Ok(Default::default())
+        }
     }
     /// Flutter の Stage タブが窓を置く: 画素寸法と、comp 画像のどこを写すか。幅 0 は「隠れた」。
     pub(crate) fn set_stage_window(&mut self,j:&Json)->Result<bool,String>{
@@ -145,7 +153,7 @@ impl EditorRuntime{
     }
     /// 3D 層の 3 軸ギズモ。頂点は comp 座標 —— Stage は掴む所も描く所も同じ写像で扱う。
     /// 3D 層を選んでいない時は Null。2D・2.5D の平面ケージはここを通らない。
-    pub(crate) fn spatial_gizmo(&self,seen:View)->Result<Json,String>{
+    pub(crate) fn spatial_gizmo(&mut self,seen:View)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
         let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.viewer.selected_ids,time) else{return Ok(Json::Null)};
@@ -206,7 +214,10 @@ impl EditorRuntime{
     /// 見ている姿勢 —— comp・作中カメラ・その view の観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
     fn eye(&self,seen:View)->Option<Eye>{
         let view=self.doc.view();let time=self.time().ok()?;
-        Some(Eye{time,comp:view.composition().ok()??.spec(),camera:self.projection_camera(seen,LayerProjection::ThreeD).ok()?,observer:self.view_camera(seen).ok()?,document:self.engine.resolve_camera(&view,time).ok()?})
+        let document=self.engine.resolve_camera(&view,time).ok()?;
+        let camera=if seen==View::Camera{document}else{Default::default()};
+        let observer=if seen==View::Camera{document}else{self.viewer.user_camera};
+        Some(Eye{time,comp:view.composition().ok()??.spec(),camera,observer,document})
     }
     /// 描いた直後に GPU の mask から届いた範囲を、窓の px から comp 画像の px へ戻して取り込む。選択が変わるまで使う。
     pub(crate) fn take_selection_bounds(&mut self,seen:View,window:crate::render::engine::Window){
