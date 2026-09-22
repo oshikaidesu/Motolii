@@ -240,6 +240,26 @@ impl GpuLowerer for LogicalGpuLowerer {
             current = Some(output);
         }
 
+        if let Some(base) = input.clip_base {
+            let mut reads = current.into_iter().collect::<Vec<_>>();
+            reads.push(base);
+            let output = Self::resource(
+                graph,
+                input.contribution,
+                GpuResourceClass::Composite,
+                input.instance | 0x4000_0000,
+                reads.clone(),
+            )?;
+            Self::producer(
+                graph,
+                input.contribution.node.as_u64() ^ 0x434c4950 ^ u64::from(input.instance),
+                GpuPassKind::Composite,
+                reads,
+                vec![output],
+            )?;
+            current = Some(output);
+        }
+
         if let Some(matte) = input.matte_source {
             let mut reads = current.into_iter().collect::<Vec<_>>();
             reads.push(matte);
@@ -298,6 +318,7 @@ mod tests {
             image_sources: vec![],
             masks: vec![],
             matte_source: None,
+            clip_base: None,
             clip_to_below: false,
             stencil: false,
             plate: None,
