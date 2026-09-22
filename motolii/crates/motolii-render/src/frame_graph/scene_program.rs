@@ -75,6 +75,37 @@ impl SceneValue {
     }
 }
 
+#[cfg(test)]
+mod scene_value_lookup_tests {
+    use super::*;
+
+    fn layer(id: u64, instance: u32, content: SceneContentValue) -> SceneLayerValue {
+        SceneLayerValue {
+            layer: LayerId(id), instance, source: LayerSource::Shape,
+            transform: TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY },
+            content_key: None, content, effect_keys: vec![], effects: vec![],
+            after_effect_keys: vec![], after_effects: vec![], image_sources: vec![],
+            masks: vec![], matte: None, clip_to_below: false, flatten: false,
+            environment: false, ghost: false, freeze_eligible: false, timing_start: 0,
+            opacity: 1.0, projection: LayerProjection::TwoD, blend: BlendMode::Normal,
+            order: 0, shape_stretch: [1.0; 2], depth: 0.0,
+        }
+    }
+
+    #[test]
+    fn authored_instance_beats_generated_plate_with_same_layer_id() {
+        let authored = layer(7, 0, SceneContentValue::None);
+        let member = SceneContributionValue { solo: false, layer: Some(authored.clone()) };
+        let plate = layer(7, 0, SceneContentValue::Plate(ScenePlateValue {
+            owner: Some(LayerId(7)), members: vec![member], average: false,
+        }));
+        let scene = SceneValue { layers: vec![plate] };
+        let found = scene.layer(LayerId(7)).expect("authored layer inside plate");
+        assert!(!matches!(found.content, SceneContentValue::Plate(_)));
+        assert_eq!(found.instance, 0);
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SceneContributionValue {
     pub(crate) solo: bool,
