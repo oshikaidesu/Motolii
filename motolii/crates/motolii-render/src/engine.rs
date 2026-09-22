@@ -121,6 +121,14 @@ fn still_pixels() -> StillPixels {
 pub struct Engine {
     frame_graph: Option<frame_graph::EngineFrameGraph>,
     gpu_resource_graph: gpu_exec::GpuResourceGraph,
+    /// Exact semantic work identities for the frame currently crossing the
+    /// GPU lowering boundary.
+    gpu_work_keys: std::collections::BTreeMap<crate::frame_graph::NodeKey, crate::frame_graph::WorkKey>,
+    /// Retained base GPU content. Time-dependent WorkKeys are deliberately not
+    /// admitted here; video/history keep their dedicated temporal caches.
+    gpu_content_cache: HashMap<gpu_exec::GpuContentCacheKey, frame_graph_scene::CachedGpuContent>,
+    gpu_content_cache_hits: u64,
+    gpu_content_cache_misses: u64,
     /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
     /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
     /// 直前に**実際に解いた**拍の中身(相ごと・層の種類ごと)。memo に当たった面では空。
@@ -234,6 +242,10 @@ impl Engine {
         Ok(Self {
             frame_graph: None,
             gpu_resource_graph: Default::default(),
+            gpu_work_keys: Default::default(),
+            gpu_content_cache: Default::default(),
+            gpu_content_cache_hits: 0,
+            gpu_content_cache_misses: 0,
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
@@ -310,6 +322,15 @@ impl Engine {
         (stats.resources, stats.retained, stats.temporal)
     }
 
+    /// (hits, misses, retained static content entries).
+    pub fn gpu_content_cache_stats(&self) -> (u64, u64, usize) {
+        (
+            self.gpu_content_cache_hits,
+            self.gpu_content_cache_misses,
+            self.gpu_content_cache.len(),
+        )
+    }
+
     /// Stage で選ばれている層の mask の番号(1..=255)。選ばれていなければ 0。
     fn outline_id(&self, id: LayerId) -> u8 {
         self.outline_layers.iter().position(|l| *l == id).map_or(0, |i| i as u8 + 1)
@@ -330,6 +351,10 @@ impl Engine {
         Ok(Self {
             frame_graph: None,
             gpu_resource_graph: Default::default(),
+            gpu_work_keys: Default::default(),
+            gpu_content_cache: Default::default(),
+            gpu_content_cache_hits: 0,
+            gpu_content_cache_misses: 0,
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
