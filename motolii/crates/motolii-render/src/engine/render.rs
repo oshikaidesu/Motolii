@@ -1,12 +1,9 @@
-#[allow(unused_imports)]
 use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
-use std::collections::BTreeMap;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::{
-    LayerId, LayerSource, RationalTime, ShapeNode, StoreView,
-    TextDocument,
+    LayerId, LayerSource, RationalTime, ShapeNode, StoreView, TextDocument,
 };
 use crate::render::compositor::{
     BlendMode as CompositeBlendMode, EffectPass, Layer, LayerContent, LayerWithPasses, Window,
@@ -15,7 +12,6 @@ use crate::render::compositor::{
 use crate::render::engine::translate::{
     translate_blend_mode, translate_cast_shadow, translate_clip, translate_effect_passes, translate_matte_mode, translate_point_displace,
 };
-use crate::render::compositor::effects::isf::TimeBase;
 use crate::render::engine::{Engine, EngineError};
 
 /// 先読みと、見えない層の捨て方。
@@ -34,33 +30,7 @@ impl Engine {
         self.render_frame_graph_pixels(view, t, include_background, camera_override)
     }
 
-    /// 効果が宣言した時刻のずれごとに、**その時刻の層の絵**を用意する。
-    ///
-    /// 効果が自分で前フレームを覚えるのは恒久禁止(`docs/plugin-resources.md` §6) — 追跡できなくなり、
-    /// 純関数契約・フレーム並列・スクラブが壊れるため。ここは逆で、ホストが時刻を決めて渡すので
-    /// `render_frame(t)` は純関数のまま。
-    ///
-    /// 「時刻 t の層の姿」を作るのは Document の resolve 1 箇所だけ。ここでは引き直した姿を使う
-    /// (`source_time` だけを手でずらすと、mask やキーフレームは t のままの継ぎ接ぎになる)。
-    /// 別の時刻 `at` の**合成**を 1 枚に描く(下の合成 / 自分の群 / comp 全体)。自分は除く(非再帰)。
-
-    pub(super) fn stamp_feedback(&mut self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>) {
-        super::translate::stamp_feedback(passes, layer, copy, chain, screen, self.feedback_namespace);
-        // 本番の鍵だけ辿り直しの対象(別の時刻の列は自分の列で進む)。
-        if self.feedback_namespace == 0 {
-            for key in passes.iter().filter_map(|p| p.feedback) { self.gpu_history.observe(key); }
-        }
-    }
-
-    /// 層の組み立て + feedback の辿り直し。
-    ///
-    /// feedback は「入点を初期条件とする漸化式」(`docs/plugin-resources.md` §6-3)。組んだ後で、
-    /// 初期条件から描かれてしまった状態(飛んで来た)があれば、直近の checkpoint(無ければ入点)から
-    /// t の手前まで順に描いてから、t をもう一度組む。順再生と書き出しは 1 歩ずつなので何もしない。
-    ///
-    /// - 板の道(層の絵に焼く列)は**その層だけ**を辿り直す。
-
-
+    
     pub fn render_frame_to_texture(
         &mut self,
         view: &StoreView<'_>,
