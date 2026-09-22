@@ -158,7 +158,7 @@ pub struct Engine {
     material_picture: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     /// GPU execution layer owns feedback identity/visibility; compositor remains the concrete texture/checkpoint backend during cutover.
-    gpu_history: crate::gpu_exec::GpuHistoryRegistry,
+    pub(crate) gpu_history: crate::gpu_exec::GpuHistoryRegistry,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
     /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
