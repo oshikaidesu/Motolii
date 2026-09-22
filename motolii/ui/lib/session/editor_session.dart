@@ -63,7 +63,7 @@ bool sameValue(Object? a, Object? b) {
 
 class EditorSession {
   static const channel = NativeBridge.channel;
-  final _bridge = NativeBridge();
+  final NativeBridge _bridge;
   int? _attachmentId;
   final _runtimeEpoch = ValueNotifier<int>(0);
   ValueListenable<int> get runtimeEpoch => _runtimeEpoch;
@@ -558,7 +558,7 @@ class EditorSession {
     return work;
   }
 
-  EditorSession() {
+  EditorSession({NativeBridge? bridge}) : _bridge = bridge ?? NativeBridge() {
     document.addListener(_spreadDocument);
     deskWork.addListener(_syncPreferences);
     _bridge.listen((call) async {
