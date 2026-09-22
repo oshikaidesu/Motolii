@@ -138,8 +138,6 @@ pub enum NodeKind {
     EffectImages,
     /// The ordered shared scene before any view projection.
     SceneComposite,
-    /// GPU-ready layer resources shared by every final projection.
-    GpuScene,
     /// Effect node reserved for the later F4 lowering.
     Effect,
     Mask,
