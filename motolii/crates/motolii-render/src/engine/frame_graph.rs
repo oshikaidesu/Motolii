@@ -272,6 +272,63 @@ impl Engine {
         Ok(camera)
     }
 
+    /// First visual cassette slice. Semantic evaluation is lowered through the
+    /// backend-neutral RenderGraph; concrete layer resources still come from the
+    /// frozen GpuScene oracle until Raster/Transfer are migrated individually.
+    ///
+    /// This deliberately makes the new boundary draw real pixels before replacing
+    /// resource preparation. The RenderGraph, not GpuScene, owns the ordered
+    /// composite description on this path.
+    pub(in crate::engine) fn render_frame_graph_cassette_pixels(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+        include_background: bool,
+        camera_override: Option<ResolvedCamera>,
+    ) -> Result<Vec<u8>, EngineError> {
+        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
+        let scene = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.scene))
+            .and_then(|value| value.downcast_ref::<SceneValue>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        let graph = crate::render_lowering::lower_scene(&scene)
+            .map_err(|_| EngineError::Store("Render lowering failed".into()))?;
+
+        let prepared = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.gpu))
+            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("GpuScene reference resources are missing".into()))?;
+
+        // The first visual slice consumes Composite work for ordering/placement.
+        // Resource production remains the oracle. This assertion prevents the
+        // bridge from silently becoming another semantic evaluator.
+        let composite = graph.work().iter().find_map(|work| match work {
+            crate::render_graph::RenderWork::Composite { items, .. } => Some(items),
+            _ => None,
+        }).ok_or_else(|| EngineError::Store("RenderGraph composite work is missing".into()))?;
+        let order: std::collections::HashMap<_, _> = composite.iter()
+            .enumerate().map(|(index, item)| (item.layer, index)).collect();
+        let mut paired: Vec<_> = prepared.layer_ids.iter().copied()
+            .zip(prepared.layers.iter().cloned())
+            .collect();
+        paired.sort_by_key(|(id, _)| order.get(id).copied().unwrap_or(usize::MAX));
+        let mut layers: Vec<_> = paired.into_iter().map(|(_, layer)| layer).collect();
+
+        let document_camera = state.frame.as_ref()
+            .and_then(|frame| frame.value(state.program.camera()))
+            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
+            .copied()
+            .unwrap_or_default();
+        for layer in &mut layers { layer.layer.projection_camera = document_camera; }
+        let camera = camera_override.unwrap_or(document_camera);
+        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
+        let pixels = self.compositor.render_with_effects(state.comp, camera, &layers, background)?;
+        self.frame_graph = Some(state);
+        Ok(pixels)
+    }
+
     pub(in crate::engine) fn render_frame_graph_pixels(
         &mut self,
         view: &StoreView<'_>,
