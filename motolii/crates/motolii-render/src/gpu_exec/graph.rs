@@ -123,6 +123,10 @@ impl GpuResourceGraph {
         Ok(())
     }
 
+    pub fn version(&self, key: GpuResourceKey) -> Option<GpuResourceVersion> {
+        self.resources.get(&key).map(|record| record.desc.version)
+    }
+
     pub fn resource(&self, key: GpuResourceKey) -> Option<&GpuResourceDesc> {
         self.resources.get(&key).map(|record| &record.desc)
     }
