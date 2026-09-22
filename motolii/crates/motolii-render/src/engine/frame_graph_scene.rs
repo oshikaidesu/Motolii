@@ -279,7 +279,7 @@ impl Engine {
     }
 
 
-    fn frame_graph_extruded_content(
+    pub(crate) fn frame_graph_extruded_content(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
         texture: crate::render::compositor::GpuTexture2D,
@@ -354,7 +354,7 @@ impl Engine {
         Ok(crate::render::compositor::LayerContent::Model(model))
     }
 
-    fn frame_graph_frozen_content(
+    pub(crate) fn frame_graph_frozen_content(
         &mut self,
         source: &SceneLayerValue,
     ) -> Option<(
