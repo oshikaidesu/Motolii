@@ -77,7 +77,10 @@ impl EngineFrameGraph {
         }.ok_or_else(|| EngineError::Store("GPU sink root missing".into()))?.pass;
         let mut pre = plan.clone();
         pre.passes.retain(|pass| *pass != sink_pass);
-        let mut backend = crate::gpu_exec::EngineGpuBackend { operations: &self.gpu_operations };
+        let mut backend = crate::gpu_exec::EngineGpuBackend {
+            operations: &self.gpu_operations,
+            cross: crate::gpu_exec::NoCrossExecutor,
+        };
         crate::gpu_exec::GpuExecutor.execute(
             &mut self.gpu_resources,
             &pre,
