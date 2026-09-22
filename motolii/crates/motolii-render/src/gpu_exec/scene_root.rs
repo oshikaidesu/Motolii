@@ -141,5 +141,13 @@ mod tests {
         let readback = lower_sink(&mut graph, scene_node, scene, GpuSinkKind::Readback).unwrap();
         assert_eq!(graph.pass(present.pass).unwrap().identity.reads, vec![scene.resource]);
         assert_eq!(graph.pass(readback.pass).unwrap().identity.reads, vec![scene.resource]);
+
+        let preview = crate::gpu_exec::GpuPlanner.plan(&graph, [present.pass]).unwrap();
+        assert!(preview.passes.contains(&present.pass));
+        assert!(!preview.passes.contains(&readback.pass));
+
+        let export = crate::gpu_exec::GpuPlanner.plan(&graph, [readback.pass]).unwrap();
+        assert!(export.passes.contains(&readback.pass));
+        assert!(!export.passes.contains(&present.pass));
     }
 }
