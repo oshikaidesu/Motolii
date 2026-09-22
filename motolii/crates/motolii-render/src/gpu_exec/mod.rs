@@ -7,6 +7,7 @@
 mod composite_backend;
 mod content_backend;
 mod contribution_backend;
+mod cross_backend;
 mod effect_backend;
 mod engine_backend;
 mod executor;
