@@ -452,7 +452,7 @@ impl SceneNodeProgram {
                 let mut plate = base;
                 plate.content_key = None;
                 plate.freeze_eligible = false;
-                        plate.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(*layer), members, average: false });
+                plate.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(*layer), members, average: false });
                 plate.effect_keys.clear();
                 plate.effects.clear();
                 plate.after_effect_keys = after_keys;
