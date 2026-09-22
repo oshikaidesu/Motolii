@@ -12,6 +12,40 @@ pub(crate) struct ExecutableScene {
 /// Concrete scene dispatcher. Semantic meaning is already resolved; this only
 /// joins resident producer outputs into executable contributions.
 impl crate::render::engine::Engine {
+    pub(crate) fn gpu_executable_scene_with_solver(
+        &mut self,
+        scene: &SceneValue,
+        solver: &crate::frame_graph::SolverPlanValue,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        time: crate::doc::core::RationalTime,
+        fps: crate::doc::store::Fps,
+    ) -> Result<ExecutableScene, crate::render::engine::EngineError> {
+        let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
+            .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
+            .collect();
+        if physics_overlays.is_empty() {
+            let planned = self.gpu_plan_visible_scene(scene, solver, comp, camera);
+            let scene = planned.as_ref().unwrap_or(scene);
+            let mut executable = self.gpu_executable_scene(scene, comp, camera)?;
+            self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut executable)?;
+            return Ok(executable);
+        }
+        let base_scene = SceneValue {
+            layers: scene.layers.iter()
+                .filter(|layer| !physics_overlays.contains(&layer.layer))
+                .cloned().collect(),
+        };
+        let mut base = self.gpu_executable_scene(&base_scene, comp, camera)?;
+        self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut base)?;
+
+        let mut executable = self.gpu_executable_scene(scene, comp, camera)?;
+        for (id, layer) in executable.layer_ids.iter().copied().zip(executable.layers.iter_mut()) {
+            self.attach_block_id(id, &mut layer.layer, comp);
+        }
+        Ok(executable)
+    }
+
     pub(crate) fn gpu_executable_scene(
         &mut self,
         scene: &SceneValue,
