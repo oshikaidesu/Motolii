@@ -54,7 +54,7 @@ impl crate::render::engine::Engine {
                             let nested = SceneValue {
                                 layers: plate.members.iter().filter_map(|member| member.layer.clone()).collect(),
                             };
-                            let prepared = self.prepare_gpu_scene(&nested, comp, camera)?;
+                            let prepared = self.prepare_execution_scene(&nested, comp, camera)?;
                             if prepared.layers.is_empty() { return Ok(None); }
                             let (texture, _) = self.compositor.render_to_texture(
                                 comp,
@@ -71,7 +71,7 @@ impl crate::render::engine::Engine {
                     self.compositor.snapshot_texture(&texture)
                 }
                 SceneImageSourceValue::Scene { scene, background, .. } => {
-                    let prepared = self.prepare_gpu_scene(scene, comp, camera)?;
+                    let prepared = self.prepare_execution_scene(scene, comp, camera)?;
                     let (texture, _) = self.compositor.render_to_texture(
                         comp, camera, &prepared.layers, *background,
                     )?;
