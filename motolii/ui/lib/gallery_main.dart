@@ -47,7 +47,10 @@ class _GalleryStoryState extends State<GalleryStory> {
       ..document.value = status
       ..frame.value = (status['frame'] as num? ?? 0).toInt();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) session.deskWork.value = const {'theme': _velvetTheme};
+      if (mounted)
+        session.deskWork.value = const {
+          'theme': {'data': _velvetTheme},
+        };
     });
   }
 
@@ -87,7 +90,9 @@ class _PreviewBridge extends NativeBridge {
         return status;
       case 'readSettings':
         return const {
-          'deskWork': {'theme': _velvetTheme},
+          'deskWork': {
+            'theme': {'data': _velvetTheme},
+          },
         };
       case 'placePanel':
         await _handler?.call(MethodCall('placePanel', arguments));
