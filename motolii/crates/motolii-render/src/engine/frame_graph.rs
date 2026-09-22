@@ -427,7 +427,7 @@ impl Engine {
         Ok(state)
     }
 
-    pub(in crate::engine) fn frame_graph_plate(
+    pub(crate) fn frame_graph_plate(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
         plate: &crate::frame_graph::ScenePlateValue,
@@ -440,7 +440,7 @@ impl Engine {
         result
     }
 
-    pub(in crate::engine) fn frame_graph_matte(
+    pub(crate) fn frame_graph_matte(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
         target: &crate::render::compositor::LayerWithPasses,
@@ -454,7 +454,7 @@ impl Engine {
         result
     }
 
-    pub(in crate::engine) fn frame_graph_process_mask_flatten(
+    pub(crate) fn frame_graph_process_mask_flatten(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
         layer: crate::render::compositor::Layer,
@@ -478,13 +478,13 @@ impl Engine {
         result
     }
 
-    pub(in crate::engine) fn frame_graph_snapshot_rows(
+    pub(crate) fn frame_graph_snapshot_rows(
         &mut self,
         source: &crate::frame_graph::SceneLayerValue,
         comp: crate::doc::core::CompSpec,
         camera: crate::render::engine::ResolvedCamera,
     ) -> Result<Vec<Vec<crate::render::compositor::GpuTexture2D>>, EngineError> {
-        let Some(state) = self.frame_graph.as_mut() else { return Ok(Vec::new()) };
+        let Some(mut state) = self.frame_graph.take() else { return Ok(Vec::new()) };
         let mut rows = Vec::with_capacity(source.image_sources.len());
         for (pass_slot, row) in source.image_sources.iter().enumerate() {
             let Some(effect) = source.effect_keys.get(pass_slot).copied() else {
@@ -516,7 +516,7 @@ impl Engine {
         Ok(rows)
     }
 
-    pub(in crate::engine) fn frame_graph_resident_effects(
+    pub(crate) fn frame_graph_resident_effects(
         &self,
         source: &crate::frame_graph::SceneLayerValue,
     ) -> Option<crate::gpu_exec::ResidentEffectChain> {
@@ -525,7 +525,7 @@ impl Engine {
         state.gpu_effects.current(key, version).cloned()
     }
 
-    pub(in crate::engine) fn frame_graph_resident_placement(
+    pub(crate) fn frame_graph_resident_placement(
         &self,
         source: &crate::frame_graph::SceneLayerValue,
     ) -> Option<crate::gpu_exec::ResidentPlacement> {
@@ -539,7 +539,7 @@ impl Engine {
         state.gpu_placement.get_any(identity.key()).map(|(_, value)| *value)
     }
 
-    pub(in crate::engine) fn frame_graph_resident_content(
+    pub(crate) fn frame_graph_resident_content(
         &self,
         source: &crate::frame_graph::SceneLayerValue,
     ) -> Option<crate::gpu_exec::ResidentContent> {
@@ -626,7 +626,7 @@ impl Engine {
 
     fn prepare_frame_graph_layers(
         &mut self,
-        state: &EngineFrameGraph,
+        state: &mut EngineFrameGraph,
         time: RationalTime,
         document_camera: ResolvedCamera,
     ) -> Result<Vec<crate::render::compositor::LayerWithPasses>, EngineError> {
