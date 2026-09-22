@@ -174,6 +174,23 @@ impl Engine {
             .copied()
     }
 
+    /// Local and inherited world transform evaluated by the production
+    /// TransformProgram for this exact revision/time.
+    pub fn frame_graph_cached_transform(
+        &self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+        id: LayerId,
+    ) -> Option<(crate::frame_graph::TransformValue, crate::frame_graph::TransformValue)> {
+        let state = self.frame_graph.as_ref()?;
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        let binding = state.program.transforms().binding(id)?;
+        let frame = state.frame.as_ref()?;
+        let local = frame.value(binding.local)?.downcast_ref::<crate::frame_graph::TransformValue>().copied()?;
+        let world = frame.value(binding.world)?.downcast_ref::<crate::frame_graph::TransformValue>().copied()?;
+        Some((local, world))
+    }
+
     /// Editor read model. Evaluate the production graph once and hand the
     /// semantic scene to editor geometry directly. Do not project back through
     /// ResolvedLayer: that would recreate the migration bridge we are deleting.
