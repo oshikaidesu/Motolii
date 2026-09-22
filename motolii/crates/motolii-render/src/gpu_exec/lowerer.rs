@@ -1,5 +1,6 @@
 use std::hash::{Hash, Hasher};
 
+use crate::doc::store::LayerId;
 use crate::frame_graph::NodeKey;
 
 use super::graph::{GpuGraphError, GpuResourceGraph};
@@ -35,9 +36,10 @@ pub(crate) struct GpuEffectImages {
     pub sources: Vec<VersionedImageSource>,
 }
 
-pub(crate) fn image_source_identity(effect: NodeKey, instance: u32, index: usize) -> GpuResourceIdentity {
+pub(crate) fn image_source_identity(effect: NodeKey, layer: LayerId, instance: u32, index: usize) -> GpuResourceIdentity {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     effect.hash(&mut hasher);
+    layer.hash(&mut hasher);
     instance.hash(&mut hasher);
     index.hash(&mut hasher);
     GpuResourceIdentity::synthetic(hasher.finish(), GpuResourceClass::ImageSource, 0)
@@ -49,6 +51,7 @@ pub(crate) fn image_source_identity(effect: NodeKey, instance: u32, index: usize
 #[derive(Clone, Debug)]
 pub(crate) struct GpuContributionInput {
     pub contribution: VersionedSemantic,
+    pub layer: LayerId,
     pub instance: u32,
     pub content: Option<VersionedSemantic>,
     pub placement: VersionedSemantic,
