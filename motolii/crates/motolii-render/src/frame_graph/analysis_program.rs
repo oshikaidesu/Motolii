@@ -293,12 +293,14 @@ impl AnalysisProgram {
                                 cursor += 1;
                                 value
                             } else { 1.0 };
+                            let mut resolved_effect_keys = Vec::new();
                             let mut resolved_effects = Vec::new();
-                            for _ in &plan.effects {
+                            for key in &plan.effects {
                                 if let Some(effect) = inputs.at(cursor)
                                     .and_then(|value| value.downcast_ref::<EffectValue>())
                                     .and_then(|value| value.0.clone())
                                 {
+                                    resolved_effect_keys.push(*key);
                                     resolved_effects.push(effect);
                                 }
                                 cursor += 1;
@@ -319,7 +321,9 @@ impl AnalysisProgram {
                                 transform,
                                 content_key: None,
                                 content,
+                                effect_keys: resolved_effect_keys,
                                 effects: resolved_effects,
+                                after_effect_keys: Vec::new(),
                                 after_effects: Vec::new(),
                                 image_sources: Vec::new(),
                                 masks: resolved_masks,
