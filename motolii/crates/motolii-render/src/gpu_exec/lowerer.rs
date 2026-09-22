@@ -52,10 +52,9 @@ pub(crate) struct GpuContributionResources {
     /// connected. Matte/clip/composition backends must address this resource
     /// directly instead of rediscovering layers from SceneValue.
     pub contribution: GpuResourceKey,
-    pub final_image_or_geometry: Option<GpuResourceKey>,
-    /// Cross-contribution operations emitted by lowering. These are concrete
-    /// execution payloads keyed entirely by logical resources; registering
-    /// them requires no SceneValue scan.
+    /// Per-contribution output before cross-contribution relations. Clip/matte
+    /// are lowered only after every contribution has reached this stage.
+    pub prepared: Option<GpuResourceKey>,
     pub operations: Vec<(super::types::GpuPassKey, super::engine_backend::EngineGpuOperation)>,
 }
 
