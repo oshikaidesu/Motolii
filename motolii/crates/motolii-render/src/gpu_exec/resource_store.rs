@@ -48,6 +48,10 @@ impl<T> GpuResourceStore<T> {
         self.scratch.insert(slot, value)
     }
 
+    pub fn get_any(&self, key: GpuResourceKey) -> Option<(&GpuResourceVersion, &T)> {
+        self.entries.get(&key).map(|entry| (&entry.version, &entry.value))
+    }
+
     pub fn len(&self) -> usize { self.entries.len() }
 }
 
