@@ -44,6 +44,7 @@ class _GalleryStoryState extends State<GalleryStory> {
     bridge = _PreviewBridge(status);
     session = EditorSession(bridge: bridge)
       ..windowInfo = const {'id': 'preview', 'main': true}
+      ..deskWork.value = const {'theme': _velvetTheme}
       ..document.value = status
       ..frame.value = (status['frame'] as num? ?? 0).toInt();
   }
@@ -83,7 +84,9 @@ class _PreviewBridge extends NativeBridge {
       case 'request':
         return status;
       case 'readSettings':
-        return const <String, dynamic>{};
+        return const {
+          'deskWork': {'theme': _velvetTheme},
+        };
       case 'placePanel':
         await _handler?.call(MethodCall('placePanel', arguments));
         return true;
@@ -99,6 +102,35 @@ class _PreviewBridge extends NativeBridge {
     }
   }
 }
+
+const _velvetTheme = {
+  'schemaVersion': 1,
+  'name': 'Velvet',
+  'colors': {
+    'app': '#24202d',
+    'panel': '#332b40',
+    'raised': '#453954',
+    'hover': '#554564',
+    'line': '#17131f',
+    'border': '#847294',
+    'ink': '#f5ebff',
+    'muted': '#c8b9d4',
+    'tab': '#dc9bea',
+    'tabInk': '#25122e',
+    'accent': '#80e2d0',
+    'caret': '#80e2d0',
+    'selection': '#80e2d066',
+    'menu': '#24202d',
+    'menuEdge': '#847294',
+  },
+  'drawing': {
+    'laneGround': '#292332',
+    'lane': '#2d2637',
+    'laneAlt': '#332c40',
+    'grid': '#17131f',
+    'gridMinor': '#241e2c',
+  },
+};
 
 Map<String, dynamic> _number(String id, String label, Object value) => {
   'id': id,
