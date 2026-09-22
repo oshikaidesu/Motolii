@@ -324,7 +324,7 @@ impl Engine {
             displace: work.displace,
             clip: work.clip,
             shadow: work.shadow,
-            outline: self.outline_id(work.id),
+            outline: 0,
             frame: frozen_frame,
         };
         let layer = self.apply_masks_to_layer(layer, &work.masks, natural, frozen_frame)?;

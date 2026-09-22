@@ -403,13 +403,15 @@ impl Engine {
             .unwrap_or_default();
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
         let mut layers = prepared.layers.clone();
-        for layer in &mut layers {
+        // Selection is editor state: stamped per view, never into the shared prepared scene.
+        for (layer, id) in layers.iter_mut().zip(&prepared.layer_ids) {
             layer.layer.projection_camera =
                 if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
                     document_camera
                 } else {
                     projection_camera
                 };
+            layer.layer.outline = self.outline_id(*id);
         }
         self.stamp_frame_graph_window_feedback(&mut layers, window);
         let background = if include_background {
