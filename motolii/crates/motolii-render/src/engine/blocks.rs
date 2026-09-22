@@ -583,7 +583,7 @@ impl Engine {
 
     /// FrameGraph path: build block/Follow/field/physics state from evaluated
     /// scene + solver values only. No StoreView/document reads are allowed here.
-    pub(in crate::engine) fn prepare_frame_graph_blocks(
+    pub(crate) fn prepare_frame_graph_blocks(
         &mut self,
         scene: &SceneValue,
         solver: &SolverPlanValue,
