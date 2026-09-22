@@ -8,6 +8,7 @@ mod executor;
 mod graph;
 mod lowerer;
 mod planner;
+mod semantic_adapter;
 mod types;
 
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
@@ -15,6 +16,7 @@ pub(crate) use graph::{GpuGraphError, GpuResourceDelta, GpuResourceGraph};
 pub(crate) use lowerer::{
     GpuContributionInput, GpuContributionResources, GpuLowerer, VersionedSemantic,
 };
+pub(crate) use semantic_adapter::{SemanticAdapterError, SemanticGpuAdapter};
 pub(crate) use planner::{
     GpuExecutionPlan, GpuPlanError, GpuPlanner, GpuResourceInterval,
 };
