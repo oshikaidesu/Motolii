@@ -136,7 +136,7 @@ pub struct Engine {
     text_order: std::collections::VecDeque<TextCacheKey>,
     shape_textures: HashMap<ShapeCacheKey, TextTexture>,
     failed_probes: HashMap<String, String>,
-    layer_failures: Vec<String>,
+    pub(crate) layer_failures: Vec<String>,
     /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
     feedback_replaying: bool,
     /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
