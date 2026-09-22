@@ -81,6 +81,15 @@ impl<'a> SemanticGpuAdapter<'a> {
             .map(|(node, value)| VersionedSemantic { node, version: resolved_effect_version(value) })
             .collect();
 
+        let catalog = crate::render::engine::known_effects();
+        let persistent_effects = layer.effect_keys.iter().copied().zip(layer.effects.iter())
+            .chain(layer.after_effect_keys.iter().copied().zip(layer.after_effects.iter()))
+            .filter_map(|(node, effect)| catalog.iter()
+                .find(|descriptor| descriptor.plugin_id == effect.plugin_id)
+                .is_some_and(|descriptor| descriptor.persistent)
+                .then_some(node))
+            .collect();
+
         if layer.image_source_effects.len() != layer.image_sources.len() {
             return Err(SemanticAdapterError::ImageSourceIdentityMismatch(layer.layer));
         }
@@ -117,6 +126,7 @@ impl<'a> SemanticGpuAdapter<'a> {
             placement,
             effects,
             after_effects,
+            persistent_effects,
             effect_images,
             masks,
             matte_source,
