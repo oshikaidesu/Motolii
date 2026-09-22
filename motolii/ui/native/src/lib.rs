@@ -30,7 +30,6 @@ pub struct EditorRuntime {
     path: Option<String>,
     saved_signature: String,
     exporter: motolii_jobs::export::ExportController,
-    freezer: motolii_jobs::freeze::FreezeController,
     device_id: u64,
     render_count: u64,
     render_ms: f64,
@@ -82,8 +81,7 @@ impl EditorRuntime {
         if doc.view().composition().map_err(|e| e.to_string())?.is_none() {
             return Err("Saved document has no composition".into());
         }
-        let mut engine = Engine::new().map_err(|e| e.to_string())?;
-        engine.set_cache_root(Self::cache_root_for(if path.is_empty() { None } else { Some(path) }));
+        let engine = Engine::new().map_err(|e| e.to_string())?;
         let device_id = unsafe { engine.gpu_device().as_hal::<wgpu::hal::api::Metal>() }
             .ok_or("Engine did not create a Metal device")?.raw_device().registryID();
         let saved_signature = snapshot::authored_signature(&doc)?;
@@ -94,7 +92,7 @@ impl EditorRuntime {
         Ok(Self {
             doc, engine, viewer, clipboard: Default::default(),
             path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature,
-            exporter: Default::default(), freezer: Default::default(), device_id,
+            exporter: Default::default(), device_id,
             render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), error: None,
             preview: None, preview_tag: None, stage_drag: None,
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
@@ -103,14 +101,6 @@ impl EditorRuntime {
             owners: Default::default(), last_window: Default::default(),
             playback_rendered_frame: None,
         })
-    }
-
-    /// Freeze の cache の置き場: 書類の隣。未保存の書類は temp(保存した時に引っ越さない — Freeze し直す)。
-    fn cache_root_for(path: Option<&str>) -> Option<std::path::PathBuf> {
-        match path {
-            Some(path) => Engine::cache_root_for(std::path::Path::new(path)),
-            None => Some(std::env::temp_dir().join(format!("motolii-cache-{}", std::process::id()))),
-        }
     }
 
     fn time(&self) -> Result<RationalTime, String> {

@@ -23,7 +23,6 @@ pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 pub(crate) mod translate;
 mod blocks;
 mod physics;
-mod frozen;
 mod frame_graph;
 mod frame_graph_scene;
 
@@ -148,10 +147,6 @@ pub struct Engine {
     video_stream_namespace: u64,
     /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
     pub(crate) feedback_namespace: u64,
-    /// Freeze の cache(層の投影の前の絵、書類の隣)。
-    pub(crate) frozen: frozen::FrozenStore,
-    /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
-    pub(crate) freezing: Option<LayerId>,
     material_picture: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
     /// GPU execution layer owns feedback identity/visibility; compositor remains the concrete texture/checkpoint backend during cutover.
@@ -264,8 +259,6 @@ impl Engine {
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            frozen: Default::default(),
-            freezing: None,
             material_picture: None,
             gpu_history: Default::default(),
             blocks: Default::default(),
@@ -350,8 +343,6 @@ impl Engine {
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            frozen: Default::default(),
-            freezing: None,
             material_picture: None,
             gpu_history: Default::default(),
             blocks: Default::default(),

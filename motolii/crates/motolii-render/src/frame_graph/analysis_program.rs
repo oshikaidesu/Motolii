@@ -332,7 +332,6 @@ impl AnalysisProgram {
                                 flatten: plan.flatten,
                                 environment: plan.environment,
                                 ghost: false,
-                                freeze_eligible: false,
                                 timing_start: 0,
                                 opacity,
                                 projection: plan.projection,

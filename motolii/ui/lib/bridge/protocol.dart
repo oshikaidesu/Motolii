@@ -62,7 +62,6 @@ enum DocumentOperation {
   historyGoto('historyGoto'),
   seek('seek'),
   anchor('anchor'),
-  freeze('freeze'),
   setFillMode('setFillMode'),
   setGradient('setGradient'),
   previewBlend('previewBlend'),

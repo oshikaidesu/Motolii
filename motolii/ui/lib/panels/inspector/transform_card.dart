@@ -266,8 +266,6 @@ mixin _InspectorTransformCard on _InspectorControls {
           ),
         ),
       ], divisions: flagColumns),
-      // Freeze の入口は Timeline にある(右クリック)。焼けているかは列の色で見せる物で、
-      // Inspector の行ではない。ここに置くと入口が二重になる。
     ];
   }
 }

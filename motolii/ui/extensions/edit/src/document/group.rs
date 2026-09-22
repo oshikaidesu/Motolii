@@ -80,13 +80,6 @@ impl Document {
         let mut released = Vec::new();
 
         for &group in &groups {
-            if view.attrs(group)?.unwrap_or_default().frozen {
-                return Err(StoreError::Property(format!(
-                    "layer {} は凍結中(frozen)なので ungroup できない \
-                     (先に unfreeze すること)",
-                    group.0
-                )));
-            }
             reject_animated_transform(&view, group, "group")?;
             let new_parent = view.attrs(group)?.and_then(|attrs| attrs.parent);
             let group_local = (self.geometry.local)(&view, group, t)?;

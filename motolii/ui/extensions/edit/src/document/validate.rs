@@ -7,7 +7,7 @@ use re_types_core::SerializedComponentBatch;
 use motolii_doc::store::components::{descriptor_attrs, TrackJson};
 use motolii_doc::store::slot::PropertyLink;
 use motolii_doc::store::view::StoreView;
-use motolii_doc::store::{LayerId, LayerSource, Mask, PropertyId, StoreError};
+use motolii_doc::store::{LayerId, Mask, PropertyId, StoreError};
 
 pub(super) fn validate_no_parent_cycle(
     view: &StoreView,
@@ -109,44 +109,6 @@ pub(super) fn check_not_locked(view: &StoreView, layer: LayerId) -> Result<(), S
     Ok(())
 }
 
-pub(super) fn check_not_frozen(view: &StoreView, layer: LayerId) -> Result<(), StoreError> {
-    if let Some(group) = view.frozen_ancestor(layer)? {
-        return Err(StoreError::Property(format!(
-            "layer {} は凍結中(frozen)のグループ(layer {})の部分木にあるので編集できない \
-             (先にそのグループを unfreeze すること)",
-            layer.0, group.0
-        )));
-    }
-    Ok(())
-}
-
-/// 凍った層の**中**(素材・効果・欄・キーフレーム・マスク・形・文字)は触れない。配置・不透明度・重ね順・時間は
-/// 触れる(docs/freeze-and-flatten.md §2-2, §2-3)。群の部分木は従来通り丸ごと。
-pub(super) fn check_not_frozen_inside(view: &StoreView, layer: LayerId, what: &str) -> Result<(), StoreError> {
-    check_not_frozen(view, layer)?;
-    if view.attrs(layer)?.unwrap_or_default().frozen {
-        return Err(StoreError::Property(format!(
-            "layer {} is frozen — unfreeze to edit {what}",
-            layer.0
-        )));
-    }
-    Ok(())
-}
-
-/// 欄の名前が「中」の物か(効果の欄・マスク)。それ以外(位置・不透明度など)は凍っていても回せる。
-pub(super) fn property_is_inside(name: &str) -> bool {
-    name.starts_with(motolii_doc::store::property::EFFECT_PREFIX) || name.starts_with(motolii_doc::store::property::MASK_PREFIX)
-}
-
-pub(super) fn is_frozen_or_within_frozen(view: &StoreView, candidate: LayerId) -> Result<bool, StoreError> {
-    let self_frozen = view
-        .meta(candidate)?
-        .map(|meta| meta.source == LayerSource::Group)
-        .unwrap_or(false)
-        && view.attrs(candidate)?.unwrap_or_default().frozen;
-    Ok(self_frozen || view.frozen_ancestor(candidate)?.is_some())
-}
-
 pub(super) fn freeze_attrs_batch(
     view: &StoreView,
     group: LayerId,
@@ -158,7 +120,7 @@ pub(super) fn freeze_attrs_batch(
             group.0
         )));
     }
-    // Freeze は層にも群にも(DAW のトラック単位。docs/freeze-and-flatten.md、2026-09-13)。
+    // 旗だけ残す。評価も編集拒否もしない。古い undo が Freeze / Unfreeze をまだ持つ。
     let mut attrs = view.attrs(group)?.unwrap_or_default();
     attrs.frozen = frozen;
     let json = serde_json::to_string(&attrs)?;

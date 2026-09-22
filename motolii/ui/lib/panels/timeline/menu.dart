@@ -30,20 +30,11 @@ mixin TimelineMenu on State<TimelinePanel>, TimelineFrame {
       'ungroup': 'Ungroup',
       'split': 'Split',
     };
-    final frozen =
-        row >= 0 && row < tracks.length && tracks[row].layer['frozen'] == true;
     final chosen = await showEditorMenu<String>(
       context,
       details.globalPosition,
       [
         if (target != null) ...[
-          // DAW の Freeze Track / Unfreeze(Ableton の右クリック)。中を固めて軽くし、配置は生きたまま。
-          EditorMenuItem<String>(
-            value: frozen ? 'freeze:off' : 'freeze:on',
-            enabled: has('freeze'),
-            child: Text(frozen ? 'Unfreeze' : 'Freeze'),
-          ),
-          const EditorMenuDivider(),
           const EditorMenuItem<String>(
             value: 'lanes:keyed',
             child: Text('Show animated properties'),
@@ -94,13 +85,6 @@ mixin TimelineMenu on State<TimelinePanel>, TimelineFrame {
           if (chosen == 'lanes:all') allProperties.add(target);
         }
         relane();
-      });
-    } else if (chosen != null &&
-        chosen.startsWith('freeze:') &&
-        target != null) {
-      widget.controller.command('freeze', {
-        'layer': target,
-        'enabled': chosen == 'freeze:on',
       });
     } else if (chosen != null)
       widget.controller.command(chosen);
