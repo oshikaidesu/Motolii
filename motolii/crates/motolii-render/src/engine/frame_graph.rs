@@ -112,6 +112,18 @@ impl EngineFrameGraph {
                     passes: crate::render::engine::translate::translate_effect_passes(&layer.effects),
                     plate_passes: crate::render::engine::translate::translate_plate_passes(&layer.after_effects),
                 });
+            let mut pass_sources = Vec::with_capacity(resources.snapshot_rows.len());
+            for row in &resources.snapshot_rows {
+                let mut textures = Vec::with_capacity(row.len());
+                for key in row {
+                    let Some((_, snapshot)) = self.gpu_snapshots.get_any(*key) else {
+                        textures.clear();
+                        break;
+                    };
+                    textures.push(snapshot.texture.clone());
+                }
+                pass_sources.push(textures);
+            }
             engine.gpu_materialize_contribution(
                 &mut self.gpu_composites,
                 output,
@@ -121,7 +133,7 @@ impl EngineFrameGraph {
                 content,
                 placement,
                 effects,
-                Vec::new(),
+                pass_sources,
                 self.comp,
                 camera,
             )?;
