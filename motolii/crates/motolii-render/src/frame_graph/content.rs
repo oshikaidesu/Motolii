@@ -9,9 +9,6 @@ use super::{EvaluationContext, GraphNode, NodeIdentity, NodeInputs, NodeKey, Nod
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MediaSourceValue { pub path: String, pub fingerprint: Option<String>, pub version: u64 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MaterialValue { pub source: MediaSourceValue }
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct MediaExtentValue { pub source: MediaSourceValue, pub size: [f32; 3] }
 
@@ -26,7 +23,6 @@ pub struct ContentBinding {
     pub layer: LayerId,
     pub content: Option<NodeKey>,
     pub extent: Option<NodeKey>,
-    pub material: Option<NodeKey>,
 }
 
 #[derive(Clone)]
@@ -42,7 +38,6 @@ enum Recipe {
         speed_track: Option<KeyframeTrack>,
         remap: Option<usize>,
     },
-    Material,
 }
 
 #[derive(Debug)]
@@ -66,7 +61,7 @@ impl ContentProgram {
         let fps = view.composition()?.map(|composition| composition.fps);
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
-            let mut binding = ContentBinding { layer, content: None, extent: None, material: None };
+            let mut binding = ContentBinding { layer, content: None, extent: None };
             match meta.source {
                 LayerSource::Text => if let Some(document) = view.text_document(layer)? {
                     let parameters = serde_json::to_vec(&document)?;
@@ -85,7 +80,6 @@ impl ContentProgram {
                     if crate::render::media::is_mesh_path(&source.path) {
                         let mesh = program.intern_versioned(NodeKind::MeshSource, vec![], parameters, false, vec![version], Recipe::Mesh(source));
                         binding.content = Some(mesh);
-                        binding.material = Some(program.intern(NodeKind::Material, vec![mesh], vec![], false, Recipe::Material));
                     } else {
                         let speed_track = view.track(layer, &PropertyId::new(property::SPEED)?)?;
                         let remap_key = properties.node_for(layer, &PropertyId::new(property::TIME_REMAP)?);
@@ -179,10 +173,7 @@ impl ContentProgram {
                     Ok(MediaFrameValue { source: source.clone(), time: Some(time) })
                 })();
                 result.map(NodeValue::new).map_err(ContentProgramError::from)
-            },
-            Recipe::Material => inputs.at(0).and_then(|value| value.downcast_ref::<MediaSourceValue>()).cloned()
-                .map(|source| NodeValue::new(MaterialValue { source }))
-                .ok_or(ContentProgramError::InvalidInput(node.identity().kind)),
+            }
         })
     }
 
@@ -236,10 +227,7 @@ mod tests {
         let properties = PropertyProgram::compile(&doc.view()).unwrap();
         let program = ContentProgram::compile(&doc.view(), &properties).unwrap();
         assert_eq!(program.nodes().filter(|node| node.identity().kind == NodeKind::MeshSource).count(), 1);
-        assert_eq!(program.nodes().filter(|node| node.identity().kind == NodeKind::Material).count(), 1);
         let mesh: std::collections::BTreeSet<_> = program.bindings().filter_map(|binding| binding.content).collect();
-        let materials: std::collections::BTreeSet<_> = program.bindings().filter_map(|binding| binding.material).collect();
         assert_eq!(mesh.len(), 1);
-        assert_eq!(materials.len(), 1);
     }
 }
