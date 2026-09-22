@@ -57,6 +57,7 @@ pub(crate) struct GpuContributionInput {
     pub placement: VersionedSemantic,
     pub effects: Vec<VersionedSemantic>,
     pub after_effects: Vec<VersionedSemantic>,
+    pub persistent_effects: Vec<NodeKey>,
     pub effect_images: Vec<GpuEffectImages>,
     pub masks: Vec<VersionedSemantic>,
     pub matte_source: Option<GpuResourceKey>,
