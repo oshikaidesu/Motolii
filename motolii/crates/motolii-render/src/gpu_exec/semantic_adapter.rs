@@ -1,5 +1,5 @@
 use crate::frame_graph::{
-    CanonicalEncoder, EvaluatedFrame, SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneProgram,
+    CanonicalEncoder, SceneContentValue, SceneImageSourceValue, SceneLayerValue, SceneProgram,
     SceneValue, TransformValue,
 };
 
@@ -17,6 +17,7 @@ pub(crate) enum SemanticAdapterError {
     MissingTransform(crate::doc::store::LayerId),
     EffectIdentityMismatch(crate::doc::store::LayerId),
     ImageSourceIdentityMismatch(crate::doc::store::LayerId),
+    MaskIdentityMismatch(crate::doc::store::LayerId),
 }
 
 impl From<crate::frame_graph::CanonicalError> for SemanticAdapterError {
@@ -25,12 +26,11 @@ impl From<crate::frame_graph::CanonicalError> for SemanticAdapterError {
 
 pub(crate) struct SemanticGpuAdapter<'a> {
     program: &'a SceneProgram,
-    frame: &'a EvaluatedFrame,
 }
 
 impl<'a> SemanticGpuAdapter<'a> {
-    pub fn new(program: &'a SceneProgram, frame: &'a EvaluatedFrame) -> Self {
-        Self { program, frame }
+    pub fn new(program: &'a SceneProgram) -> Self {
+        Self { program }
     }
 
     pub fn contributions(
@@ -99,12 +99,12 @@ impl<'a> SemanticGpuAdapter<'a> {
                 Ok(GpuEffectImages { effect, sources })
             }).collect::<Result<Vec<_>, SemanticAdapterError>>()?;
 
-        let masks = self.program.masks().binding(layer.layer)
-            .map(|binding| binding.masks.iter().filter_map(|node| {
-                let value = self.frame.value(*node)?.downcast_ref::<crate::frame_graph::MaskValue>()?;
-                Some(VersionedSemantic { node: *node, version: mask_version(value) })
-            }).collect())
-            .unwrap_or_default();
+        if layer.mask_keys.len() != layer.masks.len() {
+            return Err(SemanticAdapterError::MaskIdentityMismatch(layer.layer));
+        }
+        let masks = layer.mask_keys.iter().copied().zip(layer.masks.iter())
+            .map(|(node, value)| VersionedSemantic { node, version: resolved_mask_version(value) })
+            .collect();
 
         Ok(GpuContributionInput {
             contribution: VersionedSemantic {
@@ -241,7 +241,7 @@ fn layer_visual_version(layer: &SceneLayerValue) -> Result<GpuResourceVersion, S
     Ok(hash_encoded(encoded))
 }
 
-fn mask_version(value: &crate::frame_graph::MaskValue) -> GpuResourceVersion {
+fn resolved_mask_version(value: &crate::picture::resolved::ResolvedMask) -> GpuResourceVersion {
     let mut encoded = CanonicalEncoder::new();
     let bytes = format!("{value:?}");
     let _ = encoded.string(&bytes);
