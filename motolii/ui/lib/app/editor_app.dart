@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../foundation/leaves.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
+import '../session/editor_session.dart';
 import 'editor_window.dart';
 
 class EditorApp extends StatefulWidget {
