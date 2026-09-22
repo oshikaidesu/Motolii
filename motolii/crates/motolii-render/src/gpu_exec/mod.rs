@@ -7,6 +7,7 @@
 mod composite_backend;
 mod content_backend;
 mod effect_backend;
+mod engine_backend;
 mod executor;
 mod graph;
 mod history;
@@ -25,6 +26,7 @@ mod types;
 
 pub(crate) use composite_backend::ResidentCompositeLayer;
 pub(crate) use content_backend::ResidentContent;
+pub(crate) use engine_backend::{EngineGpuBackend, EngineGpuBackendError, EngineGpuOperation};
 pub(crate) use effect_backend::{effect_chain_key, resident_effect_chain, ResidentEffectChain};
 pub(crate) use executor::{GpuBackend, GpuExecuteError, GpuExecutionStats, GpuExecutor};
 pub(crate) use history::{history_identity, GpuHistoryRegistry};
