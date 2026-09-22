@@ -4,6 +4,8 @@ use crate::frame_graph::{SceneContentValue, SceneImageSourceValue, SceneLayerVal
 use crate::render::compositor::{BlendMode as CompositeBlendMode, Layer, LayerWithPasses};
 use crate::render::engine::{Engine, EngineError};
 
+use super::gpu_exec::{GpuResidency, GpuResourceDesc, GpuResourceId, GpuResourceKind};
+
 #[derive(Clone)]
 pub(super) struct GpuSceneValue {
     pub layers: Vec<LayerWithPasses>,
@@ -284,6 +286,31 @@ impl Engine {
         comp: CompSpec,
         projection_camera: ResolvedCamera,
     ) -> Result<Option<PreparedGpuContribution>, EngineError> {
+            let content_resource = source.content_key.map(|semantic| {
+                let id = GpuResourceId::from_parts(GpuResourceKind::Content, semantic, 0);
+                self.gpu_resource_graph.upsert(GpuResourceDesc::new(
+                    id,
+                    GpuResourceKind::Content,
+                    Some(semantic),
+                    [],
+                    GpuResidency::Retained,
+                ));
+                id
+            });
+            let placement_discriminator = source.layer.0.rotate_left(32) ^ u64::from(source.instance);
+            let placement_resource = GpuResourceId::from_parts(
+                GpuResourceKind::Placement,
+                source.transform_key,
+                placement_discriminator,
+            );
+            self.gpu_resource_graph.upsert(GpuResourceDesc::new(
+                placement_resource,
+                GpuResourceKind::Placement,
+                Some(source.transform_key),
+                content_resource,
+                GpuResidency::Frame,
+            ));
+
             let key = LayerId(source.content_key.map_or(0, |key| key.as_u64()));
             let solid = crate::render::engine::translate::translate_solid(&source.effects)
                 .map(|solid| if solid.depth > 0.0 { solid } else { crate::render::compositor::extrude::Solid { depth: source.depth, ..solid } })
