@@ -21,6 +21,13 @@ pub(crate) struct GpuImageSourceResources {
     pub snapshot: GpuResourceKey,
 }
 
+pub(crate) fn snapshot_identity(effect: NodeKey, pass_slot: u32, image_slot: u32) -> GpuResourceIdentity {
+    let slot = pass_slot.wrapping_mul(0x10000).wrapping_add(image_slot);
+    GpuResourceIdentity { source: GpuIdentitySource::Semantic(effect), class: GpuResourceClass::Snapshot, slot }
+}
+
+pub(crate) fn snapshot_version(source: &SceneImageSourceValue) -> GpuResourceVersion { source_version(source) }
+
 pub(crate) fn lower_image_source(
     graph: &mut GpuResourceGraph,
     input: &GpuImageSourceInput,
@@ -42,11 +49,7 @@ pub(crate) fn lower_image_source(
         estimated_bytes: 0,
     })?;
 
-    let snapshot_identity = GpuResourceIdentity {
-        source: GpuIdentitySource::Semantic(input.effect),
-        class: GpuResourceClass::Snapshot,
-        slot,
-    };
+    let snapshot_identity = snapshot_identity(input.effect, input.pass_slot, input.image_slot);
     let snapshot_key = snapshot_identity.key();
     graph.upsert_resource(GpuResourceDesc {
         identity: snapshot_identity,
