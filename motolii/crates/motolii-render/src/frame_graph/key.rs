@@ -74,7 +74,6 @@ pub enum NodeKind {
     /// Imported mesh/resource geometry.
     MeshSource,
     /// Material/resource surface input for a file or mesh.
-    Material,
     /// A time-addressed media frame (video) or image source.
     MediaFrame,
     /// Pure semantic request describing one Blob Track analysis source.
@@ -132,7 +131,7 @@ impl NodeKind {
         
         NodeKind::TextContent, NodeKind::TextShape, NodeKind::TextObstacle,
         NodeKind::TextFlow, NodeKind::ShapeGeometry, NodeKind::Layout,
-        NodeKind::FlowWindow, NodeKind::GroupBackground, NodeKind::MediaExtent, NodeKind::MeshSource, NodeKind::Material,
+        NodeKind::FlowWindow, NodeKind::GroupBackground, NodeKind::MediaExtent, NodeKind::MeshSource,
         NodeKind::MediaFrame, NodeKind::AnalysisRequest, NodeKind::AnalysisBlob, NodeKind::AnalysisOverlay,
         NodeKind::OverlaySet, NodeKind::Visibility, NodeKind::ParticleBirths, NodeKind::Particle, NodeKind::TemporalCopy,
         NodeKind::PlacementSet, NodeKind::MotionMeasure, NodeKind::MotionSamples, NodeKind::Relation, NodeKind::RelationSet,
