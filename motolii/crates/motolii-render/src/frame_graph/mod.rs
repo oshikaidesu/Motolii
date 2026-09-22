@@ -6,7 +6,6 @@ mod analysis_program;
 mod cache;
 mod canonical;
 mod camera_program;
-mod compiler;
 mod content;
 mod effect_program;
 mod evaluate;
@@ -14,7 +13,6 @@ mod flow_program;
 mod group_program;
 mod ghost_program;
 mod group_composite_program;
-mod initial;
 mod key;
 mod lookbehind_program;
 mod mask_program;
@@ -46,16 +44,11 @@ pub use analysis_program::{AnalysisBinding, AnalysisProgram, AnalysisProgramErro
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
-pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
 pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaExtentValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
 pub use evaluate::{DynamicInput, EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
 pub use group_program::{GroupBackgroundProgram, GroupBackgroundProgramError};
-pub use initial::{
-    build_initial_topology, CameraRoot, DocumentCamera, InitialTopology, ResolvedWorld,
-    ShapeDocuments, SharedScene, StageRoot, TextDocuments,
-};
 pub use key::{
     FrameQuality, InputTime, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency,
     WorkKey,
