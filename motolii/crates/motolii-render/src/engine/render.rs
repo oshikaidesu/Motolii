@@ -33,7 +33,7 @@ impl Engine {
     ) -> Result<Vec<u8>, EngineError> {
         self.layer_failures.clear();
         self.purge_idle_video_players();
-        self.render_frame_graph_pixels(view, t, include_background, camera_override)
+        self.render_frame_graph_cassette_pixels(view, t, include_background, camera_override)
     }
 
     /// 効果が宣言した時刻のずれごとに、**その時刻の層の絵**を用意する。
