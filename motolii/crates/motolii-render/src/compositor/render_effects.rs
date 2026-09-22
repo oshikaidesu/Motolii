@@ -358,10 +358,10 @@ impl Compositor {
             let frame_index = self.frame_index();
             let feedback = pass.feedback.map(|key| {
                 let state = self.feedback.entry(key).or_default();
-                let step = match (state.frame, frame_index) {
-                    (Some(have), Some(now)) if have == now => effects::FeedbackStep::Reuse,
-                    (Some(have), Some(now)) if have + 1 == now => effects::FeedbackStep::Advance,
-                    _ => effects::FeedbackStep::Restart,
+                let step = match crate::gpu_exec::history_step(state.frame, frame_index) {
+                    crate::gpu_exec::GpuHistoryStep::Reuse => effects::FeedbackStep::Reuse,
+                    crate::gpu_exec::GpuHistoryStep::Advance => effects::FeedbackStep::Advance,
+                    crate::gpu_exec::GpuHistoryStep::Restart => effects::FeedbackStep::Restart,
                 };
                 (key, step)
             });
