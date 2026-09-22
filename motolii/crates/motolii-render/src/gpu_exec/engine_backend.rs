@@ -78,7 +78,7 @@ where X: EngineCrossExecutor<Error = EngineGpuBackendError> {
 /// Resource-keyed cross executor. Relationship discovery is already complete;
 /// this adapter only invokes the proven compositor primitives.
 pub(crate) struct CompositorCrossExecutor<'a> {
-    pub engine: &'a mut crate::render::engine::Engine,
+    pub compositor: &'a mut crate::render::compositor::Compositor,
     pub resources: &'a mut super::GpuResourceStore<super::ResidentCompositeLayer>,
     pub versions: &'a super::GpuResourceGraph,
     pub generation: u64,
@@ -94,7 +94,7 @@ impl EngineCrossExecutor for CompositorCrossExecutor<'_> {
         let (_, base_value) = self.resources.get_any(base).ok_or(EngineGpuBackendError::MissingCrossResource(base))?;
         let source_layer = source_value.layer.clone();
         let base_layer = base_value.layer.clone();
-        let Some(result) = self.engine.clip_onto_base(base_layer, &source_layer.layer, &source_layer.passes)
+        let Some(result) = self.compositor.clip_onto_base(base_layer, &source_layer.layer, &source_layer.passes)
             .map_err(|_| EngineGpuBackendError::MissingCrossResource(output))? else {
             return Err(EngineGpuBackendError::MissingCrossResource(output));
         };
@@ -108,11 +108,11 @@ impl EngineCrossExecutor for CompositorCrossExecutor<'_> {
         let (_, source_value) = self.resources.get_any(source).ok_or(EngineGpuBackendError::MissingCrossResource(source))?;
         let target_layer = target_value.layer.clone();
         let source_layer = source_value.layer.clone();
-        let target_layer = self.engine.apply_effects_before_matte(self.comp, self.camera, target_layer.layer, &target_layer.passes)
+        let target_layer = self.compositor.apply_effects_before_matte(self.comp, self.camera, target_layer.layer, &target_layer.passes)
             .map_err(|_| EngineGpuBackendError::MissingCrossResource(output))?;
-        let source_layer = self.engine.apply_effects_before_matte(self.comp, self.camera, source_layer.layer, &source_layer.passes)
+        let source_layer = self.compositor.apply_effects_before_matte(self.comp, self.camera, source_layer.layer, &source_layer.passes)
             .map_err(|_| EngineGpuBackendError::MissingCrossResource(output))?;
-        let layer = self.engine.apply_matte(self.comp, self.camera, &target_layer, &source_layer, mode)
+        let layer = self.compositor.apply_matte(self.comp, self.camera, &target_layer, &source_layer, mode)
             .map_err(|_| EngineGpuBackendError::MissingCrossResource(output))?;
         let result = crate::render::compositor::LayerWithPasses { layer, passes: Vec::new(), padding: 0, pass_sources: Vec::new(), cut: Vec::new() };
         let version = self.versions.version(output).ok_or(EngineGpuBackendError::MissingCrossResource(output))?;
