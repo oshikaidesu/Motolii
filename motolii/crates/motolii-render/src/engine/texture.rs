@@ -257,7 +257,7 @@ impl Engine {
             // (Chroma Key を掛けた動画が 0 コマ目で止まった、2026-09-17)。
             let key = (path.to_owned(), pts);
             if !self.frame_cache.contains_key(&key) {
-                self.remember_video_frame(path, pts, texture);
+                self.remember_video_frame(path, pts, texture, true);
             }
             self.pending_frame_copies.retain(|(p, t, _)| (p, *t) != (&key.0, key.1));
             let tick = self.frame_cache_tick;
@@ -272,12 +272,14 @@ impl Engine {
     /// 前の frame で揃ったコマを cache に写す。frame の頭、復号器が texture を書き換える前に呼ぶ。
     pub(super) fn flush_pending_frame_copies(&mut self) {
         for (path, pts, texture) in std::mem::take(&mut self.pending_frame_copies) {
-            self.remember_video_frame(&path, pts, &texture);
+            self.remember_video_frame(&path, pts, &texture, false);
         }
     }
 
     /// 復号したコマを GPU texture のまま写して取っておく。上限を超えたら、使われてから一番古い物を捨てる。
-    fn remember_video_frame(&mut self, path: &str, pts: i64, source: &crate::render::compositor::GpuTexture2D) {
+    /// `after_upload`: 今復号したコマ。復号器の転送は frame の encoder に積まれていて `before_submit` で流れるので、
+    /// 写しは pending に積んでその後に流す(先に打つと、冷えた復号器の空の texture を写す)。
+    fn remember_video_frame(&mut self, path: &str, pts: i64, source: &crate::render::compositor::GpuTexture2D, after_upload: bool) {
         let [width, height] = source.width_height();
         let bytes = u64::from(width) * u64::from(height) * 4;
         if bytes == 0 || bytes > self.frame_cache_budget {
@@ -291,6 +293,7 @@ impl Engine {
         }
         // 動画の texture は不透明。pool から同じ形を確保して写し、`Opaque` のまま包む
         // (α ありとして輸入すると α 0 で消える)。
+        let mut deferred = None;
         let texture = {
             let ctx = self.compositor.render_context();
             let size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
@@ -308,9 +311,10 @@ impl Engine {
             );
             let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Motolii video frame cache copy") });
             encoder.copy_texture_to_texture(source.texture.as_image_copy(), copy.texture.as_image_copy(), size);
-            ctx.queue.submit([encoder.finish()]);
+            if after_upload { deferred = Some(encoder.finish()); } else { ctx.queue.submit([encoder.finish()]); }
             re_renderer::resource_managers::GpuTexture2D::new(copy, re_renderer::resource_managers::AlphaChannelUsage::Opaque)
         };
+        self.compositor.pending.extend(deferred);
         let Some(texture) = texture else { return };
         let tick = self.frame_cache_tick;
         self.frame_cache.insert((path.to_owned(), pts), CachedVideoFrame { texture, bytes, last_use: tick });
