@@ -1,6 +1,6 @@
 use crate::doc::core::{CompSpec, RationalTime};
 use crate::doc::store::LayerId;
-use crate::frame_graph::{SceneContentValue, SceneLayerValue};
+use crate::frame_graph::SceneContentValue;
 
 use super::types::{GpuResourceKey, GpuResourceVersion};
 use super::resource_store::GpuResourceStore;
@@ -20,7 +20,11 @@ impl crate::render::engine::Engine {
         key: GpuResourceKey,
         version: GpuResourceVersion,
         generation: u64,
-        layer: &SceneLayerValue,
+        layer_id: LayerId,
+        content: &SceneContentValue,
+        shape_stretch: [f32; 2],
+        environment: bool,
+        content_key: Option<crate::frame_graph::NodeKey>,
         comp: CompSpec,
         at: RationalTime,
     ) -> Result<Option<ResidentContent>, crate::render::engine::EngineError> {
@@ -29,8 +33,8 @@ impl crate::render::engine::Engine {
             return Ok(Some(hit));
         }
 
-        let semantic_key = LayerId(layer.content_key.map_or(0, |node| node.as_u64()));
-        let built = match &layer.content {
+        let semantic_key = LayerId(content_key.map_or(0, |node| node.as_u64()));
+        let built = match content {
             SceneContentValue::None => return Ok(None),
             SceneContentValue::Text(text) => {
                 let (content, natural) = self.text_texture_from_shapes(&text.shapes(), semantic_key, comp)?;
@@ -38,8 +42,8 @@ impl crate::render::engine::Engine {
             }
             SceneContentValue::Shape(shapes) => {
                 let stretched;
-                let shapes = if layer.shape_stretch != [1.0, 1.0] {
-                    stretched = crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch);
+                let shapes = if shape_stretch != [1.0, 1.0] {
+                    stretched = crate::picture::shapes_ops::stretch_outline(shapes, shape_stretch);
                     stretched.as_slice()
                 } else {
                     shapes.as_slice()
@@ -51,7 +55,7 @@ impl crate::render::engine::Engine {
                     0.05,
                     comp,
                     None,
-                    layer.shape_stretch == [1.0, 1.0],
+                    shape_stretch == [1.0, 1.0],
                 )?;
                 content.map(|content| ResidentContent { content, natural })
             }
@@ -60,10 +64,10 @@ impl crate::render::engine::Engine {
                 content.map(|content| ResidentContent { content, natural })
             }
             SceneContentValue::Media { source, time } => {
-                let (content, natural) = if layer.environment && crate::render::media::is_still_image_path(&source.path) {
+                let (content, natural) = if environment && crate::render::media::is_still_image_path(&source.path) {
                     self.environment_content_for(&source.path)?
                 } else {
-                    self.file_content_for(&source.path, *time, layer.layer, comp)?
+                    self.file_content_for(&source.path, *time, layer_id, comp)?
                 };
                 content.map(|content| ResidentContent { content, natural })
             }
