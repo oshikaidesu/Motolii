@@ -360,7 +360,7 @@ impl Engine {
             frozen: Default::default(),
             freezing: None,
             material_picture: None,
-            feedback_keys_seen: Vec::new(),
+            gpu_history: Default::default(),
             blocks: Default::default(),
             clip_bases: Default::default(),
             frame_cache: HashMap::new(),
