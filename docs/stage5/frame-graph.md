@@ -337,6 +337,8 @@ FrameGraph の GPU parity test は、GPU 初期化そのものを合格扱いし
 
 ローカルの GPU test は process 境界で実行する。
 
+GPU parity は shader を焼き込むビルドで実行する。`IS_IN_RERUN_WORKSPACE=no cargo test -p motolii-render --lib --no-run` を先に完走させ、初回コンパイル時間を90秒の実行予算へ混ぜない。runner の既定 `--shaders embedded` はこの上流環境設定を渡す。既にビルド済みの実行ファイルでは shader mode は変わらない。ファイル監視・hot reload の検証は明示的に `--shaders disk` を使い、別に検収する。
+
 ```bash
 python3 scripts/gpu-test.py --backend metal --timeout-seconds 90 -- \
   cargo test -p motolii-render <test-filter> -- --nocapture --test-threads=1

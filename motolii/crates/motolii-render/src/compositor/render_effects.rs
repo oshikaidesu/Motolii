@@ -75,10 +75,12 @@ impl Compositor {
         self.refresh_catalog_programs();
         for pass in layers.iter().flat_map(|layer| &layer.passes) {
             if !self.effect_programs.contains_key(&pass.plugin_id) {
-                return Err(CompositorError::Effect(format!(
-                    "unknown Vism {}",
-                    pass.plugin_id
-                )));
+                let definition = self.catalog.definitions.iter().find(|definition| {
+                    definition.plugin_id() == pass.plugin_id
+                        && (definition.manifest.expose || definition.manifest.stage == effects::IsfStage::Warp)
+                        && matches!(definition.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp)
+                }).ok_or_else(|| CompositorError::Effect(format!("unknown Vism {}", pass.plugin_id)))?;
+                self.effect_programs.insert(pass.plugin_id.clone(), effects::EffectProgram::compile(&self.ctx, definition));
             }
         }
         let mut effective_textures = Vec::with_capacity(layers.len());

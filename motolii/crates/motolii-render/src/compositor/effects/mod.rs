@@ -86,12 +86,32 @@ impl VismDefinition {
 
 pub(crate) struct EffectProgram(vism::VismProgram);
 
+pub(crate) struct LazyEffectProgram {
+    definition: VismDefinition,
+    program: std::sync::OnceLock<EffectProgram>,
+}
+
+impl LazyEffectProgram {
+    #[cfg(test)]
+    pub(crate) fn is_compiled(&self) -> bool { self.program.get().is_some() }
+
+    pub(crate) fn new(definition: VismDefinition) -> Self {
+        Self { definition, program: std::sync::OnceLock::new() }
+    }
+
+    pub(crate) fn get(&self, ctx: &re_renderer::RenderContext) -> &EffectProgram {
+        self.program.get_or_init(|| EffectProgram::compile(ctx, &self.definition))
+    }
+}
+
 impl EffectProgram {
     pub(crate) fn compile(ctx: &re_renderer::RenderContext, definition: &VismDefinition) -> Self {
         Self::compile_for(ctx, definition, definition.output_format())
     }
     /// 宣言と違う出力 format で組む(同じ shader を別 format の texture へ描く時)。
     pub(crate) fn compile_for(ctx: &re_renderer::RenderContext, definition: &VismDefinition, output_format: wgpu::TextureFormat) -> Self {
+        #[cfg(test)]
+        eprintln!("MOTOLII_GPU_PROGRAM phase=compile id={} format={output_format:?}", definition.plugin_id());
         let [vertex, fragment] = definition.paths();
         Self(vism::VismProgram::new(ctx, &format!("motolii-vism-{}-{output_format:?}", definition.source.name), definition.manifest.clone(),
             vism::ShaderStageSource { path: vertex, entry_point: definition.vertex_entry.clone() },

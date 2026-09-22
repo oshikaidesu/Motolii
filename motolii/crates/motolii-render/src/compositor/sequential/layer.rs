@@ -180,7 +180,7 @@ impl Compositor {
             effect_scratch,
             ..
         } = self;
-        matte_vism.record_over(
+        matte_vism.get(ctx).record_over(
             ctx,
             &mut encoder,
             effect_scratch,

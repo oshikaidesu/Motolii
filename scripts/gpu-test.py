@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", default=default_backend(), help="WGPU_BACKEND value (default: platform primary backend)")
     parser.add_argument("--adapter", help="Optional WGPU_ADAPTER_NAME substring")
+    parser.add_argument("--shaders", choices=("embedded", "disk"), default="embedded", help="Build-time Rerun shader source; disk enables hot-reload watchers")
     parser.add_argument("--timeout-seconds", type=float, default=90.0, help="Hard wall timeout for the whole child process tree")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command after --, for example: -- cargo test -p motolii-render ...")
     args = parser.parse_args()
@@ -85,6 +86,8 @@ def main() -> int:
     argv = command_argv(args.command)
     env = os.environ.copy()
     env["WGPU_BACKEND"] = args.backend
+    env["MOTOLII_GPU_TEST"] = "1"
+    env["IS_IN_RERUN_WORKSPACE"] = "yes" if args.shaders == "disk" else "no"
     if args.adapter:
         env["WGPU_ADAPTER_NAME"] = args.adapter
     else:
@@ -92,7 +95,7 @@ def main() -> int:
 
     print(
         "MOTOLII_GPU_TEST "
-        f"backend={args.backend!r} adapter={args.adapter or '<any>'!r} "
+        f"backend={args.backend!r} adapter={args.adapter or '<any>'!r} shaders={args.shaders!r} "
         f"timeout={args.timeout_seconds:.1f}s command={argv!r}",
         file=sys.stderr,
         flush=True,
