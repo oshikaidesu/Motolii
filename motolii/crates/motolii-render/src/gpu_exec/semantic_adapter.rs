@@ -3,6 +3,10 @@ use crate::frame_graph::{
     SceneValue, TransformValue,
 };
 
+// GPU versioning is deliberately value-derived. These helpers are kept here
+// rather than in the semantic programs so GPU residency policy cannot leak
+// back into semantic evaluation.
+
 use super::lowerer::{GpuContributionInput, VersionedSemantic};
 use super::types::GpuResourceVersion;
 
