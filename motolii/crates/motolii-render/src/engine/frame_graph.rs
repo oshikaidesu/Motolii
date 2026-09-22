@@ -585,7 +585,7 @@ impl Engine {
         self.outline_order = self.outline_layers.clone();
 
         self.render_frame_graph_projection(
-            &state,
+            &mut state,
             target,
             camera,
             include_background,
@@ -610,7 +610,7 @@ impl Engine {
             self.gpu_history.begin_frame();
             state.evaluate_at(self, time, FrameQuality::Preview { scale: 1 }, true)?;
             self.render_frame_graph_projection(
-                &state,
+                &mut state,
                 target,
                 camera,
                 include_background,
