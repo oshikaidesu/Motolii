@@ -153,12 +153,13 @@ impl EditorRuntime{
     }
     /// 3D 層の 3 軸ギズモ。頂点は comp 座標 —— Stage は掴む所も描く所も同じ写像で扱う。
     /// 3D 層を選んでいない時は Null。2D・2.5D の平面ケージはここを通らない。
-    pub(crate) fn spatial_gizmo(&mut self,seen:View)->Result<Json,String>{
+    pub(crate) fn spatial_gizmo(&self,seen:View)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
         let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.viewer.selected_ids,time) else{return Ok(Json::Null)};
         let pointer=self.viewer.stage_pointer.filter(|_|self.viewer.stage_view==seen);
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera(seen)?,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
+        let camera=if seen==View::User{self.viewer.user_camera}else{self.engine.resolve_camera(&view,time).map_err(e)?};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
     /// Stage に置いた箱(Boxcam): Camera 層ごとの frustum と取っ手。Stage の comp 画像 px。
