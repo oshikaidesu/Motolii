@@ -546,10 +546,6 @@ impl Engine {
         self.frame_graph.as_ref().map(|state| state.gpu_resources.stats())
     }
 
-    pub(super) fn semantic_layer_for(&self, view: &StoreView<'_>, time: RationalTime, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
-        self.frame_graph_cached_scene(view, time)?.layer(id)
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub fn render_frame_graph_into_window(
         &mut self,
