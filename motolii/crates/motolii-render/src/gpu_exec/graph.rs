@@ -9,7 +9,7 @@ use super::types::{
 pub(crate) enum GpuResourceDelta {
     Inserted,
     Unchanged,
-    VersionChanged,
+    Changed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,12 +58,13 @@ impl GpuResourceGraph {
             if same {
                 return Ok(GpuResourceDelta::Unchanged);
             }
-            if existing.desc.version != desc.version {
-                existing.resident_version = None;
-            }
+            // Any descriptor change can change what the GPU slot means.
+            // A lowerer bug that forgets to bump version must not preserve
+            // stale residency after dependency/lifetime/alias changes.
+            existing.resident_version = None;
             existing.desc = desc;
             self.rebuild_downstream();
-            return Ok(GpuResourceDelta::VersionChanged);
+            return Ok(GpuResourceDelta::Changed);
         }
 
         self.resources.insert(
@@ -279,7 +280,7 @@ mod tests {
 
         let second = resource(node(7), GpuResourceClass::Placement, 2, vec![]);
         assert_eq!(second.key(), key);
-        assert_eq!(graph.upsert_resource(second).unwrap(), GpuResourceDelta::VersionChanged);
+        assert_eq!(graph.upsert_resource(second).unwrap(), GpuResourceDelta::Changed);
         assert!(!graph.is_current(key));
     }
 }
