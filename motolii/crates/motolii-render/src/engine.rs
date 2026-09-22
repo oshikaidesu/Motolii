@@ -180,7 +180,7 @@ pub struct Engine {
     /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
     particle_frames: HashMap<LayerId, ParticleFrame>,
     /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
-    overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
+    pub(crate) overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
     /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
