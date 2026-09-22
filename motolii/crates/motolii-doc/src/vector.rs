@@ -211,6 +211,44 @@ pub struct Gradient {
     /// stop の間を色がどう渡るか。書類に書く定義で、鍵は打たない。
     #[serde(default)]
     pub blend: GradientBlend,
+    /// `start`・`end` の座標系(SVG の `gradientUnits`)。欄の無い書類は層の座標。
+    #[serde(default, skip_serializing_if = "GradientUnits::is_user_space")]
+    pub units: GradientUnits,
+}
+
+/// SVG `gradientUnits`. `ObjectBoundingBox`: the gradient's space is the painted object's geometry
+/// bounds (no stroke) scaled to 0..=1, so the gradient follows the object when it is resized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GradientUnits {
+    #[default]
+    UserSpaceOnUse,
+    ObjectBoundingBox,
+}
+
+impl GradientUnits {
+    fn is_user_space(&self) -> bool { *self == Self::UserSpaceOnUse }
+}
+
+/// Tight geometric bounds `[x0, y0, x1, y1]` of the contours (curve extrema, no stroke), the
+/// object bounding box of SVG. `None` for no geometry.
+pub fn geometry_bounds<'a>(contours: impl IntoIterator<Item = &'a Contour>) -> Option<[f64; 4]> {
+    use kurbo::Shape as _;
+    let mut path = kurbo::BezPath::new();
+    let at = |p: Point| kurbo::Point::new(p.x, p.y);
+    for contour in contours {
+        let n = contour.vertices.len();
+        let Some(first) = contour.vertices.first() else { continue };
+        path.move_to(at(first.point));
+        let edges = if contour.closed { n } else { n - 1 };
+        for i in 0..edges {
+            let (a, b) = (&contour.vertices[i], &contour.vertices[(i + 1) % n]);
+            path.curve_to(at(a.point.add(a.out_tangent)), at(b.point.add(b.in_tangent)), at(b.point));
+        }
+    }
+    if path.elements().is_empty() { return None; }
+    let r = path.bounding_box();
+    Some([r.x0, r.y0, r.x1, r.y1])
 }
 
 /// 2 つの stop の間の道。空間の一覧は CSS Color 4 の閉集合(sRGB・linear・Oklab・Oklch の短/長)と段階。
@@ -309,6 +347,24 @@ pub enum GradientType {
 }
 
 impl Gradient {
+    /// Where the gradient's own coordinates sit in user space: `user = origin + gradient * scale`.
+    /// `bounds` is the painted object's [`geometry_bounds`].
+    pub fn space(&self, bounds: [f64; 4]) -> (Point, Point) {
+        match self.units {
+            GradientUnits::UserSpaceOnUse => (Point { x: 0.0, y: 0.0 }, Point { x: 1.0, y: 1.0 }),
+            GradientUnits::ObjectBoundingBox => (
+                Point { x: bounds[0], y: bounds[1] },
+                Point { x: (bounds[2] - bounds[0]).max(1e-9), y: (bounds[3] - bounds[1]).max(1e-9) },
+            ),
+        }
+    }
+
+    /// [`Self::parameter`] of a user-space point on an object with these bounds.
+    pub fn parameter_in(&self, p: Point, bounds: [f64; 4]) -> f64 {
+        let (origin, scale) = self.space(bounds);
+        self.parameter(Point { x: (p.x - origin.x) / scale.x, y: (p.y - origin.y) / scale.y })
+    }
+
     pub fn stop_id(&self, index: usize) -> usize { self.stop_ids.get(index).copied().unwrap_or(index) }
     pub fn stop_index(&self, id: usize) -> Option<usize> { (0..self.stops.len()).find(|&i| self.stop_id(i) == id) }
     pub fn identify_stops(&mut self) {
@@ -504,3 +560,52 @@ pub enum VectorError {
 
 
 
+
+#[cfg(test)]
+mod gradient_units_tests {
+    use super::*;
+
+    fn gradient(units: GradientUnits) -> Gradient {
+        Gradient {
+            kind: GradientType::Linear,
+            start: Point { x: 0.0, y: 0.5 },
+            end: Point { x: 1.0, y: 0.5 },
+            stops: Vec::new(),
+            stop_ids: Vec::new(),
+            next_stop_id: 0,
+            blend: GradientBlend::default(),
+            units,
+        }
+    }
+
+    #[test]
+    fn a_document_without_units_keeps_user_space_and_writes_nothing_new() {
+        let json = serde_json::to_value(gradient(GradientUnits::UserSpaceOnUse)).unwrap();
+        assert!(json.get("units").is_none());
+        let read: Gradient = serde_json::from_value(json).unwrap();
+        assert_eq!(read.units, GradientUnits::UserSpaceOnUse);
+    }
+
+    #[test]
+    fn an_object_bounding_box_gradient_spans_the_object() {
+        let g = gradient(GradientUnits::ObjectBoundingBox);
+        let bounds = [10.0, 0.0, 50.0, 20.0];
+        assert!((g.parameter_in(Point { x: 20.0, y: 5.0 }, bounds) - 0.25).abs() < 1e-12);
+        assert!((g.parameter_in(Point { x: 50.0, y: 5.0 }, bounds) - 1.0).abs() < 1e-12);
+        let user = gradient(GradientUnits::UserSpaceOnUse);
+        assert_eq!(user.parameter_in(Point { x: 0.25, y: 5.0 }, bounds), user.parameter(Point { x: 0.25, y: 5.0 }));
+    }
+
+    #[test]
+    fn object_bounds_follow_the_curve_not_its_control_points() {
+        let bulge = Contour {
+            closed: false,
+            vertices: vec![
+                Vertex { point: Point { x: 0.0, y: 0.0 }, in_tangent: Point { x: 0.0, y: 0.0 }, out_tangent: Point { x: 0.0, y: 10.0 } },
+                Vertex { point: Point { x: 10.0, y: 0.0 }, in_tangent: Point { x: 0.0, y: 10.0 }, out_tangent: Point { x: 0.0, y: 0.0 } },
+            ],
+        };
+        let b = geometry_bounds([&bulge]).unwrap();
+        assert!((b[3] - 7.5).abs() < 1e-9, "the curve peaks at 3/4 of its control height: {b:?}");
+    }
+}

@@ -56,7 +56,7 @@ fn byte(v: f64) -> u8 {
 }
 
 /// 筆の色。単色は定数、gradient は点ごとに評価する(直線 2 色なら三角形の補間で厳密)。
-fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> Rgba32Unmul> {
+fn paint(brush: &Brush, alpha: f64, origin: Point, bounds: [f64; 4]) -> Box<dyn Fn(glam::Vec2) -> Rgba32Unmul> {
     match brush {
         Brush::Solid(c) => {
             let color = Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)]);
@@ -65,7 +65,7 @@ fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> 
         Brush::Gradient(g) => {
             let g: Gradient = g.clone();
             Box::new(move |p| {
-                let c = g.color_at(g.parameter(Point { x: p.x as f64 - origin.x, y: p.y as f64 - origin.y }));
+                let c = g.color_at(g.parameter_in(Point { x: p.x as f64 - origin.x, y: p.y as f64 - origin.y }, bounds));
                 Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])
             })
         }
@@ -81,10 +81,13 @@ fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, ste
 /// here; the renderer only locates t per fragment.
 const RAMP: usize = 1024;
 
-fn exact_gradient(g: &Gradient, alpha: f64, origin: Point) -> re_renderer::mesh::CurveGradient {
+fn exact_gradient(g: &Gradient, alpha: f64, origin: Point, bounds: [f64; 4]) -> re_renderer::mesh::CurveGradient {
     use re_renderer::mesh::CurveGradientKind as Kind;
-    let at = |p: Point| glam::vec2((p.x + origin.x) as f32, (p.y + origin.y) as f32);
+    let at = |p: Point| glam::vec2(p.x as f32, p.y as f32);
+    let (space_origin, space_scale) = g.space(bounds);
     re_renderer::mesh::CurveGradient {
+        space_origin: glam::vec2((space_origin.x + origin.x) as f32, (space_origin.y + origin.y) as f32),
+        space_scale: at(space_scale),
         kind: match g.kind {
             crate::doc::vector::GradientType::Linear => Kind::Linear,
             crate::doc::vector::GradientType::Radial => Kind::Radial,
@@ -103,16 +106,25 @@ fn exact_gradient(g: &Gradient, alpha: f64, origin: Point) -> re_renderer::mesh:
 fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>, exact: bool) -> Result<PathDrawDataBuilder, CompositorError> {
     let origin = Point { x: canvas.origin_x as f64, y: canvas.origin_y as f64 };
     let mut b = PathDrawDataBuilder::default().with_tolerance(tolerance);
-    for shape in crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
-        for instance in crate::picture::shapes_ops::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
+    let leaves = crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))?;
+    let mut resolved = Vec::with_capacity(leaves.len());
+    for shape in leaves {
+        let instances = crate::picture::shapes_ops::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))?;
+        resolved.push((shape, instances));
+    }
+    // The object whose bounds an object-bounding-box gradient spans: every shape of the layer.
+    let bounds = crate::doc::vector::geometry_bounds(resolved.iter().flat_map(|(_, instances)| instances.iter().flat_map(|instance| instance.path.iter())))
+        .unwrap_or([0.0, 0.0, 1.0, 1.0]);
+    for (shape, instances) in resolved {
+        for instance in instances {
             let outline = contours(&instance.path, origin, step);
             if let Some(fill) = shape.fill.as_ref().filter(|f| !f.hidden) {
                 let rule = match fill.rule { crate::doc::vector::FillRule::NonZero => PathFillRule::NonZero, crate::doc::vector::FillRule::EvenOdd => PathFillRule::EvenOdd };
                 let alpha = fill.opacity * instance.opacity;
                 match (&fill.brush, exact) {
                     (Brush::Solid(c), true) => b.fill_exact(&outline, rule, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])),
-                    (Brush::Gradient(g), true) => b.fill_exact_gradient(&outline, rule, exact_gradient(g, alpha, origin)),
-                    _ => b.fill(&outline, rule, &*paint(&fill.brush, alpha, origin)),
+                    (Brush::Gradient(g), true) => b.fill_exact_gradient(&outline, rule, exact_gradient(g, alpha, origin, bounds)),
+                    _ => b.fill(&outline, rule, &*paint(&fill.brush, alpha, origin, bounds)),
                 }
             }
             if let Some(stroke) = shape.stroke.as_ref().filter(|s| !s.hidden) {
@@ -126,8 +138,8 @@ fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Opti
                 let alpha = stroke.opacity * instance.opacity;
                 match (&stroke.brush, exact) {
                     (Brush::Solid(c), true) => b.stroke_exact(&outline, &s, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])),
-                    (Brush::Gradient(g), true) => b.stroke_exact_gradient(&outline, &s, exact_gradient(g, alpha, origin)),
-                    _ => b.stroke(&outline, &s, &*paint(&stroke.brush, alpha, origin)),
+                    (Brush::Gradient(g), true) => b.stroke_exact_gradient(&outline, &s, exact_gradient(g, alpha, origin, bounds)),
+                    _ => b.stroke(&outline, &s, &*paint(&stroke.brush, alpha, origin, bounds)),
                 }
             }
         }

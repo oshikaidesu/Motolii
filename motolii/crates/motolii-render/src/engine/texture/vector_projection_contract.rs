@@ -261,7 +261,7 @@ fn an_exact_gradient_is_located_per_pixel_at_any_magnification() {
     use crate::doc::vector::{Gradient, GradientStop, GradientType};
     let scale = 40.0;
     let mut doc = circle(16.0, scale as f64, false);
-    let gradient = Gradient {
+    let gradient = Gradient { units: Default::default(),
         kind: GradientType::Linear,
         start: Point { x: -8.0, y: 0.0 },
         end: Point { x: 8.0, y: 0.0 },
@@ -288,4 +288,41 @@ fn an_exact_gradient_is_located_per_pixel_at_any_magnification() {
         worst = worst.max(got.abs_diff(want));
     }
     assert!(worst <= 3, "the rendered gradient drifts from the document's by {worst}");
+}
+
+/// An object-bounding-box gradient (SVG's default) spans its object: resizing the object carries
+/// the gradient with it, so the same fraction of the object shows the same colour.
+#[test]
+fn an_object_bounding_box_gradient_follows_its_object() {
+    use crate::doc::vector::{Gradient, GradientStop, GradientType, GradientUnits};
+    let gradient = Gradient {
+        kind: GradientType::Linear,
+        start: Point { x: 0.0, y: 0.5 },
+        end: Point { x: 1.0, y: 0.5 },
+        stops: vec![GradientStop { offset: 0.0, color: Rgb { r: 0.0, g: 0.0, b: 0.0 } }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }],
+        stop_ids: Vec::new(),
+        next_stop_id: 0,
+        blend: Default::default(),
+        units: GradientUnits::ObjectBoundingBox,
+    };
+    let sample = |size: f64| {
+        let scale = 10.0;
+        let mut doc = circle(size, scale, false);
+        let mut shapes = doc.view().shapes(LayerId(1)).unwrap();
+        if let ShapeNode::Leaf(shape) = &mut shapes[0] {
+            shape.fill.as_mut().unwrap().brush = Brush::Gradient(gradient.clone());
+        }
+        doc.apply(Intent::SetShapes { layer: LayerId(1), shapes }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        // A quarter of the way across the object, on its centre row.
+        let x = (256.0 - size * scale * 0.5 + size * scale * 0.25) as usize;
+        pixels[(256 * 512 + x) * 4]
+    };
+    let want = gradient.color_at(0.25).r;
+    let want = (want.clamp(0.0, 1.0) * 255.0).round() as u8;
+    for size in [16.0, 40.0] {
+        let got = sample(size);
+        assert!(got.abs_diff(want) <= 3, "size {size}: a quarter across shows {got}, the gradient gives {want}");
+    }
 }

@@ -3,7 +3,7 @@
 
 use crate::doc::eval::Value;
 use crate::doc::store::{property, ShapeNode};
-use crate::doc::vector::{Brush, Gradient, GradientType, PathSource, Point, Rgb, Stroke};
+use crate::doc::vector::{Brush, Gradient, GradientType, GradientUnits, PathSource, Point, Rgb, Stroke};
 
 /// 線の無い形に線の色や太さを付けた時の太さ(Create の線と同じ)。
 pub const DEFAULT_STROKE_WIDTH: f64 = 6.0;
@@ -36,8 +36,17 @@ pub fn half_extent(bounds: [f64; 4], angle: f64) -> f64 {
     (c.abs() * w + s.abs() * h) * 0.5
 }
 
+/// The frame the axis ratios are measured in: the shape's bounds, or the unit square for a gradient
+/// already in object-bounding-box units.
+fn axis_bounds(source: &PathSource, units: GradientUnits) -> [f64; 4] {
+    match units {
+        GradientUnits::UserSpaceOnUse => source_bounds(source),
+        GradientUnits::ObjectBoundingBox => [0.0, 0.0, 1.0, 1.0],
+    }
+}
+
 pub fn axis_of(source: &PathSource, g: &Gradient) -> GradientAxis {
-    let b = source_bounds(source);
+    let b = axis_bounds(source, g.units);
     let (hw, hh) = (((b[2] - b[0]) * 0.5).max(1e-6), ((b[3] - b[1]) * 0.5).max(1e-6));
     let c0 = Point { x: (b[0] + b[2]) * 0.5, y: (b[1] + b[3]) * 0.5 };
     let d = g.end.sub(g.start);
@@ -50,8 +59,8 @@ pub fn axis_of(source: &PathSource, g: &Gradient) -> GradientAxis {
 }
 
 /// 比から軸の 2 点へ。`axis_of` の逆。
-pub fn axis_points(source: &PathSource, kind: GradientType, axis: &GradientAxis) -> (Point, Point) {
-    let b = source_bounds(source);
+pub fn axis_points(source: &PathSource, kind: GradientType, units: GradientUnits, axis: &GradientAxis) -> (Point, Point) {
+    let b = axis_bounds(source, units);
     let (hw, hh) = ((b[2] - b[0]) * 0.5, (b[3] - b[1]) * 0.5);
     let c = Point { x: (b[0] + b[2]) * 0.5 + axis.center[0] / 100.0 * hw, y: (b[1] + b[3]) * 0.5 + axis.center[1] / 100.0 * hh };
     match kind {
@@ -146,7 +155,7 @@ pub fn apply(shapes: &[ShapeNode], get: &dyn Fn(&str) -> Option<Value>) -> Vec<S
                     let center = pair(property::FILL_CENTER, Point { x: axis.center[0], y: axis.center[1] });
                     let spread = number(property::FILL_SPREAD, axis.spread);
                     if angle != axis.angle || [center.x, center.y] != axis.center || spread != axis.spread {
-                        let (start, end) = axis_points(&shape.source, g.kind, &GradientAxis { angle, center: [center.x, center.y], spread });
+                        let (start, end) = axis_points(&shape.source, g.kind, g.units, &GradientAxis { angle, center: [center.x, center.y], spread });
                         g.start = start;
                         g.end = end;
                     }
@@ -209,10 +218,10 @@ mod tests {
     fn gradient_axis_is_a_ratio_of_the_shapes_bounds() {
         use crate::doc::vector::{Fill, GradientStop};
         let source = PathSource::Rectangle { size: Point { x: 100.0, y: 50.0 } };
-        let g = Gradient { blend: Default::default(), stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Linear, start: Point { x: -50.0, y: 0.0 }, end: Point { x: 50.0, y: 0.0 }, stops: vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }] };
+        let g = Gradient { units: Default::default(), blend: Default::default(), stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Linear, start: Point { x: -50.0, y: 0.0 }, end: Point { x: 50.0, y: 0.0 }, stops: vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }] };
         let axis = axis_of(&source, &g);
         assert!((axis.angle).abs() < 1e-9 && axis.center == [0.0, 0.0] && (axis.spread - 100.0).abs() < 1e-9, "{} {:?} {}", axis.angle, axis.center, axis.spread);
-        assert_eq!(axis_points(&source, GradientType::Linear, &axis), (g.start, g.end));
+        assert_eq!(axis_points(&source, GradientType::Linear, g.units, &axis), (g.start, g.end));
         let mut shape = crate::doc::vector::Shape::new(source.clone());
         shape.fill = Some(Fill { brush: Brush::Gradient(g.clone()), ..Fill::default() });
         let shown = apply(&[ShapeNode::Leaf(shape)], &|n| match n {
@@ -229,7 +238,7 @@ mod tests {
         assert_eq!(g2.stops[1].color, Rgb { r: 1.0, g: 0.0, b: 0.0 });
         let radial = Gradient { kind: GradientType::Radial, ..g.clone() };
         let axis = axis_of(&source, &radial);
-        assert_eq!(axis_points(&source, GradientType::Radial, &axis), (radial.start, radial.end));
+        assert_eq!(axis_points(&source, GradientType::Radial, radial.units, &axis), (radial.start, radial.end));
     }
 
     /// 角度と菱形: 一周で 0→1、菱形の角で 1。描く側は全部この 1 つの関数を読む。
@@ -237,11 +246,11 @@ mod tests {
     fn angular_and_diamond_parameters_close_the_circle_and_the_diamond() {
         use crate::doc::vector::GradientStop;
         let stops = vec![GradientStop { offset: 0.0, color: Rgb::BLACK }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }];
-        let angular = Gradient { stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Angular, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops: stops.clone(), blend: crate::doc::vector::GradientBlend::Rgb };
+        let angular = Gradient { units: Default::default(), stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Angular, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops: stops.clone(), blend: crate::doc::vector::GradientBlend::Rgb };
         assert!((angular.parameter(Point { x: 0.0, y: 10.0 }) - 0.25).abs() < 1e-9);
         assert!((angular.parameter(Point { x: -10.0, y: 0.0 }) - 0.5).abs() < 1e-9);
         assert!(angular.parameter(Point { x: 10.0, y: -0.001 }) > 0.99);
-        let diamond = Gradient { stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Diamond, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops, blend: crate::doc::vector::GradientBlend::Rgb };
+        let diamond = Gradient { units: Default::default(), stop_ids: Vec::new(), next_stop_id: 0, kind: GradientType::Diamond, start: Point::ZERO, end: Point { x: 10.0, y: 0.0 }, stops, blend: crate::doc::vector::GradientBlend::Rgb };
         assert!((diamond.parameter(Point { x: 5.0, y: 5.0 }) - 1.0).abs() < 1e-9);
         assert!((diamond.parameter(Point { x: 0.0, y: 10.0 }) - 1.0).abs() < 1e-9);
         assert!((diamond.parameter(Point { x: 2.5, y: 0.0 }) - 0.25).abs() < 1e-9);

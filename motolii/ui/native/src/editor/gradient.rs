@@ -42,7 +42,7 @@ pub(crate) fn edit(doc:&Document, slot:&ColorSlot, j:&J, at:crate::doc::store::R
         Brush::Gradient(g)=>g.clone(),
         Brush::Solid(c)=>{
             let c=match &shown {Brush::Solid(c)=>*c,_=>*c};
-            Gradient{kind:GradientType::Linear,start,end,stops:if j.get("addStop").is_some(){vec![GradientStop{offset:0.0,color:c}]}else{vec![GradientStop{offset:0.0,color:c},GradientStop{offset:1.0,color:c}]},blend:Default::default(),stop_ids:Vec::new(),next_stop_id:0}
+            Gradient{ units: crate::doc::vector::GradientUnits::ObjectBoundingBox,kind:GradientType::Linear,start,end,stops:if j.get("addStop").is_some(){vec![GradientStop{offset:0.0,color:c}]}else{vec![GradientStop{offset:0.0,color:c},GradientStop{offset:1.0,color:c}]},blend:Default::default(),stop_ids:Vec::new(),next_stop_id:0}
         },
     };
     g.identify_stops();
