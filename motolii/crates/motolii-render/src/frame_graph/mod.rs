@@ -320,6 +320,26 @@ mod tests {
     }
 
     #[test]
+    fn exposed_scene_and_camera_survive_cached_projection_on_seek_back() {
+        let scene = node(1, vec![]);
+        let camera = node(2, vec![]);
+        let gpu = node(3, vec![scene.key(), camera.key()]);
+        let projection = node(4, vec![gpu.key()]);
+        let outputs = vec![scene.key(), camera.key(), gpu.key(), projection.key()];
+        let topology = GraphTopology::try_new(
+            [scene, camera, gpu, projection], outputs.clone(),
+        ).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = EchoExecutor;
+        for (generation, time) in [RationalTime::ZERO, RationalTime::from_seconds(1), RationalTime::ZERO].into_iter().enumerate() {
+            let frame = graph.evaluate(&mut executor, time, FrameQuality::Export, Generation::new(generation as u64 + 1)).unwrap();
+            for key in &outputs { assert!(frame.value(*key).is_some(), "missing exposed output on seek: {key:?}"); }
+            if generation == 2 { assert!(frame.executed_nodes().is_empty()); }
+        }
+        assert_eq!(graph.stats().topology_compiles, 1);
+    }
+
+    #[test]
     fn a_stale_generation_cannot_publish() {
         let root = node(1, vec![]);
         let graph = GraphTopology::try_new([root.clone()], vec![root.key()]).unwrap();

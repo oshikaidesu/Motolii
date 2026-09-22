@@ -171,7 +171,6 @@ impl Engine {
     ) -> Option<crate::render::media::SpatialBounds> {
         use crate::render::media::SpatialBounds;
         let layer_id = layer.id;
-        let comp = view.composition().ok().flatten()?.spec();
         let planar = |bounds: SpatialBounds, natural: [f32; 2]| {
             let displayed = layer_size(layer, natural);
             let scale = [displayed[0] / natural[0], displayed[1] / natural[1]];
@@ -182,18 +181,20 @@ impl Engine {
         };
         match &layer.source {
             LayerSource::Text => {
-                let document = crate::picture::resolve::text::resolved_text_document(view, layer_id, t).ok().flatten()?;
-                let partner = crate::extensions::text::morph(&layer.effects)
-                    .and_then(|(target, amount)| crate::picture::resolve::text::resolved_text_document(view, target, t).ok().flatten().map(|d| (d, amount)));
-                let key = TextCacheKey::new(layer_id, &document, partner.as_ref().map(|(d, a)| (d, *a)), t, comp.width, comp.height).moving(text::Flow::of(layer));
-                let cached = self.text_textures.get(&key)?;
-                planar(cached.bounds?, [comp.width as f32, comp.height as f32])
+                let source = self.semantic_layer_for(view, t, layer_id)?;
+                let crate::frame_graph::SceneContentValue::Text(text) = &source.content else { return None };
+                let bounds = crate::picture::shapes_ops::content_bounds(&text.shapes()).ok().flatten()?;
+                Some(SpatialBounds { min: [bounds[0] as f32, bounds[1] as f32, 0.0], max: [bounds[2] as f32, bounds[3] as f32, 0.0] })
             }
             LayerSource::Shape => {
-                let shapes = crate::render::engine::render::shown_shapes(&crate::picture::shapes::shapes_at(view, layer_id, t).ok()?, layer);
+                let source = self.semantic_layer_for(view, t, layer_id)?;
+                let crate::frame_graph::SceneContentValue::Shape(shapes) = &source.content else { return None };
+                let stretched;
+                let shapes = if source.shape_stretch != [1.0, 1.0] {
+                    stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                    &stretched
+                } else { shapes };
                 let canvas = content_canvas(&shapes).ok().flatten()?;
-                let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
-                let _cached = self.shape_textures.get(&key)?;
                 let natural = [canvas.width as f32, canvas.height as f32];
                 let bounds = crate::picture::shapes_ops::content_bounds(&shapes).ok().flatten()?;
                 planar(SpatialBounds {
