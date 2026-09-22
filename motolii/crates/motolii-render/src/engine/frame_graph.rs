@@ -34,6 +34,7 @@ pub(super) struct EngineFrameGraph {
     gpu_effects: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
     gpu_snapshots: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentSnapshot>,
     gpu_processed: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentProcessedLayer>,
+    gpu_composites: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentCompositeLayer>,
 }
 
 impl EngineFrameGraph {
@@ -60,7 +61,7 @@ impl EngineFrameGraph {
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
         let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default() })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
