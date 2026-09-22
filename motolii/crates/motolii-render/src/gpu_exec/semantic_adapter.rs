@@ -90,6 +90,7 @@ impl<'a> SemanticGpuAdapter<'a> {
             placement,
             direct_effects,
             after_effects,
+            image_sources: layer.image_sources.clone(),
             masks,
             matte_source,
             plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
