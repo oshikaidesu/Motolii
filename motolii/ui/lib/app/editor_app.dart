@@ -7,7 +7,9 @@ import '../foundation/theme.dart';
 import 'editor_window.dart';
 
 class EditorApp extends StatefulWidget {
-  const EditorApp({super.key});
+  const EditorApp({super.key, this.controller, this.initialize = true});
+  final EditorSession? controller;
+  final bool initialize;
 
   /// Hovering a control shows nothing: every [EditorTooltip] below is off.
   static Widget noHover(BuildContext context, Widget? child) =>
@@ -53,7 +55,10 @@ class _EditorAppState extends State<EditorApp> {
           ),
         ),
       ),
-      home: const EditorWindow(),
+      home: EditorWindow(
+        controller: widget.controller,
+        initialize: widget.initialize,
+      ),
     ),
   );
 }
