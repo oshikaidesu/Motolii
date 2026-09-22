@@ -152,8 +152,8 @@ fn mask_version(value: &crate::frame_graph::MaskValue) -> GpuResourceVersion {
 fn contribution_version(layer: &SceneLayerValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
     let mut encoded = CanonicalEncoder::new();
     encoded.u64(layer.layer.0).u32(layer.instance);
-    encoded.u64(content_version(&layer.content).0);
-    encoded.u64(transform_version(&layer.transform)?.0);
+    encoded.u64(content_version(&layer.content).as_u64());
+    encoded.u64(transform_version(&layer.transform)?.as_u64());
     encoded.f32(layer.opacity)?;
     encoded.i16(layer.order);
     encoded.f32(layer.depth)?;
