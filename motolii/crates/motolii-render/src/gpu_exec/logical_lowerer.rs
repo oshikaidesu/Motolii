@@ -159,9 +159,12 @@ impl GpuLowerer for LogicalGpuLowerer {
         )?;
 
         let mut current = content;
+        let mut image_sources = Vec::new();
         for (index, effect) in input.effects.iter().copied().enumerate() {
             let mut reads = current.into_iter().collect::<Vec<_>>();
-            reads.extend(Self::effect_image_resources(graph, input, effect)?);
+            let sources = Self::effect_image_resources(graph, input, effect)?;
+            reads.extend(sources.iter().copied());
+            image_sources.extend(sources);
             let output = Self::resource(
                 graph,
                 effect,
@@ -281,6 +284,7 @@ impl GpuLowerer for LogicalGpuLowerer {
         Ok(GpuContributionResources {
             content,
             placement,
+            image_sources,
             final_image_or_geometry: current,
         })
     }
