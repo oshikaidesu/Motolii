@@ -1,6 +1,5 @@
 #[allow(unused_imports)]
 use crate::edit::{Animate, Document, Intent};
-use motolii_render::picture::resolved::ResolvedLayer;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -42,6 +41,25 @@ fn fold(id: LayerId, own: &HashMap<LayerId, u64>, children: &HashMap<LayerId, Ve
     digest((own.get(&id).copied().unwrap_or(0), kids))
 }
 
+fn mix_scene_pose(layer: &crate::render::frame_graph::SceneLayerValue, own: &mut HashMap<LayerId, u64>) {
+    if let Some(key) = own.get_mut(&layer.layer) {
+        *key = digest((*key, format!("{:?}", (
+            layer.instance,
+            layer.transform,
+            layer.opacity,
+            layer.projection,
+            layer.shape_stretch,
+            layer.depth,
+            layer.ghost,
+        ))));
+    }
+    if let crate::render::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
+        for member in &plate.members {
+            if let Some(child) = member.layer.as_ref() { mix_scene_pose(child, own); }
+        }
+    }
+}
+
 impl EditorRuntime {
     /// 層ごとの「入力の指紋」。同じ指紋なら `layer_json` の出す行も同じ。
     /// 覆うのは行が読む全て — 属性・meta・各属性の出所と *その時刻での評価値*(transient と
@@ -49,7 +67,7 @@ impl EditorRuntime {
     /// そして子の指紋。値を時刻で評価して入れるので、時刻そのものは鍵に要らない。
     /// 例外は ◇ の点灯(`keyedNow`)—— キーを持つ層だけ frame も鍵に混ぜる。
     /// 観測者(カメラ・向き)は行に入らない。枠と x/y は `overlay_geometry` が毎回載せ直す。
-    pub(crate) fn layer_keys(&self, view: &StoreView<'_>, at: RationalTime, resolved: &[ResolvedLayer], clipping: &HashMap<LayerId, Option<LayerId>>, live: bool) -> Result<HashMap<LayerId, u64>, String> {
+    pub(crate) fn layer_keys(&self, view: &StoreView<'_>, at: RationalTime, scene: &crate::render::frame_graph::SceneValue, clipping: &HashMap<LayerId, Option<LayerId>>, live: bool) -> Result<HashMap<LayerId, u64>, String> {
         let e = |error: &dyn std::fmt::Display| error.to_string();
         let comp = view.composition().map_err(|x| e(&x))?;
         // 効果の台帳は plugin の読み直しで差し替わる。行の label も choices もそこから来る。
@@ -83,10 +101,9 @@ impl EditorRuntime {
             ]);
             own.insert(id, digest((global, row.to_string())));
         }
-        // 解決済みの姿(world 変換・配置効果の複製)も枠の入力。
-        for layer in resolved {
-            if let Some(key) = own.get_mut(&layer.id) { *key = digest((*key, format!("{layer:?}"))); }
-        }
+        // FrameGraph が評価した姿(world 変換・配置効果の複製)も枠の入力。
+        // ResolvedLayer へ戻さず semantic scene をそのまま指紋へ混ぜる。
+        for layer in &scene.layers { mix_scene_pose(layer, &mut own); }
         Ok(ids.iter().map(|&id| (id, fold(id, &own, &children, &mut Vec::new()))).collect())
     }
 }
@@ -239,11 +256,11 @@ mod tests {
             rt.doc.apply_all(crate::editor::create::new_layer_intents(LayerId(100 + i), i as i16, 0, 600, fps, (1920.0, 1080.0), crate::editor::create::NewKind::Rectangle, None)).unwrap();
         }
         let at = rt.time().unwrap();
-        let keys = |rt: &EditorRuntime| {
+        let keys = |rt: &mut EditorRuntime| {
             let view = rt.doc.view();
-            let resolved = crate::render::picture::resolve::resolved_layers(&view, at).unwrap();
+            let scene = rt.engine.frame_graph_editor_scene(&view, at).unwrap();
             let clipping = view.clipping_bases().unwrap();
-            rt.layer_keys(&view, at, &resolved, &clipping, false).unwrap()
+            rt.layer_keys(&view, at, &scene, &clipping, false).unwrap()
         };
         let moved = |before: &HashMap<LayerId, u64>, after: &HashMap<LayerId, u64>| {
             let mut ids: Vec<u64> = after.iter().filter(|(id, key)| before.get(id) != Some(key)).map(|(id, _)| id.0).collect();
@@ -252,23 +269,23 @@ mod tests {
         };
         request(&mut rt, json!({"op":"select","ids":[100]}));
         request(&mut rt, json!({"op":"previewProperties","edits":[{"layer":100,"property":"opacity","value":0.5}]}));
-        let before = keys(&rt);
+        let before = keys(&mut rt);
         request(&mut rt, json!({"op":"previewProperties","edits":[{"layer":100,"property":"opacity","value":0.6}]}));
-        assert_eq!(moved(&before, &keys(&rt)), vec![100], "掴んでいる層だけが動く");
+        assert_eq!(moved(&before, &keys(&mut rt)), vec![100], "掴んでいる層だけが動く");
         request(&mut rt, json!({"op":"cancelPreview"}));
         // キーの無い層は時刻が進んでも行が変わらない。
-        let before = keys(&rt);
+        let before = keys(&mut rt);
         request(&mut rt, json!({"op":"seek","frame":5}));
-        assert_eq!(moved(&before, &keys(&rt)), Vec::<u64>::new(), "キーが無ければ時刻で行は動かない");
+        assert_eq!(moved(&before, &keys(&mut rt)), Vec::<u64>::new(), "キーが無ければ時刻で行は動かない");
         // キーを持たせれば、その層だけが時刻で動く。
         request(&mut rt, json!({"op":"toggleKey","layer":100,"property":"opacity"}));
-        let before = keys(&rt);
+        let before = keys(&mut rt);
         request(&mut rt, json!({"op":"seek","frame":9}));
-        assert_eq!(moved(&before, &keys(&rt)), vec![100], "キーを持つ層だけが時刻で動く");
+        assert_eq!(moved(&before, &keys(&mut rt)), vec![100], "キーを持つ層だけが時刻で動く");
         // 観測者は行に入らない —— 枠は毎回載せ直すので、回しても組み直しは起きない。
-        let before = keys(&rt);
+        let before = keys(&mut rt);
         rt.viewer.user_camera.orbit_degrees = [30.0, 12.0];
-        assert_eq!(moved(&before, &keys(&rt)), Vec::<u64>::new(), "台を回しても行は組み直さない");
+        assert_eq!(moved(&before, &keys(&mut rt)), Vec::<u64>::new(), "台を回しても行は組み直さない");
     }
 
     /// 層ごとの cache は、同じ編集列を cache 無しで組んだ status と 1 行も違ってはならない。
