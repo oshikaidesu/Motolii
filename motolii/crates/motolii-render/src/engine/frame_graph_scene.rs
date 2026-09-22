@@ -34,6 +34,7 @@ impl Engine {
             let scene = planned.as_ref().unwrap_or(scene);
             let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
+            self.drawn_layers = prepared.layers.len();
             return Ok(prepared);
         }
 
@@ -53,6 +54,7 @@ impl Engine {
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
             self.attach_block_id(id, &mut layer.layer, comp);
         }
+        self.drawn_layers = prepared.layers.len();
         Ok(prepared)
     }
 
