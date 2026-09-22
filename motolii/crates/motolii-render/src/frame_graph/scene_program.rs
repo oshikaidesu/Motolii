@@ -345,8 +345,7 @@ impl SceneNodeProgram {
                         plate.after_effect_keys = after_keys.clone();
                         plate.after_effects = after;
                         plate.mask_keys.clear();
-                        plate.mask_keys.clear();
-                plate.masks.clear();
+                        plate.masks.clear();
                         plate.transform = TransformValue {
                             affine: glam::Affine2::IDENTITY,
                             spatial: glam::Affine3A::IDENTITY,
@@ -407,7 +406,7 @@ impl SceneNodeProgram {
                     layer.shape_stretch = sampled_flow_stretch(inputs, *flow, &sample_indices, sample_start).unwrap_or([1.0, 1.0]);
                     layer.depth = sampled_number(inputs, *depth, &sample_indices, sample_start).unwrap_or(0.0).max(0.0);
 
-                    let (sampled_direct, sampled_selected) = sampled_effects(
+                    let (sampled_direct_keys, sampled_direct, sampled_selected) = sampled_effects(
                         node,
                         inputs,
                         effects,
@@ -415,6 +414,7 @@ impl SceneNodeProgram {
                         &sample_indices,
                         sample_start,
                     )?;
+                    layer.effect_keys = sampled_direct_keys;
                     layer.effects = sampled_direct;
 
                     if sampled_selected.is_some() {
@@ -453,7 +453,9 @@ impl SceneNodeProgram {
                 plate.content_key = None;
                 plate.freeze_eligible = false;
                         plate.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(*layer), members, average: false });
+                plate.effect_keys.clear();
                 plate.effects.clear();
+                plate.after_effect_keys = after_keys;
                 plate.after_effects = after;
                 plate.mask_keys.clear();
                 plate.masks.clear();
@@ -650,7 +652,7 @@ fn sampled_effects(
     placement_effects: &[bool],
     sample_indices: &[usize],
     sample_start: usize,
-) -> Result<(Vec<crate::picture::resolved::ResolvedEffect>, Option<usize>), SceneNodeError> {
+) -> Result<(Vec<NodeKey>, Vec<crate::picture::resolved::ResolvedEffect>, Option<usize>), SceneNodeError> {
     let mut values = Vec::with_capacity(effects.len());
     for index in effects {
         values.push(
@@ -663,14 +665,17 @@ fn sampled_effects(
     let selected = values.iter().enumerate().find_map(|(index, value)| {
         (placement_effects.get(index).copied().unwrap_or(false) && value.is_some()).then_some(index)
     });
-    let direct = values.into_iter().enumerate().filter_map(|(index, value)| {
-        let effect = value?;
-        match selected {
-            Some(selected) if index >= selected => None,
-            _ => Some(effect),
+    let mut keys = Vec::new();
+    let mut direct = Vec::new();
+    for (effect_index, value) in values.into_iter().enumerate() {
+        let Some(effect) = value else { continue };
+        if selected.is_some_and(|selected| effect_index >= selected) {
+            continue;
         }
-    }).collect();
-    Ok((direct, selected))
+        keys.push(node.identity().inputs[effects[effect_index]]);
+        direct.push(effect);
+    }
+    Ok((keys, direct, selected))
 }
 
 fn contribution_has_solo(contribution: &SceneContributionValue) -> bool {
