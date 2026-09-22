@@ -5,14 +5,22 @@ use crate::frame_graph::TransformValue;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ResourceId(pub u64);
 
-/// Backend-neutral description of one already-evaluated scene contribution.
-///
-/// This is intentionally smaller than `SceneLayerValue`: it contains only values
-/// needed to schedule/composite a contribution and does not carry Motolii node
-/// identities or wgpu resources.
+/// Backend-neutral source recipe. It describes the class of resource required by
+/// rendering without carrying wgpu handles or re-encoding Motolii semantic nodes.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ResourceSource {
+    Text,
+    Shape,
+    Material { path: String },
+    Media { path: String },
+    Particles,
+    Plate,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompositeItem {
     pub layer: LayerId,
+    pub resource: Option<ResourceId>,
     pub transform: TransformValue,
     pub opacity: f32,
     pub projection: LayerProjection,
@@ -21,16 +29,13 @@ pub struct CompositeItem {
 }
 
 /// Small backend-neutral execution vocabulary.
-///
-/// These are work families, not Motolii semantic nodes. Payloads grow only when a
-/// production vertical slice needs them.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RenderWork {
-    Raster { output: ResourceId },
+    Raster { source: ResourceSource, output: ResourceId },
     Compute { output: ResourceId },
     Filter { input: ResourceId, output: ResourceId },
     Composite { items: Vec<CompositeItem>, output: ResourceId },
-    Transfer { input: Option<ResourceId>, output: ResourceId },
+    Transfer { source: ResourceSource, output: ResourceId },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
