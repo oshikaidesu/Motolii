@@ -25,31 +25,8 @@ pub(crate) fn resident_effect_chain(
         return hit;
     }
 
-    let mut passes = crate::render::engine::translate::translate_effect_passes(&layer.effects);
-    let direct_screen = passes.iter()
-        .any(|pass| pass.reads_backdrop || pass.reads_composite())
-        .then_some(screen);
-    crate::render::engine::translate::stamp_feedback(
-        &mut passes,
-        layer.layer,
-        layer.instance,
-        0,
-        direct_screen,
-        0,
-    );
-
-    let mut plate_passes = crate::render::engine::translate::translate_plate_passes(&layer.after_effects);
-    let plate_screen = plate_passes.iter()
-        .any(|pass| pass.reads_backdrop || pass.reads_composite())
-        .then_some(screen);
-    crate::render::engine::translate::stamp_feedback(
-        &mut plate_passes,
-        layer.layer,
-        layer.instance,
-        1,
-        plate_screen,
-        0,
-    );
+    let passes = crate::render::engine::translate::translate_effect_passes(&layer.effects);
+    let plate_passes = crate::render::engine::translate::translate_plate_passes(&layer.after_effects);
 
     let value = ResidentEffectChain { passes, plate_passes };
     store.install(key, version, generation, value.clone());
