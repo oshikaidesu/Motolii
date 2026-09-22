@@ -13,6 +13,7 @@ pub(crate) enum GpuResourceClass {
     Snapshot,
     Mask,
     Matte,
+    Flatten,
     Plate,
     History,
     Composite,
