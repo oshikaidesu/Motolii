@@ -57,6 +57,8 @@ pub struct StaticCluster {
 pub struct StaticClusterReport {
     pub clusters: Vec<StaticCluster>,
     pub node_cluster: BTreeMap<NodeKey, StaticClusterId>,
+    pub unused_builtin_kinds: BTreeSet<NodeKind>,
+    pub merge_candidates: Vec<(NodeKey, NodeKey)>,
 }
 
 impl StaticClusterReport {
@@ -90,6 +92,18 @@ impl StaticClusterReport {
                 upstream,
                 downstream,
             ));
+        }
+        if !self.unused_builtin_kinds.is_empty() {
+            out.push_str("\n## Unused builtin NodeKind\n\n");
+            for kind in &self.unused_builtin_kinds {
+                out.push_str(&format!("- {kind:?}\n"));
+            }
+        }
+        if !self.merge_candidates.is_empty() {
+            out.push_str("\n## Linear merge candidates\n\n");
+            for (from, to) in &self.merge_candidates {
+                out.push_str(&format!("- {from:?} -> {to:?}\n"));
+            }
         }
         out
     }
@@ -155,7 +169,39 @@ fn build_report(
         }
     }
 
-    StaticClusterReport { clusters, node_cluster }
+    let used: BTreeSet<_> = node_cluster.keys()
+        .filter_map(|key| topology.node(*key))
+        .map(|node| node.identity().kind)
+        .collect();
+    let unused_builtin_kinds = NodeKind::BUILTINS.iter().copied()
+        .filter(|kind| !used.contains(kind))
+        .collect();
+
+    let mut upstream_count: BTreeMap<NodeKey, usize> = BTreeMap::new();
+    let mut downstream_count: BTreeMap<NodeKey, usize> = BTreeMap::new();
+    for key in node_cluster.keys().copied() {
+        let node = topology.node(key).expect("clustered node");
+        upstream_count.insert(key, node.identity().inputs.iter().filter(|input| node_cluster.contains_key(input)).count());
+        for input in &node.identity().inputs {
+            if node_cluster.contains_key(input) {
+                *downstream_count.entry(*input).or_default() += 1;
+            }
+        }
+    }
+    let roots: BTreeSet<_> = topology.roots().iter().copied().collect();
+    let mut merge_candidates = Vec::new();
+    for (&to, &to_cluster) in &node_cluster {
+        if roots.contains(&to) { continue; }
+        let node = topology.node(to).expect("clustered node");
+        if upstream_count.get(&to).copied().unwrap_or(0) != 1 { continue; }
+        let Some(&from) = node.identity().inputs.iter().find(|input| node_cluster.contains_key(input)) else { continue };
+        if downstream_count.get(&from).copied().unwrap_or(0) != 1 { continue; }
+        let Some(&from_cluster) = node_cluster.get(&from) else { continue };
+        if from_cluster != to_cluster { continue; }
+        merge_candidates.push((from, to));
+    }
+
+    StaticClusterReport { clusters, node_cluster, unused_builtin_kinds, merge_candidates }
 }
 
 /// Conservative static capability map for SceneProgram.
@@ -291,6 +337,18 @@ mod tests {
         assert!(report.cluster_of(ghost.key()).unwrap().signature.temporal_edge);
         assert_eq!(report.cluster_of(scene.key()).unwrap().signature.dynamic, StaticDynamicClass::TemporalSample);
         assert_ne!(report.node_cluster[&ghost.key()], report.node_cluster[&transform.key()]);
+    }
+
+    #[test]
+    fn audit_reports_unused_kinds_and_only_linear_same_cluster_merge_candidates() {
+        let a = node(NodeKind::PropertyConstant, vec![]);
+        let b = node(NodeKind::PropertyConstant, vec![a.key()]);
+        let cnode = node(NodeKind::PropertyConstant, vec![b.key()]);
+        let topology = GraphTopology::try_new([a.clone(), b.clone(), cnode.clone()], vec![cnode.key()]).unwrap();
+        let report = cluster_topology(&topology, |_| StaticDynamicClass::None);
+                assert!(report.unused_builtin_kinds.contains(&NodeKind::ShapeMesh));
+        assert!(report.merge_candidates.contains(&(a.key(), b.key())));
+        assert!(!report.merge_candidates.contains(&(b.key(), cnode.key())), "root consumer is not a merge candidate");
     }
 
     #[test]
