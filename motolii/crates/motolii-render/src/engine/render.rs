@@ -18,8 +18,6 @@ use crate::render::engine::translate::{
 use crate::render::compositor::effects::isf::TimeBase;
 use crate::render::engine::{Engine, EngineError};
 
-/// 1 コマ分の層を建てて焼く。
-mod build;
 /// 先読みと、見えない層の捨て方。
 mod warm;
 
