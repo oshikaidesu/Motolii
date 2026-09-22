@@ -86,6 +86,7 @@ impl EngineFrameGraph {
             Generation::new(self.generation),
         )?;
         drop(executor);
+        engine.gpu_work_keys = evaluated.work_keys.clone();
 
         // GPU lowering is intentionally outside the semantic FrameGraph. The
         // semantic scheduler owns meaning/cache; the GPU control plane owns
