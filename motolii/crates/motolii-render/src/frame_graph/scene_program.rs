@@ -38,6 +38,38 @@ pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
+impl SceneValue {
+    /// Authoring layer as evaluated by the FrameGraph. Plates and placement
+    /// copies are an execution/semantic detail; editor callers ask by LayerId
+    /// and get the original instance when one exists.
+    pub fn layer(&self, id: LayerId) -> Option<&SceneLayerValue> {
+        fn find<'a>(
+            layer: &'a SceneLayerValue,
+            id: LayerId,
+            fallback: &mut Option<&'a SceneLayerValue>,
+        ) -> Option<&'a SceneLayerValue> {
+            if layer.layer == id && !layer.ghost {
+                if layer.instance == 0 { return Some(layer); }
+                if fallback.is_none() { *fallback = Some(layer); }
+            }
+            if let SceneContentValue::Plate(plate) = &layer.content {
+                for member in &plate.members {
+                    if let Some(child) = member.layer.as_ref() {
+                        if let Some(found) = find(child, id, fallback) { return Some(found); }
+                    }
+                }
+            }
+            None
+        }
+
+        let mut fallback = None;
+        for layer in &self.layers {
+            if let Some(found) = find(layer, id, &mut fallback) { return Some(found); }
+        }
+        fallback
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SceneContributionValue {
     pub(crate) solo: bool,
