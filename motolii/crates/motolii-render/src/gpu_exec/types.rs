@@ -71,6 +71,17 @@ impl GpuResourceVersion {
     pub fn new(value: u64) -> Self {
         Self(value)
     }
+
+    /// Runtime fingerprint of the GPU-visible evaluated value.
+    ///
+    /// This intentionally hashes canonical value bytes, not comp time,
+    /// generation, or "node executed" status. Many semantic nodes are Exact
+    /// today even when their evaluated value did not change.
+    pub fn from_canonical(encoded: &crate::frame_graph::CanonicalEncoder) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        encoded.as_bytes().hash(&mut hasher);
+        Self(hasher.finish())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
