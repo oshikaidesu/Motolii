@@ -128,6 +128,7 @@ impl GpuLowerer for LogicalGpuLowerer {
             vec![placement],
         )?;
 
+        let mut operations = Vec::new();
         let mut current = content;
         for (index, effect) in input.direct_effects.iter().copied().enumerate() {
             let mut reads = current.into_iter().collect::<Vec<_>>();
@@ -250,13 +251,22 @@ impl GpuLowerer for LogicalGpuLowerer {
                 input.instance | 0x4000_0000,
                 reads.clone(),
             )?;
-            Self::producer(
-                graph,
-                input.contribution.node.as_u64() ^ 0x434c4950 ^ u64::from(input.instance),
-                GpuPassKind::Composite,
-                reads,
-                vec![output],
-            )?;
+            let pass = GpuPassDesc {
+                identity: GpuPassIdentity {
+                    kind: GpuPassKind::Composite,
+                    tag: input.contribution.node.as_u64() ^ 0x434c4950 ^ u64::from(input.instance),
+                    reads: reads.clone(),
+                    writes: vec![output],
+                },
+                after: Vec::new(), cacheable: true, side_effect: false,
+            };
+            let pass_key = pass.key();
+            graph.insert_pass(pass)?;
+            if let Some(source) = reads.first().copied() {
+                operations.push((pass_key, super::engine_backend::EngineGpuOperation::Clip {
+                    source, base, output,
+                }));
+            }
             current = Some(output);
         }
 
@@ -270,13 +280,22 @@ impl GpuLowerer for LogicalGpuLowerer {
                 input.instance,
                 reads.clone(),
             )?;
-            Self::producer(
-                graph,
-                input.contribution.node.as_u64() ^ 0x4d41545445,
-                GpuPassKind::Render,
-                reads,
-                vec![output],
-            )?;
+            let pass = GpuPassDesc {
+                identity: GpuPassIdentity {
+                    kind: GpuPassKind::Render,
+                    tag: input.contribution.node.as_u64() ^ 0x4d41545445,
+                    reads: reads.clone(),
+                    writes: vec![output],
+                },
+                after: Vec::new(), cacheable: true, side_effect: false,
+            };
+            let pass_key = pass.key();
+            graph.insert_pass(pass)?;
+            if let (Some(target), Some(mode)) = (reads.first().copied(), input.matte_mode) {
+                operations.push((pass_key, super::engine_backend::EngineGpuOperation::Matte {
+                    target, source: matte, output, mode,
+                }));
+            }
             current = Some(output);
         }
 
@@ -285,6 +304,7 @@ impl GpuLowerer for LogicalGpuLowerer {
             placement,
             contribution,
             final_image_or_geometry: current,
+            operations,
         })
     }
 }
