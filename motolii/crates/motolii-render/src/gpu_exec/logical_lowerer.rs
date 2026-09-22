@@ -100,7 +100,7 @@ impl GpuLowerer for LogicalGpuLowerer {
         )?;
 
         let mut current = content;
-        for (index, effect) in input.effects.iter().copied().enumerate() {
+        for (index, effect) in input.direct_effects.iter().copied().enumerate() {
             let reads = current.into_iter().collect::<Vec<_>>();
             let output = Self::resource(
                 graph,
@@ -178,6 +178,25 @@ impl GpuLowerer for LogicalGpuLowerer {
             current = Some(output);
         }
 
+        for (index, effect) in input.after_effects.iter().copied().enumerate() {
+            let reads = current.into_iter().collect::<Vec<_>>();
+            let output = Self::resource(
+                graph,
+                effect,
+                GpuResourceClass::Effect,
+                0x8000_0000u32 | index as u32,
+                reads.clone(),
+            )?;
+            Self::producer(
+                graph,
+                effect.node.as_u64() ^ 0x4146544552 ^ index as u64,
+                GpuPassKind::Render,
+                reads,
+                vec![output],
+            )?;
+            current = Some(output);
+        }
+
         if let Some(matte) = input.matte_source {
             let mut reads = current.into_iter().collect::<Vec<_>>();
             reads.push(matte);
@@ -230,7 +249,8 @@ mod tests {
             instance: 0,
             content: Some(semantic(2, 10)),
             placement: semantic(3, 20),
-            effects: vec![],
+            direct_effects: vec![],
+            after_effects: vec![],
             masks: vec![],
             matte_source: None,
             plate: None,
