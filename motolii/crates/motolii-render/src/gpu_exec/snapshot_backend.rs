@@ -35,7 +35,7 @@ impl crate::render::engine::Engine {
         self.feedback_namespace = namespace;
         self.gpu_set_source_clock(time);
 
-        let built = (|| {
+        let built: Result<Option<GpuTexture2D>, crate::render::engine::EngineError> = (|| {
             let texture = match source {
                 SceneImageSourceValue::Content { layer, content, .. } => {
                     let content = match content {
