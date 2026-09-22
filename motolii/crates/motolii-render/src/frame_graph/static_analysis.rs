@@ -20,16 +20,24 @@ pub enum StaticDomain {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StaticDynamicClass {
+    None,
+    CrossNode,
+    TemporalSample,
+    Recurrence,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StaticClusterSignature {
     pub domain: StaticDomain,
     pub time: TimeDependency,
     pub quality: QualityDependency,
     /// At least one compiler-declared input is sampled at another time.
     pub temporal_edge: bool,
-    /// The evaluator may ask for additional inputs after seeing ordinary inputs.
-    /// This is deliberately conservative: static analysis marks capability,
-    /// not whether a particular runtime value will actually request one.
-    pub dynamic_inputs: bool,
+    /// Runtime-added dependency shape. This is deliberately conservative:
+    /// static analysis marks capability, not whether a particular value will
+    /// actually request an extra input on this frame.
+    pub dynamic: StaticDynamicClass,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,7 +71,7 @@ impl StaticClusterReport {
 
     pub fn to_markdown(&self) -> String {
         let mut out = String::from(
-            "| Cluster | Domain | Time | Temporal edge | Dynamic inputs | Quality | Kinds | Nodes | Upstream | Downstream |\n             |---:|---|---|---|---|---|---|---:|---|---|\n",
+            "| Cluster | Domain | Time | Temporal edge | Dynamic | Quality | Kinds | Nodes | Upstream | Downstream |\n|---:|---|---|---|---|---|---|---:|---|---|\n",
         );
         for cluster in &self.clusters {
             let kinds = cluster.kinds.iter().map(|kind| format!("{kind:?}")).collect::<Vec<_>>().join(", ");
@@ -75,7 +83,7 @@ impl StaticClusterReport {
                 cluster.signature.domain,
                 cluster.signature.time,
                 cluster.signature.temporal_edge,
-                cluster.signature.dynamic_inputs,
+                format!("{:?}", cluster.signature.dynamic),
                 cluster.signature.quality,
                 kinds,
                 cluster.nodes.len(),
@@ -106,11 +114,19 @@ pub fn cluster_topology(
             time: node.identity().time_dependency,
             quality: node.identity().quality_dependency,
             temporal_edge: node.identity().input_times.iter().any(|time| !matches!(time, InputTime::Same)),
-            dynamic_inputs: dynamic_capable(node),
+            dynamic: if dynamic_capable(node) { StaticDynamicClass::TemporalSample } else { StaticDynamicClass::None },
         };
         grouped.entry(signature).or_default().push(*key);
     }
 
+    build_report(topology, reachable, grouped)
+}
+
+fn build_report(
+    topology: &GraphTopology,
+    reachable: Vec<NodeKey>,
+    grouped: BTreeMap<StaticClusterSignature, Vec<NodeKey>>,
+) -> StaticClusterReport {
     let mut clusters = Vec::with_capacity(grouped.len());
     let mut node_cluster = BTreeMap::new();
     for (signature, nodes) in grouped {
@@ -148,23 +164,45 @@ pub fn cluster_topology(
 /// recipes. Marking the entire kind is intentional: this report is a safety
 /// tool for finding scheduling boundaries, so false negatives are worse than
 /// false positives.
-pub fn scene_node_may_request_dynamic_inputs(kind: NodeKind) -> bool {
-    matches!(
-        kind,
+pub fn scene_dynamic_class(kind: NodeKind) -> StaticDynamicClass {
+    match kind {
+        NodeKind::AnalysisRequest => StaticDynamicClass::CrossNode,
         NodeKind::AnalysisBlob
-            | NodeKind::AnalysisOverlay
-            | NodeKind::PlacementSet
-            | NodeKind::MotionSamples
-            | NodeKind::TextShape
-            | NodeKind::TextFlow
-            | NodeKind::EffectImages
-            | NodeKind::Particle
-            | NodeKind::CompositeContribution
-    )
+        | NodeKind::AnalysisOverlay
+        | NodeKind::ParticleBirths => StaticDynamicClass::Recurrence,
+        NodeKind::PlacementSet
+        | NodeKind::MotionMeasure
+        | NodeKind::MotionSamples
+        | NodeKind::TextShape
+        | NodeKind::TextFlow
+        | NodeKind::EffectImages
+        | NodeKind::Particle
+        | NodeKind::CompositeContribution => StaticDynamicClass::TemporalSample,
+        _ => StaticDynamicClass::None,
+    }
+}
+
+pub fn scene_node_may_request_dynamic_inputs(kind: NodeKind) -> bool {
+    scene_dynamic_class(kind) != StaticDynamicClass::None
 }
 
 pub fn scene_static_clusters(topology: &GraphTopology) -> StaticClusterReport {
-    cluster_topology(topology, |node| scene_node_may_request_dynamic_inputs(node.identity().kind))
+    let reachable = topology.reachable();
+    let mut grouped: BTreeMap<StaticClusterSignature, Vec<NodeKey>> = BTreeMap::new();
+
+    for key in &reachable {
+        let node = topology.node(*key).expect("reachable node");
+        let signature = StaticClusterSignature {
+            domain: domain(node.identity().kind),
+            time: node.identity().time_dependency,
+            quality: node.identity().quality_dependency,
+            temporal_edge: node.identity().input_times.iter().any(|time| !matches!(time, InputTime::Same)),
+            dynamic: scene_dynamic_class(node.identity().kind),
+        };
+        grouped.entry(signature).or_default().push(*key);
+    }
+
+    build_report(topology, reachable, grouped)
 }
 
 pub fn domain(kind: NodeKind) -> StaticDomain {
@@ -266,7 +304,7 @@ mod tests {
         assert_eq!(report.cluster_of(property.key()).unwrap().signature.domain, StaticDomain::Property);
         assert!(!report.cluster_of(transform.key()).unwrap().signature.temporal_edge);
         assert!(report.cluster_of(ghost.key()).unwrap().signature.temporal_edge);
-        assert!(report.cluster_of(scene.key()).unwrap().signature.dynamic_inputs);
+        assert_eq!(report.cluster_of(scene.key()).unwrap().signature.dynamic, StaticDynamicClass::TemporalSample);
         assert_ne!(report.node_cluster[&ghost.key()], report.node_cluster[&transform.key()]);
     }
 
@@ -280,7 +318,7 @@ mod tests {
         let markdown = scene_static_clusters(&topology).to_markdown();
         assert!(markdown.contains("| Cluster | Domain | Time |"));
         assert!(markdown.contains("Effect"));
-        assert!(markdown.contains("true"));
+        assert!(markdown.contains("TemporalSample"));
     }
 
     #[test]
