@@ -138,6 +138,45 @@ impl GpuLowerer for LogicalGpuLowerer {
             current = Some(output);
         }
 
+        if let Some(plate) = input.plate {
+            let reads = current.into_iter().collect::<Vec<_>>();
+            let output = Self::resource(
+                graph,
+                plate,
+                GpuResourceClass::Plate,
+                input.instance,
+                reads.clone(),
+            )?;
+            Self::producer(
+                graph,
+                plate.node.as_u64() ^ 0x504c415445,
+                GpuPassKind::Composite,
+                reads,
+                vec![output],
+            )?;
+            current = Some(output);
+        }
+
+        if let Some(matte) = input.matte_source {
+            let mut reads = current.into_iter().collect::<Vec<_>>();
+            reads.push(matte);
+            let output = Self::resource(
+                graph,
+                input.contribution,
+                GpuResourceClass::Matte,
+                input.instance,
+                reads.clone(),
+            )?;
+            Self::producer(
+                graph,
+                input.contribution.node.as_u64() ^ 0x4d41545445,
+                GpuPassKind::Render,
+                reads,
+                vec![output],
+            )?;
+            current = Some(output);
+        }
+
         Ok(GpuContributionResources {
             content,
             placement,
