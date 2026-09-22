@@ -9,3 +9,13 @@ Rust編集層は`native/src/editor`。旧実装は[Git履歴](../../docs/stage5/
 寸法・余白・文字サイズは`lib/foundation/metrics.dart`の`EditorMetrics`から取る。生の数字は`tool/motolii_lints`(analyzer plugin)がIDEで止め、`scripts/motolii-ui.sh test`の`bin/check.dart`が一式で止める。quick fixは同じ値のtokenへ置き換える。Dockの側面幅は`panel_catalog.dart`の`Extent`。
 
 Inspectorは部品版に一本化。[操作契約と検証](../../docs/stage5/inspector.md)。
+
+## UI Gallery
+
+`lib/gallery_main.dart`は製品とは別のUI確認入口。native bridgeや作品runtimeを起動せず、実際の`foundation`と`workspace`部品をブラウザで確認する。
+
+- ローカルでGalleryを開く: `flutter run -d chrome -t lib/gallery_main.dart`
+- Flutter公式Widget Previewerで同じstoryを見る: `flutter widget-preview start`
+- 直接storyを開く: `?story=foundation-controls` / `?story=panel-chrome` / `?story=workspace-dock`
+
+`ui-gallery-pages.yml`はPRでGalleryのformat/analyze/Web buildを検査し、mainでは同じbuildをGitHub Pagesへ出す。GalleryのWeb buildがnative依存で壊れた場合は、UIからnative実装への依存漏れとして扱う。
