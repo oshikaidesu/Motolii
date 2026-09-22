@@ -52,7 +52,7 @@ impl EngineFrameGraph {
         };
         let camera = projection(0); let stage = projection(1);
         nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
-        let topology = GraphTopology::try_new(nodes, vec![camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
+        let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
         Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
@@ -321,6 +321,20 @@ impl Engine {
         if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
         let scene = state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()?;
         Some(resolved_layers_from_scene(scene, time, state.fps))
+    }
+
+    pub(super) fn semantic_layer_for(&self, view: &StoreView<'_>, time: RationalTime, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
+        let state = self.frame_graph.as_ref()?;
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        let scene = state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()?;
+        fn find(layer: &crate::frame_graph::SceneLayerValue, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
+            if layer.layer == id && !layer.ghost { return Some(layer); }
+            if let crate::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
+                return plate.members.iter().filter_map(|member| member.layer.as_ref()).find_map(|layer| find(layer, id));
+            }
+            None
+        }
+        scene.layers.iter().find_map(|layer| find(layer, id))
     }
 
     #[allow(clippy::too_many_arguments)]

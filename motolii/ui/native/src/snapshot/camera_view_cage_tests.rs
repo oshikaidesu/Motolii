@@ -230,6 +230,7 @@ fn a_tilted_planar_layer_keeps_a_facing_frame_and_its_handles_write_scale_and_ro
         request(&mut rt,json!({"op":"setAttrs","layers":[layer.0],"patch":{"projection":projection}}));
         rt.viewer.user_camera=observer;
         let time=rt.time().unwrap();
+        rt.engine.frame_graph_editor_layers(&rt.doc.view(),time).unwrap();
         let bounds=rt.bounds_seen(layer,View::User).unwrap();
         let c:Vec<[f64;2]>=serde_json::from_value(bounds["corners"].clone()).unwrap();
         assert_eq!(c.len(),4,"{projection}: a planar layer gets the 4-corner frame");
@@ -244,14 +245,14 @@ fn a_tilted_planar_layer_keeps_a_facing_frame_and_its_handles_write_scale_and_ro
         assert!((c[1][0]-c[0][0])>1.0&&(c[3][1]-c[0][1])>1.0,"{projection}: the frame is not edge-on even though the plane may be");
         // 角を外へ引く → scale が伸びる。
         let se=[c[2][0],c[2][1]];let nw=[c[0][0],c[0][1]];
-        let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"scale","se",se,time,observer,Default::default(),1.0,None).unwrap();
+        let drag=editor::stage::DragSession::begin(&rt.doc,&mut rt.engine,&[layer],"scale","se",se,time,observer,Default::default(),1.0,None).unwrap();
         let far=[nw[0]+(se[0]-nw[0])*2.0,nw[1]+(se[1]-nw[1])*2.0];
         let edits=drag.edits(&rt.doc,far,false,false,Animate::Off).unwrap();
         let scale=edits.iter().find_map(|i|match i{Intent::SetConstant{property,value:Value::Vec2(v),..} if *property==PropertyId::new(property::SCALE).unwrap()=>Some(*v),_=>None}).expect("scale edit");
         assert!(scale[0]>1.5&&scale[1]>1.5,"{projection}: pulling the corner out grows the layer: {scale:?}");
         // 上の取っ手を画面で 90° 回す → rotation が 90° 動く(相似で結ぶので画面の角度がそのまま値)。
         let top=[(c[0][0]+c[1][0])*0.5,c[0][1]-22.0];
-        let drag=editor::stage::DragSession::begin(&rt.doc,&rt.engine,&[layer],"rotate","",top,time,observer,Default::default(),1.0,None).unwrap();
+        let drag=editor::stage::DragSession::begin(&rt.doc,&mut rt.engine,&[layer],"rotate","",top,time,observer,Default::default(),1.0,None).unwrap();
         // 回転の軸は anchor を写した点(取っ手と同じ写像: 中間奥行きの面の 4 角を anchor の比で結ぶ)。
         let m:Vec<[f64;2]>=(0..4).map(|i|[((projected[i].x+projected[i+4].x)*0.5)as f64,((projected[i].y+projected[i+4].y)*0.5)as f64]).collect();
         let f:[f64;2]=serde_json::from_value(bounds["anchorFraction"].clone()).unwrap();
