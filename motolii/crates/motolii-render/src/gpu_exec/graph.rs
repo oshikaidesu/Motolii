@@ -5,7 +5,6 @@ use super::types::{
     GpuResourceVersion,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct GpuGraphStats {
     pub resources: usize,
@@ -13,6 +12,7 @@ pub(crate) struct GpuGraphStats {
     pub passes: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuResourceDelta {
     Inserted,
     Unchanged,
