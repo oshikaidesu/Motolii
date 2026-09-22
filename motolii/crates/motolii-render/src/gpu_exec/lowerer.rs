@@ -1,7 +1,9 @@
+use std::hash::{Hash, Hasher};
+
 use crate::frame_graph::NodeKey;
 
 use super::graph::{GpuGraphError, GpuResourceGraph};
-use super::types::{GpuResourceKey, GpuResourceLifetime, GpuResourceVersion};
+use super::types::{GpuResourceClass, GpuResourceIdentity, GpuResourceKey, GpuResourceLifetime, GpuResourceVersion};
 
 /// A semantic recipe plus the version of its currently evaluated value.
 ///
@@ -31,6 +33,14 @@ pub(crate) struct VersionedImageSource {
 pub(crate) struct GpuEffectImages {
     pub effect: NodeKey,
     pub sources: Vec<VersionedImageSource>,
+}
+
+pub(crate) fn image_source_identity(effect: NodeKey, instance: u32, index: usize) -> GpuResourceIdentity {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    effect.hash(&mut hasher);
+    instance.hash(&mut hasher);
+    index.hash(&mut hasher);
+    GpuResourceIdentity::synthetic(hasher.finish(), GpuResourceClass::ImageSource, 0)
 }
 
 /// Per-contribution lowering input. The semantic adapter constructs these from
