@@ -100,14 +100,16 @@ impl Engine {
 
     /// 作中カメラの意味は FrameGraph Camera node が所有する。
     ///
-    /// Native editor も playback/export と同じ camera branch を読む。ここで
-    /// StoreView から legacy ResolvedLayer owner を復活させない。
+    /// This accessor never compiles or evaluates a second graph. Callers that
+    /// can arrive before production evaluation must prepare the revision/time
+    /// through `frame_graph_document_camera` first.
     pub fn resolve_camera(
         &self,
         view: &StoreView<'_>,
         t: RationalTime,
     ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
-        self.frame_graph_camera(view, t)
+        self.frame_graph_cached_camera(view, t)
+            .ok_or_else(|| crate::render::engine::EngineError::Store("FrameGraph camera is not prepared for this revision/time".into()))
     }
 
     pub fn selected_layer_bounds_in(
