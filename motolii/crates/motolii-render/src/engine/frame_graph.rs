@@ -272,6 +272,164 @@ impl Engine {
         Ok(camera)
     }
 
+    /// First visual cassette slice. Semantic evaluation is lowered through the
+    /// backend-neutral RenderGraph; concrete layer resources still come from the
+    /// frozen GpuScene oracle until Raster/Transfer are migrated individually.
+    ///
+    /// This deliberately makes the new boundary draw real pixels before replacing
+    /// resource preparation. The RenderGraph, not GpuScene, owns the ordered
+    /// composite description on this path.
+    fn cassette_plain_layers(
+        &mut self,
+        scene: &SceneValue,
+        comp: CompSpec,
+        projection_camera: ResolvedCamera,
+    ) -> Result<Option<Vec<crate::render::compositor::LayerWithPasses>>, EngineError> {
+        use crate::frame_graph::SceneContentValue;
+        use crate::render::compositor::{Layer, LayerContent, LayerWithPasses};
+
+        let mut layers = Vec::new();
+        for source in &scene.layers {
+            if !source.effects.is_empty()
+                || !source.after_effects.is_empty()
+                || !source.image_sources.is_empty()
+                || !source.masks.is_empty()
+                || source.matte.is_some()
+                || source.clip_to_below
+                || source.flatten
+                || source.environment
+            {
+                return Ok(None);
+            }
+
+            let (content, natural) = match &source.content {
+                SceneContentValue::None => continue,
+                SceneContentValue::Text(text) => {
+                    self.text_texture_from_shapes(&text.shapes(), source.layer, comp)?
+                }
+                SceneContentValue::Shape(shapes) => {
+                    let stretched;
+                    let shapes = if source.shape_stretch != [1.0, 1.0] {
+                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
+                        stretched.as_slice()
+                    } else {
+                        shapes.as_slice()
+                    };
+                    self.shape_texture_from_shapes(
+                        shapes,
+                        source.layer,
+                        true,
+                        0.05,
+                        comp,
+                        None,
+                        source.shape_stretch == [1.0, 1.0],
+                    )?
+                }
+                SceneContentValue::Material(material) => {
+                    self.mesh_content_for(&material.source.path, comp)?
+                }
+                SceneContentValue::Media { source: media, time } => {
+                    self.file_content_for(&media.path, *time, source.layer, comp)?
+                }
+                SceneContentValue::Particles(value) => {
+                    let frame = super::ParticleFrame::from_particles(
+                        &value.particles,
+                        value.turbulence,
+                        value.links,
+                    );
+                    let natural = [
+                        frame.bounds.max[0].max(1.0),
+                        frame.bounds.max[1].max(1.0),
+                    ];
+                    (
+                        Some(LayerContent::Cloud {
+                            positions: frame.positions,
+                            colors: frame.colors,
+                            bounds: frame.bounds,
+                            point_size: 1.0,
+                            sizes: Some(frame.sizes),
+                            sprites: true,
+                            links: frame.links,
+                        }),
+                        natural,
+                    )
+                }
+                // A plate is already a nested semantic composite. Keep it on the
+                // frozen oracle until RenderGraph owns nested composite resources.
+                SceneContentValue::Plate(_) => return Ok(None),
+            };
+            let Some(content) = content else { continue };
+
+            let placement = crate::doc::core::LayerPlacement {
+                transform: source.transform.affine,
+                world_transform: Some(source.transform.spatial),
+                opacity: source.opacity,
+                order: i32::from(source.order),
+                z: source.transform.spatial.translation.z,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
+                plane: None,
+            };
+            let layer = Layer {
+                content,
+                size: natural,
+                placement,
+                projection: source.projection,
+                projection_camera,
+                blend_mode: crate::render::engine::translate::translate_blend_mode(source.blend)?,
+                shading: Default::default(),
+                displace: Default::default(),
+                clip: None,
+                shadow: 0.0,
+                outline: self.outline_id(source.layer),
+                frame: None,
+            };
+            layers.push(LayerWithPasses {
+                layer,
+                passes: Vec::new(),
+                padding: 0,
+                pass_sources: Vec::new(),
+                cut: Vec::new(),
+            });
+        }
+        Ok(Some(layers))
+    }
+
+    pub(in crate::engine) fn render_frame_graph_cassette_pixels(
+        &mut self,
+        view: &StoreView<'_>,
+        time: RationalTime,
+        include_background: bool,
+        camera_override: Option<ResolvedCamera>,
+    ) -> Result<Vec<u8>, EngineError> {
+        // Important: the supported cassette path evaluates only semantic roots.
+        // It must not construct/evaluate NodeKind::GpuScene just to discover
+        // whether the new lowering/backend path can render the scene.
+        let (scene, document_camera, comp, _fps) =
+            self.evaluate_frame_graph_semantics(view, time)?;
+        let _graph = crate::render_lowering::lower_scene(&scene)
+            .map_err(|_| EngineError::Store("Render lowering failed".into()))?;
+
+        if let Some(mut layers) = self.cassette_plain_layers(&scene, comp, document_camera)? {
+            for layer in &mut layers {
+                layer.layer.projection_camera = document_camera;
+            }
+            let camera = camera_override.unwrap_or(document_camera);
+            let background = if include_background {
+                view.composition().map_err(store)?
+                    .map_or(crate::render::compositor::NO_BACKGROUND, |c| c.background)
+            } else {
+                crate::render::compositor::NO_BACKGROUND
+            };
+            return self.compositor.render_with_effects(comp, camera, &layers, background)
+                .map_err(Into::into);
+        }
+
+        // Unsupported semantics remain on the frozen reference path until their
+        // Raster/Filter/Composite work has been migrated with parity evidence.
+        self.render_frame_graph_pixels(view, time, include_background, camera_override)
+    }
+
     pub(in crate::engine) fn render_frame_graph_pixels(
         &mut self,
         view: &StoreView<'_>,
@@ -535,6 +693,50 @@ impl Engine {
     }
 }
 
+
+
+#[cfg(test)]
+mod cassette_tests {
+    use super::*;
+    use motolii_edit::{Document, Intent};
+    use crate::doc::store::{Composition, Fps};
+
+    #[test]
+    fn plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation() {
+        let dir = tempfile::tempdir().unwrap();
+        let image_path = dir.path().join("cassette-red.png");
+        image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 0, 0, 255]))
+            .save(&image_path)
+            .unwrap();
+
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 1,
+            background: [0.0, 0.0, 0.0, 1.0],
+        })).unwrap();
+        super::super::environment_tests::file_layer(&mut doc, 1, 0, &image_path);
+
+        let mut engine = Engine::new().unwrap();
+        let (scene, camera, comp, _) = engine
+            .evaluate_frame_graph_semantics(&doc.view(), RationalTime::ZERO)
+            .unwrap();
+        let cassette = engine
+            .cassette_plain_layers(&scene, comp, camera)
+            .unwrap()
+            .expect("plain still scene must be fully owned by the cassette path");
+        assert_eq!(cassette.len(), 1);
+
+        let pixels = engine
+            .render_with_camera_override(&doc.view(), RationalTime::ZERO, true, None)
+            .unwrap();
+        assert_eq!(pixels.len(), 64 * 64 * 4);
+        assert!(pixels.chunks_exact(4).any(|p| p[0] > 200 && p[1] < 40 && p[2] < 40));
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    }
+}
 
 
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }
