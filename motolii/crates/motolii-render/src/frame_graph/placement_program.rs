@@ -383,7 +383,7 @@ mod tests {
         let scene = frame.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>()).unwrap();
 
         assert_eq!(scene.layers.len(), 1);
-        assert_eq!(scene.layers[0].effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(), ["test.after"]);
+        assert_eq!(scene.layers[0].after_effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(), ["test.after"]);
         let crate::frame_graph::SceneContentValue::Plate(plate) = &scene.layers[0].content else { panic!("copies must be one plate before downstream effects"); };
         assert_eq!(plate.members.len(), 2);
     }
@@ -416,7 +416,7 @@ mod tests {
         assert_eq!(set.selected_effect, Some(0));
         assert_eq!(set.copies.len(), 3);
         assert!(set.copies[0].transform.is_some());
-        assert!(set.copies[1].transform.is_none());
+        assert!(set.copies[1].transform.is_some(), "a delayed copy carries its transform sampled at its own time");
         assert_eq!(set.copies[1].time_offset, RationalTime::try_new(1, 2).unwrap());
     }
 }
