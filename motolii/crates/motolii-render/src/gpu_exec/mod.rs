@@ -27,6 +27,7 @@ mod special_content_backend;
 mod resource_store;
 mod telemetry;
 mod types;
+mod visibility;
 
 pub(crate) use composite_backend::ResidentCompositeLayer;
 pub(crate) use content_backend::ResidentContent;
