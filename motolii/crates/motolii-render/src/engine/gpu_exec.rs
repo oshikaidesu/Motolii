@@ -27,6 +27,14 @@ impl GpuResourceId {
         Self(hasher.finish())
     }
 
+    pub(crate) fn from_work(kind: GpuResourceKind, work: WorkKey, discriminator: u64) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        kind.hash(&mut hasher);
+        work.hash(&mut hasher);
+        discriminator.hash(&mut hasher);
+        Self(hasher.finish())
+    }
+
     pub(crate) fn from_dependencies(
         kind: GpuResourceKind,
         dependencies: impl IntoIterator<Item = GpuResourceId>,
@@ -114,6 +122,7 @@ pub(crate) struct GpuGraphStats {
 pub(crate) struct GpuResourceGraph {
     resources: BTreeMap<GpuResourceId, GpuResourceDesc>,
     downstream: BTreeMap<GpuResourceId, BTreeSet<GpuResourceId>>,
+    resident: BTreeSet<GpuResourceId>,
 }
 
 impl GpuResourceGraph {
@@ -135,6 +144,20 @@ impl GpuResourceGraph {
 
     pub(crate) fn get(&self, id: GpuResourceId) -> Option<&GpuResourceDesc> {
         self.resources.get(&id)
+    }
+
+    pub(crate) fn mark_resident(&mut self, id: GpuResourceId) {
+        if self.resources.contains_key(&id) {
+            self.resident.insert(id);
+        }
+    }
+
+    pub(crate) fn mark_not_resident(&mut self, id: GpuResourceId) {
+        self.resident.remove(&id);
+    }
+
+    pub(crate) fn is_resident(&self, id: GpuResourceId) -> bool {
+        self.resident.contains(&id)
     }
 
     pub(crate) fn invalidate(
@@ -184,6 +207,7 @@ impl GpuResourceGraph {
             return removed;
         }
         self.resources.retain(|id, _| !removed.contains(id));
+        self.resident.retain(|id| self.resources.contains_key(id));
         self.rebuild_downstream();
         removed
     }
@@ -213,6 +237,9 @@ impl GpuResourceGraph {
             let Some(resource) = graph.resources.get(&id) else { return };
             for dependency in &resource.dependencies {
                 visit(graph, *dependency, emitted, plan);
+            }
+            if resource.residency != GpuResidency::Frame && graph.resident.contains(&id) {
+                return;
             }
             let kind = match resource.kind {
                 GpuResourceKind::Content => GpuPassKind::Raster,
@@ -529,6 +556,38 @@ mod tests {
         let allocation = graph.allocate_transients(&plan);
         assert_eq!(allocation.slot_count, 1);
         assert_eq!(allocation.slots[&GpuResourceId::raw(2)], allocation.slots[&GpuResourceId::raw(3)]);
+    }
+
+
+    #[test]
+    fn resident_retained_content_is_not_scheduled_again() {
+        let mut graph = GpuResourceGraph::default();
+        graph.upsert(desc(1, GpuResourceKind::Content, &[], GpuResidency::Retained));
+        graph.upsert(desc(2, GpuResourceKind::Placement, &[1], GpuResidency::Frame));
+        graph.upsert(desc(3, GpuResourceKind::Composite, &[2], GpuResidency::Frame));
+        graph.mark_resident(GpuResourceId::raw(1));
+
+        let plan = graph.plan(GpuResourceId::raw(3), GpuSink::Preview);
+        let kinds: Vec<_> = plan.passes.iter().map(|pass| pass.kind).collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                GpuPassKind::Upload,
+                GpuPassKind::Composite,
+                GpuPassKind::Present,
+            ]
+        );
+    }
+
+    #[test]
+    fn nonresident_retained_content_is_scheduled() {
+        let mut graph = GpuResourceGraph::default();
+        graph.upsert(desc(1, GpuResourceKind::Content, &[], GpuResidency::Retained));
+        graph.upsert(desc(2, GpuResourceKind::Composite, &[1], GpuResidency::Frame));
+
+        let plan = graph.plan(GpuResourceId::raw(2), GpuSink::Preview);
+        assert_eq!(plan.passes[0].kind, GpuPassKind::Raster);
     }
 
 }
