@@ -271,16 +271,9 @@ impl Engine {
                     _ => content,
                 };
             }
-            let placement = LayerPlacement {
-                transform: source.transform.affine,
-                world_transform: Some(source.transform.spatial),
-                order: i32::from(source.order),
-                opacity: source.opacity,
-                z: source.transform.spatial.translation.z,
-                rotation_x: 0.0,
-                rotation_y: 0.0,
-                plane: None,
-            };
+            let placement = self.frame_graph_resident_placement(source)
+                .map(|resident| resident.placement)
+                .unwrap_or_else(|| crate::gpu_exec::ResidentPlacement::from_scene(source).placement);
             let (passes, pass_sources) = if frozen_hit {
                 (Vec::new(), Vec::new())
             } else {
