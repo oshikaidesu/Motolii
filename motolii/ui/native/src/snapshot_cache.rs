@@ -41,25 +41,6 @@ fn fold(id: LayerId, own: &HashMap<LayerId, u64>, children: &HashMap<LayerId, Ve
     digest((own.get(&id).copied().unwrap_or(0), kids))
 }
 
-fn mix_scene_pose(layer: &crate::render::frame_graph::SceneLayerValue, own: &mut HashMap<LayerId, u64>) {
-    if let Some(key) = own.get_mut(&layer.layer) {
-        *key = digest((*key, format!("{:?}", (
-            layer.instance,
-            layer.transform,
-            layer.opacity,
-            layer.projection,
-            layer.shape_stretch,
-            layer.depth,
-            layer.ghost,
-        ))));
-    }
-    if let crate::render::frame_graph::SceneContentValue::Plate(plate) = &layer.content {
-        for member in &plate.members {
-            if let Some(child) = member.layer.as_ref() { mix_scene_pose(child, own); }
-        }
-    }
-}
-
 impl EditorRuntime {
     /// 層ごとの「入力の指紋」。同じ指紋なら `layer_json` の出す行も同じ。
     /// 覆うのは行が読む全て — 属性・meta・各属性の出所と *その時刻での評価値*(transient と
@@ -101,9 +82,22 @@ impl EditorRuntime {
             ]);
             own.insert(id, digest((global, row.to_string())));
         }
-        // FrameGraph が評価した姿(world 変換・配置効果の複製)も枠の入力。
-        // ResolvedLayer へ戻さず semantic scene をそのまま指紋へ混ぜる。
-        for layer in &scene.layers { mix_scene_pose(layer, &mut own); }
+        // FrameGraph が評価した authoring layer の姿も枠の入力。
+        // Plate/placement の内部構造は FrameGraph の責務なので UI は覗かない。
+        for &id in &ids {
+            if let Some(layer) = scene.layer(id) {
+                if let Some(key) = own.get_mut(&id) {
+                    *key = digest((*key, format!("{:?}", (
+                        layer.transform,
+                        layer.opacity,
+                        layer.projection,
+                        layer.shape_stretch,
+                        layer.depth,
+                        layer.ghost,
+                    ))));
+                }
+            }
+        }
         Ok(ids.iter().map(|&id| (id, fold(id, &own, &children, &mut Vec::new()))).collect())
     }
 }
