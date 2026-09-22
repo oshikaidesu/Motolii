@@ -462,43 +462,6 @@ impl Engine {
         Ok(state)
     }
 
-    pub(in crate::engine) fn frame_graph_resident_effects(
-        &self,
-        source: &crate::frame_graph::SceneLayerValue,
-    ) -> Option<crate::gpu_exec::ResidentEffectChain> {
-        let state = self.frame_graph.as_ref()?;
-        let (key, version) = crate::gpu_exec::effect_chain_key(source)?;
-        state.gpu_effects.current(key, version).cloned()
-    }
-
-    pub(in crate::engine) fn frame_graph_resident_placement(
-        &self,
-        source: &crate::frame_graph::SceneLayerValue,
-    ) -> Option<crate::gpu_exec::ResidentPlacement> {
-        let state = self.frame_graph.as_ref()?;
-        let node = state.program.transforms().binding(source.layer)?.world;
-        let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
-            node,
-            crate::gpu_exec::GpuResourceClass::Placement,
-            source.instance,
-        );
-        state.gpu_placement.get_any(identity.key()).map(|(_, value)| *value)
-    }
-
-    pub(in crate::engine) fn frame_graph_resident_content(
-        &self,
-        source: &crate::frame_graph::SceneLayerValue,
-    ) -> Option<crate::gpu_exec::ResidentContent> {
-        let state = self.frame_graph.as_ref()?;
-        let node = state.program.content().binding(source.layer)?.content.or(source.content_key)?;
-        let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
-            node,
-            crate::gpu_exec::GpuResourceClass::Content,
-            source.instance,
-        );
-        state.gpu_content.get_any(identity.key()).map(|(_, value)| value.clone())
-    }
-
     pub(in crate::engine) fn frame_graph_gpu_stats(&self) -> Option<crate::gpu_exec::GpuGraphStats> {
         self.frame_graph.as_ref().map(|state| state.gpu_resources.stats())
     }
