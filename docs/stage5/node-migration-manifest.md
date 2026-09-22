@@ -44,3 +44,27 @@ Suggested order:
 Do not turn the scanner into a giant Rust-aware migration framework. Add a symbol to
 a cluster when repeated rediscovery is costing time; otherwise keep moving the
 cutover forward.
+
+
+## Static ownership smell gate
+
+The inventory also scans for behavior that indicates a second planner even when
+the old symbol names have disappeared:
+
+- semantic relation fields (`matte`, `clip_to_below`, masks/effects) read by
+  concrete `gpu_exec` backends;
+- `LayerId` maps/indexes used to rediscover cross-contribution dependencies;
+- mutation/filtering of `Vec<LayerWithPasses>` to decide scene survivors;
+- concrete GPU backends reading `SceneValue` / `SceneLayerValue` instead of
+  resource-keyed operation payloads.
+
+Run the strict GPU ownership check with:
+
+```bash
+python3 scripts/framegraph-migration-inventory.py --fail-on-gpu-planner-smell
+```
+
+This is intentionally a negative architecture gate, not a semantic-parity proof.
+During migration it may remain red. The useful invariant is that the reported
+product-owner-smell set only shrinks; new execution owners must not be added to
+the allowlist merely to make the gate green.
