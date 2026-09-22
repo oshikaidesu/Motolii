@@ -59,7 +59,7 @@ pub(crate) struct PreparedExecutionInputs<'a> {
 }
 
 impl<'a> PreparedExecutionInputs<'a> {
-    pub(crate) fn inputs(&'a self) -> Vec<crate::render::compositor::sequential::SequentialInput<'a>> {
+    pub(crate) fn inputs(&'a self) -> Vec<SequentialInput<'a>> {
         sequential_inputs(self.layers, &self.effective_textures, &self.effective_paddings, &self.effective_spills)
     }
     pub(crate) fn release(self, compositor: &mut Compositor) {
