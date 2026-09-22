@@ -120,6 +120,7 @@ fn still_pixels() -> StillPixels {
 
 pub struct Engine {
     frame_graph: Option<frame_graph::EngineFrameGraph>,
+    gpu_resource_graph: gpu_exec::GpuResourceGraph,
     /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
     /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
     /// 直前に**実際に解いた**拍の中身(相ごと・層の種類ごと)。memo に当たった面では空。
@@ -232,6 +233,7 @@ impl Engine {
         let _gpu = GpuLease::take();
         Ok(Self {
             frame_graph: None,
+            gpu_resource_graph: Default::default(),
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
@@ -301,6 +303,13 @@ impl Engine {
         self.compositor.device()
     }
 
+    /// (all resources, retained resources, temporal resources) currently
+    /// represented by the GPU control plane.
+    pub fn gpu_resource_graph_stats(&self) -> (usize, usize, usize) {
+        let stats = self.gpu_resource_graph.stats();
+        (stats.resources, stats.retained, stats.temporal)
+    }
+
     /// Stage で選ばれている層の mask の番号(1..=255)。選ばれていなければ 0。
     fn outline_id(&self, id: LayerId) -> u8 {
         self.outline_layers.iter().position(|l| *l == id).map_or(0, |i| i as u8 + 1)
@@ -320,6 +329,7 @@ impl Engine {
         let _gpu = GpuLease::take();
         Ok(Self {
             frame_graph: None,
+            gpu_resource_graph: Default::default(),
             resolve_tally: Vec::new(),
             resolve_worst: Vec::new(),
             layout_flow: Default::default(),
