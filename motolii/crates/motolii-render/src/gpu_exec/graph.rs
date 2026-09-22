@@ -313,6 +313,21 @@ mod tests {
     }
 
     #[test]
+    fn temporal_residency_expires_after_bounded_generations() {
+        let mut graph = GpuResourceGraph::default();
+        let mut temporal = resource(node(13), GpuResourceClass::ImageSource, 1, vec![]);
+        temporal.lifetime = GpuResourceLifetime::Temporal { retain_generations: 2 };
+        let key = temporal.key();
+        graph.upsert_resource(temporal).unwrap();
+        graph.mark_resident(key, GpuResourceVersion::new(1), 10);
+
+        graph.retire_temporal(12);
+        assert!(graph.is_current(key));
+        graph.retire_temporal(13);
+        assert!(!graph.is_current(key));
+    }
+
+    #[test]
     fn identity_survives_version_changes() {
         let mut graph = GpuResourceGraph::default();
         let first = resource(node(7), GpuResourceClass::Placement, 1, vec![]);
