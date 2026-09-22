@@ -67,6 +67,15 @@ impl EngineFrameGraph {
         Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_processed: Default::default(), gpu_composites: Default::default(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+    fn plan_sink(&self, kind: crate::gpu_exec::GpuSinkKind) -> Result<crate::gpu_exec::GpuExecutionPlan, EngineError> {
+        let sink = match kind {
+            crate::gpu_exec::GpuSinkKind::Present => self.gpu_present_sink,
+            crate::gpu_exec::GpuSinkKind::Readback => self.gpu_readback_sink,
+        }.ok_or_else(|| EngineError::Store("GPU sink root missing".into()))?;
+        crate::gpu_exec::GpuPlanner.plan(&self.gpu_resources, [sink.pass])
+            .map_err(|error| EngineError::Store(format!("GPU execution plan: {error:?}")))
+    }
+
 
     fn evaluate_at(
         &mut self,
