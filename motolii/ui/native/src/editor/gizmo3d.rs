@@ -672,7 +672,8 @@ mod spatial_gizmo_tests {
     /// (掴んだ瞬間に飛ぶ = 見えているカメラと当たり判定が食い違っている印。)
     #[test]
     fn grabbing_without_moving_writes_nothing() {
-        let (doc, _) = document();
+        let (doc, layer) = document();
+        let targets = evaluated_targets(&doc, &[layer], RationalTime::ZERO).unwrap();
         let mut grabbed = 0;
         for camera in [
             crate::doc::core::ResolvedCamera::default(),
@@ -681,7 +682,7 @@ mod spatial_gizmo_tests {
             for x in (700..1250).step_by(25) {
                 for y in (300..800).step_by(25) {
                     let start = [f64::from(x), f64::from(y)];
-                    let Ok(drag) = SpatialDrag::begin_with_targets(&doc, evaluated_targets(&doc, &[LayerId(41)], RationalTime::ZERO).unwrap(), start, RationalTime::ZERO, camera, 0.5, None) else {
+                    let Ok(drag) = SpatialDrag::begin_with_targets(&doc, targets.clone(), start, RationalTime::ZERO, camera, 0.5, None) else {
                         continue;
                     };
                     grabbed += 1;
@@ -697,12 +698,13 @@ mod spatial_gizmo_tests {
     #[test]
     fn dragging_moves_the_layer_without_flinging_it() {
         let (doc, layer) = document();
+        let targets = evaluated_targets(&doc, &[layer], RationalTime::ZERO).unwrap();
         let camera = crate::doc::core::ResolvedCamera { orbit_degrees: [-18.0, 35.0], distance_scale: 1.6, ..Default::default() };
         let mut moved = 0;
         for x in (700..1250).step_by(25) {
             for y in (300..800).step_by(25) {
                 let start = [f64::from(x), f64::from(y)];
-                let Ok(drag) = SpatialDrag::begin_with_targets(&doc, evaluated_targets(&doc, &[layer], RationalTime::ZERO).unwrap(), start, RationalTime::ZERO, camera, 0.5, None) else {
+                let Ok(drag) = SpatialDrag::begin_with_targets(&doc, targets.clone(), start, RationalTime::ZERO, camera, 0.5, None) else {
                     continue;
                 };
                 let Ok(out) = drag.edits(&doc, [start[0] + 30.0, start[1]], false, Animate::Off) else { continue };
