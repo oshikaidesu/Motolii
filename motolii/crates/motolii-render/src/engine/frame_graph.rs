@@ -648,7 +648,7 @@ impl Engine {
             state.fps.den() as f32 / state.fps.num() as f32,
             frame_number,
         ]);
-        Ok(self.prepare_gpu_scene_with_solver(
+        Ok(self.prepare_execution_scene_with_solver(
             scene,
             solver,
             state.comp,
