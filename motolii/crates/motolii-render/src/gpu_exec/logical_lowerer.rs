@@ -65,6 +65,28 @@ impl LogicalGpuLowerer {
 impl GpuLowerer for LogicalGpuLowerer {
     type Error = LogicalLowerError;
 
+    fn declare_contribution(
+        &mut self,
+        graph: &mut GpuResourceGraph,
+        input: &GpuContributionInput,
+    ) -> Result<GpuResourceKey, Self::Error> {
+        let identity = GpuResourceIdentity {
+            source: GpuIdentitySource::Semantic(input.contribution.node),
+            class: GpuResourceClass::Composite,
+            slot: input.instance,
+        };
+        let key = identity.key();
+        graph.upsert_resource(GpuResourceDesc {
+            identity,
+            version: input.contribution.version,
+            dependencies: Vec::new(),
+            lifetime: GpuResourceLifetime::Persistent,
+            alias_class: None,
+            estimated_bytes: 0,
+        })?;
+        Ok(key)
+    }
+
     fn lower_contribution(
         &mut self,
         graph: &mut GpuResourceGraph,
