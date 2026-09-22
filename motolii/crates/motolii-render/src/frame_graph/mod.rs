@@ -29,6 +29,7 @@ mod scheduler;
 mod scene_program;
 mod scene_policy;
 mod solver_program;
+mod static_analysis;
 mod text_program;
 mod text_flow_program;
 mod topology;
@@ -68,6 +69,11 @@ pub use overlay_program::{OverlayAnalysisValue, OverlayProgram, OverlayProgramEr
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationSetValue, RelationValue};
 pub use solver_program::{SolverLayerValue, SolverPlanValue, SolverProgram, SolverProgramError};
+pub use static_analysis::{
+    cluster_topology, domain as static_domain, scene_node_may_request_dynamic_inputs,
+    scene_static_clusters, StaticCluster, StaticClusterId, StaticClusterReport,
+    StaticClusterSignature, StaticDomain,
+};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
