@@ -9,6 +9,7 @@ pub(crate) enum GpuResourceClass {
     Content,
     Placement,
     Effect,
+    ImageSource,
     Mask,
     Matte,
     Plate,
