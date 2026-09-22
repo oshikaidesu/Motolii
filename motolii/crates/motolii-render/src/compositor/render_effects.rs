@@ -50,6 +50,25 @@ impl BakedEffects {
 
 type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<LayerSpill>, Vec<(u32,u32,wgpu::TextureFormat,wgpu::Texture)>);
 
+pub(crate) struct PreparedExecutionInputs<'a> {
+    layers: &'a [LayerWithPasses],
+    effective_textures: Vec<LayerContent>,
+    effective_paddings: Vec<u32>,
+    effective_spills: Vec<LayerSpill>,
+    checked_out: Vec<(u32,u32,wgpu::TextureFormat,wgpu::Texture)>,
+}
+
+impl<'a> PreparedExecutionInputs<'a> {
+    pub(crate) fn inputs(&'a self) -> Vec<SequentialInput<'a>> {
+        sequential_inputs(self.layers, &self.effective_textures, &self.effective_paddings, &self.effective_spills)
+    }
+    pub(crate) fn release(self, compositor: &mut Compositor) {
+        for (width, height, format, texture) in self.checked_out {
+            compositor.effect_scratch.release(width, height, format, texture);
+        }
+    }
+}
+
 impl Compositor {
     /// 色の規約を写す。出口は乗算済み線形(`to_linear`)か乗算済み sRGB。入口の素性は
     /// `source_encoded`(sRGB 符号化か)と `source_premultiplied` で言う。
@@ -65,6 +84,21 @@ impl Compositor {
             &[("to_linear".into(), flag(to_linear)), ("source_encoded".into(), flag(source_encoded)), ("source_premultiplied".into(), flag(source_premultiplied))],
             [source.width() as f32,source.height() as f32]);
         out
+    }
+
+    pub(crate) fn prepare_execution_inputs<'a>(
+        &mut self,
+        layers: &'a [LayerWithPasses],
+    ) -> Result<PreparedExecutionInputs<'a>, CompositorError> {
+        let (effective_textures, effective_paddings, effective_spills, checked_out) =
+            self.effective_layer_textures(layers)?;
+        Ok(PreparedExecutionInputs {
+            layers,
+            effective_textures,
+            effective_paddings,
+            effective_spills,
+            checked_out,
+        })
     }
 
     pub(crate) fn effective_layer_textures(&mut self, layers: &[LayerWithPasses]) -> Result<EffectiveLayers, CompositorError> {

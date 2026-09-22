@@ -1,4 +1,5 @@
-use super::*;
+use crate::frame_graph::SceneValue;
+use crate::gpu_exec::GpuLowerer;
 use crate::doc::store::{
     BlendMode, Composition, Fps, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
     LayerTiming, Matte, MatteMode, ShapeNode,
@@ -61,19 +62,37 @@ fn add_shape(doc: &mut Document, id: u64, order: i16, rgb: Rgb) -> LayerId {
     layer
 }
 
-fn scene(doc: &Document) -> SceneValue {
+fn evaluated(doc: &Document) -> (SceneProgram, crate::frame_graph::EvaluatedFrame, crate::frame_graph::NodeKey) {
     let program = SceneProgram::compile(&doc.view()).unwrap();
     let root = program.scene().scene;
     let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
     let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
-    let mut executor = Executor(&program);
     let frame = graph.evaluate(
-        &mut executor,
+        &mut Executor(&program),
         crate::doc::core::RationalTime::ZERO,
         FrameQuality::Export,
         Generation::new(1),
     ).unwrap();
+    (program, frame, root)
+}
+
+fn scene(doc: &Document) -> SceneValue {
+    let (_, frame, root) = evaluated(doc);
     frame.value(root).and_then(|value| value.downcast_ref::<SceneValue>()).unwrap().clone()
+}
+
+/// Contributions that reach the scene root after relation lowering.
+fn scene_outputs(doc: &Document) -> usize {
+    let (program, frame, root) = evaluated(doc);
+    let scene = frame.value(root).and_then(|value| value.downcast_ref::<SceneValue>()).unwrap();
+    let inputs = crate::gpu_exec::SemanticGpuAdapter::new(&program, &frame).contributions(scene).unwrap();
+    let mut graph = crate::gpu_exec::GpuResourceGraph::default();
+    let mut lowerer = crate::gpu_exec::LogicalGpuLowerer::default();
+    for input in &inputs {
+        lowerer.declare_contribution(&mut graph, input).unwrap();
+    }
+    let lowered: Vec<_> = inputs.iter().map(|input| lowerer.lower_contribution(&mut graph, input).unwrap()).collect();
+    lowerer.lower_relations(&mut graph, &inputs, &lowered).unwrap().ordered_outputs.len()
 }
 
 #[test]
@@ -89,14 +108,7 @@ fn track_matte_source_is_auxiliary_not_a_second_draw_layer() {
         },
     }).unwrap();
 
-    let scene = scene(&doc);
-    let mut engine = Engine::new().unwrap();
-    let gpu = engine.prepare_gpu_scene(
-        &scene,
-        doc.view().composition().unwrap().unwrap().spec(),
-        ResolvedCamera::default(),
-    ).unwrap();
-    assert_eq!(gpu.layers.len(), 1, "matte source must be consumed");
+    assert_eq!(scene_outputs(&doc), 1, "matte source must be consumed");
 }
 
 #[test]
@@ -109,20 +121,7 @@ fn clipping_folds_the_upper_picture_into_its_base() {
         patch: LayerAttrsPatch { clip_to_below: Some(true), ..Default::default() },
     }).unwrap();
 
-    let scene = scene(&doc);
-    let mut engine = Engine::new().unwrap();
-    assert!(engine.compositor.effect_programs.is_empty());
-    assert!(!engine.compositor.blend_vism.is_compiled());
-    assert!(!engine.compositor.matte_vism.is_compiled());
-    let gpu = engine.prepare_gpu_scene(
-        &scene,
-        doc.view().composition().unwrap().unwrap().spec(),
-        ResolvedCamera::default(),
-    ).unwrap();
-    assert_eq!(gpu.layers.len(), 1, "clip upper is not a separate contribution");
-    assert!(engine.compositor.effect_programs.is_empty(), "clipping must not compile unrelated effects");
-    assert!(engine.compositor.blend_vism.is_compiled());
-    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert_eq!(scene_outputs(&doc), 1, "clip upper is not a separate contribution");
 }
 
 #[test]
@@ -141,11 +140,5 @@ fn stencil_is_built_as_a_matte_source_and_never_drawn_itself() {
         Some(Matte { layer: stencil, mode: MatteMode::Alpha }),
     );
 
-    let mut engine = Engine::new().unwrap();
-    let gpu = engine.prepare_gpu_scene(
-        &scene,
-        doc.view().composition().unwrap().unwrap().spec(),
-        ResolvedCamera::default(),
-    ).unwrap();
-    assert_eq!(gpu.layers.len(), 1, "stencil itself is auxiliary");
+    assert_eq!(scene_outputs(&doc), 1, "stencil itself is auxiliary");
 }

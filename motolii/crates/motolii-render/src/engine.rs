@@ -14,15 +14,15 @@ mod motion_contracts;
 #[cfg(test)]
 mod light_reach_contracts;
 mod clip;
+mod composite_primitives;
 mod render;
 mod texture;
 mod material;
 pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
-mod translate;
+pub(crate) mod translate;
 mod blocks;
 mod physics;
-mod frozen;
 mod frame_graph;
 mod frame_graph_scene;
 
@@ -130,15 +130,13 @@ pub struct Engine {
     layout_flow: std::rc::Rc<crate::picture::flow::FlowCache>,
     pub(crate) compositor: Compositor,
     materials: HashMap<LayerId, material::MaterialCache>,
-    probes: HashMap<String, MediaInfo>,
+    pub(crate) probes: HashMap<String, MediaInfo>,
     text_textures: HashMap<TextCacheKey, TextTexture>,
     /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
     text_order: std::collections::VecDeque<TextCacheKey>,
     shape_textures: HashMap<ShapeCacheKey, TextTexture>,
     failed_probes: HashMap<String, String>,
-    layer_failures: Vec<String>,
-    /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
-    feedback_replaying: bool,
+    pub(crate) layer_failures: Vec<String>,
     /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
     keyed_outlines: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>>,
     /// 形の覚え: 書類の版とコマが同じなら読み戻さない。止まった絵は 1 回だけ。
@@ -148,16 +146,11 @@ pub struct Engine {
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
     video_stream_namespace: u64,
     /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
-    feedback_namespace: u64,
-    /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
-    feedback_saw_composites: bool,
-    /// Freeze の cache(層の投影の前の絵、書類の隣)。
-    pub(crate) frozen: frozen::FrozenStore,
-    /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
-    freezing: Option<LayerId>,
+    pub(crate) feedback_namespace: u64,
     material_picture: Option<LayerId>,
     /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
-    feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
+    /// GPU execution layer owns feedback identity/visibility; compositor remains the concrete texture/checkpoint backend during cutover.
+    pub(crate) gpu_history: crate::gpu_exec::GpuHistoryRegistry,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
     /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
@@ -165,7 +158,7 @@ pub struct Engine {
     /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
     outline_layers: Vec<LayerId>,
     /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
-    outline_order: Vec<LayerId>,
+    pub(crate) outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
@@ -176,10 +169,10 @@ pub struct Engine {
     containers: HashMap<String, ContainerInfo>,
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
-    /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
+    /// このコマの粒子の層の点。
     particle_frames: HashMap<LayerId, ParticleFrame>,
     /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
-    overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
+    pub(crate) overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
     /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
@@ -261,17 +254,13 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
-            feedback_replaying: false,
             keyed_outlines: HashMap::new(),
             keyed_cache: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
-            frozen: Default::default(),
-            freezing: None,
             material_picture: None,
-            feedback_keys_seen: Vec::new(),
+            gpu_history: Default::default(),
             blocks: Default::default(),
             clip_bases: Default::default(),
             frame_cache: HashMap::new(),
@@ -349,17 +338,13 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
-            feedback_replaying: false,
             keyed_outlines: HashMap::new(),
             keyed_cache: HashMap::new(),
             feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
-            frozen: Default::default(),
-            freezing: None,
             material_picture: None,
-            feedback_keys_seen: Vec::new(),
+            gpu_history: Default::default(),
             blocks: Default::default(),
             clip_bases: Default::default(),
             frame_cache: HashMap::new(),

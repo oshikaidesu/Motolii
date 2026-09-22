@@ -7,6 +7,7 @@ pub mod engine;
 pub mod export;
 pub mod extensions;
 pub mod frame_graph;
+pub(crate) mod gpu_exec;
 pub mod media;
 pub mod playback;
 

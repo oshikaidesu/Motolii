@@ -9,7 +9,7 @@ use crate::render::media::blob::{BlobSettings, BlobSource, BlobTracker};
 
 use super::{
     ContentProgram, DynamicInput, EffectProgram, EffectValue, EvaluationContext, GraphNode,
-    GroupBackgroundProgram, MaskProgram, MaskValue, MaterialValue, MediaFrameValue, NodeIdentity,
+    GroupBackgroundProgram, MaskProgram, MaskValue, MediaFrameValue, MediaSourceValue, NodeIdentity,
     NodeInputs, NodeKey, NodeKind, NodeValue, ParticleProgram, ParticleValue, PropertyProgram,
     SceneContentValue, SceneLayerValue, TextProgram, TextShapeValue, TimeDependency, TransformProgram,
     TransformValue, VisibilityProgram, VisibilityValue,
@@ -106,7 +106,7 @@ impl AnalysisProgram {
             let content = match meta.source {
                 LayerSource::Text => text.binding(layer).map(|binding| (1, binding.shape)),
                 LayerSource::Shape => content.binding(layer).and_then(|binding| binding.content).map(|key| (2, key)),
-                LayerSource::File { .. } => content.binding(layer).and_then(|binding| binding.material.or(binding.content)).map(|key| (3, key)),
+                LayerSource::File { .. } => content.binding(layer).and_then(|binding| binding.content).map(|key| (3, key)),
                 LayerSource::Group => groups.binding(layer).map(|key| (2, key)),
                 LayerSource::Particles => particles.binding(layer).map(|binding| (4, binding.particles)),
                 _ => None,
@@ -263,7 +263,7 @@ impl AnalysisProgram {
                                 Some((3, _)) => {
                                     let value = inputs.at(cursor).ok_or(AnalysisProgramError::InvalidInput(node.identity().kind))?;
                                     cursor += 1;
-                                    if let Some(material) = value.downcast_ref::<MaterialValue>() {
+                                    if let Some(material) = value.downcast_ref::<MediaSourceValue>() {
                                         SceneContentValue::Material(material.clone())
                                     } else if let Some(frame) = value.downcast_ref::<MediaFrameValue>() {
                                         match frame.time {
@@ -293,12 +293,14 @@ impl AnalysisProgram {
                                 cursor += 1;
                                 value
                             } else { 1.0 };
+                            let mut resolved_effect_keys = Vec::new();
                             let mut resolved_effects = Vec::new();
-                            for _ in &plan.effects {
+                            for key in &plan.effects {
                                 if let Some(effect) = inputs.at(cursor)
                                     .and_then(|value| value.downcast_ref::<EffectValue>())
                                     .and_then(|value| value.0.clone())
                                 {
+                                    resolved_effect_keys.push(*key);
                                     resolved_effects.push(effect);
                                 }
                                 cursor += 1;
@@ -319,7 +321,9 @@ impl AnalysisProgram {
                                 transform,
                                 content_key: None,
                                 content,
+                                effect_keys: resolved_effect_keys,
                                 effects: resolved_effects,
+                                after_effect_keys: Vec::new(),
                                 after_effects: Vec::new(),
                                 image_sources: Vec::new(),
                                 masks: resolved_masks,
@@ -328,7 +332,6 @@ impl AnalysisProgram {
                                 flatten: plan.flatten,
                                 environment: plan.environment,
                                 ghost: false,
-                                freeze_eligible: false,
                                 timing_start: 0,
                                 opacity,
                                 projection: plan.projection,

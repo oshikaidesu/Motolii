@@ -6,7 +6,6 @@ mod analysis_program;
 mod cache;
 mod canonical;
 mod camera_program;
-mod compiler;
 mod content;
 mod effect_program;
 mod evaluate;
@@ -14,7 +13,6 @@ mod flow_program;
 mod group_program;
 mod ghost_program;
 mod group_composite_program;
-mod initial;
 mod key;
 mod lookbehind_program;
 mod mask_program;
@@ -29,6 +27,7 @@ mod scheduler;
 mod scene_program;
 mod scene_policy;
 mod solver_program;
+mod static_analysis;
 mod text_program;
 mod text_flow_program;
 mod topology;
@@ -45,16 +44,11 @@ pub use analysis_program::{AnalysisBinding, AnalysisProgram, AnalysisProgramErro
 pub use cache::NodeValue;
 pub use canonical::{CanonicalEncoder, CanonicalError};
 pub use camera_program::{CameraProgram, CameraProgramError};
-pub use compiler::{CompilerOutput, GraphBuilder, LayerBinding};
-pub use content::{ContentBinding, ContentProgram, ContentProgramError, MaterialValue, MediaExtentValue, MediaFrameValue, MediaSourceValue};
+pub use content::{ContentBinding, ContentProgram, ContentProgramError, MediaExtentValue, MediaFrameValue, MediaSourceValue};
 pub use effect_program::{EffectBinding, EffectProgram, EffectProgramError, EffectValue};
 pub use evaluate::{DynamicInput, EvaluationContext, NodeExecutor, NodeInputs};
 pub use flow_program::{FlowBinding, FlowFrameValue, FlowProgram, FlowProgramError, FlowSlot};
 pub use group_program::{GroupBackgroundProgram, GroupBackgroundProgramError};
-pub use initial::{
-    build_initial_topology, CameraRoot, DocumentCamera, InitialTopology, ResolvedWorld,
-    ShapeDocuments, SharedScene, StageRoot, TextDocuments,
-};
 pub use key::{
     FrameQuality, InputTime, NodeIdentity, NodeKey, NodeKind, QualityDependency, TimeDependency,
     WorkKey,
@@ -68,6 +62,12 @@ pub use overlay_program::{OverlayAnalysisValue, OverlayProgram, OverlayProgramEr
 pub use property::{PropertyBinding, PropertyProgram, PropertyProgramError};
 pub use relation_program::{RelationBinding, RelationProgram, RelationProgramError, RelationSetValue, RelationValue};
 pub use solver_program::{SolverLayerValue, SolverPlanValue, SolverProgram, SolverProgramError};
+pub use static_analysis::{
+    cluster_topology, domain as static_domain, scene_dynamic_class,
+    scene_node_may_request_dynamic_inputs, scene_static_clusters, StaticCluster,
+    StaticClusterId, StaticClusterReport, StaticClusterSignature, StaticDomain,
+    StaticDynamicClass,
+};
 pub use program::{SceneProgram, SceneProgramError};
 pub use topology::{GraphNode, GraphTopology, TopologyError};
 pub use transform::{TransformBinding, TransformProgram, TransformProgramError, TransformValue};
@@ -167,6 +167,7 @@ impl CompiledGraph {
             values: scheduled.values,
             executed: scheduled.executed,
             reused: scheduled.reused,
+            input_types: scheduled.input_types,
         })
     }
 

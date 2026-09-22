@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::doc::store::StoreView;
+use crate::doc::store::{LayerId, StoreView};
 
 use super::{AnalysisProgram, AnalysisProgramError, CameraProgram, CameraProgramError, ContentProgram, ContentProgramError, DynamicInput, EffectProgram, EffectProgramError, EvaluationContext, FlowProgram, FlowProgramError, GraphNode, GroupBackgroundProgram, GroupBackgroundProgramError, LookbehindProgram, LookbehindProgramError, MaskProgram, MaskProgramError, MotionProgram, MotionProgramError, NodeInputs, NodeKey, NodeValue, OverlayProgram, OverlayProgramError, ParticleProgram, ParticleProgramError, PlacementProgram, PlacementProgramError, PropertyProgram, PropertyProgramError, RelationProgram, RelationProgramError, SceneNodeError, SolverProgram, SolverProgramError, SceneNodeProgram, SceneProgramNodes, TextFlowProgram, TextFlowProgramError, TextProgram, TextProgramError, TransformProgram, TransformProgramError, VisibilityProgram, VisibilityProgramError};
 
@@ -104,11 +104,20 @@ impl SceneProgram {
         let overlay = OverlayProgram::compile(view, &effects, lookbehind.key(), solver.key(), camera.key())?;
         let mut nodes = BTreeMap::new();
         for node in properties.nodes().chain(visibility.nodes()).chain(content.nodes()).chain(transforms.nodes()).chain(flow.nodes()).chain(effects.nodes()).chain(motion.nodes()).chain(particles.nodes()).chain(text.nodes()).chain(text_flow.nodes()).chain(groups.nodes()).chain(masks.nodes()).chain(analysis.nodes()).chain(placements.nodes()).chain(relations.nodes()).chain(std::iter::once(solver.node())).chain(scene.nodes()).chain(std::iter::once(lookbehind.node())).chain(std::iter::once(camera.node())).chain(overlay.nodes()) { nodes.insert(node.key(), node); }
-        let roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
+        let mut roots = BTreeSet::from([lookbehind.key(), camera.key(), solver.key()]);
+        for binding in transforms.bindings() {
+            roots.insert(binding.local);
+            roots.insert(binding.world);
+        }
         Ok(Self { analysis, properties, content, transforms, flow, text, text_flow, scene, camera, effects, masks, groups, visibility, placements, motion, lookbehind, particles, overlay, relations, solver, nodes, roots })
     }
 
     pub fn nodes(&self) -> impl ExactSizeIterator<Item = GraphNode> + '_ { self.nodes.values().cloned() }
+    pub fn static_clusters(&self) -> Result<super::StaticClusterReport, super::TopologyError> {
+        let topology = super::GraphTopology::try_new(self.nodes(), self.roots().collect())?;
+        Ok(super::scene_static_clusters(&topology))
+    }
+
     pub fn roots(&self) -> impl ExactSizeIterator<Item = NodeKey> + '_ { self.roots.iter().copied() }
     pub fn analysis(&self) -> &AnalysisProgram { &self.analysis }
     pub fn properties(&self) -> &PropertyProgram { &self.properties }
@@ -121,6 +130,12 @@ impl SceneProgram {
     pub fn base_scene(&self) -> SceneProgramNodes { self.scene.output() }
     pub fn camera(&self) -> NodeKey { self.camera.key() }
     pub fn visibility(&self) -> &VisibilityProgram { &self.visibility }
+    pub fn effects(&self) -> &EffectProgram { &self.effects }
+    pub fn masks(&self) -> &MaskProgram { &self.masks }
+    pub fn contribution(&self, layer: LayerId) -> Option<NodeKey> { self.scene.binding(layer) }
+    pub fn contributions(&self) -> impl ExactSizeIterator<Item = (LayerId, NodeKey)> + '_ {
+        self.scene.bindings()
+    }
     pub fn placements(&self) -> &PlacementProgram { &self.placements }
     pub fn motion(&self) -> &MotionProgram { &self.motion }
     pub fn particles(&self) -> &ParticleProgram { &self.particles }
@@ -209,14 +224,28 @@ mod tests {
             Intent::SetConstant { layer: cube, property: opacity.clone(), value: Value::F64(0.75) },
         ]).unwrap();
         let program = SceneProgram::compile(&doc.view()).unwrap();
+        let transform_binding = program.transforms().binding(cube).unwrap();
+        let public_roots: std::collections::BTreeSet<_> = program.roots().collect();
+        assert!(public_roots.contains(&transform_binding.local));
+        assert!(public_roots.contains(&transform_binding.world));
+        let mut clusters = program.static_clusters().unwrap();
+        assert!(clusters.clusters_with_kind(crate::frame_graph::NodeKind::SceneComposite).next().is_some());
+        let effect_images = clusters.clusters_with_kind(crate::frame_graph::NodeKind::EffectImages).next().expect("lookbehind cluster");
+        assert_eq!(effect_images.signature.dynamic, crate::frame_graph::StaticDynamicClass::TemporalSample);
         let topology = GraphTopology::try_new(program.nodes(), program.roots().collect()).unwrap();
         let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
         let mut executor = Executor(&program);
         let frame = graph.evaluate(&mut executor, crate::doc::core::RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        clusters.observe_frame(&frame);
+        let cluster_table = clusters.to_markdown();
+        println!("{cluster_table}");
+        assert!(cluster_table.contains("MediaSourceValue"));
+        assert!(cluster_table.contains("TransformValue"));
+        assert!(clusters.clusters.iter().any(|cluster| cluster.input_types.iter().any(|ty| ty.ends_with("Value"))));
         let property = program.properties().node_for(cube, &opacity).unwrap();
-        let material = program.content().binding(cube).unwrap().material.unwrap();
+        let material = program.content().binding(cube).unwrap().content.unwrap();
         assert_eq!(frame.value(property).and_then(|value| value.downcast_ref::<Value>()), Some(&Value::F64(0.75)));
-        assert!(frame.value(material).and_then(|value| value.downcast_ref::<super::super::MaterialValue>()).is_some());
+        assert!(frame.value(material).and_then(|value| value.downcast_ref::<super::super::MediaSourceValue>()).is_some());
         let scene = frame.value(program.scene().scene).and_then(|value| value.downcast_ref::<super::super::SceneValue>()).unwrap();
         assert_eq!(scene.layers.len(), 1);
         assert_eq!(scene.layers[0].opacity, 0.75);

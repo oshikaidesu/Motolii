@@ -12,8 +12,6 @@ pub(crate) fn edit_rejection(
         Some("layer no longer exists")
     } else if view.attrs(layer)?.is_some_and(|attrs| attrs.locked) {
         Some("locked")
-    } else if view.frozen_ancestor(layer)?.is_some() {
-        Some("inside a frozen group")
     } else {
         None
     })

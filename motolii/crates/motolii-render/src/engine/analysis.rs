@@ -2,8 +2,6 @@
 //! 層を本物で組んで読み戻し(Freeze と同じ道)、Blob Track の塊をコマごとに解いて `AnalysisInputs` に置く。
 //! ID を持続する・動きで拾う時は入点から 1 コマずつ解き、解いたコマは書類の版が変わるまで持つ(飛んでも辿っても同じ塊)。
 
-#[allow(unused_imports)]
-use crate::picture::resolved::{ResolvedEffect, ResolvedLayer, ResolvedMask};
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::analysis::{AnalysisInputs, BlobMark};
 use crate::doc::store::{EffectId, LayerId, RationalTime, StoreView};
@@ -25,6 +23,38 @@ pub(crate) struct LinearPicture {
 }
 
 impl Engine {
+    /// 1 層を、このコマの描画と同じ層ごとの backend で組む。scene を作り直さない。
+    fn scene_layer_with_passes(
+        &mut self,
+        source: &crate::frame_graph::SceneLayerValue,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        at: RationalTime,
+    ) -> Result<Option<crate::render::compositor::LayerWithPasses>, EngineError> {
+        let Some(node) = source.content_key else { return Ok(None) };
+        let key = crate::gpu_exec::GpuResourceIdentity::semantic(node, crate::gpu_exec::GpuResourceClass::Content, source.instance).key();
+        let mut store = crate::gpu_exec::GpuResourceStore::default();
+        let Some(content) = self.gpu_resident_content(
+            &mut store, key, crate::gpu_exec::GpuResourceVersion::new(0), 0,
+            source.layer, &source.content, source.shape_stretch, source.environment, source.content_key, comp, at,
+        )? else { return Ok(None) };
+        self.gpu_contribution_layer(
+            source.layer,
+            crate::render::engine::translate::scene_layer_media_tick(source),
+            content,
+            crate::gpu_exec::ResidentPlacement { placement: crate::render::engine::translate::scene_layer_placement(source) },
+            crate::gpu_exec::ResidentBlend { blend: source.blend },
+            crate::gpu_exec::ResidentProjection { projection: source.projection },
+            matches!(source.source, crate::doc::store::LayerSource::File { .. }),
+            &source.effects,
+            0,
+            crate::render::engine::translate::scene_layer_effect_chain(source, comp),
+            Vec::new(),
+            comp,
+            camera,
+        ).map(Some)
+    }
+
     pub(super) fn layer_with_passes_linear_picture(
         &mut self,
         lwp: &crate::render::compositor::LayerWithPasses,
@@ -93,10 +123,8 @@ impl Engine {
             frame,
         ]);
         let picture = (|| {
-            let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
-            let prepared = self.prepare_gpu_scene(&scene, comp, ResolvedCamera::default())?;
-            let Some(layer) = prepared.layers.first() else { return Ok(None); };
-            self.layer_with_passes_linear_picture(layer)
+            let Some(layer) = self.scene_layer_with_passes(source, comp, ResolvedCamera::default(), t)? else { return Ok(None); };
+            self.layer_with_passes_linear_picture(&layer)
         })();
         self.compositor.clock = previous_clock;
         let Some(picture) = picture? else {
@@ -242,20 +270,19 @@ impl Engine {
             });
         }
 
-        let below = crate::frame_graph::SceneValue {
-            layers: scene.layers.iter()
-                .filter(|candidate| candidate.layer != layer && candidate.order < own_order)
-                .cloned()
-                .collect(),
-        };
-        let prepared = self.prepare_gpu_scene(&below, comp, camera)?;
-        let picture = if prepared.layers.is_empty() {
+        let mut below = Vec::new();
+        for candidate in scene.layers.iter().filter(|candidate| candidate.layer != layer && candidate.order < own_order) {
+            if let Some(built) = self.scene_layer_with_passes(candidate, comp, camera, t)? {
+                below.push(built);
+            }
+        }
+        let picture = if below.is_empty() {
             None
         } else {
             let (texture, _view) = self.compositor.render_to_texture(
                 comp,
                 camera,
-                &prepared.layers,
+                &below,
                 crate::render::compositor::NO_BACKGROUND,
             )?;
             let mut encoder = self.compositor.ctx.device.create_command_encoder(
@@ -361,16 +388,6 @@ impl Engine {
         }
     }
 
-    /// Compatibility projection for tests/tools that still consume ResolvedLayer.
-    /// Product meaning is evaluated by FrameGraph first; this must never re-enter
-    /// the legacy StoreView + analysis_inputs + resolved_layers owner.
-    pub(super) fn resolved_with_analysis(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<ResolvedLayer>, EngineError> {
-        self.resolve_tally.clear();
-        self.resolve_worst.clear();
-        let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
-        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
-    }
-
     /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、
     /// semantic Scene/TextFlow の最終値から測る。診断のために legacy resolve を再実行しない。
     pub fn continuity_samples(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<Vec<(String, [f32; 2])>, EngineError> {
@@ -407,7 +424,7 @@ impl Engine {
                         .map(|bounds| bounds.map(|value| value as f32))
                 }
                 crate::frame_graph::SceneContentValue::Media { source, .. }
-                | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => {
+                | crate::frame_graph::SceneContentValue::Material(source) => {
                     self.material_extent(&source.path, comp).map(|extent| [0.0, 0.0, extent[0], extent[1]])
                 }
                 crate::frame_graph::SceneContentValue::Plate(_) => Some([0.0, 0.0, comp.width as f32, comp.height as f32]),
@@ -482,7 +499,7 @@ fn semantic_extent(engine: &mut Engine, layer: &crate::frame_graph::SceneLayerVa
     match &layer.content {
         crate::frame_graph::SceneContentValue::Text(text) => crate::picture::shapes_ops::content_canvas(&text.shapes()).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
         crate::frame_graph::SceneContentValue::Shape(shapes) => crate::picture::shapes_ops::content_canvas(shapes).ok().flatten().map(|canvas| [canvas.width as f32, canvas.height as f32]),
-        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(crate::frame_graph::MaterialValue { source }) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
+        crate::frame_graph::SceneContentValue::Media { source, .. } | crate::frame_graph::SceneContentValue::Material(source) => engine.material_extent(&source.path, comp).map(|extent| [extent[0], extent[1]]),
         crate::frame_graph::SceneContentValue::Particles(value) => {
             let mut hi = glam::Vec2::ZERO;
             for particle in &value.particles { hi = hi.max(glam::Vec2::new(particle.position[0], particle.position[1])); }

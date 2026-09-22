@@ -1,0 +1,232 @@
+use crate::frame_graph::{
+    CanonicalEncoder, EvaluatedFrame, SceneContentValue, SceneLayerValue, SceneProgram,
+    SceneValue, TransformValue,
+};
+
+// GPU versioning is deliberately value-derived. These helpers are kept here
+// rather than in the semantic programs so GPU residency policy cannot leak
+// back into semantic evaluation.
+
+use super::lowerer::{GpuContributionInput, VersionedEffect, VersionedSemantic};
+use super::types::GpuResourceVersion;
+
+#[derive(Debug)]
+pub(crate) enum SemanticAdapterError {
+    Encode(crate::frame_graph::CanonicalError),
+    MissingContribution(crate::doc::store::LayerId),
+    MissingTransform(crate::doc::store::LayerId),
+    EffectIdentityMismatch(crate::doc::store::LayerId),
+}
+
+impl From<crate::frame_graph::CanonicalError> for SemanticAdapterError {
+    fn from(value: crate::frame_graph::CanonicalError) -> Self { Self::Encode(value) }
+}
+
+pub(crate) struct SemanticGpuAdapter<'a> {
+    program: &'a SceneProgram,
+    frame: &'a EvaluatedFrame,
+}
+
+impl<'a> SemanticGpuAdapter<'a> {
+    pub fn new(program: &'a SceneProgram, frame: &'a EvaluatedFrame) -> Self {
+        Self { program, frame }
+    }
+
+    pub fn contributions(
+        &self,
+        scene: &SceneValue,
+    ) -> Result<Vec<GpuContributionInput>, SemanticAdapterError> {
+        scene.layers.iter().map(|layer| self.contribution(layer)).collect()
+    }
+
+    pub fn contribution(
+        &self,
+        layer: &SceneLayerValue,
+    ) -> Result<GpuContributionInput, SemanticAdapterError> {
+        let contribution = self.program.contribution(layer.layer)
+            .ok_or(SemanticAdapterError::MissingContribution(layer.layer))?;
+        let transform = self.program.transforms().binding(layer.layer)
+            .ok_or(SemanticAdapterError::MissingTransform(layer.layer))?;
+
+        let content_node = self.program.content().binding(layer.layer)
+            .and_then(|binding| binding.content)
+            .or(layer.content_key);
+        let content = content_node.map(|node| VersionedSemantic {
+            node,
+            version: content_version(&layer.content),
+        });
+
+        let placement = VersionedSemantic {
+            node: transform.world,
+            version: transform_version(&layer.transform)?,
+        };
+
+        // Blend/projection have no dedicated program binding of their own;
+        // like `plate`, they anchor to the contribution node. Their version
+        // is what actually decides GPU-visible invalidation.
+        let blend = VersionedSemantic {
+            node: contribution,
+            version: blend_version(layer.blend),
+        };
+        let projection = VersionedSemantic {
+            node: contribution,
+            version: projection_version(layer.projection),
+        };
+        let is_file_source = matches!(layer.source, crate::doc::store::LayerSource::File { .. });
+
+        let relation_source = layer.matte.and_then(|matte| {
+            let source = self.program.contribution(matte.layer)?;
+            Some(super::types::GpuResourceIdentity::semantic(
+                source,
+                super::types::GpuResourceClass::Composite,
+                0,
+            ).key())
+        });
+        let clip_base = layer.clip_to_below.then_some(relation_source).flatten();
+        let matte_source = (!layer.clip_to_below).then_some(relation_source).flatten();
+
+        let direct_effects = versioned_effects(layer.layer, &layer.effect_keys, &layer.effects)?;
+        let after_effects = versioned_effects(layer.layer, &layer.after_effect_keys, &layer.after_effects)?;
+
+        let masks = self.program.masks().binding(layer.layer)
+            .map(|binding| binding.masks.iter().filter_map(|node| {
+                let value = self.frame.value(*node)?.downcast_ref::<crate::frame_graph::MaskValue>()?;
+                Some(VersionedSemantic { node: *node, version: mask_version(value) })
+            }).collect())
+            .unwrap_or_default();
+
+        Ok(GpuContributionInput {
+            contribution: VersionedSemantic {
+                node: contribution,
+                version: contribution_version(layer)?,
+            },
+            instance: layer.instance,
+            content,
+            placement,
+            blend,
+            projection,
+            is_file_source,
+            direct_effects,
+            after_effects,
+            image_sources: layer.image_sources.clone(),
+            masks,
+            matte_source,
+            clip_base,
+            clip_to_below: layer.clip_to_below,
+            matte_mode: layer.matte.map(|matte| matte.mode),
+            stencil: layer.blend.is_stencil(),
+            plate: matches!(layer.content, SceneContentValue::Plate(_)).then_some(VersionedSemantic {
+                node: contribution,
+                version: content_version(&layer.content),
+            }),
+        })
+    }
+}
+
+fn hash_encoded(encoded: CanonicalEncoder) -> GpuResourceVersion {
+    GpuResourceVersion::from_canonical(&encoded)
+}
+
+fn transform_version(value: &TransformValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
+    let mut encoded = CanonicalEncoder::new();
+    for component in value.affine.matrix2.to_cols_array() { encoded.f32(component)?; }
+    for component in value.affine.translation.to_array() { encoded.f32(component)?; }
+    for component in value.spatial.matrix3.to_cols_array() { encoded.f32(component)?; }
+    for component in value.spatial.translation.to_array() { encoded.f32(component)?; }
+    Ok(hash_encoded(encoded))
+}
+
+fn content_version(value: &SceneContentValue) -> GpuResourceVersion {
+    let mut encoded = CanonicalEncoder::new();
+    match value {
+        SceneContentValue::None => { encoded.u8(0); }
+        SceneContentValue::Text(text) => {
+            encoded.u8(1);
+            let bytes = format!("{text:?}");
+            let _ = encoded.string(&bytes);
+        }
+        SceneContentValue::Shape(shape) => {
+            encoded.u8(2);
+            let bytes = serde_json::to_vec(shape).unwrap_or_default();
+            let _ = encoded.bytes(&bytes);
+        }
+        SceneContentValue::Material(material) => {
+            encoded.u8(3).u64(material.version);
+            let _ = encoded.string(&material.path);
+        }
+        SceneContentValue::Media { source, time } => {
+            encoded.u8(4).u64(source.version).rational_time(*time);
+            let _ = encoded.string(&source.path);
+        }
+        SceneContentValue::Particles(particles) => {
+            encoded.u8(5);
+            let bytes = format!("{particles:?}");
+            let _ = encoded.string(&bytes);
+        }
+        SceneContentValue::Plate(plate) => {
+            encoded.u8(6).bool(plate.average);
+            encoded.u64(plate.owner.map_or(0, |id| id.0));
+            encoded.u64(plate.members.len() as u64);
+        }
+    }
+    hash_encoded(encoded)
+}
+
+fn versioned_effects(
+    layer: crate::doc::store::LayerId,
+    keys: &[crate::frame_graph::NodeKey],
+    values: &[crate::picture::resolved::ResolvedEffect],
+) -> Result<Vec<VersionedEffect>, SemanticAdapterError> {
+    if keys.len() != values.len() {
+        return Err(SemanticAdapterError::EffectIdentityMismatch(layer));
+    }
+    keys.iter().copied().zip(values).map(|(node, value)| {
+        Ok(VersionedEffect {
+            semantic: VersionedSemantic { node, version: effect_version(value)? },
+            value: value.clone(),
+        })
+    }).collect()
+}
+
+fn blend_version(value: crate::doc::store::BlendMode) -> GpuResourceVersion {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u8(value as u8);
+    hash_encoded(encoded)
+}
+
+/// HARD CONSTRAINT: this hashes only the declared `LayerProjection` enum
+/// value as authored in the Document. It must never be derived from
+/// geometry, transform, or camera state — projection is always an explicit
+/// authoring-time pin, never auto-inferred.
+fn projection_version(value: crate::doc::store::LayerProjection) -> GpuResourceVersion {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u8(value as u8);
+    hash_encoded(encoded)
+}
+
+fn effect_version(value: &crate::picture::resolved::ResolvedEffect) -> Result<GpuResourceVersion, SemanticAdapterError> {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.string(&value.plugin_id)?;
+    let bytes = serde_json::to_vec(&(value.scope, &value.params)).unwrap_or_default();
+    encoded.bytes(&bytes)?;
+    Ok(hash_encoded(encoded))
+}
+
+fn mask_version(value: &crate::frame_graph::MaskValue) -> GpuResourceVersion {
+    let mut encoded = CanonicalEncoder::new();
+    let bytes = format!("{value:?}");
+    let _ = encoded.string(&bytes);
+    hash_encoded(encoded)
+}
+
+fn contribution_version(layer: &SceneLayerValue) -> Result<GpuResourceVersion, SemanticAdapterError> {
+    let mut encoded = CanonicalEncoder::new();
+    encoded.u64(layer.layer.0).u32(layer.instance);
+    encoded.u64(content_version(&layer.content).as_u64());
+    encoded.u64(transform_version(&layer.transform)?.as_u64());
+    encoded.f32(layer.opacity)?;
+    encoded.i16(layer.order);
+    encoded.f32(layer.depth)?;
+    encoded.bool(layer.flatten).bool(layer.environment).bool(layer.ghost);
+    Ok(hash_encoded(encoded))
+}

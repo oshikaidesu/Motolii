@@ -73,7 +73,7 @@ impl Engine {
         )
     }
 
-    pub(in crate::engine) fn apply_material_domains_semantic(
+    pub(crate) fn apply_material_domains_semantic(
         &mut self,
         mut layer: Layer,
         layer_id: crate::doc::store::LayerId,

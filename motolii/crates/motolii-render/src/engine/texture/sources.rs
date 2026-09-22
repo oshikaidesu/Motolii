@@ -230,7 +230,7 @@ impl Engine {
         ))
     }
 
-    pub(in crate::engine) fn shape_texture_from_shapes(
+    pub(crate) fn shape_texture_from_shapes(
         &mut self,
         shapes: &[ShapeNode],
         layer_id: LayerId,
@@ -251,7 +251,7 @@ impl Engine {
         self.shape_texture_from_shapes_on_canvas(shapes, layer_id, vector, tolerance, comp, step, remember, canvas)
     }
 
-    pub(in crate::engine) fn text_texture_from_shapes(
+    pub(crate) fn text_texture_from_shapes(
         &mut self,
         shapes: &[ShapeNode],
         layer_id: LayerId,
@@ -324,7 +324,7 @@ impl Engine {
         self.probes.get(path).map(|info| [info.width as f32, info.height as f32, 0.0])
     }
 
-    pub(in crate::engine) fn mesh_content_for(
+    pub(crate) fn mesh_content_for(
         &mut self,
         path: &str,
         comp: CompSpec,
@@ -410,7 +410,7 @@ impl Engine {
 
     /// ファイル素材の道はここ1本。**種別で分かれるのはこの関数の中だけ**で、
     /// 呼ぶ側は素材が何かを知らない。種別を足す時に触るのもここだけ。
-    pub(in crate::engine) fn file_content_for(
+    pub(crate) fn file_content_for(
         &mut self,
         path: &str,
         source_time: RationalTime,
@@ -433,7 +433,7 @@ impl Engine {
 
     /// 環境にした画。線形の放射輝度で上げ、照度図は上げる時に畳む。
     /// 失敗は普通の画と同じ棚(`failed_probes`)に置く。
-    pub(in crate::engine) fn environment_content_for(
+    pub(crate) fn environment_content_for(
         &mut self,
         path: &str,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {

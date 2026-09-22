@@ -1,0 +1,35 @@
+name: GPU control-plane check
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "motolii/crates/motolii-render/**"
+      - "motolii/ui/native/**"
+      - ".github/workflows/gpu-control-plane-check.yml"
+  workflow_dispatch:
+
+jobs:
+  render-lib-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libswresample-dev libswscale-dev
+      - name: Check motolii-render
+        run: cargo check -p motolii-render --lib
+      - name: Test GPU control plane
+        run: cargo test -p motolii-render --lib gpu_exec:: -- --nocapture
+      - name: Test FrameGraph static clustering
+        run: cargo test -p motolii-render --lib frame_graph::static_analysis:: -- --nocapture
+      - name: Test SceneProgram output-type inventory
+        run: cargo test -p motolii-render --lib frame_graph::program::tests::one_revision_program_evaluates_authored_values_and_shared_content_without_store_reads -- --nocapture
+      - name: Test authored layer lookup through generated plates
+        run: cargo test -p motolii-render --lib frame_graph::scene_program::scene_value_lookup_tests:: -- --nocapture
+      - name: Check native UI against FrameGraph public surface
+        if: runner.os == 'macOS'
+        run: cargo check -p motolii-ui

@@ -165,24 +165,29 @@ impl GroupCompositeProgram {
                 }
             }
 
+            let mut each_keys = Vec::new();
             let mut each = Vec::new();
+            let mut whole_keys = Vec::new();
             let mut whole = Vec::new();
             let mut in_whole = false;
             for index in recipe.effect_start..node.identity().inputs.len() {
                 let Some(effect) = inputs.at(index)
                     .and_then(|value| value.downcast_ref::<EffectValue>())
                     .and_then(|value| value.0.clone()) else { continue };
+                let effect_key = node.identity().inputs[index];
                 if in_whole || effect.scope == EffectScope::Whole {
                     in_whole = true;
+                    whole_keys.push(effect_key);
                     whole.push(effect);
                 } else {
+                    each_keys.push(effect_key);
                     each.push(effect);
                 }
             }
 
             if !each.is_empty() {
                 for child in &mut children {
-                    append_each(child, &each);
+                    append_each(child, &each_keys, &each);
                 }
             }
 
@@ -198,10 +203,11 @@ impl GroupCompositeProgram {
                 let owner_layer = owner.layer.as_ref();
                 layer.layer = recipe.group;
                 layer.content_key = None;
-                layer.freeze_eligible = owner_layer.is_some_and(|owner| owner.freeze_eligible);
                 layer.timing_start = owner_layer.map_or(layer.timing_start, |owner| owner.timing_start);
                 layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(recipe.group), members: children, average: false });
+                layer.effect_keys.clear();
                 layer.effects.clear();
+                layer.after_effect_keys = whole_keys;
                 layer.after_effects = whole;
                 layer.masks.clear();
                 layer.matte = None;
@@ -224,8 +230,9 @@ impl GroupCompositeProgram {
     }
 }
 
-fn append_each(contribution: &mut SceneContributionValue, effects: &[crate::picture::resolved::ResolvedEffect]) {
+fn append_each(contribution: &mut SceneContributionValue, keys: &[NodeKey], effects: &[crate::picture::resolved::ResolvedEffect]) {
     if let Some(layer) = contribution.layer.as_mut() {
+        layer.effect_keys.extend(keys.iter().copied());
         layer.effects.extend(effects.iter().cloned());
     }
 }

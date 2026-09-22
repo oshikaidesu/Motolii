@@ -90,7 +90,7 @@ fn probe() {
         rt.viewer.clock.toggle();
         eprintln!("  live status={live:?} ({live_bytes} bytes)");
         let sig = time(&mut || { crate::snapshot::authored_signature(&rt.doc).unwrap(); });
-        let depth = time(&mut || { let r = crate::render::picture::resolve::resolved_layers(&rt.doc.view(), t).unwrap(); rt.depth_layout(&r).unwrap(); });
+        let depth = time(&mut || { let scene = rt.engine.frame_graph_editor_scene(&rt.doc.view(), t).unwrap(); rt.depth_layout(&scene).unwrap(); });
         let catalog = crate::render::engine::known_effects();
         let inspector = time(&mut || { for id in rt.doc.view().layers() { crate::editor::functions::read::inspector_data_from_doc(&rt.doc.view(), id, t, &catalog); } });
         eprintln!("  signature={sig:?} depth={depth:?} inspector={inspector:?}");

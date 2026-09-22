@@ -250,7 +250,7 @@ mod move_layer_tests {
     }
 
     #[test]
-    fn invalid_cycle_locked_and_frozen_drops_are_atomic() {
+    fn invalid_cycle_and_locked_drops_are_atomic() {
         let mut doc = placed();
         let parent = add(&mut doc, 1, true, None);
         let nested = add(&mut doc, 2, true, Some(parent));
@@ -277,12 +277,6 @@ mod move_layer_tests {
         let history = doc.history_depth();
         assert!(doc
             .move_layers(&[plain], Some(parent), "before", RationalTime::ZERO)
-            .is_err());
-        assert_eq!(doc.history_depth(), history);
-        doc.apply(Intent::Freeze { group: nested }).unwrap();
-        let history = doc.history_depth();
-        assert!(doc
-            .move_layers(&[nested], None, "rootEnd", RationalTime::ZERO)
             .is_err());
         assert_eq!(doc.history_depth(), history);
     }

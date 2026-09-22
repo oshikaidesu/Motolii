@@ -11,7 +11,7 @@ use motolii_doc::store::slot::PropertySource;
 use motolii_doc::store::StoreError;
 
 use crate::document::validate::{
-    check_not_frozen, check_not_frozen_inside, check_not_locked, freeze_attrs_batch, is_frozen_or_within_frozen, property_is_inside,
+    check_not_locked, freeze_attrs_batch,
     validate_masks_have_shapes, validate_no_link_cycle, validate_no_parent_cycle,
 };
 use motolii_doc::store::{};
@@ -37,7 +37,6 @@ impl Document {
                 let targets: Vec<_> = present.into_iter().filter(|id| removed.contains(id)).collect();
                 for &target in &targets {
                     check_not_locked(&view, target)?;
-                    check_not_frozen(&view, target)?;
                 }
                 for target in targets {
                     self.ingest(target.entity_path(), vec![serialize_present(false)?], at)?;
@@ -76,7 +75,6 @@ impl Document {
             }
             Intent::SetMasks { layer, masks } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen_inside(&self.view(), layer, "its masks")?;
                 motolii_doc::store::mask::validate_unique_ids(&masks)?;
                 validate_masks_have_shapes(&self.view(), layer, &masks)?;
                 let json = serde_json::to_string(&masks)?;
@@ -91,7 +89,6 @@ impl Document {
             }
             Intent::AddMask { layer, mask, shape } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen_inside(&self.view(), layer, "its masks")?;
                 let mut masks = self.view().masks(layer)?;
                 masks.push(mask);
                 motolii_doc::store::mask::validate_unique_ids(&masks)?;
@@ -120,7 +117,6 @@ impl Document {
             }
             Intent::SetTiming { layer, timing } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -159,7 +155,6 @@ impl Document {
             }
             Intent::SetSource { layer, source } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen_inside(&self.view(), layer, "its source")?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -180,7 +175,6 @@ impl Document {
             }
             Intent::SetOrder { layer, order } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -200,17 +194,6 @@ impl Document {
                 )
             }
             Intent::SetAttrs { layer, patch } => {
-                check_not_frozen(&self.view(), layer)?;
-                if let Some(Some(new_parent)) = patch.parent {
-                    if is_frozen_or_within_frozen(&self.view(), new_parent)? {
-                        return Err(StoreError::Property(format!(
-                            "layer {} の parent を layer {} にはできない — \
-                             凍結中(frozen)のグループか、その部分木の中にある \
-                             (先に unfreeze すること)",
-                            layer.0, new_parent.0
-                        )));
-                    }
-                }
                 let current = self.view().attrs(layer)?.unwrap_or_default();
                 // 環境層は空(照明)であって時間の姿ではないので、ゴーストを持たない。
                 // 環境にした瞬間に既存のゴーストも落とす(旨みがない: 裁定 2026-09-07)。
@@ -258,7 +241,6 @@ impl Document {
             }
             Intent::SetEffects { layer, effects } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen_inside(&self.view(), layer, "its effects")?;
                 motolii_doc::store::effect::validate_unique_ids(&effects)?;
                 let json = serde_json::to_string(&effects)?;
                 (
@@ -272,7 +254,6 @@ impl Document {
             }
             Intent::SetShapes { layer, shapes } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen_inside(&self.view(), layer, "its shapes")?;
                 let json = serde_json::to_string(&shapes)?;
                 (
                     layer.entity_path(),
@@ -285,7 +266,6 @@ impl Document {
             }
             Intent::SetTextDocument { layer, document } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen_inside(&self.view(), layer, "its text")?;
                 motolii_doc::store::text::validate(&document)?;
                 let json = serde_json::to_string(&document)?;
                 (
@@ -303,8 +283,6 @@ impl Document {
                 track,
             } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
-                if property_is_inside(property.name()) { check_not_frozen_inside(&self.view(), layer, "its effects")?; }
                 track
                     .validate()
                     .map_err(|error| StoreError::Property(error.to_string()))?;
@@ -324,8 +302,6 @@ impl Document {
                 value,
             } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
-                if property_is_inside(property.name()) { check_not_frozen_inside(&self.view(), layer, "its effects")?; }
                 (layer.entity_path(), vec![constant_batch(&property, value)?])
             }
             Intent::SetCameraConstant { property, value } => {
@@ -351,7 +327,6 @@ impl Document {
                 slot,
             } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
                 let json = serde_json::to_string(&PropertySource::slot(slot))?;
                 (
                     layer.entity_path(),
@@ -368,7 +343,6 @@ impl Document {
                 link,
             } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
                 validate_no_link_cycle(&self.view(), layer, &property, &link)?;
                 let json = serde_json::to_string(&PropertySource::link_only(link))?;
                 (
@@ -397,7 +371,6 @@ impl Document {
                 modulators,
             } => {
                 check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
                 for link in &modulators {
                     validate_no_link_cycle(&self.view(), layer, &property, link)?;
                 }
@@ -509,12 +482,10 @@ impl Document {
             }
             Intent::Freeze { group } => {
                 check_not_locked(&self.view(), group)?;
-                check_not_frozen(&self.view(), group)?;
                 freeze_attrs_batch(&self.view(), group, true)?
             }
             Intent::Unfreeze { group } => {
                 check_not_locked(&self.view(), group)?;
-                check_not_frozen(&self.view(), group)?;
                 freeze_attrs_batch(&self.view(), group, false)?
             }
         };

@@ -190,10 +190,6 @@ fn move_editable(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError>
         )));
     }
     crate::document::validate::check_not_locked(view, layer)?;
-    crate::document::validate::check_not_frozen(view, layer)?;
-    if view.attrs(layer)?.unwrap_or_default().frozen {
-        return Err(StoreError::Property(format!("Layer {} is frozen", layer.0)));
-    }
     Ok(())
 }
 

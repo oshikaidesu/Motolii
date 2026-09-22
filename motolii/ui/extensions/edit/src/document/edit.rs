@@ -50,7 +50,6 @@ impl Document {
             )));
         }
         crate::document::validate::check_not_locked(&view, layer)?;
-        crate::document::validate::check_not_frozen(&view, layer)?;
         let source = view.property_source(layer, property)?;
         if let Some(reason) = crate::document::edit::property_write_rejection(&view, layer, property)? {
             return Err(StoreError::Property(reason.into()));
@@ -191,7 +190,6 @@ impl Document {
                 )));
             }
             crate::document::validate::check_not_locked(&view, layer)?;
-            crate::document::validate::check_not_frozen(&view, layer)?;
         }
         let mut projected = motolii_doc::store::ReadOverlay::default();
         for edit in edits {

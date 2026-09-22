@@ -2,23 +2,21 @@
 //! comp time, prepare one GPU scene, then branch only for final projection.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
+use crate::gpu_exec::GpuLowerer;
+use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue};
 use crate::picture::resolved::ResolvedLayer;
 
-use super::frame_graph_scene::GpuSceneValue;
 use super::{Engine, EngineError};
 
 pub(super) struct EngineFrameGraph {
     graph: CompiledGraph,
     program: SceneProgram,
     scene: NodeKey,
-    gpu: NodeKey,
-    camera: NodeKey,
-    stage: NodeKey,
+    solver: NodeKey,
+    overlay: NodeKey,
     comp: CompSpec,
     fps: crate::doc::store::Fps,
     background: [f32; 4],
@@ -27,6 +25,20 @@ pub(super) struct EngineFrameGraph {
     generation: u64,
     prepare_us: u64,
     measured: bool,
+    gpu_resources: crate::gpu_exec::GpuResourceGraph,
+    gpu_lowerer: crate::gpu_exec::LogicalGpuLowerer,
+    gpu_content: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentContent>,
+    gpu_placement: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentPlacement>,
+    gpu_blend_projection: crate::gpu_exec::GpuBlendProjectionResidency,
+    gpu_effects: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentEffectChain>,
+    gpu_snapshots: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentSnapshot>,
+    gpu_composites: crate::gpu_exec::GpuResourceStore<crate::gpu_exec::ResidentCompositeLayer>,
+    gpu_contributions: Vec<crate::gpu_exec::GpuContributionResources>,
+    gpu_scene_outputs: Vec<crate::gpu_exec::GpuResourceKey>,
+    gpu_scene_root: Option<crate::gpu_exec::GpuSceneRoot>,
+    gpu_present_sink: Option<crate::gpu_exec::GpuSinkRoot>,
+    gpu_readback_sink: Option<crate::gpu_exec::GpuSinkRoot>,
+    gpu_operations: crate::gpu_exec::GpuOperationTable<crate::gpu_exec::EngineGpuOperation>,
 }
 
 impl EngineFrameGraph {
@@ -41,21 +53,127 @@ impl EngineFrameGraph {
         let document_camera = program.camera();
         let solver = program.solver().key();
         let overlay = program.overlay().output();
-        let mut nodes: Vec<_> = program.nodes().collect();
-        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera, solver, overlay]);
-        gpu_identity.time_dependency = TimeDependency::Exact;
-        let gpu = GraphNode::new(gpu_identity);
-        let projection = |role| {
-            let mut identity = NodeIdentity::new(NodeKind::CameraProjection, vec![gpu.key()]);
-            identity.parameters = vec![role]; identity.time_dependency = TimeDependency::Exact;
-            GraphNode::new(identity)
-        };
-        let camera = projection(0); let stage = projection(1);
-        nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
-        let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
+        let nodes: Vec<_> = program.nodes().collect();
+        let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, solver, overlay])
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, gpu_resources: Default::default(), gpu_lowerer: Default::default(), gpu_content: Default::default(), gpu_placement: Default::default(), gpu_blend_projection: Default::default(), gpu_effects: Default::default(), gpu_snapshots: Default::default(), gpu_composites: Default::default(), gpu_contributions: Vec::new(), gpu_scene_outputs: Vec::new(), gpu_scene_root: None, gpu_present_sink: None, gpu_readback_sink: None, gpu_operations: Default::default() })
     }
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+    fn plan_sink(&self, kind: crate::gpu_exec::GpuSinkKind) -> Result<crate::gpu_exec::GpuExecutionPlan, EngineError> {
+        let sink = match kind {
+            crate::gpu_exec::GpuSinkKind::Present => self.gpu_present_sink,
+            crate::gpu_exec::GpuSinkKind::Readback => self.gpu_readback_sink,
+        }.ok_or_else(|| EngineError::Store("GPU sink root missing".into()))?;
+        crate::gpu_exec::GpuPlanner.plan(&self.gpu_resources, [sink.pass])
+            .map_err(|error| EngineError::Store(format!("GPU execution plan: {error:?}")))
+    }
+
+    fn execute_pre_sink(
+        &mut self,
+        engine: &mut Engine,
+        camera: ResolvedCamera,
+        plan: &crate::gpu_exec::GpuExecutionPlan,
+        sink: crate::gpu_exec::GpuSinkKind,
+    ) -> Result<crate::gpu_exec::GpuExecutionStats, EngineError> {
+        let sink_pass = match sink {
+            crate::gpu_exec::GpuSinkKind::Present => self.gpu_present_sink,
+            crate::gpu_exec::GpuSinkKind::Readback => self.gpu_readback_sink,
+        }.ok_or_else(|| EngineError::Store("GPU sink root missing".into()))?.pass;
+        let mut pre = plan.clone();
+        pre.passes.retain(|pass| *pass != sink_pass);
+
+        // Materialize prepared contribution outputs before relation passes.
+        // This is the replacement for whole-scene Vec<LayerWithPasses> assembly:
+        // each resource is addressed by the lowering result that owns it.
+        let frame = self.frame.as_ref()
+            .ok_or_else(|| EngineError::Store("FrameGraph evaluated frame is missing".into()))?;
+        let scene = frame.value(self.scene)
+            .and_then(|value| value.downcast_ref::<SceneValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph semantic scene is missing".into()))?;
+        // Stage selection is editor state, not document data: plain passthrough, never node-ified.
+        let outline_index: HashMap<LayerId, u8> = engine.outline_order.iter().take(255).enumerate().map(|(index, id)| (*id, (index + 1) as u8)).collect();
+        for (layer, resources) in scene.layers.iter().zip(self.gpu_contributions.iter()) {
+            let Some(output) = resources.prepared else { continue };
+            let version = self.gpu_resources.version(output)
+                .ok_or_else(|| EngineError::Store("GPU prepared contribution version missing".into()))?;
+            if self.gpu_composites.current(output, version).is_some() {
+                self.gpu_composites.touch(output, self.generation);
+                self.gpu_resources.mark_resident(output, version, self.generation);
+                continue;
+            }
+            let Some(content_key) = resources.content else { continue };
+            let content_version = self.gpu_resources.version(content_key)
+                .ok_or_else(|| EngineError::Store("GPU content version missing".into()))?;
+            let Some(content) = self.gpu_content.current(content_key, content_version).cloned() else { continue };
+            let placement_version = self.gpu_resources.version(resources.placement)
+                .ok_or_else(|| EngineError::Store("GPU placement version missing".into()))?;
+            let Some(placement) = self.gpu_placement.current(resources.placement, placement_version).copied() else { continue };
+            let Some((blend, projection)) = self.gpu_blend_projection.fetch(&self.gpu_resources, resources.blend, resources.projection) else { continue };
+            let is_file_source = matches!(layer.source, crate::doc::store::LayerSource::File { .. });
+            let outline = outline_index.get(&layer.layer).copied().unwrap_or(0);
+            let effects = layer.content_key.and_then(|first| {
+                let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
+                    first,
+                    crate::gpu_exec::GpuResourceClass::Effect,
+                    layer.instance,
+                );
+                self.gpu_effects.get_any(identity.key()).map(|(_, value)| value.clone())
+            }).unwrap_or_else(|| crate::gpu_exec::ResidentEffectChain {
+                passes: crate::render::engine::translate::translate_effect_passes(&layer.effects),
+                plate_passes: crate::render::engine::translate::translate_plate_passes(&layer.after_effects),
+            });
+            let mut pass_sources = Vec::with_capacity(resources.snapshot_rows.len());
+            for row in &resources.snapshot_rows {
+                let mut textures = Vec::with_capacity(row.len());
+                for key in row {
+                    let Some((_, snapshot)) = self.gpu_snapshots.get_any(*key) else {
+                        textures.clear();
+                        break;
+                    };
+                    textures.push(snapshot.texture.clone());
+                }
+                pass_sources.push(textures);
+            }
+            engine.gpu_materialize_contribution(
+                &mut self.gpu_composites,
+                output,
+                version,
+                self.generation,
+                layer.layer, crate::render::engine::translate::scene_layer_media_tick(layer),
+                content,
+                placement,
+                blend,
+                projection,
+                is_file_source,
+                &layer.effects,
+                outline,
+                effects,
+                pass_sources,
+                self.comp,
+                camera,
+            )?;
+            self.gpu_resources.mark_resident(output, version, self.generation);
+        }
+
+        let cross = crate::gpu_exec::EngineCrossContext {
+            engine,
+            resources: &mut self.gpu_composites,
+            generation: self.generation,
+            comp: self.comp,
+            camera,
+        };
+        let mut backend = crate::gpu_exec::EngineGpuBackend {
+            operations: &self.gpu_operations,
+            cross,
+        };
+        crate::gpu_exec::GpuExecutor.execute(
+            &mut self.gpu_resources,
+            &pre,
+            self.generation,
+            &mut backend,
+        ).map_err(|error| EngineError::Store(format!("GPU executor: {error:?}")))
+    }
+
 
     fn evaluate_at(
         &mut self,
@@ -64,9 +182,7 @@ impl EngineFrameGraph {
         quality: FrameQuality,
         force_gpu: bool,
     ) -> Result<(), EngineError> {
-        if force_gpu {
-            self.graph.invalidate([self.gpu]);
-        }
+        let _ = force_gpu; // GPU work is no longer represented by a semantic FrameGraph node.
         self.generation += 1;
         let mut executor = ProgramExecutor {
             engine,
@@ -80,13 +196,120 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
+        if let Some(scene) = evaluated.value(self.scene).and_then(|value| value.downcast_ref::<SceneValue>()) {
+            let adapter = crate::gpu_exec::SemanticGpuAdapter::new(&self.program, &evaluated);
+            let inputs = adapter.contributions(scene).map_err(|error| EngineError::Store(format!("GPU semantic adapter: {error:?}")))?;
+            // Phase 1: every contribution output identity exists before any
+            // matte/clip/cross-layer dependency is connected.
+            for input in &inputs {
+                self.gpu_lowerer.declare_contribution(&mut self.gpu_resources, input)
+                    .map_err(|error| EngineError::Store(format!("GPU contribution declaration: {error:?}")))?;
+            }
+            // Phase 2: lower only per-contribution producers. No relation may
+            // inspect another contribution until every prepared output exists.
+            let mut lowered = Vec::with_capacity(inputs.len());
+            for (layer, input) in scene.layers.iter().zip(inputs.iter()) {
+                let resources = self.gpu_lowerer.lower_contribution(&mut self.gpu_resources, input)
+                    .map_err(|error| EngineError::Store(format!("GPU logical lowering: {error:?}")))?;
+                for (pass, operation) in resources.operations.iter().copied() {
+                    self.gpu_operations.install(pass, operation);
+                }
+                let placement_version = self.gpu_resources.version(resources.placement)
+                    .ok_or_else(|| EngineError::Store("GPU placement resource version missing".into()))?;
+                let placement = crate::render::engine::translate::scene_layer_placement(layer);
+                let _ = crate::gpu_exec::resident_placement(&mut self.gpu_placement, resources.placement, placement_version, self.generation, placement);
+                self.gpu_resources.mark_resident(resources.placement, placement_version, self.generation);
+                self.gpu_blend_projection.install(&mut self.gpu_resources, self.generation, resources.blend, resources.projection, layer.blend, layer.projection)
+                    .ok_or_else(|| EngineError::Store("GPU blend/projection resource version missing".into()))?;
+                if let Some(first) = layer.content_key {
+                    let identity = crate::gpu_exec::GpuResourceIdentity::semantic(
+                        first,
+                        crate::gpu_exec::GpuResourceClass::Effect,
+                        layer.instance,
+                    );
+                    let mut encoded = crate::frame_graph::CanonicalEncoder::new();
+                    let _ = encoded.string(&format!("{:?}{:?}", layer.effects, layer.after_effects));
+                    let effect_version = crate::gpu_exec::GpuResourceVersion::from_canonical(&encoded);
+                    let chain = crate::render::engine::translate::scene_layer_effect_chain(layer, self.comp);
+                    let _ = crate::gpu_exec::resident_effect_chain(&mut self.gpu_effects, identity.key(), effect_version, self.generation, chain.passes, chain.plate_passes);
+                }
+                if let Some(content_key) = resources.content {
+                    let version = self.gpu_resources.version(content_key)
+                        .ok_or_else(|| EngineError::Store("GPU content resource version missing".into()))?;
+                    let _ = engine.gpu_resident_content(
+                        &mut self.gpu_content,
+                        content_key,
+                        version,
+                        self.generation,
+                        layer.layer,
+                        &layer.content,
+                        layer.shape_stretch,
+                        layer.environment,
+                        layer.content_key,
+                        self.comp,
+                        time,
+                    )?;
+                    self.gpu_resources.mark_resident(content_key, version, self.generation);
+                }
+                lowered.push(resources);
+            }
+
+            // Phase 3: connect clip/matte consumption using the prepared
+            // resource keys. The semantic LayerId mapping has already ended.
+            let relations = self.gpu_lowerer
+                .lower_relations(&mut self.gpu_resources, &inputs, &lowered)
+                .map_err(|error| EngineError::Store(format!("GPU relation lowering: {error:?}")))?;
+            for (pass, operation) in relations.operations.iter().copied() {
+                self.gpu_operations.install(pass, operation);
+            }
+            self.gpu_contributions = lowered;
+            self.gpu_scene_outputs = relations.ordered_outputs;
+
+            let scene_root = crate::gpu_exec::lower_scene_root(
+                &mut self.gpu_resources,
+                self.scene,
+                &self.gpu_scene_outputs,
+            ).map_err(|error| EngineError::Store(format!("GPU scene root: {error:?}")))?;
+            let present = crate::gpu_exec::lower_sink(
+                &mut self.gpu_resources,
+                self.scene,
+                scene_root,
+                crate::gpu_exec::GpuSinkKind::Present,
+            ).map_err(|error| EngineError::Store(format!("GPU present sink: {error:?}")))?;
+            let readback = crate::gpu_exec::lower_sink(
+                &mut self.gpu_resources,
+                self.scene,
+                scene_root,
+                crate::gpu_exec::GpuSinkKind::Readback,
+            ).map_err(|error| EngineError::Store(format!("GPU readback sink: {error:?}")))?;
+            self.gpu_scene_root = Some(scene_root);
+            self.gpu_present_sink = Some(present);
+            self.gpu_readback_sink = Some(readback);
+            // Concrete resident backends have already materialized ordinary
+            // resources during lowering. Register every logical pass so the
+            // executor validates the complete plan instead of rediscovering work.
+            let pass_ops: Vec<_> = self.gpu_resources.passes().map(|(key, pass)| {
+                let op = match pass.identity.kind {
+                    crate::gpu_exec::GpuPassKind::Present => crate::gpu_exec::EngineGpuOperation::Present,
+                    crate::gpu_exec::GpuPassKind::Readback => crate::gpu_exec::EngineGpuOperation::Readback,
+                    _ => crate::gpu_exec::EngineGpuOperation::Resident,
+                };
+                (key, op)
+            }).collect();
+            for (key, op) in pass_ops {
+                // Specific operations emitted by lowering own their pass.
+                // The compatibility Resident marker fills only passes whose
+                // concrete backend has not migrated yet.
+                if !self.gpu_operations.contains(key) {
+                    self.gpu_operations.install(key, op);
+                }
+            }
+            self.gpu_resources.retire_temporal(self.generation);
+        }
         self.frame = Some(evaluated);
         Ok(())
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
-#[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
 struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
@@ -131,26 +354,6 @@ impl NodeExecutor for ProgramExecutor<'_> {
                     layer, parent, effect, scene, solver, camera, previous, context.time, self.comp,
                 )?;
                 Ok(NodeValue::new(value))
-            }
-            NodeKind::GpuScene => {
-                let scene = direct::<SceneValue>(node, &inputs, 0)?;
-                let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
-                let solver = direct::<SolverPlanValue>(node, &inputs, 2)?;
-                let overlays = direct::<OverlaySetValue>(node, &inputs, 3)?;
-                self.engine.install_frame_graph_overlays(overlays);
-                let frame = context.time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
-                self.engine.compositor.clock = Some([
-                    context.time.as_seconds_f64() as f32,
-                    self.fps.den() as f32 / self.fps.num() as f32,
-                    frame,
-                ]);
-                let prepared = self.engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, context.time, self.fps)?;
-                Ok(NodeValue::new(Arc::new(prepared)))
-            }
-            NodeKind::CameraProjection => {
-                let scene = inputs.at(0).and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>()).cloned().ok_or_else(|| unsupported(node.identity().kind))?;
-                let role = match node.identity().parameters.as_slice() { [0] => ProjectionRole::Camera, [1] => ProjectionRole::Stage, _ => return Err(unsupported(node.identity().kind)) };
-                Ok(NodeValue::new(Arc::new(Projection { scene, role })))
             }
             kind => Err(unsupported(kind)),
         }
@@ -280,18 +483,15 @@ impl Engine {
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
+        let _stats = state.execute_pre_sink(self, document_camera, &plan, crate::gpu_exec::GpuSinkKind::Readback)?;
         let camera = camera_override.unwrap_or(document_camera);
-        let mut layers = prepared.layers.clone();
+        let mut layers = self.prepare_frame_graph_layers(&mut state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
@@ -308,17 +508,14 @@ impl Engine {
         include_background: bool,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
-        let mut layers = prepared.layers.clone();
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Readback)?;
+        let _stats = state.execute_pre_sink(self, document_camera, &plan, crate::gpu_exec::GpuSinkKind::Readback)?;
+        let mut layers = self.prepare_frame_graph_layers(&mut state, time, document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera = document_camera;
         }
@@ -332,7 +529,7 @@ impl Engine {
         let revision = GraphRevision::new(view.revision_key());
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
         self.compositor.feedback_set_revision(view.revision_key());
-        self.feedback_keys_seen.clear();
+        self.gpu_history.begin_frame();
         if !state.matches(revision, time) {
             let started = std::time::Instant::now();
             if let Err(error) = state.evaluate_at(self, time, quality, false) {
@@ -345,8 +542,8 @@ impl Engine {
         Ok(state)
     }
 
-    pub(super) fn semantic_layer_for(&self, view: &StoreView<'_>, time: RationalTime, id: LayerId) -> Option<&crate::frame_graph::SceneLayerValue> {
-        self.frame_graph_cached_scene(view, time)?.layer(id)
+    pub(in crate::engine) fn frame_graph_gpu_stats(&self) -> Option<crate::gpu_exec::GpuGraphStats> {
+        self.frame_graph.as_ref().map(|state| state.gpu_resources.stats())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -372,7 +569,7 @@ impl Engine {
         self.outline_order = self.outline_layers.clone();
 
         self.render_frame_graph_projection(
-            &state,
+            &mut state,
             target,
             camera,
             include_background,
@@ -394,10 +591,10 @@ impl Engine {
 
             let c = &mut self.compositor;
             c.baked_effects.clear(&mut c.effect_scratch);
-            self.feedback_keys_seen.clear();
+            self.gpu_history.begin_frame();
             state.evaluate_at(self, time, FrameQuality::Preview { scale: 1 }, true)?;
             self.render_frame_graph_projection(
-                &state,
+                &mut state,
                 target,
                 camera,
                 include_background,
@@ -412,41 +609,62 @@ impl Engine {
         Ok(())
     }
 
+    fn prepare_frame_graph_layers(
+        &mut self,
+        state: &mut EngineFrameGraph,
+        time: RationalTime,
+        _document_camera: ResolvedCamera,
+    ) -> Result<Vec<crate::render::compositor::LayerWithPasses>, EngineError> {
+        let frame = state.frame.as_ref()
+            .ok_or_else(|| EngineError::Store("FrameGraph evaluated frame is missing".into()))?;
+        let overlays = frame.value(state.overlay)
+            .and_then(|value| value.downcast_ref::<OverlaySetValue>())
+            .cloned()
+            .ok_or_else(|| EngineError::Store("FrameGraph overlay value is missing".into()))?;
+        self.install_frame_graph_overlays(&overlays);
+        let frame_number = time.try_to_frame_round(state.fps).unwrap_or(0) as f32;
+        self.compositor.clock = Some([
+            time.as_seconds_f64() as f32,
+            state.fps.den() as f32 / state.fps.num() as f32,
+            frame_number,
+        ]);
+
+        // The scene root already decided survivors/order. Presentation merely
+        // reads those resource outputs; it must not reconstruct a scene.
+        let mut layers = Vec::with_capacity(state.gpu_scene_outputs.len());
+        for key in &state.gpu_scene_outputs {
+            let Some((_, resident)) = state.gpu_composites.get_any(*key) else {
+                return Err(EngineError::Store(format!(
+                    "GPU scene output {:?} was not materialized by the execution plan",
+                    key
+                )));
+            };
+            layers.push(resident.layer.clone());
+        }
+        Ok(layers)
+    }
+
     fn render_frame_graph_projection(
         &mut self,
-        state: &EngineFrameGraph,
+        state: &mut EngineFrameGraph,
         target: &wgpu::Texture,
         camera: ResolvedCamera,
         include_background: bool,
         window: crate::render::compositor::Window,
         projection: crate::frame_graph::ViewProjection,
     ) -> Result<(), EngineError> {
-        let root = match projection {
-            crate::frame_graph::ViewProjection::Camera => state.camera,
-            crate::frame_graph::ViewProjection::Stage => state.stage,
-            _ => return Err(EngineError::Store("Unsupported playback projection".into())),
-        };
-        let projected = state.frame.as_ref()
-            .and_then(|frame| frame.value(root))
-            .and_then(|value| value.downcast_ref::<Arc<Projection>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph projection is missing".into()))?;
-        let expected = if projection == crate::frame_graph::ViewProjection::Camera {
-            ProjectionRole::Camera
-        } else {
-            ProjectionRole::Stage
-        };
-        if projected.role != expected {
-            return Err(EngineError::Store("FrameGraph projection role mismatch".into()));
+        if !matches!(projection, crate::frame_graph::ViewProjection::Camera | crate::frame_graph::ViewProjection::Stage) {
+            return Err(EngineError::Store("Unsupported playback projection".into()));
         }
-
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        let plan = state.plan_sink(crate::gpu_exec::GpuSinkKind::Present)?;
+        let _stats = state.execute_pre_sink(self, document_camera, &plan, crate::gpu_exec::GpuSinkKind::Present)?;
         let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        let mut layers = projected.scene.layers.clone();
+        let mut layers = self.prepare_frame_graph_layers(state, state.frame.as_ref().map(|f| f.time()).unwrap_or(RationalTime::ZERO), document_camera)?;
         for layer in &mut layers {
             layer.layer.projection_camera =
                 if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
@@ -455,7 +673,7 @@ impl Engine {
                     projection_camera
                 };
         }
-        self.stamp_frame_graph_window_feedback(&mut layers, window);
+        self.gpu_stamp_window_feedback(&mut layers, window);
         let background = if include_background {
             state.background
         } else {
@@ -470,7 +688,8 @@ impl Engine {
         state: &EngineFrameGraph,
         now: i64,
     ) -> Option<i64> {
-        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        let seen = self.gpu_history.seen().collect::<Vec<_>>();
+        self.gpu_history.begin_frame();
         let mut unique = HashSet::new();
         let mut start: Option<i64> = None;
         for key in seen.into_iter().filter(|key| unique.insert(*key)) {
@@ -516,7 +735,7 @@ impl Engine {
 
         for frame in start..now {
             self.pending_frame_copies.clear();
-            self.feedback_keys_seen.clear();
+            self.gpu_history.begin_frame();
             let at = RationalTime::try_from_frame(frame, state.fps)
                 .map_err(|error| EngineError::Time(error.to_string()))?;
             state.evaluate_at(self, at, FrameQuality::Preview { scale: 1 }, true)?;
@@ -530,68 +749,12 @@ impl Engine {
             )?;
         }
         self.pending_frame_copies.clear();
-        self.feedback_keys_seen.clear();
+        self.gpu_history.begin_frame();
         Ok(())
     }
 }
 
 
-pub(super) fn resolved_layers_from_scene(
-    scene: &SceneValue,
-    time: RationalTime,
-    fps: crate::doc::store::Fps,
-) -> Vec<ResolvedLayer> {
-    scene.layers.iter().map(|layer| {
-        let source_time = match &layer.content {
-            crate::frame_graph::SceneContentValue::Media { time, .. } => *time,
-            _ => time,
-        };
-        let source_frame = source_time.try_to_frame_floor(fps).unwrap_or(0);
-        let (plate, averaged) = match &layer.content {
-            crate::frame_graph::SceneContentValue::Plate(plate) => (
-                plate.owner,
-                if plate.average { plate.members.len().try_into().unwrap_or(u32::MAX) } else { 0 },
-            ),
-            _ => (None, 0),
-        };
-        ResolvedLayer {
-            id: layer.layer,
-            source: layer.source.clone(),
-            placement: crate::doc::core::LayerPlacement {
-                transform: layer.transform.affine,
-                world_transform: Some(layer.transform.spatial),
-                order: i32::from(layer.order),
-                opacity: layer.opacity,
-                z: layer.transform.spatial.translation.z,
-                rotation_x: 0.0,
-                rotation_y: 0.0,
-                plane: None,
-            },
-            declared_size: [0.0; 2],
-            source_frame,
-            source_time,
-            masks: layer.masks.clone(),
-            effects: layer.effects.clone(),
-            blend_mode: layer.blend,
-            matte: layer.matte,
-            clip_to_below: layer.clip_to_below,
-            projection: layer.projection,
-            flatten: layer.flatten,
-            environment: layer.environment,
-            depth: layer.depth,
-            ghost: layer.ghost,
-            copy: layer.instance,
-            after_effects: layer.after_effects.clone(),
-            plate,
-            averaged,
-            shape_stretch: layer.shape_stretch,
-            // These meanings are already baked into TextFlow/TextShape values.
-            // The compatibility ResolvedLayer projection must not re-run them.
-            glyph_offsets: None,
-            flow_around: None,
-        }
-    }).collect()
-}
 
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }
 fn store(error: crate::doc::store::StoreError) -> EngineError { EngineError::Store(error.to_string()) }

@@ -97,6 +97,7 @@ pub(super) struct ScheduledFrame {
     pub(super) values: BTreeMap<NodeKey, NodeValue>,
     pub(super) executed: Vec<NodeKey>,
     pub(super) reused: Vec<NodeKey>,
+    pub(super) input_types: BTreeMap<NodeKey, Vec<&'static str>>,
 }
 
 impl ScheduledFrame {
@@ -106,6 +107,7 @@ impl ScheduledFrame {
             values: BTreeMap::new(),
             executed: Vec::new(),
             reused: Vec::new(),
+            input_types: BTreeMap::new(),
         }
     }
 
@@ -115,6 +117,7 @@ impl ScheduledFrame {
             values: BTreeMap::new(),
             executed: Vec::new(),
             reused: Vec::new(),
+            input_types: BTreeMap::new(),
         }
     }
 }
@@ -136,6 +139,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
     let mut values = BTreeMap::new();
     let mut executed = Vec::new();
     let mut reused = Vec::new();
+    let mut input_types = BTreeMap::new();
 
     #[allow(clippy::too_many_arguments)]
     fn node_at<E: NodeExecutor>(
@@ -150,6 +154,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
         values: &mut BTreeMap<NodeKey, NodeValue>,
         executed: &mut Vec<NodeKey>,
         reused: &mut Vec<NodeKey>,
+        input_types: &mut BTreeMap<NodeKey, Vec<&'static str>>,
     ) -> Result<Option<NodeValue>, E::Error> {
         if !lease.is_current() {
             scheduler.record_cancelled_evaluation();
@@ -169,7 +174,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
         let mut inputs = Vec::with_capacity(node.identity().inputs.len());
         for (index, input) in node.identity().inputs.iter().enumerate() {
             let input_time = node.identity().input_times[index].apply(time);
-            let Some(value) = node_at(scheduler, topology, executor, *input, input_time, root_time, quality, lease, values, executed, reused)? else {
+            let Some(value) = node_at(scheduler, topology, executor, *input, input_time, root_time, quality, lease, values, executed, reused, input_types)? else {
                 return Ok(None);
             };
             inputs.push((*input, value));
@@ -189,11 +194,13 @@ pub(super) fn evaluate<E: NodeExecutor>(
                 values,
                 executed,
                 reused,
+                input_types,
             )? else {
                 return Ok(None);
             };
             inputs.push((request.node, value));
         }
+        input_types.insert(key, inputs.iter().map(|(_, value)| value.type_name()).collect());
         let value = executor.execute(node, NodeInputs(inputs), context)?;
         if !lease.is_current() {
             scheduler.record_cancelled_evaluation();
@@ -207,7 +214,7 @@ pub(super) fn evaluate<E: NodeExecutor>(
     }
 
     for root in topology.roots() {
-        if node_at(scheduler, topology, executor, *root, time, time, quality, &lease, &mut values, &mut executed, &mut reused)?.is_none() {
+        if node_at(scheduler, topology, executor, *root, time, time, quality, &lease, &mut values, &mut executed, &mut reused, &mut input_types)?.is_none() {
             return Ok(ScheduledFrame::cancelled(generation));
         }
     }
@@ -218,5 +225,6 @@ pub(super) fn evaluate<E: NodeExecutor>(
         values,
         executed,
         reused,
+        input_types,
     })
 }

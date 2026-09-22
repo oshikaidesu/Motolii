@@ -320,30 +320,8 @@ class _InspectorPanelState extends State<InspectorPanel>
                           _card(title: 'Matte', children: _matte(layer, matte)),
                       ],
                     ),
-                    // 凍った層: 効果は焼かれている。灰色にして触れない(DAW の凍った device)。
-                    if (!_multiple &&
-                        layer['frozen'] == true &&
-                        effects.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: EditorMetrics.s6,
-                            vertical: EditorMetrics.s4,
-                          ),
-                          child: Text(
-                            'Frozen — effects are baked. Unfreeze to edit.',
-                            style: TextStyle(
-                              color: EditorTheme.of(context).muted,
-                            ),
-                          ),
-                        ),
-                      ),
                     if (!_multiple)
-                      SliverOpacity(
-                        opacity: layer['frozen'] == true ? 0.45 : 1.0,
-                        sliver: SliverIgnorePointer(
-                          ignoring: layer['frozen'] == true,
-                          sliver: SliverReorderableList(
+                      SliverReorderableList(
                             itemCount: effects.length,
                             itemBuilder: (context, i) => _effect(
                               layer,
@@ -357,8 +335,6 @@ class _InspectorPanelState extends State<InspectorPanel>
                                   'id': effects[from]['id'],
                                   'to': to,
                                 }),
-                          ),
-                        ),
                       ),
                     const SliverPadding(
                       padding: EdgeInsets.only(bottom: EditorMetrics.s6),

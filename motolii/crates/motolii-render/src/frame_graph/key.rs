@@ -53,21 +53,8 @@ pub enum NodeKind {
     PropertyTrack,
     PropertyLink,
     PropertySum,
-    /// Coarse F2 world evaluation, before per-content node lowering.
-    ResolvedWorld,
-    /// Text documents collected from one resolved world.
-    TextDocuments,
-    /// Shape documents collected from one resolved world.
-    ShapeDocuments,
-    /// The authored camera resolved from one world.
-    DocumentCamera,
-    /// Coarse shared scene passed to final view projections.
-    SharedScene,
     /// Canonical authored text content and its run/style references.
     TextContent,
-    /// Canonical text style/font input.  It is separate so equal styles can
-    /// be shared by otherwise different text documents.
-    TextStyle,
     /// Shaped text paths/contours after the layout input is known.
     TextShape,
     /// One Shape Outside source expressed as comp-space obstacle polygons.
@@ -76,10 +63,6 @@ pub enum NodeKind {
     TextFlow,
     /// Authored vector geometry plus evaluated shape/fill properties.
     ShapeGeometry,
-    /// Shape path tessellation/raster input.  The renderer chooses the value.
-    ShapeMesh,
-    /// A group authoring/topology descriptor, before its time-varying layout.
-    Group,
     /// The layout/slot result for a group and its direct children.
     Layout,
     /// Transition/stagger blend over exact-time Layout results.
@@ -91,7 +74,6 @@ pub enum NodeKind {
     /// Imported mesh/resource geometry.
     MeshSource,
     /// Material/resource surface input for a file or mesh.
-    Material,
     /// A time-addressed media frame (video) or image source.
     MediaFrame,
     /// Pure semantic request describing one Blob Track analysis source.
@@ -128,8 +110,6 @@ pub enum NodeKind {
     WorldTransform,
     /// Resolved document/observer camera state.
     Camera,
-    /// A view-specific camera/stage projection.
-    CameraProjection,
     /// One authored layer's ordered contribution to the scene.
     CompositeContribution,
     /// A Group scope over its direct children. It becomes a plate only when an evaluated Whole effect requires one.
@@ -138,12 +118,27 @@ pub enum NodeKind {
     EffectImages,
     /// The ordered shared scene before any view projection.
     SceneComposite,
-    /// GPU-ready layer resources shared by every final projection.
-    GpuScene,
     /// Effect node reserved for the later F4 lowering.
     Effect,
     Mask,
     Custom(u16),
+}
+
+
+impl NodeKind {
+    pub const BUILTINS: &'static [NodeKind] = &[
+        NodeKind::PropertyConstant, NodeKind::PropertyTrack, NodeKind::PropertyLink, NodeKind::PropertySum,
+        
+        NodeKind::TextContent, NodeKind::TextShape, NodeKind::TextObstacle,
+        NodeKind::TextFlow, NodeKind::ShapeGeometry, NodeKind::Layout,
+        NodeKind::FlowWindow, NodeKind::GroupBackground, NodeKind::MediaExtent, NodeKind::MeshSource,
+        NodeKind::MediaFrame, NodeKind::AnalysisRequest, NodeKind::AnalysisBlob, NodeKind::AnalysisOverlay,
+        NodeKind::OverlaySet, NodeKind::Visibility, NodeKind::ParticleBirths, NodeKind::Particle, NodeKind::TemporalCopy,
+        NodeKind::PlacementSet, NodeKind::MotionMeasure, NodeKind::MotionSamples, NodeKind::Relation, NodeKind::RelationSet,
+        NodeKind::SolverPlan, NodeKind::Transform, NodeKind::WorldTransform, NodeKind::Camera, 
+        NodeKind::CompositeContribution, NodeKind::GroupComposite, NodeKind::EffectImages, NodeKind::SceneComposite,
+        NodeKind::Effect, NodeKind::Mask,
+    ];
 }
 
 /// A content-addressed node identity. `parameters` must be the complete,
