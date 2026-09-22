@@ -53,6 +53,10 @@ pub(crate) struct GpuContributionResources {
     /// directly instead of rediscovering layers from SceneValue.
     pub contribution: GpuResourceKey,
     pub final_image_or_geometry: Option<GpuResourceKey>,
+    /// Cross-contribution operations emitted by lowering. These are concrete
+    /// execution payloads keyed entirely by logical resources; registering
+    /// them requires no SceneValue scan.
+    pub operations: Vec<(super::types::GpuPassKey, super::engine_backend::EngineGpuOperation)>,
 }
 
 /// Greenfield lowering boundary.
