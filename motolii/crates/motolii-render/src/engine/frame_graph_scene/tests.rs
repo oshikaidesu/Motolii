@@ -190,6 +190,7 @@ fn a_frame_that_only_moves_things_is_not_prepared_again() {
     let prepared = engine.prepared_contributions;
     let moved = engine.render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
     assert_eq!(engine.prepared_contributions, prepared, "only the placement changed: nothing is lowered or prepared again");
+    assert!(engine.frame_claims().iter().all(|c| c.stage != "prepare"), "and nothing claims to have prepared: {:?}", engine.frame_claims());
     assert_ne!(first, moved, "and the picture still moves");
     let fresh = Engine::new().unwrap().render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
     assert_eq!(moved, fresh, "the reused frame is the frame a fresh engine prepares");
@@ -216,6 +217,9 @@ fn only_the_contribution_that_changed_is_prepared_again() {
     let before = engine.prepared_contributions;
     let frame = engine.render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
     assert_eq!(engine.prepared_contributions - before, 1, "the still shape is reused; only the animated blur is prepared");
+    let prepared: Vec<_> = engine.frame_claims().iter().filter(|c| c.stage == "prepare").collect();
+    assert_eq!(prepared.len(), 1, "exactly one contribution names itself: {prepared:?}");
+    assert_eq!((prepared[0].who.as_str(), prepared[0].why.as_str()), ("layer 2", "an effect value changed"));
     let fresh = Engine::new().unwrap().render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
     assert_eq!(frame, fresh, "the mixed frame is the frame a fresh engine prepares");
 }

@@ -34,7 +34,9 @@ impl Engine {
             let planned = self.plan_frame_graph_scene(scene, solver, comp, projection_camera);
             let scene = planned.as_ref().unwrap_or(scene);
             let mut prepared = self.prepare_gpu_scene_incremental(scene, comp, projection_camera)?;
+            let started = std::time::Instant::now();
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
+            if self.blocks.object_count() > 0 { self.ledger.claim("blocks", "block solver", format!("{} objects", self.blocks.object_count()), started.elapsed()); }
             self.drawn_layers = prepared.layers.len();
             return Ok(prepared);
         }
@@ -69,7 +71,7 @@ impl Engine {
         // Temporal/named image dependencies already carry their own source
         // values, but conservatively keep the full scene while such auxiliary
         // views exist. The same rule applies to Block/Follow/physics work.
-        if scene.layers.iter().any(|layer| !layer.image_sources.is_empty()) {
+        if scene.layers.iter().any(|layer| layer.reads_other_pictures()) {
             return None;
         }
         let block_ids: std::collections::HashSet<&str> = self.compositor.catalog.definitions.iter()
@@ -183,7 +185,13 @@ impl Engine {
         let mut layers = Vec::with_capacity(graph.output.len());
         let mut layer_ids = Vec::with_capacity(graph.output.len());
         for composed in &graph.output {
-            if let Some(layer) = self.realize_composed(graph, prepared, composed, &mut groups, comp, projection_camera)? {
+            let started = std::time::Instant::now();
+            let realized = self.realize_composed(graph, prepared, composed, &mut groups, comp, projection_camera)?;
+            if composed.mask.is_some() || !composed.atop.is_empty() {
+                let why = if composed.mask.is_some() { "matte composed" } else { "clip group composed" };
+                self.ledger.claim("compose", format!("layer {}", graph.layers[composed.base].id.0), why, started.elapsed());
+            }
+            if let Some(layer) = realized {
                 layers.push(layer);
                 layer_ids.push(graph.layers[composed.base].id);
             }

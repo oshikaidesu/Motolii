@@ -42,6 +42,14 @@ pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
+impl SceneLayerValue {
+    /// Whether an effect reads another layer's or another time's picture. Every pass has a row;
+    /// only a row with sources reads anything.
+    pub fn reads_other_pictures(&self) -> bool {
+        self.image_sources.iter().any(|row| !row.is_empty())
+    }
+}
+
 impl SceneValue {
     /// Authoring layer as evaluated by the FrameGraph. Plates and placement
     /// copies are an execution/semantic detail; editor callers ask by LayerId

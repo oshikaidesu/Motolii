@@ -88,6 +88,13 @@ pub struct LayerWork {
     pub isolate: bool,
 }
 
+impl LayerWork {
+    /// Whether an effect reads another picture (see `SceneLayerValue::reads_other_pictures`).
+    pub fn reads_other_pictures(&self) -> bool {
+        self.image_inputs.iter().any(|row| !row.is_empty())
+    }
+}
+
 /// A picture built from contributions: a base, pictures drawn source-atop onto
 /// it, and optionally masked by the union of other composed pictures.
 #[derive(Clone, Debug, PartialEq)]

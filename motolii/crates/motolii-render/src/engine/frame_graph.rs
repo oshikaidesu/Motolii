@@ -92,6 +92,16 @@ impl NodeExecutor for ProgramExecutor<'_> {
     }
 
     fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
+        // Only nodes that are not reused reach here: each claims its recomputation.
+        let started = std::time::Instant::now();
+        let value = self.execute_node(node, inputs, context);
+        self.engine.ledger.claim("evaluate", format!("{:?}", node.identity().kind), "recomputed", started.elapsed());
+        value
+    }
+}
+
+impl ProgramExecutor<'_> {
+    fn execute_node(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, EngineError> {
         if node.identity().kind == NodeKind::MediaExtent {
             let source = self.program.content().extent_source(node.key())
                 .cloned()
@@ -331,8 +341,10 @@ impl Engine {
         window: crate::render::compositor::Window,
         projection: crate::frame_graph::ViewProjection,
     ) -> Result<(), EngineError> {
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
+        // The frame starts before evaluation: evaluating is part of what the frame costs.
         let frame_start = std::time::Instant::now();
+        self.ledger.clear();
+        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
         self.compositor.measurement = Default::default();
         if !state.measured {
             self.compositor.measurement.resolve_us = state.prepare_us;
@@ -378,6 +390,10 @@ impl Engine {
 
         self.outline_layers.clear();
         self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
+        let budget = std::time::Duration::from_secs_f64(1.0 / state.fps.as_f64().max(1.0));
+        if let Some(report) = self.ledger.report_if_over(frame_start.elapsed(), budget) {
+            eprintln!("{report}");
+        }
         self.frame_graph = Some(state);
         Ok(())
     }
@@ -421,7 +437,14 @@ impl Engine {
         } else {
             crate::render::compositor::NO_BACKGROUND
         };
+        for (layer, id) in layers.iter().zip(&prepared.layer_ids) {
+            if layer.passes.is_empty() { continue; }
+            let names: Vec<_> = layer.passes.iter().map(|pass| pass.plugin_id.as_str()).collect();
+            self.ledger.claim("draw", format!("layer {}", id.0), format!("{} effect pass(es): {}", names.len(), names.join(", ")), std::time::Duration::ZERO);
+        }
+        let started = std::time::Instant::now();
         self.compositor.render_into_window(target, state.comp, camera, &layers, background, window)?;
+        self.ledger.claim("draw", "compositor", format!("{} layers into the window", layers.len()), started.elapsed());
         Ok(())
     }
 

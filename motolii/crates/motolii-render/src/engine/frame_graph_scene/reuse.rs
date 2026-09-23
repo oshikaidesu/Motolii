@@ -50,7 +50,12 @@ impl Engine {
                 Some(kept) => kept,
                 None => {
                     self.prepared_contributions += 1;
-                    self.execute_layer(work, comp, projection_camera)?
+                    let current = &scene.layers[index];
+                    let why = why_prepared(self.contributions.get(&(current.layer, current.instance)), current, bases[index]);
+                    let started = std::time::Instant::now();
+                    let layer = self.execute_layer(work, comp, projection_camera)?;
+                    self.ledger.claim("prepare", format!("layer {}", current.layer.0), why, started.elapsed());
+                    layer
                 }
             });
         }
@@ -73,7 +78,9 @@ impl Engine {
                 layer.layer.placement.transform == current.transform.affine
                     && layer.layer.placement.world_transform == Some(current.transform.spatial)
             });
-            if placement_independent(current) && placed_as_authored {
+            // A pass with history is a recurrence over frames; its picture is never the previous one.
+            let has_history = layer.as_ref().is_some_and(|layer| layer.passes.iter().any(|pass| pass.feedback.is_some()));
+            if placement_independent(current) && placed_as_authored && !has_history {
                 next.insert(key, CachedContribution {
                     scene: current.clone(),
                     clip_base: bases[index],
@@ -85,6 +92,33 @@ impl Engine {
         self.contributions = next;
         Ok(result)
     }
+}
+
+/// Why a contribution could not keep its previous preparation.
+fn why_prepared(previous: Option<&CachedContribution>, current: &SceneLayerValue, clip_base: bool) -> &'static str {
+    if !placement_independent(current) {
+        return match &current.content {
+            SceneContentValue::Media { .. } => "a video frame changes every frame",
+            SceneContentValue::Particles(_) => "particles move every frame",
+            SceneContentValue::Plate(_) => "a plate is composed every frame",
+            _ if current.reads_other_pictures() => "it reads another layer or another time",
+            _ if current.flatten => "flattened in composition space",
+            _ if current.freeze_eligible => "freezable",
+            _ => "its picture depends on the frame",
+        };
+    }
+    let Some(previous) = previous else { return "new this frame" };
+    let a = &previous.scene;
+    let content = match (&a.content, &current.content) {
+        (SceneContentValue::Shape(x), SceneContentValue::Shape(y)) => std::sync::Arc::ptr_eq(x, y),
+        (SceneContentValue::Text(x), SceneContentValue::Text(y)) => std::sync::Arc::ptr_eq(x, y),
+        (x, y) => x == y,
+    };
+    if !content { "its content changed" }
+    else if a.effects != current.effects || a.after_effects != current.after_effects { "an effect value changed" }
+    else if a.masks != current.masks { "a mask changed" }
+    else if a.matte != current.matte || a.clip_to_below != current.clip_to_below || previous.clip_base != clip_base { "its matte or clip changed" }
+    else { "an attribute changed" }
 }
 
 fn place(placement: &mut LayerPlacement, layer: &SceneLayerValue) {
@@ -104,7 +138,7 @@ fn placement_independent(layer: &SceneLayerValue) -> bool {
         SceneContentValue::Particles(_) | SceneContentValue::Plate(_) => false,
     };
     content
-        && layer.image_sources.is_empty()
+        && !layer.reads_other_pictures()
         && !layer.flatten
         && !layer.freeze_eligible
         && !layer.effects.iter().chain(&layer.after_effects).any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))

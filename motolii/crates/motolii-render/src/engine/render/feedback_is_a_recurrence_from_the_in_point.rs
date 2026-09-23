@@ -83,10 +83,12 @@ fn history_accumulates_over_frames() {
     let path = dir.path().join("white.png");
     image::save_buffer(&path, &vec![255u8; (SIZE * SIZE * 4) as usize], SIZE, SIZE, image::ColorType::Rgba8).unwrap();
     let doc = document(&path, true);
-    let mean = |px: &[u8]| px.chunks_exact(4).map(|p| p[0] as f64).sum::<f64>() / (SIZE * SIZE) as f64;
+    // The picture is sRGB-encoded; the recurrence is in linear light (0.2 → 0.945 is ×4.7 there, ×2 encoded).
+    let linear = |c: u8| { let c = c as f64 / 255.0; if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) } };
+    let mean = |px: &[u8]| px.chunks_exact(4).map(|p| linear(p[0])).sum::<f64>() / (SIZE * SIZE) as f64;
     let (_, first) = walked_to(&doc, 0);
     let (_, later) = walked_to(&doc, 12);
-    assert!(mean(&later) > mean(&first) * 2.0, "history が積もっていない: {} → {}", mean(&first), mean(&later));
+    assert!(mean(&later) > mean(&first) * 3.0, "history が積もっていない: {} → {}", mean(&first), mean(&later));
 }
 
 /// 下の合成を読む列(Background Copy → 残像)は板に焼けず、画面の道で効く。それでも飛んで来た絵は

@@ -58,6 +58,10 @@ pub(crate) struct BlockState {
 
 impl BlockState {
     /// 解き手が動かす物か(描く前に間引かないため)。
+    pub(crate) fn object_count(&self) -> usize {
+        self.objects.len()
+    }
+
     pub(crate) fn moves(&self, layer: LayerId) -> bool {
         self.slots.contains_key(&layer)
     }

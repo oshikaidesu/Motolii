@@ -16,3 +16,6 @@ engine::clip::clipping_contract::a_box_shadow_falls_below_the_box_and_leaves_the
 
 # Freezing a layer with feedback history; likely the same root as the feedback replays above.
 engine::render::freeze_keeps_the_picture::a_frozen_layer_draws_the_same_picture_from_its_cache_and_thaws_back
+
+# Reads a macOS system font (ヒラギノ) that the Linux runner does not have.
+engine::response_tests::default_reflection_response_has_no_receiver_crossing_pop

@@ -25,6 +25,7 @@ impl Engine {
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         self.layer_failures.clear();
+        self.ledger.clear();
         self.purge_idle_video_players();
         self.render_frame_graph_pixels(view, t, include_background, camera_override)
     }

@@ -16,6 +16,7 @@ mod clip;
 mod render;
 mod texture;
 pub(crate) mod material;
+pub mod ledger;
 pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 pub(crate) mod translate;
@@ -166,6 +167,8 @@ pub struct Engine {
     outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
+    /// Who worked in the current frame, and why.
+    ledger: ledger::FrameLedger,
     /// Each contribution's last preparation, reused while only its placement changes.
     contributions: frame_graph_scene::ContributionCache,
     /// Contributions lowered and prepared on the production path (reused ones are not counted).
@@ -249,6 +252,7 @@ impl Engine {
             outline_layers: Vec::new(),
             outline_order: Vec::new(),
             drawn_layers: 0,
+            ledger: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
             models: HashMap::new(),
@@ -338,6 +342,7 @@ impl Engine {
             outline_layers: Vec::new(),
             outline_order: Vec::new(),
             drawn_layers: 0,
+            ledger: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
             models: HashMap::new(),
@@ -440,6 +445,11 @@ impl Engine {
 
     pub fn layer_failures(&self) -> &[String] {
         &self.layer_failures
+    }
+
+    /// The current frame's claims: every piece of work that ran, with its owner and reason.
+    pub fn frame_claims(&self) -> &[ledger::Claim] {
+        self.ledger.claims()
     }
 
     pub fn drawn_layers(&self) -> usize {
