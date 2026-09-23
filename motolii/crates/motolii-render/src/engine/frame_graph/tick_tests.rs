@@ -339,6 +339,32 @@ mod frame_reflection {
         engine
     }
 
+    /// A plate's members ask for their Views as any layer does: six per member layer, drawn once
+    /// in the preparation, however many views show the plates (and whether a plate is baked or
+    /// materialized by each view).
+    #[test]
+    fn plate_members_views_are_drawn_once_however_many_views() {
+        let dir = tempfile::tempdir().unwrap();
+        for plates_count in [1, 3] {
+            for mirror_only in [true, false] {
+                let (mut doc, members) = plates(dir.path(), plates_count);
+                // One member of each plate asks for Views; the other stays glass (the plate then reads the view).
+                for (i, member) in members.iter().enumerate() {
+                    if mirror_only || i % 2 == 0 {
+                        doc.apply(Intent::SetEffects { layer: *member, effects: vec![EffectInstance { id: EffectId(3000 + i as u32), plugin_id: "motolii.cube_mirror".into() }] }).unwrap();
+                    }
+                }
+                let asking = if mirror_only { members.len() } else { members.len().div_ceil(2) } as u64;
+                // The plates' Repeater picks its members at random: which members appear is the work's.
+                // What is fixed: six per member layer that appears, never more, whatever the views.
+                let drawn: Vec<u64> = [1, 3].iter().map(|&views| prepare(&doc, views).surface_work().layer_views).collect();
+                let label = format!("{plates_count} plates, mirror only {mirror_only}");
+                assert_eq!(drawn[0], drawn[1], "{label}: the views do not draw them again");
+                assert!(drawn[0] > 0 && drawn[0] % 6 == 0 && drawn[0] <= 6 * asking, "{label}: {} Views for {asking} asking layers", drawn[0]);
+            }
+        }
+    }
+
     /// One capture, before every bake, and every bake lit by it — however many plates or views.
     #[test]
     fn one_capture_lights_every_plate_however_many_plates_or_views() {
