@@ -80,8 +80,6 @@ impl Compositor {
             reflection_diagnostic_near: None,
             reflection_entry: Vec::new(),
             next_readback: 1,
-            next_effect_key: 1,
-            effect_scratch: effects::EffectScratch::default(),
             baked_effects: Default::default(),
             effect_programs,
             surface_programs: Default::default(),
@@ -114,7 +112,7 @@ impl Compositor {
         }
         self.surface_programs.clear();
         // 焼いた絵は plugin_id と欄の値で引く。本文だけ変わった効果は同じ鍵で当たるので、世代が動いたら全部捨てる。
-        self.baked_effects.clear(&mut self.effect_scratch);
+        self.baked_effects.clear();
         for definition in changed {
             if !matches!(definition.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp) { continue; }
             match definition.source.name.as_str() {
@@ -193,28 +191,22 @@ impl Compositor {
 
     /// CPU の byte(乗算済み線形、Rgba16Float)を板として置ける texture に(Freeze の cache を disk から戻す時)。
     pub(crate) fn upload_rgba16f(&mut self, label: &str, bytes: Vec<u8>, width: u32, height: u32) -> Result<GpuTexture2D, CompositorError> {
-        self.next_effect_key += 1;
-        let key = self.next_effect_key;
-        self.ctx.texture_manager_2d.get_or_try_create_with(key, &self.ctx, || Ok::<_, std::convert::Infallible>(ImageDataDesc {
+        self.ctx.texture_manager_2d.create(&self.ctx, ImageDataDesc {
             label: label.into(),
             data: bytes.into(),
             format: wgpu::TextureFormat::Rgba16Float.into(),
             width_height: [width, height],
             alpha_channel_usage: re_renderer::AlphaChannelUsage::AlphaChannelInUse,
-        })).map_err(|e| CompositorError::Rectangles(e.to_string()))
+        }).map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
 
-    /// 焼いた絵を板として使えるようにする(上流の取り込み口)。
+    /// A drawn picture (premultiplied), as a texture a layer is drawn with.
     pub fn import_premultiplied(
         &mut self,
-        texture: &wgpu::Texture,
+        texture: &re_renderer::GpuTexture,
     ) -> Result<GpuTexture2D, CompositorError> {
-        self.next_effect_key += 1;
-        let key = self.next_effect_key;
-        self.ctx
-            .texture_manager_2d
-            .import_gpu_premultiplied(key, &self.ctx, texture)
-            .map_err(|e| CompositorError::Effect(e.to_string()))
+        GpuTexture2D::new(texture.clone(), re_renderer::AlphaChannelUsage::AlphaChannelInUse)
+            .ok_or_else(|| CompositorError::Effect("a picture is a 2D texture".into()))
     }
 
     pub fn upload_yuv420p(

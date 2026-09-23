@@ -5,9 +5,6 @@ use re_renderer::{GpuTexture, Rgba, ViewBuilderId};
 use crate::render::compositor::*;
 
 impl Compositor {
-    pub fn effect_passes_created_textures(&self) -> u64 {
-        self.effect_scratch.created_count()
-    }
 
     /// 最後に出した束の番号(まだ 1 度も出していなければ `None`)。
     pub fn last_submission(&self) -> Option<wgpu::SubmissionIndex> {

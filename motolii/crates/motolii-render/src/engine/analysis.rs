@@ -62,30 +62,23 @@ impl Engine {
         &mut self,
         lwp: &crate::render::compositor::LayerWithPasses,
     ) -> Result<Option<(re_renderer::GpuReadbackIdentifier, PictureMeta)>, EngineError> {
-        let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(lwp))?;
+        let (textures, paddings, _spills) = self.compositor.effective_layer_textures(std::slice::from_ref(lwp))?;
         let Some(texture) = textures.first().and_then(|content| content.texture()).cloned() else { return Ok(None) };
         let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle())
-            .map_err(|error| EngineError::Store(error.to_string()))?.texture.clone();
-        let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || raw.format().is_srgb();
-        let (half, owned) = if raw.format() == wgpu::TextureFormat::Rgba16Float {
-            (raw, None)
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || raw.texture.format().is_srgb();
+        let half = if raw.texture.format() == wgpu::TextureFormat::Rgba16Float {
+            raw
         } else {
             let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-linear-picture-encode"),
             });
-            let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !linear, linear);
+            let converted = self.compositor.convert_image_encoding(&mut encoder, &raw.texture, true, !linear, linear);
             self.compositor.ctx.queue_commands([encoder.finish()]);
-            (converted.clone(), Some(converted))
+            converted
         };
-        let id = crate::render::compositor::readback::ask_texture(&self.compositor.ctx, &half)
+        let id = crate::render::compositor::readback::ask_texture(&self.compositor.ctx, &half.texture)
             .map_err(|error| EngineError::Store(error.to_string()))?;
-        // The copy is recorded: the scratch can serve later passes, which run after it.
-        for (width, height, format, texture) in checked_out {
-            self.compositor.effect_scratch.release(width, height, format, texture);
-        }
-        if let Some(owned) = owned {
-            self.compositor.effect_scratch.release(owned.width(), owned.height(), owned.format(), owned);
-        }
         Ok(Some((id, PictureMeta { natural: lwp.layer.size, padding: paddings[0], frame: lwp.layer.frame })))
     }
 
@@ -363,7 +356,7 @@ impl Engine {
             if prepared.layers.is_empty() {
                 return Ok(None);
             }
-            let (texture, _view) = engine.compositor.bake_picture(
+            let texture = engine.compositor.bake_picture(
                 comp,
                 camera,
                 &prepared.layers,
@@ -377,16 +370,14 @@ impl Engine {
             );
             let converted = engine.compositor.convert_image_encoding(
                 &mut encoder,
-                &texture,
+                &texture.texture,
                 true,
-                !texture.format().is_srgb(),
+                !texture.texture.format().is_srgb(),
                 true,
             );
             engine.compositor.ctx.queue_commands([encoder.finish()]);
-            let id = crate::render::compositor::readback::ask_texture(&engine.compositor.ctx, &converted)
+            let id = crate::render::compositor::readback::ask_texture(&engine.compositor.ctx, &converted.texture)
                 .map_err(|error| EngineError::Store(error.to_string()))?;
-            let (width, height) = (converted.width(), converted.height());
-            engine.compositor.effect_scratch.release(width, height, converted.format(), converted);
             Ok(Some((id, PictureMeta { natural: [comp.width as f32, comp.height as f32], padding: 0, frame: None })))
         })?;
 

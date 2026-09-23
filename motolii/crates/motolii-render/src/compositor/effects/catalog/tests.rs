@@ -114,11 +114,10 @@ fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
     });
     let src = texture(wgpu::TextureUsages::TEXTURE_BINDING);
     let dst = texture(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC);
-    let mut scratch = super::super::EffectScratch::default();
     let params: Vec<(String, f32)> = params.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect();
     let scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let mut encoder = ctx.device.create_command_encoder(&Default::default());
-    program.record(ctx, &mut encoder, &mut scratch, &[&src.create_view(&Default::default())], &dst.create_view(&Default::default()), &params, [2.0, 2.0]);
+    program.record(ctx, &mut encoder, &[&src.create_view(&Default::default())], &dst.create_view(&Default::default()), &params, [2.0, 2.0]);
     let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: 256 * 2, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
     encoder.copy_texture_to_buffer(dst.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(2) } }, wgpu::Extent3d { width: 2, height: 2, depth_or_array_layers: 1 });
     let commands = encoder.finish();

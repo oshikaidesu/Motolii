@@ -207,7 +207,7 @@ impl Compositor {
             return Ok(None);
         }
         let draw_data = builder.build(&self.ctx, label);
-        let texture = self.create_blend_scratch_texture(width, height);
+        let texture = self.picture_texture(width, height);
         let mut view_builder = ViewBuilder::new_with_external_resolved(
             &self.ctx,
             TargetConfiguration {
@@ -225,20 +225,14 @@ impl Compositor {
                 ..Default::default()
             },
             ViewBuilderId::new(self.next_readback),
-            &texture,
+            &texture.texture,
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
         view_builder.queue_draw(&self.ctx, draw_data);
         let command_buffer = view_builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?;
         self.ctx.queue_commands([command_buffer]);
-        self.next_effect_key += 1;
-        let imported = self
-            .ctx
-            .texture_manager_2d
-            .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &texture)
-            .map_err(|e| CompositorError::Effect(e.to_string()))?;
-        Ok(Some(imported))
+        Ok(Some(self.import_premultiplied(&texture)?))
     }
 }
 

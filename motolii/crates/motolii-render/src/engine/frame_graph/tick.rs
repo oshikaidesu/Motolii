@@ -96,9 +96,8 @@ impl Engine {
                     self.collect_analysis_pictures();
                 }
                 // The frame itself, on the history just rebuilt.
-                let c = &mut self.compositor;
-                c.baked_effects.clear(&mut c.effect_scratch);
-                c.feedback_seen.clear();
+                self.compositor.baked_effects.clear();
+                self.compositor.feedback_seen.clear();
                 self.tick_frame = None;
                 let prepared = self.prepare_document_frame(doc, time, views, stats)?;
                 for view in views {
@@ -130,7 +129,7 @@ impl Engine {
             .copied()
             .unwrap_or_default();
         // Each layer's own effect chain reads only the document frame: run once, here, for every view.
-        let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene.layers)?;
+        let (pictures, paddings, spills) = self.compositor.effective_layer_textures(&scene.layers)?;
 
         // The world the preparation left: its environment, the blocks' motion, and its one light
         // (captured in the preparation, where it saw every plate's members).

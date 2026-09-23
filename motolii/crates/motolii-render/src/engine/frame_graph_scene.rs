@@ -160,7 +160,7 @@ impl Engine {
         // The plates' members this capture sees (the top level is the frame's own layer list).
         self.reflectable_ids = std::mem::take(&mut prep.plates.member_ids);
         scene.extend(prep.plates.reflectables.drain(..));
-        let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene)?;
+        let (pictures, paddings, spills) = self.compositor.effective_layer_textures(&scene)?;
         let world = prep.seam.camera_relative_world();
         let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills, world, world);
         let environment = self.compositor.world_environment.clone();
@@ -638,7 +638,7 @@ impl Engine {
                     Ok((prepared, top))
                 })?;
                 if prepared.layers.is_empty() && *absent_when_empty { return Ok(None); }
-                let (texture, _) = self.compositor.bake_picture(prep.comp, prep.seam.composition_picture(), &prepared.layers, *background, 1.0, Some(&light), None)?;
+                let texture = self.compositor.bake_picture(prep.comp, prep.seam.composition_picture(), &prepared.layers, *background, 1.0, Some(&light), None)?;
                 Ok(self.compositor.import_premultiplied(&texture).ok())
             }
         })();

@@ -30,7 +30,7 @@ impl Engine {
             },
             passes: Vec::new(),
         };
-        let (texture, _view) = self.compositor.render_to_texture(
+        let texture = self.compositor.render_to_texture(
             comp,
             camera,
             std::slice::from_ref(&source),
@@ -110,7 +110,7 @@ impl Engine {
         let (comp, camera) = (prep.comp, prep.seam.composition_picture());
         self.plate_bakes += 1;
         self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.as_ref().map_or(0, |light| light.serial)));
-        let (texture, _view) = self.compositor.bake_picture(comp, camera, &sources, crate::render::compositor::NO_BACKGROUND, density, light.as_ref(), None)?;
+        let texture = self.compositor.bake_picture(comp, camera, &sources, crate::render::compositor::NO_BACKGROUND, density, light.as_ref(), None)?;
         let imported = self.compositor.import_premultiplied(&texture)?;
         Ok(Self::plate_layer(imported, comp, &sources, output_blend, placement))
     }
@@ -131,7 +131,7 @@ impl Engine {
             source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
         }
         let size = |side: u32| if density >= 1.0 { side } else { ((side as f32 * density).ceil() as u32).max(1) };
-        let target = self.compositor.create_blend_scratch_texture(size(comp.width), size(comp.height));
+        let target = self.compositor.picture_texture(size(comp.width), size(comp.height));
         let imported = self.compositor.import_premultiplied(&target)?;
         let layer = Self::plate_layer(imported.clone(), comp, &sources, CompositeBlendMode::Normal, placement);
         prep.plates.reflectables.extend(sources.iter().cloned());
@@ -245,7 +245,7 @@ impl Engine {
 
 /// A plate whose picture is baked after the frame's reflection capture.
 pub(in crate::engine) struct PendingPlate {
-    target: wgpu::Texture,
+    target: re_renderer::GpuTexture,
     /// The plate's picture as layers refer to it (its identity until it is baked).
     picture: crate::render::compositor::GpuTexture2D,
     comp: CompSpec,

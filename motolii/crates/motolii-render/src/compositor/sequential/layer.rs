@@ -100,8 +100,8 @@ impl Compositor {
         let layer_view = layer_canvas.default_view.clone();
         let matte_view = matte_canvas.default_view.clone();
         let window = Window::output(comp);
-        let out_texture = self.create_blend_scratch_texture(window.width, window.height);
-        let out_view = out_texture.create_view(&Default::default());
+        let out_texture = self.picture_texture(window.width, window.height);
+        let out_view = out_texture.default_view.clone();
 
         let mut encoder = self
             .ctx
@@ -112,13 +112,11 @@ impl Compositor {
         let Self {
             ctx,
             matte_vism,
-            effect_scratch,
             ..
         } = self;
         matte_vism.get(ctx).record_over(
             ctx,
             &mut encoder,
-            effect_scratch,
             &[&layer_view, &matte_view],
             &out_view,
             &[("mode".to_owned(), matte::matte_mode_index(mode) as f32)],
@@ -126,13 +124,7 @@ impl Compositor {
         );
         self.ctx.queue_commands([encoder.finish()]);
 
-        self.next_effect_key += 1;
-        let key = self.next_effect_key;
-        let imported = self
-            .ctx
-            .texture_manager_2d
-            .import_gpu_premultiplied(key, &self.ctx, &out_texture)
-            .map_err(|e| CompositorError::Effect(e.to_string()))?;
+        let imported = self.import_premultiplied(&out_texture)?;
 
         Ok(Layer {
             content: crate::render::compositor::LayerContent::Texture(imported),

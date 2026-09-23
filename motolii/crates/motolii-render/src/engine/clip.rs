@@ -45,7 +45,7 @@ impl Engine {
             frame: None,
         };
         let bake = |engine: &mut Self, layer: Layer, passes: &[EffectPass]| {
-            let (texture, _view) = engine.compositor.render_to_texture(
+            let texture = engine.compositor.render_to_texture(
                 local,
                 flat,
                 &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }],

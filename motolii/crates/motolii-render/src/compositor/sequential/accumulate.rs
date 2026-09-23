@@ -25,14 +25,14 @@ impl Compositor {
             .map_err(|error| CompositorError::Effect(error.to_string()))?;
         let base_view = base_resource.texture.create_view(&Default::default());
         let upper_view = upper_resource.texture.create_view(&Default::default());
-        let output = self.create_blend_scratch_texture(width, height);
-        let output_view = output.create_view(&Default::default());
+        let output = self.picture_texture(width, height);
+        let output_view = output.default_view.clone();
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("motolii-clipping-source-atop"),
         });
-        let Self { ctx, blend_vism, effect_scratch, .. } = self;
+        let Self { ctx, blend_vism, .. } = self;
         blend_vism.get(ctx).record_over(
-            ctx, &mut encoder, effect_scratch, &[&base_view, &upper_view], &output_view,
+            ctx, &mut encoder, &[&base_view, &upper_view], &output_view,
             &[("mode".to_owned(), mode as f32)], [width as f32, height as f32],
         );
         self.ctx.queue_commands([encoder.finish()]);

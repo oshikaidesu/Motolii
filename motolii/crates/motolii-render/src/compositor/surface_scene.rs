@@ -12,14 +12,14 @@ use super::*;
 
 pub(crate) struct ReflectionResources {
     face_size: u32,
-    faces: [wgpu::Texture; 6],
-    atlas: wgpu::Texture,
+    faces: [re_renderer::GpuTexture; 6],
+    atlas: re_renderer::GpuTexture,
     imported: GpuTexture2D,
 }
 
 /// 太陽から見た型紙(light cookie)の置き場。1 枚を frame ごとに描き直す。
 pub(crate) struct LightCookieResources {
-    texture: wgpu::Texture,
+    texture: re_renderer::GpuTexture,
     imported: GpuTexture2D,
 }
 
@@ -85,7 +85,7 @@ impl Compositor {
         let resources = match self.light_cookie.take() {
             Some(r) => r,
             None => {
-                let texture = self.create_blend_scratch_texture(LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE);
+                let texture = self.picture_texture(LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE);
                 let imported = self.import_premultiplied(&texture)?;
                 LightCookieResources { texture, imported }
             }
@@ -108,7 +108,7 @@ impl Compositor {
             ..Default::default()
         };
         super::light::light_view(&mut config, None, None, true);
-        let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture)
+        let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture.texture)
             .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
         builder.queue_draw(&self.ctx, draws.rects.clone());
@@ -550,8 +550,8 @@ impl Compositor {
         let resources = match self.reflection_resources.take() {
             Some(r) if r.face_size == face_size => r,
             _ => {
-                let atlas = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("shared-scene-reflection"),
+                let atlas = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
+                    label: "shared-scene-reflection".into(),
                     size: wgpu::Extent3d {
                         width: face_size * 3,
                         height: face_size * 4,
@@ -569,13 +569,12 @@ impl Compositor {
                         | wgpu::TextureUsages::COPY_DST
                         | wgpu::TextureUsages::COPY_SRC
                         | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
                 });
                 let imported = self.import_premultiplied(&atlas)?;
                 ReflectionResources {
                     face_size,
                     faces: std::array::from_fn(|_| {
-                        self.create_blend_scratch_texture(face_size, face_size)
+                        self.picture_texture(face_size, face_size)
                     }),
                     atlas,
                     imported,
@@ -639,7 +638,7 @@ impl Compositor {
                     &self.ctx,
                     config,
                     ViewBuilderId::new(self.next_readback),
-                    &resources.faces[face],
+                    &resources.faces[face].texture,
                 )
                 .map_err(|e| CompositorError::View(e.to_string()))?;
                 self.next_readback += 1;
@@ -661,13 +660,13 @@ impl Compositor {
             for face in 0..6 {
                 capture.copy_texture_to_texture(
                     wgpu::TexelCopyTextureInfo {
-                        texture: &resources.faces[face],
+                        texture: &resources.faces[face].texture,
                         mip_level: 0,
                         origin: wgpu::Origin3d::ZERO,
                         aspect: wgpu::TextureAspect::All,
                     },
                     wgpu::TexelCopyTextureInfo {
-                        texture: &resources.atlas,
+                        texture: &resources.atlas.texture,
                         mip_level: 0,
                         origin: wgpu::Origin3d {
                             x: face as u32 % 3 * face_size,
@@ -686,7 +685,7 @@ impl Compositor {
         }
         self.ctx
             .texture_manager_2d
-            .generate_mipmaps(&self.ctx, &mut capture, &resources.atlas);
+            .generate_mipmaps(&self.ctx, &mut capture, &resources.atlas.texture);
         self.ctx.queue_commands([capture.finish()]);
         let influence_radii = [origins[0], *origins.last().unwrap()].map(|origin| {
             candidates
@@ -728,7 +727,7 @@ impl Compositor {
             self.reflection_diagnostic =
                 Some(super::reflection_diagnostic::CaptureDiagnostic::enqueue(
                     &self.ctx,
-                    &resources.atlas,
+                    &resources.atlas.texture,
                     metadata,
                 ));
         }

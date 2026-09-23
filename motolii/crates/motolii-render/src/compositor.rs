@@ -404,8 +404,6 @@ pub struct Compositor {
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) light_cookie: Option<surface_scene::LightCookieResources>,
     pub(crate) next_readback: u64,
-    pub(crate) next_effect_key: u64,
-    pub(crate) effect_scratch: effects::EffectScratch,
     /// 層の持ち物: 焼いた効果。view が何枚でも、静止した層は焼かない。
     pub(crate) baked_effects: render_effects::BakedEffects,
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,

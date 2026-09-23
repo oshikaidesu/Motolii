@@ -45,8 +45,8 @@ impl super::Compositor {
             .map_err(|error| super::CompositorError::Effect(error.to_string()))?;
         let layer_view = layer_resource.texture.create_view(&Default::default());
         let mask_view = mask_resource.texture.create_view(&Default::default());
-        let out_texture = self.create_blend_scratch_texture(width, height);
-        let out_view = out_texture.create_view(&Default::default());
+        let out_texture = self.picture_texture(width, height);
+        let out_view = out_texture.default_view.clone();
         let mut encoder = self
             .ctx
             .device
@@ -57,13 +57,11 @@ impl super::Compositor {
         let Self {
             ctx,
             matte_vism,
-            effect_scratch,
             ..
         } = self;
         matte_vism.get(ctx).record_over(
             ctx,
             &mut encoder,
-            effect_scratch,
             &[&layer_view, &mask_view],
             &out_view,
             &[("mode".to_owned(), matte_mode_index(MatteMode::Alpha) as f32)],

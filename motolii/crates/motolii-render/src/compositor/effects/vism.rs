@@ -12,7 +12,6 @@ use re_renderer::{
 };
 
 use super::isf::{IsfInputType, IsfManifest};
-use super::EffectScratch;
 
 /// 入力の並びから束縛番号を決める。image は texture と sampler の2つを使う。
 fn target_format(manifest: &IsfManifest, name: &str) -> wgpu::TextureFormat {
@@ -126,7 +125,7 @@ pub(crate) struct VismProgram {
     pipelines: Vec<GpuRenderPipelineHandle>,
     texture_layout: GpuBindGroupLayoutHandle,
     params_layout: GpuBindGroupLayoutHandle,
-    sampler: wgpu::Sampler,
+    sampler: re_renderer::GpuSamplerHandle,
     image_order: Vec<usize>,
     param_order: Vec<usize>,
 }
@@ -261,13 +260,14 @@ impl VismProgram {
             })
             .collect();
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some(&format!("{label}-sampler")),
+        let filter = if manifest.linear_sampling { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
+        let sampler = ctx.gpu_resources.samplers.get_or_create(device, &re_renderer::SamplerDesc {
+            label: format!("{label}-sampler").into(),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: if manifest.linear_sampling { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest },
-            min_filter: if manifest.linear_sampling { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest },
+            mag_filter: filter,
+            min_filter: filter,
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
@@ -284,32 +284,31 @@ impl VismProgram {
     }
 
     /// 宣言された image 入力に `sources` を順に渡し、`PASSES` があればその段数だけ
-    /// 描く。中間ターゲットは Host(`EffectScratch`)から借りて、記録し終えたら返す。
+    /// 描く。中間ターゲットは re_renderer の pool から借りる(持つ者が居なくなれば pool へ戻る)。
     /// **フレームを跨いで持ち越さない**(裁定: StatefulFilter 拒否)。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(
         &self,
         ctx: &RenderContext,
         encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut EffectScratch,
         sources: &[&wgpu::TextureView],
         dst_view: &wgpu::TextureView,
         params: &[(String, f32)],
         render_size: [f32; 2],
     ) {
-        self.record_in_frame(ctx, encoder, scratch, sources, dst_view, params, ImageFrame { size: render_size, origin: [0.0;2], pixels: render_size.map(|n| n.max(1.0) as u32) });
+        self.record_in_frame(ctx, encoder, sources, dst_view, params, ImageFrame { size: render_size, origin: [0.0;2], pixels: render_size.map(|n| n.max(1.0) as u32) });
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame) {
-        self.record_feedback_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame, None)
+    pub(crate) fn record_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame) {
+        self.record_feedback_in_frame(ctx, encoder, sources, dst_view, params, frame, None)
     }
 
     /// PERSISTENT な target は host の状態(`feedback`)の 2 枚を使う: 書く pass とその前の pass は
     /// 前のフレーム(`prev`)を読み、書く先は今のフレーム(`next`)。後の pass は `next` を読む。
     /// 状態が無い(鍵が刻まれていない)persistent は、毎フレーム透明を初期条件にする。
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_feedback_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame, feedback: Option<(&mut super::FeedbackState, super::FeedbackStep)>) {
+    pub(crate) fn record_feedback_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame, feedback: Option<(&mut super::FeedbackState, super::FeedbackStep)>) {
         let device = &ctx.device;
         let queue = &ctx.queue;
         let extent = frame.pixels;
@@ -328,29 +327,25 @@ impl VismProgram {
             });
             drop(pass);
         };
-        // (texture, view, format, 借り物か, 前のフレームの view)
-        let mut targets: Vec<(wgpu::Texture, wgpu::TextureView, wgpu::TextureFormat, bool, Option<wgpu::TextureView>)> = Vec::new();
+        // (texture, view, 前のフレームの view)
+        let mut targets: Vec<(re_renderer::GpuTexture, wgpu::TextureView, Option<wgpu::TextureView>)> = Vec::new();
         for name in &slots {
             let format = target_format(&self.manifest, name);
             let declaration = self.manifest.passes.iter().find(|p| p.target.as_deref() == Some(name));
             let width = declaration.and_then(|p| p.width).map_or(extent[0], |v| v.resolve(extent[0]));
             let height = declaration.and_then(|p| p.height).map_or(extent[1], |v| v.resolve(extent[1]));
             if !persistent.contains(name) {
-                let texture = scratch.acquire(device, width, height, format);
-                let view = texture.create_view(&Default::default());
-                targets.push((texture, view, format, true, None));
+                let texture = super::pass_texture(ctx, width, height, format);
+                let view = texture.default_view.clone();
+                targets.push((texture, view, None));
                 continue;
             }
             match state.as_deref_mut() {
                 Some(state) => {
-                    let fits = state.targets.get(*name).is_some_and(|t| t.next.width() == width && t.next.height() == height && t.next.format() == format);
+                    let fits = state.targets.get(*name).is_some_and(|t| t.next.texture.width() == width && t.next.texture.height() == height && t.next.texture.format() == format);
                     if !fits {
-                        let make = || device.create_texture(&wgpu::TextureDescriptor {
-                            label: Some("motolii-feedback-state"), size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-                            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format,
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
-                            view_formats: &[],
-                        });
+                        // The history is the host's to keep alive: two pool textures held by the state.
+                        let make = || super::pass_texture(ctx, width, height, format);
                         state.targets.insert((*name).to_owned(), super::FeedbackTarget { prev: make(), next: make() });
                         // 寸法や形式が変われば履歴は続けられない: 初期条件から。
                         step = super::FeedbackStep::Restart;
@@ -358,22 +353,21 @@ impl VismProgram {
                     let target = state.targets.get_mut(*name).expect("just ensured");
                     match step {
                         super::FeedbackStep::Advance => std::mem::swap(&mut target.prev, &mut target.next),
-                        super::FeedbackStep::Restart => clear(encoder, &target.prev.create_view(&Default::default())),
+                        super::FeedbackStep::Restart => clear(encoder, &target.prev.default_view),
                         super::FeedbackStep::Reuse => {}
                     }
-                    let view = target.next.create_view(&Default::default());
-                    let prev_view = target.prev.create_view(&Default::default());
-                    targets.push((target.next.clone(), view, format, false, Some(prev_view)));
+                    let view = target.next.default_view.clone();
+                    let prev_view = target.prev.default_view.clone();
+                    targets.push((target.next.clone(), view, Some(prev_view)));
                 }
                 None => {
                     // 持ち主が無い: 前のフレームは透明(借り物を空にして読ませる)。
-                    let prev = scratch.acquire(device, width, height, format);
-                    let prev_view = prev.create_view(&Default::default());
+                    let prev = super::pass_texture(ctx, width, height, format);
+                    let prev_view = prev.default_view.clone();
                     clear(encoder, &prev_view);
-                    let texture = scratch.acquire(device, width, height, format);
-                    let view = texture.create_view(&Default::default());
-                    targets.push((texture, view, format, true, Some(prev_view)));
-                    scratch.release(width, height, format, prev);
+                    let texture = super::pass_texture(ctx, width, height, format);
+                    let view = texture.default_view.clone();
+                    targets.push((texture, view, Some(prev_view)));
                 }
             }
         }
@@ -388,6 +382,8 @@ impl VismProgram {
             .get(self.params_layout)
             .expect("vism params bind group layout");
         let render_pipelines = ctx.gpu_resources.render_pipelines.resources();
+        let samplers = ctx.gpu_resources.samplers.resources();
+        let sampler = samplers.get(self.sampler).expect("vism sampler");
 
         // 読める image = 入力 + 中間ターゲット。並びは宣言順で固定。
         let mut views: Vec<&wgpu::TextureView> = Vec::new();
@@ -398,7 +394,7 @@ impl VismProgram {
                 .expect("image 入力を宣言した Vism には最低1枚要る");
             views.push(view);
         }
-        for (_, view, _, _, _) in &targets {
+        for (_, view, _) in &targets {
             views.push(view);
         }
 
@@ -411,7 +407,7 @@ impl VismProgram {
             let mut entries: Vec<wgpu::BindGroupEntry> = Vec::with_capacity(views.len() * 2);
             for (order_index, view) in views.iter().enumerate() {
                 let slot = order_index.checked_sub(inputs);
-                let prev = slot.and_then(|s| targets[s].4.as_ref());
+                let prev = slot.and_then(|s| targets[s].2.as_ref());
                 let bound = match (prev, slot.and_then(|s| writer_of[s])) {
                     (Some(prev), Some(writer)) if pass_index <= writer => prev,
                     _ => match writing {
@@ -426,7 +422,7 @@ impl VismProgram {
                 });
                 entries.push(wgpu::BindGroupEntry {
                     binding: tex_binding + 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    resource: wgpu::BindingResource::Sampler(sampler),
                 });
             }
             device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -439,9 +435,7 @@ impl VismProgram {
         let pass_count = self.pipelines.len();
         for pass_index in 0..pass_count {
             let params_bind = self.params_bind_group(
-                device,
-                queue,
-                params_layout,
+                ctx,
                 params,
                 self.manifest.passes.get(pass_index).map_or(render_size, |p| [p.width.map_or(render_size[0], |w| w.resolve(extent[0]) as f32), p.height.map_or(render_size[1], |h| h.resolve(extent[1]) as f32)]),
                 pass_index as u32,
@@ -486,23 +480,23 @@ impl VismProgram {
             drop(pass);
         }
 
-        // 記録し終えたので返す。次に借りた者のパスは、この後ろで実行される。状態の 2 枚は host の物。
-        for (texture, _, format, borrowed, _) in targets {
-            if borrowed { scratch.release(texture.width(), texture.height(), format, texture); }
-        }
+        // The targets go back to the pool when dropped here; the state's two are the host's to keep.
+        drop(targets);
     }
 
+    /// The pass's params, render size, pass index and clock (and a warp's origin), one uniform each,
+    /// through re_renderer's uniform belt; bound by a pooled bind group.
     fn params_bind_group(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        layout: &wgpu::BindGroupLayout,
+        ctx: &RenderContext,
         params: &[(String, f32)],
         render_size: [f32; 2],
         pass_index: u32,
         origin: [f32; 2],
-    ) -> wgpu::BindGroup {
-        let mut buffers: Vec<wgpu::Buffer> = Vec::with_capacity(self.param_order.len() + 2);
+    ) -> re_renderer::GpuBindGroup {
+        // One 256-byte row per binding (the belt's alignment); a shader reads its first floats.
+        let mut rows: Vec<[f32; 64]> = Vec::with_capacity(self.param_order.len() + 3);
+        let row = |values: &[f32]| { let mut r = [0.0f32; 64]; r[..values.len()].copy_from_slice(values); r };
         for &index in &self.param_order {
             let input = &self.manifest.inputs[index];
             let count = input.ty.component_count().max(1);
@@ -513,67 +507,25 @@ impl VismProgram {
                     components[i] = *value;
                 }
             }
-            let mut bytes = vec![0u8; count * 4];
-            for i in 0..count {
-                bytes[i * 4..i * 4 + 4].copy_from_slice(&components[i].to_le_bytes());
-            }
-            buffers.push(uniform_buffer(device, queue, "vism-param", &bytes));
+            rows.push(row(&components[..count]));
         }
-        let mut render_info = [0u8; 8];
-        render_info[0..4].copy_from_slice(&render_size[0].to_le_bytes());
-        render_info[4..8].copy_from_slice(&render_size[1].to_le_bytes());
-        buffers.push(uniform_buffer(
-            device,
-            queue,
-            "vism-render-info",
-            &render_info,
-        ));
+        rows.push(row(&render_size));
         // (段, TIME, TIMEDELTA, FRAMEINDEX)。同梱の WGSL は先頭の f32 だけを pass_index として読む。
-        let mut pass_info = [0u8; 16];
-        pass_info[..4].copy_from_slice(&(pass_index as f32).to_le_bytes());
+        let mut pass_info = [pass_index as f32, 0.0, 0.0, 0.0];
         for (i, key) in CLOCK_KEYS.iter().enumerate() {
-            let v = params.iter().find(|(name, _)| name == key).map_or(0.0, |(_, v)| *v);
-            pass_info[(i + 1) * 4..(i + 2) * 4].copy_from_slice(&v.to_le_bytes());
+            pass_info[i + 1] = params.iter().find(|(name, _)| name == key).map_or(0.0, |(_, v)| *v);
         }
-        buffers.push(uniform_buffer(device, queue, "vism-pass-index", &pass_info));
-
+        rows.push(row(&pass_info));
         if self.manifest.stage == super::IsfStage::Warp {
-            let mut bytes = [0u8; 8];
-            bytes[..4].copy_from_slice(&origin[0].to_le_bytes());
-            bytes[4..].copy_from_slice(&origin[1].to_le_bytes());
-            buffers.push(uniform_buffer(device, queue, "vism-material-origin", &bytes));
+            rows.push(row(&origin));
         }
-
-
-        let entries: Vec<wgpu::BindGroupEntry> = buffers
-            .iter()
-            .enumerate()
-            .map(|(binding, buffer)| wgpu::BindGroupEntry {
-                binding: binding as u32,
-                resource: buffer.as_entire_binding(),
-            })
-            .collect();
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("vism-params-bind"),
-            layout,
-            entries: &entries,
+        let entries = re_renderer::create_and_fill_uniform_buffer_batch(ctx, "vism-params".into(), rows.into_iter());
+        ctx.gpu_resources.bind_groups.alloc(&ctx.device, &ctx.gpu_resources, &re_renderer::BindGroupDesc {
+            label: "vism-params-bind".into(),
+            entries: entries.into_iter().collect(),
+            layout: self.params_layout,
         })
     }
-}
-
-fn uniform_buffer(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    label: &str,
-    bytes: &[u8],
-) -> wgpu::Buffer {
-    let _ = queue;
-    // Filled at creation: no staging copy through the queue for a buffer written once.
-    wgpu::util::DeviceExt::create_buffer_init(device, &wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents: bytes,
-        usage: wgpu::BufferUsages::UNIFORM,
-    })
 }
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
