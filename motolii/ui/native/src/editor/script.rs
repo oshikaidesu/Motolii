@@ -52,7 +52,33 @@ impl EditorRuntime {
         let before = self.doc.edit_head();
         self.run_script(&source, path)?;
         self.last_script = Some((path.to_owned(), before, self.doc.edit_head()));
+        self.last_script_source = Some(source);
+        self.watch_script(path);
         Ok(())
+    }
+
+    /// Saving the script wakes the window, which asks for `reloadEffects`; that reruns the script
+    /// when its source changed. The folder is watched, not the file: editors save by replacing it.
+    fn watch_script(&mut self, path: &str) {
+        use notify::Watcher;
+        let Some(wake) = self.wake.clone() else { return };
+        let file = std::path::PathBuf::from(path);
+        let (Some(folder), Some(name)) = (file.parent().map(std::path::Path::to_path_buf), file.file_name().map(std::ffi::OsStr::to_owned)) else { return };
+        let watcher = notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
+            let Ok(event) = event else { return };
+            let touched = matches!(event.kind, notify::EventKind::Create(_) | notify::EventKind::Modify(_))
+                && event.paths.iter().any(|p| p.file_name() == Some(name.as_os_str()));
+            if touched { wake(); }
+        });
+        self.script_watch = watcher.ok().and_then(|mut w| w.watch(&folder, notify::RecursiveMode::NonRecursive).ok().map(|_| w));
+    }
+
+    /// Reruns the last script file if its source is no longer what it ran with.
+    pub(crate) fn rerun_script_if_saved(&mut self) -> Result<(), String> {
+        let Some((path, _, _)) = self.last_script.clone() else { return Ok(()) };
+        let Ok(source) = std::fs::read_to_string(&path) else { return Ok(()) };
+        if self.last_script_source.as_deref() == Some(source.as_str()) { return Ok(()); }
+        self.rerun_script()
     }
 
     /// 直前のスクリプトの結果を戻して、同じ file を読み直して走らせる(書いて・保存して・見る)。
@@ -244,6 +270,24 @@ mod tests {
         assert_eq!(g.stops.iter().map(|s| s.offset).collect::<Vec<_>>(), [0.0, 0.25, 1.0]);
         let d = g.end.sub(g.start);
         assert!(d.x > 0.0 && d.y.abs() < 1e-9, "\"to right\" runs left to right: {:?} → {:?}", g.start, g.end);
+    }
+
+    #[test]
+    fn saving_the_script_reruns_it_on_the_next_wake() {
+        let dir = std::env::temp_dir().join(format!("motolii-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("live.js");
+        std::fs::write(&path, r#"comp({ seconds: 1 }); rectangle({ name: "One" });"#).unwrap();
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.request(serde_json::json!({ "op": "runScript", "path": path })).unwrap();
+        rt.request(serde_json::json!({ "op": "reloadEffects" })).unwrap();
+        assert_eq!(rt.doc.view().layers().len(), 1, "an unchanged file is not run again");
+        std::fs::write(&path, r#"comp({ seconds: 1 }); rectangle({ name: "One" }); ellipse({ name: "Two" });"#).unwrap();
+        rt.request(serde_json::json!({ "op": "reloadEffects" })).unwrap();
+        let view = rt.doc.view();
+        let mut names: Vec<_> = view.layers().iter().map(|id| view.attrs(*id).unwrap().unwrap().name).collect();
+        names.sort();
+        assert_eq!(names, ["One", "Two"], "the saved script replaced the old run");
     }
 
     /// 同梱の例は説明書の一部。窓の名前が変わったらここが赤。

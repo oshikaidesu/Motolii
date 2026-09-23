@@ -45,6 +45,11 @@ pub struct EditorRuntime {
     pub(crate) history: editor::history::Ledger,
     effects_watch: Option<motolii_render::engine::CatalogWatcher>,
     last_script: Option<(String, i64, i64)>,
+    /// The source the last script file ran with: a save that changes it reruns the script.
+    last_script_source: Option<String>,
+    /// How a file watcher wakes the window's thread (set with the effect watch).
+    wake: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+    script_watch: Option<notify::RecommendedWatcher>,
     /// 出したコマの列。再生中は「出して返る」ので、描き終わりはここが次の拍で拾う。
     frames: frames::Frames,
     /// 再生中の 1 コマを持ち主ごとに畳む。▶ で空にし、Ⅱ で 1 度だけ出す。
@@ -99,7 +104,7 @@ impl EditorRuntime {
             preview: None, preview_tag: None, stage_drag: None,
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
             flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
-            history, effects_watch: None, last_script: None, frames,
+            history, effects_watch: None, last_script: None, last_script_source: None, wake: None, script_watch: None, frames,
             owners: Default::default(), last_window: Default::default(),
             playback_rendered_frame: None,
         })
@@ -426,7 +431,9 @@ pub unsafe extern "C" fn motolii_probe_watch_effects(ctx: *mut EditorRuntime, wa
     unsafe impl Sync for User {}
     impl User { fn pointer(&self) -> *mut std::ffi::c_void { self.0 } }
     let user = User(user);
-    match motolii_render::engine::watch_effect_catalog(move || unsafe { wake(user.pointer()) }) {
+    let wake: std::sync::Arc<dyn Fn() + Send + Sync> = std::sync::Arc::new(move || unsafe { wake(user.pointer()) });
+    probe.wake = Some(wake.clone());
+    match motolii_render::engine::watch_effect_catalog(move || wake()) {
         Ok(watch) => { probe.effects_watch = Some(watch); 0 }
         Err(error) => { probe.error = Some(format!("Effect watch: {error}")); -2 }
     }

@@ -126,7 +126,9 @@ impl EditorRuntime{
         crate::render::engine::refresh_effect_catalog();
         // 焼いている間は disk にコマが増える: 「無い」の記憶を捨てて見に行く。
         if self.freezer.running().is_some(){self.engine.refresh_frozen();}
-        if op=="status"||op=="exportStatus"||op=="reloadEffects"{return Ok(())}
+        // A watcher woke the window: the effect shelf is refreshed above; a saved script reruns.
+        if op=="reloadEffects"{return self.rerun_script_if_saved()}
+        if op=="status"||op=="exportStatus"{return Ok(())}
         if op=="stageView" {
             self.cancel_preview();
             if let Some(orbit)=j["orbit"].as_array() {

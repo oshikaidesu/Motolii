@@ -9,6 +9,8 @@ name = "motolii_ui"
 crate-type = ["cdylib"]
 
 [dependencies]
+# Saving a running script reruns it: the same OS file events the effect shelf uses.
+notify = "=8.2.0"
 motolii-doc = { path = "../../crates/motolii-doc" }
 motolii-edit = { path = "../extensions/edit" }
 motolii-render = { path = "../../crates/motolii-render", features = ["shared-bgra-output"] }
