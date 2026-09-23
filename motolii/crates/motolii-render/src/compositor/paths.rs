@@ -172,7 +172,12 @@ impl Compositor {
         if builder.is_empty() { return Ok(None); }
         let mut mesh = builder.into_mesh(&self.ctx, "vector layer");
         // 場は線の中心線の点(錨)で評価する: 線の両側が同じ量だけ動き、線幅が保たれる。
-        for material in &mut mesh.materials { material.field_at_texcoord = step.is_some(); }
+        // Its texcoords are those points, in canvas px: the surface's uv is 0..1 across the canvas,
+        // as an image's is across its picture.
+        for material in &mut mesh.materials {
+            material.field_at_texcoord = step.is_some();
+            material.texcoord_frame = Some((glam::Vec2::ZERO, glam::vec2(canvas.width as f32, canvas.height as f32)));
+        }
         let vertices = mesh.vertex_positions.clone();
         let mut instances = re_renderer::CpuModel::from_single_mesh(mesh).into_gpu_meshes(&self.ctx)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;

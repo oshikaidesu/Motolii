@@ -301,3 +301,57 @@ fn a_repeaters_copies_share_their_layers_views() {
         assert_eq!(engine.surface_work().layer_views - before, 6, "{count} copies, one layer's six Views");
     }
 }
+
+/// `SurfaceIn::uv` means the same on every picture: a Checker of 2×2 cells lights the same corners
+/// of an image, a shape (a path mesh, whose texcoords are path points) and an extruded solid.
+#[test]
+fn a_surfaces_uv_is_the_same_on_an_image_a_shape_and_a_solid() {
+    use crate::doc::store::{Composition, Fps, LayerMeta, LayerTiming, PathSource, Shape, ShapeNode};
+    use crate::doc::vector::{Brush, Fill, Point, Rgb};
+    let dir = tempfile::tempdir().unwrap();
+    let white = dir.path().join("white.png");
+    image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 255, 255, 255])).save(&white).unwrap();
+    let corners = |kind: &str| -> [bool; 4] {
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
+        doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        let source = if kind == "image" { LayerSource::File { path: white.to_string_lossy().into_owned(), fingerprint: None } } else { LayerSource::Shape };
+        doc.apply_all([Intent::AddLayer(layer), Intent::SetMeta { layer, meta: LayerMeta { source, order: 0, timing: LayerTiming::place(0, None, 1) } }]).unwrap();
+        if kind != "image" {
+            let fill = Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() };
+            doc.apply(Intent::SetShapes { layer, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: 32.0, y: 32.0 } }, ops: Vec::new(), stroke: None, fill: Some(fill) })] }).unwrap();
+        }
+        set(&mut doc, layer, property::POSITION, Value::Vec2([16.0, 16.0]));
+        // Off the picture plane, as a layer placed in depth is: drawn as itself, not as a picture of it.
+        set(&mut doc, layer, "position.z", Value::F64(-8.0));
+        let mut effects = Vec::new();
+        if kind == "solid" { effects.push(EffectInstance { id: EffectId(1), plugin_id: crate::extensions::solid::EXTRUDE.into() }); }
+        effects.push(EffectInstance { id: EffectId(0), plugin_id: "motolii.checker".into() });
+        doc.apply(Intent::SetEffects { layer, effects }).unwrap();
+        effect(&mut doc, layer, 0, "cells", Value::F64(2.0));
+        effect(&mut doc, layer, 0, "dark", Value::F64(0.4));
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{kind}: {:?}", engine.layer_failures());
+        // Each kind places its box its own way; the cells are read within the box it drew.
+        let value = |x: u32, y: u32| pixels[((y * 64 + x) * 4 + 1) as usize];
+        let drawn: Vec<(u32, u32)> = (0..64).flat_map(|y| (0..64).map(move |x| (x, y))).filter(|&(x, y)| value(x, y) > 20).collect();
+        let (x0, x1) = (drawn.iter().map(|p| p.0).min().unwrap(), drawn.iter().map(|p| p.0).max().unwrap());
+        let (y0, y1) = (drawn.iter().map(|p| p.1).min().unwrap(), drawn.iter().map(|p| p.1).max().unwrap());
+        // A cell is one colour throughout (not stripes of some other unit): lit or dark as a whole.
+        let cell = |cx: u32, cy: u32| {
+            let (w, h) = ((x1 - x0) / 2, (y1 - y0) / 2);
+            let inside: Vec<bool> = (y0 + cy * h + 2..y0 + (cy + 1) * h - 2)
+                .flat_map(|y| (x0 + cx * w + 2..x0 + (cx + 1) * w - 2).map(move |x| (x, y)))
+                .map(|(x, y)| value(x, y) > 180).collect();
+            let lit = inside.iter().filter(|l| **l).count() as f32 / inside.len() as f32;
+            assert!(lit > 0.95 || lit < 0.05, "{kind}: cell ({cx}, {cy}) is {:.0}% lit — not one cell", lit * 100.0);
+            lit > 0.5
+        };
+        [cell(0, 0), cell(1, 0), cell(0, 1), cell(1, 1)]
+    };
+    let image = corners("image");
+    assert_eq!(image, [true, false, false, true], "the image's cells");
+    assert_eq!(corners("shape"), image, "a shape's uv is its box's, as an image's");
+    assert_eq!(corners("solid"), image, "a solid's front is its box's too");
+}

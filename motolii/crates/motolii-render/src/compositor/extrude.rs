@@ -193,6 +193,7 @@ impl Compositor {
                 // A solid is a volume: it occludes by depth like any geometry, unlike a painted plane.
                 albedo_is_cutout: true,
                 field_at_texcoord: false,
+                texcoord_frame: None,
                 curves: None,
                 label: "layer picture".into(),
                 index_range: re_renderer::Span::from_start_len(0, index_count),

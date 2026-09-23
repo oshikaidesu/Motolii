@@ -45,7 +45,7 @@
       {"name": "surface programs", "why": "Hooks a renderer user writes in WGSL (field, motion, tint, surface); the renderer only calls them.",
        "owns": ["re_renderer/src/renderer/mesh_program.rs", "re_renderer/shader/surface.wgsl", "re_renderer/shader/utils/field.wgsl",
                 "re_renderer/shader/instanced_mesh_base.wgsl", "re_renderer/shader/rectangle_fragment.wgsl", "re_renderer/shader/rectangle_vertex.wgsl"],
-       "items": ["re_renderer/src/mesh.rs:albedo_is_premultiplied", "re_renderer/src/mesh.rs:albedo_is_cutout", "re_renderer/src/mesh.rs:field_at_texcoord",
+       "items": ["re_renderer/src/mesh.rs:albedo_is_premultiplied", "re_renderer/src/mesh.rs:albedo_is_cutout", "re_renderer/src/mesh.rs:field_at_texcoord", "re_renderer/src/mesh.rs:texcoord_frame",
                  "re_renderer/src/renderer/mesh_renderer.rs:params", "re_renderer/src/renderer/mesh_renderer.rs:program",
                  "re_renderer/src/renderer/rectangles.rs:surface", "re_renderer/src/renderer/rectangles.rs:surface_params",
                  "re_renderer/src/renderer/rectangles.rs:surface_thickness", "re_renderer/src/renderer/rectangles.rs:subdivisions",
