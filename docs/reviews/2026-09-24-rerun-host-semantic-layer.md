@@ -43,3 +43,47 @@ The scan was a throwaway script. It classifies the fork's public additions again
 What remains on the fork's WGSL side is the generic contract: the field and surface hooks and the view near-plane fade.
 
 The oracle has three parts, all run against the rev-pinned fork. motolii-render lib passes 323 and fails 8. motolii-ui lib passes 92 and fails 5. Every one of those failures predates the migration. The fork's `re_renderer` tests and the native Viewer build (`rerun-cli`, native_viewer) are green.
+
+## On current upstream, with the old routes removed (2026-09-24)
+
+The fork was reapplied onto current upstream main (`2309184bbb`, 590 commits past the old base). It is now branch `motolii/host-core-current` at `a8b897ef`, and Motolii is pinned to that rev. Upstream API changes were followed as migration, not redesign: `re_span::Span`, renderer lookups that return a `Result`, wgpu/naga 30, `Loggable` split into `ArrowDataType` + `To/FromArrow(Opt)`, sample sources, `FrameRetainedCache`, and focal length in the frame uniform.
+
+Fork changes on top of the reapply:
+- **Data textures for per-element data.** Upstream requests WebGL2-class device limits, which allow no storage buffers. The fork's storage buffers in the global and mesh layouts made those layouts invalid on the Viewer's device, and a build-only oracle could not see that. Motion and curve fills are now data textures, as upstream keeps per-element data (`motion_at` / `motion_len`).
+- **`new_with_external_resolved`** only validates and imports the caller's texture. It now shares `new`'s body instead of copying it.
+- **Removed:** transient attachments (wgpu 30 forbids storing them, and upstream's volume phase stores the MSAA target), the unused openh264 decoder, dead surface-program pipelines, and the outline-mask accessor.
+
+The migration was held to completion conditions:
+- **Fork:** 191 public additions, all UPSTREAMABLE. MOTOLII_SEMANTICS 0, unclassified 0, `motolii` in the fork diff 0.
+- **Motolii:** HOST_VIOLATION 0.
+- **Negative ownership audit:** the checkpoint's list of forbidden architecture was scanned as symbols across all production sources and the fork diff, with 0 hits. References to old fork revs: 0. Every Rerun crate resolves from the one new rev.
+- **Old routes deleted, not left unused:** the pending video-frame copies, the texture route before FrameGraph (the text texture cache and friends), engine state nobody read, the tick's `not_ported` gate, and tests of removed owners. The compiler then built the workspace without them.
+- **The Viewer at runtime:** re_renderer tests pass (64), and the native `rerun-cli` builds. The re_view_spatial snapshot tests match pure upstream: the same 94 fail on missing LFS assets, with no wgpu validation errors.
+
+### The Plate / Glass fix found by the acceptance
+
+In the real window, Glass Garden's petals were grey. The petals are glass inside a Repeater `.whole()` plate. Such a plate was still baked in the preparation over nothing (`NO_BACKGROUND`), so its glass found no backdrop and showed the environment.
+
+A plate whose members read the backdrop is now `LayerContent::Plate`. The preparation prepares its members' pictures once. Each view draws the members at the plate's place in its stack, with that view's picture below as their backdrop, then runs the plate's effects on the drawing. Plates without glass keep their single bake per frame.
+
+Two contracts pin this:
+- Glass in a plate refracts the picture below it, and looks the same as the copies drawn each. On the old bake this renders grey.
+- A plate without glass is baked once, however many views draw it.
+
+A saved WGSL also now redraws a paused window: the effect catalog's generation is an input of the frame.
+
+### Production acceptance: the existing Glass Garden, unmodified
+
+- **Stage and Camera** show the same world as two views. In the Stage, the orbit line and the glass slab extend beyond the Camera's frame.
+- **2.5D** follows the authored camera and does not billboard to the observer (contract `the_stage_window_draws_beyond_the_frame_and_the_camera_does_not`).
+- **The glass flower** inside the Repeater plate is transparent and refracts the picture below it, in both views.
+- **WGSL hot reload:** editing `vism/glass.wgsl` with no cargo build changed the paused window within seconds, and reverting restored it.
+- **Stage ROI change:** the picture and its window/ROI matched within 1–2 frames (`PROBE room=stage-window`). An OS-level window resize could not be driven from background input and was not exercised.
+- **Playback, 10 s:** both runs had two views (Stage 2443×1374 + Camera) at 60 fps.
+
+  | Build | Frames drawn | Dropped | CPU submit (median / p90 / max, ms) |
+  |---|---|---|---|
+  | dev | 341 | 317 | 10.6 / 13.8 / 37.9 |
+  | release (profile) | 354 | 307 | 8.8 / 10.9 / 51.4 |
+
+- **Oracle:** motolii-render lib passes 322 and fails 8. motolii-ui lib passes 92 and fails 5. Both failure sets are the same as the baseline.
