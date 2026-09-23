@@ -1,6 +1,6 @@
 use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 use crate::doc::store::LayerId;
-use crate::frame_graph::{SceneContentValue, SceneValue, SolverPlanValue};
+use crate::frame_graph::{SceneContentValue, SceneLayerValue, SceneValue, SolverPlanValue};
 use crate::render::compositor::LayerContent;
 use crate::render::compositor::effects::surface_program::SurfaceRecipe;
 use crate::render_graph::{Composed, Extrusion, ImageInput, LayerWork, RasterSource, RenderGraph};
@@ -11,6 +11,16 @@ use crate::render::engine::{Engine, EngineError};
 pub(super) struct GpuSceneValue {
     pub layers: Vec<LayerWithPasses>,
     pub layer_ids: Vec<LayerId>,
+    /// For each output, the scene contribution it draws when it is that contribution alone
+    /// (no clip group, no matte): only those can take a new placement without being prepared again.
+    pub plain_sources: Vec<Option<usize>>,
+}
+
+/// The scene a prepared frame was built from, kept to recognise a frame that differs only in
+/// where things are placed.
+pub(super) struct PreparedFrame {
+    scene: SceneValue,
+    prepared: GpuSceneValue,
 }
 
 impl Engine {
@@ -27,12 +37,20 @@ impl Engine {
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
         if physics_overlays.is_empty() {
+            if let Some(mut prepared) = self.moved_only(scene) {
+                self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
+                self.drawn_layers = prepared.layers.len();
+                return Ok(prepared);
+            }
             // Culling is execution planning only: semantic SceneValue remains
             // untouched and cacheable. The planner may omit only simple media
             // contributions that cannot feed analysis/matte/solver work.
             let planned = self.plan_frame_graph_scene(scene, solver, comp, projection_camera);
+            let scene_for_frame = scene;
             let scene = planned.as_ref().unwrap_or(scene);
             let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
+            self.full_prepares += 1;
+            self.remember_prepared(scene_for_frame, planned.is_none(), &prepared);
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
             self.drawn_layers = prepared.layers.len();
             return Ok(prepared);
@@ -56,6 +74,45 @@ impl Engine {
         }
         self.drawn_layers = prepared.layers.len();
         Ok(prepared)
+    }
+
+    /// The previous frame's prepared layers with this frame's placements, when nothing but
+    /// placement changed. No lowering, no preparation: the cost is one pass over the layers.
+    fn moved_only(&mut self, scene: &SceneValue) -> Option<GpuSceneValue> {
+        let last = self.last_prepared.as_ref()?;
+        if last.scene.layers.len() != scene.layers.len()
+            || !last.scene.layers.iter().zip(&scene.layers).all(|(a, b)| same_but_placement(a, b))
+        {
+            return None;
+        }
+        let mut prepared = last.prepared.clone();
+        for (layer, source) in prepared.layers.iter_mut().zip(&prepared.plain_sources) {
+            let Some(index) = *source else { return None };
+            let placed = &scene.layers[index];
+            let placement = &mut layer.layer.placement;
+            placement.transform = placed.transform.affine;
+            placement.world_transform = Some(placed.transform.spatial);
+            placement.z = placed.transform.spatial.translation.z;
+            placement.opacity = placed.opacity;
+            placement.order = i32::from(placed.order);
+        }
+        self.last_prepared = Some(PreparedFrame { scene: scene.clone(), prepared: prepared.clone() });
+        Some(prepared)
+    }
+
+    /// Keeps a prepared frame whose layers depend only on their contributions' content, so a
+    /// later frame that merely moves them can reuse it.
+    fn remember_prepared(&mut self, scene: &SceneValue, uncut: bool, prepared: &GpuSceneValue) {
+        // Preparation that moved a layer itself (a planar warp's frame) is not a placement to replace.
+        let placed_as_authored = prepared.layers.iter().zip(&prepared.plain_sources).all(|(layer, source)| {
+            source.is_some_and(|index| {
+                let authored = &scene.layers[index];
+                layer.layer.placement.transform == authored.transform.affine
+                    && layer.layer.placement.world_transform == Some(authored.transform.spatial)
+            })
+        });
+        let reusable = uncut && placed_as_authored && scene.layers.iter().all(placement_independent);
+        self.last_prepared = reusable.then(|| PreparedFrame { scene: scene.clone(), prepared: prepared.clone() });
     }
 
     fn plan_frame_graph_scene(
@@ -176,13 +233,15 @@ impl Engine {
         let mut groups = std::collections::HashMap::new();
         let mut layers = Vec::with_capacity(graph.output.len());
         let mut layer_ids = Vec::with_capacity(graph.output.len());
+        let mut plain_sources = Vec::with_capacity(graph.output.len());
         for composed in &graph.output {
             if let Some(layer) = self.realize_composed(graph, &prepared, composed, &mut groups, comp, projection_camera)? {
                 layers.push(layer);
                 layer_ids.push(graph.layers[composed.base].id);
+                plain_sources.push((composed.atop.is_empty() && composed.mask.is_none()).then_some(composed.base));
             }
         }
-        Ok(GpuSceneValue { layers, layer_ids })
+        Ok(GpuSceneValue { layers, layer_ids, plain_sources })
     }
 
     /// How finely outlines are cut: one device pixel after projection. Vector
@@ -572,3 +631,51 @@ impl Engine {
 
 #[cfg(test)]
 mod tests;
+
+
+/// A contribution whose prepared picture does not depend on where it is placed or on the frame.
+fn placement_independent(layer: &SceneLayerValue) -> bool {
+    let content = match &layer.content {
+        SceneContentValue::None | SceneContentValue::Shape(_) | SceneContentValue::Text(_) | SceneContentValue::Material(_) => true,
+        SceneContentValue::Media { source, .. } => crate::render::media::is_still_image_path(&source.path),
+        SceneContentValue::Particles(_) | SceneContentValue::Plate(_) => false,
+    };
+    content
+        && layer.image_sources.is_empty()
+        && layer.matte.is_none()
+        && !layer.clip_to_below
+        && !layer.flatten
+        && !layer.freeze_eligible
+        && !layer.effects.iter().chain(&layer.after_effects).any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
+}
+
+/// Everything but placement (transform, opacity, order) is the same; content is compared by
+/// identity of the shared evaluated value, never by walking it.
+fn same_but_placement(a: &SceneLayerValue, b: &SceneLayerValue) -> bool {
+    let content = match (&a.content, &b.content) {
+        (SceneContentValue::None, SceneContentValue::None) => true,
+        (SceneContentValue::Shape(x), SceneContentValue::Shape(y)) => std::sync::Arc::ptr_eq(x, y),
+        (SceneContentValue::Text(x), SceneContentValue::Text(y)) => std::sync::Arc::ptr_eq(x, y),
+        (SceneContentValue::Material(x), SceneContentValue::Material(y)) => x == y,
+        (SceneContentValue::Media { source: x, time: tx }, SceneContentValue::Media { source: y, time: ty }) => {
+            x == y && (tx == ty || crate::render::media::is_still_image_path(&x.path))
+        }
+        _ => false,
+    };
+    content
+        && placement_independent(b)
+        && a.layer == b.layer
+        && a.instance == b.instance
+        && a.source == b.source
+        && a.content_key == b.content_key
+        && a.effects == b.effects
+        && a.after_effects == b.after_effects
+        && a.masks == b.masks
+        && a.environment == b.environment
+        && a.ghost == b.ghost
+        && a.timing_start == b.timing_start
+        && a.projection == b.projection
+        && a.blend == b.blend
+        && a.shape_stretch == b.shape_stretch
+        && a.depth == b.depth
+}

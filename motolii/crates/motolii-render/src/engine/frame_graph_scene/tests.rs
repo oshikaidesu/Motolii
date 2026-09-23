@@ -169,3 +169,25 @@ fn a_lowered_matte_draws_real_pixels_through_the_cassette() {
     assert!(red(MatteMode::Alpha) > 0, "the target shows where its source covers");
     assert_eq!(red(MatteMode::InvertedAlpha), 0, "and nowhere else");
 }
+
+
+#[test]
+fn a_frame_that_only_moves_things_is_not_prepared_again() {
+    use crate::doc::store::{property, Interp, KeyframeTrack, PropertyId, Value};
+    use crate::doc::eval::Keyframe;
+    let mut doc = document();
+    let layer = add_shape(&mut doc, 1, 0, Rgb { r: 1.0, g: 1.0, b: 1.0 });
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe { t: crate::doc::core::RationalTime::ZERO, value: Value::Vec2([0.0, 0.0]), interp: Interp::Linear, spatial: None });
+    track.insert(Keyframe { t: crate::doc::core::RationalTime::try_from_frame(10, Fps::try_new(30, 1).unwrap()).unwrap(), value: Value::Vec2([30.0, 0.0]), interp: Interp::Linear, spatial: None });
+    doc.apply(Intent::SetTrack { layer, property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
+    let at = |frame| crate::doc::core::RationalTime::try_from_frame(frame, Fps::try_new(30, 1).unwrap()).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let first = engine.render_with_camera_override(&doc.view(), at(0), true, None).unwrap();
+    let prepared = engine.full_prepares;
+    let moved = engine.render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
+    assert_eq!(engine.full_prepares, prepared, "only the placement changed: nothing is lowered or prepared again");
+    assert_ne!(first, moved, "and the picture still moves");
+    let fresh = Engine::new().unwrap().render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
+    assert_eq!(moved, fresh, "the reused frame is the frame a fresh engine prepares");
+}
