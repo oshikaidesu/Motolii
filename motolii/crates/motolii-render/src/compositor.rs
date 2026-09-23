@@ -347,6 +347,8 @@ pub enum CompositorError {
 pub struct SurfaceWork {
     /// 太陽から見た型紙(light cookie)を描いた回数。
     pub light_captures: u64,
+    /// 層が頼んだ View(Vism の `VIEWS`)を描いた枚数。
+    pub layer_views: u64,
     pub main_runs: u64,
     pub backdrop_copies: u64,
     pub backdrop_allocations: u64,

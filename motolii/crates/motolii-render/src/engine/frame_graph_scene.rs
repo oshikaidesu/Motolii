@@ -168,11 +168,11 @@ impl Engine {
         let world = prep.seam.camera_relative_world();
         let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills, world, world);
         let environment = self.compositor.world_environment.clone();
-        let (light, meshes) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
+        let (light, meshes, views) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
         drop(inputs);
         self.world_light_captures += 1;
         self.preparation_events.push(PreparationEvent::Capture(self.world_light_captures));
-        Ok(WorldLight { light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
+        Ok(WorldLight { views, light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
     }
 
     fn prepare_gpu_scene_with_solver_members(
@@ -449,7 +449,7 @@ impl Engine {
         let layer = self.apply_masks_to_layer(layer, &work.masks, natural, frozen_frame)?;
         let mut layer = self.apply_material_recipe(layer, work.id, &work.material, work.source_is_file, work.source_tick, natural, frozen_frame)?;
         if matches!(layer.content, LayerContent::Model(_) | LayerContent::Texture(_) | LayerContent::LinearTexture(_)) {
-            let recipe = SurfaceRecipe { unlit: matches!(&layer.content, LayerContent::Model(model) if model.planar_size.is_some()), ..work.surface.clone() };
+            let recipe = SurfaceRecipe { unlit: matches!(&layer.content, LayerContent::Model(model) if model.planar_size.is_some()), owner: work.id.0, ..work.surface.clone() };
             layer.shading = self.compositor.surface_shading_from(&recipe).map_err(EngineError::Store)?;
         }
         let layer = self.flatten_if_asked(prep, layer, work.isolate)?;

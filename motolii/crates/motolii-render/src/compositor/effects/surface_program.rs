@@ -33,6 +33,18 @@ pub struct SurfaceShading {
     pub grid_hint: u32,
     /// A field effect moves the surface (its vertices, a picture's samples).
     pub field_effect: bool,
+    /// The Views of the world the surface's Vism asked for (`VIEWS`), and whose request they are.
+    pub views: Option<Arc<ViewNeeds>>,
+}
+
+/// A layer's request for Views of the world: the host draws them once per prepared frame for the
+/// layer (all its copies share them) and binds them to the layer's draws.
+#[derive(Debug, PartialEq)]
+pub struct ViewNeeds {
+    /// The requesting layer (`LayerId`), whose copies are left out of what the Views see.
+    pub owner: u64,
+    pub views: Vec<super::isf::IsfView>,
+    pub size: u32,
 }
 
 impl SurfaceShading {
@@ -43,7 +55,7 @@ impl SurfaceShading {
 }
 
 /// The noise fields read, the meaning of a Block's motion entry, and Motolii's standard material
-/// (environment light, the two reflection probes, the sun's cookie, transmission of the backdrop).
+/// (environment light, the sun's cookie, transmission of the backdrop, the requested Views).
 const NOISE: &str = include_str!("program/noise.wgsl");
 const MOTION: &str = include_str!("program/motion.wgsl");
 const MATERIAL: &str = include_str!("program/material.wgsl");
@@ -67,6 +79,11 @@ pub struct SurfaceRecipe {
     pub reads_backdrop: bool,
     pub backdrop_roughness: f32,
     pub unlit: bool,
+    /// The surface Vism's `VIEWS` and `VIEW_SIZE`.
+    pub views: Vec<super::isf::IsfView>,
+    pub view_size: u32,
+    /// The layer the Views are for (`LayerId`); set where the layer is prepared.
+    pub owner: u64,
 }
 
 impl SurfaceRecipe {
@@ -89,6 +106,9 @@ impl SurfaceRecipe {
             field: field.map(|d| d.plugin_id().to_string()),
             surface: surface.map(|d| d.plugin_id().to_string()),
             params, reads_backdrop, backdrop_roughness, unlit,
+            views: surface.map(|d| d.manifest.views.clone()).unwrap_or_default(),
+            view_size: surface.map_or(0, |d| d.manifest.view_size),
+            owner: 0,
         }
     }
 }
@@ -212,6 +232,17 @@ mod tests {
         let p = params(&[ResolvedEffect { plugin_id: "x.t".into(), params: vec![("along".into(), crate::doc::store::Value::F64(1.0))], ..Default::default() }], Some(&def), None);
         assert_eq!(&p[..2], &[2.0, 1.0]);
     }
+
+    /// A View says where it stands: a manifest that leaves FROM out is refused, not given a place.
+    #[test]
+    fn a_view_names_where_it_stands() {
+        let with = |view: &str| format!("/*{{ \"ID\": \"x.v\", \"STAGE\": \"surface\", \"VIEWS\": [{view}] }}*/\nfn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {{ return in.albedo; }}");
+        let (manifest, _) = super::super::isf::parse_isf_source(&with(r#"{ "FROM": "layer", "LOOK": [0, 0, -1] }"#)).unwrap();
+        assert_eq!(manifest.views.len(), 1);
+        assert_eq!((manifest.views[0].up, manifest.views[0].fov, manifest.view_size), ([0.0, 1.0, 0.0], 90.0, 256));
+        assert!(super::super::isf::parse_isf_source(&with(r#"{ "LOOK": [0, 0, -1] }"#)).is_err());
+        assert!(super::super::isf::parse_isf_source(&with(r#"{ "FROM": "layer", "LOOK": [0, 1, 0], "UP": [0, 1, 0] }"#)).is_err());
+    }
 }
 
 impl crate::render::compositor::Compositor {
@@ -238,7 +269,8 @@ impl crate::render::compositor::Compositor {
                 program
             }
         };
-        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some() })
+        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(),
+            views: (!recipe.views.is_empty()).then(|| Arc::new(ViewNeeds { owner: recipe.owner, views: recipe.views.clone(), size: recipe.view_size })) })
     }
 
     /// The program of a surface without effects: its Block's motion and the standard material.

@@ -1,5 +1,5 @@
-// Motolii's standard material: split-sum environment light, the sun's light cookie, and
-// transmission that refracts the backdrop (Standard Glass).
+// Motolii's standard material: split-sum environment light, the sun's light cookie,
+// transmission that refracts the backdrop (Standard Glass), and the Views a Vism asked for.
 // Appended to a surface program's surface hook; reads the frame's resources (re_renderer's bindings).
 
 // The view's program constants as Motolii lays them out (compositor/light.rs).
@@ -10,6 +10,21 @@ fn sun_color() -> vec4f { return frame.program_constants[1]; }
 /// World → light cookie uv (orthographic, looking along the sun).
 fn light_uv_from_world() -> mat4x4f {
     return mat4x4f(frame.program_constants[2], frame.program_constants[3], frame.program_constants[4], frame.program_constants[5]);
+}
+
+/// The Views this surface's Vism asked for (`VIEWS`, in their order), side by side in one picture;
+/// 0 when it asked for none or the host drew none.
+fn view_count() -> u32 { return u32(frame.program_constants[6].x); }
+/// Where they were taken from: the centre of the requesting layer (world).
+fn view_origin() -> vec3f { return frame.program_constants[7].xyz; }
+/// View `i` at `uv` (0..1 across that View, +y down), premultiplied: alpha is what the View saw
+/// there. `lod` blurs it by mip level.
+fn view_sample(i: u32, uv: vec2f, lod: f32) -> vec4f {
+    let n = f32(max(view_count(), 1u));
+    let size = vec2f(textureDimensions(view_capture_texture));
+    let margin = min(0.49, exp2(lod) * n / size.x);
+    let local = clamp(uv, vec2f(margin), vec2f(1.0 - margin));
+    return textureSampleLevel(view_capture_texture, screen_sampler, vec2f((f32(i) + local.x) / n, local.y), lod);
 }
 
 /// Split-sum environment BRDF, analytic fit (Karis 2014, "Physically Based Shading on Mobile").

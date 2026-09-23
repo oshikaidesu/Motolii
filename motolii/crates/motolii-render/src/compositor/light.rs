@@ -1,5 +1,6 @@
 //! The world's light as Motolii lays it into a view: the sun and what blocks it (a coverage
-//! picture), and the constants the standard material reads (`effects/program/material.wgsl`).
+//! picture), the Views a layer asked for (a view capture), and the constants the standard material
+//! reads (`effects/program/material.wgsl`).
 
 use re_renderer::resource_managers::GpuTexture2D;
 use re_renderer::view_builder::TargetConfiguration;
@@ -16,6 +17,24 @@ pub struct SunLight {
     /// World position → cookie uv.
     pub uv_from_world: glam::Mat4,
     pub cookie: GpuTexture2D,
+}
+
+/// The Views one layer asked for (its Vism's `VIEWS`), drawn once for the prepared frame and laid
+/// side by side in one picture (premultiplied; alpha is what the View saw).
+#[derive(Clone, Debug)]
+pub struct LayerViews {
+    pub owner: u64,
+    pub picture: GpuTexture2D,
+    /// Where they were taken from: the centre of the layer (all its copies).
+    pub origin: glam::Vec3,
+    pub count: u32,
+}
+
+/// Binds a layer's Views to the draw that shades it. The layout is material.wgsl's `view_*`.
+pub(crate) fn bind_views(config: &mut TargetConfiguration, views: &LayerViews) {
+    config.view_capture = Some(views.picture.clone());
+    config.program_constants[6] = glam::vec4(views.count as f32, 0.0, 0.0, 0.0);
+    config.program_constants[7] = views.origin.extend(0.0);
 }
 
 /// Lays the world's light into a view. `capture` marks the view that draws the sun's cookie itself:

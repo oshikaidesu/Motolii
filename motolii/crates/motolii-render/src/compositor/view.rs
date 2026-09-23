@@ -15,14 +15,19 @@ use re_renderer::{Rgba, ViewBuilderId};
 
 use super::*;
 
+fn view_owner(input: &SequentialInput<'_>) -> Option<u64> {
+    input.shading.views.as_ref().map(|v| v.owner)
+}
+
 /// The Normal blend (Porter-Duff source-over) in `vism/blend.wgsl`'s numbering.
 const SRC_OVER: u32 = 3;
 /// What is below stays on top (the sky under what is drawn).
 const DEST_OVER: u32 = 4;
 
-/// The world's light for one frame: the sun's occluder map.
+/// The world's light for one frame: the sun's occluder map, and the Views the layers asked for.
 #[derive(Clone, Default)]
 pub(crate) struct WorldLight {
+    pub views: Vec<crate::render::compositor::light::LayerViews>,
     pub light: Option<crate::render::compositor::light::SunLight>,
     /// The mesh instances the capture uploaded, when its scene is the frame's own layer list (no
     /// plate members added): the views place them the same way and draw them as they are.
@@ -36,6 +41,7 @@ pub(crate) struct ViewWorld<'a> {
     pub environment: Option<&'a GpuEnvironmentData>,
     pub motion: Option<&'a re_renderer::DataTexture>,
     pub light: Option<&'a crate::render::compositor::light::SunLight>,
+    pub views: &'a [crate::render::compositor::light::LayerViews],
     /// The world's mesh instances, for a view that places the layers as the world does.
     pub meshes: Option<&'a super::surface_scene::SharedMeshScene>,
 }
@@ -199,6 +205,10 @@ impl Compositor {
                     if index > start && !inputs[index].screen_passes.is_empty() {
                         break;
                     }
+                    // A layer that asked for Views reads its own: a run is one layer's copies or none's.
+                    if index > start && view_owner(&inputs[index]) != view_owner(&inputs[start]) {
+                        break;
+                    }
                     has_rect |= matches!(inputs[index].content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
                     index += 1;
                     if !inputs[index - 1].screen_passes.is_empty() {
@@ -233,6 +243,9 @@ impl Compositor {
             let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, environment);
             config.motion = world.motion.cloned();
             super::light::light_view(&mut config, world.light, false);
+            if let Some(views) = run[0].shading.views.as_ref().and_then(|needs| world.views.iter().find(|v| v.owner == needs.owner)) {
+                super::light::bind_views(&mut config, views);
+            }
             if glass_run {
                 if transmission.is_none() {
                     let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
@@ -370,13 +383,13 @@ impl Compositor {
     }
 
     /// The world's light, captured once per document frame from the world's layers (placed as the
-    /// output places them): the sun's occluder map.
+    /// output places them): the sun's occluder map and the Views the layers asked for.
     pub(crate) fn capture_world_light(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
-    ) -> Result<(Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
+    ) -> Result<(Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>, Vec<crate::render::compositor::light::LayerViews>), CompositorError> {
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,
@@ -384,7 +397,8 @@ impl Compositor {
         // The meshes' instances, placed as the output places them, uploaded once for the frame.
         let shared = self.shared_mesh_scene(comp, inputs)?;
         let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
-        Ok((light, shared))
+        let views = self.draw_layer_views(comp, inputs, environment, light.as_ref(), shared.as_ref())?;
+        Ok((light, shared, views))
     }
 
     /// A canvas the size of the view's window, from re_renderer's pool: it returns to the pool when

@@ -134,6 +134,25 @@ fn world_captures_do_not_grow_with_views() {
     }
 }
 
+/// The Views a layer's Vism asks for are the world's: drawn once per document frame, however
+/// many views show it.
+#[test]
+fn layer_views_do_not_grow_with_views() {
+    use crate::doc::store::{EffectId, EffectInstance, LayerId};
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    use motolii_edit::Intent;
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "sky.png", 40, 220);
+    let mut doc = scene(dir.path(), &sky, true);
+    doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.cube_mirror".into() }] }).unwrap();
+    for n in [1, 2, 5] {
+        let mut engine = Engine::new().unwrap();
+        let before = engine.surface_work().layer_views;
+        let stats = tick(&mut engine, &doc, RationalTime::ZERO, n);
+        assert_eq!((stats.preparations, engine.surface_work().layer_views - before), (1, 6), "{n} views");
+    }
+}
+
 /// A plate is made inside the preparation and goes out with the tick's one submission.
 #[test]
 fn a_plate_is_recorded_with_the_tick() {

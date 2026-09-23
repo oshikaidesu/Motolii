@@ -185,6 +185,17 @@ pub struct IsfPass {
     pub persistent: bool,
 }
 
+/// One View a surface asks for (`"VIEWS"`): where it stands (`"FROM"`), looking along `look` with
+/// `up`, through a square perspective of `fov` degrees. `"FROM": "layer"` stands at the centre of
+/// the requesting layer (all its copies) and sees the world without that layer. The host draws it
+/// (re_renderer's ViewBuilder) and hands the surface every View side by side (`view_sample`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct IsfView {
+    pub look: [f32; 3],
+    pub up: [f32; 3],
+    pub fov: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct IsfPadding {
     pub param: String,
@@ -207,6 +218,9 @@ pub struct IsfManifest {
     pub backdrop_input: Option<String>,
     /// The roughness-like input that decides how far down the backdrop's mip chain reads go.
     pub backdrop_blur_input: Option<String>,
+    /// Views of the world the surface reads (`"VIEWS"`), each `"VIEW_SIZE"` pixels square.
+    pub views: Vec<IsfView>,
+    pub view_size: u32,
     pub padding: Option<IsfPadding>,
     /// 溢れの法: 素材の coverage の外へ出た出力(光・影)を、層の Blend と独立にこの混ぜ方で下へ合成する
     /// (`"SPILL": "screen" | "add" | "multiply"`。Photoshop の layer style が効果ごとに blend を持つのと同じ)。
@@ -249,6 +263,8 @@ impl Default for IsfManifest {
         output_float: false,
             backdrop_input: None,
             backdrop_blur_input: None,
+            views: Vec::new(),
+            view_size: 256,
             padding: None,
             spill: None,
             description: None,
@@ -481,6 +497,36 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
         }
         Ok(name.to_owned())
     }).transpose()?;
+    // VIEWS = Views of the world the surface reads (a Mirror asks one, a cube six). What they are is
+    // data here; drawing them is the host's.
+    let views = match value.get("VIEWS") {
+        None => Vec::new(),
+        Some(serde_json::Value::Array(items)) if stage == IsfStage::Surface && items.len() <= 16 => items.iter().map(|item| {
+            let vec3 = |key: &str, fallback: Option<[f32; 3]>| match item.get(key).and_then(|v| v.as_array()) {
+                Some(a) if a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite)) => { let c = read_components(item.get(key)); Ok([c[0], c[1], c[2]]) }
+                None => fallback.ok_or_else(|| IsfError::Validate(format!("VIEWS: {key} is three numbers"))),
+                _ => Err(IsfError::Validate(format!("VIEWS: {key} is three numbers"))),
+            };
+            if item.get("FROM").and_then(|v| v.as_str()) != Some("layer") {
+                return Err(IsfError::Validate("VIEWS: FROM says where the View stands; \"layer\" (the layer's centre, seeing the world without it) is the one place so far".into()));
+            }
+            let look: [f32; 3] = vec3("LOOK", None)?;
+            let up: [f32; 3] = vec3("UP", Some([0.0, 1.0, 0.0]))?;
+            let fov = item.get("FOV").map_or(Some(90.0), |v| v.as_f64()).filter(|f| (1.0..=179.0).contains(f))
+                .ok_or_else(|| IsfError::Validate("VIEWS: FOV is degrees in 1..179".into()))? as f32;
+            let (l, u) = (glam::Vec3::from(look), glam::Vec3::from(up));
+            if l.length_squared() < 1e-12 || l.normalize().cross(u.normalize_or_zero()).length_squared() < 1e-6 {
+                return Err(IsfError::Validate("VIEWS: LOOK is a direction and UP is not along it".into()));
+            }
+            Ok(IsfView { look, up, fov })
+        }).collect::<Result<Vec<_>, _>>()?,
+        Some(_) => return Err(IsfError::Validate("VIEWS: a surface asks for a list of at most 16 Views".into())),
+    };
+    let view_size = match value.get("VIEW_SIZE").map(|v| v.as_u64()) {
+        None => 256,
+        Some(Some(n)) if (16..=1024).contains(&n) => n as u32,
+        _ => return Err(IsfError::Validate("VIEW_SIZE is pixels in 16..1024".into())),
+    };
     Ok((
         IsfManifest {
             id,
@@ -493,6 +539,8 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             uses_clock: reads_clock(&body),
             backdrop_input,
             backdrop_blur_input,
+            views,
+            view_size,
             padding,
             spill,
             description,

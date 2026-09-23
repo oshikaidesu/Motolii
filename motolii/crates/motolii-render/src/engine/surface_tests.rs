@@ -243,3 +243,61 @@ fn gpu_instance_subsets_preserve_rect_mesh_boundaries_and_surface_parameters() {
         assert!(after.main_runs - before.main_runs >= 2);
     }
 }
+
+/// A Vism's `VIEWS` are drawn by the host once for the layer's prepared frame, and what they saw
+/// reaches the surface: a picture only the Views can see changes the mirror. A Vism asking for no
+/// Views (Glass) gets none drawn.
+#[test]
+fn a_vism_asks_for_views_and_the_host_draws_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let red = dir.path().join("red.png");
+    image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+    let sender = file_layer(&mut doc, 3, 0, &red);
+    set(&mut doc, sender, "position", Value::Vec2([-300.0, -300.0]));
+    set(&mut doc, sender, "scale", Value::Vec2([10.0, 10.0]));
+    set(&mut doc, sender, "position.z", Value::F64(-200.0));
+    let mesh = LayerId(2);
+    let use_effect = |doc: &mut Document, id: &str| {
+        doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: id.into() }] }).unwrap();
+    };
+    use_effect(&mut doc, "motolii.cube_mirror");
+    let mut engine = Engine::new().unwrap();
+    let before = engine.surface_work();
+    let seen = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert_eq!(engine.surface_work().layer_views - before.layer_views, 6, "the six Views the Vism asked for");
+    set(&mut doc, sender, "opacity", Value::F64(0.0));
+    let unseen = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert_ne!(seen, unseen, "what only the Views see reaches the mirror");
+    use_effect(&mut doc, "motolii.glass");
+    let before = engine.surface_work();
+    engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert_eq!(engine.surface_work().layer_views - before.layer_views, 0, "Glass asks for no View");
+}
+
+/// A Repeater's copies are one layer's: its Views are drawn once, however many copies there are,
+/// and the copies are left out of what the Views see.
+#[test]
+fn a_repeaters_copies_share_their_layers_views() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let mesh = LayerId(2);
+    doc.apply(Intent::SetEffects { layer: mesh, effects: vec![
+        EffectInstance { id: EffectId(0), plugin_id: "motolii.cube_mirror".into() },
+        EffectInstance { id: EffectId(1), plugin_id: placement::REPEAT.into() },
+    ] }).unwrap();
+    set(&mut doc, mesh, property::SCALE, Value::Vec2([0.3, 0.3]));
+    effect(&mut doc, mesh, 1, "position_each", Value::Vec2([3.0, 0.0]));
+    let mut engine = Engine::new().unwrap();
+    for count in [1, 10, 200] {
+        effect(&mut doc, mesh, 1, "count", Value::F64(count as f64));
+        let before = engine.surface_work().layer_views;
+        engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert_eq!(engine.drawn_layers(), count as usize + 1, "every copy is drawn");
+        assert_eq!(engine.surface_work().layer_views - before, 6, "{count} copies, one layer's six Views");
+    }
+}
