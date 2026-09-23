@@ -129,6 +129,7 @@ impl Compositor {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct SharedMeshScene {
     draw: MeshDrawData,
     source_layers: Vec<usize>,
@@ -223,7 +224,7 @@ fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, gl
 }
 
 impl Compositor {
-    pub(super) fn shared_mesh_scene(
+    pub(crate) fn shared_mesh_scene(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],

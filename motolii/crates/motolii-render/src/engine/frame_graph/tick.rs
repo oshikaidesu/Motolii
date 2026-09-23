@@ -162,7 +162,9 @@ impl Engine {
         let mut placed = scene.layers.clone();
         for layer in &mut placed { layer.layer.projection_camera = document_camera; }
         let world_inputs = crate::render::compositor::sequential_inputs(&placed, &pictures, &paddings, &spills);
-        let (reflection, light, meshes) = self.compositor.capture_world_light(state.comp, &world_inputs, environment.as_deref())?;
+        // The frame's light was captured once in its preparation (it saw every plate's members).
+        let crate::render::compositor::WorldLight { reflection, light, meshes, .. } = self.frame_light.clone();
+        let meshes = match meshes { Some(meshes) => Some(meshes), None => self.compositor.shared_mesh_scene(state.comp, &world_inputs)? };
         drop(world_inputs);
         let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, reflection, light, meshes, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);

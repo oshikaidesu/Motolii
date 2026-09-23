@@ -105,15 +105,64 @@ impl Engine {
         for source in &mut sources {
             source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
         }
-        let (texture, _view) = self.compositor.render_to_texture_at(
-            comp,
-            camera,
-            &sources,
-            crate::render::compositor::NO_BACKGROUND,
-            density,
-        )?;
+        // Lit by the frame's light (a frame prepared again because something read a plate early).
+        // Needed before the frame is lit: this pass is a draft, the frame is prepared again lit.
+        if self.known_frame_light.is_none() && self.deferring_plates {
+            self.plates_needed_early = true;
+        }
+        let light = Some(self.known_frame_light.clone().unwrap_or_default());
+        self.plate_bakes += 1;
+        self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.as_ref().map_or(0, |light| light.serial)));
+        let (texture, _view) = self.compositor.bake_picture(comp, camera, &sources, crate::render::compositor::NO_BACKGROUND, density, light.as_ref(), None)?;
         let imported = self.compositor.import_premultiplied(&texture)?;
-        Ok(Layer {
+        Ok(Self::plate_layer(imported, comp, camera, &sources, output_blend, placement))
+    }
+
+    /// A plate whose members are prepared now and whose picture is baked at the end of the frame's
+    /// preparation, after the frame's one reflection capture has seen its members (2026-09-23): the
+    /// members are the reflectable scene; the plate is their picture.
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn defer_isolated_layers(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        mut sources: Vec<LayerWithPasses>,
+        placement: crate::doc::core::LayerPlacement,
+        average: bool,
+        density: f32,
+    ) -> Result<Layer, EngineError> {
+        for source in &mut sources {
+            source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
+        }
+        let size = |side: u32| if density >= 1.0 { side } else { ((side as f32 * density).ceil() as u32).max(1) };
+        let target = self.compositor.create_blend_scratch_texture(size(comp.width), size(comp.height));
+        let imported = self.compositor.import_premultiplied(&target)?;
+        let layer = Self::plate_layer(imported, comp, camera, &sources, CompositeBlendMode::Normal, placement);
+        self.reflectables.extend(sources.iter().cloned());
+        self.pending_plates.push(PendingPlate { target, comp, camera, sources, density });
+        Ok(layer)
+    }
+
+    /// The plates waiting for their picture, baked now: with the frame's world light when given,
+    /// else each with its own capture (a plate something needs before the frame is lit).
+    pub(in crate::engine) fn bake_pending_plates(&mut self, light: &crate::render::compositor::WorldLight) -> Result<(), EngineError> {
+        for plate in std::mem::take(&mut self.pending_plates) {
+            self.plate_bakes += 1;
+            self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.serial));
+            self.compositor.bake_picture(plate.comp, plate.camera, &plate.sources, crate::render::compositor::NO_BACKGROUND, plate.density, Some(light), Some(&plate.target))?;
+        }
+        Ok(())
+    }
+
+    fn plate_layer(
+        imported: crate::render::compositor::GpuTexture2D,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        sources: &[LayerWithPasses],
+        output_blend: CompositeBlendMode,
+        placement: crate::doc::core::LayerPlacement,
+    ) -> Layer {
+        Layer {
             content: LayerContent::Texture(imported),
             size: [comp.width as f32, comp.height as f32],
             placement: crate::doc::core::LayerPlacement {
@@ -134,7 +183,7 @@ impl Engine {
             shadow: sources.iter().map(|s| s.layer.shadow).fold(0.0, f32::max),
             outline: sources.iter().map(|s| s.layer.outline).max().unwrap_or(0),
             frame: None,
-        })
+        }
     }
 
     pub(in crate::engine) fn apply_masks_to_layer(
@@ -199,4 +248,17 @@ impl Engine {
         Ok(layer)
     }
 
+}
+
+/// A plate whose picture is baked after the frame's reflection capture.
+pub(in crate::engine) struct PendingPlate {
+    target: wgpu::Texture,
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    sources: Vec<LayerWithPasses>,
+    density: f32,
+}
+
+impl PendingPlate {
+    pub(in crate::engine) fn target_texture(&self) -> &wgpu::Texture { &self.target }
 }

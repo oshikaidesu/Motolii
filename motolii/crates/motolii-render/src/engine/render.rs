@@ -12,7 +12,7 @@ use crate::render::compositor::{
 use crate::render::engine::{Engine, EngineError};
 
 /// 1 コマ分の層を建てて焼く。
-mod build;
+pub(super) mod build;
 /// 先読みと、見えない層の捨て方。
 mod warm;
 
@@ -61,6 +61,8 @@ impl Engine {
             &crate::frame_graph::SceneValue { layers: vec![target] },
             comp,
             camera,
+            // A frozen frame is an evaluation at its own time: lit like a frame.
+            true,
         );
         self.compositor.clock = previous_clock;
         self.freezing = None;

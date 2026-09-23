@@ -93,7 +93,7 @@ impl Engine {
         ]);
         let picture = (|| {
             let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
-            let prepared = self.prepare_gpu_pictures(&scene, comp, ResolvedCamera::default())?;
+            let prepared = self.prepare_gpu_pictures(&scene, comp, ResolvedCamera::default(), false)?;
             let Some(layer) = prepared.layers.first() else { return Ok(None); };
             self.layer_with_passes_linear_picture(layer)
         })();
@@ -247,15 +247,22 @@ impl Engine {
                 .cloned()
                 .collect(),
         };
-        let prepared = self.prepare_gpu_scene(&below, comp, camera)?;
+        let (prepared, light) = self.as_frame_part(comp, camera, false, |engine| {
+            let prepared = engine.prepare_gpu_scene(&below, comp, camera)?;
+            let top = prepared.layers.clone();
+            Ok((prepared, top))
+        })?;
         let picture = if prepared.layers.is_empty() {
             None
         } else {
-            let (texture, _view) = self.compositor.render_to_texture(
+            let (texture, _view) = self.compositor.bake_picture(
                 comp,
                 camera,
                 &prepared.layers,
                 crate::render::compositor::NO_BACKGROUND,
+                1.0,
+                Some(&light),
+                None,
             )?;
             let mut encoder = self.compositor.ctx.device.create_command_encoder(
                 &wgpu::CommandEncoderDescriptor { label: Some("motolii-framegraph-overlay-analysis") },

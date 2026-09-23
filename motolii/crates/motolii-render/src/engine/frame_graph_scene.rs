@@ -24,6 +24,107 @@ impl Engine {
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
     ) -> Result<GpuSceneValue, EngineError> {
+        // Members first, then the frame's one reflection capture (it sees the members of every
+        // plate), then the plates' pictures lit by it.
+        self.pending_plates.clear();
+        self.reflectables.clear();
+        self.reflectable_member_ids.clear();
+        self.preparation_events.clear();
+        self.plates_needed_early = false;
+        self.known_frame_light = None;
+        self.deferring_plates = true;
+        let prepared = self.prepare_gpu_scene_with_solver_members(scene, solver, comp, projection_camera, time, fps);
+        self.deferring_plates = false;
+        let prepared = prepared?;
+        if !self.plates_needed_early {
+            self.frame_light = self.light_and_bake(comp, projection_camera, &prepared.layers)?;
+            return Ok(prepared);
+        }
+        // Something in the frame (a matte, a clip group) reads a plate's picture while the frame is
+        // prepared: the reflectable scene just collected lights the frame once, and the frame is
+        // prepared again with its plates baked in place under that same light.
+        self.frame_light = self.light_the_scene(comp, projection_camera, &prepared.layers)?;
+        self.pending_plates.clear();
+        // The draft pass's record is dropped with its work; only the capture it made stays.
+        self.preparation_events.retain(|event| matches!(event, PreparationEvent::Capture(_)));
+        self.known_frame_light = Some(self.frame_light.clone());
+        let prepared = self.prepare_gpu_scene_with_solver_members(scene, solver, comp, projection_camera, time, fps);
+        self.known_frame_light = None;
+        prepared
+    }
+
+    /// A picture prepared as a frame of its own (another time's composite, an analysis picture):
+    /// its plates wait for its one capture like a frame's. Returns what `f` made and its light.
+    pub(super) fn as_own_frame<T>(&mut self, comp: CompSpec, camera: ResolvedCamera, f: impl FnOnce(&mut Self) -> Result<(T, Vec<LayerWithPasses>), EngineError>) -> Result<(T, crate::render::compositor::WorldLight), EngineError> {
+        self.as_frame_part(comp, camera, true, f)
+    }
+
+    /// Like `as_own_frame`, but when `own_frame` is false the pictures belong to the frame being
+    /// evaluated (a read for analysis): its plates are baked unlit by any scene reflection, and no
+    /// capture is made for them — a frame has one.
+    pub(super) fn as_frame_part<T>(&mut self, comp: CompSpec, camera: ResolvedCamera, own_frame: bool, f: impl FnOnce(&mut Self) -> Result<(T, Vec<LayerWithPasses>), EngineError>) -> Result<(T, crate::render::compositor::WorldLight), EngineError> {
+        let pending = std::mem::take(&mut self.pending_plates);
+        let reflectables = std::mem::take(&mut self.reflectables);
+        let member_ids = std::mem::take(&mut self.reflectable_member_ids);
+        let deferring = std::mem::replace(&mut self.deferring_plates, true);
+        let known = self.known_frame_light.take();
+        let early = std::mem::replace(&mut self.plates_needed_early, false);
+        let made = f(self);
+        self.deferring_plates = false;
+        let lit = made.and_then(|(value, top)| {
+            if own_frame { return Ok((value, self.light_and_bake(comp, camera, &top)?)); }
+            let unlit = crate::render::compositor::WorldLight::default();
+            self.bake_pending_plates(&unlit)?;
+            Ok((value, unlit))
+        });
+        self.pending_plates = pending;
+        self.reflectables = reflectables;
+        self.reflectable_member_ids = member_ids;
+        self.deferring_plates = deferring;
+        self.known_frame_light = known;
+        self.plates_needed_early = early;
+        lit
+    }
+
+    /// The frame's light, captured once, and its waiting plates baked with it.
+    fn light_and_bake(&mut self, comp: CompSpec, camera: ResolvedCamera, top: &[LayerWithPasses]) -> Result<crate::render::compositor::WorldLight, EngineError> {
+        let light = self.light_the_scene(comp, camera, top)?;
+        self.bake_pending_plates(&light)?;
+        Ok(light)
+    }
+
+    /// The frame's world light, once, from its reflectable scene: the top-level layers (not the
+    /// plates' pictures, which are not baked yet) and every plate's members, each where it is.
+    fn light_the_scene(&mut self, comp: CompSpec, camera: ResolvedCamera, top: &[LayerWithPasses]) -> Result<crate::render::compositor::WorldLight, EngineError> {
+        let plates: Vec<_> = self.pending_plates.iter().map(|plate| plate.target_texture().clone()).collect();
+        let is_plate = |layer: &LayerWithPasses| layer.layer.content.texture().is_some_and(|t| {
+            self.compositor.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().is_some_and(|g| plates.iter().any(|p| *p == g.texture))
+        });
+        let mut scene: Vec<LayerWithPasses> = top.iter().filter(|layer| !is_plate(layer)).cloned().collect();
+        let same_as_frame = scene.len() == top.len() && self.reflectables.is_empty();
+        // The plates' members this capture sees (the top level is the frame's own layer list).
+        self.reflectable_ids = std::mem::take(&mut self.reflectable_member_ids);
+        scene.extend(self.reflectables.drain(..));
+        for layer in &mut scene { layer.layer.projection_camera = camera; }
+        let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene)?;
+        let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills);
+        let environment = self.compositor.world_environment.clone();
+        let (reflection, light, meshes) = self.compositor.capture_world_light(comp, &inputs, environment.as_deref())?;
+        drop(inputs);
+        self.world_light_captures += 1;
+        self.preparation_events.push(PreparationEvent::Capture(self.world_light_captures));
+        Ok(crate::render::compositor::WorldLight { reflection, light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
+    }
+
+    fn prepare_gpu_scene_with_solver_members(
+        &mut self,
+        scene: &SceneValue,
+        solver: &SolverPlanValue,
+        comp: CompSpec,
+        projection_camera: ResolvedCamera,
+        time: crate::doc::core::RationalTime,
+        fps: crate::doc::store::Fps,
+    ) -> Result<GpuSceneValue, EngineError> {
         let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
@@ -180,13 +281,21 @@ impl Engine {
     }
 
     /// The scene's contributions as material-space pictures the host reads back.
-    pub(super) fn prepare_gpu_pictures(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+    /// The scene's contributions as material-space pictures the host reads back. `own_frame`: the
+    /// scene is an evaluation of its own (a frozen frame at its time) and is lit like a frame; else
+    /// it belongs to the frame being evaluated (an analysis read) and makes no capture of its own.
+    pub(super) fn prepare_gpu_pictures(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera, own_frame: bool) -> Result<GpuSceneValue, EngineError> {
         self.compositor.refresh_catalog_programs();
         let catalog = self.compositor.catalog.clone();
         let graph = crate::render_lowering::lower_scene_as_pictures(scene, &catalog)
             .map_err(|error| EngineError::Store(error.to_string()))?;
         self.adopt_world_environment(&graph)?;
-        self.execute_render_graph(&graph, comp, projection_camera)
+        let (prepared, _light) = self.as_frame_part(comp, projection_camera, own_frame, |engine| {
+            let prepared = engine.execute_render_graph(&graph, comp, projection_camera)?;
+            let top = prepared.layers.clone();
+            Ok((prepared, top))
+        })?;
+        Ok(prepared)
     }
 
     /// Cassette executor: reads only the backend-neutral graph.
@@ -200,6 +309,11 @@ impl Engine {
 
     /// Clip groups and mattes over prepared contributions, in scene order.
     fn compose_prepared(&mut self, graph: &RenderGraph, prepared: &[Option<LayerWithPasses>], comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+        // A matte or clip group reads its layers' pictures now: plates waiting for the frame's light
+        // are baked first, each with its own capture.
+        if !self.pending_plates.is_empty() && graph.output.iter().any(|composed| composed.mask.is_some() || !composed.atop.is_empty()) {
+            self.plates_needed_early = true;
+        }
         let mut groups = std::collections::HashMap::new();
         let mut layers = Vec::with_capacity(graph.output.len());
         let mut layer_ids = Vec::with_capacity(graph.output.len());
@@ -295,7 +409,12 @@ impl Engine {
                         rotation_y: 0.0,
                         plane: None,
                     };
-                    let baked = self.bake_isolated_layers(comp, camera, prepared.layers, CompositeBlendMode::Normal, placement, *average, self.picture_density)?;
+                    let baked = if self.deferring_plates || self.known_frame_light.is_none() {
+                        self.reflectable_member_ids.extend(prepared.layer_ids.iter().copied());
+                        self.defer_isolated_layers(comp, camera, prepared.layers, placement, *average, self.picture_density)?
+                    } else {
+                        self.bake_isolated_layers(comp, camera, prepared.layers, CompositeBlendMode::Normal, placement, *average, self.picture_density)?
+                    };
                     (Some(baked.content), baked.size)
                 }
             }
@@ -556,16 +675,24 @@ impl Engine {
         let result = (|| match input {
             ImageInput::Absent | ImageInput::Refused { .. } => Ok(None),
             ImageInput::Raster { id, source, .. } => {
-                let (content, _) = self.execute_raster(*id, *id, source, None, comp, camera)?;
+                // Another time is a frame of its own: its plates wait for its one capture.
+                let ((content, _), _light) = self.as_own_frame(comp, camera, |engine| {
+                    let made = engine.execute_raster(*id, *id, source, None, comp, camera)?;
+                    Ok((made, Vec::new()))
+                })?;
                 let Some(texture) = content.and_then(|content| content.texture().cloned()) else {
                     return Ok(None);
                 };
                 Ok(self.compositor.snapshot_texture(&texture))
             }
             ImageInput::Graph { graph, background, absent_when_empty, .. } => {
-                let prepared = self.execute_render_graph(graph, comp, camera)?;
+                let (prepared, light) = self.as_own_frame(comp, camera, |engine| {
+                    let prepared = engine.execute_render_graph(graph, comp, camera)?;
+                    let top = prepared.layers.clone();
+                    Ok((prepared, top))
+                })?;
                 if prepared.layers.is_empty() && *absent_when_empty { return Ok(None); }
-                let (texture, _) = self.compositor.render_to_texture(comp, camera, &prepared.layers, *background)?;
+                let (texture, _) = self.compositor.bake_picture(comp, camera, &prepared.layers, *background, 1.0, Some(&light), None)?;
                 Ok(self.compositor.import_premultiplied(&texture).ok())
             }
         })();
@@ -610,3 +737,12 @@ pub(super) use reuse::ContributionCache;
 #[cfg(test)]
 mod tests;
 
+
+/// What the frame's preparation did, in order: the invariants are read from this, not from pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::engine) enum PreparationEvent {
+    /// A frame-level world light capture, by serial.
+    Capture(u64),
+    /// A plate baked, lit by the capture of this serial (0: unlit, a read within the frame).
+    Bake(u64),
+}

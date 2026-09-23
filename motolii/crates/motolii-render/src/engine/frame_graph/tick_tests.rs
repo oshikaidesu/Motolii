@@ -242,3 +242,116 @@ fn repeated_glass_is_one_transmission_input_and_one_batch_and_previews_as_it_exp
         assert!(worst <= 1, "{count} copies: preview and export differ by {worst}");
     }
 }
+
+/// The frame's reflection, checked on the preparation's own record (no pictures): one capture per
+/// evaluated frame, taken before any plate is baked, seeing every plate's members, and the light
+/// every plate is baked with.
+mod frame_reflection {
+    use super::*;
+    use crate::doc::store::{EffectId, EffectInstance, EffectScope, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, Value};
+    use crate::render::engine::environment_tests::{file_layer, scene, sky_png};
+    use crate::render::engine::frame_graph_scene::PreparationEvent::{Bake, Capture};
+    use motolii_edit::{Document, Intent};
+
+    /// `count` groups, each a plate (a Repeater on the whole and a cheap effect after it) holding
+    /// two mesh members.
+    fn plates(dir: &std::path::Path, count: u64) -> (Document, Vec<LayerId>) {
+        let sky = sky_png(dir, "sky.png", 40, 220);
+        let mut doc = scene(dir, &sky, true);
+        let obj = dir.join("quad.obj");
+        let mut members = Vec::new();
+        for k in 0..count {
+            let group = LayerId(100 + k * 10);
+            let (repeat, gain) = (EffectId(1000 + k as u32), EffectId(1500 + k as u32));
+            doc.apply_all([
+                Intent::AddLayer(group),
+                Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 10 + k as i16 * 3, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetEffects { layer: group, effects: vec![
+                    EffectInstance { id: repeat, plugin_id: crate::extensions::placement::REPEAT.to_owned() },
+                    EffectInstance { id: gain, plugin_id: "motolii.gain".to_owned() },
+                ] },
+                Intent::SetConstant { layer: group, property: PropertyId::effect_scope(gain), value: Value::Enum(EffectScope::Whole.enum_value()) },
+            ]).unwrap();
+            for m in 1..=2 {
+                let member = file_layer(&mut doc, 100 + k * 10 + m, 10 + k as i16 * 3 + m as i16, &obj);
+                doc.apply(Intent::SetAttrs { layer: member, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } }).unwrap();
+                doc.apply(Intent::SetEffects { layer: member, effects: vec![EffectInstance { id: EffectId(2000 + (k * 10 + m) as u32), plugin_id: "motolii.glass".into() }] }).unwrap();
+                members.push(member);
+            }
+        }
+        (doc, members)
+    }
+
+    fn prepare(doc: &Document, views: usize) -> Engine {
+        let mut engine = Engine::new().unwrap();
+        let _ = tick(&mut engine, doc, RationalTime::ZERO, views);
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        engine
+    }
+
+    /// One capture, before every bake, and every bake lit by it — however many plates or views.
+    #[test]
+    fn one_capture_lights_every_plate_however_many_plates_or_views() {
+        let dir = tempfile::tempdir().unwrap();
+        for (count, views) in [(1, 1), (3, 1), (3, 5)] {
+            let (doc, _) = plates(dir.path(), count);
+            let engine = prepare(&doc, views);
+            let events = &engine.preparation_events;
+            let captures: Vec<_> = events.iter().filter_map(|e| match e { Capture(s) => Some(*s), _ => None }).collect();
+            assert_eq!(captures.len(), 1, "{count} plates, {views} views: one frame-level capture: {events:?}");
+            assert_eq!(events.iter().filter(|e| matches!(e, Bake(_))).count(), count as usize, "each plate baked once: {events:?}");
+            assert!(events.iter().all(|e| !matches!(e, Bake(s) if *s != captures[0])), "every plate lit by the frame's capture: {events:?}");
+            assert_eq!(events.first(), Some(&Capture(captures[0])), "the capture comes before any plate is baked: {events:?}");
+        }
+    }
+
+    /// Every plate's members are in the scene the frame's capture sees (so siblings reflect each
+    /// other through the shared probe), and no plate captures a probe of its own.
+    #[test]
+    fn plate_members_are_the_reflectable_scene_and_no_plate_captures_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let (one, _) = plates(dir.path(), 1);
+        let (three, _) = plates(dir.path(), 3);
+        let faces = |doc: &Document| { let engine = prepare(doc, 1); engine.surface_work().scene_captures };
+        let mut engine = prepare(&three, 1);
+        let members = engine.plate_member_ids(&three, RationalTime::ZERO);
+        assert!(!members.is_empty());
+        for member in &members {
+            assert!(engine.reflectable_ids.contains(member), "member {member:?} is in the captured scene: {:?}", engine.reflectable_ids);
+        }
+        assert_eq!(faces(&one), faces(&three), "three plates capture no more faces than one");
+    }
+
+    /// A matte reading a plate needs it during preparation: still one capture, and the plate is lit
+    /// by it, not by one of its own.
+    #[test]
+    fn a_plate_needed_early_is_lit_by_the_frames_capture() {
+        use crate::doc::store::{Matte, MatteMode};
+        let dir = tempfile::tempdir().unwrap();
+        let (mut doc, _) = plates(dir.path(), 1);
+        let board = file_layer(&mut doc, 500, 40, &dir.path().join("sky.png"));
+        doc.apply(Intent::SetAttrs { layer: board, patch: LayerAttrsPatch { matte: Some(Some(Matte { layer: LayerId(100), mode: MatteMode::Alpha })), ..Default::default() } }).unwrap();
+        let engine = prepare(&doc, 1);
+        let events = &engine.preparation_events;
+        let captures: Vec<_> = events.iter().filter_map(|e| match e { Capture(s) => Some(*s), _ => None }).collect();
+        assert_eq!(captures.len(), 1, "{events:?}");
+        assert!(events.iter().any(|e| matches!(e, Bake(_))) && events.iter().all(|e| !matches!(e, Bake(s) if *s != captures[0])), "{events:?}");
+    }
+
+    /// Reads for analysis belong to the frame: however many, no capture of their own; an
+    /// evaluation of its own (a frozen frame) is lit once.
+    #[test]
+    fn reads_within_a_frame_make_no_capture_of_their_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let (doc, _) = plates(dir.path(), 2);
+        let mut engine = prepare(&doc, 1);
+        let scene = engine.frame_graph_editor_scene(&doc.view(), RationalTime::ZERO).unwrap();
+        let comp = doc.view().composition().unwrap().unwrap().spec();
+        let before = engine.world_light_captures;
+        for _ in 0..3 { engine.prepare_gpu_pictures(&scene, comp, Default::default(), false).unwrap(); }
+        assert_eq!(engine.world_light_captures, before, "three reads within the frame, no capture");
+        engine.prepare_gpu_pictures(&scene, comp, Default::default(), true).unwrap();
+        assert_eq!(engine.world_light_captures, before + 1, "an evaluation of its own is lit once");
+        engine.compositor.flush_pending();
+    }
+}

@@ -324,6 +324,16 @@ impl Engine {
         Ok(texture)
     }
 
+    /// The members of the plates in the evaluated scene at `time` (for the invariant tests).
+    #[cfg(test)]
+    pub(crate) fn plate_member_ids(&mut self, doc: &motolii_edit::Document, time: RationalTime) -> Vec<LayerId> {
+        let scene = self.frame_graph_editor_scene(&doc.view(), time).unwrap();
+        scene.layers.iter().filter_map(|l| match &l.content {
+            crate::frame_graph::SceneContentValue::Plate(plate) => Some(plate.members.iter().filter_map(|m| m.layer.as_ref().map(|l| l.layer)).collect::<Vec<_>>()),
+            _ => None,
+        }).flatten().collect()
+    }
+
     fn evaluated_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality) -> Result<EngineFrameGraph, EngineError> {
         let revision = GraphRevision::new(view.revision_key());
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };

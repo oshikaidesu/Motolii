@@ -20,6 +20,18 @@ const SRC_OVER: u32 = 3;
 /// What is below stays on top (the sky under what is drawn).
 const DEST_OVER: u32 = 4;
 
+/// The world's light for one frame: its one shared reflection probe and the sun's occluder map.
+#[derive(Clone, Default)]
+pub(crate) struct WorldLight {
+    pub reflection: Option<re_renderer::environment::SceneReflection>,
+    pub light: Option<re_renderer::environment::SunLight>,
+    /// The mesh instances the capture uploaded, when its scene is the frame's own layer list (no
+    /// plate members added): the views place them the same way and draw them as they are.
+    pub meshes: Option<super::surface_scene::SharedMeshScene>,
+    /// Which frame-level capture this is (0: none, unlit).
+    pub serial: u64,
+}
+
 /// What a view reads from the prepared world.
 pub(crate) struct ViewWorld<'a> {
     pub environment: Option<&'a GpuEnvironmentData>,
@@ -72,9 +84,10 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
+        into: Option<&wgpu::Texture>,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<wgpu::Texture, CompositorError> {
-        let picture = self.create_blend_scratch_texture(window.width, window.height);
+        let picture = into.cloned().unwrap_or_else(|| self.create_blend_scratch_texture(window.width, window.height));
         match self.record_stack(comp, window, camera, inputs, background_color, world, encoder)? {
             Some(stack) => {
                 let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };

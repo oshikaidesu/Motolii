@@ -179,6 +179,24 @@ pub struct Engine {
     contributions: frame_graph_scene::ContributionCache,
     /// Contributions lowered and prepared on the production path (reused ones are not counted).
     prepared_contributions: u64,
+    /// While preparing a frame: plates whose picture waits for the frame's reflection capture, the
+    /// members they hold (the reflectable scene), whether plates wait at all, and the frame's light.
+    pending_plates: Vec<render::build::PendingPlate>,
+    reflectables: Vec<crate::render::compositor::LayerWithPasses>,
+    deferring_plates: bool,
+    /// Set while a frame is prepared again under its already captured light (something read a
+    /// plate's picture during preparation).
+    known_frame_light: Option<crate::render::compositor::WorldLight>,
+    plates_needed_early: bool,
+    /// Counters for the invariants: frame-level light captures and plate bakes.
+    world_light_captures: u64,
+    plate_bakes: u64,
+    /// The plate members in the last frame-level capture's scene, and what the preparation did in
+    /// order: read by the invariant tests.
+    reflectable_ids: Vec<LayerId>,
+    reflectable_member_ids: Vec<LayerId>,
+    preparation_events: Vec<frame_graph_scene::PreparationEvent>,
+    frame_light: crate::render::compositor::WorldLight,
     /// The document frame the last tick's views read.
     tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
     tick_stats: frame_graph::tick::TickStats,
@@ -270,6 +288,17 @@ impl Engine {
             view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
+            pending_plates: Vec::new(),
+            reflectables: Vec::new(),
+            deferring_plates: false,
+            known_frame_light: None,
+            plates_needed_early: false,
+            world_light_captures: 0,
+            plate_bakes: 0,
+            reflectable_ids: Vec::new(),
+            reflectable_member_ids: Vec::new(),
+            preparation_events: Vec::new(),
+            frame_light: Default::default(),
             tick_frame: None,
             tick_stats: Default::default(),
             in_tick: false,
@@ -367,6 +396,17 @@ impl Engine {
             view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
+            pending_plates: Vec::new(),
+            reflectables: Vec::new(),
+            deferring_plates: false,
+            known_frame_light: None,
+            plates_needed_early: false,
+            world_light_captures: 0,
+            plate_bakes: 0,
+            reflectable_ids: Vec::new(),
+            reflectable_member_ids: Vec::new(),
+            preparation_events: Vec::new(),
+            frame_light: Default::default(),
             tick_frame: None,
             tick_stats: Default::default(),
             in_tick: false,

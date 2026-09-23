@@ -573,6 +573,22 @@ impl Compositor {
         background_color: [f32; 4],
         density: f32,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
+        self.bake_picture(comp, camera, layers, background_color, density, None, None)
+    }
+
+    /// A picture of `layers`, lit by the frame's world light when given (a plate baked after the
+    /// frame's one reflection capture), else by its own capture; into `into` when given.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn bake_picture(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+        background_color: [f32; 4],
+        density: f32,
+        world_light: Option<&WorldLight>,
+        into: Option<&wgpu::Texture>,
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         let (pictures, paddings, spills, _always_empty) = self.effective_layer_textures(layers)?;
         let inputs = sequential_inputs(layers, &pictures, &paddings, &spills);
         let full = crate::render::compositor::Window::output(comp);
@@ -585,10 +601,13 @@ impl Compositor {
         };
         let environment = self.world_environment.clone();
         let motion = self.motion.clone();
-        let (reflection, light, meshes) = self.capture_world_light(comp, &inputs, environment.as_deref())?;
+        let (reflection, light, meshes) = match world_light {
+            Some(world) => (world.reflection.clone(), world.light.clone(), self.shared_mesh_scene(comp, &inputs)?),
+            None => self.capture_world_light(comp, &inputs, environment.as_deref())?,
+        };
         let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), reflection: reflection.as_ref(), light: light.as_ref(), meshes: meshes.as_ref() };
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
-        let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, &mut encoder)?;
+        let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, into, &mut encoder)?;
         self.pending.push(encoder.finish());
         let view = texture.create_view(&Default::default());
         Ok((texture, view))
