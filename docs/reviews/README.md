@@ -28,6 +28,7 @@
 
 ## 全文書索引
 
+- [Render orchestration は Rerun の — tick = begin_frame ×1 → prepare ×1 → View ×N → submit ×1、仕事の置き場は入力で決める](2026-09-23-render-orchestration.md)
 - [Chromatic Workshop — 実画面への反映と公開カラーテーマ](2026-09-20-chromatic-theme-implementation.md)
 
 - [UI の余白・整列・寸法関係 — Claude へのレビュー引き継ぎ](2026-09-20-ui-spacing-review-handoff.md)
