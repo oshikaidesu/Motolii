@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
             println!("{case} pass={pass} cpu_ms={:.3} wait_ms={:.3} total_ms={:.3}", mean(&cpu), mean(&wait), mean(&cpu)+mean(&wait));
             let after = engine.surface_work();
-            println!("{case} captures={} main_runs={} mesh_upload_bytes={} draw_prepare_us={}", after.scene_captures-before.scene_captures, after.main_runs-before.main_runs, after.mesh_instance_upload_bytes-before.mesh_instance_upload_bytes, after.draw_data_prepare_us-before.draw_data_prepare_us);
+            println!("{case} main_runs={} mesh_upload_bytes={} draw_prepare_us={}", after.main_runs-before.main_runs, after.mesh_instance_upload_bytes-before.mesh_instance_upload_bytes, after.draw_data_prepare_us-before.draw_data_prepare_us);
             if !engine.layer_failures().is_empty() { eprintln!("failures: {:?}", engine.layer_failures()); }
         }
     }

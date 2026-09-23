@@ -33,8 +33,6 @@ pub struct SurfaceShading {
     pub grid_hint: u32,
     /// A field effect moves the surface (its vertices, a picture's samples).
     pub field_effect: bool,
-    /// A surface effect shades it (a reflecting, refracting surface: the reflection capture looks at it).
-    pub surface_effect: bool,
 }
 
 impl SurfaceShading {
@@ -240,9 +238,7 @@ impl crate::render::compositor::Compositor {
                 program
             }
         };
-        // An unlit layer is shaded by a program of its own, which the reflection capture has always
-        // treated as a shaded surface.
-        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(), surface_effect: surface.is_some() || recipe.unlit })
+        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some() })
     }
 
     /// The program of a surface without effects: its Block's motion and the standard material.

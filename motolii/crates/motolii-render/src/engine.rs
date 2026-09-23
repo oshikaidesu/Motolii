@@ -159,7 +159,7 @@ pub struct Engine {
     plate_bakes: u64,
     /// The plate members in the last frame-level capture's scene, and what the preparation did in
     /// order: read by the invariant tests.
-    reflectable_ids: Vec<LayerId>,
+    light_scene_ids: Vec<LayerId>,
     preparation_events: Vec<frame_graph_scene::PreparationEvent>,
     /// The document frame the last tick's views read.
     tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
@@ -246,7 +246,7 @@ impl Engine {
             prepared_contributions: 0,
             world_light_captures: 0,
             plate_bakes: 0,
-            reflectable_ids: Vec::new(),
+            light_scene_ids: Vec::new(),
             preparation_events: Vec::new(),
             tick_frame: None,
             tick_stats: Default::default(),
@@ -319,7 +319,7 @@ impl Engine {
             prepared_contributions: 0,
             world_light_captures: 0,
             plate_bakes: 0,
-            reflectable_ids: Vec::new(),
+            light_scene_ids: Vec::new(),
             preparation_events: Vec::new(),
             tick_frame: None,
             tick_stats: Default::default(),
@@ -382,11 +382,6 @@ impl Engine {
 
     pub fn frame_measurement(&self) -> crate::render::compositor::FrameMeasurement {
         self.compositor.measurement
-    }
-
-    /// 反射の撮影点を送り手の箱に固定し、受け手を撮影から外す(比較用の切替、Document は変えない)。
-    pub fn set_reflection_scene_probe(&mut self, enabled: bool) {
-        self.compositor.reflection_scene_probe = enabled;
     }
 
     pub fn surface_work(&self) -> crate::render::compositor::SurfaceWork {
@@ -490,15 +485,9 @@ mod environment_tests;
 mod presentable_matches_export;
 
 #[cfg(test)]
-mod reflection_tests;
+mod surface_tests;
 #[cfg(test)]
 mod antialiasing_tests;
-
-#[cfg(test)]
-mod response_tests;
-
-#[cfg(test)]
-mod visibility_tests;
 
 /// 粒子の層の 1 コマ分の点(層の局所 px、出す元が 0)。
 #[derive(Clone)]

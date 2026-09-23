@@ -7,33 +7,6 @@ use crate::doc::store::{
 };
 use crate::extensions::{placement};
 
-#[test]
-#[ignore = "near-contact reflection continuity diagnostic"]
-fn gallery_near_contact_continuity() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let mut doc = Document::load(root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd")).unwrap().with_programs(crate::extensions::bundled());
-    let ball = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO).unwrap().into_iter()
-        .filter(|l| matches!(&l.source, LayerSource::File { path, .. } if path.ends_with("sphere.obj")))
-        .last().unwrap().id;
-    let out = std::path::PathBuf::from(std::env::var("MOTOLII_CONTACT_DIR").unwrap());
-    std::fs::create_dir_all(&out).unwrap();
-    let mut engine = Engine::new().unwrap();
-    let mut previous: Option<Vec<u8>> = None;
-    let mut rows = Vec::new();
-    for x in 870..=1170 {
-        set(&mut doc, ball, "position", Value::Vec2([f64::from(x), 479.21]));
-        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
-        assert!(engine.layer_failures().is_empty());
-        if let Some(before) = &previous {
-            let delta: u64 = before.iter().zip(&pixels).map(|(a,b)| u64::from(a.abs_diff(*b))).sum();
-            rows.push(serde_json::json!({"x":x,"rgba_absolute_difference":delta}));
-        }
-        image::RgbaImage::from_raw(1600,1000,pixels.clone()).unwrap().save(out.join(format!("{x}.png"))).unwrap();
-        previous = Some(pixels);
-    }
-    std::fs::write(out.join("deltas.json"),serde_json::to_vec_pretty(&rows).unwrap()).unwrap();
-}
-
 pub(super) fn set(doc: &mut Document, layer: LayerId, name: &str, value: Value) {
     doc.apply(Intent::SetConstant {
         layer,
@@ -51,127 +24,9 @@ pub(super) fn effect(doc: &mut Document, layer: LayerId, id: u32, name: &str, va
     .unwrap();
 }
 
-/// Local probes include geometry behind the main camera; changing it must invalidate the result.
-#[test]
-fn shared_reflection_sees_offscreen_objects_and_refreshes_without_history() {
-    let dir = tempfile::tempdir().unwrap();
-    let sky = sky_png(dir.path(), "white.png", 255, 255);
-    let red = dir.path().join("red.png");
-    let blue = dir.path().join("blue.png");
-    let plate = dir.path().join("plate.png");
-    for (path, color, size) in [
-        (&red, [255, 0, 0, 255], SIZE),
-        (&blue, [0, 0, 255, 255], SIZE),
-        (&plate, [255, 255, 255, 255], 24),
-    ] {
-        image::RgbaImage::from_pixel(size, size, image::Rgba(color))
-            .save(path)
-            .unwrap();
-    }
-    let mut engine = Engine::new().unwrap();
-    for rectangle in [false, true] {
-        let mut doc = scene(dir.path(), &sky, true);
-        let receiver = LayerId(2);
-        if rectangle {
-            doc.apply(Intent::SetSource {
-                layer: receiver,
-                source: LayerSource::File {
-                    path: plate.to_string_lossy().into_owned(),
-                    fingerprint: None,
-                },
-            })
-            .unwrap();
-            set(&mut doc, receiver, property::SCALE, Value::Vec2([1.0, 1.0]));
-        }
-        doc.apply(Intent::SetEffects {
-            layer: receiver,
-            effects: vec![EffectInstance {
-                id: EffectId(0),
-                plugin_id: "motolii.glass".into(),
-            }],
-        })
-        .unwrap();
-        for (name, value) in [("roughness", 0.0), ("metallic", 1.0), ("transmission", 0.0)] {
-            effect(&mut doc, receiver, 0, name, Value::F64(value));
-        }
-        let sender = file_layer(&mut doc, 3, 0, &red);
-        set(
-            &mut doc,
-            sender,
-            property::POSITION,
-            Value::Vec2([-300.0, -300.0]),
-        );
-        set(&mut doc, sender, property::SCALE, Value::Vec2([10.0, 10.0]));
-        set(&mut doc, sender, "position.z", Value::F64(-200.0));
-        let mut first = None;
-        for (step, path) in [&red, &blue, &red].into_iter().enumerate() {
-            doc.apply(Intent::SetSource {
-                layer: sender,
-                source: LayerSource::File {
-                    path: path.to_string_lossy().into_owned(),
-                    fingerprint: None,
-                },
-            })
-            .unwrap();
-            let pixels = engine
-                .render_frame(&doc.view(), RationalTime::ZERO)
-                .unwrap();
-            assert!(
-                engine.layer_failures().is_empty(),
-                "{:?}",
-                engine.layer_failures()
-            );
-            let i = ((MESH_Y * SIZE + MESH_X) * 4) as usize;
-            let color = &pixels[i..i + 3];
-            if step == 1 {
-                assert!(
-                    color[2] > 150 && color[0] < 80,
-                    "offscreen blue, rectangle={rectangle}: {color:?}"
-                );
-            } else {
-                assert!(
-                    color[0] > 150 && color[2] < 80,
-                    "offscreen red, rectangle={rectangle}: {color:?}"
-                );
-            }
-            if step == 0 {
-                first = Some(pixels);
-            } else if step == 2 {
-                assert_eq!(
-                    first.as_ref().unwrap(),
-                    &pixels,
-                    "same source state must have identical output"
-                );
-                let observed = engine
-                    .render_with_camera_override(
-                        &doc.view(),
-                        RationalTime::ZERO,
-                        true,
-                        Some(ResolvedCamera {
-                            orbit_degrees: [15.0, 25.0],
-                            ..Default::default()
-                        }),
-                    )
-                    .unwrap();
-                assert_ne!(
-                    &pixels, &observed,
-                    "authored view change must remain visible"
-                );
-                let restored = engine
-                    .render_frame(&doc.view(), RationalTime::ZERO)
-                    .unwrap();
-                assert_eq!(
-                    pixels, restored,
-                    "returning to a camera must not retain old reflection history"
-                );
-            }
-        }
-    }
-}
-
 /// The capture/draw budget belongs to the scene, not to each Repeater copy.
 #[test]
-fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
+fn repeated_mirrors_batch_and_do_not_copy_the_backdrop() {
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "white.png", 255, 255);
     let mut engine = Engine::new().unwrap();
@@ -205,8 +60,7 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
         ] {
             effect(&mut doc, mesh, id, name, value);
         }
-        // The world is made once per document frame: the first render of it captures, a redraw of
-        // the same frame reuses it and only the view is drawn again.
+        // The world is made once per document frame: a redraw of the same frame draws only the view.
         let before = engine.surface_work();
         let started = std::time::Instant::now();
         engine
@@ -224,11 +78,6 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
         );
         let after = engine.surface_work();
         assert_eq!(
-            after.scene_captures - before.scene_captures,
-            12,
-            "two shared probes, count={count}"
-        );
-        assert_eq!(
             after.main_runs - before.main_runs,
             1,
             "mirror copies need no backdrop barrier"
@@ -236,14 +85,13 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
         assert_eq!(after.backdrop_copies - before.backdrop_copies, 0);
         assert_eq!(
             after.mesh_batches - before.mesh_batches,
-            3,
-            "two capture batches and one main batch"
+            1,
+            "one main batch"
         );
-        eprintln!("SHARED_REFLECTION count={count} total_with_readback_us={} captures=12 main_runs=1 backdrop_copies=0 mesh_batches=3",started.elapsed().as_micros());
+        eprintln!("REPEATED_MIRRORS count={count} total_with_readback_us={} main_runs=1 backdrop_copies=0 mesh_batches=1",started.elapsed().as_micros());
         let before = engine.surface_work();
         engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
         let after = engine.surface_work();
-        assert_eq!(after.scene_captures - before.scene_captures, 0, "a redraw of the same frame reads the world it made, count={count}");
         assert_eq!(after.main_runs - before.main_runs, 1, "the view is drawn again, count={count}");
     }
 }
@@ -300,79 +148,6 @@ fn overlapping_glass_copies_read_one_shared_backdrop() {
     );
 }
 
-/// Primary-view culling must not discard a lateral reflection sender.
-#[test]
-fn reflection_keeps_a_sender_outside_the_primary_frustum() {
-    let dir = tempfile::tempdir().unwrap();
-    let sky = sky_png(dir.path(), "white.png", 255, 255);
-    let red = dir.path().join("red.png");
-    image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 255]))
-        .save(&red)
-        .unwrap();
-    let mut doc = scene(dir.path(), &sky, true);
-    let receiver = LayerId(2);
-    doc.apply(Intent::SetEffects {
-        layer: receiver,
-        effects: vec![EffectInstance {
-            id: EffectId(0),
-            plugin_id: "motolii.glass".into(),
-        }],
-    })
-    .unwrap();
-    for (name, value) in [("roughness", 0.0), ("metallic", 1.0), ("transmission", 0.0)] {
-        effect(&mut doc, receiver, 0, name, Value::F64(value));
-    }
-    set(&mut doc, receiver, property::ROTATION_Y, Value::F64(45.0));
-    let sender = file_layer(&mut doc, 3, 0, &red);
-    set(
-        &mut doc,
-        sender,
-        property::POSITION,
-        Value::Vec2([-200.0, -100.0]),
-    );
-    set(
-        &mut doc,
-        sender,
-        property::SCALE,
-        Value::Vec2([1.5625, 4.0]),
-    );
-    set(&mut doc, sender, "position.z", Value::F64(50.0));
-    set(&mut doc, sender, property::ROTATION_Y, Value::F64(90.0));
-    let mut engine = Engine::new().unwrap();
-    let pixels = engine
-        .render_frame(&doc.view(), RationalTime::ZERO)
-        .unwrap();
-    let red_pixels = |pixels: &[u8]| {
-        pixels
-            .chunks_exact(4)
-            .filter(|p| p[0] > 150 && p[1] < 80 && p[2] < 80)
-            .count()
-    };
-    assert!(
-        red_pixels(&pixels) > 10,
-        "mirror must see the lateral red sender"
-    );
-    doc.apply(Intent::SetEffects {
-        layer: receiver,
-        effects: vec![],
-    })
-    .unwrap();
-    let plain = engine
-        .render_frame(&doc.view(), RationalTime::ZERO)
-        .unwrap();
-    assert_eq!(
-        red_pixels(&plain),
-        0,
-        "the sender is not directly visible in the primary view"
-    );
-    assert!(
-        engine.layer_failures().is_empty(),
-        "{:?}",
-        engine.layer_failures()
-    );
-}
-
-
 #[test]
 fn gpu_instance_sharing_matches_rebuilds_and_uploads_each_copy_once() {
     let dir = tempfile::tempdir().unwrap();
@@ -403,17 +178,14 @@ fn gpu_instance_sharing_matches_rebuilds_and_uploads_each_copy_once() {
         assert_eq!(actual, expected, "shared GPU subset count={count}");
         assert_eq!(after.mesh_instances_uploaded - before.mesh_instances_uploaded, count);
         assert_eq!(after.mesh_batches - before.mesh_batches, 1);
-        assert_eq!(after.scene_captures - before.scene_captures, 12);
         assert_eq!(shared.drawn_layers(), count as usize + 1);
     }
     for opacity in [0.5, 1.0] {
         set(&mut doc, mesh, property::OPACITY, Value::F64(opacity));
         effect(&mut doc, mesh, 1, "count", Value::F64(10.0));
         let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
-        let before = shared.surface_work();
         let actual = shared.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
         assert_eq!(actual, expected, "transparency fallback {opacity}");
-        if opacity < 1.0 { assert!(shared.surface_work().mesh_batches - before.mesh_batches > 1); }
     }
     for clipped in [false, true] {
         let mut effects = vec![

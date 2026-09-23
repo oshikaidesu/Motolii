@@ -1,98 +1,16 @@
-// Motolii's standard material: split-sum environment light, the scene's two box-projected reflection
-// probes, the sun's light cookie, and transmission that refracts the backdrop (Standard Glass).
+// Motolii's standard material: split-sum environment light, the sun's light cookie, and
+// transmission that refracts the backdrop (Standard Glass).
 // Appended to a surface program's surface hook; reads the frame's resources (re_renderer's bindings).
 
 // The view's program constants as Motolii lays them out (compositor/light.rs).
-fn reflection_origin() -> vec4f { return frame.program_constants[0]; }
-fn reflection_origin_second() -> vec4f { return frame.program_constants[1]; }
-fn reflection_min() -> vec4f { return frame.program_constants[2]; }
-fn reflection_max() -> vec4f { return frame.program_constants[3]; }
 /// xyz: world direction toward the sun; w: its share of the diffuse light (0 = no sun, no shadow).
-fn sun_direction() -> vec4f { return frame.program_constants[4]; }
+fn sun_direction() -> vec4f { return frame.program_constants[0]; }
 /// rgb: the sun's tint; w = 1 while the light cookie is captured (surfaces write what they let through).
-fn sun_color() -> vec4f { return frame.program_constants[5]; }
+fn sun_color() -> vec4f { return frame.program_constants[1]; }
 /// World → light cookie uv (orthographic, looking along the sun).
 fn light_uv_from_world() -> mat4x4f {
-    return mat4x4f(frame.program_constants[6], frame.program_constants[7], frame.program_constants[8], frame.program_constants[9]);
+    return mat4x4f(frame.program_constants[2], frame.program_constants[3], frame.program_constants[4], frame.program_constants[5]);
 }
-
-fn projected_reflection_ray(position: vec3f, direction: vec3f, origin: vec3f) -> vec3f {
-    var anchor = position;
-    if reflection_origin_second().w > 0.0 {
-        anchor = clamp(position, reflection_min().xyz, reflection_max().xyz);
-    }
-    if all(anchor >= reflection_min().xyz) && all(anchor <= reflection_max().xyz) {
-        let safe_dir = select(select(vec3f(-1e-6), vec3f(1e-6), direction >= vec3f(0.0)), direction, abs(direction) > vec3f(1e-6));
-        let far = max((reflection_min().xyz - anchor) / safe_dir, (reflection_max().xyz - anchor) / safe_dir);
-        return anchor + direction * min(far.x, min(far.y, far.z)) - origin;
-    }
-    return direction;
-}
-
-fn reflection_face_uv(ray: vec3f, forward: vec3f, up: vec3f) -> vec2f {
-    return vec2f(dot(ray, cross(forward,up)), -dot(ray,up)) / max(dot(ray,forward),1e-6) * 0.5 + 0.5;
-}
-
-
-// Box-projected local reflection, as used by reflection probes (Arm / Happy Elements).
-fn local_reflection(position: vec3f, direction: vec3f, roughness: f32, origin: vec3f, probe: u32) -> vec4f {
-    let ray = projected_reflection_ray(position, direction, origin);
-    let a = abs(ray);
-    var face = 0u;
-    if a.x >= a.y && a.x >= a.z { face = select(1u, 0u, ray.x >= 0.0); }
-    else if a.y >= a.z { face = select(3u, 2u, ray.y >= 0.0); }
-    else { face = select(5u, 4u, ray.z >= 0.0); }
-    let directions = array<vec3f, 6>(vec3f(1,0,0),vec3f(-1,0,0),vec3f(0,1,0),vec3f(0,-1,0),vec3f(0,0,1),vec3f(0,0,-1));
-    let ups = array<vec3f, 6>(vec3f(0,-1,0),vec3f(0,-1,0),vec3f(0,0,1),vec3f(0,0,-1),vec3f(0,-1,0),vec3f(0,-1,0));
-    let uv = reflection_face_uv(ray, directions[face], ups[face]);
-    // Keep each face at least 4x4 to avoid cross-face mip leakage.
-    let face_size = f32(textureDimensions(view_capture_texture).x) / 3.0;
-    let max_lod = max(log2(face_size) - 2.0, 0.0);
-    var lod = clamp(roughness,0.0,1.0) * max_lod;
-    if FILTER_SURFACE_FOOTPRINT {
-        let ray_x = projected_reflection_ray(position + surface_position_dx, direction + surface_ray_dx, origin);
-        let ray_y = projected_reflection_ray(position + surface_position_dy, direction + surface_ray_dy, origin);
-        let dx = reflection_face_uv(ray_x, directions[face], ups[face]) - uv;
-        let dy = reflection_face_uv(ray_y, directions[face], ups[face]) - uv;
-        lod = min(max_lod, max(lod, footprint_lod(dx,dy,vec2f(face_size))));
-    }
-    // A continuous guard covers half a texel at both trilinear mip levels.
-    let guard_lod = select(ceil(lod), lod, FILTER_SURFACE_FOOTPRINT);
-    let margin = min(0.49, exp2(guard_lod) / face_size);
-    let local = clamp(uv,vec2f(margin),vec2f(1.0-margin));
-    let atlas_uv = (local + vec2f(f32(face % 3u),f32(face / 3u) + f32(probe)*2.0)) / vec2f(3,4);
-    let captured = textureSampleLevel(view_capture_texture, screen_sampler, atlas_uv, lod);
-    return captured;
-}
-
-fn reflection_influence(position: vec3f, origin: vec3f, radius: f32) -> f32 {
-    if radius <= 0.0 { return 1.0; }
-    let radial = 1.0 - smoothstep(radius, 2.0 * radius, distance(position, origin));
-    let border = min(position - reflection_min().xyz, reflection_max().xyz - position);
-    let fade = max((reflection_max().xyz - reflection_min().xyz) * 0.05, vec3f(1e-4));
-    let box_weight = vec3f(1.0) - smoothstep(vec3f(0.0), fade, max(-border, vec3f(0.0)));
-    return radial * min(box_weight.x, min(box_weight.y, box_weight.z));
-}
-
-fn scene_specular(position: vec3f, direction: vec3f, roughness: f32) -> vec3f {
-    let fallback = environment_specular_along(direction, roughness);
-    if reflection_origin().w == 0.0 { return fallback; }
-    let w0 = reflection_influence(position, reflection_origin().xyz, reflection_origin_second().w);
-    var captured = local_reflection(position,direction,roughness,reflection_origin().xyz,0u) * w0;
-    if reflection_origin().w > 1.0 {
-        let d0 = position-reflection_origin().xyz;
-        let d1 = position-reflection_origin_second().xyz;
-        var ratio = dot(d0,d0)/max(dot(d0,d0)+dot(d1,d1),1e-6);
-        if reflection_origin_second().w > 0.0 {
-            ratio = (dot(d0,d0) + 0.5e-6) / (dot(d0,d0) + dot(d1,d1) + 1e-6);
-        }
-        let weight = smoothstep(0.0,1.0,ratio);
-        let w1 = reflection_influence(position, reflection_origin_second().xyz, reflection_min().w);
-        captured = mix(captured,local_reflection(position,direction,roughness,reflection_origin_second().xyz,1u) * w1,weight);
-    }
-    return captured.rgb + (1.0-captured.a)*fallback;
-}
-
 
 /// Split-sum environment BRDF, analytic fit (Karis 2014, "Physically Based Shading on Mobile").
 fn env_brdf_approx(f0: vec3f, roughness: f32, n_dot_v: f32) -> vec3f {
@@ -137,7 +55,7 @@ fn transmitted_backdrop(view_dir: vec3f, normal: vec3f, reflected: vec3f, world_
 }
 
 /// Radiance leaving a surface: Lambert diffuse from the irradiance map, glossy reflection from the
-/// radiance mip chain (split-sum), and for transmissive surfaces the refracted see-through of what
+/// environment's radiance mip chain (split-sum), and for transmissive surfaces the refracted see-through of what
 /// is drawn behind (the backdrop, read where the refracted ray leaves a slab of `thickness`; vgpu's
 /// transmission example) with the environment where nothing is drawn.
 /// `surface` = (roughness, metallic, transmission, ior). Without an environment, the fixed lights apply.
@@ -159,7 +77,7 @@ fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: 
     }
     let shade = sun_shade(world_position, normal, 0.0);
 
-    if frame.environment_present != 1u && reflection_origin().w == 0.0 {
+    if frame.environment_present != 1u {
         return albedo * simple_lighting(normal) * shade;
     }
 
@@ -169,7 +87,7 @@ fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: 
         surface_ray_dx = reflect(-view_direction_to_camera(world_position + surface_position_dx), footprint_neighbor_normal(normal,surface_normal_dx)) - reflected;
         surface_ray_dy = reflect(-view_direction_to_camera(world_position + surface_position_dy), footprint_neighbor_normal(normal,surface_normal_dy)) - reflected;
     }
-    let specular = scene_specular(world_position, reflected, roughness) * env_brdf_approx(f0, roughness, n_dot_v);
+    let specular = environment_specular_along(reflected, roughness) * env_brdf_approx(f0, roughness, n_dot_v);
     var transmitted = vec3f(0.0);
     if transmission > 0.0 {
         let fresnel = f0_dielectric + (1.0 - f0_dielectric) * pow(1.0 - n_dot_v, 5.0);

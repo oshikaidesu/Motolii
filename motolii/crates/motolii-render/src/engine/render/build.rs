@@ -116,8 +116,8 @@ impl Engine {
     }
 
     /// A plate whose members are prepared now and whose picture is baked at the end of the frame's
-    /// preparation, after the frame's one reflection capture has seen its members (2026-09-23): the
-    /// members are the reflectable scene; the plate is their picture.
+    /// preparation, after the frame's one light capture has seen its members (2026-09-23): the
+    /// members are the light scene; the plate is their picture.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::engine) fn defer_isolated_layers(
         &mut self,
@@ -134,7 +134,7 @@ impl Engine {
         let target = self.compositor.picture_texture(size(comp.width), size(comp.height));
         let imported = self.compositor.import_premultiplied(&target)?;
         let layer = Self::plate_layer(LayerContent::Texture(imported.clone()), comp, &sources, CompositeBlendMode::Normal, placement);
-        prep.plates.reflectables.extend(sources.iter().cloned());
+        prep.plates.light_scene.extend(sources.iter().cloned());
         prep.plates.pending.push(PendingPlate { target, picture: imported, comp, camera, sources, density });
         Ok(layer)
     }
@@ -180,7 +180,7 @@ impl Engine {
         });
         let layer = Self::plate_layer(LayerContent::Plate(plate.clone()), comp, &plate.sources, CompositeBlendMode::Normal, placement);
         if prep.plates.deferring || prep.plates.known_light.is_none() {
-            prep.plates.reflectables.extend(plate.sources.iter().cloned());
+            prep.plates.light_scene.extend(plate.sources.iter().cloned());
             prep.plates.view.push(plate);
         } else {
             self.prepare_view_plate(&plate)?;
@@ -287,7 +287,7 @@ impl Engine {
 
 }
 
-/// A plate whose picture is baked after the frame's reflection capture.
+/// A plate whose picture is baked after the frame's light capture.
 pub(in crate::engine) struct PendingPlate {
     target: re_renderer::GpuTexture,
     /// The plate's picture as layers refer to it (its identity until it is baked).

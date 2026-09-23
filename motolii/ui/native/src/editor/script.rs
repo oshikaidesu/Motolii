@@ -425,7 +425,6 @@ mod frames {
         let comp = view.composition().unwrap().unwrap();
         let mut engine = crate::render::engine::Engine::new().unwrap();
         engine.set_realtime(true);
-        if std::env::var("MOTOLII_SCENE_PROBE").is_ok() { engine.set_reflection_scene_probe(true); }
         if let Ok(count) = std::env::var("MOTOLII_TIMING") {
             // Time a run of consecutive frames (after one warm frame) and name what the last one spent.
             let count: i64 = count.parse().unwrap();
@@ -439,8 +438,8 @@ mod frames {
             let before = engine.surface_work();
             engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start + count + 1, comp.fps).unwrap()).unwrap();
             let after = engine.surface_work();
-            eprintln!("  one frame: captures {} runs {} backdrop copies {} mesh batches {} instances uploaded {}",
-                after.scene_captures - before.scene_captures, after.main_runs - before.main_runs, after.backdrop_copies - before.backdrop_copies,
+            eprintln!("  one frame: light captures {} runs {} backdrop copies {} mesh batches {} instances uploaded {}",
+                after.light_captures - before.light_captures, after.main_runs - before.main_runs, after.backdrop_copies - before.backdrop_copies,
                 after.mesh_batches - before.mesh_batches, after.mesh_instances_uploaded - before.mesh_instances_uploaded);
             let mut claims = engine.frame_claims().to_vec();
             claims.sort_by(|a, b| b.us.cmp(&a.us));

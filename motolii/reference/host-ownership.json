@@ -25,7 +25,7 @@
               "SelectionBounds", "selection_bounds", "projection_camera_window", "read_texture_bytes", "submit_within_frame", "read_texture_now",
               "after_submit_within_frame", "reflection_cache", "ReflectionCache", "create_blend_scratch_texture", "wait_for_gpu",
               "import_gpu_premultiplied", "ExternalGpuTextureError", "is_imported", "transient_attachments", "discard_attachment_usage",
-              "TextCacheKey", "text_texture_from_document", "not_ported", "MotionBuffer", "SceneReflection", "SunLight", "light_capture", "shade_surface"],
+              "TextCacheKey", "text_texture_from_document", "not_ported", "MotionBuffer", "capture_scene_reflection", "reflection_scene_probe", "ReflectionResources", "reflection_resources", "reflection_probe_experiment", "reflection_diagnostic", "scene_captures", "local_reflection", "scene_specular", "SceneReflection", "SunLight", "light_capture", "shade_surface"],
     "fork_only": ["SceneReflection", "SunLight", "light_capture", "shade_surface"]
   },
 

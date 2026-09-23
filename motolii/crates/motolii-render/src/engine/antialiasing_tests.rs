@@ -1,6 +1,6 @@
 use motolii_edit::{Document, Intent};
 use super::environment_tests::{SIZE, scene, sky_png};
-use super::reflection_tests::set;
+use super::surface_tests::set;
 use super::*;
 use crate::doc::store::{LayerId, LayerSource, Value, property};
 
@@ -145,8 +145,7 @@ fn antialiasing_cost_comparison() {
                     rows.push(
                         serde_json::json!({"scenario":scenario,"frame":frame-5,"aa":enabled,
                         "total_us":m.total_us,"prepare_us":m.prepare_us,"submit_us":m.submit_us,
-                        "wait_us":m.wait_us,"readback_us":m.readback_us,
-                        "captures":engine.surface_work().scene_captures-before.scene_captures}),
+                        "wait_us":m.wait_us,"readback_us":m.readback_us}),
                     );
                 }
             }
@@ -221,8 +220,7 @@ fn lightweight_antialiasing_comparison() {
                     records.push(
                         serde_json::json!({"scenario":scenario,"frame":frame-5,"mode":configs[i].0,
                         "total_us":m.total_us,"prepare_us":m.prepare_us,"submit_us":m.submit_us,
-                        "wait_us":m.wait_us,"readback_us":m.readback_us,
-                        "captures":engine.surface_work().scene_captures-before.scene_captures}),
+                        "wait_us":m.wait_us,"readback_us":m.readback_us}),
                     );
                 }
             }
@@ -260,19 +258,19 @@ fn configured_engine(config: re_renderer::RenderConfig) -> Engine {
     engine
 }
 
-fn reflection_fixture(dir: &std::path::Path) -> Document {
+/// A metal mirror (filtered surface sampling) beside a red picture the edits change.
+fn mirror_fixture(dir: &std::path::Path) -> Document {
     use super::environment_tests::file_layer;
     use crate::doc::store::{EffectId, EffectInstance};
     let sky = sky_png(dir, "white-sky.png", 255, 255);
     let mut doc = scene(dir, &sky, true);
-    let red = dir.join("reflection-source.png");
+    let red = dir.join("red.png");
     image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255]))
         .save(&red)
         .unwrap();
     let sender = file_layer(&mut doc, 3, 0, &red);
-    set(&mut doc, sender, "position", Value::Vec2([-300.0, -300.0]));
-    set(&mut doc, sender, "scale", Value::Vec2([10.0, 10.0]));
-    set(&mut doc, sender, "position.z", Value::F64(-200.0));
+    set(&mut doc, sender, "position", Value::Vec2([12.0, 12.0]));
+    set(&mut doc, sender, "scale", Value::Vec2([0.2, 0.2]));
     doc.apply(Intent::SetEffects {
         layer: LayerId(2),
         effects: vec![EffectInstance {
@@ -281,15 +279,15 @@ fn reflection_fixture(dir: &std::path::Path) -> Document {
         }],
     })
     .unwrap();
-    super::reflection_tests::effect(&mut doc, LayerId(2), 0, "transmission", Value::F64(0.0));
-    super::reflection_tests::effect(&mut doc, LayerId(2), 0, "metallic", Value::F64(1.0));
+    super::surface_tests::effect(&mut doc, LayerId(2), 0, "transmission", Value::F64(0.0));
+    super::surface_tests::effect(&mut doc, LayerId(2), 0, "metallic", Value::F64(1.0));
     doc
 }
 
 #[test]
 fn filtered_surfaces_refresh_on_edit_undo_camera_and_cache_eviction() {
     let dir = tempfile::tempdir().unwrap();
-    let mut doc = reflection_fixture(dir.path());
+    let mut doc = mirror_fixture(dir.path());
     let mut engine = configured_engine(re_renderer::RenderConfig {
         surface_sampling: re_renderer::SurfaceSampling::FilteredPixel,
         ..Default::default()

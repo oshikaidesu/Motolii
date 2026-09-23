@@ -50,20 +50,8 @@ impl Compositor {
             motion: None,
             measurement: Default::default(),
             surface_work: Default::default(),
-            reflection_resources: None,
             light_cookie: None,
             gpu_instance_sharing_enabled: true,
-            reflection_scene_probe: false,
-            #[cfg(test)]
-            reflection_probe_experiment: 3,
-            #[cfg(test)]
-            reflection_diagnostic_enabled: false,
-            #[cfg(test)]
-            reflection_diagnostic: None,
-            #[cfg(test)]
-            reflection_diagnostic_skip: None,
-            #[cfg(test)]
-            reflection_diagnostic_near: None,
             next_readback: 1,
             baked_effects: Default::default(),
             effect_programs,

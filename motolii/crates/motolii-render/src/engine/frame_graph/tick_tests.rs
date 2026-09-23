@@ -110,7 +110,7 @@ fn world_captures_do_not_grow_with_views() {
     let mut doc = scene(dir.path(), &sky, true);
     let mesh = LayerId(2);
     doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(crate::doc::store::property::POSITION_Z).unwrap(), value: Value::F64(-20.0) }).unwrap();
-    // Something for the glass to reflect: a second mesh beside it.
+    // A second mesh beside it, under the same sun.
     let other = crate::render::engine::environment_tests::file_layer(&mut doc, 3, 2, &dir.path().join("quad.obj"));
     doc.apply(Intent::SetConstant { layer: other, property: PropertyId::new(crate::doc::store::property::POSITION).unwrap(), value: Value::Vec2([10.0, 10.0]) }).unwrap();
     doc.apply(Intent::SetConstant { layer: other, property: PropertyId::new(crate::doc::store::property::SCALE).unwrap(), value: Value::Vec2([8.0, 8.0]) }).unwrap();
@@ -123,13 +123,13 @@ fn world_captures_do_not_grow_with_views() {
         let before = engine.surface_work();
         let stats = tick(&mut engine, &doc, RationalTime::ZERO, n);
         let after = engine.surface_work();
-        (stats, after.scene_captures - before.scene_captures, after.light_captures - before.light_captures, after.backdrop_copies - before.backdrop_copies)
+        (stats, after.light_captures - before.light_captures, after.backdrop_copies - before.backdrop_copies)
     };
-    let (one, captures, lights, copies) = work(1);
-    assert!(captures > 0 && lights == 1, "the scene reflects and casts a shadow: {captures} {lights}");
+    let (one, lights, copies) = work(1);
+    assert_eq!(lights, 1, "the scene casts a shadow");
     for n in [2, 5] {
-        let (stats, c, l, b) = work(n);
-        assert_eq!((stats.preparations, stats.submits, c, l), (one.preparations, one.submits, captures, lights), "{n} views: the world is made once");
+        let (stats, l, b) = work(n);
+        assert_eq!((stats.preparations, stats.submits, l), (one.preparations, one.submits, lights), "{n} views: the world is made once");
         assert_eq!(b, copies * n as u64, "{n} views: each view copies its own backdrop");
     }
 }
@@ -337,8 +337,6 @@ mod frame_reflection {
         }
     }
 
-    /// Every plate's members are in the scene the frame's capture sees (so siblings reflect each
-    /// other through the shared probe), and no plate captures a probe of its own.
     /// A plate without glass reads nothing of a view: its picture is baked once in the preparation,
     /// however many views draw it (the plate as an optimization).
     #[test]
@@ -353,19 +351,21 @@ mod frame_reflection {
         assert_eq!(events.iter().filter(|e| matches!(e, Bake(_))).count(), 2, "each plate baked once: {events:?}");
     }
 
+    /// Every plate's members are in the scene the frame's one light capture sees; no plate
+    /// captures light of its own.
     #[test]
-    fn plate_members_are_the_reflectable_scene_and_no_plate_captures_its_own() {
+    fn plate_members_are_the_light_scene_and_no_plate_captures_its_own() {
         let dir = tempfile::tempdir().unwrap();
         let (one, _) = plates(dir.path(), 1);
         let (three, _) = plates(dir.path(), 3);
-        let faces = |doc: &Document| { let engine = prepare(doc, 1); engine.surface_work().scene_captures };
+        let faces = |doc: &Document| { let engine = prepare(doc, 1); engine.surface_work().light_captures };
         let mut engine = prepare(&three, 1);
         let members = engine.plate_member_ids(&three, RationalTime::ZERO);
         assert!(!members.is_empty());
         for member in &members {
-            assert!(engine.reflectable_ids.contains(member), "member {member:?} is in the captured scene: {:?}", engine.reflectable_ids);
+            assert!(engine.light_scene_ids.contains(member), "member {member:?} is in the captured scene: {:?}", engine.light_scene_ids);
         }
-        assert_eq!(faces(&one), faces(&three), "three plates capture no more faces than one");
+        assert_eq!(faces(&one), faces(&three), "three plates capture no more light than one");
     }
 
     /// A matte reading a plate needs it during preparation: still one capture, and the plate is lit

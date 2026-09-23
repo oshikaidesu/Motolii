@@ -20,10 +20,9 @@ const SRC_OVER: u32 = 3;
 /// What is below stays on top (the sky under what is drawn).
 const DEST_OVER: u32 = 4;
 
-/// The world's light for one frame: its one shared reflection probe and the sun's occluder map.
+/// The world's light for one frame: the sun's occluder map.
 #[derive(Clone, Default)]
 pub(crate) struct WorldLight {
-    pub reflection: Option<crate::render::compositor::light::SceneReflection>,
     pub light: Option<crate::render::compositor::light::SunLight>,
     /// The mesh instances the capture uploaded, when its scene is the frame's own layer list (no
     /// plate members added): the views place them the same way and draw them as they are.
@@ -36,7 +35,6 @@ pub(crate) struct WorldLight {
 pub(crate) struct ViewWorld<'a> {
     pub environment: Option<&'a GpuEnvironmentData>,
     pub motion: Option<&'a re_renderer::DataTexture>,
-    pub reflection: Option<&'a crate::render::compositor::light::SceneReflection>,
     pub light: Option<&'a crate::render::compositor::light::SunLight>,
     /// The world's mesh instances, for a view that places the layers as the world does.
     pub meshes: Option<&'a super::surface_scene::SharedMeshScene>,
@@ -234,7 +232,7 @@ impl Compositor {
 
             let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, environment);
             config.motion = world.motion.cloned();
-            super::light::light_view(&mut config, world.reflection, world.light, false);
+            super::light::light_view(&mut config, world.light, false);
             if glass_run {
                 if transmission.is_none() {
                     let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
@@ -372,25 +370,21 @@ impl Compositor {
     }
 
     /// The world's light, captured once per document frame from the world's layers (placed as the
-    /// output places them): the scene's reflection and the sun's occluder map.
+    /// output places them): the sun's occluder map.
     pub(crate) fn capture_world_light(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
-    ) -> Result<(Option<crate::render::compositor::light::SceneReflection>, Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
+    ) -> Result<(Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,
         }).or(environment);
-        let mut shared = None;
-        let reflection = self.capture_scene_reflection(comp, inputs, environment, &mut shared)?;
-        let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
         // The meshes' instances, placed as the output places them, uploaded once for the frame.
-        if shared.is_none() {
-            shared = self.shared_mesh_scene(comp, inputs)?;
-        }
-        Ok((reflection, light, shared))
+        let shared = self.shared_mesh_scene(comp, inputs)?;
+        let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
+        Ok((light, shared))
     }
 
     /// A canvas the size of the view's window, from re_renderer's pool: it returns to the pool when

@@ -68,13 +68,13 @@ pub(in crate::engine) struct Preparation {
 }
 
 /// Plates whose picture waits for the preparation's world light, the members they hold (the
-/// reflectable scene), and whether something read a plate before the light was taken.
+/// light scene), and whether something read a plate before the light was taken.
 #[derive(Default)]
 pub(in crate::engine) struct PlateWork {
     pub(in crate::engine) pending: Vec<super::render::build::PendingPlate>,
     /// Plates the views materialize, whose members' pictures are prepared with the pending plates.
     pub(in crate::engine) view: Vec<std::sync::Arc<crate::render::compositor::ViewPlate>>,
-    pub(in crate::engine) reflectables: Vec<LayerWithPasses>,
+    pub(in crate::engine) light_scene: Vec<LayerWithPasses>,
     pub(in crate::engine) member_ids: Vec<LayerId>,
     pub(in crate::engine) deferring: bool,
     /// The light the frame was already lit by (a frame prepared again because a plate was read early).
@@ -100,7 +100,7 @@ impl Engine {
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
     ) -> Result<GpuSceneValue, EngineError> {
-        // Members first, then the frame's one reflection capture (it sees the members of every
+        // Members first, then the frame's one light capture (it sees the members of every
         // plate), then the plates' pictures lit by it.
         self.preparation_events.clear();
         prep.plates.deferring = true;
@@ -112,7 +112,7 @@ impl Engine {
             return Ok(prepared);
         }
         // Something in the frame (a matte, a clip group) reads a plate's picture while the frame is
-        // prepared: the reflectable scene just collected lights the frame once, and the frame is
+        // prepared: the light scene just collected lights the frame once, and the frame is
         // prepared again with its plates baked in place under that same light.
         let light = self.light_the_scene(prep, &prepared.layers)?;
         prep.plates.pending.clear();
@@ -153,26 +153,26 @@ impl Engine {
         Ok(light)
     }
 
-    /// The frame's world light, once, from its reflectable scene: the top-level layers (not the
+    /// The frame's world light, once, from its light scene: the top-level layers (not the
     /// plates' pictures, which are not baked yet) and every plate's members, each where it is.
     fn light_the_scene(&mut self, prep: &mut Preparation, top: &[LayerWithPasses]) -> Result<WorldLight, EngineError> {
         // A plate's picture is not baked yet: its members stand for it.
         let is_plate = |layer: &LayerWithPasses| matches!(layer.layer.content, crate::render::compositor::LayerContent::Plate(_))
             || prep.plates.pending.iter().any(|plate| plate.is_picture_of(&layer.layer.content));
         let mut scene: Vec<LayerWithPasses> = top.iter().filter(|layer| !is_plate(layer)).cloned().collect();
-        let same_as_frame = scene.len() == top.len() && prep.plates.reflectables.is_empty();
+        let same_as_frame = scene.len() == top.len() && prep.plates.light_scene.is_empty();
         // The plates' members this capture sees (the top level is the frame's own layer list).
-        self.reflectable_ids = std::mem::take(&mut prep.plates.member_ids);
-        scene.extend(prep.plates.reflectables.drain(..));
+        self.light_scene_ids = std::mem::take(&mut prep.plates.member_ids);
+        scene.extend(prep.plates.light_scene.drain(..));
         let (pictures, paddings, spills) = self.compositor.effective_layer_textures(&scene)?;
         let world = prep.seam.camera_relative_world();
         let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills, world, world);
         let environment = self.compositor.world_environment.clone();
-        let (reflection, light, meshes) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
+        let (light, meshes) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
         drop(inputs);
         self.world_light_captures += 1;
         self.preparation_events.push(PreparationEvent::Capture(self.world_light_captures));
-        Ok(WorldLight { reflection, light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
+        Ok(WorldLight { light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
     }
 
     fn prepare_gpu_scene_with_solver_members(

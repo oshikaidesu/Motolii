@@ -16,8 +16,6 @@ mod surface_scene;
 pub(crate) use surface_scene::SharedMeshScene;
 mod view;
 pub(crate) use view::{ViewWorld, WorldLight};
-#[cfg(test)]
-mod reflection_diagnostic;
 mod measurement;
 pub use measurement::FrameMeasurement;
 pub(crate) mod light;
@@ -347,7 +345,6 @@ pub enum CompositorError {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SurfaceWork {
-    pub scene_captures: u64,
     /// 太陽から見た型紙(light cookie)を描いた回数。
     pub light_captures: u64,
     pub main_runs: u64,
@@ -380,21 +377,6 @@ pub struct Compositor {
     pub(crate) measurement: FrameMeasurement,
     pub(crate) surface_work: SurfaceWork,
     pub(crate) gpu_instance_sharing_enabled: bool,
-    /// 反射の撮影点を受け手ではなく送り手の箱に固定し、受け手は撮影から外す(Arm の local cubemap)。
-    pub(crate) reflection_scene_probe: bool,
-    #[cfg(test)]
-    pub(crate) reflection_probe_experiment: u8,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic_enabled: bool,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic: Option<reflection_diagnostic::CaptureDiagnostic>,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic_skip: Option<usize>,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic_near: Option<f32>,
-    /// Recent scene captures, newest last. Each owns its atlas, so captures of different scenes
-    /// drawn in one frame (the views, a group's plate) are kept side by side.
-    pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) light_cookie: Option<surface_scene::LightCookieResources>,
     pub(crate) next_readback: u64,
     /// 層の持ち物: 焼いた効果。view が何枚でも、静止した層は焼かない。

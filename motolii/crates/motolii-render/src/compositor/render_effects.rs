@@ -472,7 +472,7 @@ impl Compositor {
 
 
     /// A picture of `layers`, lit by the frame's world light when given (a plate baked after the
-    /// frame's one reflection capture), else by its own capture; into `into` when given.
+    /// frame's one light capture), else by its own capture; into `into` when given.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn bake_picture(
         &mut self,
@@ -496,11 +496,11 @@ impl Compositor {
         };
         let environment = self.world_environment.clone();
         let motion = self.motion.clone();
-        let (reflection, light, meshes) = match world_light {
-            Some(world) => (world.reflection.clone(), world.light.clone(), self.shared_mesh_scene(comp, &inputs)?),
+        let (light, meshes) = match world_light {
+            Some(world) => (world.light.clone(), self.shared_mesh_scene(comp, &inputs)?),
             None => self.capture_world_light(comp, &inputs, environment.as_deref())?,
         };
-        let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), reflection: reflection.as_ref(), light: light.as_ref(), meshes: meshes.as_ref() };
+        let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), meshes: meshes.as_ref() };
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
         let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, into, &mut encoder)?;
         self.ctx.queue_commands([encoder.finish()]);

@@ -135,7 +135,7 @@ impl Engine {
         // (captured in the preparation, where it saw every plate's members).
         let environment = self.compositor.world_environment.clone();
         let motion = self.compositor.motion.clone();
-        let crate::render::compositor::WorldLight { reflection, light, meshes, .. } = scene.light.clone();
+        let crate::render::compositor::WorldLight { light, meshes, .. } = scene.light.clone();
         // The mesh instances a view placing the layers as the output does can draw as they are.
         let meshes = match meshes {
             Some(meshes) => Some(meshes),
@@ -144,7 +144,7 @@ impl Engine {
                 self.compositor.shared_mesh_scene(state.comp, &inputs)?
             }
         };
-        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, reflection, light, meshes, comp: state.comp, background: state.background, document_camera });
+        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, light, meshes, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());
         Ok(frame)
@@ -160,7 +160,7 @@ impl Engine {
         let inputs = crate::render::compositor::sequential_inputs(&frame.scene.layers, &frame.pictures, &frame.paddings, &frame.spills, frame.document_camera, frame.document_camera);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-tick-view") });
-        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref(), meshes: frame.meshes.as_ref() };
+        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), light: frame.light.as_ref(), meshes: frame.meshes.as_ref() };
         let camera = view.camera.unwrap_or(frame.document_camera);
         // A history on the view's own picture is the view's: keyed by which view it is.
         let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, 1 + view.projection as u32, &mut encoder)?;
@@ -235,7 +235,6 @@ pub(in crate::engine) struct PreparedFrame {
     spills: Vec<crate::render::compositor::LayerSpill>,
     environment: Option<Arc<crate::render::compositor::GpuEnvironmentData>>,
     motion: Option<re_renderer::DataTexture>,
-    reflection: Option<crate::render::compositor::light::SceneReflection>,
     light: Option<crate::render::compositor::light::SunLight>,
     meshes: Option<crate::render::compositor::SharedMeshScene>,
     comp: crate::doc::core::CompSpec,
