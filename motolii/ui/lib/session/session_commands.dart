@@ -54,6 +54,8 @@ mixin SessionCommands on SessionCore {
     return false;
   }
 
+  final _windowTurns = <String, int>{};
+
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
     if (op == 'save') {
@@ -83,9 +85,15 @@ mixin SessionCommands on SessionCore {
       stopPlayback();
       return _tail;
     }
+    // Latest wins: a window superseded before its turn is neither sent nor drawn.
+    final windowView = op == 'stageWindow' ? '${args['view'] ?? 'User'}' : null;
+    final windowTurn = windowView == null
+        ? 0
+        : (_windowTurns[windowView] = (_windowTurns[windowView] ?? 0) + 1);
     final requiresPause = operation.requiresPause;
     if (requiresPause) _schedulePause(renderFinal: false);
     return _serial(() async {
+      if (windowView != null && _windowTurns[windowView] != windowTurn) return;
       if (requiresPause && playing.value)
         throw StateError('Playback did not stop before $op');
       final response = EditorSession.map(await _request(operation, args));
@@ -100,6 +108,7 @@ mixin SessionCommands on SessionCore {
       if (operation == DocumentOperation.select) {
         editingFocus.value = {'selection': true};
       }
+      if (windowView != null && _windowTurns[windowView] != windowTurn) return;
       if (needsRender) await _render();
     });
   }
