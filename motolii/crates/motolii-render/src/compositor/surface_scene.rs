@@ -237,7 +237,8 @@ impl Compositor {
             if let SequentialContent::Model(model) = input.content {
                 if input.blend_mode != BlendMode::Normal
                     || input.opacity != 1.0
-                    || input.shading.reads_backdrop
+                    // A backdrop reader stays in the scene: its own run selects just its instances,
+                    // and a capture (which feeds no transmission) draws it with the rest.
                     || input.clip.is_some()
                     || model
                         .instances

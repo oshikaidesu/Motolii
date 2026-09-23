@@ -558,12 +558,31 @@ impl Compositor {
         layers: &[LayerWithPasses],
         background_color: [f32; 4],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
+        self.render_to_texture_at(comp, camera, layers, background_color, 1.0)
+    }
+
+    /// The whole composition into a picture `density` device pixels per composition pixel.
+    pub fn render_to_texture_at(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+        background_color: [f32; 4],
+        density: f32,
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
 
         let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
 
-        self.window = crate::render::compositor::Window::output(comp);
+        let full = crate::render::compositor::Window::output(comp);
+        self.window = if density >= 1.0 { full } else {
+            crate::render::compositor::Window {
+                width: ((comp.width as f32 * density).ceil() as u32).max(1),
+                height: ((comp.height as f32 * density).ceil() as u32).max(1),
+                ..full
+            }
+        };
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         let (texture, view) = self.finalize_texture(comp, camera, background, background_color)?;
 

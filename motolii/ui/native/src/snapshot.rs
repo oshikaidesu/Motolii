@@ -63,10 +63,10 @@ impl EditorRuntime{
         let time=self.time()?;let doc=self.doc.view();
         self.engine.frame_graph_document_camera(&doc,time).map_err(e)
     }
-    /// view の描く窓。Camera は出力寸法そのもの、Stage はタブが置いた窓(未設定なら出力寸法)。
+    /// view の描く窓。Camera はタブが見せている密度(未設定なら出力寸法)、Stage はタブが置いた窓(未設定なら出力寸法)。
     pub(crate) fn window(&self,view:View)->Result<crate::render::engine::Window,String>{
         let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?.spec();
-        Ok(match view{View::Camera=>crate::render::engine::Window::output(comp),View::User=>self.viewer.stage_window.unwrap_or(crate::render::engine::Window{projection_camera:Some(Default::default()),..crate::render::engine::Window::output(comp)})})
+        Ok(match view{View::Camera=>self.viewer.camera_window.unwrap_or(crate::render::engine::Window::output(comp)),View::User=>self.viewer.stage_window.unwrap_or(crate::render::engine::Window{projection_camera:Some(Default::default()),..crate::render::engine::Window::output(comp)})})
     }
     /// 層を置くカメラ。2D は出力の画面の物なのでどの view でも作中カメラの箱に貼り付く。
     /// 2.5D・3D は世界に居る: Stage は既定(Boxcam の Original Comp)、Camera は作中カメラ。
@@ -87,11 +87,14 @@ impl EditorRuntime{
             (width,height)=>{
                 let roi:[f32;4]=serde_json::from_value(j["roi"].clone()).map_err(|_|"stageWindow needs roi [x, y, w, h]")?;
                 if roi.iter().any(|v|!v.is_finite())||roi[2]<=0.0||roi[3]<=0.0{return Err("Invalid stageWindow roi".into())}
-                Some(crate::render::engine::Window{width,height,roi,projection_camera:Some(Default::default())})
+                let camera=j["view"]=="Camera";
+                Some(crate::render::engine::Window{width,height,roi,projection_camera:(!camera).then(Default::default)})
             }
         };
-        let changed=self.viewer.stage_window!=next;
-        self.viewer.stage_window=next;
+        // The Camera tab sends its window too: the output drawn only as densely as it is shown.
+        let slot=if j["view"]=="Camera"{&mut self.viewer.camera_window}else{&mut self.viewer.stage_window};
+        let changed=*slot!=next;
+        *slot=next;
         Ok(changed)
     }
     fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{

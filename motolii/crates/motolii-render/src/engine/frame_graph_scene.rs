@@ -295,7 +295,7 @@ impl Engine {
                         rotation_y: 0.0,
                         plane: None,
                     };
-                    let baked = self.bake_isolated_layers(comp, camera, prepared.layers, CompositeBlendMode::Normal, placement, *average)?;
+                    let baked = self.bake_isolated_layers(comp, camera, prepared.layers, CompositeBlendMode::Normal, placement, *average, self.picture_density)?;
                     (Some(baked.content), baked.size)
                 }
             }
@@ -312,7 +312,8 @@ impl Engine {
         } else {
             let (content, natural) = self.execute_raster(work.id, work.content_key, &work.content, Some(work), comp, projection_camera)?;
             // A picture drawn above one pixel per unit carries its logical frame.
-            let frame = matches!(work.content, RasterSource::Vector { .. })
+            // A plate baked at the views' density carries it too, so its effects keep their size.
+            let frame = matches!(work.content, RasterSource::Vector { .. } | RasterSource::Isolate { .. })
                 .then(|| content.as_ref().and_then(|content| content.texture()))
                 .flatten()
                 .map(|texture| crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0; 2], pixels: texture.width_height() });
@@ -418,7 +419,7 @@ impl Engine {
             1 => { let source = sources.remove(0); self.apply_effects_before_matte(comp, camera, source.layer, &source.passes)? }
             _ => {
                 let placement = sources[0].layer.placement;
-                self.bake_isolated_layers(comp, camera, sources, CompositeBlendMode::Normal, placement, false)?
+                self.bake_isolated_layers(comp, camera, sources, CompositeBlendMode::Normal, placement, false, 1.0)?
             }
         };
         let target = self.apply_effects_before_matte(comp, camera, base.layer, &base.passes)?;

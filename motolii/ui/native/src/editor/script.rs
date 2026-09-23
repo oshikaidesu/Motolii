@@ -436,6 +436,12 @@ mod frames {
                 engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap()).unwrap();
             }
             eprintln!("TIMING {:.2} ms/frame over {count} frames", began.elapsed().as_secs_f64() * 1e3 / count as f64);
+            let before = engine.surface_work();
+            engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start + count + 1, comp.fps).unwrap()).unwrap();
+            let after = engine.surface_work();
+            eprintln!("  one frame: captures {} runs {} backdrop copies {} mesh batches {} instances uploaded {}",
+                after.scene_captures - before.scene_captures, after.main_runs - before.main_runs, after.backdrop_copies - before.backdrop_copies,
+                after.mesh_batches - before.mesh_batches, after.mesh_instances_uploaded - before.mesh_instances_uploaded);
             let mut claims = engine.frame_claims().to_vec();
             claims.sort_by(|a, b| b.us.cmp(&a.us));
             for c in claims.iter().take(10) { eprintln!("  {:>8.2} ms {:<8} {} x{} — {}", c.us as f64 / 1e3, c.stage, c.who, c.count, c.why); }

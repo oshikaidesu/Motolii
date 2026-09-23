@@ -169,6 +169,11 @@ pub struct Engine {
     drawn_layers: usize,
     /// Who worked in the current frame, and why.
     ledger: ledger::FrameLedger,
+    /// Device pixels per composition pixel that pictures are baked at (a group's plate): the densest
+    /// view's, rounded up to a power of two and at most 1. Export bakes at 1.
+    picture_density: f32,
+    /// The latest density of each view, by name.
+    view_densities: std::collections::HashMap<String, f32>,
     /// Each contribution's last preparation, reused while only its placement changes.
     contributions: frame_graph_scene::ContributionCache,
     /// Contributions lowered and prepared on the production path (reused ones are not counted).
@@ -253,6 +258,8 @@ impl Engine {
             outline_order: Vec::new(),
             drawn_layers: 0,
             ledger: Default::default(),
+            picture_density: 1.0,
+            view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
             models: HashMap::new(),
@@ -343,6 +350,8 @@ impl Engine {
             outline_order: Vec::new(),
             drawn_layers: 0,
             ledger: Default::default(),
+            picture_density: 1.0,
+            view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
             models: HashMap::new(),

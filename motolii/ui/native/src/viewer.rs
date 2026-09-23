@@ -42,6 +42,9 @@ pub(crate) struct ViewerState {
     pub stage_view_scale: f64,
     pub stage_held: Option<String>,
     pub stage_window: Option<Window>,
+    /// The Camera tab's window: the composition at the density the tab shows it (After Effects'
+    /// Auto resolution). `None` = the output's own pixels.
+    pub camera_window: Option<Window>,
     pub stage_view: View,
     pub user_camera: ResolvedCamera,
     pub animate: Animate,
@@ -66,6 +69,7 @@ impl ViewerState {
             stage_view_scale: 1.0,
             stage_held: None,
             stage_window: None,
+            camera_window: None,
             stage_view: View::User,
             user_camera: Default::default(),
             animate: Animate::Off,

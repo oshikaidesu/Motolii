@@ -26,6 +26,8 @@ pub(super) struct EngineFrameGraph {
     generation: u64,
     prepare_us: u64,
     measured: bool,
+    /// The picture density the prepared frame was baked at.
+    density: f32,
 }
 
 impl EngineFrameGraph {
@@ -41,9 +43,9 @@ impl EngineFrameGraph {
         let solver = program.solver().key();
         let overlay = program.overlay().output();
         let topology = GraphTopology::try_new(program.nodes().collect::<Vec<_>>(), vec![scene, document_camera, solver, overlay]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, density: 1.0 })
     }
-    fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+    fn matches(&self, revision: GraphRevision, time: RationalTime, density: f32) -> bool { self.graph.revision() == revision && self.density == density && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
     fn evaluate_at(
         &mut self,
@@ -76,6 +78,7 @@ impl EngineFrameGraph {
             self.fps.den() as f32 / self.fps.num() as f32,
             frame,
         ]);
+        self.density = engine.picture_density;
         self.prepared = Some(Arc::new(engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, time, self.fps)?));
         self.frame = Some(evaluated);
         Ok(())
@@ -152,7 +155,7 @@ impl Engine {
         time: RationalTime,
     ) -> Option<ResolvedCamera> {
         let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        if !state.matches(GraphRevision::new(view.revision_key()), time, state.density) { return None; }
         state.frame.as_ref()?
             .value(state.program.camera())?
             .downcast_ref::<ResolvedCamera>()
@@ -168,7 +171,7 @@ impl Engine {
         id: LayerId,
     ) -> Option<(crate::frame_graph::TransformValue, crate::frame_graph::TransformValue)> {
         let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        if !state.matches(GraphRevision::new(view.revision_key()), time, state.density) { return None; }
         let binding = state.program.transforms().binding(id)?;
         let frame = state.frame.as_ref()?;
         let local = frame.value(binding.local)?.downcast_ref::<crate::frame_graph::TransformValue>().copied()?;
@@ -203,7 +206,7 @@ impl Engine {
         time: RationalTime,
     ) -> Option<&SceneValue> {
         let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
+        if !state.matches(GraphRevision::new(view.revision_key()), time, state.density) { return None; }
         state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()
     }
 
@@ -264,6 +267,9 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
+        // Output is the composition's own pixels.
+        self.picture_density = 1.0;
+        self.compositor.begin_render_frame();
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
         let prepared = state.prepared.clone()
             .ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
@@ -290,6 +296,9 @@ impl Engine {
         time: RationalTime,
         include_background: bool,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
+        // Output is the composition's own pixels.
+        self.picture_density = 1.0;
+        self.compositor.begin_render_frame();
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
         let prepared = state.prepared.clone()
             .ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
@@ -313,7 +322,7 @@ impl Engine {
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
         self.compositor.feedback_set_revision(view.revision_key());
         self.feedback_keys_seen.clear();
-        if !state.matches(revision, time) {
+        if !state.matches(revision, time, self.picture_density) {
             let started = std::time::Instant::now();
             if let Err(error) = state.evaluate_at(self, time, quality) {
                 self.frame_graph = Some(state);
@@ -343,7 +352,14 @@ impl Engine {
     ) -> Result<(), EngineError> {
         // The frame starts before evaluation: evaluating is part of what the frame costs.
         let frame_start = std::time::Instant::now();
+        self.compositor.begin_render_frame();
         self.ledger.begin_view(time, format!("{projection:?}"));
+        // Pictures are baked as densely as the densest view shows them (one device pixel after
+        // projection), never above the composition's own pixels.
+        let density = window.width as f32 / window.roi[2].max(1.0);
+        self.view_densities.insert(format!("{projection:?}"), density);
+        let densest = self.view_densities.values().copied().fold(0.0_f32, f32::max);
+        self.picture_density = (2.0_f32).powf(densest.max(1.0 / 16.0).log2().ceil()).min(1.0);
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
         self.compositor.measurement = Default::default();
         if !state.measured {

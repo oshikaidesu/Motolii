@@ -86,7 +86,7 @@ impl Engine {
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
         let (blend, placement) = (layer.blend_mode, layer.placement);
-        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }], blend, placement, false)
+        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }], blend, placement, false, 1.0)
     }
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。`average` なら写しを足す
@@ -99,16 +99,18 @@ impl Engine {
         output_blend: CompositeBlendMode,
         placement: crate::doc::core::LayerPlacement,
         average: bool,
+        density: f32,
     ) -> Result<Layer, EngineError> {
         // BlendはMatteでcoverageを得た後、作品の下層との間に一度だけ掛ける。
         for source in &mut sources {
             source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
         }
-        let (texture, _view) = self.compositor.render_to_texture(
+        let (texture, _view) = self.compositor.render_to_texture_at(
             comp,
             camera,
             &sources,
             crate::render::compositor::NO_BACKGROUND,
+            density,
         )?;
         let imported = self.compositor.import_premultiplied(&texture)?;
         Ok(Layer {

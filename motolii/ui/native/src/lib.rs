@@ -300,8 +300,9 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         if value["op"] == "renderInfo" {
             model_reply = Some(probe.doc.view().composition().map_err(|e|e.to_string()).and_then(|comp| {
                 let c = comp.ok_or("No composition")?;
-                // 描く窓の一覧。Camera は出力そのもの、Stage はタブが窓を置いている間だけ。
-                let mut views = vec![json!({"view":View::Camera.name(),"width":c.width,"height":c.height})];
+                // 描く窓の一覧。Camera はタブの見せる密度(無ければ出力そのもの)、Stage はタブが窓を置いている間だけ。
+                let camera = probe.viewer.camera_window.map_or([c.width, c.height], |w| [w.width, w.height]);
+                let mut views = vec![json!({"view":View::Camera.name(),"width":camera[0],"height":camera[1]})];
                 if let Some(w) = probe.viewer.stage_window { views.push(json!({"view":View::User.name(),"width":w.width,"height":w.height})); }
                 Ok(json!({"width":c.width,"height":c.height,"views":views}))
             }));
