@@ -154,8 +154,9 @@ pub struct FeedbackKey {
     pub copy: u32,
     pub chain: u8,
     pub index: u16,
-    /// 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持つ: 窓の寸法。板の道は None。
-    pub screen: Option<[u32; 2]>,
+    /// 画面の道(板に焼けない層・下の合成を読む列)は view ごとに状態を持つ: `[view, 幅, 高さ]`
+    /// (view の絵の履歴。Camera と Stage が同じ寸法でも混ざらない)。板の道は None。
+    pub screen: Option<[u32; 3]>,
     /// 0 = 本番。別の時刻の合成(SOURCE below / group / comp)を描く間は時刻のずれごとの値:
     /// t′ の列は t′ の列で 1 歩ずつ進み、本番の状態を汚さない(辿り直しの対象外)。
     pub namespace: u64,

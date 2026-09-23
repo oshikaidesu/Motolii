@@ -112,7 +112,7 @@ fn probe() {
 
 /// 1 コマの時間を持ち主ごとに割る(Flutter 無し)。再生の Ticker と同じ順で
 /// tick → renderInfo → view ごとに描く → status を回し、段ごとに時計を置く。
-/// 拍を 1 つおきに二役へ振る: 偶数は本番の道(`motolii_probe_render` = IOSurface の
+/// 拍を 1 つおきに二役へ振る: 偶数は本番の道(`motolii_probe_tick` = IOSurface の
 /// 紐付けも込み)、奇数は中の段を 1 つずつ。差が「橋と紐付けの取り分」。
 /// `MOTOLII_PROBE_DOC` の書類、または `MOTOLII_PROBE_SCRIPT` の script、`MOTOLII_PROBE_SECONDS`(既定 12)秒、
 /// `MOTOLII_PROBE_STAGE`(既定 `1000x700`)の Stage 窓。集計は終わりに 1 回。
@@ -203,7 +203,7 @@ fn frame_owners() {
             if production {
                 let name = std::ffi::CString::new(view.name()).unwrap();
                 let t0 = std::time::Instant::now();
-                let code = unsafe { crate::motolii_probe_render(&mut rt, surfaces[i].id(), name.as_ptr()) };
+                let code = unsafe { crate::motolii_probe_tick(&mut rt, &surfaces[i].id(), &name.as_ptr(), 1) };
                 owners[base].push(t0.elapsed().as_micros() as u64);
                 // 0 = 出した、1 = 番人が止めた(この harness は面が 1 枚なので有り得る)。
                 assert!(code >= 0, "{:?}", rt.error);

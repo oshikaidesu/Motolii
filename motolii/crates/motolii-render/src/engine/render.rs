@@ -104,7 +104,7 @@ impl Engine {
     pub fn frozen_frames_resident(&self, layer: LayerId) -> usize { self.frozen.resident_count(layer) }
 
     /// feedback を持つ pass に状態の鍵を刻み、この frame で見た鍵として覚える(辿り直しの要否を後で見る)。
-    pub(super) fn stamp_feedback(&mut self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>) {
+    pub(super) fn stamp_feedback(&mut self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 3]>) {
         super::translate::stamp_feedback(passes, layer, copy, chain, screen, self.feedback_namespace);
         // 本番の鍵だけ辿り直しの対象(別の時刻の列は自分の列で進む)。
         if self.feedback_namespace == 0 {

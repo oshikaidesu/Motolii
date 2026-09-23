@@ -125,3 +125,4 @@ fn editing_the_document_restarts_the_history() {
     assert_ne!(edited, before);
     assert_eq!(edited, Engine::new().unwrap().render_frame(&doc.view(), at(12)).unwrap(), "編集後の絵が、入点からの絵と違う");
 }
+

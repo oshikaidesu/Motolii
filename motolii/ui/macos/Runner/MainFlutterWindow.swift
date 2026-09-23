@@ -77,7 +77,8 @@ private enum ProbeFailure: Error {
 private final class ProbeRuntime {
   typealias Open = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
   typealias Request = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>) -> UnsafePointer<CChar>?
-  typealias Render = @convention(c) (UnsafeMutableRawPointer, UInt32, UnsafePointer<CChar>) -> Int32
+  /// One app tick: every shown view (`surfaces[i]` draws `views[i]`) from one prepared frame.
+  typealias Render = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<UInt32>, UnsafePointer<UnsafePointer<CChar>?>, Int) -> Int32
   typealias PlaybackTick = @convention(c) (UnsafeMutableRawPointer) -> Int64
   typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
   typealias Wake = @convention(c) (UnsafeMutableRawPointer?) -> Void
@@ -103,7 +104,6 @@ private final class ProbeRuntime {
   /// Samples are confined to `renderQueue`. They measure CPU time through the
   /// native tick and submit only; GPU completion remains the IOSurface signal.
   private var playbackSubmitUs: [UInt64] = []
-  private var playbackViewSubmitUs: [String: [UInt64]] = [:]
   private var library: UnsafeMutableRawPointer?
   /// The native host owns playback pulses; Dart retains this context only for
   /// one-shot commands and still frames. Both use the macOS main thread
@@ -130,7 +130,6 @@ private final class ProbeRuntime {
   fileprivate func resetPlaybackStats() {
     renderQueue.async { [weak self] in
       self?.playbackSubmitUs.removeAll(keepingCapacity: true)
-      self?.playbackViewSubmitUs.removeAll(keepingCapacity: true)
     }
     playbackGate.lock()
     playbackDropped = 0
@@ -142,8 +141,6 @@ private final class ProbeRuntime {
       guard let self else { return }
       let samples = self.playbackSubmitUs
       self.playbackSubmitUs.removeAll(keepingCapacity: true)
-      let byView = self.playbackViewSubmitUs
-      self.playbackViewSubmitUs.removeAll(keepingCapacity: true)
       self.playbackGate.lock()
       let dropped = self.playbackDropped
       self.playbackDropped = 0
@@ -154,13 +151,7 @@ private final class ProbeRuntime {
         guard !sorted.isEmpty else { return 0 }
         return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded(.up)))]
       }
-      let viewStats = byView.keys.sorted().map { view -> String in
-        let values = byView[view, default: []].sorted()
-        guard !values.isEmpty else { return "\(view)=—" }
-        let at = { (fraction: Double) in values[min(values.count - 1, Int((Double(values.count - 1) * fraction).rounded(.up)))] }
-        return "\(view)=\(Double(at(0.5)) / 1000.0)/\(Double(at(0.9)) / 1000.0)ms"
-      }.joined(separator: " ")
-      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0) views=\(viewStats)"
+      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)"
       playbackLog.info("\(message, privacy: .public)")
       // Diagnostics are one line on pause, never a per-frame disk write. The
       // file is intentionally in tmp: it is not authored state or telemetry.
@@ -199,7 +190,7 @@ private final class ProbeRuntime {
       }
       let start = try symbol("motolii_probe_open", Open.self)
       requestFunction = try symbol("motolii_probe_request", Request.self)
-      renderFunction = try symbol("motolii_probe_render", Render.self)
+      renderFunction = try symbol("motolii_probe_tick", Render.self)
       playbackTickFunction = try symbol("motolii_probe_playback_tick", PlaybackTick.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
       finishFunction = try symbol("motolii_probe_finish_frames", FinishFrames.self)
@@ -267,19 +258,16 @@ private final class ProbeRuntime {
               let render = self.renderFunction else { throw ProbeFailure.message("Document is closed") }
         let frame = tick(context)
         guard frame >= 0 else { return nil }
-        for target in targets {
-          // `keepAlive` holds the IOSurface until Rust has imported it.
-          _ = target.keepAlive
-          let startedView = DispatchTime.now().uptimeNanoseconds
-          let code = target.view.withCString { render(context, target.surface, $0) }
-          if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
-          // Busy means Metal still owns this IOSurface. Do not advance the UI
-          // onto a frame that was never submitted; the next host pulse retries.
-          if code > 0 {
-            self.dropPlaybackFrame()
-            return nil
-          }
-          self.playbackViewSubmitUs[target.view, default: []].append((DispatchTime.now().uptimeNanoseconds - startedView) / 1_000)
+        // `keepAlive` holds each IOSurface until Rust has imported it.
+        let code = withExtendedLifetime(targets.map(\.keepAlive)) {
+          ProbeRuntime.tickViews(render, context, targets.map { ($0.surface, $0.view) })
+        }
+        if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
+        // Busy means Metal still owns a surface. Do not advance the UI onto a frame that
+        // was never submitted; the next host pulse retries.
+        if code > 0 {
+          self.dropPlaybackFrame()
+          return nil
         }
         self.playbackSubmitUs.append((DispatchTime.now().uptimeNanoseconds - started) / 1_000)
         return frame
@@ -330,6 +318,7 @@ private final class ProbeRuntime {
     }
     guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
     var buffers: [String: CVPixelBuffer] = [:]
+    var targets: [(UInt32, String)] = []
     for entry in views {
       guard let view = entry["view"] as? String,
             let width = (entry["width"] as? NSNumber)?.intValue,
@@ -338,10 +327,12 @@ private final class ProbeRuntime {
         throw ProbeFailure.message("View dimensions missing or outside probe allocation limit")
       }
       let made = try ProbeRuntime.makeSurface(width: width, height: height)
-      let code = view.withCString { renderFunction(context, made.id, $0) }
-      guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(view): \(code)") }
+      targets.append((made.id, view))
       buffers[view] = made.buffer
     }
+    // Every view in one app tick: one prepared frame, one submission.
+    let code = ProbeRuntime.tickViews(renderFunction, context, targets)
+    guard code == 0 else { throw ProbeFailure.message("Rust render failed: \(code)") }
     // この道は合図を待たずに buffer をそのまま返すので、ここで描き終わりを待つ。
     _ = finishFunction?(context)
     rendered += 1
@@ -360,16 +351,16 @@ private final class ProbeRuntime {
   ) throws -> ([String: Any], Int) {
     try onRenderQueue {
       guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
-      for target in targets {
-        _ = target.keepAlive
-        var code = target.view.withCString { renderFunction(context, target.surface, $0) }
+      try withExtendedLifetime(targets.map(\.keepAlive)) {
+        let views = targets.map { ($0.surface, $0.view) }
+        var code = ProbeRuntime.tickViews(renderFunction, context, views)
         // Playback may drop a busy surface. A still frame is exact: wait for
         // that prior submission, then submit this requested frame once.
         if code == 1 {
           _ = finishFunction?(context)
-          code = target.view.withCString { renderFunction(context, target.surface, $0) }
+          code = ProbeRuntime.tickViews(renderFunction, context, views)
         }
-        guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(target.view): \(code)") }
+        guard code == 0 else { throw ProbeFailure.message("Rust render failed: \(code)") }
       }
       _ = finishFunction?(context)
       rendered += 1
@@ -378,6 +369,19 @@ private final class ProbeRuntime {
       if let references { query["knownReferenceId"] = references }
       let data = try JSONSerialization.data(withJSONObject: query)
       return (try requestOnRenderQueue(String(decoding: data, as: UTF8.self)), rendered)
+    }
+  }
+
+  /// One app tick through the FFI: every (surface, view) pair in one call.
+  static func tickViews(_ render: Render, _ context: UnsafeMutableRawPointer, _ targets: [(UInt32, String)]) -> Int32 {
+    let names = targets.map { strdup($0.1) }
+    defer { names.forEach { free($0) } }
+    let surfaces = targets.map(\.0)
+    let pointers: [UnsafePointer<CChar>?] = names.map { $0.map { UnsafePointer($0) } }
+    return surfaces.withUnsafeBufferPointer { s in
+      pointers.withUnsafeBufferPointer { n in
+        render(context, s.baseAddress ?? UnsafePointer(bitPattern: 1)!, n.baseAddress ?? UnsafePointer(bitPattern: 1)!, targets.count)
+      }
     }
   }
 

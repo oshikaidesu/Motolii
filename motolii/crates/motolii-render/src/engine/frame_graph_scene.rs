@@ -341,13 +341,13 @@ impl Engine {
             let direct_screen = (
                 content.texture().is_none()
                     || direct_passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite())
-            ).then_some([comp.width, comp.height]);
+            ).then_some([0, comp.width, comp.height]);
             self.stamp_feedback(&mut direct_passes, work.id, work.instance, 0, direct_screen);
 
             let mut plate_passes = work.after_passes.clone();
             let plate_screen = plate_passes.iter()
                 .any(|pass| pass.reads_backdrop || pass.reads_composite())
-                .then_some([comp.width, comp.height]);
+                .then_some([0, comp.width, comp.height]);
             self.stamp_feedback(&mut plate_passes, work.id, work.instance, 1, plate_screen);
 
             (
@@ -591,7 +591,7 @@ impl Engine {
             for pass in &mut entry.passes {
                 if let Some(mut key) = pass.feedback {
                     if screen_chain || pass.reads_backdrop || pass.reads_composite() {
-                        key.screen = Some(window.size());
+                        key.screen = Some([0, window.width, window.height]);
                         pass.feedback = Some(key);
                     }
                     if self.feedback_namespace == 0 {

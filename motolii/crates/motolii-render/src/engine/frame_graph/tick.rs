@@ -62,6 +62,9 @@ impl Engine {
         let commands = std::mem::take(&mut self.tick_commands);
         self.compositor.last_submission = Some(self.compositor.ctx.queue.submit(commands));
         stats.submits += 1;
+        // Staging goes back to the belts; work between ticks (an edit, a query) records into a fresh
+        // frame-global encoder and submits itself.
+        self.compositor.ctx.after_submit_within_frame();
         if std::mem::take(&mut self.tick_outlined) {
             if let Some(bounds) = self.compositor.selection_bounds.as_mut() { bounds.schedule_map(); }
         }
@@ -79,6 +82,51 @@ impl Engine {
         for view in views {
             commands.extend(self.record_view(&prepared, view)?);
             stats.views += 1;
+        }
+
+        // Feedback is a recurrence from the in-point: a frame reached by a jump is replayed from the
+        // nearest checkpoint (the document's history and each view's), then drawn again.
+        let fps = doc.composition().ok().flatten().map(|c| c.fps);
+        let now = fps.and_then(|fps| time.try_to_frame_round(fps).ok());
+        if let (Some(fps), Some(now)) = (fps, now) {
+            let state = self.frame_graph.take();
+            let start = state.as_ref().and_then(|state| self.frame_graph_feedback_replay_start(state, now));
+            self.frame_graph = state;
+            if let Some(start) = start {
+                for frame in start..now {
+                    let at = RationalTime::try_from_frame(frame, fps).map_err(|error| EngineError::Time(error.to_string()))?;
+                    self.tick_frame = None;
+                    let past = self.prepare_document_frame(doc, at, views, stats)?;
+                    commands.append(&mut self.compositor.pending);
+                    for view in views {
+                        let scratch = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
+                            label: Some("motolii-feedback-replay"),
+                            size: wgpu::Extent3d { width: view.window.width, height: view.window.height, depth_or_array_layers: 1 },
+                            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+                            format: crate::render::compositor::PRESENTABLE_FORMAT,
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                            view_formats: &[],
+                        });
+                        commands.extend(self.record_view(&past, &ViewRequest { target: &scratch, ..*view })?);
+                    }
+                    // Each past frame is a frame of its own: its uploads (a video frame) must not be
+                    // overwritten by the next frame's before its draws run.
+                    self.compositor.ctx.before_submit();
+                    self.compositor.ctx.queue.submit(std::mem::take(&mut commands));
+                    self.compositor.ctx.after_submit_within_frame();
+                    stats.submits += 1;
+                }
+                // The frame itself, on the history just rebuilt.
+                let c = &mut self.compositor;
+                c.baked_effects.clear(&mut c.effect_scratch);
+                self.feedback_keys_seen.clear();
+                self.tick_frame = None;
+                let prepared = self.prepare_document_frame(doc, time, views, stats)?;
+                commands.append(&mut self.compositor.pending);
+                for view in views {
+                    commands.extend(self.record_view(&prepared, view)?);
+                }
+            }
         }
         self.tick_commands = commands;
         Ok(())
@@ -137,6 +185,16 @@ impl Engine {
                 return Err(EngineError::Store(format!("tick: {feature} is not ported to the tick yet")));
             }
             layer.layer.projection_camera = if layer.layer.projection == crate::doc::store::LayerProjection::TwoD { frame.document_camera } else { placing };
+            // Effects on the view's picture keep the view's own history (its picture over time).
+            let on_the_view = layer.layer.content.texture().is_none() || layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite());
+            if on_the_view {
+                for pass in &mut layer.passes {
+                    if let Some(key) = pass.feedback.as_mut() {
+                        key.screen = Some([1 + view.projection as u32, view.window.width, view.window.height]);
+                        if key.namespace == 0 { self.feedback_keys_seen.push(*key); }
+                    }
+                }
+            }
         }
         let inputs = crate::render::compositor::sequential_inputs(&layers, &frame.pictures, &frame.paddings, &frame.spills);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
@@ -200,8 +258,6 @@ impl Engine {
 /// What the tick cannot draw yet, named; the old path draws it until it is ported.
 fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'static str> {
     use crate::render::compositor::LayerContent;
-    let on_the_view = layer.layer.content.texture().is_none() || layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite());
-    if on_the_view && layer.passes.iter().any(|pass| pass.feedback.is_some()) { return Some("feedback on the view's picture"); }
     match layer.layer.content {
         LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) | LayerContent::Cloud { .. } => None,
     }

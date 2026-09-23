@@ -169,17 +169,27 @@ impl EditorRuntime {
 
 
 
-    /// `Ok(false)` = 番人が止めた(この surface はまだ描かれている最中)。
-    fn render(&mut self, surface_id: u32, view: View) -> Result<bool, String> {
+    /// One app tick: every shown view, drawn from one prepared frame in one submission (Rerun's
+    /// app frame). `Ok(false)` = a surface is still being drawn: nothing is drawn this tick.
+    fn render_views(&mut self, targets: &[(u32, View)]) -> Result<bool, String> {
         // 前の拍で出した物のうち、GPU が終えている物をここで拾って鳴らす(待たない)。
         self.frames.collect();
-        let window = self.window(view)?;
+        if !targets.iter().all(|(surface, _)| self.frames.claim(*surface)) { return Ok(false); }
+        let mut drawn = Vec::with_capacity(targets.len());
+        for &(surface_id, view) in targets {
+            let window = self.window(view)?;
+            drawn.push((surface_id, view, window, self.import_surface(surface_id, view, window)?));
+        }
+        self.draw_views(&drawn)
+    }
+
+    /// The host's IOSurface as this view's target (same device, no copy).
+    fn import_surface(&self, surface_id: u32, view: View, window: Window) -> Result<wgpu::Texture, String> {
         let surface = IOSurfaceRef::lookup(surface_id).ok_or("IOSurface lookup failed")?;
         if surface.width() != window.width as usize || surface.height() != window.height as usize {
             return Err(format!("IOSurface dimensions differ from the {} window", view.name()));
         }
         if surface.pixel_format() != u32::from_be_bytes(*b"BGRA") { return Err("IOSurface must be BGRA".into()); }
-        if !self.frames.claim(surface_id) { return Ok(false); }
         let device = self.engine.gpu_device();
         let descriptor = MTLTextureDescriptor::new();
         unsafe {
@@ -196,7 +206,7 @@ impl EditorRuntime {
             .ok_or("Metal could not bind IOSurface")?;
         let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
         // Same-device imported attachment. The host exclusively owns a fresh surface;
-        // the existing compositor clears and writes it before this function publishes it.
+        // the tick clears and writes it before this function publishes it.
         let texture = unsafe {
             let raw = wgpu::hal::metal::Device::texture_from_raw(raw, wgpu::TextureFormat::Bgra8Unorm,
                 MTLTextureType::Type2D, 1, 1, size.into());
@@ -207,55 +217,64 @@ impl EditorRuntime {
             })
         };
         drop(hal);
-        self.render_into_surface(&texture, view, window, surface_id)
+        Ok(texture)
     }
 
     /// 窓を持たない道(試験)。合図の surface は 0。
     #[cfg(test)]
     fn render_into(&mut self, texture: &wgpu::Texture, view: View, window: Window) -> Result<(), String> {
-        self.render_into_surface(texture, view, window, 0).map(|_| ())
+        self.draw_views(&[(0, view, window, texture.clone())]).map(|_| ())
     }
 
-    fn render_into_surface(&mut self, texture: &wgpu::Texture, view: View, window: Window, surface_id: u32) -> Result<bool, String> {
+    fn draw_views(&mut self, views: &[(u32, View, Window, wgpu::Texture)]) -> Result<bool, String> {
         let started = Instant::now();
         let time = self.time()?;
-        let view_camera = self.view_camera(view)?;
-        self.engine.set_realtime(self.viewer.clock.playing());
-        // 再生中はギズモを出さないので、選択の mask も焼かない。
-        let outline: &[LayerId] = if self.viewer.clock.playing() { &[] } else { &self.viewer.selected_ids };
-        self.engine.render_frame_graph_into_window(&self.doc.view(), time, texture, view_camera, true, outline, window,
-            match view { View::Camera=>crate::render::frame_graph::ViewProjection::Camera, View::User=>crate::render::frame_graph::ViewProjection::Stage }).map_err(|e|e.to_string())?;
-        // 出した束の番号。これが終われば、この surface に絵が入っている。
+        let playing = self.viewer.clock.playing();
+        self.engine.set_realtime(playing);
+        // 再生中はギズモを出さないので、選択の mask も焼かない。籠を読むのは 1 拍に 1 つの view
+        // (Stage が出ていれば Stage)。
+        let selected = if playing { Vec::new() } else { self.viewer.selected_ids.clone() };
+        let caged = views.iter().map(|(_, view, ..)| *view).max_by_key(|view| *view == View::User);
+        let requests: Vec<_> = views.iter().map(|(_, view, window, texture)| crate::render::engine::ViewRequest {
+            target: texture,
+            window: *window,
+            // Camera は作品のカメラ(tick が準備した物)、Stage は利用者のカメラ。
+            camera: (*view == View::User).then_some(self.viewer.user_camera),
+            projection: match view { View::Camera => crate::render::frame_graph::ViewProjection::Camera, View::User => crate::render::frame_graph::ViewProjection::Stage },
+            include_background: true,
+            outline: if Some(*view) == caged { &selected } else { &[] },
+        }).collect();
+        self.engine.tick(&self.doc.view(), time, &requests).map_err(|e| e.to_string())?;
+        drop(requests);
+        // 出した束の番号。これが終われば、どの surface にも絵が入っている。
         let submission = self.engine.last_submission();
-        // `warm_upcoming` resolves now and ahead to find media. That is useful
-        // as an explicit preload, but forbidden on the realtime render path:
-        // it turns one submitted frame into two extra full-document resolves.
-        self.frames.submitted(submission, view.name(), surface_id);
-        // 絵と窓(roi)が同じコマで揃っていないといけない道 —— 掴む・伸ばす・Fit —— はここで待つ。
-        // **窓が同じまま時刻だけ動く道(時間帯のドラッグ)は揃える相手が居ない**ので待たない:
-        // 待つと UI thread が GPU に明け渡され、掴んでいる手がカクつく(2026-09-21 の標本で
-        // main thread の 22.5% が semaphore 待ち)。再生中も待たない。
-        let same_window = self.last_window.insert(view.name(), window) == Some(window);
-        let coherent = self.stage_drag.is_some() || !same_window;
-        if !self.viewer.clock.playing() && coherent { self.frames.finish(); }
+        let mut coherent = self.stage_drag.is_some();
+        for (surface_id, view, window, _) in views {
+            self.frames.submitted(submission.clone(), view.name(), *surface_id);
+            // 絵と窓(roi)が同じコマで揃っていないといけない道 —— 掴む・伸ばす・Fit —— はここで待つ。
+            // 窓が同じまま時刻だけ動く道(時間帯のドラッグ)・再生中は待たない。
+            coherent |= self.last_window.insert(view.name(), *window) != Some(*window);
+        }
+        if !playing && coherent { self.frames.finish(); }
         // Playback has no outline, so a selection readback and geometry cache
         // invalidation cannot produce a new cage. Keep both off the realtime
         // path; exact still frames retain the bridge below.
-        if !self.viewer.clock.playing() {
-            self.take_selection_bounds(view, window);
+        if !playing {
+            if let Some((_, view, window, _)) = views.iter().find(|(_, view, ..)| Some(*view) == caged) {
+                self.take_selection_bounds(*view, *window);
+            }
             self.snapshot_cache.borrow_mut().invalidate_geometry();
         }
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
         // 再生中だけ畳む。止まっている 1 枚は待つ道なので、同じ物差しに混ぜない。
-        if self.viewer.clock.playing() {
-            // 尺を越えた先は描く物が無い。空のコマを混ぜると分布が薄まるので数に残すだけ。
+        if playing {
             let duration = self.doc.view().composition().ok().flatten().map(|c| c.duration_frames);
             if duration.is_some_and(|last| self.viewer.frame >= last) {
                 self.owners.outside();
             } else {
-                self.owners.push(view.name(), self.engine.frame_measurement());
-                self.owners.push_inside(view.name(), self.engine.resolve_tally(), self.engine.resolve_worst());
+                self.owners.push("tick", self.engine.frame_measurement());
+                self.owners.push_inside("tick", self.engine.resolve_tally(), self.engine.resolve_worst());
             }
         }
         self.error = if self.engine.layer_failures().is_empty() { None } else { Some(self.engine.layer_failures().join("; ")) };
@@ -363,14 +382,20 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
     probe.reply.as_ptr()
 }
 
+/// One app tick: draw every shown view, each into its IOSurface, from one prepared frame in one
+/// submission. `surfaces[i]` / `views[i]` name the targets. 0 = drawn, 1 = a surface is still
+/// being drawn (nothing was drawn; try again next pulse), negative = error.
 #[no_mangle]
-pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_id: u32, view: *const c_char) -> i32 {
-    if ctx.is_null() { return -1; }
+pub unsafe extern "C" fn motolii_probe_tick(ctx: *mut EditorRuntime, surfaces: *const u32, views: *const *const c_char, count: usize) -> i32 {
+    if ctx.is_null() || (count > 0 && (surfaces.is_null() || views.is_null())) { return -1; }
     let probe = unsafe { &mut *ctx };
-    let view = (!view.is_null()).then(|| unsafe { CStr::from_ptr(view) }.to_str().ok()).flatten().unwrap_or("Camera");
-    match catch_unwind(AssertUnwindSafe(|| View::parse(view).and_then(|view| probe.render(surface_id, view)))) {
+    let targets: Result<Vec<(u32, View)>, String> = (0..count).map(|i| {
+        let view = unsafe { *views.add(i) };
+        let name = (!view.is_null()).then(|| unsafe { CStr::from_ptr(view) }.to_str().ok()).flatten().ok_or("view name missing")?;
+        Ok((unsafe { *surfaces.add(i) }, View::parse(name)?))
+    }).collect();
+    match catch_unwind(AssertUnwindSafe(|| targets.and_then(|targets| probe.render_views(&targets)))) {
         Ok(Ok(true)) => 0,
-        // 1 = 番人が止めた。頼んだ surface はまだ前のコマを描いている。
         Ok(Ok(false)) => 1,
         Ok(Err(error)) => { probe.error=Some(error); -1 },
         Err(_) => { probe.error=Some("Rust render panic".into()); -2 },
@@ -380,7 +405,7 @@ pub unsafe extern "C" fn motolii_probe_render(ctx: *mut EditorRuntime, surface_i
 /// Native host の再生 pulse。Dart の `Ticker` は時計もレンダラも駆動しない。
 ///
 /// 新しい作中コマならその番号、同じコマ/停止中なら -1 を返す。host は番号を
-/// 受けた時だけ、手元にある IOSurface へ `motolii_probe_render` を出す。
+/// 受けた時だけ、手元にある IOSurface へ `motolii_probe_tick` を出す。
 #[no_mangle]
 pub unsafe extern "C" fn motolii_probe_playback_tick(ctx: *mut EditorRuntime) -> i64 {
     if ctx.is_null() { return -2; }
@@ -396,8 +421,8 @@ pub unsafe extern "C" fn motolii_probe_playback_tick(ctx: *mut EditorRuntime) ->
 }
 
 /// Register `ready(user, view, surface_id)` for completed renders. It always runs
-/// on the calling thread: a still frame is waited for inside `motolii_probe_render`,
-/// a playing one is picked up at the head of the next `motolii_probe_render` (or by
+/// on the calling thread: a still frame is waited for inside `motolii_probe_tick`,
+/// a playing one is picked up at the head of the next `motolii_probe_tick` (or by
 /// `motolii_probe_finish_frames`), once the GPU has it.
 /// Removing/replacing the registration cancels old signals. A callback must not
 /// re-enter this setter; `user` must live until unregister returns.
@@ -470,16 +495,16 @@ mod frame_ready_tests {
         let user = &mut seen as *mut _ as *mut std::ffi::c_void;
         assert_eq!(unsafe { motolii_probe_set_frame_ready(&mut rt, Some(count), user) }, 0);
         for _ in 0..2 {
-            assert_eq!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Camera".as_ptr()) }, 0, "{:?}", rt.error);
+            assert_eq!(unsafe { motolii_probe_tick(&mut rt, &surface.id(), &c"Camera".as_ptr(), 1) }, 0, "{:?}", rt.error);
             rt.frames.finish();
         }
         assert_eq!(seen, vec![("Camera".to_owned(), surface.id()); 2]);
         // 失敗した描画は合図しない。
-        assert_ne!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Nowhere".as_ptr()) }, 0);
+        assert_ne!(unsafe { motolii_probe_tick(&mut rt, &surface.id(), &c"Nowhere".as_ptr(), 1) }, 0);
         rt.frames.finish();
         assert_eq!(seen.len(), 2);
         assert_eq!(unsafe { motolii_probe_set_frame_ready(&mut rt, None, std::ptr::null_mut()) }, 0);
-        assert_eq!(unsafe { motolii_probe_render(&mut rt, surface.id(), c"Camera".as_ptr()) }, 0);
+        assert_eq!(unsafe { motolii_probe_tick(&mut rt, &surface.id(), &c"Camera".as_ptr(), 1) }, 0);
         rt.frames.finish();
         assert_eq!(seen.len(), 2);
         // 番人: まだ合図の来ていない面には描かない(描画はこれを見て 1 を返す)。飛ばした数だけ増える。
