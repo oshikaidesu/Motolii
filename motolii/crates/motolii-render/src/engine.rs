@@ -36,7 +36,7 @@ use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
 use crate::render::media::PointCloudData;
 
-use crate::render::engine::texture::{ShapeCacheKey, ShapeTexture, TextCacheKey, TextTexture};
+use crate::render::engine::texture::{ShapeCacheKey, ShapeTexture};
 
 pub use crate::render::compositor::{Window, bind_catalog_runtime, catalog_errors, catalog_generation, catalog_reads_disk, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
@@ -132,34 +132,19 @@ pub struct Engine {
     pub(crate) compositor: Compositor,
     materials: HashMap<LayerId, material::MaterialCache>,
     probes: HashMap<String, MediaInfo>,
-    text_textures: HashMap<TextCacheKey, TextTexture>,
-    /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
-    text_order: std::collections::VecDeque<TextCacheKey>,
     shape_textures: HashMap<ShapeCacheKey, ShapeTexture>,
     failed_probes: HashMap<String, String>,
     layer_failures: Vec<String>,
-    /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
-    feedback_replaying: bool,
-    /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
-    keyed_outlines: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>>,
-    /// 形の覚え: 書類の版とコマが同じなら読み戻さない。止まった絵は 1 回だけ。
-    keyed_cache: HashMap<LayerId, (u64, i64, std::sync::Arc<Vec<[f32; 2]>>)>,
-    /// 今描いている窓(画面の道の feedback は窓ごとに状態を持つ)。読み戻しの道では None = 出力寸法。
-    feedback_window: Option<crate::render::compositor::Window>,
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
     video_stream_namespace: u64,
     /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
     feedback_namespace: u64,
-    /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
-    feedback_saw_composites: bool,
     /// Freeze の cache(層の投影の前の絵、書類の隣)。
     pub(crate) frozen: frozen::FrozenStore,
     /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
     freezing: Option<LayerId>,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
-    /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
-    clip_bases: std::collections::HashSet<LayerId>,
     /// The selection ids the last outlined view drew, in mask order (the tick keeps the view's answer).
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
@@ -206,8 +191,6 @@ pub struct Engine {
     frame_cache_budget: u64,
     frame_cache_tick: u64,
     frame_cache_hits: u64,
-    /// 揃ったコマの texture。中身は frame の提出で GPU に届くので、写すのは次の frame の頭。
-    pending_frame_copies: Vec<(String, i64, crate::render::compositor::GpuTexture2D)>,
     /// 再生中は間に合ったコマで描く。止めた時と書き出しは頼んだコマを待つ。
     realtime: bool,
     /// test では GPU を 1 つずつ使う(cargo test の並走で `a_field_moves_*` が落ちた)。持っている間は他の Engine を待たせる。
@@ -254,8 +237,6 @@ impl Engine {
             compositor: Compositor::headless()?,
             materials: HashMap::new(),
             probes: HashMap::new(),
-            text_textures: HashMap::new(),
-            text_order: std::collections::VecDeque::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
@@ -285,23 +266,16 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
-            feedback_replaying: false,
-            keyed_outlines: HashMap::new(),
-            keyed_cache: HashMap::new(),
-            feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
             blocks: Default::default(),
-            clip_bases: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
             frame_cache_tick: 0,
             frame_cache_hits: 0,
-            pending_frame_copies: Vec::new(),
         })
     }
 
@@ -336,8 +310,6 @@ impl Engine {
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
             materials: HashMap::new(),
             probes: HashMap::new(),
-            text_textures: HashMap::new(),
-            text_order: std::collections::VecDeque::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
@@ -367,23 +339,16 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
-            feedback_replaying: false,
-            keyed_outlines: HashMap::new(),
-            keyed_cache: HashMap::new(),
-            feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
             blocks: Default::default(),
-            clip_bases: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
             frame_cache_tick: 0,
             frame_cache_hits: 0,
-            pending_frame_copies: Vec::new(),
         })
     }
 
@@ -473,10 +438,6 @@ impl Engine {
         include_background: bool,
     ) -> Result<Vec<u8>, EngineError> {
         self.render_with_camera_override(view, t, include_background, None)
-    }
-
-    pub fn cached_text_texture_count(&self) -> usize {
-        self.text_textures.len()
     }
 
     pub fn cached_shape_texture_count(&self) -> usize {

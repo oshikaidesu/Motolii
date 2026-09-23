@@ -195,7 +195,7 @@ impl Compositor {
                 field_at_texcoord: false,
                 curves: None,
                 label: "layer picture".into(),
-                index_range: 0..index_count,
+                index_range: re_renderer::Span::from_start_len(0, index_count),
                 albedo: texture,
                 albedo_factor: re_renderer::Rgba::WHITE,
             }],
@@ -206,7 +206,6 @@ impl Compositor {
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
         Ok(Some(GpuModelData {
             planar_size: None,
-            revision: super::mesh::next_model_revision(),
             instances: std::sync::Arc::new(instances),
             bounds: SpatialBounds { min: [0.0, 0.0, -depth], max: [max.x, max.y, depth] },
             vertices: std::sync::Arc::new(crate::render::media::silhouette_points(g.positions)),

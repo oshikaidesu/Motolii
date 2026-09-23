@@ -56,7 +56,7 @@ impl Compositor {
         .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
 
-        view_builder.queue_draw(&self.ctx, draw_data);
+        view_builder.queue_draw(&self.ctx, draw_data).map_err(|e| CompositorError::Draw(e.to_string()))?;
         let command_buffer = view_builder
             .draw(&self.ctx, Rgba::TRANSPARENT)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;

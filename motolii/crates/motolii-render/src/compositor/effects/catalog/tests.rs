@@ -108,8 +108,8 @@ fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
     let error = pollster::block_on(building.pop());
     assert!(error.is_none(), "pipeline が組めない: {error:?}");
     let ctx = &compositor.ctx;
-    let src = crate::render::compositor::effects::pass_texture(ctx, 2, 2, wgpu::TextureFormat::Rgba8Unorm);
-    let dst = crate::render::compositor::effects::pass_texture(ctx, 2, 2, wgpu::TextureFormat::Rgba8Unorm);
+    let src = crate::render::compositor::effects::vism::pass_texture(ctx, 2, 2, wgpu::TextureFormat::Rgba8Unorm);
+    let dst = crate::render::compositor::effects::vism::pass_texture(ctx, 2, 2, wgpu::TextureFormat::Rgba8Unorm);
     let params: Vec<(String, f32)> = params.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect();
     let scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let mut encoder = ctx.device.create_command_encoder(&Default::default());
@@ -154,11 +154,11 @@ fn catalog_refresh_keeps_the_open_renderer_frame_and_device() {
         descriptors: current.descriptors.clone(),
         errors: Vec::new(),
     });
-    let frame = compositor.ctx.active_frame_idx();
+    let frame = compositor.ctx.active_frame.frame_index;
     let device = compositor.ctx.device.clone();
     let shaders = compositor.ctx.gpu_resources.shader_modules.num_resources();
     compositor.refresh_catalog_programs();
-    assert_eq!(compositor.ctx.active_frame_idx(), frame);
+    assert_eq!(compositor.ctx.active_frame.frame_index, frame);
     assert_eq!(compositor.ctx.device, device);
     assert_eq!(compositor.ctx.gpu_resources.shader_modules.num_resources(), shaders);
 }

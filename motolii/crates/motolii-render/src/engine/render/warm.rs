@@ -8,7 +8,6 @@ const VIDEO_PLAYER_PURGE_EVERY: u32 = 150;
 impl Engine {
     pub(super) fn purge_idle_video_players(&mut self) {
         self.frame_cache_tick += 1;
-        self.flush_pending_frame_copies();
         self.renders_since_video_purge += 1;
         if self.renders_since_video_purge < VIDEO_PLAYER_PURGE_EVERY {
             return;

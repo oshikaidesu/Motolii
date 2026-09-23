@@ -90,7 +90,7 @@ impl Engine {
         t: RationalTime,
         ask: impl FnOnce(&mut Self) -> Result<Option<(re_renderer::GpuReadbackIdentifier, PictureMeta)>, EngineError>,
     ) -> Result<Option<Option<std::sync::Arc<LinearPicture>>>, EngineError> {
-        let frame = self.compositor.ctx.active_frame_idx();
+        let frame = self.compositor.ctx.active_frame.frame_index;
         match self.analysis_pictures.get(&(node, t)) {
             Some(AnalysisPicture::Arrived(picture)) => return Ok(Some(Some(picture.clone()))),
             Some(AnalysisPicture::Nothing) => return Ok(Some(None)),
@@ -610,26 +610,6 @@ fn overlay_settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSet
         revive_frames: 5,
         separation: n("separation").max(0.0).round() as u32,
         blur: n("blur").max(0.0).round() as u32,
-    }
-}
-
-pub(crate) fn settings_of(params: &[(String, crate::doc::store::Value)]) -> BlobSettings {
-    let n = |name| blob::number_of(params, name);
-    let source = match n("mode").round() as i64 {
-        1 => BlobSource::Motion { threshold: n("threshold") as f32 },
-        2 => BlobSource::Color { target: [n("red") as f32, n("green") as f32, n("blue") as f32], tolerance: n("tolerance") as f32 },
-        _ => BlobSource::Luminance { threshold: n("threshold") as f32, invert: n("invert") >= 0.5 },
-    };
-    BlobSettings {
-        source,
-        min_area: n("min_area").max(0.0) as u32,
-        max_area: n("max_area").clamp(0.0, u32::MAX as f64) as u32,
-        max_blobs: n("max_blobs").max(1.0) as usize,
-        persist: n("persist") >= 0.5,
-        max_move: n("max_move").max(0.0) as f32,
-        revive_frames: n("revive").max(0.0) as u32,
-        separation: n("separation").max(0.0).round() as u32,
-        blur: 0,
     }
 }
 

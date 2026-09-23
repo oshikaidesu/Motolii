@@ -11,11 +11,6 @@ use crate::render::compositor::{
 };
 use crate::render::media::SpatialBounds;
 
-pub(crate) fn next_model_revision() -> u64 {
-    static NEXT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-    NEXT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-}
-
 impl Compositor {
     pub(crate) fn import_model(&mut self, path: &str) -> Result<GpuModelData, CompositorError> {
         let bytes = std::fs::read(path).map_err(|error| {
@@ -50,7 +45,6 @@ impl Compositor {
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
         Ok(GpuModelData {
             planar_size: None,
-            revision: next_model_revision(),
             instances: Arc::new(instances),
             bounds,
             vertices: Arc::new(vertices),
@@ -91,22 +85,6 @@ impl Compositor {
             })
             .collect();
         (instances, clip)
-    }
-    pub(crate) fn model_draw_data(
-        &mut self,
-        model: &GpuModelData,
-        size: [f32; 2],
-        placement: crate::doc::core::LayerPlacement,
-        opacity: f32,
-        comp: crate::doc::core::CompSpec,
-        camera: crate::doc::core::ResolvedCamera,
-        projection: crate::doc::store::LayerProjection,
-        shading: &SurfaceShading,
-        clip: Option<super::ClipSpec>,
-    ) -> Result<MeshDrawData, CompositorError> {
-        let (instances, clip) = self.model_instances(model, size, placement, opacity, comp, camera, projection, shading, clip);
-        MeshDrawData::new_clipped(&self.ctx, &instances, clip)
-            .map_err(|error| CompositorError::Draw(error.to_string()))
     }
 
 }

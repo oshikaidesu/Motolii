@@ -323,10 +323,6 @@ fn append_each(contribution: &mut SceneContributionValue, effects: &[crate::pict
     }
 }
 
-fn seed_layer_id(children: &[SceneContributionValue]) -> Option<LayerId> {
-    children.iter().find_map(|child| child.layer.as_ref().map(|layer| layer.layer))
-}
-
 
 #[cfg(test)]
 mod tests {

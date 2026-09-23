@@ -111,16 +111,7 @@ impl Compositor {
         let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture.texture)
             .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
-        builder.queue_draw(&self.ctx, draws.rects.clone());
-        for cloud in &draws.clouds {
-            builder.queue_draw(&self.ctx, cloud.clone());
-        }
-        for line in &draws.lines {
-            builder.queue_draw(&self.ctx, line.clone());
-        }
-        for mesh in &draws.meshes {
-            builder.queue_draw(&self.ctx, mesh.clone());
-        }
+        draws.queue(&self.ctx, &mut builder)?;
         self.ctx.queue_commands([builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?]);
         self.surface_work.light_captures += 1;
         let cookie = resources.imported.clone();
@@ -161,17 +152,19 @@ pub(crate) struct SceneDraws {
 }
 
 impl SceneDraws {
-    pub(crate) fn queue(self, ctx: &re_renderer::RenderContext, view: &mut ViewBuilder) {
-        view.queue_draw(ctx, self.rects);
-        for cloud in self.clouds {
-            view.queue_draw(ctx, cloud);
+    pub(crate) fn queue(&self, ctx: &re_renderer::RenderContext, view: &mut ViewBuilder) -> Result<(), CompositorError> {
+        let draw = |e: re_renderer::RendererRegistrationError| CompositorError::Draw(e.to_string());
+        view.queue_draw(ctx, self.rects.clone()).map_err(draw)?;
+        for cloud in &self.clouds {
+            view.queue_draw(ctx, cloud.clone()).map_err(draw)?;
         }
-        for line in self.lines {
-            view.queue_draw(ctx, line);
+        for line in &self.lines {
+            view.queue_draw(ctx, line.clone()).map_err(draw)?;
         }
-        for mesh in self.meshes {
-            view.queue_draw(ctx, mesh);
+        for mesh in &self.meshes {
+            view.queue_draw(ctx, mesh.clone()).map_err(draw)?;
         }
+        Ok(())
     }
 }
 
@@ -642,16 +635,7 @@ impl Compositor {
                 )
                 .map_err(|e| CompositorError::View(e.to_string()))?;
                 self.next_readback += 1;
-                builder.queue_draw(&self.ctx, draws.rects.clone());
-                for cloud in &draws.clouds {
-                    builder.queue_draw(&self.ctx, cloud.clone());
-                }
-                for line in &draws.lines {
-                    builder.queue_draw(&self.ctx, line.clone());
-                }
-                for mesh in &draws.meshes {
-                    builder.queue_draw(&self.ctx, mesh.clone());
-                }
+                draws.queue(&self.ctx, &mut builder)?;
                 builder
                     .draw_into(&self.ctx, Rgba::TRANSPARENT, &mut capture)
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;

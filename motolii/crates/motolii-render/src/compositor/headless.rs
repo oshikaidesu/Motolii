@@ -52,8 +52,8 @@ impl HeadlessGpu {
             .map_err(|e| HeadlessError::InsufficientCaps(e.to_string()))?;
 
         let mut descriptor = caps.device_descriptor();
-        // rerun は WebGL2 相当の上限で device を頼む(compute 無し)。選択の籠を GPU で畳む(`selection_bounds`)分と、
-        // 箱のブロック(`block_program`: 箱の並びとずれの 2 本、物の数に天井を作らない)の分だけ、adapter が持つ範囲で上限を借りる。
+        // rerun は WebGL2 相当の上限で device を頼む(compute 無し)。箱のブロック(`block_program`: 箱の並びとずれの 2 本、
+        // 物の数に天井を作らない)の分だけ、adapter が持つ範囲で上限を借りる。
         {
             let have = adapter.limits();
             let want = &mut descriptor.required_limits;

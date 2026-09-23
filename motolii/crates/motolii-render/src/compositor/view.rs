@@ -35,7 +35,7 @@ pub(crate) struct WorldLight {
 /// What a view reads from the prepared world.
 pub(crate) struct ViewWorld<'a> {
     pub environment: Option<&'a GpuEnvironmentData>,
-    pub motion: Option<&'a re_renderer::GpuBuffer>,
+    pub motion: Option<&'a re_renderer::DataTexture>,
     pub reflection: Option<&'a crate::render::compositor::light::SceneReflection>,
     pub light: Option<&'a crate::render::compositor::light::SunLight>,
     /// The world's mesh instances, for a view that places the layers as the world does.
@@ -65,7 +65,8 @@ impl Compositor {
             Some(picture) => {
                 let imported = self.import_premultiplied(&picture)?;
                 let rects: Vec<TexturedRect> = vec![screen_rect(window, imported)];
-                shown.queue_draw(&self.ctx, RectangleDrawData::new(&self.ctx, &rects).map_err(|e| CompositorError::Rectangles(e.to_string()))?);
+                shown.queue_draw(&self.ctx, RectangleDrawData::new(&self.ctx, &rects).map_err(|e| CompositorError::Rectangles(e.to_string()))?)
+                    .map_err(|e| CompositorError::Draw(e.to_string()))?;
                 Rgba::TRANSPARENT
             }
             None => clear_color(background_color),
@@ -189,7 +190,9 @@ impl Compositor {
                 let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, sequential_target_config("motolii-view-sky", comp, window, view_from_world, projection, environment), ViewBuilderId::new(self.next_readback), &sky.texture)
                     .map_err(|e| CompositorError::View(e.to_string()))?;
                 self.next_readback += 1;
-                builder.queue_draw(&self.ctx, re_renderer::renderer::GenericSkyboxDrawData::new(&self.ctx, re_renderer::renderer::GenericSkyboxType::Environment));
+                let sky_data = re_renderer::renderer::GenericSkyboxDrawData::new(&self.ctx, re_renderer::renderer::GenericSkyboxType::Environment)
+                    .map_err(|e| CompositorError::Draw(e.to_string()))?;
+                builder.queue_draw(&self.ctx, sky_data).map_err(|e| CompositorError::Draw(e.to_string()))?;
                 builder.draw_into(&self.ctx, Rgba::TRANSPARENT, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
                 if glazed {
                     unglazed = unglazed.take().map(|below| self.mix_onto(window, &below, &sky, DEST_OVER, encoder));
@@ -232,7 +235,7 @@ impl Compositor {
             } else {
                 run
             };
-            self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, world.meshes, start)?.queue(&self.ctx, &mut builder);
+            self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, world.meshes, start)?.queue(&self.ctx, &mut builder)?;
             // The bottom of the stack starts from the background; everything above is drawn on clear.
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             builder.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
@@ -354,7 +357,7 @@ impl Compositor {
 
     /// [`Self::view_canvas`] in `format`.
     pub(crate) fn view_canvas_for(&self, window: Window, format: wgpu::TextureFormat) -> re_renderer::GpuTexture {
-        effects::pass_texture(&self.ctx, window.width, window.height, format)
+        effects::vism::pass_texture(&self.ctx, window.width, window.height, format)
     }
 
     /// `above` mixed onto `below` by `mode`, into a new canvas.

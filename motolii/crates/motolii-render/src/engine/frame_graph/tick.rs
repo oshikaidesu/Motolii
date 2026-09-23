@@ -218,6 +218,7 @@ impl Engine {
 
     /// Offline routes and tests only: `texture` as this frame leaves it, now (the frame ends and
     /// the GPU is waited for).
+    #[cfg(test)]
     pub(crate) fn read_texture_offline(&mut self, texture: &wgpu::Texture) -> Result<Vec<u8>, EngineError> {
         let id = crate::render::compositor::readback::ask_texture(&self.compositor.ctx, texture)
             .map_err(|error| EngineError::Store(error.to_string()))?;
@@ -244,7 +245,7 @@ pub(in crate::engine) struct PreparedFrame {
     paddings: Vec<u32>,
     spills: Vec<crate::render::compositor::LayerSpill>,
     environment: Option<Arc<crate::render::compositor::GpuEnvironmentData>>,
-    motion: Option<re_renderer::GpuBuffer>,
+    motion: Option<re_renderer::DataTexture>,
     reflection: Option<crate::render::compositor::light::SceneReflection>,
     light: Option<crate::render::compositor::light::SunLight>,
     meshes: Option<crate::render::compositor::SharedMeshScene>,

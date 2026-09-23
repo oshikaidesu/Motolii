@@ -22,12 +22,6 @@ symbols = ["Animate"]
 [[violations]]
 rule = "no cycles"
 from = "motolii-render::compositor"
-to = "motolii-render::compositor::reflection_cache"
-symbols = ["ReflectionEntry"]
-
-[[violations]]
-rule = "no cycles"
-from = "motolii-render::compositor"
 to = "motolii-render::compositor::surface_scene"
 symbols = [
     "LightCookieResources",
@@ -104,7 +98,6 @@ rule = "no cycles"
 from = "motolii-render::compositor::effects::vism"
 to = "motolii-render::compositor::effects"
 symbols = [
-    "EffectScratch",
     "FeedbackState",
     "FeedbackStep",
     "FeedbackTarget",
@@ -172,60 +165,6 @@ rule = "no cycles"
 from = "motolii-render::compositor::measurement"
 to = "motolii-render::compositor::matte"
 symbols = ["MatteMode"]
-
-[[violations]]
-rule = "no cycles"
-from = "motolii-render::compositor::reflection_cache"
-to = "motolii-render::compositor"
-symbols = [
-    "BLEND_TARGET_FORMAT",
-    "BlendMode",
-    "Clock",
-    "Compositor",
-    "CompositorError",
-    "GpuModelData",
-    "Layer",
-    "LayerContent",
-    "LayerWithPasses",
-    "NO_BACKGROUND",
-    "RenderTiming",
-    "SequentialContent",
-    "SequentialInput",
-    "SurfaceWork",
-    "Window",
-    "clear_color",
-    "outline_mask",
-    "premultiplied_texture",
-    "projected_corners",
-    "projected_placement_corners",
-    "projected_spatial_placement",
-    "screen_target_config",
-    "sequential_target_config",
-    "spatial_placement_from_bounds",
-    "spatial_world_from_bounds",
-    "tilt",
-    "tilted_corners",
-    "to_point3",
-    "to_vector3",
-]
-
-[[violations]]
-rule = "no cycles"
-from = "motolii-render::compositor::reflection_cache"
-to = "motolii-render::compositor::matte"
-symbols = ["MatteMode"]
-
-[[violations]]
-rule = "no cycles"
-from = "motolii-render::compositor::reflection_cache"
-to = "motolii-render::compositor::measurement"
-symbols = ["FrameMeasurement"]
-
-[[violations]]
-rule = "no cycles"
-from = "motolii-render::compositor::reflection_cache"
-to = "motolii-render::compositor::surface_scene"
-symbols = ["SharedMeshScene"]
 
 [[violations]]
 rule = "no cycles"

@@ -333,7 +333,7 @@ impl VismProgram {
             let width = declaration.and_then(|p| p.width).map_or(extent[0], |v| v.resolve(extent[0]));
             let height = declaration.and_then(|p| p.height).map_or(extent[1], |v| v.resolve(extent[1]));
             if !persistent.contains(name) {
-                targets.push((super::pass_texture(ctx, width, height, format), None));
+                targets.push((pass_texture(ctx, width, height, format), None));
                 continue;
             }
             match state.as_deref_mut() {
@@ -341,7 +341,7 @@ impl VismProgram {
                     let fits = state.targets.get(*name).is_some_and(|t| t.next.texture.width() == width && t.next.texture.height() == height && t.next.texture.format() == format);
                     if !fits {
                         // The history is the host's to keep alive: two pool textures held by the state.
-                        let make = || super::pass_texture(ctx, width, height, format);
+                        let make = || pass_texture(ctx, width, height, format);
                         state.targets.insert((*name).to_owned(), super::FeedbackTarget { prev: make(), next: make() });
                         // 寸法や形式が変われば履歴は続けられない: 初期条件から。
                         step = super::FeedbackStep::Restart;
@@ -356,9 +356,9 @@ impl VismProgram {
                 }
                 None => {
                     // 持ち主が無い: 前のフレームは透明(借り物を空にして読ませる)。
-                    let prev = super::pass_texture(ctx, width, height, format);
+                    let prev = pass_texture(ctx, width, height, format);
                     clear(encoder, &prev.default_view);
-                    targets.push((super::pass_texture(ctx, width, height, format), Some(prev)));
+                    targets.push((pass_texture(ctx, width, height, format), Some(prev)));
                 }
             }
         }
@@ -514,4 +514,18 @@ fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         },
         count: None,
     }
+}
+
+/// A texture a pass draws into, from re_renderer's pool: it goes back to the pool when nothing
+/// holds it, and the pool reuses it from the next frame on.
+pub(crate) fn pass_texture(ctx: &re_renderer::RenderContext, width: u32, height: u32, format: wgpu::TextureFormat) -> re_renderer::GpuTexture {
+    ctx.gpu_resources.textures.alloc(&ctx.device, &re_renderer::TextureDesc {
+        label: "motolii-pass".into(),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT,
+    })
 }

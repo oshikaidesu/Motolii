@@ -217,16 +217,6 @@ mod tests {
 }
 
 impl crate::render::compositor::Compositor {
-    /// 効果列の hook(field / surface)から共有プログラムを組む。変種は catalog の世代ごとに覚える。
-    pub(crate) fn surface_shading(&mut self, effects: &[crate::picture::resolved::ResolvedEffect]) -> Result<SurfaceShading, String> {
-        self.surface_shading_for(effects, false)
-    }
-
-    pub(crate) fn surface_shading_for(&mut self, effects: &[crate::picture::resolved::ResolvedEffect], unlit: bool) -> Result<SurfaceShading, String> {
-        self.refresh_catalog_programs();
-        let recipe = SurfaceRecipe::from_effects(effects, &self.catalog, unlit);
-        self.surface_shading_from(&recipe)
-    }
 
     pub(crate) fn surface_shading_from(&mut self, recipe: &SurfaceRecipe) -> Result<SurfaceShading, String> {
         self.refresh_catalog_programs();
@@ -272,9 +262,16 @@ impl crate::render::compositor::Compositor {
 mod program_contract {
     use crate::picture::resolved::ResolvedEffect;
 
+    /// The effects' surface program, as the production route lowers it: a recipe, then its shading.
+    fn surface_shading(compositor: &mut crate::render::compositor::Compositor, effects: &[ResolvedEffect]) -> super::SurfaceShading {
+        compositor.refresh_catalog_programs();
+        let recipe = super::SurfaceRecipe::from_effects(effects, &compositor.catalog, false);
+        compositor.surface_shading_from(&recipe).unwrap()
+    }
+
     fn compiled_without_validation_error(compositor: &mut crate::render::compositor::Compositor, effects: &[ResolvedEffect]) {
         let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let shading = compositor.surface_shading(effects).unwrap();
+        let shading = surface_shading(compositor, effects);
         let error = pollster::block_on(scope.pop());
         assert!(error.is_none(), "{}", error.unwrap());
         assert_eq!(shading.program.is_some(), !effects.is_empty());
@@ -298,8 +295,8 @@ mod program_contract {
         compiled_without_validation_error(&mut compositor, std::slice::from_ref(&turbulence));
         compiled_without_validation_error(&mut compositor, &[turbulence.clone(), glass.clone()]);
         // 同じ組は同じ変種。
-        let a = compositor.surface_shading(&[turbulence.clone(), glass.clone()]).unwrap().program.unwrap();
-        let b = compositor.surface_shading(&[glass, turbulence]).unwrap().program.unwrap();
+        let a = surface_shading(&mut compositor, &[turbulence.clone(), glass.clone()]).program.unwrap();
+        let b = surface_shading(&mut compositor, &[glass, turbulence]).program.unwrap();
         assert!(std::sync::Arc::ptr_eq(&a, &b));
         assert_eq!(compositor.surface_programs.len(), 3);
     }

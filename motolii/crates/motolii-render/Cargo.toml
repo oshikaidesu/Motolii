@@ -26,7 +26,7 @@ stl_io = { workspace = true }
 smallvec = { workspace = true }
 wgpu = { workspace = true }
 # 棚の検証を device の持ち物で行うための、wgpu 本体と同じ写し(Features → naga の Capabilities)。
-wgpu-naga-bridge = "=29.0.4"
+wgpu-naga-bridge = "=30.0.0"
 re_renderer = { workspace = true }
 macaw = { workspace = true }
 glam = { workspace = true }

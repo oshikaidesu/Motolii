@@ -284,7 +284,7 @@ fn a_sphere_keeps_its_roundness_in_a_tall_stage_window(){
         encoder.copy_texture_to_buffer(texture.as_image_copy(),wgpu::TexelCopyBufferInfo{buffer:&buffer,layout:wgpu::TexelCopyBufferLayout{offset:0,bytes_per_row:Some(bytes_per_row),rows_per_image:Some(height)}},wgpu::Extent3d{width,height,depth_or_array_layers:1});
         rt.engine.gpu_queue().submit([encoder.finish()]);
         let slice=buffer.slice(..);slice.map_async(wgpu::MapMode::Read,|_|{});device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-        let data=slice.get_mapped_range();
+        let data=slice.get_mapped_range().unwrap();
         let (mut x0,mut y0,mut x1,mut y1)=(u32::MAX,u32::MAX,0u32,0u32);
         for y in 0..height{for x in 0..width{let p=&data[(y*bytes_per_row+x*4) as usize..][..3];if p.iter().any(|&c|c>24){x0=x0.min(x);y0=y0.min(y);x1=x1.max(x);y1=y1.max(y);}}}
         assert!(x1>x0&&y1>y0,"nothing drawn");

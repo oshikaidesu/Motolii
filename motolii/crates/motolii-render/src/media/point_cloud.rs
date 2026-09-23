@@ -2,7 +2,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use re_types_core::Loggable as _;
+use re_types_core::{FromArrow as _, ToArrow as _};
 
 use crate::render::media::{SpatialBounds, SpatialBoundsError};
 

@@ -53,7 +53,7 @@ impl Compositor {
             let definition = self.catalog.definitions.iter().find(|d| d.plugin_id() == ID).expect("material encoding shader");
             self.effect_programs.insert(ID.into(), effects::EffectProgram::compile_for(&self.ctx, definition, wgpu::TextureFormat::Rgba16Float));
         }
-        let out = effects::pass_texture(&self.ctx, source.texture.width(), source.texture.height(), wgpu::TextureFormat::Rgba16Float);
+        let out = effects::vism::pass_texture(&self.ctx, source.texture.width(), source.texture.height(), wgpu::TextureFormat::Rgba16Float);
         let flag = |b: bool| if b { 1.0 } else { 0.0 };
         self.effect_programs[ID].record(&self.ctx, encoder, &[source], &out.default_view,
             &[("to_linear".into(), flag(to_linear)), ("source_encoded".into(), flag(source_encoded)), ("source_premultiplied".into(), flag(source_premultiplied))],
@@ -236,7 +236,7 @@ impl Compositor {
         format: wgpu::TextureFormat,
         mode: f32,
     ) -> Result<re_renderer::GpuTexture, CompositorError> {
-        let confined = effects::pass_texture(&self.ctx, width, height, format);
+        let confined = effects::vism::pass_texture(&self.ctx, width, height, format);
         let program = match self.coverage_programs.entry(format) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -305,7 +305,7 @@ impl Compositor {
             let format = pass
                 .intermediate_format()
                 .unwrap_or_else(|| current.texture.format());
-            let destination = effects::pass_texture(&self.ctx, padded_width, padded_height, format);
+            let destination = effects::vism::pass_texture(&self.ctx, padded_width, padded_height, format);
             let source = (program.image_input_count() > 0).then_some(&current);
             let sources: Vec<_> = source.into_iter().chain(other_textures.iter()).collect();
             let destination_view = destination.default_view.clone();
@@ -345,7 +345,7 @@ impl Compositor {
                 if step != effects::FeedbackStep::Reuse && now.rem_euclid(effects::FEEDBACK_CHECKPOINT_EVERY) == 0 && !state.checkpoints.iter().any(|(f, _)| *f == now) {
                     let copies = state.targets.iter().map(|(name, target)| {
                         let next = &target.next.texture;
-                        let copy = effects::pass_texture(&self.ctx, next.width(), next.height(), next.format());
+                        let copy = effects::vism::pass_texture(&self.ctx, next.width(), next.height(), next.format());
                         encoder.copy_texture_to_texture(next.as_image_copy(), copy.texture.as_image_copy(), next.size());
                         (name.clone(), copy)
                     }).collect();
@@ -434,7 +434,7 @@ impl Compositor {
 
     /// 元の絵を余白ぶん広げた scratch の中央へ写す(周りは透明)。効果の入力と、溢れを分ける coverage が使う。
     fn padded_copy(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, [width, height]: [u32; 2], padding: u32) -> re_renderer::GpuTexture {
-        let padded = effects::pass_texture(&self.ctx, width + 2 * padding, height + 2 * padding, source.format());
+        let padded = effects::vism::pass_texture(&self.ctx, width + 2 * padding, height + 2 * padding, source.format());
         let padded_view = padded.default_view.clone();
         {
             let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

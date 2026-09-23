@@ -110,16 +110,6 @@ pub fn text_shapes_moving(
     Ok(Some(result))
 }
 
-/// 層に積まれた Text Morph の相手(組んである文字書類)と混合率。相手が無ければ効かない。
-pub(crate) fn morph_partner<'a>(
-    layer: &crate::picture::resolved::ResolvedLayer,
-    documents: &'a std::collections::HashMap<crate::doc::store::LayerId, TextDocument>,
-) -> Option<(&'a TextDocument, f64)> {
-    let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
-    let (target, amount) = crate::extensions::text::morph(&effects)?;
-    documents.get(&target).map(|d| (d, amount))
-}
-
 fn paint_contours(contours: Vec<crate::doc::vector::Contour>, style: &TextDocumentStyle) -> ShapeNode {
     ShapeNode::Leaf(Shape {
         source: PathSource::Bezier(contours),

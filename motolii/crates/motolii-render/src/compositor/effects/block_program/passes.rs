@@ -156,6 +156,7 @@ impl BlockProgram {
 
     /// 掛かった物(`members`)に `rounds` 回掛ける。毎回、前の回の state を読み、書く先は反対側
     /// (掛からない物はこのブロックが 1 度も書かないので、写すのは呼び出しごとに 1 回で足りる)。
+    #[cfg(test)]
     pub(crate) fn record(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, world: &mut BlockWorld, time: f32, members: &[u32], params: &[f32]) {
         self.record_from(ctx, encoder, world, time, members, params, u32::MAX);
     }
@@ -234,6 +235,7 @@ impl BlockWorld {
     }
 
     /// このコマの物の箱を置き、state を 0(ずれ無し)から始める。
+    #[cfg(test)]
     pub(crate) fn begin(&mut self, ctx: &RenderContext, items: &[BlockItem], reach: f32) {
         self.begin_from(ctx, items, reach, &[]);
     }

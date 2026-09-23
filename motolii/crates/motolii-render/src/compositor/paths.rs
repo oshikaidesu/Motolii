@@ -184,7 +184,6 @@ impl Compositor {
             }
         }
         Ok(Some(super::GpuModelData {
-            revision: super::mesh::next_model_revision(),
             planar_size: Some([canvas.width as f32, canvas.height as f32]),
             bounds: crate::render::media::SpatialBounds { min: [0.0; 3], max: [canvas.width as f32, canvas.height as f32, 0.0] },
             instances: std::sync::Arc::new(instances), vertices: std::sync::Arc::new(vertices),
@@ -229,7 +228,7 @@ impl Compositor {
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
-        view_builder.queue_draw(&self.ctx, draw_data);
+        view_builder.queue_draw(&self.ctx, draw_data).map_err(|e| CompositorError::Draw(e.to_string()))?;
         let command_buffer = view_builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?;
         self.ctx.queue_commands([command_buffer]);
         Ok(Some(self.import_premultiplied(&texture)?))

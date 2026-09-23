@@ -57,13 +57,9 @@ pub(crate) struct BlockState {
 }
 
 impl BlockState {
-    /// 解き手が動かす物か(描く前に間引かないため)。
+    /// 解き手が動かす物の数。
     pub(crate) fn object_count(&self) -> usize {
         self.objects.len()
-    }
-
-    pub(crate) fn moves(&self, layer: LayerId) -> bool {
-        self.slots.contains_key(&layer)
     }
 }
 
@@ -365,10 +361,14 @@ impl Engine {
             .collect();
         state.follow_pass.get_or_insert_with(|| FollowPass::new(ctx)).record(ctx, &mut encoder, world, &pairs);
         let links: Vec<(u32, u32)> = state.connectors.iter().map(|(_, a, b)| (*a, *b)).collect();
-        // Four vec4 per entry (motion.wgsl); a rope takes two entries.
+        // Four vec4 per entry (motion.wgsl); a rope takes two entries. The programs write a buffer; the
+        // view reads it as the host's motion data texture, `MOTION_ROW` texels a row.
+        const MOTION_ROW: u32 = 256;
+        let texels = ((state.objects.len() + 2 * links.len()).max(1) * 4) as u32;
+        let rows = texels.div_ceil(MOTION_ROW);
         let motion = ctx.gpu_resources.buffers.alloc(&ctx.device, &re_renderer::BufferDesc {
             label: "motion".into(),
-            size: (state.objects.len() + 2 * links.len()).max(1) as u64 * 64,
+            size: u64::from(rows * MOTION_ROW) * 16,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
@@ -376,9 +376,24 @@ impl Engine {
         let frame = (t.as_seconds_f64() * state.fps).round() as i64;
         state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(ctx))
             .record(ctx, &mut encoder, world, &state.ropes, &motion, frame, state.fps as f32);
+        let extent = wgpu::Extent3d { width: MOTION_ROW, height: rows, depth_or_array_layers: 1 };
+        let texture = ctx.gpu_resources.textures.alloc(&ctx.device, &re_renderer::TextureDesc {
+            label: "motion".into(),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        });
+        encoder.copy_buffer_to_texture(
+            wgpu::TexelCopyBufferInfo { buffer: &motion, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(MOTION_ROW * 16), rows_per_image: Some(rows) } },
+            texture.texture.as_image_copy(),
+            extent,
+        );
         // Recorded, not submitted: it goes out with the frame's other work, ahead of every draw.
         self.compositor.ctx.queue_commands([encoder.finish()]);
-        self.compositor.motion = Some(motion);
+        self.compositor.motion = Some(re_renderer::DataTexture { texture, len: texels });
     }
 }
 

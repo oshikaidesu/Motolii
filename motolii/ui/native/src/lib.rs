@@ -209,12 +209,13 @@ impl EditorRuntime {
         // the tick clears and writes it before this function publishes it.
         let texture = unsafe {
             let raw = wgpu::hal::metal::Device::texture_from_raw(raw, wgpu::TextureFormat::Bgra8Unorm,
-                MTLTextureType::Type2D, 1, 1, size.into());
+                MTLTextureType::Type2D, 1, 1, size.into(), None);
             device.create_texture_from_hal::<wgpu::hal::api::Metal>(raw, &wgpu::TextureDescriptor {
                 label: Some("Motolii direct IOSurface output"), size, mip_level_count: 1, sample_count: 1,
                 dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Bgra8Unorm,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
-            })
+            // Fresh: the tick clears it before anything reads it.
+            }, wgpu::TextureUses::UNINITIALIZED)
         };
         drop(hal);
         Ok(texture)

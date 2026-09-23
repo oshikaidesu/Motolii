@@ -88,7 +88,7 @@ impl Compositor {
             .is_none_or(|old| old.source.source != d.source.source || old.vertex_text != d.vertex_text || old.fragment_text != d.fragment_text)).collect();
         #[cfg(load_shaders_from_disk)]
         {
-            let frame = self.ctx.active_frame_idx();
+            let frame = self.ctx.active_frame.frame_index;
             let paths = changed.iter().flat_map(|d| d.paths()).collect();
             let resolver = re_renderer::new_recommended_file_resolver();
             let pools = &mut self.ctx.gpu_resources;

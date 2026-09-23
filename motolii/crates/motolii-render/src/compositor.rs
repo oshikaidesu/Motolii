@@ -418,7 +418,7 @@ pub struct Compositor {
     pub(crate) coverage_programs: std::collections::HashMap<wgpu::TextureFormat, effects::EffectProgram>,
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
     /// このコマの箱のブロックが GPU に書いた、物ごとの world のずれ(view の設定に差す)。
-    pub(crate) motion: Option<re_renderer::GpuBuffer>,
+    pub(crate) motion: Option<re_renderer::DataTexture>,
     /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
 }
@@ -426,7 +426,6 @@ pub struct Compositor {
 #[derive(Clone)]
 pub struct GpuModelData {
     pub(crate) planar_size: Option<[f32; 2]>,
-    pub(crate) revision: u64,
     pub(crate) instances: std::sync::Arc<Vec<re_renderer::renderer::GpuMeshInstance>>,
     pub(crate) bounds: crate::render::media::SpatialBounds,
     /// Every drawn vertex in model space. The Stage fits its frame to these, not to `bounds`.

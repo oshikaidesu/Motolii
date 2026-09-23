@@ -127,12 +127,6 @@ impl EffectProgram {
         self.0.record(ctx, encoder, sources, dst_view, params, render_size)
     }
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
-        params: &[(String, f32)], frame: vism::ImageFrame) {
-        self.0.record_in_frame(ctx, encoder, sources, dst_view, params, frame)
-    }
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_feedback_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
         sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], frame: vism::ImageFrame, feedback: Option<(&mut FeedbackState, FeedbackStep)>) {
@@ -257,16 +251,3 @@ impl EffectPass {
     }
 }
 
-/// A texture a pass draws into, from re_renderer's pool: it goes back to the pool when nothing
-/// holds it, and the pool reuses it from the next frame on.
-pub(crate) fn pass_texture(ctx: &re_renderer::RenderContext, width: u32, height: u32, format: wgpu::TextureFormat) -> re_renderer::GpuTexture {
-    ctx.gpu_resources.textures.alloc(&ctx.device, &re_renderer::TextureDesc {
-        label: "motolii-pass".into(),
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT,
-    })
-}

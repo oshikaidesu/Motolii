@@ -46,7 +46,6 @@ impl Compositor {
         let instances = re_renderer::CpuModel::from_single_mesh(mesh).into_gpu_meshes(&self.ctx)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
         Ok(Arc::new(GpuModelData {
-            revision: super::super::compositor::mesh::next_model_revision(),
             planar_size: Some(natural),
             bounds: crate::render::media::SpatialBounds { min: [min.x,min.y,0.0], max: [max.x,max.y,0.0] },
             instances: Arc::new(instances), vertices,
@@ -55,37 +54,6 @@ impl Compositor {
 }
 
 impl Engine {
-    pub(super) fn apply_material_domains(
-        &mut self,
-        layer: Layer,
-        resolved: &ResolvedLayer,
-        natural: [f32; 2],
-        source_frame: Option<ImageFrame>,
-    ) -> Result<Layer, EngineError> {
-        self.apply_material_domains_semantic(
-            layer,
-            resolved.id,
-            &resolved.effects,
-            matches!(resolved.source, crate::doc::store::LayerSource::File { .. }),
-            resolved.source_frame,
-            natural,
-            source_frame,
-        )
-    }
-
-    pub(in crate::engine) fn apply_material_domains_semantic(
-        &mut self,
-        layer: Layer,
-        layer_id: crate::doc::store::LayerId,
-        effects: &[ResolvedEffect],
-        source_is_file: bool,
-        source_tick: i64,
-        natural: [f32; 2],
-        source_frame: Option<ImageFrame>,
-    ) -> Result<Layer, EngineError> {
-        let recipe = material_recipe(effects, &self.compositor.catalog).map_err(EngineError::Store)?;
-        self.apply_material_recipe(layer, layer_id, &recipe, source_is_file, source_tick, natural, source_frame)
-    }
 
     pub(in crate::engine) fn apply_material_recipe(
         &mut self,
