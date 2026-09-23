@@ -29,6 +29,7 @@
 ## 全文書索引
 
 - [標準 Glass は背景共有の透過 — 非ガラスの下の絵を 1 回写して全ガラスが読む、ガラスはガラスを屈折しない、順次・再帰は WGSL の明示入力へ](2026-09-23-standard-glass-shared-transmission.md)
+- [Renderer 不変条件 — Scene → Prepared Frame → View State → View Frame → Present、10 箇条](2026-09-23-renderer-invariants.md)
 - [Render orchestration は Rerun の — tick = begin_frame ×1 → prepare ×1 → View ×N → submit ×1、仕事の置き場は入力で決める](2026-09-23-render-orchestration.md)
 - [Chromatic Workshop — 実画面への反映と公開カラーテーマ](2026-09-20-chromatic-theme-implementation.md)
 
