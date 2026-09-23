@@ -249,9 +249,10 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
     }
 }
 
-/// Ordered transmission keeps its barriers, but its full-size mip texture is reused.
+/// Standard glass refracts what is below it (2026-09-23): overlapping copies of one glass layer
+/// are one group reading one backdrop; they do not refract each other.
 #[test]
-fn overlapping_glass_reuses_one_backdrop_without_removing_transmission_steps() {
+fn overlapping_glass_copies_read_one_shared_backdrop() {
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "white.png", 255, 255);
     let mut doc = scene(dir.path(), &sky, true);
@@ -284,13 +285,13 @@ fn overlapping_glass_reuses_one_backdrop_without_removing_transmission_steps() {
         engine.layer_failures()
     );
     let first = engine.surface_work();
-    assert_eq!(first.backdrop_copies, 3);
+    assert_eq!(first.backdrop_copies, 1, "three glass copies, one backdrop");
     let b = engine
         .render_frame(&doc.view(), RationalTime::ZERO)
         .unwrap();
     let second = engine.surface_work();
     // The backdrop is the view's picture: each draw of the view copies it again.
-    assert_eq!(second.backdrop_copies - first.backdrop_copies, 3);
+    assert_eq!(second.backdrop_copies - first.backdrop_copies, 1);
     assert_eq!(a, b);
     let i = ((MESH_Y * SIZE + MESH_X) * 4) as usize;
     assert!(

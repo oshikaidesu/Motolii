@@ -121,6 +121,16 @@ impl Compositor {
         };
 
         let mut stack: Option<re_renderer::GpuTexture> = None;
+        // Standard glass refracts the non-glass picture below it and never another glass (2026-09-23;
+        // three.js / Godot / Filament: one transmission input from the opaque scene, shared by every
+        // transmissive object). Until the first glass the non-glass picture is the stack itself;
+        // after it, non-glass runs are laid on this one too.
+        let mut unglazed: Option<re_renderer::GpuTexture> = None;
+        let mut glazed = false;
+        // The transmission input: one copy of the non-glass picture, reused by every glass until
+        // something non-glass is added. Its mips reach as far as the roughest glass of the view reads.
+        let mut transmission: Option<GpuTexture2D> = None;
+        let roughest = inputs.iter().filter(|input| input.shading.reads_backdrop).map(|input| input.shading.backdrop_roughness).fold(0.0f32, f32::max);
         // Backdrops a recorded draw still reads; kept until the view is recorded.
         let mut backdrops = Vec::new();
         let mut index = 0;
@@ -137,9 +147,9 @@ impl Compositor {
                     if index > start && flat(&inputs[index]) != flat(&inputs[start]) {
                         break;
                     }
-                    // A surface reading what is behind it starts a run: everything before is its backdrop.
-                    // A mesh after a picture starts one too.
-                    if index > start && (inputs[index].shading.reads_backdrop || (has_rect && matches!(inputs[index].content, SequentialContent::Model(_)))) {
+                    // A run is all glass or all not: glass reads the non-glass picture, which the
+                    // non-glass runs build. A mesh after a picture starts a run too.
+                    if index > start && (inputs[index].shading.reads_backdrop != inputs[start].shading.reads_backdrop || (has_rect && matches!(inputs[index].content, SequentialContent::Model(_)))) {
                         break;
                     }
                     // A layer whose effects run on the view's picture is a run of its own: its neighbours
@@ -165,22 +175,30 @@ impl Compositor {
                 self.next_readback += 1;
                 builder.queue_draw(&self.ctx, re_renderer::renderer::GenericSkyboxDrawData::new(&self.ctx, re_renderer::renderer::GenericSkyboxType::Environment));
                 builder.draw_into(&self.ctx, Rgba::TRANSPARENT, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
+                if glazed {
+                    unglazed = unglazed.take().map(|below| self.mix_onto(window, &below, &sky, DEST_OVER, encoder));
+                    transmission = None;
+                }
                 stack = Some(match stack.take() {
                     None => sky,
                     Some(below) => self.mix_onto(window, &below, &sky, DEST_OVER, encoder),
                 });
             }
+            let glass_run = run[0].shading.reads_backdrop;
 
             let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, environment);
             config.motion = world.motion.cloned();
             config.scene_reflection = world.reflection.cloned();
             config.light = world.light.cloned();
-            // A surface reading what is behind it reads this view's stack so far (ordered transmission).
-            if let Some(below) = stack.as_ref().filter(|_| run.iter().any(|input| input.shading.reads_backdrop)) {
-                let roughness = run.iter().filter(|input| input.shading.reads_backdrop).map(|input| input.shading.backdrop_roughness).fold(0.0f32, f32::max);
-                let (texture, imported) = self.backdrop(window, below, roughness, encoder)?;
-                config.backdrop = Some(imported);
-                backdrops.push(texture);
+            if glass_run {
+                if transmission.is_none() {
+                    if let Some(below) = if glazed { unglazed.as_ref() } else { stack.as_ref() } {
+                        let (texture, imported) = self.backdrop(window, below, roughest, encoder)?;
+                        transmission = Some(imported);
+                        backdrops.push(texture);
+                    }
+                }
+                config.backdrop = transmission.clone();
             }
             // Near things fade: only in the work's camera, only for what is in the world.
             if !flat(&run[0]) && window.projection_camera.is_none() {
@@ -207,6 +225,17 @@ impl Compositor {
                 [only] if !only.screen_passes.is_empty() => self.screen_passes(window, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), encoder)?,
                 _ => canvas,
             };
+            if glass_run && !glazed {
+                // The picture before the first glass is the non-glass picture from here on.
+                unglazed = stack.clone();
+                glazed = true;
+            } else if !glass_run && glazed {
+                unglazed = Some(match unglazed.take() {
+                    None => canvas.clone(),
+                    Some(below) => self.mix_onto(window, &below, &canvas, mode, encoder),
+                });
+                transmission = None;
+            }
             stack = Some(match stack.take() {
                 None => canvas,
                 Some(below) => self.mix_onto(window, &below, &canvas, mode, encoder),
