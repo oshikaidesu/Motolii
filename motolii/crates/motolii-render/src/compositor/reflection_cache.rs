@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 const MAX_INPUTS: usize = 16_384;
 const MAX_TEXTURE_BYTES: u64 = 128 * 1024 * 1024;
+/// Captures kept at once: the views of one frame and the plates drawn inside them.
+const MAX_ENTRIES: usize = 4;
 
 #[derive(PartialEq)]
 struct InputKey {
@@ -52,6 +54,8 @@ impl PartialEq for ReflectionKey {
 pub(crate) struct ReflectionEntry {
     key: ReflectionKey,
     reflection: SceneReflection,
+    /// The atlas the reflection samples; it belongs to this entry until the entry is dropped.
+    resources: Option<super::surface_scene::ReflectionResources>,
 }
 
 impl Compositor {
@@ -159,7 +163,9 @@ impl Compositor {
                     local_size: i.local_size,
                     placement: i.placement,
                     projection: i.projection,
-                    camera: i.projection_camera,
+                    // A 3D input sits in the world as it is (its projection is the identity), so
+                    // the view's camera does not change the capture; only 2D/2.5D inputs follow it.
+                    camera: if i.projection == crate::doc::store::LayerProjection::ThreeD { ResolvedCamera::default() } else { i.projection_camera },
                     opacity: i.opacity,
                     blend: i.blend_mode,
                     params: i.shading.params,
@@ -184,14 +190,10 @@ impl Compositor {
                 .as_ref()
                 .is_some_and(|p| p.desc().surface.is_some())
         }) {
-            if self.reflection_entry.take().is_some() {
-                self.surface_work.cache_evictions += 1;
-            }
-            self.surface_work.cache_retained_texture_bytes = 0;
             return Ok(None);
         }
         if !self.reflection_cache_enabled {
-            self.reflection_entry = None;
+            self.reflection_entry.clear();
             self.surface_work.cache_retained_texture_bytes = 0;
             return self.capture_scene_reflection(comp, inputs, environment, shared);
         }
@@ -199,26 +201,31 @@ impl Compositor {
         let key = self.reflection_key(comp, inputs, environment);
         let hit = key
             .as_ref()
-            .zip(self.reflection_entry.as_ref())
-            .is_some_and(|(k, e)| *k == e.key);
+            .and_then(|k| self.reflection_entry.iter().position(|e| *k == e.key));
         self.surface_work.cache_key_us += start.elapsed().as_micros() as u64;
-        if hit {
+        if let Some(index) = hit {
             self.surface_work.cache_hits += 1;
-            return Ok(self.reflection_entry.as_ref().map(|e| e.reflection.clone()));
+            let entry = self.reflection_entry.remove(index);
+            let reflection = entry.reflection.clone();
+            self.reflection_entry.push(entry);
+            return Ok(Some(reflection));
         }
         self.surface_work.cache_misses += 1;
         if key.is_none() {
             self.surface_work.cache_bypasses += 1;
         }
-        if self.reflection_entry.take().is_some() {
+        // The oldest capture gives up its atlas to this one.
+        if self.reflection_entry.len() >= MAX_ENTRIES {
+            let oldest = self.reflection_entry.remove(0);
             self.surface_work.cache_evictions += 1;
+            if oldest.resources.is_some() { self.reflection_resources = oldest.resources; }
         }
-        self.surface_work.cache_retained_texture_bytes = 0;
         let result = self.capture_scene_reflection(comp, inputs, environment, shared)?;
         if let (Some(key), Some(reflection)) = (key, result.clone()) {
-            self.surface_work.cache_retained_texture_bytes = key.bytes;
-            self.reflection_entry = Some(ReflectionEntry { key, reflection });
+            let resources = self.reflection_resources.take();
+            self.reflection_entry.push(ReflectionEntry { key, reflection, resources });
         }
+        self.surface_work.cache_retained_texture_bytes = self.reflection_entry.iter().map(|e| e.key.bytes).sum();
         Ok(result)
     }
 }

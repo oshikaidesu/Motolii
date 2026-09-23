@@ -421,7 +421,9 @@ pub struct Compositor {
     pub(crate) reflection_diagnostic_skip: Option<usize>,
     #[cfg(test)]
     pub(crate) reflection_diagnostic_near: Option<f32>,
-    pub(crate) reflection_entry: Option<reflection_cache::ReflectionEntry>,
+    /// Recent scene captures, newest last. Each owns its atlas, so captures of different scenes
+    /// drawn in one frame (the views, a group's plate) are kept side by side.
+    pub(crate) reflection_entry: Vec<reflection_cache::ReflectionEntry>,
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) light_cookie: Option<surface_scene::LightCookieResources>,
     pub(crate) next_readback: u64,

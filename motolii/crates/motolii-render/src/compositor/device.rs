@@ -78,7 +78,7 @@ impl Compositor {
             reflection_diagnostic_skip: None,
             #[cfg(test)]
             reflection_diagnostic_near: None,
-            reflection_entry: None,
+            reflection_entry: Vec::new(),
             backdrop_resource: None,
             next_readback: 1,
             next_effect_key: 1,

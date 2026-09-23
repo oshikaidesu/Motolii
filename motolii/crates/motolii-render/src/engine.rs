@@ -425,8 +425,9 @@ impl Engine {
     }
 
     pub fn clear_reflection_cache(&mut self) {
-        if self.compositor.reflection_entry.take().is_some() {
-            self.compositor.surface_work.cache_evictions += 1;
+        if !self.compositor.reflection_entry.is_empty() {
+            self.compositor.surface_work.cache_evictions += self.compositor.reflection_entry.len() as u64;
+            self.compositor.reflection_entry.clear();
         }
         self.compositor.surface_work.cache_retained_texture_bytes = 0;
     }
