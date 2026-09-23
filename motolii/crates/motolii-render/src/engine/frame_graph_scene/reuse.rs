@@ -43,6 +43,7 @@ impl Engine {
             Some(work)
         }).map_err(|error| EngineError::Store(error.to_string()))?;
 
+        let kept: Vec<bool> = reused.iter().map(Option::is_some).collect();
         let mut prepared = Vec::with_capacity(graph.layers.len());
         for (index, work) in graph.layers.iter().enumerate() {
             prepared.push(match reused[index].take() {
@@ -55,8 +56,17 @@ impl Engine {
         }
         let result = self.compose_prepared(&graph, &prepared, comp, projection_camera)?;
 
+        let mut previous = std::mem::take(&mut self.contributions);
         let mut next = ContributionCache::with_capacity(scene.layers.len());
         for (index, (current, work)) in scene.layers.iter().zip(&graph.layers).enumerate() {
+            let key = (current.layer, current.instance);
+            // A reused contribution's record still describes it: move it, copy nothing.
+            if kept[index] {
+                if let Some(record) = previous.remove(&key) {
+                    next.insert(key, record);
+                }
+                continue;
+            }
             let layer = &prepared[index];
             // Preparation that moved the picture itself (a planar warp's frame) is not a placement to replace.
             let placed_as_authored = layer.as_ref().is_none_or(|layer| {
@@ -64,7 +74,7 @@ impl Engine {
                     && layer.layer.placement.world_transform == Some(current.transform.spatial)
             });
             if placement_independent(current) && placed_as_authored {
-                next.insert((current.layer, current.instance), CachedContribution {
+                next.insert(key, CachedContribution {
                     scene: current.clone(),
                     clip_base: bases[index],
                     work: work.clone(),
