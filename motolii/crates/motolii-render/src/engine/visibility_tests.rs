@@ -67,7 +67,6 @@ fn capture_visibility_diagnosis() {
     let time =
         RationalTime::try_from_frame(17, doc.view().composition().unwrap().unwrap().fps).unwrap();
     let mut engine = Engine::new().unwrap();
-    engine.set_reflection_cache_enabled(false);
     engine.set_gpu_instance_sharing_enabled(false);
     engine.compositor.reflection_diagnostic_enabled = true;
     engine.compositor.reflection_diagnostic_near = std::env::var("MOTOLII_DIAGNOSTIC_NEAR")
@@ -94,7 +93,6 @@ fn capture_visibility_diagnosis() {
             let frame = engine.render_frame(&doc.view(), time).unwrap();
             if !omit && step == 0 {
                 let mut observer_control = Engine::new().unwrap();
-                observer_control.set_reflection_cache_enabled(false);
                 observer_control.set_gpu_instance_sharing_enabled(false);
                 observer_control.compositor.reflection_diagnostic_near =
                     engine.compositor.reflection_diagnostic_near;

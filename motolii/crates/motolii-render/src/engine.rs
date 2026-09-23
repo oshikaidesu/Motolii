@@ -422,21 +422,6 @@ impl Engine {
     /// 反射の撮影点を送り手の箱に固定し、受け手を撮影から外す(比較用の切替、Document は変えない)。
     pub fn set_reflection_scene_probe(&mut self, enabled: bool) {
         self.compositor.reflection_scene_probe = enabled;
-        self.clear_reflection_cache();
-    }
-
-    /// Diagnostic switch; never changes the Document or reflection quality.
-    pub fn set_reflection_cache_enabled(&mut self, enabled: bool) {
-        self.compositor.reflection_cache_enabled = enabled;
-        self.clear_reflection_cache();
-    }
-
-    pub fn clear_reflection_cache(&mut self) {
-        if !self.compositor.reflection_entry.is_empty() {
-            self.compositor.surface_work.cache_evictions += self.compositor.reflection_entry.len() as u64;
-            self.compositor.reflection_entry.clear();
-        }
-        self.compositor.surface_work.cache_retained_texture_bytes = 0;
     }
 
     pub fn surface_work(&self) -> crate::render::compositor::SurfaceWork {

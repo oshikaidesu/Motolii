@@ -65,7 +65,6 @@ impl Compositor {
             surface_work: Default::default(),
             reflection_resources: None,
             light_cookie: None,
-            reflection_cache_enabled: true,
             gpu_instance_sharing_enabled: true,
             reflection_scene_probe: false,
             #[cfg(test)]
@@ -78,7 +77,6 @@ impl Compositor {
             reflection_diagnostic_skip: None,
             #[cfg(test)]
             reflection_diagnostic_near: None,
-            reflection_entry: Vec::new(),
             next_readback: 1,
             baked_effects: Default::default(),
             effect_programs,

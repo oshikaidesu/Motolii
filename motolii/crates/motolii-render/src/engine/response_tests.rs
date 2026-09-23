@@ -91,7 +91,6 @@ fn gallery_probe_response_comparison() {
         }
     }
     for (mode, engine) in engines.iter_mut().enumerate() {
-        engine.compositor.reflection_entry.clear();
         set(&mut doc, ball, "position", Value::Vec2([1090.0, 479.21]));
         let a = engine
             .render_frame(&doc.view(), RationalTime::ZERO)
@@ -166,7 +165,6 @@ fn default_reflection_response_has_no_receiver_crossing_pop() {
         changes[1] < 2 * changes[0].max(changes[2]),
         "isolated reflection pop: {changes:?}"
     );
-    engine.compositor.reflection_entry.clear();
     set(&mut doc, ball, "position", Value::Vec2([1089.0, 479.21]));
     assert_eq!(
         engine

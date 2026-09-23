@@ -22,7 +22,6 @@ mod view;
 pub(crate) use view::{ViewWorld, WorldLight};
 #[cfg(test)]
 mod reflection_diagnostic;
-mod reflection_cache;
 mod measurement;
 pub use measurement::FrameMeasurement;
 pub(crate) mod light;
@@ -384,7 +383,6 @@ pub struct Compositor {
     pub(crate) measurement_enabled: bool,
     pub(crate) measurement: FrameMeasurement,
     pub(crate) surface_work: SurfaceWork,
-    pub(crate) reflection_cache_enabled: bool,
     pub(crate) gpu_instance_sharing_enabled: bool,
     /// 反射の撮影点を受け手ではなく送り手の箱に固定し、受け手は撮影から外す(Arm の local cubemap)。
     pub(crate) reflection_scene_probe: bool,
@@ -400,7 +398,6 @@ pub struct Compositor {
     pub(crate) reflection_diagnostic_near: Option<f32>,
     /// Recent scene captures, newest last. Each owns its atlas, so captures of different scenes
     /// drawn in one frame (the views, a group's plate) are kept side by side.
-    pub(crate) reflection_entry: Vec<reflection_cache::ReflectionEntry>,
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) light_cookie: Option<surface_scene::LightCookieResources>,
     pub(crate) next_readback: u64,

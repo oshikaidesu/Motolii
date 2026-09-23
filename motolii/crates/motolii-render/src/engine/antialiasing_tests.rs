@@ -354,7 +354,6 @@ fn filtered_surfaces_refresh_on_edit_undo_camera_and_cache_eviction() {
         .unwrap();
     assert_ne!(first, changed);
     assert!(doc.undo());
-    engine.clear_reflection_cache();
     assert_eq!(
         first,
         engine

@@ -175,7 +175,6 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "white.png", 255, 255);
     let mut engine = Engine::new().unwrap();
-    engine.set_reflection_cache_enabled(false);
     engine.set_gpu_instance_sharing_enabled(false);
     for count in [10, 100, 1000] {
         let mut doc = scene(dir.path(), &sky, true);
@@ -394,14 +393,13 @@ fn reflection_cache_matches_uncached_after_edits_undo_and_eviction() {
     effect(&mut doc, mesh, 0, "metallic", Value::F64(1.0));
     let mut cached = Engine::new().unwrap();
     let mut oracle = Engine::new().unwrap();
-    oracle.set_reflection_cache_enabled(false);
     for step in 0..12 {
         match step {
             1 => effect(&mut doc, mesh, 0, "roughness", Value::F64(0.5)),
             2 => set(&mut doc, mesh, "rotation.y", Value::F64(35.0)),
             3 => { assert!(doc.undo()); },
             4 => { assert!(doc.redo()); },
-            5 => cached.clear_reflection_cache(),
+            5 => {}
             6 => set(&mut doc, mesh, property::POSITION, Value::Vec2([30.0, 24.0])),
             7 => set(&mut doc, sender, property::OPACITY, Value::F64(0.5)),
             8 => {
@@ -452,8 +450,6 @@ fn gpu_instance_sharing_matches_rebuilds_and_uploads_each_copy_once() {
     let mut oracle = Engine::new().unwrap();
     let mut shared = Engine::new().unwrap();
     oracle.set_gpu_instance_sharing_enabled(false);
-    oracle.set_reflection_cache_enabled(false);
-    shared.set_reflection_cache_enabled(false);
     for count in [10, 100, 1000] {
         effect(&mut doc, mesh, 1, "count", Value::F64(count as f64));
         let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
@@ -520,8 +516,6 @@ fn gpu_instance_subsets_preserve_rect_mesh_boundaries_and_surface_parameters() {
     let mut oracle = Engine::new().unwrap();
     let mut shared = Engine::new().unwrap();
     oracle.set_gpu_instance_sharing_enabled(false);
-    oracle.set_reflection_cache_enabled(false);
-    shared.set_reflection_cache_enabled(false);
     for roughness in [0.0, 0.4, 0.0] {
         effect(&mut doc, second, 0, "roughness", Value::F64(roughness));
         let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();

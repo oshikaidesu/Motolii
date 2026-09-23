@@ -26,8 +26,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gpu_sharing = args.get(3).is_some_and(|s| s == "gpu-sharing");
     if gpu_sharing {
         off.set_gpu_instance_sharing_enabled(false);
-    } else {
-        off.set_reflection_cache_enabled(false);
     }
     off.set_render_measurement_enabled(true);
     on.set_render_measurement_enabled(true);
