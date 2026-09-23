@@ -130,3 +130,32 @@ fn a_mesh_under_an_environment_matches_the_old_path() {
     assert_matches_oracle(&scene(dir.path(), &sky, true), "a mesh lit by the sky");
     assert_matches_oracle(&scene(dir.path(), &sky, false), "a mesh with the sky as a picture");
 }
+
+/// Glass (reads the view's picture behind it, refracts, reflects the world), a mirror (reflects
+/// the world's capture), and a layer casting a shadow onto a picture behind it (the world's
+/// light cookie).
+#[test]
+fn glass_mirror_and_cast_shadow_match_the_old_path() {
+    use crate::doc::store::{EffectId, EffectInstance};
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "sky.png", 40, 220);
+    let red = png(dir.path(), "board.png", [255, 0, 0, 255]);
+    let surface = |values: &[(&str, f64)], shadow: bool| {
+        let mut doc = scene(dir.path(), &sky, true);
+        let board = file_layer(&mut doc, 3, 0, &red);
+        doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
+        let mesh = LayerId(2);
+        doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(property::POSITION_Z).unwrap(), value: Value::F64(-20.0) }).unwrap();
+        let mut effects = vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }];
+        if shadow { effects.push(EffectInstance { id: EffectId(1), plugin_id: "motolii.cast_shadow".into() }); }
+        doc.apply(Intent::SetEffects { layer: mesh, effects }).unwrap();
+        for (name, value) in values {
+            doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(*value) }).unwrap();
+        }
+        doc
+    };
+    assert_matches_oracle(&surface(&[("ior", 1.5), ("roughness", 0.3), ("transmission", 1.0)], false), "rough glass over a picture");
+    assert_matches_oracle(&surface(&[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)], false), "a mirror");
+    assert_matches_oracle(&surface(&[("transmission", 0.0)], true), "a layer casting a shadow");
+}

@@ -66,3 +66,39 @@ fn every_view_of_a_tick_reads_the_same_prepared_frame() {
     let second = engine.tick_frame.clone().unwrap();
     assert!(std::sync::Arc::ptr_eq(&first.scene, &second.scene), "the document frame is prepared once and only read by views");
 }
+
+/// The world's light is captured once per document frame, however many views look at it; the
+/// views' own work (a glass layer's backdrop copy) grows with the views.
+#[test]
+fn world_captures_do_not_grow_with_views() {
+    use crate::doc::store::{EffectId, EffectInstance, LayerId, PropertyId, Value};
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    use motolii_edit::Intent;
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "sky.png", 40, 220);
+    let mut doc = scene(dir.path(), &sky, true);
+    let mesh = LayerId(2);
+    doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(crate::doc::store::property::POSITION_Z).unwrap(), value: Value::F64(-20.0) }).unwrap();
+    // Something for the glass to reflect: a second mesh beside it.
+    let other = crate::render::engine::environment_tests::file_layer(&mut doc, 3, 2, &dir.path().join("quad.obj"));
+    doc.apply(Intent::SetConstant { layer: other, property: PropertyId::new(crate::doc::store::property::POSITION).unwrap(), value: Value::Vec2([10.0, 10.0]) }).unwrap();
+    doc.apply(Intent::SetConstant { layer: other, property: PropertyId::new(crate::doc::store::property::SCALE).unwrap(), value: Value::Vec2([8.0, 8.0]) }).unwrap();
+    doc.apply(Intent::SetEffects { layer: mesh, effects: vec![
+        EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() },
+        EffectInstance { id: EffectId(1), plugin_id: "motolii.cast_shadow".into() },
+    ] }).unwrap();
+    let work = |n: usize| {
+        let mut engine = Engine::new().unwrap();
+        let before = engine.surface_work();
+        let stats = tick(&mut engine, &doc, RationalTime::ZERO, n);
+        let after = engine.surface_work();
+        (stats, after.scene_captures - before.scene_captures, after.light_captures - before.light_captures, after.backdrop_copies - before.backdrop_copies)
+    };
+    let (one, captures, lights, copies) = work(1);
+    assert!(captures > 0 && lights == 1, "the scene reflects and casts a shadow: {captures} {lights}");
+    for n in [2, 5] {
+        let (stats, c, l, b) = work(n);
+        assert_eq!((stats.preparations, stats.submits, c, l), (one.preparations, one.submits, captures, lights), "{n} views: the world is made once");
+        assert_eq!(b, copies * n as u64, "{n} views: each view copies its own backdrop");
+    }
+}

@@ -82,17 +82,23 @@ impl Engine {
             return Ok(frame);
         }
         stats.preparations += 1;
-        // Each layer's own effect chain reads only the document frame: run once, here, for every view.
-        let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene.layers)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
+        // Each layer's own effect chain reads only the document frame: run once, here, for every view.
+        let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene.layers)?;
         // The world the preparation left: its environment and the blocks' motion.
         let environment = self.compositor.world_environment.clone();
         let motion = self.compositor.motion.clone();
-        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, comp: state.comp, background: state.background, document_camera });
+        // The world's light, once: every layer placed as the output places it.
+        let mut placed = scene.layers.clone();
+        for layer in &mut placed { layer.layer.projection_camera = document_camera; }
+        let world_inputs = crate::render::compositor::sequential_inputs(&placed, &pictures, &paddings, &spills);
+        let (reflection, light) = self.compositor.capture_world_light(state.comp, &world_inputs, environment.as_deref())?;
+        drop(world_inputs);
+        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, reflection, light, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());
         Ok(frame)
@@ -115,7 +121,7 @@ impl Engine {
         let inputs = crate::render::compositor::sequential_inputs(&layers, &frame.pictures, &frame.paddings, &frame.spills);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut commands = Vec::new();
-        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref() };
+        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref() };
         let shown = self.compositor.record_view(frame.comp, view.window, view.camera, &inputs, background, &world, &mut commands)?;
 
         let ctx = &self.compositor.ctx;
@@ -150,9 +156,6 @@ fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'st
     use crate::render::compositor::LayerContent;
     if layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite()) { return Some("an effect reading the view's picture"); }
     if layer.layer.clip.is_some() { return Some("a clip"); }
-    if layer.layer.shading.reads_backdrop { return Some("a surface reading the backdrop"); }
-    if layer.layer.shading.program.as_ref().is_some_and(|program| program.desc().surface.is_some()) { return Some("a surface reflecting the scene"); }
-    if layer.layer.shadow > 0.0 { return Some("a cast shadow"); }
     match layer.layer.content {
         LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) => None,
         _ => Some("a cloud or path layer"),
@@ -168,6 +171,8 @@ pub(in crate::engine) struct PreparedFrame {
     spills: Vec<crate::render::compositor::LayerSpill>,
     environment: Option<Arc<crate::render::compositor::GpuEnvironmentData>>,
     motion: Option<re_renderer::MotionBuffer>,
+    reflection: Option<re_renderer::environment::SceneReflection>,
+    light: Option<re_renderer::environment::SunLight>,
     comp: crate::doc::core::CompSpec,
     background: [f32; 4],
     document_camera: ResolvedCamera,

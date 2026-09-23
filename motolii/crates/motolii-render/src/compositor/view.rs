@@ -24,6 +24,8 @@ const DEST_OVER: u32 = 4;
 pub(crate) struct ViewWorld<'a> {
     pub environment: Option<&'a GpuEnvironmentData>,
     pub motion: Option<&'a re_renderer::MotionBuffer>,
+    pub reflection: Option<&'a re_renderer::environment::SceneReflection>,
+    pub light: Option<&'a re_renderer::environment::SunLight>,
 }
 
 impl Compositor {
@@ -52,6 +54,8 @@ impl Compositor {
         };
 
         let mut stack: Option<re_renderer::GpuTexture> = None;
+        // Backdrops a recorded draw still reads; kept until the view is recorded.
+        let mut backdrops = Vec::new();
         let mut index = 0;
         while index < inputs.len() {
             // A mix blend reads what is below: the picture is drawn alone, then mixed onto the stack.
@@ -94,6 +98,15 @@ impl Compositor {
 
             let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, environment);
             config.motion = world.motion.cloned();
+            config.scene_reflection = world.reflection.cloned();
+            config.light = world.light.cloned();
+            // A surface reading what is behind it reads this view's stack so far (ordered transmission).
+            if let Some(below) = stack.as_ref().filter(|_| run.iter().any(|input| input.shading.reads_backdrop)) {
+                let roughness = run.iter().filter(|input| input.shading.reads_backdrop).map(|input| input.shading.backdrop_roughness).fold(0.0f32, f32::max);
+                let (texture, imported) = self.backdrop(window, below, roughness, commands)?;
+                config.backdrop = Some(imported);
+                backdrops.push(texture);
+            }
             // Near things fade: only in the work's camera, only for what is in the world.
             if !flat(&run[0]) && window.projection_camera.is_none() {
                 config.near_fade_distance = camera.near_fade;
@@ -130,7 +143,51 @@ impl Compositor {
             None => clear_color(background_color),
         };
         commands.push(shown.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        drop(backdrops);
         Ok(shown)
+    }
+
+    /// What is below, copied with the mip levels the roughest reader needs (glass blurs by reading
+    /// coarser levels): the view's own picture, so it is the view's, from the pool.
+    fn backdrop(&mut self, window: Window, below: &re_renderer::GpuTexture, roughness: f32, commands: &mut Vec<wgpu::CommandBuffer>) -> Result<(re_renderer::GpuTexture, GpuTexture2D), CompositorError> {
+        self.surface_work.backdrop_copies += 1;
+        let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
+        let pyramid = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
+            label: "motolii-view-backdrop".into(),
+            size,
+            mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(window.width, window.height),
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: BLEND_TARGET_FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
+        });
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-view-backdrop") });
+        let level0 = |texture| wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All };
+        encoder.copy_texture_to_texture(level0(&below.texture), level0(&pyramid.texture), size);
+        let levels = re_renderer::backdrop_levels_read(roughness, pyramid.texture.mip_level_count());
+        self.surface_work.backdrop_mip_levels += u64::from(levels);
+        self.ctx.texture_manager_2d.generate_mipmap_levels(&self.ctx, &mut encoder, &pyramid.texture, levels);
+        commands.push(encoder.finish());
+        let imported = self.import_premultiplied(&pyramid.texture)?;
+        Ok((pyramid, imported))
+    }
+
+    /// The world's light, captured once per document frame from the world's layers (placed as the
+    /// output places them): the scene's reflection and the sun's occluder map.
+    pub(crate) fn capture_world_light(
+        &mut self,
+        comp: CompSpec,
+        inputs: &[SequentialInput<'_>],
+        environment: Option<&GpuEnvironmentData>,
+    ) -> Result<(Option<re_renderer::environment::SceneReflection>, Option<re_renderer::environment::SunLight>), CompositorError> {
+        let environment = inputs.iter().rev().find_map(|input| match input.content {
+            SequentialContent::Environment(e) => Some(e),
+            _ => None,
+        }).or(environment);
+        let mut shared = None;
+        let reflection = self.capture_scene_reflection(comp, inputs, environment, &mut shared)?;
+        let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
+        Ok((reflection, light))
     }
 
     /// A canvas the size of the view's window, from re_renderer's pool: it returns to the pool when
