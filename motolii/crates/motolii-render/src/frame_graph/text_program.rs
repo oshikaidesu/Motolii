@@ -7,18 +7,28 @@ use crate::picture::shapes_ops::Canvas;
 use super::{ContentProgram, DynamicInput, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText }
+pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText, outlines: std::sync::Arc<Vec<crate::doc::store::ShapeNode>> }
 
 impl TextShapeValue {
-    pub fn shapes(&self) -> Vec<crate::doc::store::ShapeNode> {
+    pub fn new(document: TextDocument, shaped: ShapedText) -> Self {
+        let outlines = std::sync::Arc::new(Self::outlines_of(&document, &shaped));
+        Self { document, shaped, outlines }
+    }
+
+    /// The glyph outlines as shapes, built once with the value.
+    pub fn shapes(&self) -> std::sync::Arc<Vec<crate::doc::store::ShapeNode>> {
+        self.outlines.clone()
+    }
+
+    fn outlines_of(document: &TextDocument, shaped: &ShapedText) -> Vec<crate::doc::store::ShapeNode> {
         use crate::doc::vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape};
         let mut batches: Vec<(usize, Vec<crate::doc::vector::Contour>)> = Vec::new();
-        for (contour, style) in self.shaped.contours.iter().cloned().zip(&self.shaped.contour_styles) {
+        for (contour, style) in shaped.contours.iter().cloned().zip(&shaped.contour_styles) {
             if let Some((_, contours)) = batches.last_mut().filter(|(index, _)| index == style) { contours.push(contour); }
             else { batches.push((*style, vec![contour])); }
         }
         batches.into_iter().filter_map(|(index, contours)| {
-            let style = self.document.styles.get(index)?;
+            let style = document.styles.get(index)?;
             Some(crate::doc::store::ShapeNode::Leaf(Shape { source: PathSource::Bezier(contours), ops: Vec::new(), fill: Some(Fill { brush: Brush::Solid(Rgb { r: style.fill[0], g: style.fill[1], b: style.fill[2] }), rule: FillRule::NonZero, opacity: style.fill[3], hidden: false }), stroke: None }))
         }).collect()
     }
@@ -200,7 +210,7 @@ impl TextProgram {
             let flow = inputs.at(recipe.flow_input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
             if let Some(wrap) = flow.slots.get(recipe.flow_index).copied().flatten().and_then(|slot| slot.wrap) { document.wrap_size = Some([wrap.max(1.0), recipe.canvas.height as f32]); }
             let shaped = crate::picture::text_frame::shape_document(&document, context.time, &recipe.canvas).map_err(|error| TextProgramError::Shape(error.to_string()))?.unwrap_or_default();
-            Ok(NodeValue::new(TextShapeValue { document, shaped }))
+            Ok(NodeValue::new(TextShapeValue::new(document, shaped)))
         })())
     }
 }

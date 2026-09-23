@@ -177,7 +177,7 @@ pub fn plan_blocks(
 
 
     let semantic_size = |layer: &SceneLayerValue| -> Option<[f32; 2]> {
-        let shapes: Option<Vec<crate::doc::store::ShapeNode>> = match &layer.content {
+        let shapes: Option<std::sync::Arc<Vec<crate::doc::store::ShapeNode>>> = match &layer.content {
             SceneContentValue::Shape(shapes) => Some(shapes.clone()),
             SceneContentValue::Text(text) => Some(text.shapes()),
             _ => None,

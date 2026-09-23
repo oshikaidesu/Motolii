@@ -34,7 +34,7 @@ use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
 use crate::render::media::PointCloudData;
 
-use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey, TextTexture};
+use crate::render::engine::texture::{ShapeCacheKey, ShapeTexture, TextCacheKey, TextTexture};
 
 pub use crate::render::compositor::{Window, bind_catalog_runtime, catalog_errors, catalog_generation, catalog_reads_disk, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
@@ -133,7 +133,7 @@ pub struct Engine {
     text_textures: HashMap<TextCacheKey, TextTexture>,
     /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
     text_order: std::collections::VecDeque<TextCacheKey>,
-    shape_textures: HashMap<ShapeCacheKey, TextTexture>,
+    shape_textures: HashMap<ShapeCacheKey, ShapeTexture>,
     failed_probes: HashMap<String, String>,
     layer_failures: Vec<String>,
     /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。

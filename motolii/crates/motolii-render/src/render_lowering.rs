@@ -69,19 +69,19 @@ fn composed(planned: &PlannedContribution) -> Composed {
     }
 }
 
-fn stretched(layer: &SceneLayerValue, shapes: &[crate::doc::store::ShapeNode]) -> Arc<Vec<crate::doc::store::ShapeNode>> {
-    Arc::new(if layer.shape_stretch != [1.0, 1.0] {
-        crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch)
+fn stretched(layer: &SceneLayerValue, shapes: &Arc<Vec<crate::doc::store::ShapeNode>>) -> Arc<Vec<crate::doc::store::ShapeNode>> {
+    if layer.shape_stretch != [1.0, 1.0] {
+        Arc::new(crate::picture::shapes_ops::stretch_outline(shapes, layer.shape_stretch))
     } else {
-        shapes.to_vec()
-    })
+        shapes.clone()
+    }
 }
 
 fn raster(layer: &SceneLayerValue, vector: bool, field_step: bool, catalog: &CatalogSnapshot) -> Result<RasterSource, RenderLoweringError> {
     Ok(match &layer.content {
         SceneContentValue::None => RasterSource::None,
-        SceneContentValue::Text(text) if !vector => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: true, field_step: false },
-        SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: Arc::new(text.shapes()) },
+        SceneContentValue::Text(text) if !vector => RasterSource::Vector { shapes: text.shapes(), vector: false, remember: true, field_step: false },
+        SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: text.shapes() },
         SceneContentValue::Shape(shapes) => RasterSource::Vector {
             shapes: stretched(layer, shapes),
             vector,
@@ -113,8 +113,8 @@ fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Res
         SceneImageSourceValue::Content { layer, content, time, namespace } => {
             let source = match content {
                 SceneContentValue::None | SceneContentValue::Material(_) | SceneContentValue::Particles(_) => return Ok(ImageInput::Absent),
-                SceneContentValue::Text(text) => RasterSource::Vector { shapes: Arc::new(text.shapes()), vector: false, remember: false, field_step: false },
-                SceneContentValue::Shape(shapes) => RasterSource::Vector { shapes: Arc::new(shapes.clone()), vector: false, remember: false, field_step: false },
+                SceneContentValue::Text(text) => RasterSource::Vector { shapes: text.shapes(), vector: false, remember: false, field_step: false },
+                SceneContentValue::Shape(shapes) => RasterSource::Vector { shapes: shapes.clone(), vector: false, remember: false, field_step: false },
                 SceneContentValue::Media { source, time } => RasterSource::Image { path: source.path.clone(), time: *time },
                 SceneContentValue::Plate(plate) => return Ok(ImageInput::Graph {
                     graph: Arc::new(lower_scene(&plate_scene(plate), catalog)?),
@@ -145,7 +145,7 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, picture: bool, catalog:
     let extrude = (!flat && layer.projection != LayerProjection::TwoD && layer.masks.is_empty()).then(|| Extrusion {
         solid,
         outline: match &layer.content {
-            SceneContentValue::Text(text) => Some(Arc::new(text.shapes())),
+            SceneContentValue::Text(text) => Some(text.shapes()),
             SceneContentValue::Shape(shapes) => Some(stretched(layer, shapes)),
             _ => None,
         },
@@ -216,7 +216,7 @@ mod tests {
         SceneLayerValue {
             layer: LayerId(id), instance: 0, source: LayerSource::Null,
             transform: TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY },
-            content_key: None, content: SceneContentValue::Shape(Vec::new()), effects: Vec::new(), after_effects: Vec::new(),
+            content_key: None, content: SceneContentValue::Shape(Arc::new(Vec::new())), effects: Vec::new(), after_effects: Vec::new(),
             image_sources: Vec::new(), masks: Vec::new(), matte: None, clip_to_below: false,
             flatten: false, environment: false, ghost: false, freeze_eligible: false,
             timing_start: 0, opacity: 1.0, projection: LayerProjection::TwoD,

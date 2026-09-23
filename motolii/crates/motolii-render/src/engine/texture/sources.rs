@@ -128,9 +128,16 @@ impl Engine {
         ))
     }
 
+    /// The layer's cached vector picture, when `shapes` is the value it was drawn from and the
+    /// cut is at least as fine as `tolerance` (`None`: any cut). No outline work on a hit.
+    pub(in crate::engine) fn cached_shape(&self, layer: LayerId, on_comp: bool, shapes: &std::sync::Arc<Vec<ShapeNode>>, vector: bool, step: Option<f32>, tolerance: Option<f32>) -> Option<&crate::render::engine::texture::ShapeTexture> {
+        self.shape_textures.get(&ShapeCacheKey { layer, on_comp })
+            .filter(|c| std::sync::Arc::ptr_eq(&c.shapes, shapes) && c.vector == vector && c.step == step && tolerance.is_none_or(|t| c.tolerance <= t))
+    }
+
     pub(in crate::engine) fn shape_texture_from_shapes(
         &mut self,
-        shapes: &[ShapeNode],
+        shapes: &std::sync::Arc<Vec<ShapeNode>>,
         layer_id: LayerId,
         vector: bool,
         tolerance: f32,
@@ -138,23 +145,27 @@ impl Engine {
         step: Option<f32>,
         remember: bool,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        if let Some(hit) = self.cached_shape(layer_id, false, shapes, vector, step, Some(tolerance)) {
+            return Ok((Some(hit.texture.clone()), hit.natural));
+        }
         if shapes.is_empty() {
             return Ok((None, [0.0, 0.0]));
         }
-
         let Some(canvas) = content_canvas(shapes)? else {
             return Ok((None, [0.0, 0.0]));
         };
-
-        self.shape_texture_from_shapes_on_canvas(shapes, layer_id, vector, tolerance, comp, step, remember, canvas)
+        self.shape_texture_on_canvas(shapes, layer_id, false, vector, tolerance, comp, step, remember, canvas)
     }
 
     pub(in crate::engine) fn text_texture_from_shapes(
         &mut self,
-        shapes: &[ShapeNode],
+        shapes: &std::sync::Arc<Vec<ShapeNode>>,
         layer_id: LayerId,
         comp: CompSpec,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        if let Some(hit) = self.cached_shape(layer_id, true, shapes, true, None, None) {
+            return Ok((Some(hit.texture.clone()), hit.natural));
+        }
         if shapes.is_empty() {
             return Ok((None, [0.0, 0.0]));
         }
@@ -164,13 +175,15 @@ impl Engine {
             origin_x: 0,
             origin_y: 0,
         };
-        self.shape_texture_from_shapes_on_canvas(shapes, layer_id, true, 0.05, comp, None, true, canvas)
+        self.shape_texture_on_canvas(shapes, layer_id, true, true, 0.05, comp, None, true, canvas)
     }
 
-    fn shape_texture_from_shapes_on_canvas(
+    #[allow(clippy::too_many_arguments)]
+    fn shape_texture_on_canvas(
         &mut self,
-        shapes: &[ShapeNode],
+        shapes: &std::sync::Arc<Vec<ShapeNode>>,
         layer_id: LayerId,
+        on_comp: bool,
         vector: bool,
         tolerance: f32,
         comp: CompSpec,
@@ -178,28 +191,20 @@ impl Engine {
         remember: bool,
         canvas: crate::picture::shapes_ops::Canvas,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-
-        let key = ShapeCacheKey::new(layer_id, shapes, canvas.width, canvas.height);
-        if let Some(cached) = self.shape_textures.get(&key).filter(|c| matches!(c.texture, LayerContent::Model(_)) == vector && c.tolerance <= tolerance && c.step == step) {
-            return Ok((
-                Some(cached.texture.clone()),
-                [canvas.width as f32, canvas.height as f32],
-            ));
-        }
-
         let content = if vector {
             self.compositor.path_model(shapes, &canvas, tolerance, step)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
         } else { self.compositor.render_paths("shape", shapes, &canvas, 0.05 / tolerance, raster_pixel_budget(comp))?.map(LayerContent::Texture) };
         let Some(texture) = content else {
             return Ok((None, [0.0, 0.0]));
         };
+        let natural = [canvas.width as f32, canvas.height as f32];
         if remember {
-            self.shape_textures.insert(key, TextTexture { texture: texture.clone(), bounds: None, tolerance, step, frame: None });
+            self.shape_textures.insert(
+                ShapeCacheKey { layer: layer_id, on_comp },
+                crate::render::engine::texture::ShapeTexture { shapes: shapes.clone(), texture: texture.clone(), natural, vector, tolerance, step },
+            );
         }
-        Ok((
-            Some(texture),
-            [canvas.width as f32, canvas.height as f32],
-        ))
+        Ok((Some(texture), natural))
     }
 
     /// 網も焼かない。三角形のまま run の view へ渡り、深度で板と刺さり合う。

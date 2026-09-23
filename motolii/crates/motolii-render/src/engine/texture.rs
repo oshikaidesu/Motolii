@@ -455,25 +455,22 @@ impl TextCacheKey {
     }
 }
 
-/// 輪郭の点だけを原点から伸ばす(1 枚だけの Repeater の変換は、線を引く前の点に掛かる)。
-#[derive(Clone, PartialEq, Eq, Hash)]
+/// One vector picture per layer and canvas. It is reused while the layer's outline is the same
+/// evaluated value (the same shared allocation), so an unchanged shape costs nothing per frame.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ShapeCacheKey {
-    layer: LayerId,
-    canvas_width: u32,
-    canvas_height: u32,
-    content_snapshot: String,
+    pub(crate) layer: LayerId,
+    /// Drawn on the composition canvas (text) rather than the outline's own.
+    pub(crate) on_comp: bool,
 }
 
-impl ShapeCacheKey {
-    fn new(layer: LayerId, shapes: &[ShapeNode], canvas_width: u32, canvas_height: u32) -> Self {
-        let content_snapshot = serde_json::to_string(shapes).unwrap_or_default();
-        Self {
-            layer,
-            canvas_width,
-            canvas_height,
-            content_snapshot,
-        }
-    }
+pub(crate) struct ShapeTexture {
+    pub(crate) shapes: std::sync::Arc<Vec<ShapeNode>>,
+    pub(crate) texture: LayerContent,
+    pub(crate) natural: [f32; 2],
+    pub(crate) vector: bool,
+    pub(crate) tolerance: f32,
+    pub(crate) step: Option<f32>,
 }
 
 /// 形が占める範囲だけの canvas。層の箱が中身に吸い付く。

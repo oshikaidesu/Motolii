@@ -188,10 +188,8 @@ impl Engine {
     /// How finely outlines are cut: one device pixel after projection. Vector
     /// output reuses power-of-two steps; pictures use the exact density so
     /// placing them does not resample the edge.
-    fn outline_tolerance(&self, work: Option<&LayerWork>, shapes: &[crate::doc::store::ShapeNode], vector: bool, comp: CompSpec, camera: ResolvedCamera) -> Result<f32, EngineError> {
-        let Some(work) = work else { return Ok(0.05) };
-        let natural = crate::picture::shapes_ops::content_canvas(shapes)?
-            .map_or([1.0; 2], |canvas| [canvas.width as f32, canvas.height as f32]);
+    fn outline_tolerance(&self, work: Option<&LayerWork>, natural: [f32; 2], vector: bool, comp: CompSpec, camera: ResolvedCamera) -> f32 {
+        let Some(work) = work else { return 0.05 };
         let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, camera, work.projection, work.placement, glam::Vec2::ZERO, natural.into());
         let projection = crate::doc::core::camera_projection(comp, camera);
         let matrix = projection.projection_matrix() * projection.view_matrix();
@@ -211,7 +209,7 @@ impl Engine {
             exact = exact.min((limit / extent).max(1.0));
         }
         let stepped = (density * (1.0 - 1e-4)).log2().ceil().exp2().max(1.0);
-        Ok((0.05 / if vector { stepped } else { exact }).max(1e-6))
+        (0.05 / if vector { stepped } else { exact }).max(1e-6)
     }
 
     fn execute_raster(&mut self, id: LayerId, key: LayerId, source: &RasterSource, work: Option<&LayerWork>, comp: CompSpec, camera: ResolvedCamera) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
@@ -219,8 +217,18 @@ impl Engine {
         Ok(match source {
             RasterSource::None => (None, [0.0, 0.0]),
             RasterSource::Vector { shapes, vector, remember, field_step } => {
-                let tolerance = self.outline_tolerance(work, shapes, *vector, comp, camera)?;
                 let step = field_step.then_some(crate::render::engine::texture::FIELD_STEP);
+                // An unbent vector outline is painted exactly from its curves: no cut to choose.
+                let tolerance = if *vector && step.is_none() {
+                    0.05
+                } else {
+                    let natural = match self.cached_shape(key, false, shapes, *vector, step, None) {
+                        Some(hit) => hit.natural,
+                        None => crate::picture::shapes_ops::content_canvas(shapes)?
+                            .map_or([1.0; 2], |canvas| [canvas.width as f32, canvas.height as f32]),
+                    };
+                    self.outline_tolerance(work, natural, *vector, comp, camera)
+                };
                 self.shape_texture_from_shapes(shapes, key, *vector, tolerance, comp, step, *remember)?
             }
             RasterSource::CanvasVector { shapes } => self.text_texture_from_shapes(shapes, key, comp)?,

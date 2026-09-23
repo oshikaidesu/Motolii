@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::collections::BTreeMap;
 
 use crate::doc::core::RationalTime;
@@ -11,8 +12,9 @@ use super::scene_policy::ScenePolicy;
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneContentValue {
     None,
-    Text(TextShapeValue),
-    Shape(Vec<ShapeNode>),
+    /// Shared with the evaluated node: an unchanged value is the same allocation frame to frame.
+    Text(Arc<TextShapeValue>),
+    Shape(Arc<Vec<ShapeNode>>),
     Material(MaterialValue),
     Media { source: MediaSourceValue, time: RationalTime },
     Particles(ParticleValue),
@@ -239,8 +241,8 @@ impl SceneNodeProgram {
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 let content_key = content.map(|index| node.identity().inputs[index]);
                 let scene_content = match (*kind, *content) {
-                    (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_ref::<TextShapeValue>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
-                    (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
+                    (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_arc::<TextShapeValue>()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
+                    (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_arc::<Vec<ShapeNode>>()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (3, Some(index)) => {
                         let value = inputs.at(index).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                         if let Some(material) = value.downcast_ref::<MaterialValue>() {
@@ -536,14 +538,12 @@ fn sampled_content(
     Ok(match (kind, content) {
         (1, Some(index)) => SceneContentValue::Text(
             sampled_value(inputs, index, sample_indices, sample_start)
-                .and_then(|value| value.downcast_ref::<TextShapeValue>())
-                .cloned()
+                .and_then(|value| value.downcast_arc::<TextShapeValue>())
                 .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
         ),
         (2, Some(index)) => SceneContentValue::Shape(
             sampled_value(inputs, index, sample_indices, sample_start)
-                .and_then(|value| value.downcast_ref::<Vec<ShapeNode>>())
-                .cloned()
+                .and_then(|value| value.downcast_arc::<Vec<ShapeNode>>())
                 .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
         ),
         (3, Some(index)) => {
