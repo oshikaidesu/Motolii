@@ -52,9 +52,6 @@ impl Compositor {
         let matte_vism = builtin("matte")?;
 
         #[cfg(test)]
-        eprintln!("MOTOLII_COMPOSITOR_INIT phase=selection_bounds");
-        let selection_bounds = selection_bounds::SelectionBounds::new(&ctx.device, re_renderer::OutlineMaskProcessor::mask_sample_count(ctx.device_caps().tier) > 1);
-        #[cfg(test)]
         eprintln!("MOTOLII_COMPOSITOR_INIT phase=ready cached_effects=0");
         Ok(Self {
             ctx,
@@ -90,7 +87,6 @@ impl Compositor {
             feedback_revision: 0,
             feedback_seen: Vec::new(),
             blend_vism,
-            selection_bounds,
             matte_vism,
             coverage_programs: Default::default(),
             catalog,

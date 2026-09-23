@@ -29,8 +29,6 @@ pub struct ViewRequest<'a> {
     pub camera: Option<ResolvedCamera>,
     pub projection: ViewProjection,
     pub include_background: bool,
-    /// The layers selected in this view (editor state: the view's, never the prepared frame's).
-    pub outline: &'a [crate::doc::store::LayerId],
 }
 
 /// What one tick did. The architecture's invariants are stated over these counts.
@@ -55,9 +53,6 @@ impl Engine {
         self.compositor.next_frame();
         stats.submits += 1;
         stats.begin_frames += 1;
-        if std::mem::take(&mut self.tick_outlined) {
-            if let Some(bounds) = self.compositor.selection_bounds.as_mut() { bounds.schedule_map(); }
-        }
         self.tick_stats = stats;
         Ok(stats)
     }
@@ -142,7 +137,7 @@ impl Engine {
         let meshes = match meshes {
             Some(meshes) => Some(meshes),
             None => {
-                let inputs = crate::render::compositor::sequential_inputs(&scene.layers, &pictures, &paddings, &spills, document_camera, document_camera, &[]);
+                let inputs = crate::render::compositor::sequential_inputs(&scene.layers, &pictures, &paddings, &spills, document_camera, document_camera);
                 self.compositor.shared_mesh_scene(state.comp, &inputs)?
             }
         };
@@ -156,32 +151,19 @@ impl Engine {
     /// `ViewBuilder`s (`draw`, egui-wgpu's `prepare`), then the view composites into the surface
     /// (`composite`, `paint`).
     fn record_view(&mut self, frame: &PreparedFrame, view: &ViewRequest<'_>) -> Result<(), EngineError> {
-        // The view builds its own instances of the prepared layers, as a re_renderer visualizer builds
-        // a view's draw data from shared resources: 2D placed by the document's camera (the
-        // output's frame), the rest by the view's (a Stage's default camera), its selection marked.
-        // The prepared frame itself is read, never written.
+        // The view draws the prepared layers where the work places them — every layer relative to
+        // the work's camera (2.5D included: an observer looks at that relation from outside) — as a
+        // re_renderer visualizer builds a view's draw data from shared resources.
         if let Some(feature) = frame.scene.layers.iter().find_map(not_ported) {
             return Err(EngineError::Store(format!("tick: {feature} is not ported to the tick yet")));
         }
-        let placing = view.window.projection_camera.unwrap_or(frame.document_camera);
-        let outline: Vec<_> = view.outline.iter().copied().take(255).collect();
-        let marks: Vec<u8> = frame.scene.layer_ids.iter().map(|id| outline.iter().position(|l| l == id).map_or(0, |i| i as u8 + 1)).collect();
-        let inputs = crate::render::compositor::sequential_inputs(&frame.scene.layers, &frame.pictures, &frame.paddings, &frame.spills, frame.document_camera, placing, &marks);
+        let inputs = crate::render::compositor::sequential_inputs(&frame.scene.layers, &frame.pictures, &frame.paddings, &frame.spills, frame.document_camera, frame.document_camera);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
-        // One encoder per view, as Rerun records a view: every pass of the view's composition, then
-        // its composite into the surface.
         let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-tick-view") });
-        // A view placing the layers as the world does (the output's camera) draws the world's mesh
-        // instances; a Stage places its own.
-        let meshes = frame.meshes.as_ref().filter(|_| view.window.projection_camera.is_none() && view.camera.is_none() && outline.is_empty());
-        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref(), meshes };
+        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref(), meshes: frame.meshes.as_ref() };
         let camera = view.camera.unwrap_or(frame.document_camera);
         // A history on the view's own picture is the view's: keyed by which view it is.
         let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, 1 + view.projection as u32, &mut encoder)?;
-        if self.compositor.record_outline(frame.comp, view.window, camera, &inputs, &mut encoder)? {
-            self.outline_order = outline;
-            self.tick_outlined = true;
-        }
 
         let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });
@@ -219,7 +201,7 @@ impl Engine {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        self.tick(doc, time, &[ViewRequest { target: &target, window, camera, projection: ViewProjection::Export, include_background, outline: &[] }])?;
+        self.tick(doc, time, &[ViewRequest { target: &target, window, camera, projection: ViewProjection::Export, include_background }])?;
         Ok(self.compositor.read_texture_bytes(&target)?)
     }
 

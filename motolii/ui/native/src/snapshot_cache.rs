@@ -204,42 +204,6 @@ mod tests {
         reply
     }
 
-    #[test]
-    fn drawing_refreshes_bootstrap_bounds_and_selection_requests_a_new_mask() {
-        let mut rt = EditorRuntime::open("").unwrap();
-        request(&mut rt, json!({"op":"create","kind":"text"}));
-        let text = rt.viewer.selected().unwrap();
-        request(&mut rt, json!({"op":"create","kind":"rectangle"}));
-        let shape = rt.viewer.selected().unwrap();
-        request(&mut rt, json!({"op":"select","ids":[text.0]}));
-        let boot = request(&mut rt, json!({"op":"status","bootstrap":true}));
-        assert!(boot["selectedBounds"].is_null(), "the text has not been drawn yet");
-        let comp = rt.doc.view().composition().unwrap().unwrap().spec();
-        let texture = rt.engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("bootstrap selection regression"),
-            size: wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 },
-            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
-            format: crate::render::compositor::PRESENTABLE_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let mut previous = boot;
-        for selected in [text, shape, text] {
-            if rt.viewer.selected() != Some(selected) {
-                let reply = request(&mut rt, json!({"op":"select","ids":[selected.0],"deferSnapshot":true}));
-                assert_eq!(reply, json!({"needsRender":true}), "a new selection needs its own mask");
-            }
-            rt.render_into(&texture, crate::viewer::View::Camera, crate::render::engine::Window::output(rt.doc.view().composition().unwrap().unwrap().spec())).unwrap();
-            let after = request(&mut rt, json!({"op":"status","knownSnapshotId":previous["snapshotId"],"knownReferenceId":previous["referenceId"]}));
-            let b = rt.viewer.selection_bounds[&crate::viewer::View::Camera].get(&selected).expect("selected layer reached the mask");
-            assert_eq!(after["selectedBounds"]["corners"], json!([[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]));
-            assert_ne!(after["snapshotId"], previous["snapshotId"], "post-render geometry must reach the host");
-            assert_eq!(after["referenceId"], previous["referenceId"], "rendering does not change the catalog");
-            let row = after["layers"].as_array().unwrap().iter().find(|r| r["id"] == selected.0).unwrap();
-            assert_eq!(row["bounds"], after["selectedBounds"]);
-            previous = after;
-        }
-    }
 
     /// 1 層だけ動いたら組み直すのも 1 行だけ。cache が黙って全組み直しへ戻る事故を止める。
     #[test]
@@ -337,7 +301,7 @@ mod tests {
         step(&mut rt, "reorder now", json!({"op":"reorder","delta":1}));
         step(&mut rt, "composition", json!({"op":"composition","width":960,"height":540}));
         step(&mut rt, "delete", json!({"op":"delete"}));
-        rt.viewer.stage_window = Some(crate::render::engine::Window { width: 800, height: 500, roi: [-100.0, -50.0, 1600.0, 1000.0], projection_camera: Some(Default::default()) });
+        rt.viewer.stage_window = Some(crate::render::engine::Window { width: 800, height: 500, roi: [-100.0, -50.0, 1600.0, 1000.0] });
         step(&mut rt, "stage window", Value::Null);
         rt.viewer.user_camera.orbit_degrees = [22.0, 8.0];
         step(&mut rt, "orbited stage", Value::Null);

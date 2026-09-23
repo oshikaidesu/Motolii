@@ -10,14 +10,6 @@ impl Compositor {
     pub fn render_context(&self) -> &re_renderer::RenderContext {
         &self.ctx
     }
-
-
-
-    /// 直前の `render_into` で選ばれていた層の画面上の広がり(番号 → `[x0, y0, x1, y1]` 画素)。
-    /// GPU から届く前なら `None`。
-    pub fn selection_screen_bounds(&mut self) -> Option<Vec<(u8, [f32; 4])>> {
-        self.selection_bounds.as_mut()?.take(&self.ctx.device)
-    }
 }
 
 /// 窓へ渡す形式 = re_renderer の出力形式。composite shader が自前で `srgb_from_linear` を

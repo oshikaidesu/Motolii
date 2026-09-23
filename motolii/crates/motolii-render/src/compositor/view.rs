@@ -216,8 +216,8 @@ impl Compositor {
                 }
                 config.backdrop = transmission.clone();
             }
-            // Near things fade: only in the work's camera, only for what is in the world.
-            if !flat(&run[0]) && window.projection_camera.is_none() {
+            // Near things fade: the work's camera fades (an observer's has no fade), only what is in the world.
+            if !flat(&run[0]) {
                 config.near_fade_distance = camera.near_fade;
             }
             self.surface_work.main_runs += 1;
@@ -260,35 +260,6 @@ impl Compositor {
 
         drop(backdrops);
         Ok(stack)
-    }
-
-    /// The selected layers drawn again as an object-id mask, folded into their on-screen bounds (the
-    /// Stage's cages); nothing is drawn into the view's picture. True when something was selected.
-    pub(crate) fn record_outline(
-        &mut self,
-        comp: CompSpec,
-        window: Window,
-        camera: ResolvedCamera,
-        inputs: &[SequentialInput<'_>],
-        encoder: &mut wgpu::CommandEncoder,
-    ) -> Result<bool, CompositorError> {
-        if !inputs.iter().any(|input| input.outline != 0) {
-            return Ok(false);
-        }
-        let projection = crate::doc::core::camera_projection(comp, camera);
-        let view_from_world = macaw::IsoTransform::from_rotation_translation(projection.rotation, -(projection.rotation * projection.eye));
-        let mut config = sequential_target_config("motolii-view-outline", comp, window, view_from_world, projection, None);
-        config.outline_config = Some(re_renderer::OutlineConfig { outline_radius_pixel: 1.0, color_layer_a: Rgba::TRANSPARENT, color_layer_b: Rgba::TRANSPARENT });
-        let canvas = self.view_canvas(window);
-        let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &canvas.texture)
-            .map_err(|e| CompositorError::View(e.to_string()))?;
-        self.next_readback += 1;
-        self.surface_scene_draws(comp, inputs, Vec::new(), false, &|index| inputs[index].outline == 0, None, 0)?.queue(&self.ctx, &mut builder);
-        builder.draw_into(&self.ctx, Rgba::TRANSPARENT, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
-        if let (Some(mask), Some(bounds)) = (builder.outline_mask_texture(), self.selection_bounds.as_mut()) {
-                bounds.record(&self.ctx.device, encoder, &mask.default_view, window.size());
-            }
-        Ok(true)
     }
 
     /// A layer's effects run on its drawn canvas (it had no picture of its own to bake them into, or

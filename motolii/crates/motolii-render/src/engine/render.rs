@@ -117,7 +117,7 @@ impl Engine {
     /// The output at `t` into `target` (the composition's own window), as one tick with one view.
     pub fn render_frame_into(&mut self, view: &StoreView<'_>, t: RationalTime, target: &wgpu::Texture) -> Result<(), EngineError> {
         let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
-        self.draw_one_view(view, t, target, None, true, &[], Window::output(comp))
+        self.draw_one_view(view, t, target, None, true, Window::output(comp))
     }
 
     /// The same world seen from an observation camera, with the authored layer projection kept.
@@ -128,10 +128,9 @@ impl Engine {
         target: &wgpu::Texture,
         camera: ResolvedCamera,
         include_background: bool,
-        outline: &[LayerId],
     ) -> Result<(), EngineError> {
         let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
-        self.draw_one_view(view, t, target, Some(camera), include_background, outline, Window::output(comp))
+        self.draw_one_view(view, t, target, Some(camera), include_background, Window::output(comp))
     }
 
     /// The same world into a window of another size (a Stage tab: its size and region of interest).
@@ -143,15 +142,14 @@ impl Engine {
         target: &wgpu::Texture,
         camera: ResolvedCamera,
         include_background: bool,
-        outline: &[LayerId],
         window: Window,
     ) -> Result<(), EngineError> {
-        self.draw_one_view(view, t, target, Some(camera), include_background, outline, window)
+        self.draw_one_view(view, t, target, Some(camera), include_background, window)
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_one_view(&mut self, view: &StoreView<'_>, t: RationalTime, target: &wgpu::Texture, camera: Option<ResolvedCamera>, include_background: bool, outline: &[LayerId], window: Window) -> Result<(), EngineError> {
-        let request = super::frame_graph::tick::ViewRequest { target, window, camera, projection: crate::frame_graph::ViewProjection::Camera, include_background, outline };
+    fn draw_one_view(&mut self, view: &StoreView<'_>, t: RationalTime, target: &wgpu::Texture, camera: Option<ResolvedCamera>, include_background: bool, window: Window) -> Result<(), EngineError> {
+        let request = super::frame_graph::tick::ViewRequest { target, window, camera, projection: crate::frame_graph::ViewProjection::Camera, include_background };
         self.tick(view, t, &[request]).map(|_| ())
     }
 }

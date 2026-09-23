@@ -162,7 +162,7 @@ impl Engine {
         scene.extend(prep.plates.reflectables.drain(..));
         let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene)?;
         let world = prep.seam.camera_relative_world();
-        let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills, world, world, &[]);
+        let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills, world, world);
         let environment = self.compositor.world_environment.clone();
         let (reflection, light, meshes) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
         drop(inputs);

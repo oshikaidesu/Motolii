@@ -350,7 +350,6 @@ impl Compositor {
                         input.projection,
                         input.displace,
                         input.clip,
-                        outline_mask(input.outline),
                     )?);
                 }
                 SequentialContent::Model(model) => {
@@ -366,7 +365,6 @@ impl Compositor {
                         input.clip,
                     );
                     for instance in &mut instances {
-                        instance.outline_mask_ids = outline_mask(input.outline);
                         if input.projection == crate::doc::store::LayerProjection::TwoD && !capture {
                             // 輪郭のままの文字・図形(planar な網)も同じ法: 面の法線に沿ってカメラ側へ積み順ぶん。
                             // 奥行きがずらされた変形では z 列は面の法線ではない。矩形と同じく面の 2 辺の外積。
@@ -420,7 +418,6 @@ impl Compositor {
                             field_grid: shading.field_grid(),
                             surface: shading.program,
                             surface_params: shading.params,
-                            outline_mask: outline_mask(input.outline),
                             ..Default::default()
                         },
                     });

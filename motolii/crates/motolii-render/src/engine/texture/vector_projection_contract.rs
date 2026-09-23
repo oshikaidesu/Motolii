@@ -124,27 +124,6 @@ fn a_slow_field_does_not_tear_the_fill_and_stroke_of_one_plane() {
 }
 
 #[test]
-fn a_clipped_vector_selection_uses_only_the_visible_half() {
-    let mut doc = circle(320.0, 1.0, false);
-    doc.apply_all([
-        Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.clip".into() }] },
-        Intent::SetConstant { layer: LayerId(1), property: PropertyId::new("effect.0.param.axis").unwrap(), value: Value::F64(0.0) },
-    ]).unwrap();
-    let mut engine = Engine::new().unwrap();
-    let texture = engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
-        label: Some("clipped vector selection"), size: wgpu::Extent3d { width: 512, height: 512, depth_or_array_layers: 1 },
-        mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
-        format: crate::render::compositor::PRESENTABLE_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
-    });
-    engine.render_frame_into_with_camera(&doc.view(), RationalTime::ZERO, &texture, Default::default(), true, &[LayerId(1)]).unwrap();
-    crate::compositor::wait_for_gpu(engine.gpu_device(), "vector-selection-test").unwrap();
-    let bounds = engine.take_selection_bounds().unwrap();
-    let (_, b) = bounds.iter().find(|(id,_)| *id == LayerId(1)).unwrap();
-    assert!((95.0..=97.0).contains(&b[0]) && (255.0..=257.0).contains(&b[2]), "the clipped circle's mask must stop at its center: {b:?}");
-}
-
-#[test]
 fn camera_magnification_keeps_the_contour_at_output_precision() {
     let mut engine = Engine::new().unwrap();
     let mut doc = circle(16.0, 1.0, false);

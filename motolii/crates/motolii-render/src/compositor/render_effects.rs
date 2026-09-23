@@ -558,7 +558,7 @@ impl Compositor {
         into: Option<&wgpu::Texture>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         let (pictures, paddings, spills, _always_empty) = self.effective_layer_textures(layers)?;
-        let inputs = sequential_inputs(layers, &pictures, &paddings, &spills, camera, camera, &[]);
+        let inputs = sequential_inputs(layers, &pictures, &paddings, &spills, camera, camera);
         let full = crate::render::compositor::Window::output(comp);
         let window = if density >= 1.0 { full } else {
             crate::render::compositor::Window {
@@ -583,9 +583,8 @@ impl Compositor {
 }
 
 /// One drawing's instances of the prepared layers, as a re_renderer visualizer builds a view's
-/// draw data from shared resources: the placement cameras and the selection come from the drawing
-/// (2D by `document`, 2.5D and 3D by `world`; `outline[i]` for layer `i`, 0 when absent), never from
-/// the prepared layers.
+/// draw data from shared resources: the placement cameras come from the drawing (2D by `document`,
+/// 2.5D and 3D by `world`), never from the prepared layers.
 pub(crate) fn sequential_inputs<'a>(
     layers: &'a [LayerWithPasses],
     effective_textures: &'a [LayerContent],
@@ -593,15 +592,13 @@ pub(crate) fn sequential_inputs<'a>(
     effective_spills: &'a [LayerSpill],
     document: ResolvedCamera,
     world: ResolvedCamera,
-    outline: &[u8],
 ) -> Vec<SequentialInput<'a>> {
     layers
         .iter()
         .zip(effective_textures.iter())
         .zip(effective_paddings.iter())
         .zip(effective_spills.iter())
-        .enumerate()
-        .flat_map(|(index, (((lwp, content), &padding), spill))| {
+        .flat_map(|(((lwp, content), &padding), spill)| {
             let layer = &lwp.layer;
             // 余白は絵の画素。置く時は論理 px(密度 > 1 の素材は密度で割る)。
             let density = layer.frame.map_or([1.0, 1.0], |f| f.density());
@@ -642,7 +639,6 @@ pub(crate) fn sequential_inputs<'a>(
                 displace: layer.displace,
                 clip: layer.clip,
                 shadow: layer.shadow,
-                outline: outline.get(index).copied().unwrap_or(0),
                 // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
                 // 焼く先の絵が無い層(網・点群・環境)と、下の合成を読む効果列は、画面へ持って行く。
                 screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) { lwp.passes.as_slice() } else { &[] },
@@ -651,7 +647,7 @@ pub(crate) fn sequential_inputs<'a>(
             // 溢れ: 同じ置き場に、coverage 外の絵だけを宣言された混ぜ方で重ねる(層の Blend と独立)。
             let spilled = spill.as_ref().and_then(|(content, mode)| {
                 let texture = match content { LayerContent::Texture(t) => SequentialContent::Rect(t), LayerContent::LinearTexture(t) => SequentialContent::LinearRect(t), _ => return None };
-                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), shadow: 0.0, outline: 0, screen_passes: &[], screen_sources: &[], ..body })
+                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), shadow: 0.0, screen_passes: &[], screen_sources: &[], ..body })
             });
             std::iter::once(body).chain(spilled)
         })

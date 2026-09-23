@@ -161,8 +161,8 @@ fn frame_owners() {
     }).collect();
 
     let names = ["tick(FFI)", "renderInfo(FFI)", "status(FFI+serde)", "parse(serde)",
-        "Camera whole(本番)", "Camera build+submit(CPU)", "Camera poll(GPU 待ち)", "Camera bounds", "Camera warm",
-        "User whole(本番)", "User build+submit(CPU)", "User poll(GPU 待ち)", "User bounds", "User warm"];
+        "Camera whole(本番)", "Camera build+submit(CPU)", "Camera poll(GPU 待ち)", "Camera cage", "Camera warm",
+        "User whole(本番)", "User build+submit(CPU)", "User poll(GPU 待ち)", "User cage", "User warm"];
     let mut owners: Vec<Vec<u64>> = names.iter().map(|_| Vec::new()).collect();
     let mut whole_tick = Vec::new();
     // 合否用: UI thread に居た時間を道ごとに。本番 = 出して返る、中の段 = その場で待つ(直す前の形)。
@@ -174,7 +174,7 @@ fn frame_owners() {
     // 1 回目は shader と pipeline の compile。定常の値を測るので捨てる。
     for (view, target) in views.iter().zip(&targets) {
         let (t, cam, w) = (rt.time().unwrap(), rt.view_camera(*view).unwrap(), rt.window(*view).unwrap());
-        rt.engine.render_frame_into_window(&rt.doc.view(), t, target, cam, true, &[], w).unwrap();
+        rt.engine.render_frame_into_window(&rt.doc.view(), t, target, cam, true, w).unwrap();
         rt.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).unwrap();
     }
 
@@ -213,13 +213,13 @@ fn frame_owners() {
             let (t, cam, w) = (rt.time().unwrap(), rt.view_camera(*view).unwrap(), rt.window(*view).unwrap());
             rt.engine.set_realtime(true);
             let t0 = std::time::Instant::now();
-            rt.engine.render_frame_into_window(&rt.doc.view(), t, target, cam, true, &[], w).unwrap();
+            rt.engine.render_frame_into_window(&rt.doc.view(), t, target, cam, true, w).unwrap();
             owners[base + 1].push(t0.elapsed().as_micros() as u64);
             let t0 = std::time::Instant::now();
             rt.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).unwrap();
             owners[base + 2].push(t0.elapsed().as_micros() as u64);
             let t0 = std::time::Instant::now();
-            rt.take_selection_bounds(*view, w);
+            let _ = rt.viewer.selected().map(|id| rt.bounds_seen(id, *view));
             owners[base + 3].push(t0.elapsed().as_micros() as u64);
             let t0 = std::time::Instant::now();
             let _ = rt.engine.warm_upcoming(&rt.doc.view(), t);

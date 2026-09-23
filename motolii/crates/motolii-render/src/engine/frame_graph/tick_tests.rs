@@ -25,9 +25,9 @@ fn target(engine: &Engine, window: Window) -> wgpu::Texture {
 fn windows(n: usize) -> Vec<(Window, ViewProjection)> {
     let comp = SIZE as f32;
     (0..n).map(|i| if i % 2 == 0 {
-        (Window { width: SIZE, height: SIZE, roi: [0.0, 0.0, comp, comp], projection_camera: None }, ViewProjection::Camera)
+        (Window { width: SIZE, height: SIZE, roi: [0.0, 0.0, comp, comp] }, ViewProjection::Camera)
     } else {
-        (Window { width: SIZE, height: SIZE / 2, roi: [-comp / 2.0, 0.0, comp * 2.0, comp], projection_camera: Some(Default::default()) }, ViewProjection::Stage)
+        (Window { width: SIZE, height: SIZE / 2, roi: [-comp / 2.0, 0.0, comp * 2.0, comp] }, ViewProjection::Stage)
     }).collect()
 }
 
@@ -35,7 +35,7 @@ fn tick(engine: &mut Engine, doc: &motolii_edit::Document, time: RationalTime, n
     let windows = windows(n);
     let targets: Vec<_> = windows.iter().map(|(w, _)| target(engine, *w)).collect();
     let views: Vec<_> = windows.iter().zip(&targets).map(|((window, projection), target)| ViewRequest {
-        target, window: *window, camera: (*projection == ViewProjection::Stage).then(Default::default), projection: *projection, include_background: true, outline: &[],
+        target, window: *window, camera: (*projection == ViewProjection::Stage).then(Default::default), projection: *projection, include_background: true,
     }).collect();
     engine.tick(&doc.view(), time, &views).unwrap()
 }
@@ -76,9 +76,9 @@ fn a_resize_or_a_zoom_never_evaluates_the_scene_again() {
     let mut engine = Engine::new().unwrap();
     let comp = SIZE as f32;
     let stage = |engine: &mut Engine, width: u32, height: u32, roi: [f32; 4]| {
-        let window = Window { width, height, roi, projection_camera: Some(Default::default()) };
+        let window = Window { width, height, roi };
         let target = target(engine, window);
-        let view = ViewRequest { target: &target, window, camera: Some(Default::default()), projection: ViewProjection::Stage, include_background: true, outline: &[] };
+        let view = ViewRequest { target: &target, window, camera: Some(Default::default()), projection: ViewProjection::Stage, include_background: true };
         let stats = engine.tick(&doc.view(), RationalTime::ZERO, &[view]).unwrap();
         let state = engine.frame_graph.as_ref().unwrap();
         (stats.preparations, state.generation, engine.tick_frame.clone().unwrap())
@@ -264,9 +264,9 @@ fn repeated_glass_is_one_transmission_input_and_one_batch_and_previews_as_it_exp
 
         // Preview and export: the same meaning, the same pixels.
         let comp = SIZE as f32;
-        let window = crate::render::compositor::Window { width: SIZE, height: SIZE, roi: [0.0, 0.0, comp, comp], projection_camera: None };
+        let window = crate::render::compositor::Window { width: SIZE, height: SIZE, roi: [0.0, 0.0, comp, comp] };
         let preview = target(&engine, window);
-        engine.tick(&doc.view(), RationalTime::ZERO, &[ViewRequest { target: &preview, window, camera: None, projection: ViewProjection::Camera, include_background: true, outline: &[] }]).unwrap();
+        engine.tick(&doc.view(), RationalTime::ZERO, &[ViewRequest { target: &preview, window, camera: None, projection: ViewProjection::Camera, include_background: true }]).unwrap();
         let shown = engine.compositor.read_texture_bytes(&preview).unwrap();
         let exported = Engine::new().unwrap().export_frame(&doc.view(), RationalTime::ZERO, true, None).unwrap();
         let worst = shown.iter().zip(&exported).map(|(a, b)| a.abs_diff(*b)).max().unwrap();

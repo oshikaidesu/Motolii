@@ -310,9 +310,8 @@ impl EditorRuntime{
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
                 let at=self.time()?;
-                let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
                 let observer=self.view_camera(seen)?;
-                let projection_camera=self.projection_camera(seen,projection)?;
+                let projection_camera=self.placement_camera()?;
                 let drag=editor::stage::DragSession::begin(&self.doc,&mut self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }

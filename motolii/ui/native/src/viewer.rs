@@ -30,7 +30,6 @@ impl View {
 pub(crate) struct ViewerState {
     pub selected_ids: Vec<LayerId>,
     pub selected_keys: Vec<KeySel>,
-    pub selection_bounds: HashMap<View, HashMap<LayerId, [f32; 4]>>,
     pub color_target: Option<ColorSlot>,
     pub clock: Clock,
     pub clock_revision: Revision,
@@ -57,7 +56,6 @@ impl ViewerState {
         Self {
             selected_ids: view.layers().first().copied().into_iter().collect(),
             selected_keys: Vec::new(),
-            selection_bounds: HashMap::new(),
             color_target: None,
             clock,
             clock_revision: revision,

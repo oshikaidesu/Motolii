@@ -161,7 +161,6 @@ pub struct Engine {
     /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
     clip_bases: std::collections::HashSet<LayerId>,
     /// The selection ids the last outlined view drew, in mask order (the tick keeps the view's answer).
-    outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
     /// Who worked in the current frame, and why.
@@ -180,7 +179,6 @@ pub struct Engine {
     /// The document frame the last tick's views read.
     tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
     tick_stats: frame_graph::tick::TickStats,
-    tick_outlined: bool,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
@@ -257,7 +255,6 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
-            outline_order: Vec::new(),
             drawn_layers: 0,
             ledger: Default::default(),
             contributions: Default::default(),
@@ -268,7 +265,6 @@ impl Engine {
             preparation_events: Vec::new(),
             tick_frame: None,
             tick_stats: Default::default(),
-            tick_outlined: false,
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
@@ -321,15 +317,6 @@ impl Engine {
     }
 
 
-    /// 直前の Stage 描画で、選ばれた層が実際に描かれた画面上の範囲(comp 画素、右下は外側)。
-    /// GPU から届く前(初回)や何も描かれなかった層は入らない。
-    pub fn take_selection_bounds(&mut self) -> Option<Vec<(LayerId, [f32; 4])>> {
-        let order = self.outline_order.clone();
-        self.compositor.selection_screen_bounds().map(|found| {
-            found.into_iter().filter_map(|(id, b)| order.get(id as usize - 1).map(|l| (*l, b))).collect()
-        })
-    }
-
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
         #[cfg(test)]
         let _gpu = GpuLease::take();
@@ -348,7 +335,6 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
-            outline_order: Vec::new(),
             drawn_layers: 0,
             ledger: Default::default(),
             contributions: Default::default(),
@@ -359,7 +345,6 @@ impl Engine {
             preparation_events: Vec::new(),
             tick_frame: None,
             tick_stats: Default::default(),
-            tick_outlined: false,
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),

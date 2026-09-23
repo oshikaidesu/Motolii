@@ -231,10 +231,6 @@ impl EditorRuntime {
         let time = self.time()?;
         let playing = self.viewer.clock.playing();
         self.engine.set_realtime(playing);
-        // 再生中はギズモを出さないので、選択の mask も焼かない。籠を読むのは 1 拍に 1 つの view
-        // (Stage が出ていれば Stage)。
-        let selected = if playing { Vec::new() } else { self.viewer.selected_ids.clone() };
-        let caged = views.iter().map(|(_, view, ..)| *view).max_by_key(|view| *view == View::User);
         let requests: Vec<_> = views.iter().map(|(_, view, window, texture)| crate::render::engine::ViewRequest {
             target: texture,
             window: *window,
@@ -242,7 +238,6 @@ impl EditorRuntime {
             camera: (*view == View::User).then_some(self.viewer.user_camera),
             projection: match view { View::Camera => crate::render::frame_graph::ViewProjection::Camera, View::User => crate::render::frame_graph::ViewProjection::Stage },
             include_background: true,
-            outline: if Some(*view) == caged { &selected } else { &[] },
         }).collect();
         self.engine.tick(&self.doc.view(), time, &requests).map_err(|e| e.to_string())?;
         drop(requests);
@@ -256,13 +251,8 @@ impl EditorRuntime {
             coherent |= self.last_window.insert(view.name(), *window) != Some(*window);
         }
         if !playing && coherent { self.frames.finish(); }
-        // Playback has no outline, so a selection readback and geometry cache
-        // invalidation cannot produce a new cage. Keep both off the realtime
-        // path; exact still frames retain the bridge below.
+        // Playback changes no cage: the geometry cache is invalidated only for a still frame.
         if !playing {
-            if let Some((_, view, window, _)) = views.iter().find(|(_, view, ..)| Some(*view) == caged) {
-                self.take_selection_bounds(*view, *window);
-            }
             self.snapshot_cache.borrow_mut().invalidate_geometry();
         }
         self.render_count += 1;

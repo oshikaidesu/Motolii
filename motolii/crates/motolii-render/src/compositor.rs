@@ -28,7 +28,6 @@ mod presentable;
 mod render_effects;
 pub(crate) mod paths;
 mod sequential;
-mod selection_bounds;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BlendMode {
@@ -261,14 +260,11 @@ pub struct Window {
     pub height: u32,
     /// comp 画像の px で `[x, y, w, h]`。
     pub roi: [f32; 4],
-    /// 2D・2.5D を置くカメラ。`None` は作中カメラ(出力 = 箱の中身)。Stage は既定カメラ:
-    /// Boxcam の Original Comp で、作中カメラが動いても世界は動かず、箱だけが動く。
-    pub projection_camera: Option<crate::doc::core::ResolvedCamera>,
 }
 
 impl Window {
     pub fn output(comp: CompSpec) -> Self {
-        Self { width: comp.width, height: comp.height, roi: [0.0, 0.0, comp.width as f32, comp.height as f32], projection_camera: None }
+        Self { width: comp.width, height: comp.height, roi: [0.0, 0.0, comp.width as f32, comp.height as f32] }
     }
     pub(crate) fn viewport(&self, comp: CompSpec) -> re_renderer::RectTransform {
         re_renderer::RectTransform {
@@ -420,7 +416,6 @@ pub struct Compositor {
     pub(crate) feedback_seen: Vec<effects::FeedbackKey>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::LazyEffectProgram,
-    pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
     pub(crate) matte_vism: effects::LazyEffectProgram,
     /// 同じ matte を、生成器の出力 format ごとに組んだ物(生成器を素材の alpha に閉じ込める)。
@@ -538,17 +533,11 @@ pub(crate) struct SequentialInput<'a> {
     displace: point_cloud::PointDisplace,
     clip: Option<clip::ClipSpec>,
     shadow: f32,
-    outline: u8,
     /// 層の絵へ焼けなかった効果列(網・点群・環境には焼く先の絵が無い)。
     /// 画面へ描いた後で、その窓の絵に対して流す。AE のプリコンポと同じ位置。
     screen_passes: &'a [EffectPass],
     /// 画面の道の効果ごとの 2 枚目以降(別の時刻の合成)。`screen_passes` と同じ並び。
     screen_sources: &'a [Vec<GpuTexture2D>],
-}
-
-/// 選択の mask: channel A に層の番号。B は空けておく(hover を後で載せる口)。
-pub(crate) fn outline_mask(id: u8) -> re_renderer::OutlineMaskPreference {
-    if id != 0 { re_renderer::OutlineMaskPreference::some(id, 0) } else { re_renderer::OutlineMaskPreference::NONE }
 }
 
 pub(crate) fn sequential_target_config(
