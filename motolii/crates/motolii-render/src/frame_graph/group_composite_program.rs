@@ -124,6 +124,8 @@ impl GroupCompositeProgram {
                     if let Some(program) = effects.placement_program(effect) {
                         placement = Some(GroupPlacement { set: inputs.len(), effect: inputs.len() + 1, program });
                         inputs.extend([set.node, effect]);
+                        // Effects after the placement read its result: the copies as one picture.
+                        inputs.extend(binding.effects[end + 1..].iter().copied());
                     }
                 }
             }
@@ -209,9 +211,17 @@ impl GroupCompositeProgram {
             }
 
             if let Some(placed) = recipe.placement.and_then(|placement| placed_copies(placement, inputs, &owner, &subtrees, &each)) {
+                let after_start = recipe.placement.map_or(0, |placement| placement.effect + 1);
+                let after: Vec<_> = (after_start..node.identity().inputs.len()).filter_map(|index| inputs.at(index)
+                    .and_then(|value| value.downcast_ref::<EffectValue>())
+                    .and_then(|value| value.0.clone())).collect();
                 // The copies stand in for the group: it is not drawn itself.
                 let mut contributions = vec![SceneContributionValue { solo: owner.solo, layer: None }];
-                contributions.extend(placed);
+                if after.is_empty() {
+                    contributions.extend(placed);
+                } else {
+                    contributions.push(plate(recipe.group, &owner, placed, after));
+                }
                 return Ok(NodeValue::new(SceneFragmentValue { contributions }));
             }
 
@@ -220,38 +230,43 @@ impl GroupCompositeProgram {
                 contributions.extend(children);
                 return Ok(NodeValue::new(SceneFragmentValue { contributions }));
             }
-
-            let solo = children.iter().any(|child| child.solo);
-            let seed = children.iter().find_map(|child| child.layer.as_ref()).cloned();
-            if let Some(mut layer) = seed {
-                let owner_layer = owner.layer.as_ref();
-                layer.layer = recipe.group;
-                layer.content_key = None;
-                layer.freeze_eligible = owner_layer.is_some_and(|owner| owner.freeze_eligible);
-                layer.timing_start = owner_layer.map_or(layer.timing_start, |owner| owner.timing_start);
-                layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(recipe.group), members: children, average: false });
-                layer.effects.clear();
-                layer.after_effects = whole;
-                layer.masks.clear();
-                layer.matte = None;
-                layer.clip_to_below = false;
-                layer.flatten = false;
-                layer.environment = false;
-                layer.opacity = owner_layer.map_or(1.0, |owner| owner.opacity);
-                layer.blend = owner_layer.map_or(layer.blend, |owner| owner.blend);
-                layer.projection = LayerProjection::TwoD;
-                layer.transform = TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY };
-                contributions.push(SceneContributionValue { solo, layer: Some(layer) });
-            } else {
-                // Preserve solo participation even if every child is currently
-                // hidden/out-of-range; this matches the global solo rule.
-                contributions.push(SceneContributionValue { solo, layer: None });
-            }
-
+            contributions.push(plate(recipe.group, &owner, children, whole));
             Ok(NodeValue::new(SceneFragmentValue { contributions }))
         })())
     }
 }
+
+/// The members composed into one picture owned by the group, with `effects` applied to that picture.
+fn plate(group: LayerId, owner: &SceneContributionValue, children: Vec<SceneContributionValue>, effects: Vec<crate::picture::resolved::ResolvedEffect>) -> SceneContributionValue {
+    let solo = children.iter().any(|child| child.solo);
+    let seed = children.iter().find_map(|child| child.layer.as_ref()).cloned();
+    if let Some(mut layer) = seed {
+        let owner_layer = owner.layer.as_ref();
+        layer.layer = group;
+        layer.instance = 0;
+        layer.content_key = None;
+        layer.freeze_eligible = owner_layer.is_some_and(|owner| owner.freeze_eligible);
+        layer.timing_start = owner_layer.map_or(layer.timing_start, |owner| owner.timing_start);
+        layer.content = SceneContentValue::Plate(ScenePlateValue { owner: Some(group), members: children, average: false });
+        layer.effects.clear();
+        layer.after_effects = effects;
+        layer.masks.clear();
+        layer.matte = None;
+        layer.clip_to_below = false;
+        layer.flatten = false;
+        layer.environment = false;
+        layer.opacity = owner_layer.map_or(1.0, |owner| owner.opacity);
+        layer.blend = owner_layer.map_or(layer.blend, |owner| owner.blend);
+        layer.projection = LayerProjection::TwoD;
+        layer.transform = TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY };
+        SceneContributionValue { solo, layer: Some(layer) }
+    } else {
+        // Preserve solo participation even if every child is currently
+        // hidden/out-of-range; this matches the global solo rule.
+        SceneContributionValue { solo, layer: None }
+    }
+}
+
 
 /// A placement effect on a group copies its children: with Each scope every copy picks one child
 /// (and its subtree) by the program's pick; with Whole scope every copy carries all of them. A copy

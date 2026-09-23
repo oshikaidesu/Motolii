@@ -269,4 +269,18 @@ fn a_repeater_on_a_group_copies_its_children() {
     let whole = placed(&doc);
     assert_eq!(whole.len(), 8, "Whole: every copy carries both children");
     assert!(whole.contains(&(square, 3, [250.0, 110.0])));
+
+    // An effect after the Repeater reads its result: one plate of every copy, drawn once.
+    let glow = EffectId(1);
+    doc.apply(Intent::SetEffects { layer: group, effects: vec![
+        EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() },
+        EffectInstance { id: glow, plugin_id: "group.after".into() },
+    ] }).unwrap();
+    let scene = scene(&doc);
+    let plates: Vec<_> = scene.layers.iter().filter(|l| matches!(l.content, crate::frame_graph::SceneContentValue::Plate(_))).collect();
+    assert_eq!(plates.len(), 1, "the copies are composed into one picture");
+    assert_eq!(plates[0].after_effects.iter().map(|e| e.plugin_id.as_str()).collect::<Vec<_>>(), ["group.after"]);
+    let crate::frame_graph::SceneContentValue::Plate(plate) = &plates[0].content else { unreachable!() };
+    assert_eq!(plate.members.iter().filter(|m| m.layer.is_some()).count(), 8);
+    assert!(plate.members.iter().filter_map(|m| m.layer.as_ref()).all(|l| l.effects.is_empty()), "no copy carries the effect itself");
 }
