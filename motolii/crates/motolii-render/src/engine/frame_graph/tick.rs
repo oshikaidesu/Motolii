@@ -198,21 +198,22 @@ impl Engine {
         }
         let inputs = crate::render::compositor::sequential_inputs(&layers, &frame.pictures, &frame.paddings, &frame.spills);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
-        let mut commands = Vec::new();
+        // One encoder per view, as Rerun records a view: every pass of the view's composition, then
+        // its composite into the surface.
+        let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-tick-view") });
         // A view placing the layers as the world does (the output's camera) draws the world's mesh
         // instances; a Stage places its own.
         let meshes = frame.meshes.as_ref().filter(|_| view.window.projection_camera.is_none() && view.camera.is_none() && outline.is_empty());
         let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref(), meshes };
         let camera = view.camera.unwrap_or(frame.document_camera);
-        let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, &mut commands)?;
-        if self.compositor.record_outline(frame.comp, view.window, camera, &inputs, &mut commands)? {
+        let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, &mut encoder)?;
+        if self.compositor.record_outline(frame.comp, view.window, camera, &inputs, &mut encoder)? {
             self.outline_order = outline;
             self.tick_outlined = true;
         }
 
         let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });
-        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-tick-composite") });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("motolii-tick-composite"),
@@ -229,8 +230,7 @@ impl Engine {
             });
             shown.composite(ctx, &mut pass);
         }
-        commands.push(encoder.finish());
-        Ok(commands)
+        Ok(vec![encoder.finish()])
     }
 
     /// The output at `time`, read back: one tick with one Export view.

@@ -606,6 +606,8 @@ impl Compositor {
             glam::Vec3::NEG_Y,
             glam::Vec3::NEG_Y,
         ];
+        // Every face, the atlas copies and its mips go into one encoder.
+        let mut capture = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("shared-scene-reflection") });
         for (probe, (&receiver, &origin)) in receivers.iter().zip(&origins).enumerate() {
             // Draw data is reusable across all six camera views.
             let skip = |layer: usize| if scene_probe { is_receiver(layer) } else { layer == receiver };
@@ -658,21 +660,13 @@ impl Compositor {
                 for mesh in &draws.meshes {
                     builder.queue_draw(&self.ctx, mesh.clone());
                 }
-                self.pending.push(
-                    builder
-                        .draw(&self.ctx, Rgba::TRANSPARENT)
-                        .map_err(|e| CompositorError::Draw(e.to_string()))?,
-                );
+                builder
+                    .draw_into(&self.ctx, Rgba::TRANSPARENT, &mut capture)
+                    .map_err(|e| CompositorError::Draw(e.to_string()))?;
                 self.surface_work.scene_captures += 1;
             }
-            let mut encoder =
-                self.ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("shared-reflection-atlas"),
-                    });
             for face in 0..6 {
-                encoder.copy_texture_to_texture(
+                capture.copy_texture_to_texture(
                     wgpu::TexelCopyTextureInfo {
                         texture: &resources.faces[face],
                         mip_level: 0,
@@ -696,18 +690,11 @@ impl Compositor {
                     },
                 );
             }
-            self.pending.push(encoder.finish());
         }
-        let mut encoder = self
-            .ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("shared-reflection-mips"),
-            });
         self.ctx
             .texture_manager_2d
-            .generate_mipmaps(&self.ctx, &mut encoder, &resources.atlas);
-        self.pending.push(encoder.finish());
+            .generate_mipmaps(&self.ctx, &mut capture, &resources.atlas);
+        self.pending.push(capture.finish());
         let influence_radii = [origins[0], *origins.last().unwrap()].map(|origin| {
             candidates
                 .iter()

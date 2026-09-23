@@ -32,7 +32,7 @@ pub(crate) struct ViewWorld<'a> {
 
 impl Compositor {
     /// Records one view: every layer in order, stacked into one picture, shown by the returned
-    /// `ViewBuilder` (already drawn into `commands`; the caller composites it into its surface).
+    /// `ViewBuilder` (already drawn into `encoder`; the caller composites it into its surface).
     pub(crate) fn record_view(
         &mut self,
         comp: CompSpec,
@@ -41,9 +41,9 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
-        commands: &mut Vec<wgpu::CommandBuffer>,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> Result<ViewBuilder, CompositorError> {
-        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, commands)?;
+        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, encoder)?;
         // The view shows the stack (or, with nothing drawn, the background).
         let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -57,7 +57,7 @@ impl Compositor {
             }
             None => clear_color(background_color),
         };
-        commands.push(shown.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        shown.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
         Ok(shown)
     }
 
@@ -72,11 +72,10 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
-        commands: &mut Vec<wgpu::CommandBuffer>,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> Result<wgpu::Texture, CompositorError> {
         let picture = self.create_blend_scratch_texture(window.width, window.height);
-        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
-        match self.record_stack(comp, window, camera, inputs, background_color, world, commands)? {
+        match self.record_stack(comp, window, camera, inputs, background_color, world, encoder)? {
             Some(stack) => {
                 let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
                 encoder.copy_texture_to_texture(stack.texture.as_image_copy(), picture.as_image_copy(), size);
@@ -94,7 +93,6 @@ impl Compositor {
                 });
             }
         }
-        commands.push(encoder.finish());
         Ok(picture)
     }
 
@@ -108,7 +106,7 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
-        commands: &mut Vec<wgpu::CommandBuffer>,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> Result<Option<re_renderer::GpuTexture>, CompositorError> {
         // The light is the composition's: the top environment layer, else the world's.
         let environment = inputs.iter().rev().find_map(|input| match input.content {
@@ -166,10 +164,10 @@ impl Compositor {
                     .map_err(|e| CompositorError::View(e.to_string()))?;
                 self.next_readback += 1;
                 builder.queue_draw(&self.ctx, re_renderer::renderer::GenericSkyboxDrawData::new(&self.ctx, re_renderer::renderer::GenericSkyboxType::Environment));
-                commands.push(builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?);
+                builder.draw_into(&self.ctx, Rgba::TRANSPARENT, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
                 stack = Some(match stack.take() {
                     None => sky,
-                    Some(below) => self.mix_onto(window, &below, &sky, DEST_OVER, commands),
+                    Some(below) => self.mix_onto(window, &below, &sky, DEST_OVER, encoder),
                 });
             }
 
@@ -180,7 +178,7 @@ impl Compositor {
             // A surface reading what is behind it reads this view's stack so far (ordered transmission).
             if let Some(below) = stack.as_ref().filter(|_| run.iter().any(|input| input.shading.reads_backdrop)) {
                 let roughness = run.iter().filter(|input| input.shading.reads_backdrop).map(|input| input.shading.backdrop_roughness).fold(0.0f32, f32::max);
-                let (texture, imported) = self.backdrop(window, below, roughness, commands)?;
+                let (texture, imported) = self.backdrop(window, below, roughness, encoder)?;
                 config.backdrop = Some(imported);
                 backdrops.push(texture);
             }
@@ -204,14 +202,14 @@ impl Compositor {
             self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, world.meshes, start)?.queue(&self.ctx, &mut builder);
             // The bottom of the stack starts from the background; everything above is drawn on clear.
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
-            commands.push(builder.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
+            builder.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
             let canvas = match run {
-                [only] if !only.screen_passes.is_empty() => self.screen_passes(window, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), commands)?,
+                [only] if !only.screen_passes.is_empty() => self.screen_passes(window, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), encoder)?,
                 _ => canvas,
             };
             stack = Some(match stack.take() {
                 None => canvas,
-                Some(below) => self.mix_onto(window, &below, &canvas, mode, commands),
+                Some(below) => self.mix_onto(window, &below, &canvas, mode, encoder),
             });
         }
 
@@ -227,7 +225,7 @@ impl Compositor {
         window: Window,
         camera: ResolvedCamera,
         inputs: &[SequentialInput<'_>],
-        commands: &mut Vec<wgpu::CommandBuffer>,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> Result<bool, CompositorError> {
         if !inputs.iter().any(|input| input.outline != 0) {
             return Ok(false);
@@ -241,12 +239,10 @@ impl Compositor {
             .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
         self.surface_scene_draws(comp, inputs, Vec::new(), false, &|index| inputs[index].outline == 0, None, 0)?.queue(&self.ctx, &mut builder);
-        commands.push(builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        builder.draw_into(&self.ctx, Rgba::TRANSPARENT, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
         if let (Some(mask), Some(bounds)) = (builder.outline_mask_texture(), self.selection_bounds.as_mut()) {
-            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-selection-bounds") });
-            bounds.record(&self.ctx.device, &mut encoder, &mask.default_view, window.size());
-            commands.push(encoder.finish());
-        }
+                bounds.record(&self.ctx.device, encoder, &mask.default_view, window.size());
+            }
         Ok(true)
     }
 
@@ -259,10 +255,9 @@ impl Compositor {
         passes: &[EffectPass],
         sources: &[Vec<GpuTexture2D>],
         below: Option<&re_renderer::GpuTexture>,
-        commands: &mut Vec<wgpu::CommandBuffer>,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> Result<re_renderer::GpuTexture, CompositorError> {
         let (width, height) = (window.width, window.height);
-        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-view-screen-passes") });
         // A pass reading what is below gets the view's stack so far (nothing yet: transparent);
         // another reads the pictures the frame prepared for it (another time's composite).
         let below: Option<wgpu::Texture> = passes.iter().any(|p| p.reads_backdrop).then(|| match below {
@@ -274,10 +269,10 @@ impl Compositor {
             _ => sources.get(i).map(|row| row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()).unwrap_or_default(),
         }).collect();
         let (mut current, linear, premultiplied, mut scratch) = self.record_pass_chain(
-            &mut encoder, canvas.texture.clone(), true, true, false, passes, &others, None, [width, height], 0, [width, height],
+            encoder, canvas.texture.clone(), true, true, false, passes, &others, None, [width, height], 0, [width, height],
         )?;
         if !linear {
-            let back = self.convert_image_encoding(&mut encoder, &current, true, true, premultiplied);
+            let back = self.convert_image_encoding(encoder, &current, true, true, premultiplied);
             if scratch { self.effect_scratch.release(width, height, current.format(), current); }
             current = back;
             scratch = true;
@@ -290,16 +285,15 @@ impl Compositor {
         let out_view = out.texture.create_view(&Default::default());
         {
             let Self { ctx, blend_vism, effect_scratch, .. } = self;
-            blend_vism.get(ctx).record_over(ctx, &mut encoder, effect_scratch, &[&canvas_view, &result_view], &out_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
+            blend_vism.get(ctx).record_over(ctx, encoder, effect_scratch, &[&canvas_view, &result_view], &out_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
         }
         if scratch { self.effect_scratch.release(width, height, current.format(), current); }
-        commands.push(encoder.finish());
         Ok(out)
     }
 
     /// What is below, copied with the mip levels the roughest reader needs (glass blurs by reading
     /// coarser levels): the view's own picture, so it is the view's, from the pool.
-    fn backdrop(&mut self, window: Window, below: &re_renderer::GpuTexture, roughness: f32, commands: &mut Vec<wgpu::CommandBuffer>) -> Result<(re_renderer::GpuTexture, GpuTexture2D), CompositorError> {
+    fn backdrop(&mut self, window: Window, below: &re_renderer::GpuTexture, roughness: f32, encoder: &mut wgpu::CommandEncoder) -> Result<(re_renderer::GpuTexture, GpuTexture2D), CompositorError> {
         self.surface_work.backdrop_copies += 1;
         let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
         let pyramid = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
@@ -311,13 +305,11 @@ impl Compositor {
             format: BLEND_TARGET_FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
         });
-        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-view-backdrop") });
         let level0 = |texture| wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All };
         encoder.copy_texture_to_texture(level0(&below.texture), level0(&pyramid.texture), size);
         let levels = re_renderer::backdrop_levels_read(roughness, pyramid.texture.mip_level_count());
         self.surface_work.backdrop_mip_levels += u64::from(levels);
-        self.ctx.texture_manager_2d.generate_mipmap_levels(&self.ctx, &mut encoder, &pyramid.texture, levels);
-        commands.push(encoder.finish());
+        self.ctx.texture_manager_2d.generate_mipmap_levels(&self.ctx, encoder, &pyramid.texture, levels);
         let imported = self.import_premultiplied(&pyramid.texture)?;
         Ok((pyramid, imported))
     }
@@ -365,16 +357,14 @@ impl Compositor {
         below: &re_renderer::GpuTexture,
         above: &re_renderer::GpuTexture,
         mode: u32,
-        commands: &mut Vec<wgpu::CommandBuffer>,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> re_renderer::GpuTexture {
         let out = self.view_canvas(window);
         let below_view = below.texture.create_view(&Default::default());
         let above_view = above.texture.create_view(&Default::default());
         let out_view = out.texture.create_view(&Default::default());
-        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-view-mix") });
         let Self { ctx, blend_vism, effect_scratch, .. } = self;
-        blend_vism.get(ctx).record_over(ctx, &mut encoder, effect_scratch, &[&below_view, &above_view], &out_view, &[("mode".to_owned(), mode as f32)], window.size_f32());
-        commands.push(encoder.finish());
+        blend_vism.get(ctx).record_over(ctx, encoder, effect_scratch, &[&below_view, &above_view], &out_view, &[("mode".to_owned(), mode as f32)], window.size_f32());
         out
     }
 }
