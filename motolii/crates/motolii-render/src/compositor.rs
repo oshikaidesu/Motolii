@@ -16,6 +16,7 @@ mod matte;
 pub(crate) mod mesh;
 mod surface_scene;
 mod view;
+pub(crate) use view::ViewWorld;
 #[cfg(test)]
 mod reflection_diagnostic;
 mod reflection_cache;

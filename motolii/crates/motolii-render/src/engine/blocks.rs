@@ -365,7 +365,9 @@ impl Engine {
         let frame = (t.as_seconds_f64() * state.fps).round() as i64;
         state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
             .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, motion.buffer(), frame, state.fps as f32);
-        ctx.queue.submit([encoder.finish()]);
+        // Recorded, not submitted: it goes out with the frame's other work, ahead of every draw.
+        let recorded = encoder.finish();
+        self.compositor.pending.push(recorded);
         self.compositor.motion = Some(motion);
     }
 }

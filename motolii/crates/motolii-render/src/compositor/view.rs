@@ -17,6 +17,14 @@ use super::*;
 
 /// The Normal blend (Porter-Duff source-over) in `vism/blend.wgsl`'s numbering.
 const SRC_OVER: u32 = 3;
+/// What is below stays on top (the sky under what is drawn).
+const DEST_OVER: u32 = 4;
+
+/// What a view reads from the prepared world.
+pub(crate) struct ViewWorld<'a> {
+    pub environment: Option<&'a GpuEnvironmentData>,
+    pub motion: Option<&'a re_renderer::MotionBuffer>,
+}
 
 impl Compositor {
     /// Records one view: every layer in order, stacked into one picture, shown by the returned
@@ -28,8 +36,14 @@ impl Compositor {
         camera: ResolvedCamera,
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
+        world: &ViewWorld<'_>,
         commands: &mut Vec<wgpu::CommandBuffer>,
     ) -> Result<ViewBuilder, CompositorError> {
+        // The light is the composition's: the top environment layer, else the world's.
+        let environment = inputs.iter().rev().find_map(|input| match input.content {
+            SequentialContent::Environment(e) => Some(e),
+            _ => None,
+        }).or(world.environment);
         let projection = crate::doc::core::camera_projection(comp, camera);
         let view_from_world = macaw::IsoTransform::from_rotation_translation(projection.rotation, -(projection.rotation * projection.eye));
         let flat = |input: &SequentialInput<'_>| input.projection == crate::doc::store::LayerProjection::TwoD;
@@ -47,17 +61,39 @@ impl Compositor {
             } else {
                 // 2D is not in the world (2026-09-12): a run is all 2D or all not, and runs stack in order.
                 let start = index;
+                let mut has_rect = false;
                 while index < inputs.len() && !alone(&inputs[index]) {
                     if index > start && flat(&inputs[index]) != flat(&inputs[start]) {
                         break;
                     }
+                    // A surface reading what is behind it starts a run: everything before is its backdrop.
+                    // A mesh after a picture starts one too.
+                    if index > start && (inputs[index].shading.reads_backdrop || (has_rect && matches!(inputs[index].content, SequentialContent::Model(_)))) {
+                        break;
+                    }
+                    has_rect |= matches!(inputs[index].content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
                     index += 1;
                 }
                 (start, SRC_OVER)
             };
             let run = &inputs[start..index];
 
-            let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, None);
+            // The sky is the ground: the run holding the top environment lays it under the stack.
+            if run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e)))) {
+                let sky = self.view_canvas(window);
+                let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, sequential_target_config("motolii-view-sky", comp, window, view_from_world, projection, environment), ViewBuilderId::new(self.next_readback), &sky.texture)
+                    .map_err(|e| CompositorError::View(e.to_string()))?;
+                self.next_readback += 1;
+                builder.queue_draw(&self.ctx, re_renderer::renderer::GenericSkyboxDrawData::new(&self.ctx, re_renderer::renderer::GenericSkyboxType::Environment));
+                commands.push(builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?);
+                stack = Some(match stack.take() {
+                    None => sky,
+                    Some(below) => self.mix_onto(window, &below, &sky, DEST_OVER, commands),
+                });
+            }
+
+            let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, environment);
+            config.motion = world.motion.cloned();
             // Near things fade: only in the work's camera, only for what is in the world.
             if !flat(&run[0]) && window.projection_camera.is_none() {
                 config.near_fade_distance = camera.near_fade;

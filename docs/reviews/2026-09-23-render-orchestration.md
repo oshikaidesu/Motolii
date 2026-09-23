@@ -55,6 +55,12 @@ The fork's embedder `SpatialStage::show` (`re_view_spatial/src/spatial_stage.rs:
 | A view's projection, visibility, LOD or density request | the View |
 | A view's own image or history (screen-space effects, the part of ordered transmission that reads the view's image, window feedback, outline) | the View's render and history |
 
+**World captures place 2.5D layers by the output's camera.**
+- 3D placement does not depend on the camera (`layer_projection_transform` is the identity for 3D). 2.5D placement follows the camera.
+- The world's reflection and light cookie are made once and do not depend on any view. They therefore place 2.5D layers with the document camera, which is the output's world.
+- A Stage view only looks at that world. When Stage draws a 2.5D layer itself, it places it by its own camera, but what a mirror reflects is the output's placement.
+- The Camera view and export pictures are the same as before.
+
 ## Rerun / Motolii / reason for any difference
 
 | Topic | Rerun's actual usage | Motolii's new path | Reason for a difference |

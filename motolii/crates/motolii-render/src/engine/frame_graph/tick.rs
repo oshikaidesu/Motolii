@@ -89,7 +89,10 @@ impl Engine {
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
-        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, comp: state.comp, background: state.background, document_camera });
+        // The world the preparation left: its environment and the blocks' motion.
+        let environment = self.compositor.world_environment.clone();
+        let motion = self.compositor.motion.clone();
+        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());
         Ok(frame)
@@ -112,7 +115,8 @@ impl Engine {
         let inputs = crate::render::compositor::sequential_inputs(&layers, &frame.pictures, &frame.paddings, &frame.spills);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut commands = Vec::new();
-        let shown = self.compositor.record_view(frame.comp, view.window, view.camera, &inputs, background, &mut commands)?;
+        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref() };
+        let shown = self.compositor.record_view(frame.comp, view.window, view.camera, &inputs, background, &world, &mut commands)?;
 
         let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });
@@ -147,9 +151,11 @@ fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'st
     if layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite()) { return Some("an effect reading the view's picture"); }
     if layer.layer.clip.is_some() { return Some("a clip"); }
     if layer.layer.shading.reads_backdrop { return Some("a surface reading the backdrop"); }
+    if layer.layer.shading.program.as_ref().is_some_and(|program| program.desc().surface.is_some()) { return Some("a surface reflecting the scene"); }
+    if layer.layer.shadow > 0.0 { return Some("a cast shadow"); }
     match layer.layer.content {
-        LayerContent::Texture(_) | LayerContent::LinearTexture(_) => None,
-        _ => Some("a mesh, cloud, path or environment layer"),
+        LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) => None,
+        _ => Some("a cloud or path layer"),
     }
 }
 
@@ -160,6 +166,8 @@ pub(in crate::engine) struct PreparedFrame {
     pictures: Vec<crate::render::compositor::LayerContent>,
     paddings: Vec<u32>,
     spills: Vec<crate::render::compositor::LayerSpill>,
+    environment: Option<Arc<crate::render::compositor::GpuEnvironmentData>>,
+    motion: Option<re_renderer::MotionBuffer>,
     comp: crate::doc::core::CompSpec,
     background: [f32; 4],
     document_camera: ResolvedCamera,

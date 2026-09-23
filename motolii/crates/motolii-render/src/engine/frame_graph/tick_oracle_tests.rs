@@ -120,3 +120,13 @@ fn a_layers_own_effects_match_the_old_path() {
     doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(1), plugin_id: "motolii.glow".into() }] }).unwrap();
     assert_matches_oracle(&doc, "a blurred and a glowing picture");
 }
+
+/// A mesh lit by an environment layer that is also the sky, and the same mesh with no environment.
+#[test]
+fn a_mesh_under_an_environment_matches_the_old_path() {
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "sky.png", 40, 220);
+    assert_matches_oracle(&scene(dir.path(), &sky, true), "a mesh lit by the sky");
+    assert_matches_oracle(&scene(dir.path(), &sky, false), "a mesh with the sky as a picture");
+}
