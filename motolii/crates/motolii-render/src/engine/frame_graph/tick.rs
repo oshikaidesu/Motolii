@@ -89,17 +89,10 @@ impl Engine {
         Ok(frame)
     }
 
-    /// One view's commands, as Rerun records a view: the `ViewBuilder` draws into its own target
-    /// (`draw`, egui-wgpu's `prepare`), then composites into the surface (`composite`, `paint`).
+    /// One view's commands, as Rerun records a view: the view's pictures are drawn by its
+    /// `ViewBuilder`s (`draw`, egui-wgpu's `prepare`), then the view composites into the surface
+    /// (`composite`, `paint`).
     fn record_view(&mut self, frame: &PreparedFrame, view: &ViewRequest<'_>) -> Result<Vec<wgpu::CommandBuffer>, EngineError> {
-        let ctx = &self.compositor.ctx;
-        let projection = crate::doc::core::camera_projection(frame.comp, view.camera);
-        let view_from_world = macaw::IsoTransform::from_rotation_translation(projection.rotation, -(projection.rotation * projection.eye));
-        let config = crate::render::compositor::sequential_target_config("motolii-tick-view", frame.comp, view.window, view_from_world, projection, None);
-        let id = re_renderer::ViewBuilderId::new(self.compositor.next_readback);
-        self.compositor.next_readback += 1;
-        let mut builder = re_renderer::ViewBuilder::new(ctx, config, id).map_err(|error| EngineError::Store(error.to_string()))?;
-
         // The view places the prepared layers: 2D by the document's camera (the output's frame),
         // the rest by the view's own (a Stage's default camera).
         let placing = view.window.projection_camera.unwrap_or(frame.document_camera);
@@ -114,14 +107,11 @@ impl Engine {
         let paddings: Vec<_> = layers.iter().map(|layer| layer.padding).collect();
         let spills = vec![None; layers.len()];
         let inputs = crate::render::compositor::sequential_inputs(&layers, &contents, &paddings, &spills);
-        let draws = self.compositor.surface_scene_draws(frame.comp, &inputs, Vec::new(), false, &|_| false, None, 0)
-            .map_err(|error| EngineError::Store(error.to_string()))?;
-        let ctx = &self.compositor.ctx;
-        draws.queue(ctx, &mut builder);
-
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
-        let drawn = builder.draw(ctx, crate::render::compositor::clear_color(background)).map_err(|error| EngineError::Store(error.to_string()))?;
+        let mut commands = Vec::new();
+        let shown = self.compositor.record_view(frame.comp, view.window, view.camera, &inputs, background, &mut commands)?;
 
+        let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-tick-composite") });
         {
@@ -138,9 +128,10 @@ impl Engine {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            builder.composite(ctx, &mut pass);
+            shown.composite(ctx, &mut pass);
         }
-        Ok(vec![drawn, encoder.finish()])
+        commands.push(encoder.finish());
+        Ok(commands)
     }
 
     /// The last tick's counts.
@@ -151,7 +142,6 @@ impl Engine {
 fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'static str> {
     use crate::render::compositor::LayerContent;
     if !layer.passes.is_empty() { return Some("an effect chain"); }
-    if layer.layer.blend_mode != crate::render::compositor::BlendMode::Normal { return Some("a blend mode"); }
     if layer.layer.clip.is_some() { return Some("a clip"); }
     if layer.layer.shading.reads_backdrop { return Some("a surface reading the backdrop"); }
     match layer.layer.content {

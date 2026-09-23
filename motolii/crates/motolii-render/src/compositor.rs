@@ -15,6 +15,7 @@ mod headless;
 mod matte;
 pub(crate) mod mesh;
 mod surface_scene;
+mod view;
 #[cfg(test)]
 mod reflection_diagnostic;
 mod reflection_cache;

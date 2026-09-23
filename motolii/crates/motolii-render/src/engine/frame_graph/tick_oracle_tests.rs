@@ -92,3 +92,19 @@ fn overlapping_pictures_match_the_old_path() {
     let dir = tempfile::tempdir().unwrap();
     assert_matches_oracle(&pictures(dir.path()), "two overlapping pictures");
 }
+
+/// Pictures stacked through mix blends, and a 2.5D picture between 2D ones (runs split by 2D).
+#[test]
+fn blend_modes_and_the_2d_divider_match_the_old_path() {
+    use crate::doc::store::{BlendMode, LayerAttrsPatch, LayerProjection};
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = pictures(dir.path());
+    let blue = file_layer(&mut doc, 3, 2, &png(dir.path(), "blue.png", [40, 80, 255, 255]));
+    let white = file_layer(&mut doc, 4, 3, &png(dir.path(), "white.png", [230, 230, 230, 200]));
+    let attrs = |doc: &mut Document, layer: LayerId, patch: LayerAttrsPatch| doc.apply(Intent::SetAttrs { layer, patch }).unwrap();
+    attrs(&mut doc, blue, LayerAttrsPatch { blend_mode: Some(BlendMode::Multiply), ..Default::default() });
+    attrs(&mut doc, white, LayerAttrsPatch { blend_mode: Some(BlendMode::Screen), ..Default::default() });
+    attrs(&mut doc, LayerId(2), LayerAttrsPatch { projection: Some(LayerProjection::TwoPointFiveD), ..Default::default() });
+    doc.apply(Intent::SetConstant { layer: white, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([20.0, 44.0]) }).unwrap();
+    assert_matches_oracle(&doc, "mix blends and a 2.5D picture between 2D ones");
+}
