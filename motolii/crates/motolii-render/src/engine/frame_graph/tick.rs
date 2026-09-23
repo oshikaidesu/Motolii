@@ -155,6 +155,7 @@ impl Engine {
             .unwrap_or_default();
         // Each layer's own effect chain reads only the document frame: run once, here, for every view.
         let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene.layers)?;
+
         // The world the preparation left: its environment and the blocks' motion.
         let environment = self.compositor.world_environment.clone();
         let motion = self.compositor.motion.clone();

@@ -137,9 +137,9 @@ impl Engine {
         let size = |side: u32| if density >= 1.0 { side } else { ((side as f32 * density).ceil() as u32).max(1) };
         let target = self.compositor.create_blend_scratch_texture(size(comp.width), size(comp.height));
         let imported = self.compositor.import_premultiplied(&target)?;
-        let layer = Self::plate_layer(imported, comp, camera, &sources, CompositeBlendMode::Normal, placement);
+        let layer = Self::plate_layer(imported.clone(), comp, camera, &sources, CompositeBlendMode::Normal, placement);
         self.reflectables.extend(sources.iter().cloned());
-        self.pending_plates.push(PendingPlate { target, comp, camera, sources, density });
+        self.pending_plates.push(PendingPlate { target, picture: imported, comp, camera, sources, density });
         Ok(layer)
     }
 
@@ -253,6 +253,8 @@ impl Engine {
 /// A plate whose picture is baked after the frame's reflection capture.
 pub(in crate::engine) struct PendingPlate {
     target: wgpu::Texture,
+    /// The plate's picture as layers refer to it (its identity until it is baked).
+    picture: crate::render::compositor::GpuTexture2D,
     comp: CompSpec,
     camera: ResolvedCamera,
     sources: Vec<LayerWithPasses>,
@@ -260,5 +262,7 @@ pub(in crate::engine) struct PendingPlate {
 }
 
 impl PendingPlate {
-    pub(in crate::engine) fn target_texture(&self) -> &wgpu::Texture { &self.target }
+    pub(in crate::engine) fn is_picture_of(&self, content: &crate::render::compositor::LayerContent) -> bool {
+        content.texture().is_some_and(|texture| texture.handle() == self.picture.handle())
+    }
 }

@@ -355,3 +355,14 @@ mod frame_reflection {
         engine.compositor.flush_pending();
     }
 }
+
+/// A plate with an effect after it shows its members: its picture is read after it is baked (a
+/// snapshot taken while it waited for the frame's light would be empty).
+#[test]
+fn a_plate_with_an_effect_after_it_shows_its_members() {
+    let dir = tempfile::tempdir().unwrap();
+    let doc = super::tick_oracle_tests::plate(dir.path());
+    let pixels = Engine::new().unwrap().export_frame(&doc.view(), RationalTime::ZERO, true, None).unwrap();
+    let dots = pixels.chunks(4).filter(|p| p[0] > 200 && p[1] > 150 && p[2] < 120).count();
+    assert!(dots > 0, "the plate's orange dot is in the picture");
+}

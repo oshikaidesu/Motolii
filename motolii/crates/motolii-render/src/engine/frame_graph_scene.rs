@@ -96,10 +96,8 @@ impl Engine {
     /// The frame's world light, once, from its reflectable scene: the top-level layers (not the
     /// plates' pictures, which are not baked yet) and every plate's members, each where it is.
     fn light_the_scene(&mut self, comp: CompSpec, camera: ResolvedCamera, top: &[LayerWithPasses]) -> Result<crate::render::compositor::WorldLight, EngineError> {
-        let plates: Vec<_> = self.pending_plates.iter().map(|plate| plate.target_texture().clone()).collect();
-        let is_plate = |layer: &LayerWithPasses| layer.layer.content.texture().is_some_and(|t| {
-            self.compositor.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().is_some_and(|g| plates.iter().any(|p| *p == g.texture))
-        });
+        // A plate's picture is not baked yet: its members stand for it.
+        let is_plate = |layer: &LayerWithPasses| self.pending_plates.iter().any(|plate| plate.is_picture_of(&layer.layer.content));
         let mut scene: Vec<LayerWithPasses> = top.iter().filter(|layer| !is_plate(layer)).cloned().collect();
         let same_as_frame = scene.len() == top.len() && self.reflectables.is_empty();
         // The plates' members this capture sees (the top level is the frame's own layer list).
@@ -442,7 +440,10 @@ impl Engine {
         if let (LayerContent::Texture(texture), Some(extrusion)) = (&content, &work.extrude) {
             content = self.frame_graph_extruded_content(work, extrusion, texture.clone(), natural)?;
         }
-        if !frozen_hit && !work.image_inputs.is_empty() {
+        // A plate waiting for the frame's light is a picture of its own, drawn once and not written
+        // again: it needs no snapshot (and a snapshot now would copy it before it is baked).
+        let waiting_plate = self.pending_plates.iter().any(|plate| plate.is_picture_of(&content));
+        if !frozen_hit && !waiting_plate && !work.image_inputs.is_empty() {
             content = match &content {
                 LayerContent::Texture(texture) => self.compositor.snapshot_texture(texture)
                     .map(LayerContent::Texture)
