@@ -15,6 +15,7 @@ mod headless;
 mod matte;
 pub(crate) mod mesh;
 mod surface_scene;
+pub(crate) use surface_scene::SharedMeshScene;
 mod view;
 pub(crate) use view::ViewWorld;
 #[cfg(test)]

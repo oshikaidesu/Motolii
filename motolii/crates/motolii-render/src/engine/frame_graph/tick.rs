@@ -91,7 +91,9 @@ impl Engine {
         let densest = views.iter().map(|v| v.window.width as f32 / v.window.roi[2].max(1.0)).fold(0.0_f32, f32::max);
         let density = if densest <= 0.0 { 1.0 } else { (2.0_f32).powf(densest.max(1.0 / 16.0).log2().ceil()).min(1.0) };
         self.picture_density = density;
-        let state = self.evaluated_frame_graph(doc, time, FrameQuality::Preview { scale: 1 })?;
+        // A tick whose only views are the output is an export: full quality.
+        let quality = if !views.is_empty() && views.iter().all(|v| v.projection == ViewProjection::Export) { FrameQuality::Export } else { FrameQuality::Preview { scale: 1 } };
+        let state = self.evaluated_frame_graph(doc, time, quality)?;
         let scene = state.prepared.clone().ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
         if let Some(frame) = self.tick_frame.clone().filter(|frame| Arc::ptr_eq(&frame.scene, &scene)) {
             self.frame_graph = Some(state);
@@ -112,9 +114,9 @@ impl Engine {
         let mut placed = scene.layers.clone();
         for layer in &mut placed { layer.layer.projection_camera = document_camera; }
         let world_inputs = crate::render::compositor::sequential_inputs(&placed, &pictures, &paddings, &spills);
-        let (reflection, light) = self.compositor.capture_world_light(state.comp, &world_inputs, environment.as_deref())?;
+        let (reflection, light, meshes) = self.compositor.capture_world_light(state.comp, &world_inputs, environment.as_deref())?;
         drop(world_inputs);
-        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, reflection, light, comp: state.comp, background: state.background, document_camera });
+        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, reflection, light, meshes, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());
         Ok(frame)
@@ -139,7 +141,10 @@ impl Engine {
         let inputs = crate::render::compositor::sequential_inputs(&layers, &frame.pictures, &frame.paddings, &frame.spills);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut commands = Vec::new();
-        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref() };
+        // A view placing the layers as the world does (the output's camera) draws the world's mesh
+        // instances; a Stage places its own.
+        let meshes = frame.meshes.as_ref().filter(|_| view.window.projection_camera.is_none() && view.camera.is_none() && outline.is_empty());
+        let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref(), meshes };
         let camera = view.camera.unwrap_or(frame.document_camera);
         let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, &mut commands)?;
         if self.compositor.record_outline(frame.comp, view.window, camera, &inputs, &mut commands)? {
@@ -170,6 +175,24 @@ impl Engine {
         Ok(commands)
     }
 
+    /// The output at `time`, read back: one tick with one Export view.
+    pub fn export_frame(&mut self, doc: &StoreView<'_>, time: RationalTime, include_background: bool, camera: Option<ResolvedCamera>) -> Result<Vec<u8>, EngineError> {
+        let comp = doc.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
+        let window = Window::output(comp);
+        let target = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("motolii-export"),
+            size: wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: crate::render::compositor::PRESENTABLE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        self.tick(doc, time, &[ViewRequest { target: &target, window, camera, projection: ViewProjection::Export, include_background, outline: &[] }])?;
+        Ok(self.compositor.read_texture_bytes(&target)?)
+    }
+
     /// The last tick's counts.
     pub fn tick_stats(&self) -> TickStats { self.tick_stats }
 }
@@ -179,7 +202,6 @@ fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'st
     use crate::render::compositor::LayerContent;
     let on_the_view = layer.layer.content.texture().is_none() || layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite());
     if on_the_view && layer.passes.iter().any(|pass| pass.feedback.is_some()) { return Some("feedback on the view's picture"); }
-    if layer.layer.clip.is_some() { return Some("a clip"); }
     match layer.layer.content {
         LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) | LayerContent::Cloud { .. } => None,
     }
@@ -196,6 +218,7 @@ pub(in crate::engine) struct PreparedFrame {
     motion: Option<re_renderer::MotionBuffer>,
     reflection: Option<re_renderer::environment::SceneReflection>,
     light: Option<re_renderer::environment::SunLight>,
+    meshes: Option<crate::render::compositor::SharedMeshScene>,
     comp: crate::doc::core::CompSpec,
     background: [f32; 4],
     document_camera: ResolvedCamera,

@@ -585,8 +585,8 @@ impl Compositor {
         };
         let environment = self.world_environment.clone();
         let motion = self.motion.clone();
-        let (reflection, light) = self.capture_world_light(comp, &inputs, environment.as_deref())?;
-        let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), reflection: reflection.as_ref(), light: light.as_ref() };
+        let (reflection, light, meshes) = self.capture_world_light(comp, &inputs, environment.as_deref())?;
+        let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), reflection: reflection.as_ref(), light: light.as_ref(), meshes: meshes.as_ref() };
         let mut commands = std::mem::take(&mut self.pending);
         let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, &mut commands)?;
         self.pending = commands;

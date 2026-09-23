@@ -26,6 +26,8 @@ pub(crate) struct ViewWorld<'a> {
     pub motion: Option<&'a re_renderer::MotionBuffer>,
     pub reflection: Option<&'a re_renderer::environment::SceneReflection>,
     pub light: Option<&'a re_renderer::environment::SunLight>,
+    /// The world's mesh instances, for a view that places the layers as the world does.
+    pub meshes: Option<&'a super::surface_scene::SharedMeshScene>,
 }
 
 impl Compositor {
@@ -199,7 +201,7 @@ impl Compositor {
             } else {
                 run
             };
-            self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, None, start)?.queue(&self.ctx, &mut builder);
+            self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, world.meshes, start)?.queue(&self.ctx, &mut builder);
             // The bottom of the stack starts from the background; everything above is drawn on clear.
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             commands.push(builder.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
@@ -327,7 +329,7 @@ impl Compositor {
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
-    ) -> Result<(Option<re_renderer::environment::SceneReflection>, Option<re_renderer::environment::SunLight>), CompositorError> {
+    ) -> Result<(Option<re_renderer::environment::SceneReflection>, Option<re_renderer::environment::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,
@@ -335,7 +337,11 @@ impl Compositor {
         let mut shared = None;
         let reflection = self.capture_scene_reflection(comp, inputs, environment, &mut shared)?;
         let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
-        Ok((reflection, light))
+        // The meshes' instances, placed as the output places them, uploaded once for the frame.
+        if shared.is_none() {
+            shared = self.shared_mesh_scene(comp, inputs)?;
+        }
+        Ok((reflection, light, shared))
     }
 
     /// A canvas the size of the view's window, from re_renderer's pool: it returns to the pool when

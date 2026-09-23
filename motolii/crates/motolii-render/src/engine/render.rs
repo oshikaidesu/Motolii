@@ -27,7 +27,7 @@ impl Engine {
         self.layer_failures.clear();
         self.ledger.clear();
         self.purge_idle_video_players();
-        self.render_frame_graph_pixels(view, t, include_background, camera_override)
+        self.export_frame(view, t, include_background, camera_override)
     }
 
     /// Freeze の 1 コマを焼く: 層を本物で組み、効果の列の出口(乗算済み線形)を読み戻して cache へ。

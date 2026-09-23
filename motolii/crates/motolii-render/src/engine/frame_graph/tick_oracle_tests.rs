@@ -250,3 +250,15 @@ fn a_repeated_whole_group_with_a_glow_matches_the_old_path() {
     let dir = tempfile::tempdir().unwrap();
     assert_matches_oracle(&plate(dir.path()), "a repeated group baked into a glowing plate");
 }
+
+/// Export is one tick with one Export view; its bytes are the old path's output bytes.
+#[test]
+fn export_matches_the_old_output() {
+    let dir = tempfile::tempdir().unwrap();
+    for (what, doc) in [("pictures", pictures(dir.path())), ("plate", plate(dir.path()))] {
+        let expected = Engine::new().unwrap().render_frame_graph_pixels(&doc.view(), RationalTime::ZERO, true, None).unwrap();
+        let actual = Engine::new().unwrap().export_frame(&doc.view(), RationalTime::ZERO, true, None).unwrap();
+        let worst = actual.iter().zip(&expected).map(|(a, b)| a.abs_diff(*b)).max().unwrap_or(0);
+        assert!(actual.len() == expected.len() && worst <= 1, "{what}: export differs from the old output by up to {worst}");
+    }
+}
