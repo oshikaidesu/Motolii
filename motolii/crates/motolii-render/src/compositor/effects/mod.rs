@@ -122,25 +122,25 @@ impl EffectProgram {
     pub(crate) fn params_at_density(&self, params: &[(String, f32)], density: f32) -> Vec<(String, f32)> { self.0.params_at_density(params, density) }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], render_size: [f32; 2]) {
         self.0.record(ctx, encoder, sources, dst_view, params, render_size)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], frame: vism::ImageFrame) {
         self.0.record_in_frame(ctx, encoder, sources, dst_view, params, frame)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_feedback_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], frame: vism::ImageFrame, feedback: Option<(&mut FeedbackState, FeedbackStep)>) {
         self.0.record_feedback_in_frame(ctx, encoder, sources, dst_view, params, frame, feedback)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_over(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], render_size: [f32; 2]) {
         self.record(ctx, encoder, sources, dst_view, params, render_size)
     }

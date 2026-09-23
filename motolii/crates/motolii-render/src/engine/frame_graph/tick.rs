@@ -209,7 +209,7 @@ impl Engine {
             if !self.analysis_waiting() {
                 break;
             }
-            self.compositor.ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|error| EngineError::Store(format!("GPU wait: {error}")))?;
+            self.compositor.wait_offline().map_err(|error| EngineError::Store(error.to_string()))?;
             self.collect_analysis_pictures();
         }
         let id = self.view_readbacks.pop().ok_or_else(|| EngineError::Store("the export view asked for no readback".into()))?;

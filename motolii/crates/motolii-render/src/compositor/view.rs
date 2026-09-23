@@ -289,17 +289,14 @@ impl Compositor {
             encoder, canvas.clone(), true, true, passes, &others, None, [width, height], 0, [width, height], Some([view, width, height]),
         )?;
         if !linear {
-            current = self.convert_image_encoding(encoder, &current.texture, true, true, premultiplied);
+            current = self.convert_image_encoding(encoder, &current, true, true, premultiplied);
         }
         // The effects' result replaces the canvas (compose 1 = copy).
         const COPY: u32 = 1;
         let out = self.view_canvas(window);
-        let canvas_view = canvas.texture.create_view(&Default::default());
-        let result_view = current.default_view.clone();
-        let out_view = out.texture.create_view(&Default::default());
         {
             let Self { ctx, blend_vism, .. } = self;
-            blend_vism.get(ctx).record_over(ctx, encoder, &[&canvas_view, &result_view], &out_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
+            blend_vism.get(ctx).record_over(ctx, encoder, &[&canvas, &current], &out.default_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
         }
         Ok(out)
     }
@@ -370,11 +367,8 @@ impl Compositor {
         encoder: &mut wgpu::CommandEncoder,
     ) -> re_renderer::GpuTexture {
         let out = self.view_canvas(window);
-        let below_view = below.texture.create_view(&Default::default());
-        let above_view = above.texture.create_view(&Default::default());
-        let out_view = out.texture.create_view(&Default::default());
         let Self { ctx, blend_vism, .. } = self;
-        blend_vism.get(ctx).record_over(ctx, encoder, &[&below_view, &above_view], &out_view, &[("mode".to_owned(), mode as f32)], window.size_f32());
+        blend_vism.get(ctx).record_over(ctx, encoder, &[below, above], &out.default_view, &[("mode".to_owned(), mode as f32)], window.size_f32());
         out
     }
 }

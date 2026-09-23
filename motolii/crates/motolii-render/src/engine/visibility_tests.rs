@@ -117,7 +117,7 @@ fn capture_visibility_diagnosis() {
                 .reflection_diagnostic
                 .take()
                 .expect("capture metadata")
-                .save(&out, &name);
+                .save(&engine.compositor.ctx, &out, &name);
             if ball_input.is_none() {
                 ball_input = metadata["inputs"]
                     .as_array()

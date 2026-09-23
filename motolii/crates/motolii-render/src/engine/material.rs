@@ -29,9 +29,9 @@ fn image_layer(texture: GpuTexture2D, size: [f32; 2]) -> Layer {
 impl Compositor {
     fn normalized_material(&mut self, texture: &GpuTexture2D) -> Result<GpuTexture2D, CompositorError> {
         if texture.format().is_srgb() { return Ok(texture.clone()); }
-        let source = self.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| CompositorError::Effect(e.to_string()))?.texture.clone();
+        let source = self.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| CompositorError::Effect(e.to_string()))?;
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("material normalization") });
-        let srgb = source.format().is_srgb();
+        let srgb = source.texture.format().is_srgb();
         let out = self.convert_image_encoding(&mut encoder, &source, true, !srgb, srgb);
         self.ctx.queue_commands([encoder.finish()]);
         self.import_premultiplied(&out)

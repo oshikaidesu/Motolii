@@ -97,8 +97,6 @@ impl Compositor {
             "motolii-comp-matte-source",
         )?;
 
-        let layer_view = layer_canvas.default_view.clone();
-        let matte_view = matte_canvas.default_view.clone();
         let window = Window::output(comp);
         let out_texture = self.picture_texture(window.width, window.height);
         let out_view = out_texture.default_view.clone();
@@ -117,7 +115,7 @@ impl Compositor {
         matte_vism.get(ctx).record_over(
             ctx,
             &mut encoder,
-            &[&layer_view, &matte_view],
+            &[&layer_canvas, &matte_canvas],
             &out_view,
             &[("mode".to_owned(), matte::matte_mode_index(mode) as f32)],
             window.size_f32(),

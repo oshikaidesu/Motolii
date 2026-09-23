@@ -3,19 +3,6 @@ use re_renderer::RenderContext;
 
 use crate::render::compositor::*;
 
-#[cfg(test)]
-#[cfg(test)]
-pub(crate) fn wait_for_gpu(device: &wgpu::Device, stage: &str) -> Result<(), CompositorError> {
-    let test_host = cfg!(test) || std::env::var("MOTOLII_GPU_TEST").as_deref() == Ok("1");
-    let timeout = test_host.then_some(std::time::Duration::from_secs(30));
-    if test_host { eprintln!("MOTOLII_GPU_WAIT stage={stage} submission=latest timeout=30s"); }
-    let result = device.poll(wgpu::PollType::Wait { submission_index: None, timeout })
-        .map(|_| ())
-        .map_err(|error| CompositorError::Draw(format!("GPU wait stage={stage} submission=latest: {error}")));
-    if test_host { if let Err(error) = &result { panic!("{error}"); } }
-    result
-}
-
 impl Compositor {
     pub fn headless() -> Result<Self, CompositorError> {
         let gpu = headless::HeadlessGpu::new()?;

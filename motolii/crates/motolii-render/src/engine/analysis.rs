@@ -73,7 +73,7 @@ impl Engine {
             let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-linear-picture-encode"),
             });
-            let converted = self.compositor.convert_image_encoding(&mut encoder, &raw.texture, true, !linear, linear);
+            let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !linear, linear);
             self.compositor.ctx.queue_commands([encoder.finish()]);
             converted
         };
@@ -140,7 +140,7 @@ impl Engine {
     /// Offline routes only: ends the frame and waits until `id` has arrived.
     pub(super) fn wait_for_readback(&mut self, id: re_renderer::GpuReadbackIdentifier) -> Result<crate::render::compositor::readback::Pixels, EngineError> {
         self.compositor.next_frame();
-        self.compositor.ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|error| EngineError::Store(format!("GPU wait: {error}")))?;
+        self.compositor.wait_offline().map_err(|error| EngineError::Store(error.to_string()))?;
         crate::render::compositor::readback::take_texture(&self.compositor.ctx, id).ok_or_else(|| EngineError::Store("a readback was waited for and did not arrive".into()))
     }
 
@@ -370,7 +370,7 @@ impl Engine {
             );
             let converted = engine.compositor.convert_image_encoding(
                 &mut encoder,
-                &texture.texture,
+                &texture,
                 true,
                 !texture.texture.format().is_srgb(),
                 true,

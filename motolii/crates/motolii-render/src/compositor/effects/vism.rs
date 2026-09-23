@@ -291,7 +291,7 @@ impl VismProgram {
         &self,
         ctx: &RenderContext,
         encoder: &mut wgpu::CommandEncoder,
-        sources: &[&wgpu::TextureView],
+        sources: &[&re_renderer::GpuTexture],
         dst_view: &wgpu::TextureView,
         params: &[(String, f32)],
         render_size: [f32; 2],
@@ -300,7 +300,7 @@ impl VismProgram {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame) {
+    pub(crate) fn record_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame) {
         self.record_feedback_in_frame(ctx, encoder, sources, dst_view, params, frame, None)
     }
 
@@ -308,9 +308,7 @@ impl VismProgram {
     /// 前のフレーム(`prev`)を読み、書く先は今のフレーム(`next`)。後の pass は `next` を読む。
     /// 状態が無い(鍵が刻まれていない)persistent は、毎フレーム透明を初期条件にする。
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_feedback_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame, feedback: Option<(&mut super::FeedbackState, super::FeedbackStep)>) {
-        let device = &ctx.device;
-        let queue = &ctx.queue;
+    pub(crate) fn record_feedback_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame, feedback: Option<(&mut super::FeedbackState, super::FeedbackStep)>) {
         let extent = frame.pixels;
         let render_size = frame.size;
 
@@ -327,17 +325,15 @@ impl VismProgram {
             });
             drop(pass);
         };
-        // (texture, view, 前のフレームの view)
-        let mut targets: Vec<(re_renderer::GpuTexture, wgpu::TextureView, Option<wgpu::TextureView>)> = Vec::new();
+        // (今のフレーム, 前のフレーム)
+        let mut targets: Vec<(re_renderer::GpuTexture, Option<re_renderer::GpuTexture>)> = Vec::new();
         for name in &slots {
             let format = target_format(&self.manifest, name);
             let declaration = self.manifest.passes.iter().find(|p| p.target.as_deref() == Some(name));
             let width = declaration.and_then(|p| p.width).map_or(extent[0], |v| v.resolve(extent[0]));
             let height = declaration.and_then(|p| p.height).map_or(extent[1], |v| v.resolve(extent[1]));
             if !persistent.contains(name) {
-                let texture = super::pass_texture(ctx, width, height, format);
-                let view = texture.default_view.clone();
-                targets.push((texture, view, None));
+                targets.push((super::pass_texture(ctx, width, height, format), None));
                 continue;
             }
             match state.as_deref_mut() {
@@ -356,46 +352,32 @@ impl VismProgram {
                         super::FeedbackStep::Restart => clear(encoder, &target.prev.default_view),
                         super::FeedbackStep::Reuse => {}
                     }
-                    let view = target.next.default_view.clone();
-                    let prev_view = target.prev.default_view.clone();
-                    targets.push((target.next.clone(), view, Some(prev_view)));
+                    targets.push((target.next.clone(), Some(target.prev.clone())));
                 }
                 None => {
                     // 持ち主が無い: 前のフレームは透明(借り物を空にして読ませる)。
                     let prev = super::pass_texture(ctx, width, height, format);
-                    let prev_view = prev.default_view.clone();
-                    clear(encoder, &prev_view);
-                    let texture = super::pass_texture(ctx, width, height, format);
-                    let view = texture.default_view.clone();
-                    targets.push((texture, view, Some(prev_view)));
+                    clear(encoder, &prev.default_view);
+                    targets.push((super::pass_texture(ctx, width, height, format), Some(prev)));
                 }
             }
         }
         // 各 slot を書く pass の番(persistent の読み分けに使う)。
         let writer_of: Vec<Option<usize>> = slots.iter().map(|name| self.manifest.passes.iter().position(|p| p.target.as_deref() == Some(name))).collect();
 
-        let bind_group_layouts = ctx.gpu_resources.bind_group_layouts.resources();
-        let texture_layout = bind_group_layouts
-            .get(self.texture_layout)
-            .expect("vism texture bind group layout");
-        let params_layout = bind_group_layouts
-            .get(self.params_layout)
-            .expect("vism params bind group layout");
         let render_pipelines = ctx.gpu_resources.render_pipelines.resources();
-        let samplers = ctx.gpu_resources.samplers.resources();
-        let sampler = samplers.get(self.sampler).expect("vism sampler");
 
         // 読める image = 入力 + 中間ターゲット。並びは宣言順で固定。
-        let mut views: Vec<&wgpu::TextureView> = Vec::new();
+        let mut images: Vec<&re_renderer::GpuTexture> = Vec::new();
         for order_index in 0..self.image_order.len() {
-            let view = sources
+            let image = sources
                 .get(order_index)
                 .or_else(|| sources.last())
                 .expect("image 入力を宣言した Vism には最低1枚要る");
-            views.push(view);
+            images.push(image);
         }
-        for (_, view, _) in &targets {
-            views.push(view);
+        for (texture, _) in &targets {
+            images.push(texture);
         }
 
         // **同じパスの中で、書き込み先を読める形で束ねてはいけない**(WebGPU の使用衝突。
@@ -404,31 +386,24 @@ impl VismProgram {
         // persistent な slot は別: 書く pass とその前は前のフレーム、後の pass は今のフレームを読む。
         let inputs = self.image_order.len();
         let bind_for_pass = |pass_index: usize, writing: Option<usize>| {
-            let mut entries: Vec<wgpu::BindGroupEntry> = Vec::with_capacity(views.len() * 2);
-            for (order_index, view) in views.iter().enumerate() {
+            let mut entries = re_renderer::external::smallvec::SmallVec::with_capacity(images.len() * 2);
+            for (order_index, image) in images.iter().enumerate() {
                 let slot = order_index.checked_sub(inputs);
-                let prev = slot.and_then(|s| targets[s].2.as_ref());
+                let prev = slot.and_then(|s| targets[s].1.as_ref());
                 let bound = match (prev, slot.and_then(|s| writer_of[s])) {
                     (Some(prev), Some(writer)) if pass_index <= writer => prev,
                     _ => match writing {
-                        Some(w) if w == order_index => views[0],
-                        _ => view,
+                        Some(w) if w == order_index => images[0],
+                        _ => image,
                     },
                 };
-                let tex_binding = image_texture_binding(order_index);
-                entries.push(wgpu::BindGroupEntry {
-                    binding: tex_binding,
-                    resource: wgpu::BindingResource::TextureView(bound),
-                });
-                entries.push(wgpu::BindGroupEntry {
-                    binding: tex_binding + 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                });
+                entries.push(re_renderer::BindGroupEntry::DefaultTextureView(bound.handle));
+                entries.push(re_renderer::BindGroupEntry::Sampler(self.sampler));
             }
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("vism-texture-bind"),
-                layout: texture_layout,
-                entries: &entries,
+            ctx.gpu_resources.bind_groups.alloc(&ctx.device, &ctx.gpu_resources, &re_renderer::BindGroupDesc {
+                label: "vism-texture-bind".into(),
+                entries,
+                layout: self.texture_layout,
             })
         };
 
@@ -449,7 +424,7 @@ impl VismProgram {
                 .and_then(|name| slots.iter().position(|slot| *slot == name))
                 .map(|slot| self.image_order.len() + slot);
             let target_view = match writing {
-                Some(slot) => views[slot],
+                Some(slot) => &images[slot].default_view,
                 None => dst_view,
             };
             let texture_bind = bind_for_pass(pass_index, writing);

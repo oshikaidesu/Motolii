@@ -47,17 +47,17 @@ type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<LayerSpill>);
 impl Compositor {
     /// 色の規約を写す。出口は乗算済み線形(`to_linear`)か乗算済み sRGB。入口の素性は
     /// `source_encoded`(sRGB 符号化か)と `source_premultiplied` で言う。
-    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, to_linear: bool, source_encoded: bool, source_premultiplied: bool) -> re_renderer::GpuTexture {
+    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &re_renderer::GpuTexture, to_linear: bool, source_encoded: bool, source_premultiplied: bool) -> re_renderer::GpuTexture {
         const ID: &str = "motolii.material_encoding";
         if !self.effect_programs.contains_key(ID) {
             let definition = self.catalog.definitions.iter().find(|d| d.plugin_id() == ID).expect("material encoding shader");
             self.effect_programs.insert(ID.into(), effects::EffectProgram::compile_for(&self.ctx, definition, wgpu::TextureFormat::Rgba16Float));
         }
-        let out = effects::pass_texture(&self.ctx, source.width(), source.height(), wgpu::TextureFormat::Rgba16Float);
+        let out = effects::pass_texture(&self.ctx, source.texture.width(), source.texture.height(), wgpu::TextureFormat::Rgba16Float);
         let flag = |b: bool| if b { 1.0 } else { 0.0 };
-        self.effect_programs[ID].record(&self.ctx, encoder, &[&source.create_view(&Default::default())], &out.default_view,
+        self.effect_programs[ID].record(&self.ctx, encoder, &[source], &out.default_view,
             &[("to_linear".into(), flag(to_linear)), ("source_encoded".into(), flag(source_encoded)), ("source_premultiplied".into(), flag(source_premultiplied))],
-            [source.width() as f32,source.height() as f32]);
+            [source.texture.width() as f32,source.texture.height() as f32]);
         out
     }
 
@@ -180,7 +180,7 @@ impl Compositor {
             current_premultiplied = next_premultiplied;
             // 置く時は乗算済み線形(rerun の AlreadyPremultiplied)。列の出口が乗算済み sRGB ならここで戻す。
             if !current_linear {
-                current = self.convert_image_encoding(encoder, &current.texture, true, true, current_premultiplied);
+                current = self.convert_image_encoding(encoder, &current, true, true, current_premultiplied);
                 current_linear = true;
                 current_premultiplied = true;
             }
@@ -192,8 +192,8 @@ impl Compositor {
             if let Some(mode) = spill_mode {
                 let coverage = self.padded_copy(encoder, &src.texture, [width, height], padding);
                 let format = current.texture.format();
-                let inside = self.matte_by_coverage(encoder, &current.texture, &coverage.texture, [padded_width, padded_height], format, 0.0)?;
-                let outside = self.matte_by_coverage(encoder, &current.texture, &coverage.texture, [padded_width, padded_height], format, 1.0)?;
+                let inside = self.matte_by_coverage(encoder, &current, &coverage, [padded_width, padded_height], format, 0.0)?;
+                let outside = self.matte_by_coverage(encoder, &current, &coverage, [padded_width, padded_height], format, 1.0)?;
                 current = inside;
                 spill = Some((LayerContent::LinearTexture(self.import_premultiplied(&outside)?), mode));
             }
@@ -218,8 +218,8 @@ impl Compositor {
     fn confine_to_coverage(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
-        generated: &wgpu::Texture,
-        coverage: &wgpu::Texture,
+        generated: &re_renderer::GpuTexture,
+        coverage: &re_renderer::GpuTexture,
         size: [u32; 2],
         format: wgpu::TextureFormat,
     ) -> Result<re_renderer::GpuTexture, CompositorError> {
@@ -230,8 +230,8 @@ impl Compositor {
     fn matte_by_coverage(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
-        source: &wgpu::Texture,
-        coverage: &wgpu::Texture,
+        source: &re_renderer::GpuTexture,
+        coverage: &re_renderer::GpuTexture,
         [width, height]: [u32; 2],
         format: wgpu::TextureFormat,
         mode: f32,
@@ -252,7 +252,7 @@ impl Compositor {
         program.record_over(
             &self.ctx,
             encoder,
-            &[&source.create_view(&Default::default()), &coverage.create_view(&Default::default())],
+            &[source, coverage],
             &confined.default_view,
             &[("mode".to_owned(), mode)],
             [width as f32, height as f32],
@@ -289,7 +289,7 @@ impl Compositor {
             // 縁で over が成り立たず沈む。素材(非乗算 sRGB)は最初の効果の前で 1 度だけ写す。
             let _ = is_warp;
             if !current_linear || !current_premultiplied {
-                current = self.convert_image_encoding(encoder, &current.texture, true, !current_linear, current_premultiplied);
+                current = self.convert_image_encoding(encoder, &current, true, !current_linear, current_premultiplied);
             }
             current_linear = true;
             current_premultiplied = true;
@@ -299,17 +299,15 @@ impl Compositor {
             for t in others.get(index).map(|row| row.as_slice()).unwrap_or(&[]) {
                 let linear = t.texture.format().is_srgb() || matches!(t.texture.format(), wgpu::TextureFormat::Rgba16Float | wgpu::TextureFormat::Rgba32Float);
                 if linear { other_textures.push(t.clone()); continue; }
-                other_textures.push(self.convert_image_encoding(encoder, &t.texture, true, true, false));
+                other_textures.push(self.convert_image_encoding(encoder, t, true, true, false));
             }
             let program = &self.effect_programs[&pass.plugin_id];
             let format = pass
                 .intermediate_format()
                 .unwrap_or_else(|| current.texture.format());
             let destination = effects::pass_texture(&self.ctx, padded_width, padded_height, format);
-            let source_view = (program.image_input_count() > 0)
-                .then(|| current.default_view.clone());
-            let other_views: Vec<wgpu::TextureView> = other_textures.iter().map(|t| t.default_view.clone()).collect();
-            let sources: Vec<_> = source_view.iter().chain(other_views.iter()).collect();
+            let source = (program.image_input_count() > 0).then_some(&current);
+            let sources: Vec<_> = source.into_iter().chain(other_textures.iter()).collect();
             let destination_view = destination.default_view.clone();
             // feedback: 状態の持ち主は host。frame の並びから今フレームの扱いを決める。
             let frame_index = self.frame_index();
@@ -357,7 +355,7 @@ impl Compositor {
                 }
             }
             let destination = if program.image_input_count() == 0 {
-                self.confine_to_coverage(encoder, &destination.texture, &current.texture, [padded_width, padded_height], format)?
+                self.confine_to_coverage(encoder, &destination, &current, [padded_width, padded_height], format)?
             } else {
                 destination
             };

@@ -155,7 +155,7 @@ impl Engine {
         if bytes == 0 { return Vec::new(); }
         let Ok(id) = crate::render::compositor::readback::ask_buffer(&self.compositor.ctx, world.state(), bytes) else { return Vec::new() };
         self.compositor.next_frame();
-        if self.compositor.ctx.device.poll(wgpu::PollType::wait_indefinitely()).is_err() { return Vec::new(); }
+        if self.compositor.wait_offline().is_err() { return Vec::new(); }
         crate::render::compositor::readback::take_buffer(&self.compositor.ctx, id).map(|data| offsets_from_bytes(&data)).unwrap_or_default()
     }
 
@@ -343,29 +343,27 @@ impl Engine {
             let name = d.manifest.reach.as_ref()?;
             d.manifest.param_inputs().position(|p| &p.name == name).and_then(|i| batch.params.get(i).copied())
         }).fold(0.0f32, f32::max);
-        let world = state.world.get_or_insert_with(|| BlockWorld::new(&ctx.device));
-        world.begin_from(&ctx.device, &ctx.queue, &state.objects, reach, &seed);
+        let world = state.world.get_or_insert_with(|| BlockWorld::new(ctx));
+        world.begin_from(ctx, &state.objects, reach, &seed);
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-blocks") });
         let stages = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
         for stage in 0..stages {
             for batch in state.batches.iter().filter(|b| b.stage == stage) {
                 let Some(definition) = self.compositor.catalog.definitions.iter().find(|d| d.plugin_id() == batch.plugin) else { continue };
                 let (source, program) = state.programs.entry(batch.plugin.clone())
-                    .or_insert_with(|| (definition.vertex_text.clone(), BlockProgram::new(&ctx.device, &batch.plugin, &definition.vertex_text, definition.manifest.rounds)));
+                    .or_insert_with(|| (definition.vertex_text.clone(), BlockProgram::new(ctx, &batch.plugin, &definition.vertex_text, definition.manifest.rounds)));
                 if *source != definition.vertex_text {
                     *source = definition.vertex_text.clone();
-                    *program = BlockProgram::new(&ctx.device, &batch.plugin, source, definition.manifest.rounds);
-                    // 前の道の bind group は誰も呼ばない。世界に溜めない。
-                    world.forget_all();
+                    *program = BlockProgram::new(ctx, &batch.plugin, source, definition.manifest.rounds);
                 }
-                program.record_from(&ctx.device, &ctx.queue, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params, batch.source);
+                program.record_from(ctx, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params, batch.source);
             }
         }
         let index_of = |id: LayerId| state.object_layers.iter().position(|l| *l == id).map(|k| k as u32);
         let pairs: Vec<(u32, u32)> = state.object_layers.iter().enumerate()
             .filter_map(|(k, id)| state.follows.get(id).and_then(|target| index_of(*target)).map(|target| (k as u32, target)))
             .collect();
-        state.follow_pass.get_or_insert_with(|| FollowPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &pairs);
+        state.follow_pass.get_or_insert_with(|| FollowPass::new(ctx)).record(ctx, &mut encoder, world, &pairs);
         let links: Vec<(u32, u32)> = state.connectors.iter().map(|(_, a, b)| (*a, *b)).collect();
         // Four vec4 per entry (motion.wgsl); a rope takes two entries.
         let motion = ctx.gpu_resources.buffers.alloc(&ctx.device, &re_renderer::BufferDesc {
@@ -374,10 +372,10 @@ impl Engine {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-        state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, &motion);
+        state.world_pass.get_or_insert_with(|| WorldPass::new(ctx)).record(ctx, &mut encoder, world, &state.bases, &links, &motion);
         let frame = (t.as_seconds_f64() * state.fps).round() as i64;
-        state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
-            .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, &motion, frame, state.fps as f32);
+        state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(ctx))
+            .record(ctx, &mut encoder, world, &state.ropes, &motion, frame, state.fps as f32);
         // Recorded, not submitted: it goes out with the frame's other work, ahead of every draw.
         self.compositor.ctx.queue_commands([encoder.finish()]);
         self.compositor.motion = Some(motion);

@@ -6,10 +6,6 @@ use re_renderer::{RenderContext, Rgba};
 
 mod clip;
 mod device;
-#[cfg(test)]
-#[cfg(test)]
-#[cfg(test)]
-pub(crate) use device::wait_for_gpu;
 pub(crate) mod effects;
 mod environment;
 pub(crate) mod extrude;

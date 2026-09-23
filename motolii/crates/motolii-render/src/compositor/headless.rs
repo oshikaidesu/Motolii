@@ -83,3 +83,20 @@ impl HeadlessGpu {
         })
     }
 }
+
+impl super::Compositor {
+    /// Offline routes (an export, a freeze job) and tests only — the headless embedder's wait, as a
+    /// test harness around re_renderer waits: everything submitted so far is done on the GPU, so
+    /// what was asked of the readback belt has arrived. The drawing route never waits: what it
+    /// asks for reaches a later frame.
+    /// A test host (tests, `MOTOLII_GPU_TEST=1`) gives up after 30 s and says so, instead of hanging.
+    pub(crate) fn wait_offline(&self) -> Result<(), super::CompositorError> {
+        let test_host = cfg!(test) || std::env::var("MOTOLII_GPU_TEST").as_deref() == Ok("1");
+        let timeout = test_host.then_some(std::time::Duration::from_secs(30));
+        let result = self.ctx.device.poll(wgpu::PollType::Wait { submission_index: None, timeout })
+            .map(|_| ())
+            .map_err(|error| super::CompositorError::Draw(format!("GPU wait: {error}")));
+        if test_host { if let Err(error) = &result { panic!("{error}"); } }
+        result
+    }
+}

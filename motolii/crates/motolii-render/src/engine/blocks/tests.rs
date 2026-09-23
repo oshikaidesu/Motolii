@@ -369,14 +369,14 @@ fn the_push_apart_block_pushes_like_the_margin_law() {
         let (lo, hi) = (m.transform_point2(glam::vec2(b[0], b[1])), m.transform_point2(glam::vec2(b[2], b[3])));
         BlockItem { lo: lo.to_array(), hi: hi.to_array(), room_lo: [0.0; 2], room_size: [W as f32, H as f32], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }
     }).collect();
-    let engine = Engine::new().unwrap();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-    let program = program_for(device, "push_apart");
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut engine = Engine::new().unwrap();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
+    let program = program_for(ctx, "push_apart");
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    program.record(device, queue, &mut encoder, &mut world, 0.0, &[0, 1, 2, 3, 4, 5], &[5.0]);
-    let gpu = read_state(device, queue, &world, encoder);
+    program.record(ctx, &mut encoder, &mut world, 0.0, &[0, 1, 2, 3, 4, 5], &[5.0]);
+    let gpu = read_state(&mut engine.compositor, &world, encoder);
     let mut moved = 0;
     for i in 0..6 {
         let cpu = frame.nudges.get(&LayerId(i as u64 + 1)).copied().unwrap_or([0.0, 0.0]);
@@ -391,10 +391,10 @@ fn the_push_apart_block_pushes_like_the_margin_law() {
 #[test]
 fn blocks_chain_in_effect_order() {
     use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
-    let engine = Engine::new().unwrap();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-    let push = program_for(device, "push_apart");
-    let bounce = program_for(device, "bounce");
+    let mut engine = Engine::new().unwrap();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
+    let push = program_for(ctx, "push_apart");
+    let bounce = program_for(ctx, "bounce");
     let room = [200.0f32, 120.0];
     let mut items = Vec::new();
     for i in 0..40 {
@@ -402,13 +402,13 @@ fn blocks_chain_in_effect_order() {
         let y = 20.0 + (i as f32 * 23.0) % 110.0;
         items.push(BlockItem { lo: [x, y], hi: [x + 12.0, y + 12.0], room_lo: [0.0; 2], room_size: room, radius: 0.0, group: 7, margin: 0.0, weight: 1.0, ..Default::default() });
     }
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let members: Vec<u32> = (0..40).collect();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    push.record(device, queue, &mut encoder, &mut world, 0.0, &members, &[2.0]);
-    bounce.record(device, queue, &mut encoder, &mut world, 0.0, &members, &[1.0]);
-    let state = read_state(device, queue, &world, encoder);
+    push.record(ctx, &mut encoder, &mut world, 0.0, &members, &[2.0]);
+    bounce.record(ctx, &mut encoder, &mut world, 0.0, &members, &[1.0]);
+    let state = read_state(&mut engine.compositor, &world, encoder);
     for (i, (item, o)) in items.iter().zip(&state).enumerate() {
         let (lo, hi) = ([item.lo[0] + o.translate[0], item.lo[1] + o.translate[1]], [item.hi[0] + o.translate[0], item.hi[1] + o.translate[1]]);
         assert!(lo[0] >= -0.01 && lo[1] >= -0.01 && hi[0] <= room[0] + 0.01 && hi[1] <= room[1] + 0.01, "object {i} ends inside the room: {lo:?} {hi:?}");
@@ -421,17 +421,17 @@ fn blocks_chain_in_effect_order() {
 #[test]
 fn each_block_reads_its_own_params() {
     use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
-    let engine = Engine::new().unwrap();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-    let bounce = program_for(device, "bounce");
-    let push = program_for(device, "push_apart");
+    let mut engine = Engine::new().unwrap();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
+    let bounce = program_for(ctx, "bounce");
+    let push = program_for(ctx, "push_apart");
     let items = [BlockItem { lo: [300.0, 20.0], hi: [310.0, 30.0], room_lo: [0.0; 2], room_size: [200.0, 100.0], radius: 0.0, group: 1, margin: 0.0, weight: 1.0, ..Default::default() }];
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    bounce.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.0]);
-    push.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[9.0]);
-    let state = read_state(device, queue, &world, encoder);
+    bounce.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[0.0]);
+    push.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[9.0]);
+    let state = read_state(&mut engine.compositor, &world, encoder);
     assert_eq!(state[0].translate, [0.0, 0.0], "Bounce at strength 0 does not fold, whatever the next block's margin is");
 }
 
@@ -454,7 +454,7 @@ fn dump_blocks() {
     for b in &engine.blocks.batches { eprintln!("batch stage {} {} {:?} {:?}", b.stage, b.plugin, b.params, b.members); }
     let Some(world) = engine.blocks.world.as_ref() else { return };
     let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    for (k, o) in read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder).iter().enumerate() { eprintln!("state {k}: {o:?}"); }
+    for (k, o) in read_state(&mut engine.compositor, world, encoder).iter().enumerate() { eprintln!("state {k}: {o:?}"); }
 }
 
 /// 付いて置く札は、相手がブロックで動いた分だけ一緒に動く(GPU の中で、読み戻さずに)。
@@ -477,7 +477,7 @@ fn an_anchored_label_follows_what_a_block_moved() {
     let layers = engine.blocks.object_layers.clone();
     let world = engine.blocks.world.as_ref().unwrap();
     let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    let state = read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder);
+    let state = read_state(&mut engine.compositor, world, encoder);
     let at = |id: u64| state[layers.iter().position(|l| l.0 == id).expect("an object")].translate;
     assert!(at(2) != [0.0, 0.0], "the square was folded by Bounce");
     assert_eq!(at(3), at(2), "its label moved with it");
@@ -524,7 +524,7 @@ fn an_effector_takes_its_centre_from_the_hub_the_tile_is_anchored_to() {
         assert_eq!(engine.blocks.objects[h].anchor_slot, u32::MAX, "the hub names nobody");
         let world = engine.blocks.world.as_ref().unwrap();
         let encoder = engine.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let state = read_state(&engine.compositor.ctx.device, &engine.compositor.ctx.queue, world, encoder);
+        let state = read_state(&mut engine.compositor, world, encoder);
         (engine.blocks.objects[h].lo, state[k].translate)
     };
     let (hub_far, tile_far) = at(0);
@@ -538,15 +538,15 @@ fn an_effector_takes_its_centre_from_the_hub_the_tile_is_anchored_to() {
 #[test]
 fn the_wave_block_travels_along_things_in_order() {
     use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
-    let engine = Engine::new().unwrap();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-    let wave = program_for(device, "wave");
+    let mut engine = Engine::new().unwrap();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
+    let wave = program_for(ctx, "wave");
     let items: Vec<BlockItem> = (0..8).map(|i| BlockItem { lo: [i as f32 * 20.0, 0.0], hi: [i as f32 * 20.0 + 10.0, 10.0], weight: 1.0, ..Default::default() }).collect();
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    wave.record(device, queue, &mut encoder, &mut world, 0.125, &(0..8).collect::<Vec<u32>>(), &[10.0, 2.0, 4.0]);
-    let y: Vec<f32> = read_state(device, queue, &world, encoder).iter().map(|o| o.translate[1]).collect();
+    wave.record(ctx, &mut encoder, &mut world, 0.125, &(0..8).collect::<Vec<u32>>(), &[10.0, 2.0, 4.0]);
+    let y: Vec<f32> = read_state(&mut engine.compositor, &world, encoder).iter().map(|o| o.translate[1]).collect();
     let expect = |k: f32| 10.0 * (std::f32::consts::TAU * (2.0 * 0.125 - k / 4.0)).sin();
     for (k, v) in y.iter().enumerate() {
         assert!((v - expect(k as f32)).abs() < 1e-3, "object {k}: {v} vs {}", expect(k as f32));
@@ -592,14 +592,14 @@ fn push_apart_over_neighbours_matches_all_pairs_at_scale() {
             for a in 0..2 { lo[k][a] += step[k][a]; hi[k][a] += step[k][a]; }
         }
     }
-    let engine = Engine::new().unwrap();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
-    let push = program_for(device, "push_apart");
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut engine = Engine::new().unwrap();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
+    let push = program_for(ctx, "push_apart");
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    push.record(device, queue, &mut encoder, &mut world, 0.0, &(0..items.len() as u32).collect::<Vec<u32>>(), &[margin]);
-    let gpu = read_state(device, queue, &world, encoder);
+    push.record(ctx, &mut encoder, &mut world, 0.0, &(0..items.len() as u32).collect::<Vec<u32>>(), &[margin]);
+    let gpu = read_state(&mut engine.compositor, &world, encoder);
     let mut moved = 0;
     assert_eq!(push_reach(), Some("margin".to_owned()), "Push Apart declares its margin as its reach");
     for k in 0..items.len() {
