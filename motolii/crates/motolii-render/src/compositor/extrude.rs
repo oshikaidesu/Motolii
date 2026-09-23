@@ -190,6 +190,8 @@ impl Compositor {
             vertex_texcoords: g.texcoords,
             materials: smallvec::smallvec![Material {
                 albedo_is_premultiplied: true,
+                // A solid is a volume: it occludes by depth like any geometry, unlike a painted plane.
+                albedo_is_opaque_picture: true,
                 field_anchor: false,
                 curves: None,
                 label: "layer picture".into(),
