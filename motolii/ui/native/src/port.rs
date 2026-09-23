@@ -356,7 +356,8 @@ impl EditorRuntime{
 mod playback_probe;
 
 /// 効果のホットリロードの一連: 見張りが起きる → reloadEffects で世代が進む → 壊しても前の物が残り理由が出る → 消せば理由が変わる。
-/// 本物の vism/ に file を置くので、他の試験と並べず単独で回す(cargo test -p motolii-ui --lib hot_reload -- --ignored)。
+/// 本物の vism/ に file を置き、棚と見張りは process に 1 つなので、互いにも並べず回す
+/// (cargo test -p motolii-ui --lib hot_reload -- --ignored --test-threads=1)。
 #[cfg(test)]
 mod hot_reload_probe;
 

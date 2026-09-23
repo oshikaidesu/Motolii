@@ -15,6 +15,8 @@ use super::GpuSceneValue;
 pub(in crate::engine) struct CachedContribution {
     scene: SceneLayerValue,
     clip_base: bool,
+    /// The shelf it was prepared with: a saved Vism changes what the same effects mean.
+    catalog: u64,
     work: LayerWork,
     prepared: Option<LayerWithPasses>,
 }
@@ -32,7 +34,7 @@ impl Engine {
         let (graph, bases) = crate::render_lowering::lower_scene_reusing(scene, &catalog, &mut |index, clip_base| {
             let current = &scene.layers[index];
             let hit = cache.get(&(current.layer, current.instance))
-                .filter(|cached| cached.clip_base == clip_base && same_but_placement(&cached.scene, current))?;
+                .filter(|cached| cached.clip_base == clip_base && cached.catalog == catalog.generation && same_but_placement(&cached.scene, current))?;
             let mut work = hit.work.clone();
             place(&mut work.placement, current);
             let mut prepared = hit.prepared.clone();
@@ -52,7 +54,7 @@ impl Engine {
                 None => {
                     self.prepared_contributions += 1;
                     let current = &scene.layers[index];
-                    let why = why_prepared(self.contributions.get(&(current.layer, current.instance)), current, bases[index]);
+                    let why = why_prepared(self.contributions.get(&(current.layer, current.instance)), current, bases[index], catalog.generation);
                     let started = std::time::Instant::now();
                     let layer = self.execute_layer(work, prep)?;
                     self.ledger.claim("prepare", format!("layer {}", current.layer.0), why, started.elapsed());
@@ -85,6 +87,7 @@ impl Engine {
                 next.insert(key, CachedContribution {
                     scene: current.clone(),
                     clip_base: bases[index],
+                    catalog: catalog.generation,
                     work: work.clone(),
                     prepared: layer.clone(),
                 });
@@ -96,7 +99,7 @@ impl Engine {
 }
 
 /// Why a contribution could not keep its previous preparation.
-fn why_prepared(previous: Option<&CachedContribution>, current: &SceneLayerValue, clip_base: bool) -> &'static str {
+fn why_prepared(previous: Option<&CachedContribution>, current: &SceneLayerValue, clip_base: bool, catalog: u64) -> &'static str {
     if !placement_independent(current) {
         return match &current.content {
             SceneContentValue::Media { .. } => "a video frame changes every frame",
@@ -109,6 +112,7 @@ fn why_prepared(previous: Option<&CachedContribution>, current: &SceneLayerValue
         };
     }
     let Some(previous) = previous else { return "new this frame" };
+    if previous.catalog != catalog { return "a Vism on the shelf was saved"; }
     let a = &previous.scene;
     let content = match (&a.content, &current.content) {
         (SceneContentValue::Shape(x), SceneContentValue::Shape(y)) => std::sync::Arc::ptr_eq(x, y),

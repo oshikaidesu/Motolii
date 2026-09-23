@@ -62,3 +62,61 @@ fn saving_a_vism_file_reaches_the_window() {
     rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
     assert!(errors(&mut rt).iter().any(|e| e.contains("zz_hot_probe") && e.contains("source removed")), "{:?}", errors(&mut rt));
 }
+
+/// A saved Vism reaches a layer that did not change: its program, and the Views it asks for, follow
+/// the file (no build, no restart). A broken manifest keeps the last good one until it is fixed.
+#[test]
+#[ignore]
+fn saving_a_vism_reaches_a_still_layer_and_its_views() {
+    assert!(crate::render::engine::catalog_reads_disk(), "焼き込み build: .cargo/config.toml の IS_IN_RERUN_WORKSPACE が無い");
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/motolii-render/vism");
+    let file = Probe(dir.join("zz_view_probe.wgsl"));
+    let vism = |views: &str, rgb: &str| format!(
+        "/*{{ \"ID\": \"probe.zz_view\", \"LABEL\": \"View Probe\", \"STAGE\": \"surface\"{views} }}*/\nfn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {{ return vec3f({rgb}) + view_sample(0u, vec2f(0.5), 0.0).rgb * 0.0; }}\n");
+    let one_view = r#", "VIEWS": [ { "FROM": "layer", "LOOK": [0, 0, -1] } ], "VIEW_SIZE": 32"#;
+    std::fs::write(&file.0, vism(one_view, "1.0, 0.0, 0.0")).unwrap();
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+    let woke = Arc::new(AtomicBool::new(false));
+    let flag = woke.clone();
+    let _watch = crate::render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release)).unwrap();
+    // A save, as the window sees it: the watcher wakes, the window asks the shelf again.
+    let save = |rt: &mut crate::EditorRuntime, text: String| {
+        a_moment();
+        std::fs::write(&file.0, text).unwrap();
+        assert!(await_wake(&woke), "the watcher did not wake");
+        rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+    };
+    rt.request(serde_json::json!({"op":"create","kind":"rectangle"})).unwrap();
+    rt.request(serde_json::json!({"op":"applyEffect","pluginId":"probe.zz_view"})).unwrap();
+    let mut draw = |rt: &mut crate::EditorRuntime| {
+        let before = rt.engine.surface_work().layer_views;
+        let pixels = rt.engine.render_frame(&rt.doc.view(), crate::render::doc::core::RationalTime::ZERO).unwrap();
+        assert!(rt.engine.layer_failures().is_empty(), "{:?}", rt.engine.layer_failures());
+        (pixels, rt.engine.surface_work().layer_views - before)
+    };
+    let (red, views) = draw(&mut rt);
+    assert_eq!(views, 1, "the Vism asked for one View");
+    assert_eq!(draw(&mut rt).0, red, "the same frame again");
+
+    // The WGSL changes, the layer does not: the picture follows the file.
+    save(&mut rt, vism(one_view, "0.0, 0.0, 1.0"));
+    let (blue, views) = draw(&mut rt);
+    assert_ne!(blue, red, "a saved WGSL reaches a still layer");
+    assert_eq!(views, 1);
+
+    // The manifest drops its View: the host draws none.
+    save(&mut rt, vism("", "0.0, 0.0, 1.0"));
+    assert_eq!(draw(&mut rt).1, 0, "no View asked, none drawn");
+
+    // A View without FROM is refused: the last good Vism stays, the reason is named; fixing it recovers.
+    save(&mut rt, vism(r#", "VIEWS": [ { "LOOK": [0, 0, -1] } ]"#, "0.0, 1.0, 0.0"));
+    let errors: Vec<String> = rt.status_response(None, None).unwrap()["catalogErrors"].as_array().unwrap().iter().map(|e| e.as_str().unwrap().to_owned()).collect();
+    assert!(errors.iter().any(|e| e.starts_with("zz_view_probe:") && e.contains("FROM")), "{errors:?}");
+    let (kept, views) = draw(&mut rt);
+    assert_eq!((kept, views), (blue.clone(), 0), "the last good Vism is kept");
+    save(&mut rt, vism(one_view, "0.0, 1.0, 0.0"));
+    let (green, views) = draw(&mut rt);
+    assert_ne!(green, blue, "fixed, it recovers");
+    assert_eq!(views, 1);
+}
