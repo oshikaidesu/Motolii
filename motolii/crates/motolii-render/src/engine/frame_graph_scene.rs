@@ -11,9 +11,6 @@ use crate::render::engine::{Engine, EngineError};
 pub(super) struct GpuSceneValue {
     pub layers: Vec<LayerWithPasses>,
     pub layer_ids: Vec<LayerId>,
-    /// For each output, the scene contribution it draws when it is that contribution alone
-    /// (no clip group, no matte): only those can take a new placement without being prepared again.
-    pub plain_sources: Vec<Option<usize>>,
 }
 
 
@@ -31,20 +28,12 @@ impl Engine {
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
         if physics_overlays.is_empty() {
-            if let Some(mut prepared) = self.moved_only(scene) {
-                self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
-                self.drawn_layers = prepared.layers.len();
-                return Ok(prepared);
-            }
             // Culling is execution planning only: semantic SceneValue remains
             // untouched and cacheable. The planner may omit only simple media
             // contributions that cannot feed analysis/matte/solver work.
             let planned = self.plan_frame_graph_scene(scene, solver, comp, projection_camera);
-            let scene_for_frame = scene;
             let scene = planned.as_ref().unwrap_or(scene);
-            let mut prepared = self.prepare_gpu_scene(scene, comp, projection_camera)?;
-            self.full_prepares += 1;
-            self.remember_prepared(scene_for_frame, planned.is_none(), &prepared);
+            let mut prepared = self.prepare_gpu_scene_incremental(scene, comp, projection_camera)?;
             self.prepare_frame_graph_blocks(scene, solver, comp, time, fps, &mut prepared)?;
             self.drawn_layers = prepared.layers.len();
             return Ok(prepared);
@@ -185,18 +174,21 @@ impl Engine {
         for work in &graph.layers {
             prepared.push(self.execute_layer(work, comp, projection_camera)?);
         }
+        self.compose_prepared(graph, &prepared, comp, projection_camera)
+    }
+
+    /// Clip groups and mattes over prepared contributions, in scene order.
+    fn compose_prepared(&mut self, graph: &RenderGraph, prepared: &[Option<LayerWithPasses>], comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
         let mut groups = std::collections::HashMap::new();
         let mut layers = Vec::with_capacity(graph.output.len());
         let mut layer_ids = Vec::with_capacity(graph.output.len());
-        let mut plain_sources = Vec::with_capacity(graph.output.len());
         for composed in &graph.output {
-            if let Some(layer) = self.realize_composed(graph, &prepared, composed, &mut groups, comp, projection_camera)? {
+            if let Some(layer) = self.realize_composed(graph, prepared, composed, &mut groups, comp, projection_camera)? {
                 layers.push(layer);
                 layer_ids.push(graph.layers[composed.base].id);
-                plain_sources.push((composed.atop.is_empty() && composed.mask.is_none()).then_some(composed.base));
             }
         }
-        Ok(GpuSceneValue { layers, layer_ids, plain_sources })
+        Ok(GpuSceneValue { layers, layer_ids })
     }
 
     /// How finely outlines are cut: one device pixel after projection. Vector
@@ -585,7 +577,7 @@ impl Engine {
 
 
 mod reuse;
-pub(super) use reuse::PreparedFrame;
+pub(super) use reuse::ContributionCache;
 
 #[cfg(test)]
 mod tests;

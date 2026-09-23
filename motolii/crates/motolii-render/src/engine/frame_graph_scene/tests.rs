@@ -184,10 +184,35 @@ fn a_frame_that_only_moves_things_is_not_prepared_again() {
     let at = |frame| crate::doc::core::RationalTime::try_from_frame(frame, Fps::try_new(30, 1).unwrap()).unwrap();
     let mut engine = Engine::new().unwrap();
     let first = engine.render_with_camera_override(&doc.view(), at(0), true, None).unwrap();
-    let prepared = engine.full_prepares;
+    let prepared = engine.prepared_contributions;
     let moved = engine.render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
-    assert_eq!(engine.full_prepares, prepared, "only the placement changed: nothing is lowered or prepared again");
+    assert_eq!(engine.prepared_contributions, prepared, "only the placement changed: nothing is lowered or prepared again");
     assert_ne!(first, moved, "and the picture still moves");
     let fresh = Engine::new().unwrap().render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
     assert_eq!(moved, fresh, "the reused frame is the frame a fresh engine prepares");
+}
+
+
+#[test]
+fn only_the_contribution_that_changed_is_prepared_again() {
+    use crate::doc::store::{EffectId, EffectInstance, Interp, KeyframeTrack, PropertyId, Value};
+    use crate::doc::eval::Keyframe;
+    let fps = Fps::try_new(30, 1).unwrap();
+    let at = |frame| crate::doc::core::RationalTime::try_from_frame(frame, fps).unwrap();
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps, duration_frames: 30, background: [0.0; 4] })).unwrap();
+    add_shape(&mut doc, 1, 0, Rgb { r: 0.0, g: 1.0, b: 0.0 });
+    let blurred = add_shape(&mut doc, 2, 1, Rgb { r: 1.0, g: 0.0, b: 0.0 });
+    doc.apply(Intent::SetEffects { layer: blurred, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] }).unwrap();
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe { t: at(0), value: Value::F64(1.0), interp: Interp::Linear, spatial: None });
+    track.insert(Keyframe { t: at(10), value: Value::F64(8.0), interp: Interp::Linear, spatial: None });
+    doc.apply(Intent::SetTrack { layer: blurred, property: PropertyId::effect_param(EffectId(0), "radius").unwrap(), track }).unwrap();
+    let mut engine = Engine::new().unwrap();
+    engine.render_with_camera_override(&doc.view(), at(0), true, None).unwrap();
+    let before = engine.prepared_contributions;
+    let frame = engine.render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
+    assert_eq!(engine.prepared_contributions - before, 1, "the still shape is reused; only the animated blur is prepared");
+    let fresh = Engine::new().unwrap().render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
+    assert_eq!(frame, fresh, "the mixed frame is the frame a fresh engine prepares");
 }

@@ -166,10 +166,10 @@ pub struct Engine {
     outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
-    /// The last prepared frame, reused when the next differs only in placement.
-    last_prepared: Option<frame_graph_scene::PreparedFrame>,
-    /// Frames that were lowered and prepared in full (a moved-only frame is not counted).
-    full_prepares: u64,
+    /// Each contribution's last preparation, reused while only its placement changes.
+    contributions: frame_graph_scene::ContributionCache,
+    /// Contributions lowered and prepared on the production path (reused ones are not counted).
+    prepared_contributions: u64,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
@@ -249,8 +249,8 @@ impl Engine {
             outline_layers: Vec::new(),
             outline_order: Vec::new(),
             drawn_layers: 0,
-            last_prepared: None,
-            full_prepares: 0,
+            contributions: Default::default(),
+            prepared_contributions: 0,
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
@@ -338,8 +338,8 @@ impl Engine {
             outline_layers: Vec::new(),
             outline_order: Vec::new(),
             drawn_layers: 0,
-            last_prepared: None,
-            full_prepares: 0,
+            contributions: Default::default(),
+            prepared_contributions: 0,
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),

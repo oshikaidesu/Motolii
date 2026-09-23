@@ -41,6 +41,26 @@ pub fn lower_scene_as_pictures(scene: &SceneValue, catalog: &CatalogSnapshot) ->
 /// `pictures`: every contribution needs pixels in material space (summed by an
 /// averaging plate, or read back by the host).
 fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, pictures: bool) -> Result<RenderGraph, RenderLoweringError> {
+    Ok(lower_reusing(scene, catalog, pictures, &mut |_, _| None)?.0)
+}
+
+/// [`lower_scene`] where `reuse(index, clip_base)` may hand back a contribution's work unchanged
+/// from an earlier frame; only the others are lowered. Also returns each contribution's
+/// `clip_base`, which depends on other contributions and is part of what a reuse must match.
+pub fn lower_scene_reusing(
+    scene: &SceneValue,
+    catalog: &CatalogSnapshot,
+    reuse: &mut dyn FnMut(usize, bool) -> Option<LayerWork>,
+) -> Result<(RenderGraph, Vec<bool>), RenderLoweringError> {
+    lower_reusing(scene, catalog, false, reuse)
+}
+
+fn lower_reusing(
+    scene: &SceneValue,
+    catalog: &CatalogSnapshot,
+    pictures: bool,
+    reuse: &mut dyn FnMut(usize, bool) -> Option<LayerWork>,
+) -> Result<(RenderGraph, Vec<bool>), RenderLoweringError> {
     let plan = plan_composite(scene);
     let clip_bases: std::collections::HashSet<usize> = plan.iter()
         .flat_map(|planned| {
@@ -55,10 +75,14 @@ fn lower(scene: &SceneValue, catalog: &CatalogSnapshot, pictures: bool) -> Resul
         .filter(|group| !group.clips.is_empty())
         .map(|group| group.base)
         .collect();
+    let bases: Vec<bool> = (0..scene.layers.len()).map(|index| clip_bases.contains(&index)).collect();
     let layers = scene.layers.iter().enumerate()
-        .map(|(index, layer)| lower_layer(layer, clip_bases.contains(&index), pictures, catalog))
+        .map(|(index, layer)| match reuse(index, bases[index]) {
+            Some(work) => Ok(work),
+            None => lower_layer(layer, bases[index], pictures, catalog),
+        })
         .collect::<Result<_, _>>()?;
-    Ok(RenderGraph { layers, output: plan.iter().map(composed).collect() })
+    Ok((RenderGraph { layers, output: plan.iter().map(composed).collect() }, bases))
 }
 
 fn composed(planned: &PlannedContribution) -> Composed {

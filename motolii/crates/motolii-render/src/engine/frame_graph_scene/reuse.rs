@@ -1,60 +1,92 @@
-//! A frame that differs from the previous one only in where things are placed reuses its
-//! prepared layers.
+//! Per-contribution preparation: a contribution that is unchanged but for where it is placed
+//! keeps its lowered work and prepared picture from the previous frame; only changed
+//! contributions are lowered and prepared again.
 
+use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
+use crate::doc::store::LayerId;
 use crate::frame_graph::{SceneContentValue, SceneLayerValue, SceneValue};
-use crate::render::engine::Engine;
+use crate::render::compositor::LayerWithPasses;
+use crate::render::engine::{Engine, EngineError};
+use crate::render_graph::LayerWork;
 
 use super::GpuSceneValue;
 
-/// The scene a prepared frame was built from, kept to recognise a frame that differs only in
-/// where things are placed.
-pub(in crate::engine) struct PreparedFrame {
-    scene: SceneValue,
-    prepared: GpuSceneValue,
+/// What a contribution was last prepared from, and what it produced.
+pub(in crate::engine) struct CachedContribution {
+    scene: SceneLayerValue,
+    clip_base: bool,
+    work: LayerWork,
+    prepared: Option<LayerWithPasses>,
 }
+
+pub(in crate::engine) type ContributionCache = std::collections::HashMap<(LayerId, u32), CachedContribution>;
 
 impl Engine {
-    /// The previous frame's prepared layers with this frame's placements, when nothing but
-    /// placement changed. No lowering, no preparation: the cost is one pass over the layers.
-    pub(super) fn moved_only(&mut self, scene: &SceneValue) -> Option<GpuSceneValue> {
-        let last = self.last_prepared.as_ref()?;
-        if last.scene.layers.len() != scene.layers.len()
-            || !last.scene.layers.iter().zip(&scene.layers).all(|(a, b)| same_but_placement(a, b))
-        {
-            return None;
-        }
-        let mut prepared = last.prepared.clone();
-        for (layer, source) in prepared.layers.iter_mut().zip(&prepared.plain_sources) {
-            let Some(index) = *source else { return None };
-            let placed = &scene.layers[index];
-            let placement = &mut layer.layer.placement;
-            placement.transform = placed.transform.affine;
-            placement.world_transform = Some(placed.transform.spatial);
-            placement.z = placed.transform.spatial.translation.z;
-            placement.opacity = placed.opacity;
-            placement.order = i32::from(placed.order);
-        }
-        self.last_prepared = Some(PreparedFrame { scene: scene.clone(), prepared: prepared.clone() });
-        Some(prepared)
-    }
+    /// The production frame: contributions unchanged since the last frame but for placement are
+    /// reused with their new placement; the rest are lowered and prepared.
+    pub(super) fn prepare_gpu_scene_incremental(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+        self.compositor.refresh_catalog_programs();
+        let catalog = self.compositor.catalog.clone();
+        let mut reused: Vec<Option<Option<LayerWithPasses>>> = vec![None; scene.layers.len()];
+        let cache = &self.contributions;
+        let (graph, bases) = crate::render_lowering::lower_scene_reusing(scene, &catalog, &mut |index, clip_base| {
+            let current = &scene.layers[index];
+            let hit = cache.get(&(current.layer, current.instance))
+                .filter(|cached| cached.clip_base == clip_base && same_but_placement(&cached.scene, current))?;
+            let mut work = hit.work.clone();
+            place(&mut work.placement, current);
+            let mut prepared = hit.prepared.clone();
+            if let Some(prepared) = &mut prepared {
+                place(&mut prepared.layer.placement, current);
+            }
+            reused[index] = Some(prepared);
+            Some(work)
+        }).map_err(|error| EngineError::Store(error.to_string()))?;
 
-    /// Keeps a prepared frame whose layers depend only on their contributions' content, so a
-    /// later frame that merely moves them can reuse it.
-    pub(super) fn remember_prepared(&mut self, scene: &SceneValue, uncut: bool, prepared: &GpuSceneValue) {
-        // Preparation that moved a layer itself (a planar warp's frame) is not a placement to replace.
-        let placed_as_authored = prepared.layers.iter().zip(&prepared.plain_sources).all(|(layer, source)| {
-            source.is_some_and(|index| {
-                let authored = &scene.layers[index];
-                layer.layer.placement.transform == authored.transform.affine
-                    && layer.layer.placement.world_transform == Some(authored.transform.spatial)
-            })
-        });
-        let reusable = uncut && placed_as_authored && scene.layers.iter().all(placement_independent);
-        self.last_prepared = reusable.then(|| PreparedFrame { scene: scene.clone(), prepared: prepared.clone() });
-    }
+        let mut prepared = Vec::with_capacity(graph.layers.len());
+        for (index, work) in graph.layers.iter().enumerate() {
+            prepared.push(match reused[index].take() {
+                Some(kept) => kept,
+                None => {
+                    self.prepared_contributions += 1;
+                    self.execute_layer(work, comp, projection_camera)?
+                }
+            });
+        }
+        let result = self.compose_prepared(&graph, &prepared, comp, projection_camera)?;
 
+        let mut next = ContributionCache::with_capacity(scene.layers.len());
+        for (index, (current, work)) in scene.layers.iter().zip(&graph.layers).enumerate() {
+            let layer = &prepared[index];
+            // Preparation that moved the picture itself (a planar warp's frame) is not a placement to replace.
+            let placed_as_authored = layer.as_ref().is_none_or(|layer| {
+                layer.layer.placement.transform == current.transform.affine
+                    && layer.layer.placement.world_transform == Some(current.transform.spatial)
+            });
+            if placement_independent(current) && placed_as_authored {
+                next.insert((current.layer, current.instance), CachedContribution {
+                    scene: current.clone(),
+                    clip_base: bases[index],
+                    work: work.clone(),
+                    prepared: layer.clone(),
+                });
+            }
+        }
+        self.contributions = next;
+        Ok(result)
+    }
 }
+
+fn place(placement: &mut LayerPlacement, layer: &SceneLayerValue) {
+    placement.transform = layer.transform.affine;
+    placement.world_transform = Some(layer.transform.spatial);
+    placement.z = layer.transform.spatial.translation.z;
+    placement.opacity = layer.opacity;
+    placement.order = i32::from(layer.order);
+}
+
 /// A contribution whose prepared picture does not depend on where it is placed or on the frame.
+/// Clip groups and mattes are composed after preparation, so they do not matter here.
 fn placement_independent(layer: &SceneLayerValue) -> bool {
     let content = match &layer.content {
         SceneContentValue::None | SceneContentValue::Shape(_) | SceneContentValue::Text(_) | SceneContentValue::Material(_) => true,
@@ -63,8 +95,6 @@ fn placement_independent(layer: &SceneLayerValue) -> bool {
     };
     content
         && layer.image_sources.is_empty()
-        && layer.matte.is_none()
-        && !layer.clip_to_below
         && !layer.flatten
         && !layer.freeze_eligible
         && !layer.effects.iter().chain(&layer.after_effects).any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id))
@@ -92,6 +122,8 @@ fn same_but_placement(a: &SceneLayerValue, b: &SceneLayerValue) -> bool {
         && a.effects == b.effects
         && a.after_effects == b.after_effects
         && a.masks == b.masks
+        && a.matte == b.matte
+        && a.clip_to_below == b.clip_to_below
         && a.environment == b.environment
         && a.ghost == b.ghost
         && a.timing_start == b.timing_start
