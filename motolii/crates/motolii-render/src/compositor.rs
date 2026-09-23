@@ -397,6 +397,10 @@ pub struct SurfaceWork {
 
 pub struct Compositor {
     pub(crate) ctx: RenderContext,
+    /// The composition's environment (its one light, AE's Environment Layer). A draw that carries
+    /// no environment layer of its own — a group's plate — is lit and reflected by this one, and
+    /// does not draw its sky again.
+    pub(crate) world_environment: Option<std::sync::Arc<GpuEnvironmentData>>,
     /// 今描いている窓。`render_into_window` が置く。
     pub(crate) window: Window,
     pub(crate) measurement_enabled: bool,

@@ -59,6 +59,7 @@ impl Compositor {
             ctx,
             window: crate::render::compositor::Window { width: 0, height: 0, roi: [0.0; 4], projection_camera: None },
             measurement_enabled: false,
+            world_environment: None,
             motion: None,
             measurement: Default::default(),
             surface_work: Default::default(),

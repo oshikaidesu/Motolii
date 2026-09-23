@@ -449,9 +449,10 @@ impl Engine {
         self.compositor.render_into_window(target, state.comp, camera, &layers, background, window)?;
         let work = self.surface_work();
         self.ledger.claim("draw", "compositor", format!(
-            "{} layers into the window in {} run(s), {} bake(s) ({} reused), {} backdrop copy(ies)",
+            "{} layers into the window in {} run(s), {} bake(s) ({} reused), {} backdrop copy(ies), {} scene capture(s), {} light capture(s)",
             layers.len(), work.main_runs - before.main_runs, work.bakes - before.bakes,
             work.baked_hits - before.baked_hits, work.backdrop_copies - before.backdrop_copies,
+            work.scene_captures - before.scene_captures, work.light_captures - before.light_captures,
         ), started.elapsed());
         Ok(())
     }

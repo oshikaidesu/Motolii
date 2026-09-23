@@ -60,10 +60,11 @@ impl Compositor {
         );
 
         // 照明は comp に 1 つ: 重ね順で一番上の環境層。空を敷くのはその層の run。
+        let world = self.world_environment.clone();
         let environment = inputs.iter().rev().find_map(|i| match i.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,
-        });
+        }).or(world.as_deref());
 
         let mut shared_meshes = None;
         let reflection = self.cached_scene_reflection(comp, inputs, environment, &mut shared_meshes)?;

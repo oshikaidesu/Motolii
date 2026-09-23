@@ -135,6 +135,7 @@ class Effect {
   }
   set(name, value) { this.layer.write(this.property(name), value, undefined); return this; }
   key(name, seconds, value, ease) { this.layer.write(this.property(name), value, { seconds, ease }); return this; }
+  keys(name, list) { for (const [seconds, value, ease] of list) this.key(name, seconds, value, ease); return this; }
   names() { return this.rows().map((p) => p.label); }
   enabled(on) { op("enableEffect", { layer: this.layer.id, id: this.id, enabled: on }); return this; }
 }
@@ -184,6 +185,8 @@ class Layer {
   }
   /** Show this layer only where the layer just below it is (a clipping mask). */
   clip(on = true) { op("setAttrs", { layers: [this.id], patch: { clipToBelow: on } }); return this; }
+  /** The picture lights and is reflected by the scene (After Effects' Environment Layer). */
+  environment(on = true) { op("setAttrs", { layers: [this.id], patch: { environment: on } }); return this; }
   projection(kind) { op("setAttrs", { layers: [this.id], patch: { projection: kind } }); return this; }
   /** When the layer is on screen, in seconds. */
   time(start, duration) {

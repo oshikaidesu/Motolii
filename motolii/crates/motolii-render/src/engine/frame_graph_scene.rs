@@ -158,7 +158,25 @@ impl Engine {
         let catalog = self.compositor.catalog.clone();
         let graph = crate::render_lowering::lower_scene(scene, &catalog)
             .map_err(|error| EngineError::Store(error.to_string()))?;
+        self.adopt_world_environment(&graph)?;
         self.execute_render_graph(&graph, comp, projection_camera)
+    }
+
+    /// The top-level graph's environment becomes the composition's light for every draw in the
+    /// frame, including the nested draws of plates.
+    pub(super) fn adopt_world_environment(&mut self, graph: &crate::render_graph::RenderGraph) -> Result<(), EngineError> {
+        let path = graph.layers.iter().rev().find_map(|work| match &work.content {
+            RasterSource::EnvironmentMap { path } => Some(path.clone()),
+            _ => None,
+        });
+        self.compositor.world_environment = match path {
+            Some(path) => match self.environment_content_for(&path)?.0 {
+                Some(LayerContent::Environment(environment)) => Some(environment),
+                _ => None,
+            },
+            None => None,
+        };
+        Ok(())
     }
 
     /// The scene's contributions as material-space pictures the host reads back.
@@ -167,6 +185,7 @@ impl Engine {
         let catalog = self.compositor.catalog.clone();
         let graph = crate::render_lowering::lower_scene_as_pictures(scene, &catalog)
             .map_err(|error| EngineError::Store(error.to_string()))?;
+        self.adopt_world_environment(&graph)?;
         self.execute_render_graph(&graph, comp, projection_camera)
     }
 

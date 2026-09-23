@@ -408,6 +408,71 @@ mod file {
     }
 }
 
+/// `MOTOLII_SCRIPT=作品.js MOTOLII_OUT=dir MOTOLII_FRAMES=0,120,240 cargo test -p motolii-ui --lib -- --ignored script_frames`
+/// 台本を走らせ、指定のコマを comp の大きさの PNG に描く(窓を開かずに絵を見る)。
+#[cfg(test)]
+mod frames {
+    #[test]
+    #[ignore]
+    fn script_frames() {
+        let path = std::env::var("MOTOLII_SCRIPT").expect("MOTOLII_SCRIPT");
+        let out = std::env::var("MOTOLII_OUT").expect("MOTOLII_OUT");
+        let frames: Vec<i64> = std::env::var("MOTOLII_FRAMES").unwrap_or("0".into()).split(',').map(|f| f.trim().parse().unwrap()).collect();
+        std::fs::create_dir_all(&out).unwrap();
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.run_script(&std::fs::read_to_string(&path).unwrap(), &path).unwrap_or_else(|m| panic!("{m}"));
+        let view = rt.doc.view();
+        let comp = view.composition().unwrap().unwrap();
+        let mut engine = crate::render::engine::Engine::new().unwrap();
+        engine.set_realtime(true);
+        if std::env::var("MOTOLII_SCENE_PROBE").is_ok() { engine.set_reflection_scene_probe(true); }
+        if let Ok(count) = std::env::var("MOTOLII_TIMING") {
+            // Time a run of consecutive frames (after one warm frame) and name what the last one spent.
+            let count: i64 = count.parse().unwrap();
+            let start = frames.first().copied().unwrap_or(0);
+            engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start, comp.fps).unwrap()).unwrap();
+            let began = std::time::Instant::now();
+            for frame in start + 1..=start + count {
+                engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap()).unwrap();
+            }
+            eprintln!("TIMING {:.2} ms/frame over {count} frames", began.elapsed().as_secs_f64() * 1e3 / count as f64);
+            let mut claims = engine.frame_claims().to_vec();
+            claims.sort_by(|a, b| b.us.cmp(&a.us));
+            for c in claims.iter().take(10) { eprintln!("  {:>8.2} ms {:<8} {} x{} — {}", c.us as f64 / 1e3, c.stage, c.who, c.count, c.why); }
+            return;
+        }
+        for frame in frames {
+            let time = crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap();
+            let pixels = engine.render_frame(&view, time).unwrap();
+            for failure in engine.layer_failures() { eprintln!("frame {frame}: {failure}"); }
+            image::save_buffer(format!("{out}/frame_{frame:04}.png"), &pixels, comp.width, comp.height, image::ColorType::Rgba8).unwrap();
+        }
+    }
+}
+
+/// `MOTOLII_HDR_IN=a.hdr MOTOLII_HDR_OUT=b.hdr MOTOLII_HDR_KEEP=1.0 cargo test -p motolii-ui --lib -- --ignored hdr_lights_only`
+/// 環境マップから光源だけを残す(明るさが KEEP 未満の部屋を黒へ落とす)。暗いスタジオで硝子を見せる時に。
+#[cfg(test)]
+mod hdr {
+    #[test]
+    #[ignore]
+    fn hdr_lights_only() {
+        let input = std::env::var("MOTOLII_HDR_IN").expect("MOTOLII_HDR_IN");
+        let output = std::env::var("MOTOLII_HDR_OUT").expect("MOTOLII_HDR_OUT");
+        let keep: f32 = std::env::var("MOTOLII_HDR_KEEP").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
+        let image = image::open(&input).unwrap().into_rgb32f();
+        let (w, h) = image.dimensions();
+        let pixels: Vec<image::Rgb<f32>> = image.pixels().map(|p| {
+            let l = 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+            let t = ((l - keep * 0.5) / (keep * 0.5)).clamp(0.0, 1.0);
+            let k = t * t * (3.0 - 2.0 * t);
+            image::Rgb([p[0] * k, p[1] * k, p[2] * k])
+        }).collect();
+        let file = std::io::BufWriter::new(std::fs::File::create(&output).unwrap());
+        image::codecs::hdr::HdrEncoder::new(file).encode(&pixels, w as usize, h as usize).unwrap();
+    }
+}
+
 /// 常駐の見張り・台本の側(往復を速くする、2026-09-16 利用者「こういう往復を早くしたい」「リリースいるかなー」):
 /// 台本の保存を見張り、変わる度に 台本 → 書類(`MOTOLII_OUT/shot.rrd`)を、cargo を起動せずに作り直す。
 /// 描くのは render の側の見張り(`zz_watch`、release で組んである)に任せる — ここは描かないので debug で足りる。

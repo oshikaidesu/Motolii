@@ -42,6 +42,7 @@ impl Engine {
             reused[index] = Some(prepared);
             Some(work)
         }).map_err(|error| EngineError::Store(error.to_string()))?;
+        self.adopt_world_environment(&graph)?;
 
         let kept: Vec<bool> = reused.iter().map(Option::is_some).collect();
         let mut prepared = Vec::with_capacity(graph.layers.len());
