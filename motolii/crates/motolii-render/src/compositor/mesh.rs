@@ -77,6 +77,7 @@ impl Compositor {
         let clip = clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world(centre, world_from_object));
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let tint = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
+        let program = shading.program.clone().or_else(|| self.standard_surface_program());
         let instances: Vec<GpuMeshInstance> = model
             .instances
             .iter()
@@ -84,7 +85,7 @@ impl Compositor {
             .map(|mut instance| {
                 instance.world_from_mesh = world_from_object * instance.world_from_mesh;
                 instance.additive_tint = tint;
-                instance.program = shading.program.clone();
+                instance.program = program.clone();
                 instance.params = shading.params;
                 instance
             })

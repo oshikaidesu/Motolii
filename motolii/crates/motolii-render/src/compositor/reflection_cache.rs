@@ -141,7 +141,7 @@ impl Compositor {
                 }
             }
             // 送り手の箱から撮る時、受け手は撮影に居ない: 受け手の置き方・値は鍵に入れない。
-            let receiver = scene_probe && i.shading.program.as_ref().is_some_and(|p| p.desc().surface.is_some());
+            let receiver = scene_probe && i.shading.surface_effect;
             key.inputs.push(if receiver {
                 InputKey {
                     content,
@@ -186,9 +186,7 @@ impl Compositor {
     ) -> Result<Option<SceneReflection>, CompositorError> {
         if !inputs.iter().any(|i| {
             i.shading
-                .program
-                .as_ref()
-                .is_some_and(|p| p.desc().surface.is_some())
+.surface_effect
         }) {
             return Ok(None);
         }

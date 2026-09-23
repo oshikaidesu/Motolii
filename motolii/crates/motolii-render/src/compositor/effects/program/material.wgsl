@@ -1,0 +1,192 @@
+// Motolii's standard material: split-sum environment light, the scene's two box-projected reflection
+// probes, the sun's light cookie, and transmission that refracts the backdrop (Standard Glass).
+// Appended to a surface program's surface hook; reads the frame's resources (re_renderer's bindings).
+
+fn projected_reflection_ray(position: vec3f, direction: vec3f, origin: vec3f) -> vec3f {
+    var anchor = position;
+    if frame.reflection_origin_second.w > 0.0 {
+        anchor = clamp(position, frame.reflection_min.xyz, frame.reflection_max.xyz);
+    }
+    if all(anchor >= frame.reflection_min.xyz) && all(anchor <= frame.reflection_max.xyz) {
+        let safe_dir = select(select(vec3f(-1e-6), vec3f(1e-6), direction >= vec3f(0.0)), direction, abs(direction) > vec3f(1e-6));
+        let far = max((frame.reflection_min.xyz - anchor) / safe_dir, (frame.reflection_max.xyz - anchor) / safe_dir);
+        return anchor + direction * min(far.x, min(far.y, far.z)) - origin;
+    }
+    return direction;
+}
+
+fn reflection_face_uv(ray: vec3f, forward: vec3f, up: vec3f) -> vec2f {
+    return vec2f(dot(ray, cross(forward,up)), -dot(ray,up)) / max(dot(ray,forward),1e-6) * 0.5 + 0.5;
+}
+
+
+// Box-projected local reflection, as used by reflection probes (Arm / Happy Elements).
+fn local_reflection(position: vec3f, direction: vec3f, roughness: f32, origin: vec3f, probe: u32) -> vec4f {
+    let ray = projected_reflection_ray(position, direction, origin);
+    let a = abs(ray);
+    var face = 0u;
+    if a.x >= a.y && a.x >= a.z { face = select(1u, 0u, ray.x >= 0.0); }
+    else if a.y >= a.z { face = select(3u, 2u, ray.y >= 0.0); }
+    else { face = select(5u, 4u, ray.z >= 0.0); }
+    let directions = array<vec3f, 6>(vec3f(1,0,0),vec3f(-1,0,0),vec3f(0,1,0),vec3f(0,-1,0),vec3f(0,0,1),vec3f(0,0,-1));
+    let ups = array<vec3f, 6>(vec3f(0,-1,0),vec3f(0,-1,0),vec3f(0,0,1),vec3f(0,0,-1),vec3f(0,-1,0),vec3f(0,-1,0));
+    let uv = reflection_face_uv(ray, directions[face], ups[face]);
+    // Keep each face at least 4x4 to avoid cross-face mip leakage.
+    let face_size = f32(textureDimensions(scene_reflection).x) / 3.0;
+    let max_lod = max(log2(face_size) - 2.0, 0.0);
+    var lod = clamp(roughness,0.0,1.0) * max_lod;
+    if FILTER_SURFACE_FOOTPRINT {
+        let ray_x = projected_reflection_ray(position + surface_position_dx, direction + surface_ray_dx, origin);
+        let ray_y = projected_reflection_ray(position + surface_position_dy, direction + surface_ray_dy, origin);
+        let dx = reflection_face_uv(ray_x, directions[face], ups[face]) - uv;
+        let dy = reflection_face_uv(ray_y, directions[face], ups[face]) - uv;
+        lod = min(max_lod, max(lod, footprint_lod(dx,dy,vec2f(face_size))));
+    }
+    // A continuous guard covers half a texel at both trilinear mip levels.
+    let guard_lod = select(ceil(lod), lod, FILTER_SURFACE_FOOTPRINT);
+    let margin = min(0.49, exp2(guard_lod) / face_size);
+    let local = clamp(uv,vec2f(margin),vec2f(1.0-margin));
+    let atlas_uv = (local + vec2f(f32(face % 3u),f32(face / 3u) + f32(probe)*2.0)) / vec2f(3,4);
+    let captured = textureSampleLevel(scene_reflection, screen_sampler, atlas_uv, lod);
+    return captured;
+}
+
+fn reflection_influence(position: vec3f, origin: vec3f, radius: f32) -> f32 {
+    if radius <= 0.0 { return 1.0; }
+    let radial = 1.0 - smoothstep(radius, 2.0 * radius, distance(position, origin));
+    let border = min(position - frame.reflection_min.xyz, frame.reflection_max.xyz - position);
+    let fade = max((frame.reflection_max.xyz - frame.reflection_min.xyz) * 0.05, vec3f(1e-4));
+    let box_weight = vec3f(1.0) - smoothstep(vec3f(0.0), fade, max(-border, vec3f(0.0)));
+    return radial * min(box_weight.x, min(box_weight.y, box_weight.z));
+}
+
+fn scene_specular(position: vec3f, direction: vec3f, roughness: f32) -> vec3f {
+    let fallback = environment_specular_along(direction, roughness);
+    if frame.reflection_origin.w == 0.0 { return fallback; }
+    let w0 = reflection_influence(position, frame.reflection_origin.xyz, frame.reflection_origin_second.w);
+    var captured = local_reflection(position,direction,roughness,frame.reflection_origin.xyz,0u) * w0;
+    if frame.reflection_origin.w > 1.0 {
+        let d0 = position-frame.reflection_origin.xyz;
+        let d1 = position-frame.reflection_origin_second.xyz;
+        var ratio = dot(d0,d0)/max(dot(d0,d0)+dot(d1,d1),1e-6);
+        if frame.reflection_origin_second.w > 0.0 {
+            ratio = (dot(d0,d0) + 0.5e-6) / (dot(d0,d0) + dot(d1,d1) + 1e-6);
+        }
+        let weight = smoothstep(0.0,1.0,ratio);
+        let w1 = reflection_influence(position, frame.reflection_origin_second.xyz, frame.reflection_min.w);
+        captured = mix(captured,local_reflection(position,direction,roughness,frame.reflection_origin_second.xyz,1u) * w1,weight);
+    }
+    return captured.rgb + (1.0-captured.a)*fallback;
+}
+
+
+/// Split-sum environment BRDF, analytic fit (Karis 2014, "Physically Based Shading on Mobile").
+fn env_brdf_approx(f0: vec3f, roughness: f32, n_dot_v: f32) -> vec3f {
+    let c0 = vec4f(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4f(1.0, 0.0425, 1.04, -0.04);
+    let r = roughness * c0 + c1;
+    let a004 = min(r.x * r.x, exp2(-9.28 * n_dot_v)) * r.x + r.y;
+    let ab = vec2f(-1.04, 1.04) * a004 + r.zw;
+    return f0 * ab.x + ab.y;
+}
+
+/// Light from the sun that reaches `position`: 1 where nothing blocks it, the blocker's tint × coverage
+/// where the cookie says something does. No depth: a blocker shades everything along its ray.
+fn sun_light_through(position: vec3f) -> vec3f {
+    if frame.sun_direction.w <= 0.0 {
+        return vec3f(1.0);
+    }
+    let uv = (frame.light_uv_from_world * vec4f(position, 1.0)).xy;
+    if any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)) {
+        return vec3f(1.0);
+    }
+    let cookie = textureSampleLevel(light_cookie, screen_sampler, uv, 0.0);
+    return vec3f(1.0 - cookie.a) + cookie.rgb;
+}
+
+/// Shadow factor: only the sun's share of the light is taken away, scaled by how much the surface
+/// faces the sun. `facing_floor` keeps a flat, unlit picture readable as a receiver.
+fn sun_shade(position: vec3f, normal: vec3f, facing_floor: f32) -> vec3f {
+    let facing = max(clamp(dot(normal, frame.sun_direction.xyz), 0.0, 1.0), facing_floor);
+    let share = frame.sun_direction.w * facing;
+    return vec3f(1.0) - share * (vec3f(1.0) - sun_light_through(position));
+}
+
+/// What is drawn behind the surface, seen where a ray refracted at `ior` leaves a slab of `thickness`;
+/// the environment where nothing is drawn.
+fn transmitted_backdrop(view_dir: vec3f, normal: vec3f, reflected: vec3f, world_position: vec3f, thickness: f32, ior: f32, roughness: f32, lod: f32) -> vec3f {
+    let refracted = refract(-view_dir, normal, 1.0 / ior);
+    let through = select(reflected, refracted, any(refracted != vec3f(0.0)));
+    let uv = clamp(projected_surface_uv(world_position + through * thickness), vec2f(0.0), vec2f(1.0));
+    let behind = textureSampleLevel(backdrop_texture, screen_sampler, uv, lod);
+    return behind.rgb + (1.0 - behind.a) * environment_specular_along(through, roughness);
+}
+
+/// Radiance leaving a surface: Lambert diffuse from the irradiance map, glossy reflection from the
+/// radiance mip chain (split-sum), and for transmissive surfaces the refracted see-through of what
+/// is drawn behind (the backdrop, read where the refracted ray leaves a slab of `thickness`; vgpu's
+/// transmission example) with the environment where nothing is drawn.
+/// `surface` = (roughness, metallic, transmission, ior). Without an environment, the fixed lights apply.
+/// `dispersion` is KHR_materials_dispersion's 20 / Abbe number, read the way three.js does: the IOR
+/// spreads by `(ior - 1) * 0.025 * dispersion` to either side and red / blue refract on their own.
+fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, surface: vec4f, dispersion: f32) -> vec3f {
+    let roughness = clamp(surface.x, 0.0, 1.0);
+    let metallic = clamp(surface.y, 0.0, 1.0);
+    let transmission = clamp(surface.z, 0.0, 1.0);
+    let ior = max(surface.w, 1.0);
+    let n_dot_v = clamp(dot(normal, view_dir), 1e-4, 1.0);
+    let f0_dielectric = pow((ior - 1.0) / (ior + 1.0), 2.0);
+    let f0 = mix(vec3f(f0_dielectric), albedo, metallic);
+    let diffuse_weight = (1.0 - metallic) * (1.0 - transmission);
+
+    if frame.sun_color.w > 0.0 {
+        // Light cookie capture: what this surface lets through, straight along the sun's ray.
+        return albedo * transmission * (1.0 - metallic);
+    }
+    let shade = sun_shade(world_position, normal, 0.0);
+
+    if frame.environment_present != 1u && frame.reflection_origin.w == 0.0 {
+        return albedo * simple_lighting(normal) * shade;
+    }
+
+    let diffuse = albedo * diffuse_weight * diffuse_shading(normal);
+    let reflected = reflect(-view_dir, normal);
+    if FILTER_SURFACE_FOOTPRINT {
+        surface_ray_dx = reflect(-view_direction_to_camera(world_position + surface_position_dx), footprint_neighbor_normal(normal,surface_normal_dx)) - reflected;
+        surface_ray_dy = reflect(-view_direction_to_camera(world_position + surface_position_dy), footprint_neighbor_normal(normal,surface_normal_dy)) - reflected;
+    }
+    let specular = scene_specular(world_position, reflected, roughness) * env_brdf_approx(f0, roughness, n_dot_v);
+    var transmitted = vec3f(0.0);
+    if transmission > 0.0 {
+        let fresnel = f0_dielectric + (1.0 - f0_dielectric) * pow(1.0 - n_dot_v, 5.0);
+        let refracted = refract(-view_dir, normal, 1.0 / ior);
+        let through = select(reflected, refracted, any(refracted != vec3f(0.0)));
+        let exit = world_position + through * thickness;
+        let projected_uv = projected_surface_uv(exit);
+        let levels = f32(textureNumLevels(backdrop_texture));
+        var lod = pow(roughness, 0.8) * max(levels - 1.0, 0.0) * 0.55;
+        if FILTER_SURFACE_FOOTPRINT {
+            let vx = -view_direction_to_camera(world_position + surface_position_dx);
+            let vy = -view_direction_to_camera(world_position + surface_position_dy);
+            let nx = footprint_neighbor_normal(normal,surface_normal_dx); let ny = footprint_neighbor_normal(normal,surface_normal_dy);
+            let rx = refract(vx,nx,1.0/ior); let ry = refract(vy,ny,1.0/ior);
+            let tx = select(reflect(vx,nx),rx,any(rx != vec3f(0.0)));
+            let ty = select(reflect(vy,ny),ry,any(ry != vec3f(0.0)));
+            surface_ray_dx = tx-through; surface_ray_dy = ty-through;
+            let dx = projected_surface_uv(world_position + surface_position_dx + tx*thickness) - projected_uv;
+            let dy = projected_surface_uv(world_position + surface_position_dy + ty*thickness) - projected_uv;
+            lod = min(levels-1.0,max(lod,footprint_lod(dx,dy,vec2f(textureDimensions(backdrop_texture)))));
+        }
+        let half_spread = (ior - 1.0) * 0.025 * max(dispersion, 0.0);
+        var seen = transmitted_backdrop(view_dir, normal, reflected, world_position, thickness, ior, roughness, lod);
+        if half_spread > 0.0 {
+            seen = vec3f(
+                transmitted_backdrop(view_dir, normal, reflected, world_position, thickness, ior - half_spread, roughness, lod).r,
+                seen.g,
+                transmitted_backdrop(view_dir, normal, reflected, world_position, thickness, ior + half_spread, roughness, lod).b,
+            );
+        }
+        transmitted = seen * albedo * transmission * (1.0 - metallic) * (1.0 - fresnel);
+    }
+    return (diffuse + specular) * shade + transmitted;
+}

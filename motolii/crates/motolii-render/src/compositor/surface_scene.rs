@@ -416,7 +416,7 @@ impl Compositor {
                                 .clip
                                 .map_or(ClipPlane::NONE, |c| c.world_for_rect(corner, u, v)),
                             field_grid: shading.field_grid(),
-                            surface: shading.program,
+                            surface: shading.program.or_else(|| self.standard_surface_program()),
                             surface_params: shading.params,
                             ..Default::default()
                         },
@@ -467,12 +467,7 @@ impl Compositor {
                 if matches!(input.content, SequentialContent::Model(m) if m.planar_size.is_some()) && !input.shading.reads_backdrop {
                     return None;
                 }
-                if !input
-                    .shading
-                    .program
-                    .as_ref()
-                    .is_some_and(|p| p.desc().surface.is_some())
-                {
+                if !input.shading.surface_effect {
                     return None;
                 }
                 bounds(comp, input).map(|(lo, hi)| (index, lo, hi))
@@ -717,7 +712,7 @@ impl Compositor {
         if self.reflection_diagnostic_enabled {
             let input_metadata: Vec<_> = inputs.iter().enumerate().map(|(index, input)| {
                 let mut item = serde_json::json!({"index":index,"opacity":input.opacity,
-                    "surface":input.shading.program.as_ref().is_some_and(|p|p.desc().surface.is_some()),
+                    "surface":input.shading.surface_effect,
                     "params":input.shading.params,"bounds":bounds(comp,input).map(|(a,b)|[a.to_array(),b.to_array()])});
                 if let SequentialContent::Model(model) = input.content {
                     let world = projected_spatial_placement(comp,input.projection_camera,input.projection,input.placement,model.bounds);

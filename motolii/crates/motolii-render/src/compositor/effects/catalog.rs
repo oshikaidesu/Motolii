@@ -12,9 +12,9 @@ pub enum EffectStage {
     Pass,
     /// Material-local XY warp; independent of layer projection.
     Warp,
-    /// 網の面の hook(fork の `motolii_surface`)。
+    /// 網の面の hook(surface program の `program_surface`)。
     Surface,
-    /// 網の頂点の hook(fork の `motolii_field`)。点群は CPU の写しで受ける。
+    /// 網の頂点の hook(surface program の `program_field`)。点群は CPU の写しで受ける。
     Field,
     /// 世界の平面で切る。板・点群・網が同じ式に従う。
     Clip,
@@ -377,7 +377,7 @@ fn prepare(source: VismSource, prelude: &str, modules: &[(String, String)]) -> R
     } else {
         let manifest = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?.0;
         let text = if manifest.stage == isf::IsfStage::Warp {
-            format!("{}\n{}", re_renderer::noise::WGSL, source.source)
+            format!("{}\n{}", crate::render::compositor::noise::WGSL, source.source)
         } else if matches!(source.name.as_str(), "blend" | "matte") {
             format!("{prelude}\n{}", source.source)
         } else { source.source.to_string() };

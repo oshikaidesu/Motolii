@@ -14,7 +14,7 @@
   ]
 }*/
 
-// The split-sum shading itself is a borrowed ruler that lives in the fork (utils/lighting.wgsl);
+// The split-sum shading itself is Motolii's standard material (compositor/effects/program/material.wgsl);
 // this sheet only maps its knobs.
 fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {
     return shade_surface(in.albedo, in.normal, in.view_dir, in.world_position, in.thickness, vec4f(p.roughness, p.metallic, p.transmission, p.ior), p.dispersion);

@@ -25,6 +25,7 @@ mod reflection_diagnostic;
 mod reflection_cache;
 mod measurement;
 pub use measurement::FrameMeasurement;
+pub(crate) mod noise;
 mod point_cloud;
 pub(crate) mod readback;
 mod presentable;

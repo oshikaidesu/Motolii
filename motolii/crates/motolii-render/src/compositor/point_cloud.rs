@@ -192,9 +192,9 @@ pub(crate) fn displaced_points(
             let frame_position = frame * p;
             let q = (frame_position + displace.offset) / size + displace.evolution * glam::vec3(0.53, 0.71, 0.89);
             let field = glam::vec3(
-                re_renderer::noise::fbm3(q, octaves),
-                re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), octaves),
-                re_renderer::noise::fbm3(q + glam::vec3(0.0, 47.3, 0.0), octaves),
+                crate::render::compositor::noise::fbm3(q, octaves),
+                crate::render::compositor::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), octaves),
+                crate::render::compositor::noise::fbm3(q + glam::vec3(0.0, 47.3, 0.0), octaves),
             );
             p + obj_from_frame * (field * displace.mask * displace.amount)
         })

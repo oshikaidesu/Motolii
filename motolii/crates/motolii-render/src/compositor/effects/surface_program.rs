@@ -31,17 +31,34 @@ pub struct SurfaceShading {
     pub backdrop_roughness: f32,
     /// 場が無くても板を刻む升の数(紐の線: 頂点が曲線に沿って動く)。0 / 1 = 刻まない。
     pub grid_hint: u32,
+    /// A field effect moves the surface (its vertices, a picture's samples).
+    pub field_effect: bool,
+    /// A surface effect shades it (a reflecting, refracting surface: the reflection capture looks at it).
+    pub surface_effect: bool,
 }
 
 impl SurfaceShading {
     /// 板を割る升の数。場を持つ効果が乗っている時だけ割る。
     pub fn field_grid(&self) -> u32 {
-        match &self.program {
-            Some(p) if p.desc().field.is_some() => FIELD_GRID,
-            _ => self.grid_hint.max(1),
-        }
+        if self.field_effect { FIELD_GRID } else { self.grid_hint.max(1) }
     }
 }
+
+/// The noise fields read, the meaning of a Block's motion entry, and Motolii's standard material
+/// (environment light, the two reflection probes, the sun's cookie, transmission of the backdrop).
+const NOISE: &str = include_str!("program/noise.wgsl");
+const MOTION: &str = include_str!("program/motion.wgsl");
+const MATERIAL: &str = include_str!("program/material.wgsl");
+/// Every surface takes its Block's motion (the last param is its entry).
+const MOTION_HOOKS: &str = "fn program_motion(slot: f32, world_position: vec3f) -> vec3f { return motion_offset(slot, world_position); }\nfn program_tint(slot: f32) -> vec4f { return motion_tint(slot); }";
+/// A mesh without a surface effect: a rough dielectric.
+const STANDARD_MESH: &str = "fn program_surface(in: SurfaceIn) -> vec3f { return shade_surface(in.albedo, in.normal, in.view_dir, in.world_position, in.thickness, vec4f(1.0, 0.0, 0.0, 1.5), 0.0); }";
+/// A picture without effects: lit by the sun's share, and an opaque blocker in the light cookie.
+const STANDARD_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
+/// A picture a field moves: its picture as it is.
+const MOVED_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { return in.albedo; }";
+/// An unlit layer (`SurfaceRecipe::unlit`): the sun's shading only.
+const UNLIT: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
 
 /// Which field/surface programs a material uses and with what values.
 #[derive(Clone, Debug, PartialEq)]
@@ -104,8 +121,8 @@ fn wgsl_ident(name: &str) -> String {
 /// 欄の struct と wrapper を足した snippet。`offset` は最初の欄の slot。
 fn snippet(def: &VismDefinition, stage: EffectStage, offset: usize) -> String {
     let (params_ty, hook, sig, call) = match stage {
-        EffectStage::Field => ("FieldParams", "motolii_field", "in: FieldIn) -> FieldOut", "field"),
-        _ => ("SurfaceParams", "motolii_surface", "in: SurfaceIn) -> vec3f", "surface"),
+        EffectStage::Field => ("FieldParams", "program_field", "in: FieldIn) -> FieldOut", "field"),
+        _ => ("SurfaceParams", "program_surface", "in: SurfaceIn) -> vec3f", "surface"),
     };
     let inputs: Vec<String> = def.manifest.param_inputs().map(|p| wgsl_ident(&p.name)).collect();
     let mut out = String::new();
@@ -135,10 +152,19 @@ pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&Vism
     if field_count + surface_count > HOOK_SLOTS {
         return Err(format!("hook の欄が合わせて {HOOK_SLOTS} 個を越える"));
     }
+    let surface_hook = surface.map(|d| snippet(d, EffectStage::Surface, field_count));
+    let picture = match (&surface_hook, field) {
+        (Some(hook), _) => hook.clone(),
+        (None, Some(_)) => MOVED_PICTURE.to_owned(),
+        (None, None) => STANDARD_PICTURE.to_owned(),
+    };
     Ok(SurfaceProgramDesc {
         label: format!("{}+{}", field.map_or("-", |d| d.plugin_id()), surface.map_or("-", |d| d.plugin_id())),
+        prelude: Some(format!("{NOISE}\n{MOTION}")),
         field: field.map(|d| snippet(d, EffectStage::Field, 0)),
-        surface: surface.map(|d| snippet(d, EffectStage::Surface, field_count)),
+        motion: Some(MOTION_HOOKS.to_owned()),
+        surface: Some(format!("{MATERIAL}\n{}", surface_hook.as_deref().unwrap_or(STANDARD_MESH))),
+        rectangle_surface: Some(format!("{MATERIAL}\n{picture}")),
     })
 }
 
@@ -182,7 +208,9 @@ mod tests {
         let field = desc.field.unwrap();
         assert!(field.contains("struct FieldParams {\n    amount: f32,\n    along: f32,\n};"), "{field}");
         assert!(field.contains("let p = FieldParams(in.params[0][0], in.params[0][1]);"), "{field}");
-        assert!(desc.surface.is_none());
+        // No surface effect: meshes take the standard material, a moved picture stays as it is.
+        assert!(desc.surface.as_deref().unwrap().ends_with(STANDARD_MESH));
+        assert!(desc.rectangle_surface.as_deref().unwrap().ends_with(MOVED_PICTURE));
         let p = params(&[ResolvedEffect { plugin_id: "x.t".into(), params: vec![("along".into(), crate::doc::store::Value::F64(1.0))], ..Default::default() }], Some(&def), None);
         assert_eq!(&p[..2], &[2.0, 1.0]);
     }
@@ -213,13 +241,29 @@ impl crate::render::compositor::Compositor {
             Some(program) => program.clone(),
             None => {
                 let mut desc = program_desc(field, surface)?;
-                if recipe.unlit && surface.is_none() { desc.surface = Some("fn motolii_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }".into()); }
+                if recipe.unlit && surface.is_none() {
+                    desc.surface = Some(format!("{MATERIAL}\n{UNLIT}"));
+                    desc.rectangle_surface = desc.surface.clone();
+                }
                 let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
                 self.surface_programs.insert(key, program.clone());
                 program
             }
         };
-        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0 })
+        // An unlit layer is shaded by a program of its own, which the reflection capture has always
+        // treated as a shaded surface.
+        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(), surface_effect: surface.is_some() || recipe.unlit })
+    }
+
+    /// The program of a surface without effects: its Block's motion and the standard material.
+    pub(crate) fn standard_surface_program(&mut self) -> Option<Arc<SurfaceProgram>> {
+        const KEY: &str = "standard";
+        if let Some(program) = self.surface_programs.get(KEY) {
+            return Some(program.clone());
+        }
+        let program = Arc::new(SurfaceProgram::new(&self.ctx, program_desc(None, None).ok()?).ok()?);
+        self.surface_programs.insert(KEY.to_owned(), program.clone());
+        Some(program)
     }
 
 }
@@ -242,7 +286,7 @@ mod program_contract {
     fn default_and_shelf_hook_programs_compile() {
         let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
         let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let desc = re_renderer::renderer::SurfaceProgramDesc { label: "probe".into(), field: None, surface: None };
+        let desc = re_renderer::renderer::SurfaceProgramDesc { label: "probe".into(), ..Default::default() };
         re_renderer::renderer::SurfaceProgram::new(&compositor.ctx, desc).unwrap();
         let error = pollster::block_on(scope.pop());
         assert!(error.is_none(), "{}", error.unwrap());

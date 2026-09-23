@@ -573,7 +573,7 @@ impl ParticleFrame {
             let mut at = glam::Vec3::from(p.position);
             if turbulence.amount != 0.0 {
                 let q = at / turbulence.size + glam::vec3(turbulence.seed * 1.31, turbulence.seed * 0.77, p.age * 0.6);
-                at += glam::vec3(re_renderer::noise::fbm3(q, 3), re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), 3), 0.0) * turbulence.amount * p.age.min(1.0);
+                at += glam::vec3(crate::render::compositor::noise::fbm3(q, 3), crate::render::compositor::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), 3), 0.0) * turbulence.amount * p.age.min(1.0);
             }
             max = [max[0].max(at.x), max[1].max(at.y)];
             at.into()
