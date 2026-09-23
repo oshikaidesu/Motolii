@@ -72,6 +72,11 @@ pub(crate) fn edit(doc:&Document, slot:&ColorSlot, j:&J, at:crate::doc::store::R
         g.stops.remove(index);g.stop_ids.remove(index);
     }
     if !j["kind"].is_null() { g.kind=kind(&j["kind"])?; }
+    // Explicit points, in the gradient's own units (a script's CSS centre and radius).
+    if let (Some(start),Some(end))=(j["start"].as_array(),j["end"].as_array()) {
+        let point=|v:&Vec<J>|->Result<Point,String>{match v.as_slice(){[x,y]=>Ok(Point{x:x.as_f64().filter(|n|n.is_finite()).ok_or("Invalid gradient point")?,y:y.as_f64().filter(|n|n.is_finite()).ok_or("Invalid gradient point")?}),_=>Err("A gradient point is [x, y]".into())}};
+        g.start=point(start)?;g.end=point(end)?;
+    }
     if let Some(name)=j["blend"].as_str() { g.blend=GradientBlend::parse(name).ok_or("Unknown gradient blend")?; }
     if let Some(angle)=j["angle"].as_f64() {
         if !angle.is_finite() { return Err("Invalid gradient angle".into()); }

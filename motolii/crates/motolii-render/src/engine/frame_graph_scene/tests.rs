@@ -13,6 +13,9 @@ use motolii_edit::{Document, Intent};
 struct Executor<'a>(&'a SceneProgram);
 impl NodeExecutor for Executor<'_> {
     type Error = SceneProgramError;
+    fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> {
+        self.0.dynamic_inputs(node, inputs, context)
+    }
     fn execute(
         &mut self,
         node: &GraphNode,
@@ -215,4 +218,51 @@ fn only_the_contribution_that_changed_is_prepared_again() {
     assert_eq!(engine.prepared_contributions - before, 1, "the still shape is reused; only the animated blur is prepared");
     let fresh = Engine::new().unwrap().render_with_camera_override(&doc.view(), at(5), true, None).unwrap();
     assert_eq!(frame, fresh, "the mixed frame is the frame a fresh engine prepares");
+}
+
+
+/// The FrameGraph form of the legacy contract `a_repeater_on_a_group_hands_out_the_children_instead_of_the_group`.
+#[test]
+fn a_repeater_on_a_group_copies_its_children() {
+    use crate::doc::store::{EffectId, EffectInstance, EffectScope, PropertyId, Value};
+    use crate::extensions::placement;
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
+    doc.apply(Intent::SetComposition(Composition { width: 400, height: 200, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0; 4] })).unwrap();
+    let group = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(group),
+        Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 30) } },
+    ]).unwrap();
+    let circle = add_shape(&mut doc, 2, 1, Rgb { r: 1.0, g: 0.0, b: 0.0 });
+    let square = add_shape(&mut doc, 3, 2, Rgb { r: 0.0, g: 1.0, b: 0.0 });
+    let put = |doc: &mut Document, layer, at: [f64; 2]| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(crate::doc::store::property::POSITION).unwrap(), value: Value::Vec2(at) }).unwrap();
+    for child in [circle, square] {
+        doc.apply(Intent::SetAttrs { layer: child, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } }).unwrap();
+    }
+    put(&mut doc, group, [100.0, 100.0]);
+    put(&mut doc, circle, [10.0, 0.0]);
+    put(&mut doc, square, [0.0, 10.0]);
+    let repeat = EffectId(0);
+    doc.apply_all([
+        Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() }] },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(4.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "pick").unwrap(), value: Value::F64(1.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([50.0, 0.0]) },
+    ]).unwrap();
+    let placed = |doc: &Document| {
+        let mut seen: Vec<(LayerId, u32, [f32; 2])> = scene(doc).layers.iter()
+            .filter(|l| l.layer != group)
+            .map(|l| (l.layer, l.instance, l.transform.affine.translation.to_array().map(|v| v.round())))
+            .collect();
+        seen.sort_by_key(|(id, copy, _)| (id.0, *copy));
+        seen
+    };
+    assert_eq!(placed(&doc), [
+        (circle, 0, [110.0, 100.0]), (circle, 2, [210.0, 100.0]),
+        (square, 1, [150.0, 110.0]), (square, 3, [250.0, 110.0]),
+    ], "Each: the copies take the children in turn; the children are not drawn on their own");
+    doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_scope(repeat), value: Value::Enum(EffectScope::Whole.enum_value()) }).unwrap();
+    let whole = placed(&doc);
+    assert_eq!(whole.len(), 8, "Whole: every copy carries both children");
+    assert!(whole.contains(&(square, 3, [250.0, 110.0])));
 }

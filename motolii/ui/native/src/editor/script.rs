@@ -273,6 +273,21 @@ mod tests {
     }
 
     #[test]
+    fn a_css_radial_gradient_centres_on_the_box() {
+        let (rt, outcome) = run(r##"
+            comp({ seconds: 1 });
+            ellipse({ name: "Core" }).fill("radial-gradient(#FFFFFF, #000000)");
+        "##);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let shapes = view.shapes(view.layers()[0]).unwrap();
+        let crate::doc::store::ShapeNode::Leaf(shape) = &shapes[0] else { panic!("a leaf") };
+        let crate::doc::vector::Brush::Gradient(g) = &shape.fill.as_ref().unwrap().brush else { panic!("a gradient fill") };
+        assert_eq!(g.kind, crate::doc::vector::GradientType::Radial);
+        assert_eq!((g.start.x, g.start.y), (0.5, 0.5), "CSS radial gradients centre on the box");
+    }
+
+    #[test]
     fn a_layer_can_be_seen_through_another_layers_matte() {
         let (rt, outcome) = run(r##"
             comp({ seconds: 1 });

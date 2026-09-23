@@ -79,7 +79,6 @@ impl PlacementProgram {
 
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
-            if meta.source == LayerSource::Group { continue; }
             let Some(effect_binding) = effects.binding(layer) else { continue };
 
             let programs: Vec<_> = effect_binding.effects.iter().map(|key| effects.placement_program(*key)).collect();

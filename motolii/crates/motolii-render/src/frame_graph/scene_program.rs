@@ -155,7 +155,8 @@ impl SceneNodeProgram {
                     placement_effects.push(effect_program.is_placement(*key));
                 }
             }
-            let placement = placement_program.binding(layer).map(|binding| {
+            // A group's placement copies its children (GroupCompositeProgram), not the group itself.
+            let placement = placement_program.binding(layer).filter(|_| meta.source != LayerSource::Group).map(|binding| {
                 let at = inputs.len();
                 inputs.push(binding.node);
                 at
@@ -187,7 +188,7 @@ impl SceneNodeProgram {
                 hierarchy_bindings.insert(layer, key);
             }
         }
-        let group_composite = GroupCompositeProgram::compile(view, effect_program, &hierarchy_bindings)?;
+        let group_composite = GroupCompositeProgram::compile(view, effect_program, placement_program, &hierarchy_bindings)?;
         for node in group_composite.nodes() {
             nodes.insert(node.key(), node);
         }

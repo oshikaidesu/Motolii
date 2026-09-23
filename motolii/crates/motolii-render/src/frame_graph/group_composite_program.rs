@@ -15,6 +15,16 @@ struct Recipe {
     group: LayerId,
     child_count: usize,
     effect_start: usize,
+    /// The group's first placement effect: where its copy set and effect value sit among the
+    /// inputs, and its program (which child each copy picks).
+    placement: Option<GroupPlacement>,
+}
+
+#[derive(Clone, Copy)]
+struct GroupPlacement {
+    set: usize,
+    effect: usize,
+    program: crate::doc::store::kind::PlacementProgram,
 }
 
 #[derive(Debug)]
@@ -49,6 +59,7 @@ impl GroupCompositeProgram {
     pub(super) fn compile(
         view: &StoreView<'_>,
         effects: &EffectProgram,
+        placements: &super::PlacementProgram,
         contributions: &BTreeMap<LayerId, NodeKey>,
     ) -> Result<Self, GroupCompositeProgramError> {
         let mut metas = BTreeMap::new();
@@ -83,6 +94,7 @@ impl GroupCompositeProgram {
             metas: &BTreeMap<LayerId, crate::doc::store::LayerMeta>,
             children: &BTreeMap<Option<LayerId>, Vec<LayerId>>,
             effects: &EffectProgram,
+            placements: &super::PlacementProgram,
             contributions: &BTreeMap<LayerId, NodeKey>,
             visiting: &mut BTreeSet<LayerId>,
         ) -> Result<NodeKey, GroupCompositeProgramError> {
@@ -96,7 +108,7 @@ impl GroupCompositeProgram {
 
             for child in direct {
                 let key = if metas.get(child).is_some_and(|meta| meta.source == LayerSource::Group) {
-                    build_group(*child, program, metas, children, effects, contributions, visiting)?
+                    build_group(*child, program, metas, children, effects, placements, contributions, visiting)?
                 } else {
                     *contributions.get(child).ok_or(GroupCompositeProgramError::InvalidInput(NodeKind::GroupComposite))?
                 };
@@ -104,9 +116,16 @@ impl GroupCompositeProgram {
             }
             let child_count = direct.len();
             let effect_start = inputs.len();
+            let mut placement = None;
             if let Some(binding) = effects.binding(group) {
                 let end = binding.effects.iter().position(|key| effects.is_placement(*key)).unwrap_or(binding.effects.len());
                 inputs.extend(binding.effects[..end].iter().copied());
+                if let (Some(&effect), Some(set)) = (binding.effects.get(end), placements.binding(group)) {
+                    if let Some(program) = effects.placement_program(effect) {
+                        placement = Some(GroupPlacement { set: inputs.len(), effect: inputs.len() + 1, program });
+                        inputs.extend([set.node, effect]);
+                    }
+                }
             }
 
             let mut identity = NodeIdentity::new(NodeKind::GroupComposite, inputs);
@@ -116,7 +135,7 @@ impl GroupCompositeProgram {
             let node = GraphNode::new(identity);
             let key = node.key();
             program.nodes.entry(key).or_insert(node);
-            program.recipes.entry(key).or_insert(Recipe { group, child_count, effect_start });
+            program.recipes.entry(key).or_insert(Recipe { group, child_count, effect_start, placement });
             program.group_nodes.insert(group, key);
             visiting.remove(&group);
             Ok(key)
@@ -125,7 +144,7 @@ impl GroupCompositeProgram {
         let root_layers = children.get(&None).cloned().unwrap_or_default();
         for layer in root_layers {
             let key = if metas.get(&layer).is_some_and(|meta| meta.source == LayerSource::Group) {
-                build_group(layer, &mut program, &metas, &children, effects, contributions, &mut visiting)?
+                build_group(layer, &mut program, &metas, &children, effects, placements, contributions, &mut visiting)?
             } else {
                 *contributions.get(&layer).ok_or(GroupCompositeProgramError::InvalidInput(NodeKind::GroupComposite))?
             };
@@ -153,22 +172,25 @@ impl GroupCompositeProgram {
                 .cloned()
                 .ok_or(GroupCompositeProgramError::InvalidInput(node.identity().kind))?;
 
-            let mut children = Vec::new();
+            // Each direct child with its subtree, in order.
+            let mut subtrees: Vec<Vec<SceneContributionValue>> = Vec::with_capacity(recipe.child_count);
             for index in 0..recipe.child_count {
                 let value = inputs.at(index + 1).ok_or(GroupCompositeProgramError::InvalidInput(node.identity().kind))?;
                 if let Some(contribution) = value.downcast_ref::<SceneContributionValue>() {
-                    children.push(contribution.clone());
+                    subtrees.push(vec![contribution.clone()]);
                 } else if let Some(fragment) = value.downcast_ref::<SceneFragmentValue>() {
-                    children.extend(fragment.contributions.iter().cloned());
+                    subtrees.push(fragment.contributions.clone());
                 } else {
                     return Err(GroupCompositeProgramError::InvalidInput(node.identity().kind));
                 }
             }
+            let mut children: Vec<SceneContributionValue> = subtrees.iter().flatten().cloned().collect();
 
             let mut each = Vec::new();
             let mut whole = Vec::new();
             let mut in_whole = false;
-            for index in recipe.effect_start..node.identity().inputs.len() {
+            let effect_end = recipe.placement.map_or(node.identity().inputs.len(), |placement| placement.set);
+            for index in recipe.effect_start..effect_end {
                 let Some(effect) = inputs.at(index)
                     .and_then(|value| value.downcast_ref::<EffectValue>())
                     .and_then(|value| value.0.clone()) else { continue };
@@ -184,6 +206,13 @@ impl GroupCompositeProgram {
                 for child in &mut children {
                     append_each(child, &each);
                 }
+            }
+
+            if let Some(placed) = recipe.placement.and_then(|placement| placed_copies(placement, inputs, &owner, &subtrees, &each)) {
+                // The copies stand in for the group: it is not drawn itself.
+                let mut contributions = vec![SceneContributionValue { solo: owner.solo, layer: None }];
+                contributions.extend(placed);
+                return Ok(NodeValue::new(SceneFragmentValue { contributions }));
             }
 
             let mut contributions = vec![owner.clone()];
@@ -222,6 +251,55 @@ impl GroupCompositeProgram {
             Ok(NodeValue::new(SceneFragmentValue { contributions }))
         })())
     }
+}
+
+/// A placement effect on a group copies its children: with Each scope every copy picks one child
+/// (and its subtree) by the program's pick; with Whole scope every copy carries all of them. A copy
+/// moves its children as the group's own copy moves the group. Copies at another time are not
+/// placed here yet.
+fn placed_copies(
+    placement: GroupPlacement,
+    inputs: &NodeInputs,
+    owner: &SceneContributionValue,
+    subtrees: &[Vec<SceneContributionValue>],
+    each: &[crate::picture::resolved::ResolvedEffect],
+) -> Option<Vec<SceneContributionValue>> {
+    let set = inputs.at(placement.set)?.downcast_ref::<super::PlacementSetValue>()?;
+    set.selected_effect?;
+    let effect = inputs.at(placement.effect)?.downcast_ref::<EffectValue>()?.0.clone()?;
+    let group = owner.layer.as_ref()?;
+    let whole = effect.scope == EffectScope::Whole;
+    let heads: Vec<u64> = subtrees.iter().filter_map(|tree| tree.first().and_then(|c| c.layer.as_ref()).map(|l| l.layer.0)).collect();
+    if heads.len() != subtrees.len() || subtrees.is_empty() { return Some(Vec::new()); }
+    let picks = (placement.program.pick)(&effect.params, &heads, set.copies.len());
+    // Copies of picked children stack in copy order at the children's front-most slot.
+    let slot = (!whole).then(|| subtrees.iter().flatten().filter_map(|c| c.layer.as_ref().map(|l| l.order)).min()).flatten();
+    let (group_affine, group_spatial) = (group.transform.affine.inverse(), group.transform.spatial.inverse());
+    let mut out = Vec::new();
+    for (ordinal, copy) in set.copies.iter().enumerate() {
+        let Some(moved) = copy.transform else { continue };
+        let (affine, spatial) = (moved.affine * group_affine, moved.spatial * group_spatial);
+        let picked: Vec<&SceneContributionValue> = if whole {
+            subtrees.iter().flatten().collect()
+        } else {
+            let Some(&pick) = picks.get(ordinal) else { continue };
+            subtrees.get(pick).map(|tree| tree.iter().collect()).unwrap_or_default()
+        };
+        for contribution in picked {
+            let mut contribution = contribution.clone();
+            if let Some(layer) = contribution.layer.as_mut() {
+                layer.instance = copy.index;
+                layer.transform = TransformValue { affine: affine * layer.transform.affine, spatial: spatial * layer.transform.spatial };
+                layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                layer.shape_stretch = copy.outline_stretch;
+                layer.freeze_eligible = false;
+                if let Some(slot) = slot { layer.order = slot; }
+                layer.effects.extend(each.iter().cloned());
+            }
+            out.push(contribution);
+        }
+    }
+    Some(out)
 }
 
 fn append_each(contribution: &mut SceneContributionValue, effects: &[crate::picture::resolved::ResolvedEffect]) {

@@ -66,8 +66,16 @@ const cssGradient = (text) => {
     const from = stops[i - 1].offset;
     stops[i].offset = from + (stops[j].offset - from) / (j - i + 1);
   }
+  const cleaned = stops.map((s) => ({ offset: Math.min(1, Math.max(0, s.offset)), rgba: s.rgba }));
   // The window measures a gradient's angle from +x with y down; CSS from up, clockwise.
-  return { kind, angle: css - 90, stops: stops.map((s) => ({ offset: Math.min(1, Math.max(0, s.offset)), rgba: s.rgba })) };
+  const angle = css - 90;
+  if (kind === "linear") return { kind, angle, stops: cleaned };
+  // Radial and conic gradients centre on the box. A radial one reaches the box's corners (CSS's
+  // farthest-corner; Motolii's radial gradient is a circle); a conic one starts at its "from" angle.
+  const turn = (angle * Math.PI) / 180;
+  const reach = kind === "radial" ? 0.5 * Math.SQRT2 : 0.5;
+  const end = kind === "radial" ? [0.5 + reach, 0.5] : [0.5 + reach * Math.cos(turn), 0.5 + reach * Math.sin(turn)];
+  return { kind, start: [0.5, 0.5], end, stops: cleaned };
 };
 /** What the window stores for a written value: a choice by its name, a layer by the layer, a color by hex. */
 const valueFor = (row, value) => {
