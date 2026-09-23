@@ -22,11 +22,46 @@ pub(crate) struct LinearPicture {
     pub(crate) frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
 }
 
+/// What a picture is, besides its pixels: its logical size, padding and frame.
+#[derive(Clone, Copy)]
+pub(crate) struct PictureMeta {
+    natural: [f32; 2],
+    padding: u32,
+    frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
+}
+
+impl PictureMeta {
+    fn picture(self, pixels: crate::render::compositor::readback::Pixels) -> LinearPicture {
+        LinearPicture {
+            bytes: pixels.data,
+            width: pixels.width,
+            height: pixels.height,
+            natural: self.natural,
+            padding: self.padding,
+            frame: self.frame,
+        }
+    }
+}
+
+/// A picture an analysis asked the GPU for. It arrives in a later frame, never in the frame that
+/// asked (2026-09-23: no same-frame GPU→CPU readback on the drawing route).
+pub(crate) enum AnalysisPicture {
+    /// No picture to read (nothing drawn).
+    Nothing,
+    Waiting { id: re_renderer::GpuReadbackIdentifier, meta: PictureMeta, asked: u64 },
+    Arrived(std::sync::Arc<LinearPicture>),
+}
+
+/// A readback nobody collected within this many frames is asked for again.
+const ANALYSIS_READBACK_PATIENCE: u64 = 8;
+
 impl Engine {
-    pub(super) fn layer_with_passes_linear_picture(
+    /// Asks for the linear premultiplied half-float picture of a layer's effect chain: recorded
+    /// now, read in a later frame.
+    fn ask_linear_picture(
         &mut self,
         lwp: &crate::render::compositor::LayerWithPasses,
-    ) -> Result<Option<LinearPicture>, EngineError> {
+    ) -> Result<Option<(re_renderer::GpuReadbackIdentifier, PictureMeta)>, EngineError> {
         let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(lwp))?;
         let Some(texture) = textures.first().and_then(|content| content.texture()).cloned() else { return Ok(None) };
         let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle())
@@ -42,22 +77,78 @@ impl Engine {
             self.compositor.ctx.queue_commands([encoder.finish()]);
             (converted.clone(), Some(converted))
         };
-        let bytes = self.compositor.read_texture_bytes(&half)?;
+        let id = crate::render::compositor::readback::ask_texture(&self.compositor.ctx, &half)
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        // The copy is recorded: the scratch can serve later passes, which run after it.
         for (width, height, format, texture) in checked_out {
             self.compositor.effect_scratch.release(width, height, format, texture);
         }
-        let (width, height) = (half.width(), half.height());
         if let Some(owned) = owned {
             self.compositor.effect_scratch.release(owned.width(), owned.height(), owned.format(), owned);
         }
-        Ok(Some(LinearPicture {
-            bytes,
-            width,
-            height,
-            natural: lwp.layer.size,
-            padding: paddings[0],
-            frame: lwp.layer.frame,
-        }))
+        Ok(Some((id, PictureMeta { natural: lwp.layer.size, padding: paddings[0], frame: lwp.layer.frame })))
+    }
+
+    /// The picture `node` analyses at `t`: arrived, or asked for now (`ask` records it) and
+    /// `Waiting` until a later frame brings it.
+    fn analysis_picture(
+        &mut self,
+        node: crate::frame_graph::NodeKey,
+        t: RationalTime,
+        ask: impl FnOnce(&mut Self) -> Result<Option<(re_renderer::GpuReadbackIdentifier, PictureMeta)>, EngineError>,
+    ) -> Result<Option<Option<std::sync::Arc<LinearPicture>>>, EngineError> {
+        let frame = self.compositor.ctx.active_frame_idx();
+        match self.analysis_pictures.get(&(node, t)) {
+            Some(AnalysisPicture::Arrived(picture)) => return Ok(Some(Some(picture.clone()))),
+            Some(AnalysisPicture::Nothing) => return Ok(Some(None)),
+            Some(AnalysisPicture::Waiting { asked, .. }) if frame.saturating_sub(*asked) <= ANALYSIS_READBACK_PATIENCE => return Ok(None),
+            _ => {}
+        }
+        let state = match ask(self)? {
+            None => AnalysisPicture::Nothing,
+            Some((id, meta)) => AnalysisPicture::Waiting { id, meta, asked: frame },
+        };
+        let result = match state { AnalysisPicture::Nothing => Some(None), _ => None };
+        self.analysis_pictures.insert((node, t), state);
+        Ok(result)
+    }
+
+    /// The pictures analyses asked for that have arrived. Returns the nodes to evaluate again.
+    pub(in crate::engine) fn arrived_analysis_pictures(&mut self) -> Vec<crate::frame_graph::NodeKey> {
+        let ctx = &self.compositor.ctx;
+        let mut arrived = Vec::new();
+        for ((node, _), state) in &mut self.analysis_pictures {
+            if let AnalysisPicture::Waiting { id, meta, .. } = state {
+                if let Some(readback) = crate::render::compositor::readback::take_texture(ctx, *id) {
+                    *state = AnalysisPicture::Arrived(std::sync::Arc::new(meta.picture(readback)));
+                    arrived.push(*node);
+                }
+            }
+        }
+        arrived
+    }
+
+    /// Whether an analysis still waits for a picture (an offline route waits for it; the drawing
+    /// route draws on).
+    pub(in crate::engine) fn analysis_waiting(&self) -> bool {
+        self.analysis_pictures.values().any(|state| matches!(state, AnalysisPicture::Waiting { .. }))
+    }
+
+    /// Offline routes only (an export, a freeze job): the picture of a layer's effect chain now —
+    /// the frame ends and the GPU is waited for.
+    pub(super) fn layer_with_passes_linear_picture_offline(
+        &mut self,
+        lwp: &crate::render::compositor::LayerWithPasses,
+    ) -> Result<Option<LinearPicture>, EngineError> {
+        let Some((id, meta)) = self.ask_linear_picture(lwp)? else { return Ok(None) };
+        Ok(Some(meta.picture(self.wait_for_readback(id)?)))
+    }
+
+    /// Offline routes only: ends the frame and waits until `id` has arrived.
+    pub(super) fn wait_for_readback(&mut self, id: re_renderer::GpuReadbackIdentifier) -> Result<crate::render::compositor::readback::Pixels, EngineError> {
+        self.compositor.next_frame();
+        self.compositor.ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|error| EngineError::Store(format!("GPU wait: {error}")))?;
+        crate::render::compositor::readback::take_texture(&self.compositor.ctx, id).ok_or_else(|| EngineError::Store("a readback was waited for and did not arrive".into()))
     }
 
     pub(in crate::engine) fn frame_graph_blob_analysis(
@@ -67,6 +158,7 @@ impl Engine {
         t: RationalTime,
         comp: CompSpec,
         fps: crate::doc::store::Fps,
+        node: crate::frame_graph::NodeKey,
     ) -> Result<crate::frame_graph::BlobAnalysisValue, EngineError> {
         let mut tracker = previous.map(|value| value.tracker.clone()).unwrap_or_default();
         let previous_pixels = previous.and_then(|value| value.previous.as_ref());
@@ -90,16 +182,26 @@ impl Engine {
             fps.den() as f32 / fps.num() as f32,
             frame,
         ]);
-        let picture = (|| {
+        let picture = self.analysis_picture(node, t, |engine| {
             let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
             // A blob reads the layer's own picture, in material space: no camera.
             let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(ResolvedCamera::default()));
-            let prepared = self.prepare_gpu_pictures(&scene, &prep, false)?;
+            let prepared = engine.prepare_gpu_pictures(&scene, &prep, false)?;
             let Some(layer) = prepared.layers.first() else { return Ok(None); };
-            self.layer_with_passes_linear_picture(layer)
-        })();
+            engine.ask_linear_picture(layer)
+        });
         self.compositor.clock = previous_clock;
+        // Not arrived yet: nothing is found at this frame, and the tracks wait (their ids go on).
         let Some(picture) = picture? else {
+            inputs.set_blobs(request.target, EffectId(0), t, Vec::new());
+            return Ok(crate::frame_graph::BlobAnalysisValue {
+                inputs,
+                tracker,
+                previous: previous_pixels.cloned(),
+                mask: None,
+            });
+        };
+        let Some(picture) = picture else {
             tracker.step(Vec::new(), &request.settings);
             inputs.set_blobs(request.target, EffectId(0), t, Vec::new());
             return Ok(crate::frame_graph::BlobAnalysisValue {
@@ -175,6 +277,7 @@ impl Engine {
         previous: Option<&crate::frame_graph::OverlayAnalysisValue>,
         t: RationalTime,
         comp: CompSpec,
+        node: crate::frame_graph::NodeKey,
     ) -> Result<crate::frame_graph::OverlayAnalysisValue, EngineError> {
         let params = overlay::with_defaults(&effect.plugin_id, &effect.params);
         let method = overlay::number_of(&params, "method").round() as i64;
@@ -250,16 +353,17 @@ impl Engine {
         };
         // The overlay analyses the output below it: that picture is taken through the output camera
         // (the node's own input), and plates inside it through the undecided seam.
-        let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(camera));
-        let (prepared, light) = self.as_frame_part(&prep, false, |engine, prep| {
-            let prepared = engine.prepare_gpu_scene(&below, prep)?;
-            let top = prepared.layers.clone();
-            Ok((prepared, top))
-        })?;
-        let picture = if prepared.layers.is_empty() {
-            None
-        } else {
-            let (texture, _view) = self.compositor.bake_picture(
+        let picture = self.analysis_picture(node, t, |engine| {
+            let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(camera));
+            let (prepared, light) = engine.as_frame_part(&prep, false, |engine, prep| {
+                let prepared = engine.prepare_gpu_scene(&below, prep)?;
+                let top = prepared.layers.clone();
+                Ok((prepared, top))
+            })?;
+            if prepared.layers.is_empty() {
+                return Ok(None);
+            }
+            let (texture, _view) = engine.compositor.bake_picture(
                 comp,
                 camera,
                 &prepared.layers,
@@ -268,35 +372,43 @@ impl Engine {
                 Some(&light),
                 None,
             )?;
-            let mut encoder = self.compositor.ctx.device.create_command_encoder(
+            let mut encoder = engine.compositor.ctx.device.create_command_encoder(
                 &wgpu::CommandEncoderDescriptor { label: Some("motolii-framegraph-overlay-analysis") },
             );
-            let converted = self.compositor.convert_image_encoding(
+            let converted = engine.compositor.convert_image_encoding(
                 &mut encoder,
                 &texture,
                 true,
                 !texture.format().is_srgb(),
                 true,
             );
-            self.compositor.ctx.queue_commands([encoder.finish()]);
-            let bytes = self.compositor.read_texture_bytes(&converted)?;
+            engine.compositor.ctx.queue_commands([encoder.finish()]);
+            let id = crate::render::compositor::readback::ask_texture(&engine.compositor.ctx, &converted)
+                .map_err(|error| EngineError::Store(error.to_string()))?;
             let (width, height) = (converted.width(), converted.height());
-            self.compositor.effect_scratch.release(width, height, converted.format(), converted);
-            Some(LinearPicture {
-                bytes,
-                width,
-                height,
-                natural: [comp.width as f32, comp.height as f32],
-                padding: 0,
-                frame: None,
-            })
-        };
+            engine.compositor.effect_scratch.release(width, height, converted.format(), converted);
+            Ok(Some((id, PictureMeta { natural: [comp.width as f32, comp.height as f32], padding: 0, frame: None })))
+        })?;
 
         let settings = overlay_settings_of(&params);
         let detail = overlay::number_of(&params, "detail").round().clamp(120.0, 3840.0) as u32;
         let mut tracker = previous.map(|value| value.tracker.clone()).unwrap_or_default();
         let previous_pixels = previous.and_then(|value| value.previous.as_ref());
 
+        // Not arrived yet: nothing is found at this frame, and the tracks wait (their ids go on).
+        let Some(picture) = picture else {
+            return Ok(crate::frame_graph::OverlayAnalysisValue {
+                layer,
+                marks: Vec::new(),
+                mask: None,
+                params,
+                depths: None,
+                pushes: Vec::new(),
+                physics: false,
+                tracker,
+                previous: previous_pixels.cloned(),
+            });
+        };
         let Some(picture) = picture else {
             tracker.step(Vec::new(), &settings);
             return Ok(crate::frame_graph::OverlayAnalysisValue {

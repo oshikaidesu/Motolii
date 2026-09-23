@@ -137,21 +137,26 @@ impl Engine {
         self.blocks.physics.contacts()
     }
 
-    pub fn block_states(&self) -> Vec<[f32; 3]> {
-        let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
-        let ctx = &self.compositor.ctx;
-        let encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-read") });
-        crate::render::compositor::effects::block_program::read_state(&ctx.device, &ctx.queue, world, encoder)
-            .iter().map(|o| [o.translate[0], o.translate[1], o.rotate]).collect()
+    pub fn block_states(&mut self) -> Vec<[f32; 3]> {
+        self.block_state_now().iter().map(|o| [o.translate[0], o.translate[1], o.rotate]).collect()
     }
 
     /// 計測の口: 物ごとの今のずれを全部(位置 2・回転・大きさ・色 3・不透明)。描く道は読み戻さない。
-    pub fn block_offsets(&self) -> Vec<[f32; 8]> {
+    pub fn block_offsets(&mut self) -> Vec<[f32; 8]> {
+        self.block_state_now().iter().map(|o| [o.translate[0], o.translate[1], o.rotate, o.scale, o.tint[0], o.tint[1], o.tint[2], o.tint[3]]).collect()
+    }
+
+    /// Tests and measurement only: the blocks' state as this frame leaves it, now (the frame ends and
+    /// the GPU is waited for).
+    fn block_state_now(&mut self) -> Vec<crate::render::compositor::effects::block_program::BlockOffset> {
+        use crate::render::compositor::effects::block_program::{offsets_from_bytes, OFFSET_BYTES};
         let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
-        let ctx = &self.compositor.ctx;
-        let encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-read") });
-        crate::render::compositor::effects::block_program::read_state(&ctx.device, &ctx.queue, world, encoder)
-            .iter().map(|o| [o.translate[0], o.translate[1], o.rotate, o.scale, o.tint[0], o.tint[1], o.tint[2], o.tint[3]]).collect()
+        let bytes = u64::from(world.count) * OFFSET_BYTES;
+        if bytes == 0 { return Vec::new(); }
+        let Ok(id) = crate::render::compositor::readback::ask_buffer(&self.compositor.ctx, world.state(), bytes) else { return Vec::new() };
+        self.compositor.next_frame();
+        if self.compositor.ctx.device.poll(wgpu::PollType::wait_indefinitely()).is_err() { return Vec::new(); }
+        crate::render::compositor::readback::take_buffer(&self.compositor.ctx, id).map(|data| offsets_from_bytes(&data)).unwrap_or_default()
     }
 
 

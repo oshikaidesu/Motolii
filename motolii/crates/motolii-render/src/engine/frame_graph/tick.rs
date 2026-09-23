@@ -1,5 +1,5 @@
-//! One application tick, run the way Rerun runs one (`re_viewer/src/app/ui.rs`, the fork's embedder
-//! `SpatialStage::show`), on the host's frame (`re_view_host::HostFrame`):
+//! One application tick, run the way Rerun's embedders run one (`re_viewer/src/app/ui.rs`): Motolii is
+//! the embedder that opens and ends the renderer frame (`begin_frame` / `before_submit`):
 //!
 //! 1. Prepare the document frame — once, shared by every view (Rerun's once-per-frame context
 //!    systems and caches): FrameGraph evaluation, lowering, the prepared GPU scene.
@@ -29,6 +29,8 @@ pub struct ViewRequest<'a> {
     pub camera: Option<ResolvedCamera>,
     pub projection: ViewProjection,
     pub include_background: bool,
+    /// Read this view's picture back (an offline route: the readback arrives after the frame).
+    pub read_back: bool,
 }
 
 /// What one tick did. The architecture's invariants are stated over these counts.
@@ -49,6 +51,7 @@ impl Engine {
     pub fn tick(&mut self, doc: &StoreView<'_>, time: RationalTime, views: &[ViewRequest<'_>]) -> Result<TickStats, EngineError> {
         let mut stats = TickStats::default();
         self.compositor.feedback_seen.clear();
+        self.collect_analysis_pictures();
         self.tick_inside(doc, time, views, &mut stats)?;
         self.compositor.next_frame();
         stats.submits += 1;
@@ -85,11 +88,12 @@ impl Engine {
                     let past = self.prepare_document_frame(doc, at, views, stats)?;
                     for view in views {
                         let scratch = self.compositor.view_canvas_for(view.window, crate::render::compositor::PRESENTABLE_FORMAT);
-                        self.record_view(&past, &ViewRequest { target: &scratch.texture, ..*view })?;
+                        self.record_view(&past, &ViewRequest { target: &scratch.texture, read_back: false, ..*view })?;
                     }
                     self.compositor.next_frame();
                     stats.submits += 1;
                     stats.begin_frames += 1;
+                    self.collect_analysis_pictures();
                 }
                 // The frame itself, on the history just rebuilt.
                 let c = &mut self.compositor;
@@ -184,25 +188,41 @@ impl Engine {
             shown.composite(ctx, &mut pass);
         }
         ctx.queue_commands([encoder.finish()]);
+        if view.read_back {
+            let id = crate::render::compositor::readback::ask_texture(ctx, view.target)
+                .map_err(|error| EngineError::Store(error.to_string()))?;
+            self.view_readbacks.push(id);
+        }
         Ok(())
     }
 
-    /// The output at `time`, read back: one tick with one Export view.
+    /// The output at `time`, read back: one tick with one Export view. An offline route: it waits
+    /// for what the drawing route gets a frame later (the pictures its analyses ask for, the output).
     pub fn export_frame(&mut self, doc: &StoreView<'_>, time: RationalTime, include_background: bool, camera: Option<ResolvedCamera>) -> Result<Vec<u8>, EngineError> {
+        /// How many times an export draws a frame again for analyses that ask for pictures.
+        const SETTLE: usize = 4;
         let comp = doc.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
         let window = Window::output(comp);
-        let target = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("motolii-export"),
-            size: wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: crate::render::compositor::PRESENTABLE_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        self.tick(doc, time, &[ViewRequest { target: &target, window, camera, projection: ViewProjection::Export, include_background }])?;
-        Ok(self.compositor.read_texture_bytes(&target)?)
+        let target = self.compositor.view_canvas_for(window, crate::render::compositor::PRESENTABLE_FORMAT);
+        for _ in 0..SETTLE {
+            self.view_readbacks.clear();
+            self.tick(doc, time, &[ViewRequest { target: &target.texture, window, camera, projection: ViewProjection::Export, include_background, read_back: true }])?;
+            if !self.analysis_waiting() {
+                break;
+            }
+            self.compositor.ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|error| EngineError::Store(format!("GPU wait: {error}")))?;
+            self.collect_analysis_pictures();
+        }
+        let id = self.view_readbacks.pop().ok_or_else(|| EngineError::Store("the export view asked for no readback".into()))?;
+        Ok(self.wait_for_readback(id)?.data)
+    }
+
+    /// Offline routes and tests only: `texture` as this frame leaves it, now (the frame ends and
+    /// the GPU is waited for).
+    pub(crate) fn read_texture_offline(&mut self, texture: &wgpu::Texture) -> Result<Vec<u8>, EngineError> {
+        let id = crate::render::compositor::readback::ask_texture(&self.compositor.ctx, texture)
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        Ok(self.wait_for_readback(id)?.data)
     }
 
     /// The last tick's counts.

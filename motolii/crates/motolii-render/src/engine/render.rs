@@ -68,7 +68,7 @@ impl Engine {
         self.freezing = None;
 
         let Some(layer) = prepared?.layers.into_iter().next() else { return Ok(false) };
-        let Some(picture) = self.layer_with_passes_linear_picture(&layer)? else { return Ok(false) };
+        let Some(picture) = self.layer_with_passes_linear_picture_offline(&layer)? else { return Ok(false) };
         let uploaded = self.compositor.upload_rgba16f(
             "motolii-frozen",
             picture.bytes.clone(),
@@ -149,7 +149,7 @@ impl Engine {
 
     #[allow(clippy::too_many_arguments)]
     fn draw_one_view(&mut self, view: &StoreView<'_>, t: RationalTime, target: &wgpu::Texture, camera: Option<ResolvedCamera>, include_background: bool, window: Window) -> Result<(), EngineError> {
-        let request = super::frame_graph::tick::ViewRequest { target, window, camera, projection: crate::frame_graph::ViewProjection::Camera, include_background };
+        let request = super::frame_graph::tick::ViewRequest { target, window, camera, projection: crate::frame_graph::ViewProjection::Camera, include_background, read_back: false };
         self.tick(view, t, &[request]).map(|_| ())
     }
 }

@@ -672,7 +672,8 @@ impl RopePass {
     }
 }
 
-/// 試験と計測の口: state を読み戻す(描く道は読み戻さない)。
+/// 試験の口: state を読み戻す(描く道は読み戻さない)。
+#[cfg(test)]
 pub fn read_state(device: &wgpu::Device, queue: &wgpu::Queue, world: &BlockWorld, encoder: wgpu::CommandEncoder) -> Vec<BlockOffset> {
     let mut encoder = encoder;
     let bytes = u64::from(world.count) * OFFSET_BYTES;

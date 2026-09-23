@@ -179,6 +179,10 @@ pub struct Engine {
     /// The document frame the last tick's views read.
     tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
     tick_stats: frame_graph::tick::TickStats,
+    /// The pictures analyses asked the GPU for, by node and time (they arrive in a later frame).
+    analysis_pictures: HashMap<(crate::frame_graph::NodeKey, RationalTime), analysis::AnalysisPicture>,
+    /// Readbacks the last tick's views asked for (an offline route reads its output).
+    view_readbacks: Vec<re_renderer::GpuReadbackIdentifier>,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
@@ -265,6 +269,8 @@ impl Engine {
             preparation_events: Vec::new(),
             tick_frame: None,
             tick_stats: Default::default(),
+            analysis_pictures: HashMap::new(),
+            view_readbacks: Vec::new(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
@@ -345,6 +351,8 @@ impl Engine {
             preparation_events: Vec::new(),
             tick_frame: None,
             tick_stats: Default::default(),
+            analysis_pictures: HashMap::new(),
+            view_readbacks: Vec::new(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),

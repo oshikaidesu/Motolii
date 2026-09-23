@@ -127,7 +127,9 @@ pub(crate) fn neighbors(items: &[BlockItem], reach: f32) -> (Vec<u32>, Vec<u32>)
 mod passes;
 mod wgsl;
 
-pub(crate) use passes::{read_state, BlockProgram, BlockWorld, FollowPass, RopePass, WorldPass};
+#[cfg(test)]
+pub(crate) use passes::read_state;
+pub(crate) use passes::{BlockProgram, BlockWorld, FollowPass, RopePass, WorldPass};
 pub(crate) use wgsl::{module_source, note_device, validate, wgsl_manifest};
 
 

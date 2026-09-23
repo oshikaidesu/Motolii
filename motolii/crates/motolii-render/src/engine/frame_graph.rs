@@ -139,7 +139,7 @@ impl ProgramExecutor<'_> {
             NodeKind::AnalysisBlob => {
                 let request = direct::<BlobAnalysisRequestValue>(node, &inputs, 0)?;
                 let previous = inputs.at(1).and_then(|value| value.downcast_ref::<BlobAnalysisValue>());
-                let value = self.engine.frame_graph_blob_analysis(request, previous, context.time, self.comp, self.fps)?;
+                let value = self.engine.frame_graph_blob_analysis(request, previous, context.time, self.comp, self.fps, node.key())?;
                 Ok(NodeValue::new(value))
             }
             NodeKind::AnalysisOverlay => {
@@ -154,7 +154,7 @@ impl ProgramExecutor<'_> {
                 let (layer, _order, parent) = self.program.overlay().recipe(node.key())
                     .ok_or_else(|| unsupported(node.identity().kind))?;
                 let value = self.engine.frame_graph_overlay_analysis(
-                    layer, parent, effect, scene, solver, camera, previous, context.time, self.comp,
+                    layer, parent, effect, scene, solver, camera, previous, context.time, self.comp, node.key(),
                 )?;
                 Ok(NodeValue::new(value))
             }
@@ -290,10 +290,31 @@ impl Engine {
         }).flatten().collect()
     }
 
+    /// Pictures analyses asked for in earlier frames that have arrived: their nodes (and what reads
+    /// them) are evaluated again at the next evaluation.
+    pub(in crate::engine) fn collect_analysis_pictures(&mut self) {
+        let arrived = self.arrived_analysis_pictures();
+        if arrived.is_empty() {
+            return;
+        }
+        if let Some(state) = self.frame_graph.as_mut() {
+            state.graph.invalidate(arrived);
+            state.frame = None;
+        }
+        self.tick_frame = None;
+    }
+
     /// The semantic scene at `time` (editor reads, the tick's first step): no GPU preparation.
     fn evaluated_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality) -> Result<EngineFrameGraph, EngineError> {
         let revision = GraphRevision::new(view.revision_key());
-        let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
+        let mut state = match self.frame_graph.take() {
+            Some(state) if state.graph.revision() == revision => state,
+            _ => {
+                // Another revision: what its analyses asked for describes a work that is gone.
+                self.analysis_pictures.clear();
+                EngineFrameGraph::new(view, revision)?
+            }
+        };
         self.compositor.feedback_set_revision(view.revision_key());
         if !state.matches(revision, time) {
             if let Err(error) = state.evaluate_scene(self, time, quality) {

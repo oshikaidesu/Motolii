@@ -28,7 +28,6 @@ wgpu = { workspace = true }
 # 棚の検証を device の持ち物で行うための、wgpu 本体と同じ写し(Features → naga の Capabilities)。
 wgpu-naga-bridge = "=29.0.4"
 re_renderer = { workspace = true }
-re_view_host = { workspace = true }
 macaw = { workspace = true }
 glam = { workspace = true }
 image = { workspace = true }

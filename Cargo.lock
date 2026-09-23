@@ -3224,7 +3224,6 @@ dependencies = [
  "re_sdk_types",
  "re_types_core",
  "re_video",
- "re_view_host",
  "rtrb",
  "rtsan-standalone",
  "rubato",
@@ -5272,17 +5271,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
-]
-
-[[package]]
-name = "re_view_host"
-version = "0.35.0-alpha.1+dev"
-dependencies = [
- "glam 0.30.10",
- "macaw",
- "re_byte_size",
- "re_renderer",
- "wgpu",
 ]
 
 [[package]]

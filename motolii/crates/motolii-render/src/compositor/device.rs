@@ -3,6 +3,8 @@ use re_renderer::RenderContext;
 
 use crate::render::compositor::*;
 
+#[cfg(test)]
+#[cfg(test)]
 pub(crate) fn wait_for_gpu(device: &wgpu::Device, stage: &str) -> Result<(), CompositorError> {
     let test_host = cfg!(test) || std::env::var("MOTOLII_GPU_TEST").as_deref() == Ok("1");
     let timeout = test_host.then_some(std::time::Duration::from_secs(30));
@@ -37,7 +39,8 @@ impl Compositor {
         eprintln!("MOTOLII_COMPOSITOR_INIT phase=render_context");
         let mut ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
-        let frame = Some(re_view_host::HostFrame::begin(&mut ctx));
+        // Motolii is the embedder: it opens the first frame, as the viewer app does (`begin_frame`).
+        ctx.begin_frame();
 
         #[cfg(test)]
         eprintln!("MOTOLII_COMPOSITOR_INIT phase=catalog");
@@ -91,7 +94,6 @@ impl Compositor {
             coverage_programs: Default::default(),
             catalog,
             last_submission: None,
-            frame,
         })
     }
 
@@ -188,39 +190,6 @@ impl Compositor {
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
 
-    /// GPU の texture を CPU へ読み戻す(行の詰め物を外した生の byte)。Freeze の cache が書類の隣へ置く時に使う。
-    pub(crate) fn read_texture_bytes(&mut self, texture: &wgpu::Texture) -> Result<Vec<u8>, CompositorError> {
-        let bytes_per_pixel = texture.format().block_copy_size(None).ok_or_else(|| CompositorError::Effect(format!("{:?} は読み戻せない", texture.format())))?;
-        let (width, height) = (texture.width(), texture.height());
-        let row = width * bytes_per_pixel;
-        let padded = row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let staging = self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("motolii-freeze-readback"), size: u64::from(padded) * u64::from(height),
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false,
-        });
-        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-freeze-readback") });
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(height) } },
-            texture.size(),
-        );
-        self.ctx.queue_commands([encoder.finish()]);
-        self.next_frame();
-        let slice = staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
-        wait_for_gpu(&self.ctx.device, "texture-readback")?;
-        rx.recv_timeout(std::time::Duration::from_secs(30)).map_err(|e| CompositorError::Draw(format!("texture-readback map callback: {e}")))?.map_err(|e| CompositorError::Draw(e.to_string()))?;
-        let data = slice.get_mapped_range();
-        let mut out = Vec::with_capacity((row * height) as usize);
-        for y in 0..height as usize {
-            let start = y * padded as usize;
-            out.extend_from_slice(&data[start..start + row as usize]);
-        }
-        drop(data);
-        staging.unmap();
-        Ok(out)
-    }
 
     /// CPU の byte(乗算済み線形、Rgba16Float)を板として置ける texture に(Freeze の cache を disk から戻す時)。
     pub(crate) fn upload_rgba16f(&mut self, label: &str, bytes: Vec<u8>, width: u32, height: u32) -> Result<GpuTexture2D, CompositorError> {

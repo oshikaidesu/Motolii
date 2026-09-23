@@ -14,7 +14,6 @@ peniko = "0.6"
 # 三次ベジェの根。CSS の easing は三次方程式を解く話なので、自分で Newton も二分探索も書かない
 # (Blinn の方法。kurbo が peniko 経由で既に依存木に居た — 2026-09-21 に気付いた)。
 kurbo = "0.13"
-re_view_host = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/viewer/re_view_host" }
 re_renderer = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/viewer/re_renderer", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
 re_log = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/utils/re_log", features = ["setup"] }
 # 物理の解き手は借りる(自作しない): 積み上げの warm start・摩擦・joint・snapshot を持っている。

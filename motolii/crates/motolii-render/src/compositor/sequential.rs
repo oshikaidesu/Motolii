@@ -20,11 +20,13 @@ impl Compositor {
     /// frames are frames of their own.
     pub(crate) fn next_frame(&mut self) -> Option<wgpu::SubmissionIndex> {
         let submit_start = std::time::Instant::now();
-        let submitted = self.frame.take().and_then(|frame| frame.end(&mut self.ctx));
+        // The embedder's frame boundary, as re_viewer's app draws one: `before_submit` hands the frame
+        // to the queue, `begin_frame` opens the next.
+        let submitted = self.ctx.before_submit();
         if submitted.is_some() {
             self.last_submission = submitted.clone();
         }
-        self.frame = Some(re_view_host::HostFrame::begin(&mut self.ctx));
+        self.ctx.begin_frame();
         self.measurement.submit_us += submit_start.elapsed().as_micros() as u64;
         submitted
     }

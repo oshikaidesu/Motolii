@@ -238,6 +238,7 @@ impl EditorRuntime {
             camera: (*view == View::User).then_some(self.viewer.user_camera),
             projection: match view { View::Camera => crate::render::frame_graph::ViewProjection::Camera, View::User => crate::render::frame_graph::ViewProjection::Stage },
             include_background: true,
+            read_back: false,
         }).collect();
         self.engine.tick(&self.doc.view(), time, &requests).map_err(|e| e.to_string())?;
         drop(requests);

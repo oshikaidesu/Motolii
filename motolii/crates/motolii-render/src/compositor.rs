@@ -7,6 +7,8 @@ use re_renderer::{RenderContext, Rgba};
 mod clip;
 mod device;
 #[cfg(test)]
+#[cfg(test)]
+#[cfg(test)]
 pub(crate) use device::wait_for_gpu;
 pub(crate) mod effects;
 mod environment;
@@ -24,6 +26,7 @@ mod reflection_cache;
 mod measurement;
 pub use measurement::FrameMeasurement;
 mod point_cloud;
+pub(crate) mod readback;
 mod presentable;
 mod render_effects;
 pub(crate) mod paths;
@@ -425,8 +428,6 @@ pub struct Compositor {
     pub(crate) motion: Option<re_renderer::MotionBuffer>,
     /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
-    /// The renderer frame that is open: what is recorded goes out with it (`next_frame`).
-    pub(crate) frame: Option<re_view_host::HostFrame>,
 }
 
 #[derive(Clone)]
