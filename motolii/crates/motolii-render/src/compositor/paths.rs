@@ -172,7 +172,7 @@ impl Compositor {
         if builder.is_empty() { return Ok(None); }
         let mut mesh = builder.into_mesh(&self.ctx, "vector layer");
         // 場は線の中心線の点(錨)で評価する: 線の両側が同じ量だけ動き、線幅が保たれる。
-        for material in &mut mesh.materials { material.field_anchor = step.is_some(); }
+        for material in &mut mesh.materials { material.field_at_texcoord = step.is_some(); }
         let vertices = mesh.vertex_positions.clone();
         let mut instances = re_renderer::CpuModel::from_single_mesh(mesh).into_gpu_meshes(&self.ctx)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
