@@ -42,4 +42,4 @@ The scan was a throwaway script. It classifies the fork's public additions again
 
 What remains on the fork's WGSL side is the generic contract: the field and surface hooks and the view near-plane fade.
 
-The oracle has two parts. motolii-render lib passes 323 and fails 8, and the 8 failures all predate the migration. The fork's `re_renderer` tests and the native Viewer build (`rerun-cli`, native_viewer) are green.
+The oracle has three parts, all run against the rev-pinned fork. motolii-render lib passes 323 and fails 8. motolii-ui lib passes 92 and fails 5. Every one of those failures predates the migration. The fork's `re_renderer` tests and the native Viewer build (`rerun-cli`, native_viewer) are green.
