@@ -567,14 +567,13 @@ fn uniform_buffer(
     label: &str,
     bytes: &[u8],
 ) -> wgpu::Buffer {
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+    let _ = queue;
+    // Filled at creation: no staging copy through the queue for a buffer written once.
+    wgpu::util::DeviceExt::create_buffer_init(device, &wgpu::util::BufferInitDescriptor {
         label: Some(label),
-        size: bytes.len() as u64,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-    queue.write_buffer(&buffer, 0, bytes);
-    buffer
+        contents: bytes,
+        usage: wgpu::BufferUsages::UNIFORM,
+    })
 }
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {

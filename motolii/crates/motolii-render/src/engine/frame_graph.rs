@@ -343,7 +343,7 @@ impl Engine {
     ) -> Result<(), EngineError> {
         // The frame starts before evaluation: evaluating is part of what the frame costs.
         let frame_start = std::time::Instant::now();
-        self.ledger.clear();
+        self.ledger.begin_view(time, format!("{projection:?}"));
         let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
         self.compositor.measurement = Default::default();
         if !state.measured {
@@ -391,7 +391,9 @@ impl Engine {
         self.outline_layers.clear();
         self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
         let budget = std::time::Duration::from_secs_f64(1.0 / state.fps.as_f64().max(1.0));
-        if let Some(report) = self.ledger.report_if_over(frame_start.elapsed(), budget) {
+        self.ledger.claim("view", format!("{projection:?}"), "drawn for this tick", frame_start.elapsed());
+        let tick = self.ledger.end_view(frame_start.elapsed());
+        if let Some(report) = self.ledger.report_if_over(tick, budget) {
             eprintln!("{report}");
         }
         self.frame_graph = Some(state);
@@ -443,8 +445,14 @@ impl Engine {
             self.ledger.claim("draw", format!("layer {}", id.0), format!("{} effect pass(es): {}", names.len(), names.join(", ")), std::time::Duration::ZERO);
         }
         let started = std::time::Instant::now();
+        let before = self.surface_work();
         self.compositor.render_into_window(target, state.comp, camera, &layers, background, window)?;
-        self.ledger.claim("draw", "compositor", format!("{} layers into the window", layers.len()), started.elapsed());
+        let work = self.surface_work();
+        self.ledger.claim("draw", "compositor", format!(
+            "{} layers into the window in {} run(s), {} bake(s) ({} reused), {} backdrop copy(ies)",
+            layers.len(), work.main_runs - before.main_runs, work.bakes - before.bakes,
+            work.baked_hits - before.baked_hits, work.backdrop_copies - before.backdrop_copies,
+        ), started.elapsed());
         Ok(())
     }
 

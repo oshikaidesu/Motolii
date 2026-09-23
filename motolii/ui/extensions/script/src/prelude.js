@@ -210,7 +210,10 @@ class Layer {
     const before = new Set(this.json().effects.map((e) => e.id));
     op("select", { id: this.id });
     op("applyEffect", { pluginId: found.pluginId });
-    const added = this.json().effects.find((e) => !before.has(e.id));
+    const effects = this.json().effects;
+    const added = effects.find((e) => !before.has(e.id));
+    // Written order is the order: an effect written after a Repeater reads the copies as one picture.
+    if (effects[effects.length - 1].id !== added.id) op("moveEffect", { layer: this.id, id: added.id, to: effects.length - 1 });
     const effect = new Effect(this, added.id);
     for (const [param, value] of Object.entries(values)) effect.set(param, value);
     return effect;

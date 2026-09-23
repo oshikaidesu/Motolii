@@ -19,11 +19,35 @@ pub struct Claim {
 pub struct FrameLedger {
     claims: Vec<Claim>,
     last_report: Option<Instant>,
+    /// The clock frame being drawn and what its views have spent so far: every view drawn for
+    /// one tick shares the tick's budget.
+    tick: Option<crate::doc::core::RationalTime>,
+    views: Vec<String>,
+    spent: Duration,
 }
 
 impl FrameLedger {
     pub fn clear(&mut self) {
         self.claims.clear();
+        self.tick = None;
+        self.views.clear();
+        self.spent = Duration::ZERO;
+    }
+
+    /// Starts `view` of the tick at `time`. Another time, or a view already drawn (a still frame
+    /// redrawn), starts a new tick.
+    pub fn begin_view(&mut self, time: crate::doc::core::RationalTime, view: String) {
+        if self.tick != Some(time) || self.views.contains(&view) {
+            self.clear();
+            self.tick = Some(time);
+        }
+        self.views.push(view);
+    }
+
+    /// Adds a finished view's time to its tick and returns the tick's total so far.
+    pub fn end_view(&mut self, spent: Duration) -> Duration {
+        self.spent += spent;
+        self.spent
     }
 
     pub fn claim(&mut self, stage: &'static str, who: impl Into<String>, why: impl Into<String>, spent: Duration) {
@@ -48,7 +72,7 @@ impl FrameLedger {
         let mut claims = self.claims.clone();
         claims.sort_by(|a, b| b.us.cmp(&a.us));
         let mut report = format!(
-            "MOTOLII_SLOW_FRAME {:.1} ms (budget {:.1} ms)",
+            "MOTOLII_SLOW_FRAME {:.1} ms for every view of the tick (budget {:.1} ms)",
             spent.as_secs_f64() * 1e3,
             budget.as_secs_f64() * 1e3,
         );

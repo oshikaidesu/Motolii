@@ -319,6 +319,20 @@ mod tests {
         assert_eq!(names, ["One", "Two"], "the saved script replaced the old run");
     }
 
+    #[test]
+    fn an_effect_written_after_a_repeater_reads_the_copies() {
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.run_script(r#"comp({ seconds: 1 });
+            const bloom = group(ellipse({ name: "Petal" })).name("Bloom");
+            bloom.effect("Repeater", { "Count": 4 });
+            bloom.effect("Glow");"#, "order.js").unwrap();
+        let view = rt.doc.view();
+        let bloom = view.layers().into_iter().find(|id| view.attrs(*id).unwrap().unwrap().name == "Bloom").unwrap();
+        let ids: Vec<_> = view.effects(bloom).unwrap().iter().map(|e| e.plugin_id.clone()).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(crate::render::extensions::placement::kind(&ids[0]).is_some(), "written order is the order: {ids:?}");
+    }
+
     /// 同梱の例は説明書の一部。窓の名前が変わったらここが赤。
     #[test]
     fn every_example_builds_its_document() {
