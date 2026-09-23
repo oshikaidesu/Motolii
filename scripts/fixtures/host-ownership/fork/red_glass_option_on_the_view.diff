@@ -1,0 +1,7 @@
+--- a/crates/viewer_support/re_renderer/src/view_builder.rs
++++ b/crates/viewer_support/re_renderer/src/view_builder.rs
+@@ -312,6 +312,8 @@ pub struct TargetConfiguration {
+     pub motion: Option<DataTexture>,
++    /// Index of refraction of Motolii's standard Glass.
++    pub glass_ior: f32,
+ }

@@ -50,6 +50,10 @@ if [ "${1-}" = staged ]; then
     over_warn=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; find motolii/crates/motolii-render/vism \( -name '*.wgsl' -o -name '*.fs' -o -name '*.frag' \) -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v w="$warn" '$1>w' | wc -l | tr -d ' ')
     over_soft=$({ find motolii/crates/*/src motolii/ui/native/src motolii/ui/extensions -name '*.rs' -exec wc -l {} + ; find motolii/ui/lib -name '*.dart' -exec wc -l {} + ; find motolii/crates/motolii-render/vism \( -name '*.wgsl' -o -name '*.fs' -o -name '*.frag' \) -exec wc -l {} + ; } 2>/dev/null | grep -v ' total$' | awk -v l="$soft" '$1>l' | wc -l | tr -d ' ')
     echo "いま ${warn}行超 $over_warn 本 / ${soft}行超 $over_soft 本"
+    # GPU の実行は host の物。Rust・WGSL・持ち主の表が変わる commit だけ、境界を確かめる(数秒)。
+    if git diff --cached --name-only | grep -qE '\.(rs|wgsl)$|reference/host-ownership\.json|check-host-ownership\.py'; then
+        python3 scripts/check-host-ownership.py || fail=1
+    fi
     if [ "$fail" -ne 0 ]; then
         cat <<'MSG'
 FAILED: 既に天井を超えている file を、さらに伸ばしている。

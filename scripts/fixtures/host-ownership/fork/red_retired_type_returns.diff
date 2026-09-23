@@ -1,0 +1,4 @@
+--- a/crates/viewer_support/re_renderer/src/view_builder.rs
++++ b/crates/viewer_support/re_renderer/src/view_builder.rs
+@@ -300,3 +300,4 @@ pub struct TargetConfiguration {
++    pub reflection: Option<SceneReflection>,

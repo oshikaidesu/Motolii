@@ -1,6 +1,7 @@
 name: stage5-structure
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
@@ -14,9 +15,30 @@ jobs:
         run: |
           python3 scripts/check-stage5.py --self-test
           python3 scripts/check-stage5.py
+      - name: Host ownership (Motolii owns meaning, the Rerun host owns GPU execution)
+        run: |
+          python3 scripts/check-host-ownership.py --self-test
+          python3 scripts/check-host-ownership.py
       - name: Architecture rules (the core does not know the picture)
         run: |
           cargo install cargo-arc --locked
           cargo arc check
       - name: Documentation index and link consistency
         run: bash scripts/check-docs.sh
+
+  # The fork's patches are upstream candidates: the Viewer they would land in must still build.
+  fork-viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config nasm libavutil-dev libavcodec-dev libavformat-dev libavdevice-dev libavfilter-dev libswscale-dev libswresample-dev libasound2-dev libudev-dev libxkbcommon-dev libgtk-3-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: The pinned fork's native Viewer builds
+        run: |
+          rev=$(grep -m1 -o 'oshikaidesu/rerun?rev=[0-9a-f]*' Cargo.lock | cut -d= -f2)
+          git clone --filter=blob:none https://github.com/oshikaidesu/rerun fork
+          cd fork && git checkout "$rev"
+          cargo check -p rerun-cli --no-default-features --features native_viewer

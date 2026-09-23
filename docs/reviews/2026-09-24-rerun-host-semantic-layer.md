@@ -87,3 +87,20 @@ A saved WGSL also now redraws a paused window: the effect catalog's generation i
   | release (profile) | 354 | 307 | 8.8 / 10.9 / 51.4 |
 
 - **Oracle:** motolii-render lib passes 322 and fails 8. motolii-ui lib passes 92 and fails 5. Both failure sets are the same as the baseline.
+
+## The gate that keeps it (2026-09-24)
+
+`scripts/check-host-ownership.py` keeps the two invariants. It reads `motolii/reference/host-ownership.json`, finishes in a few seconds, and runs in CI (`stage5-structure`) and in the pre-commit hook.
+
+- **Motolii grows no GPU execution infrastructure.** The rules are structural, so a new name cannot slip past them:
+  - raw pipelines, layouts, bind groups, textures, buffers or samplers;
+  - submission, poll, map or readback waits;
+  - a `Renderer`/`DrawData` of its own;
+  - a type that keeps a collection of GPU resources (a pool of its own);
+  - an encoder whose buffer does not go to `queue_commands`.
+
+  Exceptions are six responsibility boundaries, each a file or an item with its reason: the EMBEDDER frame boundary, the window bridge and presentation, the OFFLINE wait, and the SEMANTIC_LOWERING of a Feedback history.
+- **The fork adds only classified generic primitives.** The fork is diffed against the recorded upstream. Every public Rust item, WGSL function, group-0 binding and frame-uniform field it adds must belong to a named primitive family, such as view resources, surface programs, clip planes or vector paths. Families own the files the fork added and name each item it added to upstream files. A renamed item is a new, unclassified item. Identifiers carrying product vocabulary fail even inside an owned file.
+- **Retired names do not return.** The checkpoint's retired architecture is a list of names that must not appear again.
+- **Self-test.** `--self-test` runs 21 fixtures: 13 that must fail (a raw bind group in a semantic module, an own texture pool, a synchronous wait, a self-submitted encoder, a second renderer, a product field on the view renamed to a neutral name, a product binding in the global group, …) and 8 that must pass (the embedder frame, the offline wait, pool-backed lowering with `queue_commands`, test-only code, registered seams, a primitive in its own family).
+- **Fork Viewer build.** CI's `fork-viewer` job builds the pinned fork's native Viewer.

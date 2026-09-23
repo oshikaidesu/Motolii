@@ -1,0 +1,7 @@
+--- a/crates/viewer_support/re_renderer/src/renderer/paths.rs
++++ b/crates/viewer_support/re_renderer/src/renderer/paths.rs
+@@ -120,3 +120,7 @@ impl PathStroke {
++    pub fn with_dash_offset(mut self, offset: f32) -> Self {
++        self.dash_offset = offset;
++        self
++    }
