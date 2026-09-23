@@ -9,6 +9,10 @@ use crate::doc::store::{LayerId, StoreView};
 use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue};
 
 use super::frame_graph_scene::GpuSceneValue;
+
+pub mod tick;
+#[cfg(test)]
+mod tick_tests;
 use super::{Engine, EngineError};
 
 pub(super) struct EngineFrameGraph {

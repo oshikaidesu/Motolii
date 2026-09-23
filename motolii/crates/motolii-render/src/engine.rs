@@ -24,6 +24,7 @@ mod blocks;
 pub(crate) mod physics;
 mod frozen;
 mod frame_graph;
+pub use frame_graph::tick::{TickStats, ViewRequest};
 mod frame_graph_scene;
 
 use crate::doc::core::ResolvedCamera;
@@ -178,6 +179,9 @@ pub struct Engine {
     contributions: frame_graph_scene::ContributionCache,
     /// Contributions lowered and prepared on the production path (reused ones are not counted).
     prepared_contributions: u64,
+    /// The document frame the last tick's views read.
+    tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
+    tick_stats: frame_graph::tick::TickStats,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
@@ -262,6 +266,8 @@ impl Engine {
             view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
+            tick_frame: None,
+            tick_stats: Default::default(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
@@ -354,6 +360,8 @@ impl Engine {
             view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
+            tick_frame: None,
+            tick_stats: Default::default(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
