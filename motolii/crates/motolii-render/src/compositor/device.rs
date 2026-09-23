@@ -57,7 +57,6 @@ impl Compositor {
         eprintln!("MOTOLII_COMPOSITOR_INIT phase=ready cached_effects=0");
         Ok(Self {
             ctx,
-            window: crate::render::compositor::Window { width: 0, height: 0, roi: [0.0; 4], projection_camera: None },
             measurement_enabled: false,
             world_environment: None,
             motion: None,
@@ -79,7 +78,6 @@ impl Compositor {
             #[cfg(test)]
             reflection_diagnostic_near: None,
             reflection_entry: Vec::new(),
-            backdrop_resource: None,
             next_readback: 1,
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
@@ -89,6 +87,7 @@ impl Compositor {
             clock: None,
             feedback: Default::default(),
             feedback_revision: 0,
+            feedback_seen: Vec::new(),
             blend_vism,
             selection_bounds,
             matte_vism,

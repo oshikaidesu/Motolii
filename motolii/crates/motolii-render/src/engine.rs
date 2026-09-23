@@ -156,47 +156,27 @@ pub struct Engine {
     pub(crate) frozen: frozen::FrozenStore,
     /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
     freezing: Option<LayerId>,
-    /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
-    feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
     /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
     clip_bases: std::collections::HashSet<LayerId>,
-    /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
-    outline_layers: Vec<LayerId>,
-    /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
+    /// The selection ids the last outlined view drew, in mask order (the tick keeps the view's answer).
     outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
     /// Who worked in the current frame, and why.
     ledger: ledger::FrameLedger,
-    /// Device pixels per composition pixel that pictures are baked at (a group's plate): the densest
-    /// view's, rounded up to a power of two and at most 1. Export bakes at 1.
-    picture_density: f32,
-    /// The latest density of each view, by name.
-    view_densities: std::collections::HashMap<String, f32>,
     /// Each contribution's last preparation, reused while only its placement changes.
     contributions: frame_graph_scene::ContributionCache,
     /// Contributions lowered and prepared on the production path (reused ones are not counted).
     prepared_contributions: u64,
-    /// While preparing a frame: plates whose picture waits for the frame's reflection capture, the
-    /// members they hold (the reflectable scene), whether plates wait at all, and the frame's light.
-    pending_plates: Vec<render::build::PendingPlate>,
-    reflectables: Vec<crate::render::compositor::LayerWithPasses>,
-    deferring_plates: bool,
-    /// Set while a frame is prepared again under its already captured light (something read a
-    /// plate's picture during preparation).
-    known_frame_light: Option<crate::render::compositor::WorldLight>,
-    plates_needed_early: bool,
     /// Counters for the invariants: frame-level light captures and plate bakes.
     world_light_captures: u64,
     plate_bakes: u64,
     /// The plate members in the last frame-level capture's scene, and what the preparation did in
     /// order: read by the invariant tests.
     reflectable_ids: Vec<LayerId>,
-    reflectable_member_ids: Vec<LayerId>,
     preparation_events: Vec<frame_graph_scene::PreparationEvent>,
-    frame_light: crate::render::compositor::WorldLight,
     /// The document frame the last tick's views read.
     tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
     tick_stats: frame_graph::tick::TickStats,
@@ -280,25 +260,15 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
-            outline_layers: Vec::new(),
             outline_order: Vec::new(),
             drawn_layers: 0,
             ledger: Default::default(),
-            picture_density: 1.0,
-            view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
-            pending_plates: Vec::new(),
-            reflectables: Vec::new(),
-            deferring_plates: false,
-            known_frame_light: None,
-            plates_needed_early: false,
             world_light_captures: 0,
             plate_bakes: 0,
             reflectable_ids: Vec::new(),
-            reflectable_member_ids: Vec::new(),
             preparation_events: Vec::new(),
-            frame_light: Default::default(),
             tick_frame: None,
             tick_stats: Default::default(),
             in_tick: false,
@@ -327,7 +297,6 @@ impl Engine {
             feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
-            feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
             clip_bases: Default::default(),
             frame_cache: HashMap::new(),
@@ -356,10 +325,6 @@ impl Engine {
         self.compositor.device()
     }
 
-    /// Stage で選ばれている層の mask の番号(1..=255)。選ばれていなければ 0。
-    fn outline_id(&self, id: LayerId) -> u8 {
-        self.outline_layers.iter().position(|l| *l == id).map_or(0, |i| i as u8 + 1)
-    }
 
     /// 直前の Stage 描画で、選ばれた層が実際に描かれた画面上の範囲(comp 画素、右下は外側)。
     /// GPU から届く前(初回)や何も描かれなかった層は入らない。
@@ -388,25 +353,15 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
-            outline_layers: Vec::new(),
             outline_order: Vec::new(),
             drawn_layers: 0,
             ledger: Default::default(),
-            picture_density: 1.0,
-            view_densities: Default::default(),
             contributions: Default::default(),
             prepared_contributions: 0,
-            pending_plates: Vec::new(),
-            reflectables: Vec::new(),
-            deferring_plates: false,
-            known_frame_light: None,
-            plates_needed_early: false,
             world_light_captures: 0,
             plate_bakes: 0,
             reflectable_ids: Vec::new(),
-            reflectable_member_ids: Vec::new(),
             preparation_events: Vec::new(),
-            frame_light: Default::default(),
             tick_frame: None,
             tick_stats: Default::default(),
             in_tick: false,
@@ -435,7 +390,6 @@ impl Engine {
             feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
-            feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
             clip_bases: Default::default(),
             frame_cache: HashMap::new(),

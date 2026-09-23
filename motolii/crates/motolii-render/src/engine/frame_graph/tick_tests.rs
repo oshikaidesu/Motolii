@@ -6,7 +6,6 @@ use crate::doc::core::RationalTime;
 use crate::frame_graph::ViewProjection;
 use crate::render::compositor::{Window, PRESENTABLE_FORMAT};
 use crate::render::engine::environment_tests::SIZE;
-use super::tick_oracle_tests::pictures;
 use crate::render::engine::Engine;
 
 fn target(engine: &Engine, window: Window) -> wgpu::Texture {
@@ -67,6 +66,38 @@ fn every_view_of_a_tick_reads_the_same_prepared_frame() {
     assert!(std::sync::Arc::ptr_eq(&first.scene, &second.scene), "the document frame is prepared once and only read by views");
 }
 
+/// A view's window and zoom are the view's: resizing a Stage (any aspect) neither evaluates the
+/// semantic scene again nor prepares the world again; zooming in so far that the views ask for
+/// finer outlines prepares the world again at that precision — on the same semantic scene.
+#[test]
+fn a_resize_or_a_zoom_never_evaluates_the_scene_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let doc = pictures(dir.path());
+    let mut engine = Engine::new().unwrap();
+    let comp = SIZE as f32;
+    let stage = |engine: &mut Engine, width: u32, height: u32, roi: [f32; 4]| {
+        let window = Window { width, height, roi, projection_camera: Some(Default::default()) };
+        let target = target(engine, window);
+        let view = ViewRequest { target: &target, window, camera: Some(Default::default()), projection: ViewProjection::Stage, include_background: true, outline: &[] };
+        let stats = engine.tick(&doc.view(), RationalTime::ZERO, &[view]).unwrap();
+        let state = engine.frame_graph.as_ref().unwrap();
+        (stats.preparations, state.generation, engine.tick_frame.clone().unwrap())
+    };
+    let (_, scene, first) = stage(&mut engine, SIZE, SIZE, [0.0, 0.0, comp, comp]);
+    // A resize at the same zoom: the region of interest grows and shrinks with the window.
+    for (width, height) in [(SIZE / 2, SIZE), (SIZE, SIZE / 3), (SIZE * 3 / 4, SIZE / 2), (SIZE * 2, SIZE)] {
+        let roi = [-(width as f32) / 4.0, 0.0, width as f32, height as f32];
+        let (prepared, generation, frame) = stage(&mut engine, width, height, roi);
+        assert_eq!((prepared, generation), (0, scene), "{width}x{height}: a resize is the view's alone");
+        assert!(std::sync::Arc::ptr_eq(&frame.scene, &first.scene), "{width}x{height}: the same prepared world");
+    }
+    let (prepared, generation, frame) = stage(&mut engine, SIZE * 4, SIZE * 4, [0.0, 0.0, comp, comp]);
+    assert_eq!((prepared, generation), (1, scene), "a 4x zoom asks for finer outlines: prepared again, not evaluated again");
+    for (a, b) in frame.scene.layers.iter().zip(&first.scene.layers) {
+        assert_eq!(a.layer.placement.transform, b.layer.placement.transform, "precision never moves a layer");
+    }
+}
+
 /// The world's light is captured once per document frame, however many views look at it; the
 /// views' own work (a glass layer's backdrop copy) grows with the views.
 #[test]
@@ -107,7 +138,7 @@ fn world_captures_do_not_grow_with_views() {
 #[test]
 fn a_plate_is_recorded_with_the_tick() {
     let dir = tempfile::tempdir().unwrap();
-    let doc = super::tick_oracle_tests::plate(dir.path());
+    let doc = plate(dir.path());
     for n in [1, 2] {
         let mut engine = Engine::new().unwrap();
         let stats = tick(&mut engine, &doc, RationalTime::ZERO, n);
@@ -348,9 +379,10 @@ mod frame_reflection {
         let scene = engine.frame_graph_editor_scene(&doc.view(), RationalTime::ZERO).unwrap();
         let comp = doc.view().composition().unwrap().unwrap().spec();
         let before = engine.world_light_captures;
-        for _ in 0..3 { engine.prepare_gpu_pictures(&scene, comp, Default::default(), false).unwrap(); }
+        let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(Default::default()));
+        for _ in 0..3 { engine.prepare_gpu_pictures(&scene, &prep, false).unwrap(); }
         assert_eq!(engine.world_light_captures, before, "three reads within the frame, no capture");
-        engine.prepare_gpu_pictures(&scene, comp, Default::default(), true).unwrap();
+        engine.prepare_gpu_pictures(&scene, &prep, true).unwrap();
         assert_eq!(engine.world_light_captures, before + 1, "an evaluation of its own is lit once");
         engine.compositor.flush_pending();
     }
@@ -361,8 +393,70 @@ mod frame_reflection {
 #[test]
 fn a_plate_with_an_effect_after_it_shows_its_members() {
     let dir = tempfile::tempdir().unwrap();
-    let doc = super::tick_oracle_tests::plate(dir.path());
+    let doc = plate(dir.path());
     let pixels = Engine::new().unwrap().export_frame(&doc.view(), RationalTime::ZERO, true, None).unwrap();
     let dots = pixels.chunks(4).filter(|p| p[0] > 200 && p[1] > 150 && p[2] < 120).count();
     assert!(dots > 0, "the plate's orange dot is in the picture");
+}
+
+
+// Fixtures: two overlapping pictures; a repeated group baked into a glowing plate.
+use crate::doc::store::{property, LayerId, PropertyId, Value};
+use crate::render::engine::environment_tests::file_layer;
+use motolii_edit::{Document, Intent};
+
+fn png(dir: &std::path::Path, name: &str, rgba: [u8; 4]) -> std::path::PathBuf {
+    let path = dir.join(name);
+    image::RgbaImage::from_pixel(16, 16, image::Rgba(rgba)).save(&path).unwrap();
+    path
+}
+
+fn comp(doc: &mut Document) {
+    doc.apply(Intent::SetComposition(crate::doc::store::Composition {
+        width: SIZE, height: SIZE, fps: crate::doc::store::Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.1, 0.2, 0.3, 1.0],
+    })).unwrap();
+}
+
+/// Two overlapping pictures: one scaled, one turned and see-through.
+fn pictures(dir: &std::path::Path) -> Document {
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
+    comp(&mut doc);
+    let red = file_layer(&mut doc, 1, 0, &png(dir, "red.png", [255, 0, 0, 255]));
+    let green = file_layer(&mut doc, 2, 1, &png(dir, "green.png", [0, 255, 0, 160]));
+    let set = |doc: &mut Document, layer: LayerId, name: &str, value: Value| doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+    set(&mut doc, red, property::SCALE, Value::Vec2([2.0, 2.0]));
+    set(&mut doc, green, property::POSITION, Value::Vec2([40.0, 36.0]));
+    set(&mut doc, green, property::ROTATION, Value::F64(30.0));
+    set(&mut doc, green, property::OPACITY, Value::F64(70.0));
+    doc
+}
+
+/// A group repeated as a whole with a glow on the whole (Glass Garden's rings): the copies are
+/// baked into one plate inside the preparation, the glow reads the plate. One member is a glass
+/// mesh, so the plate has its own light.
+fn plate(dir: &std::path::Path) -> Document {
+    use crate::doc::store::{EffectId, EffectInstance, EffectScope, LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming};
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    let sky = sky_png(dir, "sky.png", 40, 220);
+    let mut doc = scene(dir, &sky, true);
+    let group = LayerId(10);
+    doc.apply_all([
+        Intent::AddLayer(group),
+        Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 5, timing: LayerTiming::place(0, None, 1) } },
+        Intent::SetEffects { layer: group, effects: vec![
+            EffectInstance { id: EffectId(0), plugin_id: crate::extensions::placement::REPEAT.to_owned() },
+            EffectInstance { id: EffectId(1), plugin_id: "motolii.glow".to_owned() },
+        ] },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "count").unwrap(), value: Value::F64(3.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "position_each").unwrap(), value: Value::Vec2([12.0, 6.0]) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(EffectScope::Whole.enum_value()) },
+    ]).unwrap();
+    let dot = file_layer(&mut doc, 11, 6, &png(dir, "dot.png", [255, 200, 40, 255]));
+    let glass = crate::render::engine::environment_tests::file_layer(&mut doc, 12, 7, &dir.join("quad.obj"));
+    for member in [dot, glass] {
+        doc.apply(Intent::SetAttrs { layer: member, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } }).unwrap();
+    }
+    doc.apply(Intent::SetConstant { layer: glass, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([6.0, 6.0]) }).unwrap();
+    doc.apply(Intent::SetEffects { layer: glass, effects: vec![EffectInstance { id: EffectId(2), plugin_id: "motolii.glass".into() }] }).unwrap();
+    doc
 }

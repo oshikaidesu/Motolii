@@ -2,7 +2,7 @@
 //! keeps its lowered work and prepared picture from the previous frame; only changed
 //! contributions are lowered and prepared again.
 
-use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
+use crate::doc::core::LayerPlacement;
 use crate::doc::store::LayerId;
 use crate::frame_graph::{SceneContentValue, SceneLayerValue, SceneValue};
 use crate::render::compositor::LayerWithPasses;
@@ -24,7 +24,7 @@ pub(in crate::engine) type ContributionCache = std::collections::HashMap<(LayerI
 impl Engine {
     /// The production frame: contributions unchanged since the last frame but for placement are
     /// reused with their new placement; the rest are lowered and prepared.
-    pub(super) fn prepare_gpu_scene_incremental(&mut self, scene: &SceneValue, comp: CompSpec, projection_camera: ResolvedCamera) -> Result<GpuSceneValue, EngineError> {
+    pub(super) fn prepare_gpu_scene_incremental(&mut self, scene: &SceneValue, prep: &mut super::Preparation) -> Result<GpuSceneValue, EngineError> {
         self.compositor.refresh_catalog_programs();
         let catalog = self.compositor.catalog.clone();
         let mut reused: Vec<Option<Option<LayerWithPasses>>> = vec![None; scene.layers.len()];
@@ -54,13 +54,13 @@ impl Engine {
                     let current = &scene.layers[index];
                     let why = why_prepared(self.contributions.get(&(current.layer, current.instance)), current, bases[index]);
                     let started = std::time::Instant::now();
-                    let layer = self.execute_layer(work, comp, projection_camera)?;
+                    let layer = self.execute_layer(work, prep)?;
                     self.ledger.claim("prepare", format!("layer {}", current.layer.0), why, started.elapsed());
                     layer
                 }
             });
         }
-        let result = self.compose_prepared(&graph, &prepared, comp, projection_camera)?;
+        let result = self.compose_prepared(&graph, &prepared, prep)?;
 
         let mut previous = std::mem::take(&mut self.contributions);
         let mut next = ContributionCache::with_capacity(scene.layers.len());

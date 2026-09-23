@@ -37,13 +37,11 @@ impl Engine {
             size,
             placement: LayerPlacement { transform, opacity, ..LayerPlacement::default() },
             projection: LayerProjection::TwoD,
-            projection_camera: flat,
             blend_mode: CompositeBlendMode::Normal,
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
             shadow: base.layer.shadow,
-            outline: base.layer.outline,
             frame: None,
         };
         let bake = |engine: &mut Self, layer: Layer, passes: &[EffectPass]| {

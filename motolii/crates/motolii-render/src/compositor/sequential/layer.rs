@@ -1,82 +1,21 @@
-//! 1 層を描く: 層の列を run の入口へ渡す `render_sequential`、1 層を窓へ描く `render_layer_to_canvas`、
-//! 相手の層の α で切る `matte_layer`。
+//! A matte: a layer cut by the α of another, both drawn through the picture's camera into the
+//! composition's own window (`render_layer_to_canvas`, `matte_layer`).
 
 use super::*;
 
 impl Compositor {
-    pub fn render_sequential(
-        &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        layers: &[Layer],
-        background_color: [f32; 4],
-    ) -> Result<Vec<u8>, CompositorError> {
-        let inputs: Vec<SequentialInput<'_>> = layers
-            .iter()
-            .map(|layer| SequentialInput {
-                content: match &layer.content {
-                    crate::render::compositor::LayerContent::Texture(t) => {
-                        crate::render::compositor::SequentialContent::Rect(t)
-                    }
-                    crate::render::compositor::LayerContent::LinearTexture(t) => crate::render::compositor::SequentialContent::LinearRect(t),
-                    crate::render::compositor::LayerContent::Cloud {
-                        positions,
-                        colors,
-                        bounds,
-                        point_size,
-                        sizes,
-                        sprites,
-                        links,
-                    } => crate::render::compositor::SequentialContent::Cloud {
-                        positions,
-                        colors,
-                        bounds: *bounds,
-                        point_size: *point_size,
-                        sizes: sizes.as_ref().map(|s| s.as_slice()),
-                        sprites: *sprites,
-                        links: links.as_deref(),
-                    },
-                    crate::render::compositor::LayerContent::Model(model) => {
-                        crate::render::compositor::SequentialContent::Model(model)
-                    }
-                    crate::render::compositor::LayerContent::Environment(e) => {
-                        crate::render::compositor::SequentialContent::Environment(e)
-                    }
-                },
-                local_min: glam::Vec2::ZERO,
-                local_size: glam::Vec2::new(layer.size[0], layer.size[1]),
-                placement: layer.placement,
-                projection: layer.projection,
-                projection_camera: layer.projection_camera,
-                opacity: layer.placement.opacity,
-                depth_offset: layer.placement.order,
-                blend_mode: layer.blend_mode,
-                shading: layer.shading.clone(),
-                displace: layer.displace,
-                clip: layer.clip,
-                shadow: layer.shadow,
-                outline: layer.outline,
-                screen_passes: &[],
-                screen_sources: &[],
-            })
-            .collect();
-
-        self.window = crate::render::compositor::Window::output(comp);
-        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        self.finalize_readback(comp, camera, background, background_color)
-    }
 
     fn render_layer_to_canvas(
         &mut self,
         comp: CompSpec,
         projection: crate::doc::core::CameraProjection,
         view_from_world: macaw::IsoTransform,
-        _camera: ResolvedCamera,
+        camera: ResolvedCamera,
         layer: &Layer,
         label: &'static str,
     ) -> Result<GpuTexture, CompositorError> {
         let (corner, u, v) = projected_placement_corners(
-            comp, layer.projection_camera, layer.projection, layer.placement,
+            comp, camera, layer.projection, layer.placement,
             glam::Vec2::ZERO, glam::Vec2::from(layer.size),
         );
 
@@ -111,7 +50,7 @@ impl Compositor {
 
         let mut view_builder = ViewBuilder::new(
             &self.ctx,
-            sequential_target_config(label, comp, self.window, view_from_world, projection, None),
+            sequential_target_config(label, comp, Window::output(comp), view_from_world, projection, None),
             ViewBuilderId::new(self.next_readback),
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -135,10 +74,6 @@ impl Compositor {
         matte_source: &Layer,
         mode: MatteMode,
     ) -> Result<Layer, CompositorError> {
-        // 窓はコマの組み立ての後で決まる。まだ 1 度も描いていない engine では寸法が 0 なので、出力の窓で描く。
-        if self.window.width == 0 || self.window.height == 0 {
-            self.window = crate::render::compositor::Window::output(comp);
-        }
         let projection = crate::doc::core::camera_projection(comp, camera);
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
@@ -164,9 +99,9 @@ impl Compositor {
 
         let layer_view = layer_canvas.default_view.clone();
         let matte_view = matte_canvas.default_view.clone();
-        let out_texture = self.create_blend_scratch_texture(self.window.width, self.window.height);
+        let window = Window::output(comp);
+        let out_texture = self.create_blend_scratch_texture(window.width, window.height);
         let out_view = out_texture.create_view(&Default::default());
-        let window = self.window;
 
         let mut encoder = self
             .ctx
@@ -214,13 +149,11 @@ impl Compositor {
                 plane: None,
             },
             projection: crate::doc::store::LayerProjection::TwoD,
-            projection_camera: camera,
             blend_mode: layer.blend_mode,
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
             shadow: layer.shadow,
-            outline: layer.outline,
             frame: None,
         })
     }

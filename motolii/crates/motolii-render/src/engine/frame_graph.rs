@@ -1,5 +1,6 @@
-//! Product playback owner: compile once per revision, evaluate once per exact
-//! comp time, then lower the evaluated scene below the semantic graph.
+//! Product playback owner: compile once per revision, evaluate the semantic scene once per exact
+//! comp time, then prepare it — below the semantic graph — once per evaluation and precision. A view,
+//! its window or its zoom never evaluates the scene again.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -8,13 +9,11 @@ use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
 use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue};
 
-use super::frame_graph_scene::GpuSceneValue;
+use super::frame_graph_scene::{GpuSceneValue, LegacyCameraSeam, Precision, Preparation};
 
 pub mod tick;
 #[cfg(test)]
 mod tick_tests;
-#[cfg(test)]
-mod tick_oracle_tests;
 use super::{Engine, EngineError};
 
 pub(super) struct EngineFrameGraph {
@@ -24,6 +23,8 @@ pub(super) struct EngineFrameGraph {
     solver: NodeKey,
     overlay: NodeKey,
     prepared: Option<Arc<GpuSceneValue>>,
+    /// What `prepared` was made from: the semantic evaluation (its generation) and the precision.
+    prepared_for: Option<(u64, Precision)>,
     comp: CompSpec,
     fps: crate::doc::store::Fps,
     background: [f32; 4],
@@ -32,8 +33,6 @@ pub(super) struct EngineFrameGraph {
     generation: u64,
     prepare_us: u64,
     measured: bool,
-    /// The picture density the prepared frame was baked at.
-    density: f32,
 }
 
 impl EngineFrameGraph {
@@ -49,11 +48,13 @@ impl EngineFrameGraph {
         let solver = program.solver().key();
         let overlay = program.overlay().output();
         let topology = GraphTopology::try_new(program.nodes().collect::<Vec<_>>(), vec![scene, document_camera, solver, overlay]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false, density: 1.0 })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, prepared_for: None, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
     }
-    fn matches(&self, revision: GraphRevision, time: RationalTime, density: f32) -> bool { self.graph.revision() == revision && self.density == density && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+    /// The semantic scene is a function of the document and the time only.
+    fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
 
-    fn evaluate_at(
+    /// The semantic scene at `time`: the graph's evaluation, with no GPU preparation of its own.
+    fn evaluate_scene(
         &mut self,
         engine: &mut Engine,
         time: RationalTime,
@@ -72,21 +73,32 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
-        let value = |key: NodeKey| evaluated.value(key).ok_or_else(|| EngineError::Store("FrameGraph root is missing".into()));
-        let scene = value(self.scene)?.downcast_ref::<SceneValue>().ok_or_else(|| EngineError::Store("FrameGraph scene has the wrong type".into()))?;
-        let camera = value(self.program.camera())?.downcast_ref::<ResolvedCamera>().copied().unwrap_or_default();
-        let solver = value(self.solver)?.downcast_ref::<SolverPlanValue>().ok_or_else(|| EngineError::Store("FrameGraph solver has the wrong type".into()))?;
-        let overlays = value(self.overlay)?.downcast_ref::<OverlaySetValue>().ok_or_else(|| EngineError::Store("FrameGraph overlay set has the wrong type".into()))?;
+        let overlays = evaluated.value(self.overlay).and_then(|value| value.downcast_ref::<OverlaySetValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph overlay set has the wrong type".into()))?;
         engine.install_frame_graph_overlays(overlays);
-        let frame = time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
+        self.frame = Some(evaluated);
+        Ok(())
+    }
+
+    /// The prepared world of the evaluated scene at `precision`: made once per evaluation and
+    /// precision, whatever views read it.
+    fn prepare(&mut self, engine: &mut Engine, precision: Precision) -> Result<(), EngineError> {
+        if self.prepared.is_some() && self.prepared_for == Some((self.generation, precision)) { return Ok(()); }
+        let frame = self.frame.as_ref().ok_or_else(|| EngineError::Store("FrameGraph scene is not evaluated".into()))?;
+        let value = |key: NodeKey| frame.value(key).ok_or_else(|| EngineError::Store("FrameGraph root is missing".into()));
+        let scene = value(self.scene)?.downcast_ref::<SceneValue>().ok_or_else(|| EngineError::Store("FrameGraph scene has the wrong type".into()))?;
+        let authored = value(self.program.camera())?.downcast_ref::<ResolvedCamera>().copied().unwrap_or_default();
+        let solver = value(self.solver)?.downcast_ref::<SolverPlanValue>().ok_or_else(|| EngineError::Store("FrameGraph solver has the wrong type".into()))?;
+        let time = frame.time();
         engine.compositor.clock = Some([
             time.as_seconds_f64() as f32,
             self.fps.den() as f32 / self.fps.num() as f32,
-            frame,
+            time.try_to_frame_round(self.fps).unwrap_or(0) as f32,
         ]);
-        self.density = engine.picture_density;
-        self.prepared = Some(Arc::new(engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, time, self.fps)?));
-        self.frame = Some(evaluated);
+        let mut prep = Preparation::new(self.comp, precision, LegacyCameraSeam::new(authored));
+        let prepared = engine.prepare_gpu_scene_with_solver(scene, solver, &mut prep, time, self.fps)?;
+        self.prepared = Some(Arc::new(prepared));
+        self.prepared_for = Some((self.generation, precision));
         Ok(())
     }
 }
@@ -161,7 +173,7 @@ impl Engine {
         time: RationalTime,
     ) -> Option<ResolvedCamera> {
         let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time, state.density) { return None; }
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
         state.frame.as_ref()?
             .value(state.program.camera())?
             .downcast_ref::<ResolvedCamera>()
@@ -177,7 +189,7 @@ impl Engine {
         id: LayerId,
     ) -> Option<(crate::frame_graph::TransformValue, crate::frame_graph::TransformValue)> {
         let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time, state.density) { return None; }
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
         let binding = state.program.transforms().binding(id)?;
         let frame = state.frame.as_ref()?;
         let local = frame.value(binding.local)?.downcast_ref::<crate::frame_graph::TransformValue>().copied()?;
@@ -212,7 +224,7 @@ impl Engine {
         time: RationalTime,
     ) -> Option<&SceneValue> {
         let state = self.frame_graph.as_ref()?;
-        if !state.matches(GraphRevision::new(view.revision_key()), time, state.density) { return None; }
+        if !state.matches(GraphRevision::new(view.revision_key()), time) { return None; }
         state.frame.as_ref()?.value(state.scene)?.downcast_ref::<SceneValue>()
     }
 
@@ -266,63 +278,7 @@ impl Engine {
         Ok(camera)
     }
 
-    pub(in crate::engine) fn render_frame_graph_pixels(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        include_background: bool,
-        camera_override: Option<ResolvedCamera>,
-    ) -> Result<Vec<u8>, EngineError> {
-        // Output is the composition's own pixels.
-        self.picture_density = 1.0;
-        self.compositor.begin_render_frame();
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.prepared.clone()
-            .ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        let camera = camera_override.unwrap_or(document_camera);
-        let mut layers = prepared.layers.clone();
-        for layer in &mut layers {
-            layer.layer.projection_camera = document_camera;
-        }
 
-        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
-        let pixels = self.compositor.render_with_effects(state.comp, camera, &layers, background)?;
-        self.frame_graph = Some(state);
-        Ok(pixels)
-    }
-
-    pub(in crate::engine) fn render_frame_graph_to_texture_output(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        include_background: bool,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        // Output is the composition's own pixels.
-        self.picture_density = 1.0;
-        self.compositor.begin_render_frame();
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.prepared.clone()
-            .ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        let mut layers = prepared.layers.clone();
-        for layer in &mut layers {
-            layer.layer.projection_camera = document_camera;
-        }
-        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
-        let texture = self.compositor.render_to_texture(state.comp, document_camera, &layers, background)?;
-        self.compositor.flush_pending();
-        self.frame_graph = Some(state);
-        Ok(texture)
-    }
 
     /// The members of the plates in the evaluated scene at `time` (for the invariant tests).
     #[cfg(test)]
@@ -334,23 +290,36 @@ impl Engine {
         }).flatten().collect()
     }
 
+    /// The semantic scene at `time` (editor reads, the tick's first step): no GPU preparation.
     fn evaluated_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality) -> Result<EngineFrameGraph, EngineError> {
         let revision = GraphRevision::new(view.revision_key());
         let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
         self.compositor.feedback_set_revision(view.revision_key());
-        self.feedback_keys_seen.clear();
-        if !state.matches(revision, time, self.picture_density) {
-            let started = std::time::Instant::now();
-            if let Err(error) = state.evaluate_at(self, time, quality) {
+        if !state.matches(revision, time) {
+            if let Err(error) = state.evaluate_scene(self, time, quality) {
                 self.frame_graph = Some(state);
                 return Err(error);
             }
-            state.prepare_us = started.elapsed().as_micros() as u64;
-            state.measured = false;
-            // Outside a tick (an editor query, a capture) the work it recorded finishes here.
+            // Outside a tick (an editor query) the work the evaluation recorded (an analysis) finishes here.
             if !self.in_tick {
                 self.compositor.flush_pending();
             }
+        }
+        Ok(state)
+    }
+
+    /// The prepared world at `time` and `precision`, on the semantic scene of the same time.
+    fn prepared_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality, precision: Precision) -> Result<EngineFrameGraph, EngineError> {
+        let mut state = self.evaluated_frame_graph(view, time, quality)?;
+        let started = std::time::Instant::now();
+        let before = state.prepared_for;
+        if let Err(error) = state.prepare(self, precision) {
+            self.frame_graph = Some(state);
+            return Err(error);
+        }
+        if state.prepared_for != before {
+            state.prepare_us = started.elapsed().as_micros() as u64;
+            state.measured = false;
         }
         Ok(state)
     }
@@ -359,147 +328,15 @@ impl Engine {
         self.frame_graph_cached_scene(view, time)?.layer(id)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn render_frame_graph_into_window(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        target: &wgpu::Texture,
-        camera: ResolvedCamera,
-        include_background: bool,
-        outline: &[LayerId],
-        window: crate::render::compositor::Window,
-        projection: crate::frame_graph::ViewProjection,
-    ) -> Result<(), EngineError> {
-        // The frame starts before evaluation: evaluating is part of what the frame costs.
-        let frame_start = std::time::Instant::now();
-        self.compositor.begin_render_frame();
-        self.ledger.begin_view(time, format!("{projection:?}"));
-        // Pictures are baked as densely as the densest view shows them (one device pixel after
-        // projection), never above the composition's own pixels.
-        let density = window.width as f32 / window.roi[2].max(1.0);
-        self.view_densities.insert(format!("{projection:?}"), density);
-        let densest = self.view_densities.values().copied().fold(0.0_f32, f32::max);
-        self.picture_density = (2.0_f32).powf(densest.max(1.0 / 16.0).log2().ceil()).min(1.0);
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
-        self.compositor.measurement = Default::default();
-        if !state.measured {
-            self.compositor.measurement.resolve_us = state.prepare_us;
-            state.measured = true;
-        }
-        self.outline_layers = outline.iter().copied().take(255).collect();
-        self.outline_order = self.outline_layers.clone();
 
-        self.render_frame_graph_projection(
-            &state,
-            target,
-            camera,
-            include_background,
-            window,
-            projection,
-        )?;
 
-        let now = time.try_to_frame_round(state.fps).unwrap_or(0);
-        if let Some(start) = self.frame_graph_feedback_replay_start(&state, now) {
-            self.replay_frame_graph_feedback(
-                &mut state,
-                start,
-                now,
-                camera,
-                include_background,
-                window,
-                projection,
-            )?;
-
-            let c = &mut self.compositor;
-            c.baked_effects.clear(&mut c.effect_scratch);
-            self.feedback_keys_seen.clear();
-            state.evaluate_at(self, time, FrameQuality::Preview { scale: 1 })?;
-            self.render_frame_graph_projection(
-                &state,
-                target,
-                camera,
-                include_background,
-                window,
-                projection,
-            )?;
-        }
-
-        self.outline_layers.clear();
-        self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
-        let budget = std::time::Duration::from_secs_f64(1.0 / state.fps.as_f64().max(1.0));
-        self.ledger.claim("view", format!("{projection:?}"), "drawn for this tick", frame_start.elapsed());
-        let tick = self.ledger.end_view(frame_start.elapsed());
-        if let Some(report) = self.ledger.report_if_over(tick, budget) {
-            eprintln!("{report}");
-        }
-        self.frame_graph = Some(state);
-        Ok(())
-    }
-
-    fn render_frame_graph_projection(
-        &mut self,
-        state: &EngineFrameGraph,
-        target: &wgpu::Texture,
-        camera: ResolvedCamera,
-        include_background: bool,
-        window: crate::render::compositor::Window,
-        projection: crate::frame_graph::ViewProjection,
-    ) -> Result<(), EngineError> {
-        if !matches!(projection, crate::frame_graph::ViewProjection::Camera | crate::frame_graph::ViewProjection::Stage) {
-            return Err(EngineError::Store("Unsupported playback projection".into()));
-        }
-        let prepared = state.prepared.as_ref()
-            .ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
-
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        let mut layers = prepared.layers.clone();
-        // Selection is editor state: stamped per view, never into the shared prepared scene.
-        for (layer, id) in layers.iter_mut().zip(&prepared.layer_ids) {
-            layer.layer.projection_camera =
-                if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
-                    document_camera
-                } else {
-                    projection_camera
-                };
-            layer.layer.outline = self.outline_id(*id);
-        }
-
-        self.stamp_frame_graph_window_feedback(&mut layers, window);
-        let background = if include_background {
-            state.background
-        } else {
-            crate::render::compositor::NO_BACKGROUND
-        };
-        for (layer, id) in layers.iter().zip(&prepared.layer_ids) {
-            if layer.passes.is_empty() { continue; }
-            let names: Vec<_> = layer.passes.iter().map(|pass| pass.plugin_id.as_str()).collect();
-            self.ledger.claim("draw", format!("layer {}", id.0), format!("{} effect pass(es): {}", names.len(), names.join(", ")), std::time::Duration::ZERO);
-        }
-        let started = std::time::Instant::now();
-        let before = self.surface_work();
-        self.compositor.render_into_window(target, state.comp, camera, &layers, background, window)?;
-        let work = self.surface_work();
-        self.ledger.claim("draw", "compositor", format!(
-            "{} layers into the window in {} run(s), {} bake(s) ({} reused), {} backdrop copy(ies), {} scene capture(s), {} light capture(s)",
-            layers.len(), work.main_runs - before.main_runs, work.bakes - before.bakes,
-            work.baked_hits - before.baked_hits, work.backdrop_copies - before.backdrop_copies,
-            work.scene_captures - before.scene_captures, work.light_captures - before.light_captures,
-        ), started.elapsed());
-        Ok(())
-    }
-
+    /// The earliest frame the histories read this tick must be replayed from (a jump).
     fn frame_graph_feedback_replay_start(
         &mut self,
         state: &EngineFrameGraph,
         now: i64,
     ) -> Option<i64> {
-        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        let seen = std::mem::take(&mut self.compositor.feedback_seen);
         let mut unique = HashSet::new();
         let mut start: Option<i64> = None;
         for key in seen.into_iter().filter(|key| unique.insert(*key)) {
@@ -517,51 +354,6 @@ impl Engine {
         start
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn replay_frame_graph_feedback(
-        &mut self,
-        state: &mut EngineFrameGraph,
-        start: i64,
-        now: i64,
-        camera: ResolvedCamera,
-        include_background: bool,
-        window: crate::render::compositor::Window,
-        projection: crate::frame_graph::ViewProjection,
-    ) -> Result<(), EngineError> {
-        let replay_target = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("motolii-frame-graph-feedback-replay"),
-            size: wgpu::Extent3d {
-                width: window.width,
-                height: window.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: crate::render::compositor::PRESENTABLE_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-
-        for frame in start..now {
-            self.pending_frame_copies.clear();
-            self.feedback_keys_seen.clear();
-            let at = RationalTime::try_from_frame(frame, state.fps)
-                .map_err(|error| EngineError::Time(error.to_string()))?;
-            state.evaluate_at(self, at, FrameQuality::Preview { scale: 1 })?;
-            self.render_frame_graph_projection(
-                state,
-                &replay_target,
-                camera,
-                include_background,
-                window,
-                projection,
-            )?;
-        }
-        self.pending_frame_copies.clear();
-        self.feedback_keys_seen.clear();
-        Ok(())
-    }
 }
 
 

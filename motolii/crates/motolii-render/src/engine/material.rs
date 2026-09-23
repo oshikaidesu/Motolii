@@ -20,9 +20,9 @@ pub(super) struct MaterialCache {
 fn image_layer(texture: GpuTexture2D, size: [f32; 2]) -> Layer {
     Layer {
         content: LayerContent::LinearTexture(texture), size, placement: Default::default(),
-        projection: LayerProjection::TwoD, projection_camera: Default::default(),
+        projection: LayerProjection::TwoD,
         blend_mode: BlendMode::Normal, shading: Default::default(), displace: Default::default(),
-        clip: None, shadow: 0.0, outline: 0, frame: None,
+        clip: None, shadow: 0.0, frame: None,
     }
 }
 

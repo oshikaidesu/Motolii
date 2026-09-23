@@ -96,8 +96,7 @@ fn track_matte_source_is_auxiliary_not_a_second_draw_layer() {
     let mut engine = Engine::new().unwrap();
     let gpu = engine.prepare_gpu_scene(
         &scene,
-        doc.view().composition().unwrap().unwrap().spec(),
-        ResolvedCamera::default(),
+        &mut super::Preparation::new(doc.view().composition().unwrap().unwrap().spec(), Default::default(), super::LegacyCameraSeam::new(ResolvedCamera::default())),
     ).unwrap();
     assert_eq!(gpu.layers.len(), 1, "matte source must be consumed");
 }
@@ -119,8 +118,7 @@ fn clipping_folds_the_upper_picture_into_its_base() {
     assert!(!engine.compositor.matte_vism.is_compiled());
     let gpu = engine.prepare_gpu_scene(
         &scene,
-        doc.view().composition().unwrap().unwrap().spec(),
-        ResolvedCamera::default(),
+        &mut super::Preparation::new(doc.view().composition().unwrap().unwrap().spec(), Default::default(), super::LegacyCameraSeam::new(ResolvedCamera::default())),
     ).unwrap();
     assert_eq!(gpu.layers.len(), 1, "clip upper is not a separate contribution");
     assert!(engine.compositor.effect_programs.is_empty(), "clipping must not compile unrelated effects");
@@ -147,8 +145,7 @@ fn stencil_is_built_as_a_matte_source_and_never_drawn_itself() {
     let mut engine = Engine::new().unwrap();
     let gpu = engine.prepare_gpu_scene(
         &scene,
-        doc.view().composition().unwrap().unwrap().spec(),
-        ResolvedCamera::default(),
+        &mut super::Preparation::new(doc.view().composition().unwrap().unwrap().spec(), Default::default(), super::LegacyCameraSeam::new(ResolvedCamera::default())),
     ).unwrap();
     assert_eq!(gpu.layers.len(), 1, "stencil itself is auxiliary");
 }

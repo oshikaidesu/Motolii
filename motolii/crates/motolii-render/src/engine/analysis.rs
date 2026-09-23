@@ -93,7 +93,9 @@ impl Engine {
         ]);
         let picture = (|| {
             let scene = crate::frame_graph::SceneValue { layers: vec![source.clone()] };
-            let prepared = self.prepare_gpu_pictures(&scene, comp, ResolvedCamera::default(), false)?;
+            // A blob reads the layer's own picture, in material space: no camera.
+            let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(ResolvedCamera::default()));
+            let prepared = self.prepare_gpu_pictures(&scene, &prep, false)?;
             let Some(layer) = prepared.layers.first() else { return Ok(None); };
             self.layer_with_passes_linear_picture(layer)
         })();
@@ -247,8 +249,11 @@ impl Engine {
                 .cloned()
                 .collect(),
         };
-        let (prepared, light) = self.as_frame_part(comp, camera, false, |engine| {
-            let prepared = engine.prepare_gpu_scene(&below, comp, camera)?;
+        // The overlay analyses the output below it: that picture is taken through the output camera
+        // (the node's own input), and plates inside it through the undecided seam.
+        let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(camera));
+        let (prepared, light) = self.as_frame_part(&prep, false, |engine, prep| {
+            let prepared = engine.prepare_gpu_scene(&below, prep)?;
             let top = prepared.layers.clone();
             Ok((prepared, top))
         })?;

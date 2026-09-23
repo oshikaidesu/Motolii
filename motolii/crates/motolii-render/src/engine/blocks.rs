@@ -160,11 +160,12 @@ impl Engine {
         &mut self,
         scene: &SceneValue,
         solver: &SolverPlanValue,
-        comp: CompSpec,
+        prep: &super::frame_graph_scene::Preparation,
         t: RationalTime,
         fps: crate::doc::store::Fps,
         prepared: &mut super::frame_graph_scene::GpuSceneValue,
     ) -> Result<(), EngineError> {
+        let comp = prep.comp;
         let mut sizes: HashMap<LayerId, [f32; 2]> = HashMap::new();
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter()) {
             sizes.entry(id).or_insert(layer.layer.size);
@@ -201,13 +202,14 @@ impl Engine {
         self.solve_physics(t);
 
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
-            self.attach_block_id(id, &mut layer.layer, comp);
+            self.attach_block_id(id, &mut layer.layer, comp, prep.seam.camera_relative_world());
         }
         self.run_blocks(t, fps.as_f64());
         Ok(())
     }
 
-    pub(in crate::engine) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec) {
+    /// `world`: where a 2D/2.5D layer stands in the solver's world (3D placement does not read it).
+    pub(in crate::engine) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec, world: crate::doc::core::ResolvedCamera) {
         // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
         // その物の comp → world の向き(組んだ素材の大きさが要るのでここでしか作れない)。
         let Some(&k) = self.blocks.slots.get(&layer) else {
@@ -227,7 +229,7 @@ impl Engine {
         }
         built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (k + 1) as f32;
         let m = built.placement.transform;
-        let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, built.projection_camera, built.projection, built.placement, glam::Vec2::ZERO, size);
+        let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, world, built.projection, built.placement, glam::Vec2::ZERO, size);
         let (per_x, per_y) = (u / size.x, v / size.y);
         let inverse = if m.matrix2.determinant().abs() > 1e-12 { m.matrix2.inverse() } else { glam::Mat2::IDENTITY };
         let world = |comp_step: glam::Vec2| { let material = inverse * comp_step; (per_x * material.x + per_y * material.y).to_array() };

@@ -25,7 +25,6 @@ mod measurement;
 pub use measurement::FrameMeasurement;
 mod point_cloud;
 mod presentable;
-mod render_basic;
 mod render_effects;
 pub(crate) mod paths;
 mod sequential;
@@ -84,13 +83,6 @@ fn vello_blend_mode(mode: BlendMode) -> Option<u32> {
 /// 合成の中間テクスチャの形式(累算器・blend/matte の出力)。
 pub(crate) const BLEND_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
-fn fixed_function_tint_alpha(mode: BlendMode, opacity: f32) -> Result<f32, CompositorError> {
-    match mode {
-        BlendMode::Normal => Ok(opacity),
-        BlendMode::Add => Ok(0.0),
-        other => Err(CompositorError::UnsupportedBlendMode(other)),
-    }
-}
 
 pub(crate) fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
     glam::vec3(v.x, v.y, z)
@@ -298,7 +290,6 @@ pub struct Layer {
     pub size: [f32; 2],
     pub placement: LayerPlacement,
     pub projection: crate::doc::store::LayerProjection,
-    pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
     /// 板・網が共有する場と表面のプログラムとパラメータ(板は場を標本位置のずれとして見せる)。
     pub shading: effects::surface_program::SurfaceShading,
@@ -308,9 +299,6 @@ pub struct Layer {
     pub clip: Option<clip::ClipSpec>,
     /// 影の濃さ(0 なら落とさない): 太陽から見た型紙に描かれ、表面を持つ全ての層へ影(透過なら色)を落とす。
     pub shadow: f32,
-    /// Stage で選ばれている層の番号(1..=255、0 は無し): outline の object-id mask に描かれ、
-    /// その画面上の広がりが籠になる(export には出ない)。
-    pub outline: u8,
     /// 絵の論理の枠(素材座標の大きさ・原点・画素数)。効果はこの枠の論理 px で評価し、
     /// 描画密度を上げても reach・radius が変わらない。無ければ 1 px = 1 論理 px。
     pub frame: Option<effects::vism::ImageFrame>,
@@ -362,19 +350,6 @@ pub enum CompositorError {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct RenderTiming {
-    pub build_us: u128,
-    pub gpu_us: u128,
-    pub readback_us: u128,
-}
-
-impl RenderTiming {
-    pub fn total_us(&self) -> u128 {
-        self.build_us + self.gpu_us + self.readback_us
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default)]
 pub struct SurfaceWork {
     pub scene_captures: u64,
     /// 太陽から見た型紙(light cookie)を描いた回数。
@@ -405,12 +380,9 @@ pub struct Compositor {
     /// no environment layer of its own — a group's plate — is lit and reflected by this one, and
     /// does not draw its sky again.
     pub(crate) world_environment: Option<std::sync::Arc<GpuEnvironmentData>>,
-    /// 今描いている窓。`render_into_window` が置く。
-    pub(crate) window: Window,
     pub(crate) measurement_enabled: bool,
     pub(crate) measurement: FrameMeasurement,
     pub(crate) surface_work: SurfaceWork,
-    pub(crate) backdrop_resource: Option<sequential::BackdropResource>,
     pub(crate) reflection_cache_enabled: bool,
     pub(crate) gpu_instance_sharing_enabled: bool,
     /// 反射の撮影点を受け手ではなく送り手の箱に固定し、受け手は撮影から外す(Arm の local cubemap)。
@@ -444,6 +416,8 @@ pub struct Compositor {
     pub(crate) feedback: std::collections::HashMap<effects::FeedbackKey, effects::FeedbackState>,
     /// 状態を作った書類の指紋。変われば全部捨てて入点からやり直す(同じ時刻は同じ絵、の保証)。
     pub(crate) feedback_revision: u64,
+    /// The histories read in the frame being drawn (a jump replays them from the in-point).
+    pub(crate) feedback_seen: Vec<effects::FeedbackKey>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::LazyEffectProgram,
     pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,
@@ -460,8 +434,6 @@ pub struct Compositor {
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
     pub(crate) pending: Vec<wgpu::CommandBuffer>,
 }
-
-type AccumulatorBacking = wgpu::Texture;
 
 #[derive(Clone)]
 pub struct GpuModelData {

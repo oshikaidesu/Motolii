@@ -57,10 +57,10 @@ impl Engine {
             fps.den() as f32 / fps.num() as f32,
             frame,
         ]);
+        let prep = crate::render::engine::frame_graph_scene::Preparation::new(comp, Default::default(), crate::render::engine::frame_graph_scene::LegacyCameraSeam::new(camera));
         let prepared = self.prepare_gpu_pictures(
             &crate::frame_graph::SceneValue { layers: vec![target] },
-            comp,
-            camera,
+            &prep,
             // A frozen frame is an evaluation at its own time: lit like a frame.
             true,
         );
@@ -105,45 +105,22 @@ impl Engine {
     pub fn frozen_frames_on_disk(&self, layer: LayerId) -> usize { self.frozen.frames_on_disk(layer) }
     pub fn frozen_frames_resident(&self, layer: LayerId) -> usize { self.frozen.resident_count(layer) }
 
-    /// feedback を持つ pass に状態の鍵を刻み、この frame で見た鍵として覚える(辿り直しの要否を後で見る)。
-    pub(super) fn stamp_feedback(&mut self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 3]>) {
+    /// Keys each persistent pass's history by its layer, copy and chain (the history store records
+    /// which it read when a pass runs).
+    pub(super) fn stamp_feedback(&self, passes: &mut [EffectPass], layer: LayerId, copy: u32, chain: u8, screen: Option<[u32; 3]>) {
         super::translate::stamp_feedback(passes, layer, copy, chain, screen, self.feedback_namespace);
-        // 本番の鍵だけ辿り直しの対象(別の時刻の列は自分の列で進む)。
-        if self.feedback_namespace == 0 {
-            self.feedback_keys_seen.extend(passes.iter().filter_map(|p| p.feedback));
-        }
     }
 
-    pub fn render_frame_to_texture(
-        &mut self,
-        view: &StoreView<'_>,
-        t: RationalTime,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        self.render_frame_graph_to_texture_output(view, t, true)
+
+
+
+    /// The output at `t` into `target` (the composition's own window), as one tick with one view.
+    pub fn render_frame_into(&mut self, view: &StoreView<'_>, t: RationalTime, target: &wgpu::Texture) -> Result<(), EngineError> {
+        let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
+        self.draw_one_view(view, t, target, None, true, &[], Window::output(comp))
     }
 
-    pub fn render_frame_into(
-        &mut self,
-        view: &StoreView<'_>,
-        t: RationalTime,
-        target: &wgpu::Texture,
-    ) -> Result<(), EngineError> {
-        let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?.spec();
-        let camera = self.frame_graph_document_camera(view, t)?;
-        self.render_frame_graph_into_window(
-            view,
-            t,
-            target,
-            camera,
-            true,
-            &[],
-            Window::output(comp),
-            crate::frame_graph::ViewProjection::Camera,
-        )
-    }
-
-    /// Render from an observation camera while retaining authored layer projection.
+    /// The same world seen from an observation camera, with the authored layer projection kept.
     pub fn render_frame_into_with_camera(
         &mut self,
         view: &StoreView<'_>,
@@ -154,10 +131,11 @@ impl Engine {
         outline: &[LayerId],
     ) -> Result<(), EngineError> {
         let comp = view.composition().map_err(|e| EngineError::Store(e.to_string()))?.ok_or(EngineError::NoComposition)?.spec();
-        self.render_frame_into_window(view, t, target, camera, include_background, outline, Window::output(comp))
+        self.draw_one_view(view, t, target, Some(camera), include_background, outline, Window::output(comp))
     }
 
-    /// 同じ世界を、出力寸法以外の窓へ(Stage のタブ: 寸法と関心域は窓が言う)。
+    /// The same world into a window of another size (a Stage tab: its size and region of interest).
+    #[allow(clippy::too_many_arguments)]
     pub fn render_frame_into_window(
         &mut self,
         view: &StoreView<'_>,
@@ -168,16 +146,13 @@ impl Engine {
         outline: &[LayerId],
         window: Window,
     ) -> Result<(), EngineError> {
-        self.render_frame_graph_into_window(
-            view,
-            t,
-            target,
-            camera,
-            include_background,
-            outline,
-            window,
-            crate::frame_graph::ViewProjection::Camera,
-        )
+        self.draw_one_view(view, t, target, Some(camera), include_background, outline, window)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_one_view(&mut self, view: &StoreView<'_>, t: RationalTime, target: &wgpu::Texture, camera: Option<ResolvedCamera>, include_background: bool, outline: &[LayerId], window: Window) -> Result<(), EngineError> {
+        let request = super::frame_graph::tick::ViewRequest { target, window, camera, projection: crate::frame_graph::ViewProjection::Camera, include_background, outline };
+        self.tick(view, t, &[request]).map(|_| ())
     }
 }
 

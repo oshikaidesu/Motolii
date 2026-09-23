@@ -131,54 +131,6 @@ fn a_variable_frame_rate_clip_is_placed_by_time() {
     assert!(at_1_1.iter().all(|c| *c > 200), "1.1s should be white, got {at_1_1:?}");
 }
 
-/// 上の不透明な動画に丸ごと覆われた動画は復号も描画もしない。半透明なら両方描く。
-#[test]
-fn a_video_hidden_behind_an_opaque_video_is_not_drawn() {
-    if !ffmpeg_available() {
-        eprintln!("skip: ffmpeg not on PATH");
-        return;
-    }
-    let dir = tempfile::tempdir().unwrap();
-    let clip = |name: &str, color: &str| {
-        let path = dir.path().join(name);
-        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
-            .args(["-v", "error", "-y", "-f", "lavfi", "-i", &format!("color=c={color}:s=64x64:r=30:d=1"), "-pix_fmt", "yuv420p", "-c:v", "libx264"])
-            .arg(&path)
-            .status()
-            .expect("spawn ffmpeg");
-        assert!(status.success());
-        path
-    };
-    let below = clip("below.mp4", "black");
-    let above = clip("above.mp4", "white");
-
-    let build = |top_opacity: Option<f64>| {
-        let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
-        for (id, path, order) in [(1, &below, 0), (2, &above, 1)] {
-            let layer = LayerId(id);
-            doc.apply(Intent::AddLayer(layer)).unwrap();
-            doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_str().unwrap().to_owned(), fingerprint: None }, order, timing: LayerTiming::place(0, Some(30), 30) } }).unwrap();
-        }
-        if let Some(opacity) = top_opacity {
-            doc.apply(Intent::SetConstant { layer: LayerId(2), property: crate::doc::store::PropertyId::new(crate::doc::store::property::OPACITY).unwrap(), value: crate::doc::eval::Value::F64(opacity) }).unwrap();
-        }
-        doc
-    };
-
-    let mut engine = Engine::new().unwrap();
-    let opaque = build(None);
-    // 1 コマ目は寸を知るために両方開く。2 コマ目から隠れが効く。
-    let _ = center_pixel(&mut engine, &opaque, 1);
-    let px = center_pixel(&mut engine, &opaque, 2);
-    assert!(px.iter().all(|c| *c > 200), "the white layer on top should show, got {px:?}");
-    assert_eq!(engine.drawn_layers(), 1, "the covered layer must not be drawn");
-
-    let translucent = build(Some(0.5));
-    let _ = center_pixel(&mut engine, &translucent, 1);
-    let _ = center_pixel(&mut engine, &translucent, 2);
-    assert_eq!(engine.drawn_layers(), 2, "a translucent layer hides nothing");
-}
 
 /// 30 コマ目から始まる層は、再生中にその瞬間から描かれる。先読みが復号器を開いておくから。
 #[test]

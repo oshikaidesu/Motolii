@@ -184,7 +184,7 @@ impl Compositor {
             let encoder = copy_encoder.as_mut().expect("直前に用意した");
             let (next, next_linear, next_premultiplied, next_is_scratch) = self.record_pass_chain(
                 encoder, current, current_linear, current_premultiplied, current_is_scratch,
-                &lwp.passes, &others, frame, [padded_width, padded_height], padding, [width, height],
+                &lwp.passes, &others, frame, [padded_width, padded_height], padding, [width, height], None,
             )?;
             current = next;
             current_linear = next_linear;
@@ -311,6 +311,9 @@ impl Compositor {
         size: [u32; 2],
         padding: u32,
         unpadded: [u32; 2],
+        // The drawing whose picture these passes read (a view: its projection and size). A history
+        // on it is that drawing's own, as re_renderer keys per-view caches by `ViewBuilderId`.
+        screen: Option<[u32; 3]>,
     ) -> Result<(wgpu::Texture, bool, bool, bool), CompositorError> {
         let [padded_width, padded_height] = size;
         let [width, height] = unpadded;
@@ -355,7 +358,9 @@ impl Compositor {
             let destination_view = destination.create_view(&Default::default());
             // feedback: 状態の持ち主は host。frame の並びから今フレームの扱いを決める。
             let frame_index = self.frame_index();
-            let feedback = pass.feedback.map(|key| {
+            let feedback = pass.feedback.map(|mut key| {
+                if screen.is_some() { key.screen = screen; }
+                if key.namespace == 0 { self.feedback_seen.push(key); }
                 let state = self.feedback.entry(key).or_default();
                 let step = match (state.frame, frame_index) {
                     (Some(have), Some(now)) if have == now => effects::FeedbackStep::Reuse,
@@ -527,29 +532,6 @@ impl Compositor {
         padded
     }
 
-    pub fn render_with_effects(
-        &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        layers: &[LayerWithPasses],
-        background_color: [f32; 4],
-    ) -> Result<Vec<u8>, CompositorError> {
-        let (effective_textures, effective_paddings, effective_spills, checked_out) =
-            self.effective_layer_textures(layers)?;
-        self.flush_pending();
-
-        let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
-
-        self.window = crate::render::compositor::Window::output(comp);
-        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        let frame = self.finalize_readback(comp, camera, background, background_color)?;
-
-        for (width, height, format, texture) in checked_out {
-            self.effect_scratch.release(width, height, format, texture);
-        }
-
-        Ok(frame)
-    }
 
     pub fn render_to_texture(
         &mut self,
@@ -558,23 +540,9 @@ impl Compositor {
         layers: &[LayerWithPasses],
         background_color: [f32; 4],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
-        self.render_to_texture_at(comp, camera, layers, background_color, 1.0)
+        self.bake_picture(comp, camera, layers, background_color, 1.0, None, None)
     }
 
-    /// The whole composition into a picture `density` device pixels per composition pixel: a picture
-    /// made inside a preparation (a plate, a matte, a clip group, an image input). Its layers' own
-    /// effects and its light are its own, like a frame's; it is recorded with the frame's other work
-    /// and submitted with it.
-    pub fn render_to_texture_at(
-        &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        layers: &[LayerWithPasses],
-        background_color: [f32; 4],
-        density: f32,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
-        self.bake_picture(comp, camera, layers, background_color, density, None, None)
-    }
 
     /// A picture of `layers`, lit by the frame's world light when given (a plate baked after the
     /// frame's one reflection capture), else by its own capture; into `into` when given.
@@ -590,7 +558,7 @@ impl Compositor {
         into: Option<&wgpu::Texture>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         let (pictures, paddings, spills, _always_empty) = self.effective_layer_textures(layers)?;
-        let inputs = sequential_inputs(layers, &pictures, &paddings, &spills);
+        let inputs = sequential_inputs(layers, &pictures, &paddings, &spills, camera, camera, &[]);
         let full = crate::render::compositor::Window::output(comp);
         let window = if density >= 1.0 { full } else {
             crate::render::compositor::Window {
@@ -614,18 +582,26 @@ impl Compositor {
     }
 }
 
+/// One drawing's instances of the prepared layers, as a re_renderer visualizer builds a view's
+/// draw data from shared resources: the placement cameras and the selection come from the drawing
+/// (2D by `document`, 2.5D and 3D by `world`; `outline[i]` for layer `i`, 0 when absent), never from
+/// the prepared layers.
 pub(crate) fn sequential_inputs<'a>(
     layers: &'a [LayerWithPasses],
     effective_textures: &'a [LayerContent],
     effective_paddings: &[u32],
     effective_spills: &'a [LayerSpill],
+    document: ResolvedCamera,
+    world: ResolvedCamera,
+    outline: &[u8],
 ) -> Vec<SequentialInput<'a>> {
     layers
         .iter()
         .zip(effective_textures.iter())
         .zip(effective_paddings.iter())
         .zip(effective_spills.iter())
-        .flat_map(|(((lwp, content), &padding), spill)| {
+        .enumerate()
+        .flat_map(|(index, (((lwp, content), &padding), spill))| {
             let layer = &lwp.layer;
             // 余白は絵の画素。置く時は論理 px(密度 > 1 の素材は密度で割る)。
             let density = layer.frame.map_or([1.0, 1.0], |f| f.density());
@@ -658,7 +634,7 @@ pub(crate) fn sequential_inputs<'a>(
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad[0], layer.size[1] + 2.0 * pad[1]),
                 placement: layer.placement,
                 projection: layer.projection,
-                projection_camera: layer.projection_camera,
+                projection_camera: if layer.projection == crate::doc::store::LayerProjection::TwoD { document } else { world },
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,
                 blend_mode: layer.blend_mode,
@@ -666,7 +642,7 @@ pub(crate) fn sequential_inputs<'a>(
                 displace: layer.displace,
                 clip: layer.clip,
                 shadow: layer.shadow,
-                outline: layer.outline,
+                outline: outline.get(index).copied().unwrap_or(0),
                 // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
                 // 焼く先の絵が無い層(網・点群・環境)と、下の合成を読む効果列は、画面へ持って行く。
                 screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) { lwp.passes.as_slice() } else { &[] },

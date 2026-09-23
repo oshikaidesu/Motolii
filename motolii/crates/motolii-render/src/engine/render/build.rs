@@ -1,6 +1,7 @@
 //! 1 コマ分の層を建てて焼く: 積み方・効果・マスク・Matte・板への焼き込み。
 
 use super::*;
+use crate::render::engine::frame_graph_scene::Preparation;
 
 impl Engine {
 
@@ -9,11 +10,11 @@ impl Engine {
     /// エフェクトは今まで通り効く。
     pub(in crate::engine) fn flatten_if_asked(
         &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
+        prep: &Preparation,
         layer: Layer,
         flatten: bool,
     ) -> Result<Layer, EngineError> {
+        let (comp, camera) = (prep.comp, prep.seam.composition_picture());
         if !flatten || layer.content.texture().is_some() {
             return Ok(layer);
         }
@@ -49,13 +50,11 @@ impl Engine {
                 ..layer.placement
             },
             projection: crate::doc::store::LayerProjection::TwoD,
-            projection_camera: camera,
             blend_mode: layer.blend_mode,
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
             shadow: layer.shadow,
-            outline: layer.outline,
             frame: None,
         })
     }
@@ -65,8 +64,7 @@ impl Engine {
     /// 既存のlocal-texture Effect経路をここで一度だけcomp座標へ収めてからMatteへ渡す。
     pub(in crate::engine) fn apply_effects_before_matte(
         &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
+        prep: &mut Preparation,
         layer: Layer,
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
@@ -75,26 +73,24 @@ impl Engine {
             return Ok(layer);
         }
 
-        self.bake_isolated_layer(comp, camera, layer, passes)
+        self.bake_isolated_layer(prep, layer, passes)
     }
 
     fn bake_isolated_layer(
         &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
+        prep: &mut Preparation,
         layer: Layer,
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
         let (blend, placement) = (layer.blend_mode, layer.placement);
-        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }], blend, placement, false, 1.0)
+        self.bake_isolated_layers(prep, vec![LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }], blend, placement, false, 1.0)
     }
 
     /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。`average` なら写しを足す
     /// (Motion Blur: 各写しの不透明度は 1/枚数なので、足すと平均になる)。
     pub(in crate::engine) fn bake_isolated_layers(
         &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
+        prep: &mut Preparation,
         mut sources: Vec<LayerWithPasses>,
         output_blend: CompositeBlendMode,
         placement: crate::doc::core::LayerPlacement,
@@ -107,15 +103,16 @@ impl Engine {
         }
         // Lit by the frame's light (a frame prepared again because something read a plate early).
         // Needed before the frame is lit: this pass is a draft, the frame is prepared again lit.
-        if self.known_frame_light.is_none() && self.deferring_plates {
-            self.plates_needed_early = true;
+        if prep.plates.known_light.is_none() && prep.plates.deferring {
+            prep.plates.needed_early = true;
         }
-        let light = Some(self.known_frame_light.clone().unwrap_or_default());
+        let light = Some(prep.plates.known_light.clone().unwrap_or_default());
+        let (comp, camera) = (prep.comp, prep.seam.composition_picture());
         self.plate_bakes += 1;
         self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.as_ref().map_or(0, |light| light.serial)));
         let (texture, _view) = self.compositor.bake_picture(comp, camera, &sources, crate::render::compositor::NO_BACKGROUND, density, light.as_ref(), None)?;
         let imported = self.compositor.import_premultiplied(&texture)?;
-        Ok(Self::plate_layer(imported, comp, camera, &sources, output_blend, placement))
+        Ok(Self::plate_layer(imported, comp, &sources, output_blend, placement))
     }
 
     /// A plate whose members are prepared now and whose picture is baked at the end of the frame's
@@ -124,29 +121,28 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     pub(in crate::engine) fn defer_isolated_layers(
         &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
+        prep: &mut Preparation,
         mut sources: Vec<LayerWithPasses>,
         placement: crate::doc::core::LayerPlacement,
         average: bool,
-        density: f32,
     ) -> Result<Layer, EngineError> {
+        let (comp, camera, density) = (prep.comp, prep.seam.composition_picture(), prep.precision.picture);
         for source in &mut sources {
             source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
         }
         let size = |side: u32| if density >= 1.0 { side } else { ((side as f32 * density).ceil() as u32).max(1) };
         let target = self.compositor.create_blend_scratch_texture(size(comp.width), size(comp.height));
         let imported = self.compositor.import_premultiplied(&target)?;
-        let layer = Self::plate_layer(imported.clone(), comp, camera, &sources, CompositeBlendMode::Normal, placement);
-        self.reflectables.extend(sources.iter().cloned());
-        self.pending_plates.push(PendingPlate { target, picture: imported, comp, camera, sources, density });
+        let layer = Self::plate_layer(imported.clone(), comp, &sources, CompositeBlendMode::Normal, placement);
+        prep.plates.reflectables.extend(sources.iter().cloned());
+        prep.plates.pending.push(PendingPlate { target, picture: imported, comp, camera, sources, density });
         Ok(layer)
     }
 
     /// The plates waiting for their picture, baked now: with the frame's world light when given,
     /// else each with its own capture (a plate something needs before the frame is lit).
-    pub(in crate::engine) fn bake_pending_plates(&mut self, light: &crate::render::compositor::WorldLight) -> Result<(), EngineError> {
-        for plate in std::mem::take(&mut self.pending_plates) {
+    pub(in crate::engine) fn bake_pending_plates(&mut self, prep: &mut Preparation, light: &crate::render::compositor::WorldLight) -> Result<(), EngineError> {
+        for plate in std::mem::take(&mut prep.plates.pending) {
             self.plate_bakes += 1;
             self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.serial));
             self.compositor.bake_picture(plate.comp, plate.camera, &plate.sources, crate::render::compositor::NO_BACKGROUND, plate.density, Some(light), Some(&plate.target))?;
@@ -157,7 +153,6 @@ impl Engine {
     fn plate_layer(
         imported: crate::render::compositor::GpuTexture2D,
         comp: CompSpec,
-        camera: ResolvedCamera,
         sources: &[LayerWithPasses],
         output_blend: CompositeBlendMode,
         placement: crate::doc::core::LayerPlacement,
@@ -175,13 +170,11 @@ impl Engine {
                 ..placement
             },
             projection: crate::doc::store::LayerProjection::TwoD,
-            projection_camera: camera,
             blend_mode: output_blend,
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
             shadow: sources.iter().map(|s| s.layer.shadow).fold(0.0, f32::max),
-            outline: sources.iter().map(|s| s.layer.outline).max().unwrap_or(0),
             frame: None,
         }
     }

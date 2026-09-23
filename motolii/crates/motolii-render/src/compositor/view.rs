@@ -53,9 +53,10 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
+        view: u32,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<ViewBuilder, CompositorError> {
-        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, encoder)?;
+        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, view, encoder)?;
         // The view shows the stack (or, with nothing drawn, the background).
         let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -88,7 +89,8 @@ impl Compositor {
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<wgpu::Texture, CompositorError> {
         let picture = into.cloned().unwrap_or_else(|| self.create_blend_scratch_texture(window.width, window.height));
-        match self.record_stack(comp, window, camera, inputs, background_color, world, encoder)? {
+        // A picture is a drawing of its own (view 0): its histories are not a view's.
+        match self.record_stack(comp, window, camera, inputs, background_color, world, 0, encoder)? {
             Some(stack) => {
                 let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
                 encoder.copy_texture_to_texture(stack.texture.as_image_copy(), picture.as_image_copy(), size);
@@ -119,6 +121,7 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
+        view: u32,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<Option<re_renderer::GpuTexture>, CompositorError> {
         // The light is the composition's: the top environment layer, else the world's.
@@ -235,7 +238,7 @@ impl Compositor {
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             builder.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
             let canvas = match run {
-                [only] if !only.screen_passes.is_empty() => self.screen_passes(window, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), encoder)?,
+                [only] if !only.screen_passes.is_empty() => self.screen_passes(window, view, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), encoder)?,
                 _ => canvas,
             };
             if glass_run && !glazed {
@@ -290,9 +293,11 @@ impl Compositor {
 
     /// A layer's effects run on its drawn canvas (it had no picture of its own to bake them into, or
     /// they read the view's picture below): the view's work, at the view's size.
+    #[allow(clippy::too_many_arguments)]
     fn screen_passes(
         &mut self,
         window: Window,
+        view: u32,
         canvas: re_renderer::GpuTexture,
         passes: &[EffectPass],
         sources: &[Vec<GpuTexture2D>],
@@ -311,7 +316,7 @@ impl Compositor {
             _ => sources.get(i).map(|row| row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()).unwrap_or_default(),
         }).collect();
         let (mut current, linear, premultiplied, mut scratch) = self.record_pass_chain(
-            encoder, canvas.texture.clone(), true, true, false, passes, &others, None, [width, height], 0, [width, height],
+            encoder, canvas.texture.clone(), true, true, false, passes, &others, None, [width, height], 0, [width, height], Some([view, width, height]),
         )?;
         if !linear {
             let back = self.convert_image_encoding(encoder, &current, true, true, premultiplied);
