@@ -552,6 +552,7 @@ pub(crate) fn sequential_inputs<'a>(
                     },
                     LayerContent::Model(model) => SequentialContent::Model(model),
                     LayerContent::Environment(e) => SequentialContent::Environment(e),
+                    LayerContent::Plate(plate) => SequentialContent::Plate(plate),
                 },
                 local_min: glam::Vec2::new(-pad[0], -pad[1]),
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad[0], layer.size[1] + 2.0 * pad[1]),

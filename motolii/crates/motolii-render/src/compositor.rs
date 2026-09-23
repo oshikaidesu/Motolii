@@ -464,13 +464,33 @@ pub enum LayerContent {
     Model(std::sync::Arc<GpuModelData>),
     /// 環境(空)。板にならず、run の背景と網の照明になる。
     Environment(std::sync::Arc<GpuEnvironmentData>),
+    /// A plate the view materializes: a plate is an intent (isolate these, one picture if pixels are
+    /// needed), not a raster. Its members' pictures are prepared once for the frame; each view draws
+    /// them at the plate's place in its stack, so glass inside reads that view's picture below the
+    /// plate (2026-09-23). The plate's effects run on that drawing, as any effect with no picture.
+    Plate(std::sync::Arc<ViewPlate>),
+}
+
+/// The members of a plate a view materializes (see [`LayerContent::Plate`]).
+pub struct ViewPlate {
+    pub(crate) sources: Vec<LayerWithPasses>,
+    /// The camera the members are placed by (the composition's picture camera).
+    pub(crate) camera: crate::doc::core::ResolvedCamera,
+    /// The members' pictures, prepared with the frame's other plates.
+    pub(crate) prepared: std::sync::OnceLock<PreparedMembers>,
+}
+
+pub(crate) struct PreparedMembers {
+    pub(crate) pictures: Vec<LayerContent>,
+    pub(crate) paddings: Vec<u32>,
+    pub(crate) spills: Vec<render_effects::LayerSpill>,
 }
 
 impl LayerContent {
     pub fn texture(&self) -> Option<&GpuTexture2D> {
         match self {
             Self::Texture(t) | Self::LinearTexture(t) => Some(t),
-            Self::Cloud { .. } | Self::Model(_) | Self::Environment(_) => None,
+            Self::Cloud { .. } | Self::Model(_) | Self::Environment(_) | Self::Plate(_) => None,
         }
     }
 }
@@ -492,6 +512,7 @@ pub(crate) enum SequentialContent<'a> {
     },
     Model(&'a GpuModelData),
     Environment(&'a GpuEnvironmentData),
+    Plate(&'a ViewPlate),
 }
 
 impl SequentialContent<'_> {

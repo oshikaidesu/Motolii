@@ -56,7 +56,7 @@ impl Compositor {
         view: u32,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<ViewBuilder, CompositorError> {
-        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, view, encoder)?;
+        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, view, None, encoder)?;
         // The view shows the stack (or, with nothing drawn, the background).
         let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -91,7 +91,7 @@ impl Compositor {
     ) -> Result<re_renderer::GpuTexture, CompositorError> {
         let picture = into.cloned().unwrap_or_else(|| self.picture_texture(window.width, window.height));
         // A picture is a drawing of its own (view 0): its histories are not a view's.
-        match self.record_stack(comp, window, camera, inputs, background_color, world, 0, encoder)? {
+        match self.record_stack(comp, window, camera, inputs, background_color, world, 0, None, encoder)? {
             Some(stack) => {
                 let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
                 encoder.copy_texture_to_texture(stack.texture.as_image_copy(), picture.texture.as_image_copy(), size);
@@ -112,7 +112,9 @@ impl Compositor {
         Ok(picture)
     }
 
-    /// Every layer in order, stacked bottom to top; `None` when nothing is drawn.
+    /// Every layer in order, stacked bottom to top; `None` when nothing is drawn. `below` is the
+    /// view's picture beneath these layers when they are a plate's members: glass among them
+    /// refracts it (with the members' own non-glass picture over it).
     #[allow(clippy::too_many_arguments)]
     fn record_stack(
         &mut self,
@@ -123,6 +125,7 @@ impl Compositor {
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
         view: u32,
+        below: Option<&re_renderer::GpuTexture>,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<Option<re_renderer::GpuTexture>, CompositorError> {
         // The light is the composition's: the top environment layer, else the world's.
@@ -152,6 +155,30 @@ impl Compositor {
         let mut backdrops = Vec::new();
         let mut index = 0;
         while index < inputs.len() {
+            // A plate the view materializes: its members drawn here, over the view's picture below
+            // the plate (what its glass refracts), then the plate's effects, then onto the stack.
+            if let SequentialContent::Plate(plate) = inputs[index].content {
+                let input = &inputs[index];
+                index += 1;
+                let Some(members) = plate.prepared.get() else { continue };
+                let member_inputs = sequential_inputs(&plate.sources, &members.pictures, &members.paddings, &members.spills, plate.camera, plate.camera);
+                let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
+                let Some(mut canvas) = self.record_stack(comp, window, camera, &member_inputs, NO_BACKGROUND, world, view, beneath.as_ref(), encoder)? else { continue };
+                if !input.screen_passes.is_empty() {
+                    canvas = self.screen_passes(window, view, canvas, input.screen_passes, input.screen_sources, stack.as_ref(), encoder)?;
+                }
+                // The plate holds glass: what is above refracts the picture below it, as for a glass run.
+                if !glazed {
+                    unglazed = stack.clone();
+                    glazed = true;
+                }
+                let mode = vello_blend_mode(input.blend_mode).unwrap_or(SRC_OVER);
+                stack = Some(match stack.take() {
+                    None => canvas,
+                    Some(beneath) => self.mix_onto(window, &beneath, &canvas, mode, encoder),
+                });
+                continue;
+            }
             // A mix blend reads what is below: the picture is drawn alone, then mixed onto the stack.
             let (start, mode) = if let Some(mode) = vello_blend_mode(inputs[index].blend_mode).filter(|_| alone(&inputs[index])) {
                 index += 1;
@@ -210,8 +237,9 @@ impl Compositor {
             super::light::light_view(&mut config, world.reflection, world.light, false);
             if glass_run {
                 if transmission.is_none() {
-                    if let Some(below) = if glazed { unglazed.as_ref() } else { stack.as_ref() } {
-                        let (texture, imported) = self.backdrop(window, below, roughest, encoder)?;
+                    let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
+                    if let Some(beneath) = beneath {
+                        let (texture, imported) = self.backdrop(window, &beneath, roughest, encoder)?;
                         transmission = Some(imported);
                         backdrops.push(texture);
                     }
@@ -302,6 +330,22 @@ impl Compositor {
             blend_vism.get(ctx).record_over(ctx, encoder, &[&canvas, &current], &out.default_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
         }
         Ok(out)
+    }
+
+    /// The non-glass picture glass refracts: this stack's own (`local`) over the view's picture
+    /// beneath it (`below`, when the stack is a plate's members).
+    fn non_glass_below(
+        &mut self,
+        window: Window,
+        below: Option<&re_renderer::GpuTexture>,
+        local: Option<&re_renderer::GpuTexture>,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Option<re_renderer::GpuTexture> {
+        match (below, local) {
+            (Some(below), Some(local)) => Some(self.mix_onto(window, below, local, SRC_OVER, encoder)),
+            (Some(only), None) | (None, Some(only)) => Some(only.clone()),
+            (None, None) => None,
+        }
     }
 
     /// What is below, copied with the mip levels the roughest reader needs (glass blurs by reading

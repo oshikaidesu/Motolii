@@ -72,6 +72,8 @@ pub(in crate::engine) struct Preparation {
 #[derive(Default)]
 pub(in crate::engine) struct PlateWork {
     pub(in crate::engine) pending: Vec<super::render::build::PendingPlate>,
+    /// Plates the views materialize, whose members' pictures are prepared with the pending plates.
+    pub(in crate::engine) view: Vec<std::sync::Arc<crate::render::compositor::ViewPlate>>,
     pub(in crate::engine) reflectables: Vec<LayerWithPasses>,
     pub(in crate::engine) member_ids: Vec<LayerId>,
     pub(in crate::engine) deferring: bool,
@@ -114,6 +116,7 @@ impl Engine {
         // prepared again with its plates baked in place under that same light.
         let light = self.light_the_scene(prep, &prepared.layers)?;
         prep.plates.pending.clear();
+        prep.plates.view.clear();
         // The draft pass's record is dropped with its work; only the capture it made stays.
         self.preparation_events.retain(|event| matches!(event, PreparationEvent::Capture(_)));
         prep.plates.known_light = Some(light.clone());
@@ -154,7 +157,8 @@ impl Engine {
     /// plates' pictures, which are not baked yet) and every plate's members, each where it is.
     fn light_the_scene(&mut self, prep: &mut Preparation, top: &[LayerWithPasses]) -> Result<WorldLight, EngineError> {
         // A plate's picture is not baked yet: its members stand for it.
-        let is_plate = |layer: &LayerWithPasses| prep.plates.pending.iter().any(|plate| plate.is_picture_of(&layer.layer.content));
+        let is_plate = |layer: &LayerWithPasses| matches!(layer.layer.content, crate::render::compositor::LayerContent::Plate(_))
+            || prep.plates.pending.iter().any(|plate| plate.is_picture_of(&layer.layer.content));
         let mut scene: Vec<LayerWithPasses> = top.iter().filter(|layer| !is_plate(layer)).cloned().collect();
         let same_as_frame = scene.len() == top.len() && prep.plates.reflectables.is_empty();
         // The plates' members this capture sees (the top level is the frame's own layer list).
@@ -361,7 +365,12 @@ impl Engine {
                         rotation_y: 0.0,
                         plane: None,
                     };
-                    let baked = if prep.plates.deferring || prep.plates.known_light.is_none() {
+                    let baked = if Self::plate_reads_view(&prepared.layers) {
+                        if prep.plates.deferring || prep.plates.known_light.is_none() {
+                            prep.plates.member_ids.extend(prepared.layer_ids.iter().copied());
+                        }
+                        self.view_plate(prep, prepared.layers, placement, *average)?
+                    } else if prep.plates.deferring || prep.plates.known_light.is_none() {
                         prep.plates.member_ids.extend(prepared.layer_ids.iter().copied());
                         self.defer_isolated_layers(prep, prepared.layers, placement, *average)?
                     } else {

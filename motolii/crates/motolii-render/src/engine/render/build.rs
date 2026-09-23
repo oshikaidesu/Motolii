@@ -112,7 +112,7 @@ impl Engine {
         self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.as_ref().map_or(0, |light| light.serial)));
         let texture = self.compositor.bake_picture(comp, camera, &sources, crate::render::compositor::NO_BACKGROUND, density, light.as_ref(), None)?;
         let imported = self.compositor.import_premultiplied(&texture)?;
-        Ok(Self::plate_layer(imported, comp, &sources, output_blend, placement))
+        Ok(Self::plate_layer(LayerContent::Texture(imported), comp, &sources, output_blend, placement))
     }
 
     /// A plate whose members are prepared now and whose picture is baked at the end of the frame's
@@ -133,32 +133,76 @@ impl Engine {
         let size = |side: u32| if density >= 1.0 { side } else { ((side as f32 * density).ceil() as u32).max(1) };
         let target = self.compositor.picture_texture(size(comp.width), size(comp.height));
         let imported = self.compositor.import_premultiplied(&target)?;
-        let layer = Self::plate_layer(imported.clone(), comp, &sources, CompositeBlendMode::Normal, placement);
+        let layer = Self::plate_layer(LayerContent::Texture(imported.clone()), comp, &sources, CompositeBlendMode::Normal, placement);
         prep.plates.reflectables.extend(sources.iter().cloned());
         prep.plates.pending.push(PendingPlate { target, picture: imported, comp, camera, sources, density });
         Ok(layer)
     }
 
     /// The plates waiting for their picture, baked now: with the frame's world light when given,
-    /// else each with its own capture (a plate something needs before the frame is lit).
+    /// else each with its own capture (a plate something needs before the frame is lit). Then the
+    /// members of the plates the views materialize (they may hold a plate baked here).
     pub(in crate::engine) fn bake_pending_plates(&mut self, prep: &mut Preparation, light: &crate::render::compositor::WorldLight) -> Result<(), EngineError> {
         for plate in std::mem::take(&mut prep.plates.pending) {
             self.plate_bakes += 1;
             self.preparation_events.push(crate::render::engine::frame_graph_scene::PreparationEvent::Bake(light.serial));
             self.compositor.bake_picture(plate.comp, plate.camera, &plate.sources, crate::render::compositor::NO_BACKGROUND, plate.density, Some(light), Some(&plate.target))?;
         }
+        for plate in std::mem::take(&mut prep.plates.view) {
+            self.prepare_view_plate(&plate)?;
+        }
+        Ok(())
+    }
+
+    /// Whether a plate's members read the picture below them (standard glass, or a plate holding
+    /// it): such a plate is the view's to materialize, where that picture is (2026-09-23).
+    pub(in crate::engine) fn plate_reads_view(sources: &[LayerWithPasses]) -> bool {
+        sources.iter().any(|source| source.layer.shading.reads_backdrop || matches!(source.layer.content, LayerContent::Plate(_)))
+    }
+
+    /// A plate the views materialize: its members, whose pictures are prepared with the frame's
+    /// plates (at once when the frame is already lit). No picture of the plate is made here.
+    pub(in crate::engine) fn view_plate(
+        &mut self,
+        prep: &mut Preparation,
+        mut sources: Vec<LayerWithPasses>,
+        placement: crate::doc::core::LayerPlacement,
+        average: bool,
+    ) -> Result<Layer, EngineError> {
+        for source in &mut sources {
+            source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
+        }
+        let comp = prep.comp;
+        let plate = std::sync::Arc::new(crate::render::compositor::ViewPlate {
+            sources,
+            camera: prep.seam.composition_picture(),
+            prepared: std::sync::OnceLock::new(),
+        });
+        let layer = Self::plate_layer(LayerContent::Plate(plate.clone()), comp, &plate.sources, CompositeBlendMode::Normal, placement);
+        if prep.plates.deferring || prep.plates.known_light.is_none() {
+            prep.plates.reflectables.extend(plate.sources.iter().cloned());
+            prep.plates.view.push(plate);
+        } else {
+            self.prepare_view_plate(&plate)?;
+        }
+        Ok(layer)
+    }
+
+    fn prepare_view_plate(&mut self, plate: &crate::render::compositor::ViewPlate) -> Result<(), EngineError> {
+        let (pictures, paddings, spills) = self.compositor.effective_layer_textures(&plate.sources)?;
+        let _ = plate.prepared.set(crate::render::compositor::PreparedMembers { pictures, paddings, spills });
         Ok(())
     }
 
     fn plate_layer(
-        imported: crate::render::compositor::GpuTexture2D,
+        content: LayerContent,
         comp: CompSpec,
         sources: &[LayerWithPasses],
         output_blend: CompositeBlendMode,
         placement: crate::doc::core::LayerPlacement,
     ) -> Layer {
         Layer {
-            content: LayerContent::Texture(imported),
+            content,
             size: [comp.width as f32, comp.height as f32],
             placement: crate::doc::core::LayerPlacement {
                 transform: glam::Affine2::IDENTITY,

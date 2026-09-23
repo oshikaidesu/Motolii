@@ -330,14 +330,29 @@ mod frame_reflection {
             let events = &engine.preparation_events;
             let captures: Vec<_> = events.iter().filter_map(|e| match e { Capture(s) => Some(*s), _ => None }).collect();
             assert_eq!(captures.len(), 1, "{count} plates, {views} views: one frame-level capture: {events:?}");
-            assert_eq!(events.iter().filter(|e| matches!(e, Bake(_))).count(), count as usize, "each plate baked once: {events:?}");
-            assert!(events.iter().all(|e| !matches!(e, Bake(s) if *s != captures[0])), "every plate lit by the frame's capture: {events:?}");
-            assert_eq!(events.first(), Some(&Capture(captures[0])), "the capture comes before any plate is baked: {events:?}");
+            // Their members are glass: each view materializes the plate over its own picture below
+            // (2026-09-23), so the preparation bakes no picture of it.
+            assert_eq!(events.iter().filter(|e| matches!(e, Bake(_))).count(), 0, "a plate holding glass is the views': {events:?}");
+            assert_eq!(events.first(), Some(&Capture(captures[0])), "the capture comes first: {events:?}");
         }
     }
 
     /// Every plate's members are in the scene the frame's capture sees (so siblings reflect each
     /// other through the shared probe), and no plate captures a probe of its own.
+    /// A plate without glass reads nothing of a view: its picture is baked once in the preparation,
+    /// however many views draw it (the plate as an optimization).
+    #[test]
+    fn a_plate_without_glass_is_baked_once_for_every_view() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut doc, members) = plates(dir.path(), 2);
+        for member in members {
+            doc.apply(Intent::SetEffects { layer: member, effects: vec![] }).unwrap();
+        }
+        let engine = prepare(&doc, 3);
+        let events = &engine.preparation_events;
+        assert_eq!(events.iter().filter(|e| matches!(e, Bake(_))).count(), 2, "each plate baked once: {events:?}");
+    }
+
     #[test]
     fn plate_members_are_the_reflectable_scene_and_no_plate_captures_its_own() {
         let dir = tempfile::tempdir().unwrap();
@@ -399,6 +414,51 @@ fn a_plate_with_an_effect_after_it_shows_its_members() {
     assert!(dots > 0, "the plate's orange dot is in the picture");
 }
 
+
+/// A plate is an intent, not a raster (2026-09-23): glass in a Repeater's plate (`Whole`) refracts
+/// the view's picture below the plate — here a red picture — as the same copies drawn each
+/// (`Each`) do, instead of finding nothing below and showing the sky.
+#[test]
+fn glass_in_a_plate_refracts_the_views_picture_below_it() {
+    use crate::doc::store::{EffectId, EffectInstance, EffectScope, LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming};
+    use crate::render::engine::environment_tests::{scene, sky_png, SIZE};
+    let render = |scope: EffectScope| {
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "sky.png", 40, 220);
+        let mut doc = scene(dir.path(), &sky, true);
+        let red = file_layer(&mut doc, 20, 3, &png(dir.path(), "red.png", [230, 20, 20, 255]));
+        doc.apply(Intent::SetConstant { layer: red, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([2.0, 2.0]) }).unwrap();
+        let group = LayerId(30);
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 5, timing: LayerTiming::place(0, None, 1) } },
+            // The copies, then an effect on them: `Whole` puts it on one plate of the copies, `Each`
+            // on every copy (the effect is neutral, so the two pictures are the same).
+            Intent::SetEffects { layer: group, effects: vec![
+                EffectInstance { id: EffectId(0), plugin_id: crate::extensions::placement::REPEAT.to_owned() },
+                EffectInstance { id: EffectId(2), plugin_id: "motolii.gain".to_owned() },
+            ] },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "count").unwrap(), value: Value::F64(2.0) },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "position_each").unwrap(), value: Value::Vec2([8.0, 0.0]) },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_scope(EffectId(2)), value: Value::Enum(scope.enum_value()) },
+        ]).unwrap();
+        let glass = file_layer(&mut doc, 31, 6, &dir.path().join("quad.obj"));
+        doc.apply(Intent::SetAttrs { layer: glass, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } }).unwrap();
+        doc.apply(Intent::SetConstant { layer: glass, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([6.0, 6.0]) }).unwrap();
+        doc.apply(Intent::SetEffects { layer: glass, effects: vec![EffectInstance { id: EffectId(1), plugin_id: "motolii.glass".into() }] }).unwrap();
+        doc.apply(Intent::SetConstant { layer: glass, property: PropertyId::effect_param(EffectId(1), "transmission").unwrap(), value: Value::F64(1.0) }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.export_frame(&doc.view(), RationalTime::ZERO, true, None).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        pixels
+    };
+    let (whole, each) = (render(EffectScope::Whole), render(EffectScope::Each));
+    let center = ((SIZE / 2 * SIZE + SIZE / 2) * 4) as usize;
+    let p = &whole[center..center + 4];
+    assert!(i32::from(p[0]) - i32::from(p[2]) > 60, "the glass in the plate shows the red picture below it: {p:?}");
+    let differ = whole.chunks(4).zip(each.chunks(4)).filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8)).count();
+    assert!(differ * 100 < (SIZE * SIZE) as usize, "a plate looks as its copies drawn each: {differ} pixels differ");
+}
 
 // Fixtures: two overlapping pictures; a repeated group baked into a glowing plate.
 use crate::doc::store::{property, LayerId, PropertyId, Value};

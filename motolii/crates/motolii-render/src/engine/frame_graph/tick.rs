@@ -157,9 +157,6 @@ impl Engine {
         // The view draws the prepared layers where the work places them — every layer relative to
         // the work's camera (2.5D included: an observer looks at that relation from outside) — as a
         // re_renderer visualizer builds a view's draw data from shared resources.
-        if let Some(feature) = frame.scene.layers.iter().find_map(not_ported) {
-            return Err(EngineError::Store(format!("tick: {feature} is not ported to the tick yet")));
-        }
         let inputs = crate::render::compositor::sequential_inputs(&frame.scene.layers, &frame.pictures, &frame.paddings, &frame.spills, frame.document_camera, frame.document_camera);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut encoder = self.compositor.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-tick-view") });
@@ -227,14 +224,6 @@ impl Engine {
 
     /// The last tick's counts.
     pub fn tick_stats(&self) -> TickStats { self.tick_stats }
-}
-
-/// What the tick cannot draw yet, named; the old path draws it until it is ported.
-fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'static str> {
-    use crate::render::compositor::LayerContent;
-    match layer.layer.content {
-        LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) | LayerContent::Cloud { .. } => None,
-    }
 }
 
 /// The document frame as every view of a tick reads it.

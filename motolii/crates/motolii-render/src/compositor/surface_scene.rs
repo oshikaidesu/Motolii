@@ -170,7 +170,8 @@ impl SceneDraws {
 
 fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, glam::Vec3)> {
     let spatial = match input.content {
-        SequentialContent::Environment(_) => return None,
+        // A plate's members stand for it wherever the world is looked at.
+        SequentialContent::Environment(_) | SequentialContent::Plate(_) => return None,
         SequentialContent::Model(m) => Some(m.bounds),
         SequentialContent::Cloud { bounds, .. } => Some(bounds),
         SequentialContent::Rect(_) | SequentialContent::LinearRect(_) => None,
@@ -316,7 +317,8 @@ impl Compositor {
             }
             let shading = input.shading.clone();
             match input.content {
-                SequentialContent::Environment(_) => {}
+                // A plate is drawn by the view's stack, at its place, never inside a run.
+                SequentialContent::Environment(_) | SequentialContent::Plate(_) => {}
                 SequentialContent::Cloud {
                     positions,
                     colors,
