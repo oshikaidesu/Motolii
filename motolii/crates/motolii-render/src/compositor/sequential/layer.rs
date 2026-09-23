@@ -61,7 +61,7 @@ impl Compositor {
             .draw(&self.ctx, Rgba::TRANSPARENT)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        self.pending.push(command_buffer);
+        self.ctx.queue_commands([command_buffer]);
 
         Ok(view_builder.main_target().clone())
     }
@@ -124,7 +124,7 @@ impl Compositor {
             &[("mode".to_owned(), matte::matte_mode_index(mode) as f32)],
             window.size_f32(),
         );
-        self.pending.push(encoder.finish());
+        self.ctx.queue_commands([encoder.finish()]);
 
         self.next_effect_key += 1;
         let key = self.next_effect_key;

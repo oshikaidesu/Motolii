@@ -69,7 +69,7 @@ impl super::Compositor {
             &[("mode".to_owned(), matte_mode_index(MatteMode::Alpha) as f32)],
             [width as f32, height as f32],
         );
-        self.pending.push(encoder.finish());
+        self.ctx.queue_commands([encoder.finish()]);
         self.import_premultiplied(&out_texture)
     }
 }

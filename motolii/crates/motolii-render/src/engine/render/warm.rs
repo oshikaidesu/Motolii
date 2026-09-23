@@ -31,10 +31,8 @@ impl Engine {
     /// 再生位置の少し先で現れる動画層の復号器を、今のうちに開く。timeline は未来を知っている。
     /// 待たず、失敗も記録しない(本番の描画で改めて分かる)。
     pub fn warm_upcoming(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<(), EngineError> {
-        let warmed = self.warm_upcoming_frames(view, t);
-        // Warming runs between ticks: what it uploaded goes out now, not across the next frame's start.
-        self.compositor.flush_pending();
-        warmed
+        // Warming runs between ticks, into the open frame: what it uploads goes out with the next tick.
+        self.warm_upcoming_frames(view, t)
     }
 
     fn warm_upcoming_frames(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<(), EngineError> {

@@ -277,7 +277,7 @@ impl Engine {
     }
 
     /// 復号したコマを GPU texture のまま写して取っておく。上限を超えたら、使われてから一番古い物を捨てる。
-    /// `after_upload`: 今復号したコマ。復号器の転送は frame の encoder に積まれていて `before_submit` で流れるので、
+    /// `after_upload`: 今復号したコマ。復号器の転送は frame 共通の encoder に積まれていて frame の終わりに流れるので、
     /// 写しは pending に積んでその後に流す(先に打つと、冷えた復号器の空の texture を写す)。
     fn remember_video_frame(&mut self, path: &str, pts: i64, source: &crate::render::compositor::GpuTexture2D, after_upload: bool) {
         let [width, height] = source.width_height();
@@ -309,12 +309,19 @@ impl Engine {
                     usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
                 },
             );
-            let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Motolii video frame cache copy") });
-            encoder.copy_texture_to_texture(source.texture.as_image_copy(), copy.texture.as_image_copy(), size);
-            if after_upload { deferred = Some(encoder.finish()); } else { ctx.queue.submit([encoder.finish()]); }
+            if after_upload {
+                // After the upload the decoder recorded into the frame-global encoder: queued behind it.
+                let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Motolii video frame cache copy") });
+                encoder.copy_texture_to_texture(source.texture.as_image_copy(), copy.texture.as_image_copy(), size);
+                deferred = Some(encoder.finish());
+            } else {
+                // Before this frame's decoding rewrites the texture: at the head of the frame-global encoder.
+                ctx.active_frame.before_view_builder_encoder.lock().get()
+                    .copy_texture_to_texture(source.texture.as_image_copy(), copy.texture.as_image_copy(), size);
+            }
             re_renderer::resource_managers::GpuTexture2D::new(copy, re_renderer::resource_managers::AlphaChannelUsage::Opaque)
         };
-        self.compositor.pending.extend(deferred);
+        self.compositor.render_context().queue_commands(deferred);
         let Some(texture) = texture else { return };
         let tick = self.frame_cache_tick;
         self.frame_cache.insert((path.to_owned(), pts), CachedVideoFrame { texture, bytes, last_use: tick });

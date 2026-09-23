@@ -368,8 +368,7 @@ impl Engine {
         state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
             .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, motion.buffer(), frame, state.fps as f32);
         // Recorded, not submitted: it goes out with the frame's other work, ahead of every draw.
-        let recorded = encoder.finish();
-        self.compositor.pending.push(recorded);
+        self.compositor.ctx.queue_commands([encoder.finish()]);
         self.compositor.motion = Some(motion);
     }
 }

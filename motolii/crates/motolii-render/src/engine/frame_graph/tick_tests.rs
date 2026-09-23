@@ -384,7 +384,7 @@ mod frame_reflection {
         assert_eq!(engine.world_light_captures, before, "three reads within the frame, no capture");
         engine.prepare_gpu_pictures(&scene, &prep, true).unwrap();
         assert_eq!(engine.world_light_captures, before + 1, "an evaluation of its own is lit once");
-        engine.compositor.flush_pending();
+        engine.compositor.next_frame();
     }
 }
 

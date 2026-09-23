@@ -300,10 +300,6 @@ impl Engine {
                 self.frame_graph = Some(state);
                 return Err(error);
             }
-            // Outside a tick (an editor query) the work the evaluation recorded (an analysis) finishes here.
-            if !self.in_tick {
-                self.compositor.flush_pending();
-            }
         }
         Ok(state)
     }

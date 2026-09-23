@@ -28,7 +28,6 @@ impl Engine {
         lwp: &crate::render::compositor::LayerWithPasses,
     ) -> Result<Option<LinearPicture>, EngineError> {
         let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(lwp))?;
-        self.compositor.flush_pending();
         let Some(texture) = textures.first().and_then(|content| content.texture()).cloned() else { return Ok(None) };
         let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle())
             .map_err(|error| EngineError::Store(error.to_string()))?.texture.clone();
@@ -40,7 +39,7 @@ impl Engine {
                 label: Some("motolii-linear-picture-encode"),
             });
             let converted = self.compositor.convert_image_encoding(&mut encoder, &raw, true, !linear, linear);
-            self.compositor.pending.push(encoder.finish());
+            self.compositor.ctx.queue_commands([encoder.finish()]);
             (converted.clone(), Some(converted))
         };
         let bytes = self.compositor.read_texture_bytes(&half)?;
@@ -279,7 +278,7 @@ impl Engine {
                 !texture.format().is_srgb(),
                 true,
             );
-            self.compositor.pending.push(encoder.finish());
+            self.compositor.ctx.queue_commands([encoder.finish()]);
             let bytes = self.compositor.read_texture_bytes(&converted)?;
             let (width, height) = (converted.width(), converted.height());
             self.compositor.effect_scratch.release(width, height, converted.format(), converted);

@@ -121,7 +121,7 @@ impl Compositor {
         for mesh in &draws.meshes {
             builder.queue_draw(&self.ctx, mesh.clone());
         }
-        self.pending.push(builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        self.ctx.queue_commands([builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?]);
         self.surface_work.light_captures += 1;
         let cookie = resources.imported.clone();
         self.light_cookie = Some(resources);
@@ -695,7 +695,7 @@ impl Compositor {
         self.ctx
             .texture_manager_2d
             .generate_mipmaps(&self.ctx, &mut capture, &resources.atlas);
-        self.pending.push(capture.finish());
+        self.ctx.queue_commands([capture.finish()]);
         let influence_radii = [origins[0], *origins.last().unwrap()].map(|origin| {
             candidates
                 .iter()
@@ -736,7 +736,6 @@ impl Compositor {
             self.reflection_diagnostic =
                 Some(super::reflection_diagnostic::CaptureDiagnostic::enqueue(
                     &self.ctx,
-                    &mut self.pending,
                     &resources.atlas,
                     metadata,
                 ));

@@ -35,8 +35,9 @@ impl Compositor {
         effects::block_program::note_device(&device);
         #[cfg(test)]
         eprintln!("MOTOLII_COMPOSITOR_INIT phase=render_context");
-        let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
+        let mut ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
+        let frame = Some(re_view_host::HostFrame::begin(&mut ctx));
 
         #[cfg(test)]
         eprintln!("MOTOLII_COMPOSITOR_INIT phase=catalog");
@@ -93,9 +94,8 @@ impl Compositor {
             matte_vism,
             coverage_programs: Default::default(),
             catalog,
-            sequential_submits: 0,
             last_submission: None,
-            pending: Vec::new(),
+            frame,
         })
     }
 
@@ -208,8 +208,8 @@ impl Compositor {
             wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(height) } },
             texture.size(),
         );
-        self.pending.push(encoder.finish());
-        self.flush_pending();
+        self.ctx.queue_commands([encoder.finish()]);
+        self.next_frame();
         let slice = staging.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });

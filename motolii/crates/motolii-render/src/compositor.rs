@@ -428,11 +428,10 @@ pub struct Compositor {
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
     /// このコマの箱のブロックが GPU に書いた、物ごとの world のずれ(view の設定に差す)。
     pub(crate) motion: Option<re_renderer::MotionBuffer>,
-    pub(crate) sequential_submits: u64,
     /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
-    /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
-    pub(crate) pending: Vec<wgpu::CommandBuffer>,
+    /// The renderer frame that is open: what is recorded goes out with it (`next_frame`).
+    pub(crate) frame: Option<re_view_host::HostFrame>,
 }
 
 #[derive(Clone)]

@@ -231,7 +231,7 @@ impl Compositor {
         self.next_readback += 1;
         view_builder.queue_draw(&self.ctx, draw_data);
         let command_buffer = view_builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?;
-        self.pending.push(command_buffer);
+        self.ctx.queue_commands([command_buffer]);
         self.next_effect_key += 1;
         let imported = self
             .ctx

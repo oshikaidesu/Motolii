@@ -104,8 +104,7 @@ fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
     let building = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let program = super::super::EffectProgram::compile_for(&compositor.ctx, &definition, wgpu::TextureFormat::Rgba8Unorm);
     // pipeline は次の frame の頭で組まれる。組ませてから記録し、転送を流してから submit。
-    compositor.ctx.before_submit();
-    compositor.ctx.begin_frame();
+    compositor.next_frame();
     let error = pollster::block_on(building.pop());
     assert!(error.is_none(), "pipeline が組めない: {error:?}");
     let ctx = &compositor.ctx;
@@ -124,9 +123,9 @@ fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
     encoder.copy_texture_to_buffer(dst.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(2) } }, wgpu::Extent3d { width: 2, height: 2, depth_or_array_layers: 1 });
     let commands = encoder.finish();
     drop(ctx);
-    compositor.ctx.before_submit();
+    compositor.ctx.queue_commands([commands]);
+    compositor.next_frame();
     let ctx = &compositor.ctx;
-    ctx.queue.submit([commands]);
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "GPU の検証に落ちた: {error:?}");
     let slice = buffer.slice(..);
@@ -158,8 +157,7 @@ fn the_clock_reaches_the_shader() {
 #[test]
 fn catalog_refresh_keeps_the_open_renderer_frame_and_device() {
     let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
-    compositor.ctx.before_submit();
-    compositor.ctx.begin_frame();
+    compositor.next_frame();
     let current = catalog_snapshot();
     compositor.catalog = Arc::new(CatalogSnapshot {
         generation: current.generation.wrapping_sub(1),

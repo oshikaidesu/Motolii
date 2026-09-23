@@ -1,12 +1,12 @@
-//! One application tick, run the way Rerun runs one (`re_viewer/src/app/ui.rs`, and the fork's
-//! embedder `re_view_spatial/src/spatial_stage.rs` `SpatialStage::show`):
+//! One application tick, run the way Rerun runs one (`re_viewer/src/app/ui.rs`, the fork's embedder
+//! `SpatialStage::show`), on the host's frame (`re_view_host::HostFrame`):
 //!
-//! 1. `RenderContext::begin_frame` — once, before anything records (pools age, belts recycle).
-//! 2. Prepare the document frame — once, shared by every view (Rerun's once-per-frame context
+//! 1. Prepare the document frame — once, shared by every view (Rerun's once-per-frame context
 //!    systems and caches): FrameGraph evaluation, lowering, the prepared GPU scene.
-//! 3. Each view records its commands against that prepared frame (Rerun's `ViewBuilder::draw` per
+//! 2. Each view records its commands against that prepared frame (Rerun's `ViewBuilder::draw` per
 //!    view). A view reads the prepared frame; it never makes, completes or changes it.
-//! 4. `before_submit`, then one `queue.submit` of everything the tick recorded.
+//! 3. The frame ends — one submission of everything recorded into it — and the next begins
+//!    (`Compositor::next_frame`). Work between ticks (an edit) records into that open frame.
 //!
 //! What a piece of work belongs to is decided by its inputs: the document frame (prepare), a
 //! view's projection / visibility / density (the view), or a view's own image or history (the
@@ -50,21 +50,11 @@ impl Engine {
     /// One application tick: every shown view of the document at `time`.
     pub fn tick(&mut self, doc: &StoreView<'_>, time: RationalTime, views: &[ViewRequest<'_>]) -> Result<TickStats, EngineError> {
         let mut stats = TickStats::default();
-        // Work recorded outside a tick finishes outside it; nothing crosses the frame boundary.
-        debug_assert!(self.compositor.pending.is_empty(), "GPU work was recorded outside a tick and left for it");
-        let submitted_before = self.compositor.sequential_submits();
-        self.in_tick = true;
-        let ticked = self.tick_inside(doc, time, views, &mut stats);
-        self.in_tick = false;
-        ticked?;
-        stats.submits += (self.compositor.sequential_submits() - submitted_before) as u32;
-        self.compositor.ctx.before_submit();
-        let commands = std::mem::take(&mut self.tick_commands);
-        self.compositor.last_submission = Some(self.compositor.ctx.queue.submit(commands));
+        self.compositor.feedback_seen.clear();
+        self.tick_inside(doc, time, views, &mut stats)?;
+        self.compositor.next_frame();
         stats.submits += 1;
-        // Staging goes back to the belts; work between ticks (an edit, a query) records into a fresh
-        // frame-global encoder and submits itself.
-        self.compositor.ctx.after_submit_within_frame();
+        stats.begin_frames += 1;
         if std::mem::take(&mut self.tick_outlined) {
             if let Some(bounds) = self.compositor.selection_bounds.as_mut() { bounds.schedule_map(); }
         }
@@ -73,20 +63,16 @@ impl Engine {
     }
 
     fn tick_inside(&mut self, doc: &StoreView<'_>, time: RationalTime, views: &[ViewRequest<'_>], stats: &mut TickStats) -> Result<(), EngineError> {
-        self.compositor.ctx.begin_frame();
-        stats.begin_frames += 1;
-        self.compositor.feedback_seen.clear();
-
         let prepared = self.prepare_document_frame(doc, time, views, stats)?;
-
-        let mut commands = std::mem::take(&mut self.compositor.pending);
         for view in views {
-            commands.extend(self.record_view(&prepared, view)?);
+            self.record_view(&prepared, view)?;
             stats.views += 1;
         }
 
         // Feedback is a recurrence from the in-point: a frame reached by a jump is replayed from the
-        // nearest checkpoint (the document's history and each view's), then drawn again.
+        // nearest checkpoint (the document's history and each view's), then drawn again. Each past
+        // frame is a renderer frame of its own: its uploads (a video frame) must not be overwritten
+        // by the next frame's before its draws run.
         let fps = doc.composition().ok().flatten().map(|c| c.fps);
         let now = fps.and_then(|fps| time.try_to_frame_round(fps).ok());
         if let (Some(fps), Some(now)) = (fps, now) {
@@ -94,29 +80,21 @@ impl Engine {
             let start = state.as_ref().and_then(|state| self.frame_graph_feedback_replay_start(state, now));
             self.frame_graph = state;
             if let Some(start) = start {
+                self.compositor.next_frame();
+                stats.submits += 1;
+                stats.begin_frames += 1;
                 for frame in start..now {
                     let at = RationalTime::try_from_frame(frame, fps).map_err(|error| EngineError::Time(error.to_string()))?;
                     self.tick_frame = None;
                     self.compositor.feedback_seen.clear();
                     let past = self.prepare_document_frame(doc, at, views, stats)?;
-                    commands.append(&mut self.compositor.pending);
                     for view in views {
-                        let scratch = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
-                            label: Some("motolii-feedback-replay"),
-                            size: wgpu::Extent3d { width: view.window.width, height: view.window.height, depth_or_array_layers: 1 },
-                            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
-                            format: crate::render::compositor::PRESENTABLE_FORMAT,
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                            view_formats: &[],
-                        });
-                        commands.extend(self.record_view(&past, &ViewRequest { target: &scratch, ..*view })?);
+                        let scratch = self.compositor.view_canvas_for(view.window, crate::render::compositor::PRESENTABLE_FORMAT);
+                        self.record_view(&past, &ViewRequest { target: &scratch.texture, ..*view })?;
                     }
-                    // Each past frame is a frame of its own: its uploads (a video frame) must not be
-                    // overwritten by the next frame's before its draws run.
-                    self.compositor.ctx.before_submit();
-                    self.compositor.ctx.queue.submit(std::mem::take(&mut commands));
-                    self.compositor.ctx.after_submit_within_frame();
+                    self.compositor.next_frame();
                     stats.submits += 1;
+                    stats.begin_frames += 1;
                 }
                 // The frame itself, on the history just rebuilt.
                 let c = &mut self.compositor;
@@ -124,13 +102,11 @@ impl Engine {
                 c.feedback_seen.clear();
                 self.tick_frame = None;
                 let prepared = self.prepare_document_frame(doc, time, views, stats)?;
-                commands.append(&mut self.compositor.pending);
                 for view in views {
-                    commands.extend(self.record_view(&prepared, view)?);
+                    self.record_view(&prepared, view)?;
                 }
             }
         }
-        self.tick_commands = commands;
         Ok(())
     }
 
@@ -179,7 +155,7 @@ impl Engine {
     /// One view's commands, as Rerun records a view: the view's pictures are drawn by its
     /// `ViewBuilder`s (`draw`, egui-wgpu's `prepare`), then the view composites into the surface
     /// (`composite`, `paint`).
-    fn record_view(&mut self, frame: &PreparedFrame, view: &ViewRequest<'_>) -> Result<Vec<wgpu::CommandBuffer>, EngineError> {
+    fn record_view(&mut self, frame: &PreparedFrame, view: &ViewRequest<'_>) -> Result<(), EngineError> {
         // The view builds its own instances of the prepared layers, as a re_renderer visualizer builds
         // a view's draw data from shared resources: 2D placed by the document's camera (the
         // output's frame), the rest by the view's (a Stage's default camera), its selection marked.
@@ -225,7 +201,8 @@ impl Engine {
             });
             shown.composite(ctx, &mut pass);
         }
-        Ok(vec![encoder.finish()])
+        ctx.queue_commands([encoder.finish()]);
+        Ok(())
     }
 
     /// The output at `time`, read back: one tick with one Export view.

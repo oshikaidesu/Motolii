@@ -11,7 +11,6 @@ pub(crate) struct CaptureDiagnostic {
 impl CaptureDiagnostic {
     pub(super) fn enqueue(
         ctx: &RenderContext,
-        pending: &mut Vec<wgpu::CommandBuffer>,
         texture: &wgpu::Texture,
         metadata: serde_json::Value,
     ) -> Self {
@@ -44,7 +43,7 @@ impl CaptureDiagnostic {
         encoder.map_buffer_on_submit(&buffer, wgpu::MapMode::Read, .., move |r| {
             let _ = send.send(r.is_ok());
         });
-        pending.push(encoder.finish());
+        ctx.queue_commands([encoder.finish()]);
         Self {
             metadata,
             buffer,

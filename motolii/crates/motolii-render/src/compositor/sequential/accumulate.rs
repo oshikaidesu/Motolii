@@ -35,7 +35,7 @@ impl Compositor {
             ctx, &mut encoder, effect_scratch, &[&base_view, &upper_view], &output_view,
             &[("mode".to_owned(), mode as f32)], [width as f32, height as f32],
         );
-        self.pending.push(encoder.finish());
+        self.ctx.queue_commands([encoder.finish()]);
         self.import_premultiplied(&output)
     }
 

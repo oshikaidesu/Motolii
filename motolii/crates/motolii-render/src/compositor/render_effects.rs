@@ -235,7 +235,7 @@ impl Compositor {
             self.baked_effects.keep(baked_key, content, padding, spill, owned);
         }
         if let Some(encoder) = copy_encoder {
-            self.pending.push(encoder.finish());
+            self.ctx.queue_commands([encoder.finish()]);
         }
         let Self { baked_effects, effect_scratch, .. } = self;
         baked_effects.sweep(effect_scratch);
@@ -447,7 +447,7 @@ impl Compositor {
         }
         state.frame = Some(*at);
         let at = *at;
-        self.pending.push(encoder.finish());
+        self.ctx.queue_commands([encoder.finish()]);
         Some(at)
     }
 
@@ -493,10 +493,10 @@ impl Compositor {
             });
             encoder.copy_texture_to_texture(src.texture.as_image_copy(), copy.as_image_copy(), size);
             // ここで submit しない。復号したコマの転送は frame 共通の encoder に積まれていて、
-            // 流れるのは `before_submit` の中 — 先に打つと、まだ届いていない texture を写す
+            // 流れるのは frame の終わり — 先に打つと、まだ届いていない texture を写す
             // (冷えていれば零、暖まっていれば前のコマ。同じ時刻の絵が辿り方で変わる)。
-            // pending に積めば `flush_pending` が `before_submit` → この写し、の順で流す。
-            self.pending.push(encoder.finish());
+            // frame に積めば frame 共通の encoder → この写し、の順で流れる。
+            self.ctx.queue_commands([encoder.finish()]);
         }
         self.next_effect_key += 1;
         self.ctx
@@ -576,7 +576,7 @@ impl Compositor {
         let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), reflection: reflection.as_ref(), light: light.as_ref(), meshes: meshes.as_ref() };
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
         let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, into, &mut encoder)?;
-        self.pending.push(encoder.finish());
+        self.ctx.queue_commands([encoder.finish()]);
         let view = texture.create_view(&Default::default());
         Ok((texture, view))
     }

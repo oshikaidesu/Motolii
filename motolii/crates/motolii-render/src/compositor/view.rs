@@ -386,13 +386,18 @@ impl Compositor {
     /// A canvas the size of the view's window, from re_renderer's pool: it returns to the pool when
     /// the tick lets it go, and re_renderer retires it at a frame boundary if nothing reuses it.
     fn view_canvas(&self, window: Window) -> re_renderer::GpuTexture {
+        self.view_canvas_for(window, BLEND_TARGET_FORMAT)
+    }
+
+    /// [`Self::view_canvas`] in `format`.
+    pub(crate) fn view_canvas_for(&self, window: Window, format: wgpu::TextureFormat) -> re_renderer::GpuTexture {
         self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
             label: "motolii-view-canvas".into(),
             size: wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: BLEND_TARGET_FORMAT,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
         })
     }
