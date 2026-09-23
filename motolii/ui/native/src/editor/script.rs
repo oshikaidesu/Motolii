@@ -228,6 +228,24 @@ mod tests {
         assert_eq!(rt.doc.view().layers().len(), 2);
     }
 
+    #[test]
+    fn a_css_gradient_fills_a_shape_across_its_box() {
+        let (rt, outcome) = run(r##"
+            comp({ seconds: 1 });
+            rectangle({ name: "Band" }).fill("linear-gradient(to right, #000000, #ff0000 25%, #ffffff)");
+        "##);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let layer = view.layers()[0];
+        let shapes = view.shapes(layer).unwrap();
+        let crate::doc::store::ShapeNode::Leaf(shape) = &shapes[0] else { panic!("a leaf") };
+        let crate::doc::vector::Brush::Gradient(g) = &shape.fill.as_ref().unwrap().brush else { panic!("a gradient fill") };
+        assert_eq!(g.units, crate::doc::vector::GradientUnits::ObjectBoundingBox);
+        assert_eq!(g.stops.iter().map(|s| s.offset).collect::<Vec<_>>(), [0.0, 0.25, 1.0]);
+        let d = g.end.sub(g.start);
+        assert!(d.x > 0.0 && d.y.abs() < 1e-9, "\"to right\" runs left to right: {:?} → {:?}", g.start, g.end);
+    }
+
     /// 同梱の例は説明書の一部。窓の名前が変わったらここが赤。
     #[test]
     fn every_example_builds_its_document() {

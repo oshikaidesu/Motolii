@@ -30,6 +30,45 @@ const colorOf = (value) => {
   }
   throw new Error(`A color is "#rrggbb", "#rrggbbaa" or [r, g, b, a] in 0..1, got ${JSON.stringify(value)}`);
 };
+/** A CSS gradient function (linear-, radial-, conic-gradient) as the window's gradient edit, or
+ * null for anything else. Angles and stop positions follow CSS: 0deg points up and turns clockwise,
+ * the default is "to bottom", and stops without a position are spread evenly between their
+ * neighbours. */
+const cssGradient = (text) => {
+  const m = /^\s*(linear|radial|conic)-gradient\((.*)\)\s*$/i.exec(String(text));
+  if (!m) return null;
+  const args = m[2].split(",").map((a) => a.trim()).filter(Boolean);
+  const kind = { linear: "linear", radial: "radial", conic: "angular" }[m[1].toLowerCase()];
+  const sides = { "to top": 0, "to right": 90, "to bottom": 180, "to left": 270, "to top right": 45, "to right top": 45, "to bottom right": 135, "to right bottom": 135, "to bottom left": 225, "to left bottom": 225, "to top left": 315, "to left top": 315 };
+  let css = kind === "angular" ? 0 : 180;
+  const first = args[0].toLowerCase();
+  const degrees = /^(?:from\s+)?(-?[\d.]+)(deg|turn|rad)$/.exec(first);
+  if (degrees) {
+    css = Number(degrees[1]) * { deg: 1, turn: 360, rad: 180 / Math.PI }[degrees[2]];
+    args.shift();
+  } else if (first in sides) {
+    css = sides[first];
+    args.shift();
+  } else if (!/^#|^\[/.test(first)) {
+    args.shift(); // a radial shape/size or position this gradient does not use
+  }
+  const stops = args.map((a) => {
+    const [color, at] = a.split(/\s+/);
+    return { rgba: colorOf(color), offset: at === undefined ? undefined : Number(at.replace("%", "")) / 100 };
+  });
+  if (stops.length < 2) throw new Error(`A gradient needs two colors, got ${JSON.stringify(text)}`);
+  if (stops[0].offset === undefined) stops[0].offset = 0;
+  if (stops[stops.length - 1].offset === undefined) stops[stops.length - 1].offset = 1;
+  for (let i = 1; i < stops.length - 1; i++) {
+    if (stops[i].offset !== undefined) continue;
+    let j = i;
+    while (stops[j].offset === undefined) j++;
+    const from = stops[i - 1].offset;
+    stops[i].offset = from + (stops[j].offset - from) / (j - i + 1);
+  }
+  // The window measures a gradient's angle from +x with y down; CSS from up, clockwise.
+  return { kind, angle: css - 90, stops: stops.map((s) => ({ offset: Math.min(1, Math.max(0, s.offset)), rgba: s.rgba })) };
+};
 /** What the window stores for a written value: a choice by its name, a layer by the layer, a color by hex. */
 const valueFor = (row, value) => {
   if (row.kind === "color" || row.subtype === "color") return colorOf(value);
@@ -139,8 +178,16 @@ class Layer {
     return this;
   }
   text(content) { op("seek", { frame: 0 }); op("setText", { layer: this.id, content: String(content) }); return this; }
-  /** The fill of a shape or the color of a text: "#rrggbb". */
-  fill(color) { op("select", { id: this.id }); op("applyPalette", { rgba: colorOf(color) }); return this; }
+  /** The fill of a shape or the color of a text: "#rrggbb", or a CSS gradient on a shape
+   * ("linear-gradient(90deg, #ff66aa, #ffaa33)"), spanning the shape's box. */
+  fill(paint) {
+    const gradient = cssGradient(paint);
+    if (gradient) {
+      op("setGradient", { slot: { ShapeFill: { layer: this.id, path: [0] } }, ...gradient });
+      return this;
+    }
+    op("select", { id: this.id }); op("applyPalette", { rgba: colorOf(paint) }); return this;
+  }
   font(family) { op("setFont", { layer: this.id, family }); return this; }
   effect(name, values = {}) {
     const known = JSON.parse(__effects());
