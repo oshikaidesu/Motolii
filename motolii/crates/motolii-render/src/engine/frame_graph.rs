@@ -13,6 +13,8 @@ use super::frame_graph_scene::GpuSceneValue;
 pub mod tick;
 #[cfg(test)]
 mod tick_tests;
+#[cfg(test)]
+mod tick_oracle_tests;
 use super::{Engine, EngineError};
 
 pub(super) struct EngineFrameGraph {

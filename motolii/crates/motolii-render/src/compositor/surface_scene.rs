@@ -129,7 +129,7 @@ impl Compositor {
     }
 }
 
-pub(super) struct SharedMeshScene {
+pub(crate) struct SharedMeshScene {
     draw: MeshDrawData,
     source_layers: Vec<usize>,
 }
@@ -160,7 +160,7 @@ pub(crate) struct SceneDraws {
 }
 
 impl SceneDraws {
-    pub(super) fn queue(self, ctx: &re_renderer::RenderContext, view: &mut ViewBuilder) {
+    pub(crate) fn queue(self, ctx: &re_renderer::RenderContext, view: &mut ViewBuilder) {
         view.queue_draw(ctx, self.rects);
         for cloud in self.clouds {
             view.queue_draw(ctx, cloud);
@@ -294,7 +294,7 @@ impl Compositor {
     }
 
     /// One geometry conversion for the main view and auxiliary reflection views.
-    pub(super) fn surface_scene_draws(
+    pub(crate) fn surface_scene_draws(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],

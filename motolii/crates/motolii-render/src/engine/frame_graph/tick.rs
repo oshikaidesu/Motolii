@@ -99,6 +99,26 @@ impl Engine {
         let id = re_renderer::ViewBuilderId::new(self.compositor.next_readback);
         self.compositor.next_readback += 1;
         let mut builder = re_renderer::ViewBuilder::new(ctx, config, id).map_err(|error| EngineError::Store(error.to_string()))?;
+
+        // The view places the prepared layers: 2D by the document's camera (the output's frame),
+        // the rest by the view's own (a Stage's default camera).
+        let placing = view.window.projection_camera.unwrap_or(frame.document_camera);
+        let mut layers = frame.scene.layers.clone();
+        for layer in &mut layers {
+            if let Some(feature) = not_ported(layer) {
+                return Err(EngineError::Store(format!("tick: {feature} is not ported to the tick yet")));
+            }
+            layer.layer.projection_camera = if layer.layer.projection == crate::doc::store::LayerProjection::TwoD { frame.document_camera } else { placing };
+        }
+        let contents: Vec<_> = layers.iter().map(|layer| layer.layer.content.clone()).collect();
+        let paddings: Vec<_> = layers.iter().map(|layer| layer.padding).collect();
+        let spills = vec![None; layers.len()];
+        let inputs = crate::render::compositor::sequential_inputs(&layers, &contents, &paddings, &spills);
+        let draws = self.compositor.surface_scene_draws(frame.comp, &inputs, Vec::new(), false, &|_| false, None, 0)
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        let ctx = &self.compositor.ctx;
+        draws.queue(ctx, &mut builder);
+
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let drawn = builder.draw(ctx, crate::render::compositor::clear_color(background)).map_err(|error| EngineError::Store(error.to_string()))?;
 
@@ -120,13 +140,24 @@ impl Engine {
             });
             builder.composite(ctx, &mut pass);
         }
-        let _ = &frame.scene;
-        let _ = frame.document_camera;
         Ok(vec![drawn, encoder.finish()])
     }
 
     /// The last tick's counts.
     pub fn tick_stats(&self) -> TickStats { self.tick_stats }
+}
+
+/// What the tick cannot draw yet, named; the old path draws it until it is ported.
+fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'static str> {
+    use crate::render::compositor::LayerContent;
+    if !layer.passes.is_empty() { return Some("an effect chain"); }
+    if layer.layer.blend_mode != crate::render::compositor::BlendMode::Normal { return Some("a blend mode"); }
+    if layer.layer.clip.is_some() { return Some("a clip"); }
+    if layer.layer.shading.reads_backdrop { return Some("a surface reading the backdrop"); }
+    match layer.layer.content {
+        LayerContent::Texture(_) | LayerContent::LinearTexture(_) => None,
+        _ => Some("a mesh, cloud, path or environment layer"),
+    }
 }
 
 /// The document frame as every view of a tick reads it.

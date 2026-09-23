@@ -5,7 +5,8 @@ use super::tick::{TickStats, ViewRequest};
 use crate::doc::core::RationalTime;
 use crate::frame_graph::ViewProjection;
 use crate::render::compositor::{Window, PRESENTABLE_FORMAT};
-use crate::render::engine::environment_tests::{scene, sky_png, SIZE};
+use crate::render::engine::environment_tests::SIZE;
+use super::tick_oracle_tests::pictures;
 use crate::render::engine::Engine;
 
 fn target(engine: &Engine, window: Window) -> wgpu::Texture {
@@ -43,8 +44,7 @@ fn tick(engine: &mut Engine, doc: &motolii_edit::Document, time: RationalTime, n
 #[test]
 fn a_tick_is_one_frame_one_preparation_and_one_submission_however_many_views() {
     let dir = tempfile::tempdir().unwrap();
-    let sky = sky_png(dir.path(), "sky.png", 40, 220);
-    let doc = scene(dir.path(), &sky, true);
+    let doc = pictures(dir.path());
     for n in [0, 1, 2, 5] {
         let mut engine = Engine::new().unwrap();
         let stats = tick(&mut engine, &doc, RationalTime::ZERO, n);
@@ -58,8 +58,7 @@ fn a_tick_is_one_frame_one_preparation_and_one_submission_however_many_views() {
 #[test]
 fn every_view_of_a_tick_reads_the_same_prepared_frame() {
     let dir = tempfile::tempdir().unwrap();
-    let sky = sky_png(dir.path(), "sky.png", 40, 220);
-    let doc = scene(dir.path(), &sky, true);
+    let doc = pictures(dir.path());
     let mut engine = Engine::new().unwrap();
     tick(&mut engine, &doc, RationalTime::ZERO, 3);
     let first = engine.tick_frame.clone().unwrap();
