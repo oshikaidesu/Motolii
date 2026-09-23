@@ -1,4 +1,4 @@
-use re_renderer::environment::SceneReflection;
+use crate::render::compositor::light::SceneReflection;
 use re_renderer::renderer::{
     GpuMeshInstance, MeshDrawData, PointCloudDrawData, RectangleDrawData, RectangleOptions,
     TexturedRect,
@@ -35,7 +35,7 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
         shared: Option<&SharedMeshScene>,
-    ) -> Result<Option<re_renderer::environment::SunLight>, CompositorError> {
+    ) -> Result<Option<crate::render::compositor::light::SunLight>, CompositorError> {
         if !inputs.iter().any(|i| i.shadow > 0.0) {
             return Ok(None);
         }
@@ -91,7 +91,7 @@ impl Compositor {
             }
         };
         let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| inputs[layer].shadow <= 0.0, shared, 0)?;
-        let config = TargetConfiguration {
+        let mut config = TargetConfiguration {
             name: "light-cookie".into(),
             render_mode: RenderMode::Deterministic,
             resolution_in_pixel: [LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE],
@@ -104,10 +104,10 @@ impl Compositor {
             pixels_per_point: 1.0,
             blend_with_background: BlendWithBackground::Premultiplied,
             environment: environment.map(|e| e.environment.clone()),
-            light_capture: true,
             motion: self.motion.clone(),
             ..Default::default()
         };
+        super::light::light_view(&mut config, None, None, true);
         let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture)
             .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
@@ -125,7 +125,7 @@ impl Compositor {
         self.surface_work.light_captures += 1;
         let cookie = resources.imported.clone();
         self.light_cookie = Some(resources);
-        Ok(Some(re_renderer::environment::SunLight { direction, weight: sun.weight, color: sun.color, uv_from_world, cookie }))
+        Ok(Some(crate::render::compositor::light::SunLight { direction, weight: sun.weight, color: sun.color, uv_from_world, cookie }))
     }
 }
 

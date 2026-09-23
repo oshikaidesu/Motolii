@@ -25,6 +25,7 @@ mod reflection_diagnostic;
 mod reflection_cache;
 mod measurement;
 pub use measurement::FrameMeasurement;
+pub(crate) mod light;
 pub(crate) mod noise;
 mod point_cloud;
 pub(crate) mod readback;
@@ -426,7 +427,7 @@ pub struct Compositor {
     pub(crate) coverage_programs: std::collections::HashMap<wgpu::TextureFormat, effects::EffectProgram>,
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
     /// このコマの箱のブロックが GPU に書いた、物ごとの world のずれ(view の設定に差す)。
-    pub(crate) motion: Option<re_renderer::MotionBuffer>,
+    pub(crate) motion: Option<re_renderer::GpuBuffer>,
     /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
 }

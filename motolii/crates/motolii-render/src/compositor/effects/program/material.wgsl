@@ -2,14 +2,28 @@
 // probes, the sun's light cookie, and transmission that refracts the backdrop (Standard Glass).
 // Appended to a surface program's surface hook; reads the frame's resources (re_renderer's bindings).
 
+// The view's program constants as Motolii lays them out (compositor/light.rs).
+fn reflection_origin() -> vec4f { return frame.program_constants[0]; }
+fn reflection_origin_second() -> vec4f { return frame.program_constants[1]; }
+fn reflection_min() -> vec4f { return frame.program_constants[2]; }
+fn reflection_max() -> vec4f { return frame.program_constants[3]; }
+/// xyz: world direction toward the sun; w: its share of the diffuse light (0 = no sun, no shadow).
+fn sun_direction() -> vec4f { return frame.program_constants[4]; }
+/// rgb: the sun's tint; w = 1 while the light cookie is captured (surfaces write what they let through).
+fn sun_color() -> vec4f { return frame.program_constants[5]; }
+/// World → light cookie uv (orthographic, looking along the sun).
+fn light_uv_from_world() -> mat4x4f {
+    return mat4x4f(frame.program_constants[6], frame.program_constants[7], frame.program_constants[8], frame.program_constants[9]);
+}
+
 fn projected_reflection_ray(position: vec3f, direction: vec3f, origin: vec3f) -> vec3f {
     var anchor = position;
-    if frame.reflection_origin_second.w > 0.0 {
-        anchor = clamp(position, frame.reflection_min.xyz, frame.reflection_max.xyz);
+    if reflection_origin_second().w > 0.0 {
+        anchor = clamp(position, reflection_min().xyz, reflection_max().xyz);
     }
-    if all(anchor >= frame.reflection_min.xyz) && all(anchor <= frame.reflection_max.xyz) {
+    if all(anchor >= reflection_min().xyz) && all(anchor <= reflection_max().xyz) {
         let safe_dir = select(select(vec3f(-1e-6), vec3f(1e-6), direction >= vec3f(0.0)), direction, abs(direction) > vec3f(1e-6));
-        let far = max((frame.reflection_min.xyz - anchor) / safe_dir, (frame.reflection_max.xyz - anchor) / safe_dir);
+        let far = max((reflection_min().xyz - anchor) / safe_dir, (reflection_max().xyz - anchor) / safe_dir);
         return anchor + direction * min(far.x, min(far.y, far.z)) - origin;
     }
     return direction;
@@ -32,7 +46,7 @@ fn local_reflection(position: vec3f, direction: vec3f, roughness: f32, origin: v
     let ups = array<vec3f, 6>(vec3f(0,-1,0),vec3f(0,-1,0),vec3f(0,0,1),vec3f(0,0,-1),vec3f(0,-1,0),vec3f(0,-1,0));
     let uv = reflection_face_uv(ray, directions[face], ups[face]);
     // Keep each face at least 4x4 to avoid cross-face mip leakage.
-    let face_size = f32(textureDimensions(scene_reflection).x) / 3.0;
+    let face_size = f32(textureDimensions(view_capture_texture).x) / 3.0;
     let max_lod = max(log2(face_size) - 2.0, 0.0);
     var lod = clamp(roughness,0.0,1.0) * max_lod;
     if FILTER_SURFACE_FOOTPRINT {
@@ -47,34 +61,34 @@ fn local_reflection(position: vec3f, direction: vec3f, roughness: f32, origin: v
     let margin = min(0.49, exp2(guard_lod) / face_size);
     let local = clamp(uv,vec2f(margin),vec2f(1.0-margin));
     let atlas_uv = (local + vec2f(f32(face % 3u),f32(face / 3u) + f32(probe)*2.0)) / vec2f(3,4);
-    let captured = textureSampleLevel(scene_reflection, screen_sampler, atlas_uv, lod);
+    let captured = textureSampleLevel(view_capture_texture, screen_sampler, atlas_uv, lod);
     return captured;
 }
 
 fn reflection_influence(position: vec3f, origin: vec3f, radius: f32) -> f32 {
     if radius <= 0.0 { return 1.0; }
     let radial = 1.0 - smoothstep(radius, 2.0 * radius, distance(position, origin));
-    let border = min(position - frame.reflection_min.xyz, frame.reflection_max.xyz - position);
-    let fade = max((frame.reflection_max.xyz - frame.reflection_min.xyz) * 0.05, vec3f(1e-4));
+    let border = min(position - reflection_min().xyz, reflection_max().xyz - position);
+    let fade = max((reflection_max().xyz - reflection_min().xyz) * 0.05, vec3f(1e-4));
     let box_weight = vec3f(1.0) - smoothstep(vec3f(0.0), fade, max(-border, vec3f(0.0)));
     return radial * min(box_weight.x, min(box_weight.y, box_weight.z));
 }
 
 fn scene_specular(position: vec3f, direction: vec3f, roughness: f32) -> vec3f {
     let fallback = environment_specular_along(direction, roughness);
-    if frame.reflection_origin.w == 0.0 { return fallback; }
-    let w0 = reflection_influence(position, frame.reflection_origin.xyz, frame.reflection_origin_second.w);
-    var captured = local_reflection(position,direction,roughness,frame.reflection_origin.xyz,0u) * w0;
-    if frame.reflection_origin.w > 1.0 {
-        let d0 = position-frame.reflection_origin.xyz;
-        let d1 = position-frame.reflection_origin_second.xyz;
+    if reflection_origin().w == 0.0 { return fallback; }
+    let w0 = reflection_influence(position, reflection_origin().xyz, reflection_origin_second().w);
+    var captured = local_reflection(position,direction,roughness,reflection_origin().xyz,0u) * w0;
+    if reflection_origin().w > 1.0 {
+        let d0 = position-reflection_origin().xyz;
+        let d1 = position-reflection_origin_second().xyz;
         var ratio = dot(d0,d0)/max(dot(d0,d0)+dot(d1,d1),1e-6);
-        if frame.reflection_origin_second.w > 0.0 {
+        if reflection_origin_second().w > 0.0 {
             ratio = (dot(d0,d0) + 0.5e-6) / (dot(d0,d0) + dot(d1,d1) + 1e-6);
         }
         let weight = smoothstep(0.0,1.0,ratio);
-        let w1 = reflection_influence(position, frame.reflection_origin_second.xyz, frame.reflection_min.w);
-        captured = mix(captured,local_reflection(position,direction,roughness,frame.reflection_origin_second.xyz,1u) * w1,weight);
+        let w1 = reflection_influence(position, reflection_origin_second().xyz, reflection_min().w);
+        captured = mix(captured,local_reflection(position,direction,roughness,reflection_origin_second().xyz,1u) * w1,weight);
     }
     return captured.rgb + (1.0-captured.a)*fallback;
 }
@@ -93,22 +107,22 @@ fn env_brdf_approx(f0: vec3f, roughness: f32, n_dot_v: f32) -> vec3f {
 /// Light from the sun that reaches `position`: 1 where nothing blocks it, the blocker's tint × coverage
 /// where the cookie says something does. No depth: a blocker shades everything along its ray.
 fn sun_light_through(position: vec3f) -> vec3f {
-    if frame.sun_direction.w <= 0.0 {
+    if sun_direction().w <= 0.0 {
         return vec3f(1.0);
     }
-    let uv = (frame.light_uv_from_world * vec4f(position, 1.0)).xy;
+    let uv = (light_uv_from_world() * vec4f(position, 1.0)).xy;
     if any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)) {
         return vec3f(1.0);
     }
-    let cookie = textureSampleLevel(light_cookie, screen_sampler, uv, 0.0);
+    let cookie = textureSampleLevel(coverage_texture, screen_sampler, uv, 0.0);
     return vec3f(1.0 - cookie.a) + cookie.rgb;
 }
 
 /// Shadow factor: only the sun's share of the light is taken away, scaled by how much the surface
 /// faces the sun. `facing_floor` keeps a flat, unlit picture readable as a receiver.
 fn sun_shade(position: vec3f, normal: vec3f, facing_floor: f32) -> vec3f {
-    let facing = max(clamp(dot(normal, frame.sun_direction.xyz), 0.0, 1.0), facing_floor);
-    let share = frame.sun_direction.w * facing;
+    let facing = max(clamp(dot(normal, sun_direction().xyz), 0.0, 1.0), facing_floor);
+    let share = sun_direction().w * facing;
     return vec3f(1.0) - share * (vec3f(1.0) - sun_light_through(position));
 }
 
@@ -139,13 +153,13 @@ fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: 
     let f0 = mix(vec3f(f0_dielectric), albedo, metallic);
     let diffuse_weight = (1.0 - metallic) * (1.0 - transmission);
 
-    if frame.sun_color.w > 0.0 {
+    if sun_color().w > 0.0 {
         // Light cookie capture: what this surface lets through, straight along the sun's ray.
         return albedo * transmission * (1.0 - metallic);
     }
     let shade = sun_shade(world_position, normal, 0.0);
 
-    if frame.environment_present != 1u && frame.reflection_origin.w == 0.0 {
+    if frame.environment_present != 1u && reflection_origin().w == 0.0 {
         return albedo * simple_lighting(normal) * shade;
     }
 

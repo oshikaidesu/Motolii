@@ -367,11 +367,17 @@ impl Engine {
             .collect();
         state.follow_pass.get_or_insert_with(|| FollowPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &pairs);
         let links: Vec<(u32, u32)> = state.connectors.iter().map(|(_, a, b)| (*a, *b)).collect();
-        let motion = re_renderer::MotionBuffer::new(ctx, (state.objects.len() + 2 * links.len()) as u64);
-        state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, motion.buffer());
+        // Four vec4 per entry (motion.wgsl); a rope takes two entries.
+        let motion = ctx.gpu_resources.buffers.alloc(&ctx.device, &re_renderer::BufferDesc {
+            label: "motion".into(),
+            size: (state.objects.len() + 2 * links.len()).max(1) as u64 * 64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, &motion);
         let frame = (t.as_seconds_f64() * state.fps).round() as i64;
         state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
-            .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, motion.buffer(), frame, state.fps as f32);
+            .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, &motion, frame, state.fps as f32);
         // Recorded, not submitted: it goes out with the frame's other work, ahead of every draw.
         self.compositor.ctx.queue_commands([encoder.finish()]);
         self.compositor.motion = Some(motion);

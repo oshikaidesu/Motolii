@@ -54,11 +54,11 @@ const MOTION_HOOKS: &str = "fn program_motion(slot: f32, world_position: vec3f) 
 /// A mesh without a surface effect: a rough dielectric.
 const STANDARD_MESH: &str = "fn program_surface(in: SurfaceIn) -> vec3f { return shade_surface(in.albedo, in.normal, in.view_dir, in.world_position, in.thickness, vec4f(1.0, 0.0, 0.0, 1.5), 0.0); }";
 /// A picture without effects: lit by the sun's share, and an opaque blocker in the light cookie.
-const STANDARD_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
+const STANDARD_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if sun_color().w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
 /// A picture a field moves: its picture as it is.
 const MOVED_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { return in.albedo; }";
 /// An unlit layer (`SurfaceRecipe::unlit`): the sun's shading only.
-const UNLIT: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
+const UNLIT: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if sun_color().w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
 
 /// Which field/surface programs a material uses and with what values.
 #[derive(Clone, Debug, PartialEq)]

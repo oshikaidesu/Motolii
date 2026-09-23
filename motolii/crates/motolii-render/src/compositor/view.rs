@@ -23,8 +23,8 @@ const DEST_OVER: u32 = 4;
 /// The world's light for one frame: its one shared reflection probe and the sun's occluder map.
 #[derive(Clone, Default)]
 pub(crate) struct WorldLight {
-    pub reflection: Option<re_renderer::environment::SceneReflection>,
-    pub light: Option<re_renderer::environment::SunLight>,
+    pub reflection: Option<crate::render::compositor::light::SceneReflection>,
+    pub light: Option<crate::render::compositor::light::SunLight>,
     /// The mesh instances the capture uploaded, when its scene is the frame's own layer list (no
     /// plate members added): the views place them the same way and draw them as they are.
     pub meshes: Option<super::surface_scene::SharedMeshScene>,
@@ -35,9 +35,9 @@ pub(crate) struct WorldLight {
 /// What a view reads from the prepared world.
 pub(crate) struct ViewWorld<'a> {
     pub environment: Option<&'a GpuEnvironmentData>,
-    pub motion: Option<&'a re_renderer::MotionBuffer>,
-    pub reflection: Option<&'a re_renderer::environment::SceneReflection>,
-    pub light: Option<&'a re_renderer::environment::SunLight>,
+    pub motion: Option<&'a re_renderer::GpuBuffer>,
+    pub reflection: Option<&'a crate::render::compositor::light::SceneReflection>,
+    pub light: Option<&'a crate::render::compositor::light::SunLight>,
     /// The world's mesh instances, for a view that places the layers as the world does.
     pub meshes: Option<&'a super::surface_scene::SharedMeshScene>,
 }
@@ -204,8 +204,7 @@ impl Compositor {
 
             let mut config = sequential_target_config("motolii-view-run", comp, window, view_from_world, projection, environment);
             config.motion = world.motion.cloned();
-            config.scene_reflection = world.reflection.cloned();
-            config.light = world.light.cloned();
+            super::light::light_view(&mut config, world.reflection, world.light, false);
             if glass_run {
                 if transmission.is_none() {
                     if let Some(below) = if glazed { unglazed.as_ref() } else { stack.as_ref() } {
@@ -339,7 +338,7 @@ impl Compositor {
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
-    ) -> Result<(Option<re_renderer::environment::SceneReflection>, Option<re_renderer::environment::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
+    ) -> Result<(Option<crate::render::compositor::light::SceneReflection>, Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,

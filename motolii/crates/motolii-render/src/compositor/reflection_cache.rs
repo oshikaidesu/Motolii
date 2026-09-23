@@ -1,5 +1,5 @@
 use super::*;
-use re_renderer::environment::SceneReflection;
+use crate::render::compositor::light::SceneReflection;
 use re_renderer::renderer::SurfaceProgram;
 use std::collections::HashSet;
 use std::sync::Arc;
