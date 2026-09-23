@@ -28,6 +28,7 @@ impl Engine {
         lwp: &crate::render::compositor::LayerWithPasses,
     ) -> Result<Option<LinearPicture>, EngineError> {
         let (textures, paddings, _spills, checked_out) = self.compositor.effective_layer_textures(std::slice::from_ref(lwp))?;
+        self.compositor.flush_pending();
         let Some(texture) = textures.first().and_then(|content| content.texture()).cloned() else { return Ok(None) };
         let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle())
             .map_err(|error| EngineError::Store(error.to_string()))?.texture.clone();

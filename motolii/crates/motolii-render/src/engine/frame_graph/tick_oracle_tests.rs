@@ -108,3 +108,15 @@ fn blend_modes_and_the_2d_divider_match_the_old_path() {
     doc.apply(Intent::SetConstant { layer: white, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([20.0, 44.0]) }).unwrap();
     assert_matches_oracle(&doc, "mix blends and a 2.5D picture between 2D ones");
 }
+
+/// A layer's own effect chain: a blur (the picture grows by its reach) and a glow (light spills
+/// past the picture's coverage and is laid on with its own blend).
+#[test]
+fn a_layers_own_effects_match_the_old_path() {
+    use crate::doc::store::{EffectId, EffectInstance};
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = pictures(dir.path());
+    doc.apply(Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] }).unwrap();
+    doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(1), plugin_id: "motolii.glow".into() }] }).unwrap();
+    assert_matches_oracle(&doc, "a blurred and a glowing picture");
+}

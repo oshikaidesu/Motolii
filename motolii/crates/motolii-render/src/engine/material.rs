@@ -120,6 +120,7 @@ impl Engine {
             for pass in warps {
                 let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass], pass_sources: Vec::new(), padding: 0, cut: Vec::new() };
                 let (mut outputs,padding,_spills,_owned_outputs) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
+                self.compositor.flush_pending();
                 texture = outputs.remove(0).texture().expect("image effect output").clone();
                 frame = frame.padded(padding[0]);
             }

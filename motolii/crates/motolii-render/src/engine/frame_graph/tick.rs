@@ -47,6 +47,7 @@ impl Engine {
     /// One application tick: every shown view of the document at `time`.
     pub fn tick(&mut self, doc: &StoreView<'_>, time: RationalTime, views: &[ViewRequest<'_>]) -> Result<TickStats, EngineError> {
         let mut stats = TickStats::default();
+        let submitted_before = self.compositor.sequential_submits();
         self.compositor.ctx.begin_frame();
         stats.begin_frames += 1;
 
@@ -58,6 +59,8 @@ impl Engine {
             stats.views += 1;
         }
 
+        // Anything the old nested bakes still submitted on their own counts too.
+        stats.submits += (self.compositor.sequential_submits() - submitted_before) as u32;
         self.compositor.ctx.before_submit();
         self.compositor.last_submission = Some(self.compositor.ctx.queue.submit(commands));
         stats.submits += 1;
@@ -72,18 +75,21 @@ impl Engine {
         let densest = views.iter().map(|v| v.window.width as f32 / v.window.roi[2].max(1.0)).fold(0.0_f32, f32::max);
         let density = if densest <= 0.0 { 1.0 } else { (2.0_f32).powf(densest.max(1.0 / 16.0).log2().ceil()).min(1.0) };
         self.picture_density = density;
-        let generation = self.frame_graph.as_ref().map(|state| state.generation);
         let state = self.evaluated_frame_graph(doc, time, FrameQuality::Preview { scale: 1 })?;
-        if generation != Some(state.generation) || self.tick_frame.is_none() {
-            stats.preparations += 1;
-        }
         let scene = state.prepared.clone().ok_or_else(|| EngineError::Store("Lowered scene is missing".into()))?;
+        if let Some(frame) = self.tick_frame.clone().filter(|frame| Arc::ptr_eq(&frame.scene, &scene)) {
+            self.frame_graph = Some(state);
+            return Ok(frame);
+        }
+        stats.preparations += 1;
+        // Each layer's own effect chain reads only the document frame: run once, here, for every view.
+        let (pictures, paddings, spills, _always_empty) = self.compositor.effective_layer_textures(&scene.layers)?;
         let document_camera = state.frame.as_ref()
             .and_then(|frame| frame.value(state.program.camera()))
             .and_then(|value| value.downcast_ref::<ResolvedCamera>())
             .copied()
             .unwrap_or_default();
-        let frame = Arc::new(PreparedFrame { scene, comp: state.comp, background: state.background, document_camera });
+        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());
         Ok(frame)
@@ -103,10 +109,7 @@ impl Engine {
             }
             layer.layer.projection_camera = if layer.layer.projection == crate::doc::store::LayerProjection::TwoD { frame.document_camera } else { placing };
         }
-        let contents: Vec<_> = layers.iter().map(|layer| layer.layer.content.clone()).collect();
-        let paddings: Vec<_> = layers.iter().map(|layer| layer.padding).collect();
-        let spills = vec![None; layers.len()];
-        let inputs = crate::render::compositor::sequential_inputs(&layers, &contents, &paddings, &spills);
+        let inputs = crate::render::compositor::sequential_inputs(&layers, &frame.pictures, &frame.paddings, &frame.spills);
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut commands = Vec::new();
         let shown = self.compositor.record_view(frame.comp, view.window, view.camera, &inputs, background, &mut commands)?;
@@ -141,7 +144,7 @@ impl Engine {
 /// What the tick cannot draw yet, named; the old path draws it until it is ported.
 fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'static str> {
     use crate::render::compositor::LayerContent;
-    if !layer.passes.is_empty() { return Some("an effect chain"); }
+    if layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite()) { return Some("an effect reading the view's picture"); }
     if layer.layer.clip.is_some() { return Some("a clip"); }
     if layer.layer.shading.reads_backdrop { return Some("a surface reading the backdrop"); }
     match layer.layer.content {
@@ -153,6 +156,10 @@ fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'st
 /// The document frame as every view of a tick reads it.
 pub(in crate::engine) struct PreparedFrame {
     pub(in crate::engine) scene: Arc<GpuSceneValue>,
+    /// Each layer's picture after its own effect chain, with its padding and spill.
+    pictures: Vec<crate::render::compositor::LayerContent>,
+    paddings: Vec<u32>,
+    spills: Vec<crate::render::compositor::LayerSpill>,
     comp: crate::doc::core::CompSpec,
     background: [f32; 4],
     document_camera: ResolvedCamera,

@@ -255,7 +255,7 @@ pub(crate) use effects::IsfStage;
 pub use matte::MatteMode;
 
 pub use presentable::{check_presentable_target, PRESENTABLE_FORMAT};
-pub(crate) use render_effects::sequential_inputs;
+pub(crate) use render_effects::{sequential_inputs, LayerSpill};
 
 /// 描く先の窓: target の画素寸法と、comp 画像(出力寸法の投影)のどの矩形をそこへ写すか。
 /// Camera View は出力そのもの(窓 = comp、関心域 = 全体)。Stage はタブの寸法へ描き、

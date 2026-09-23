@@ -41,6 +41,7 @@ impl Compositor {
         let mut stage = std::time::Instant::now();
         let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
+        self.flush_pending();
         self.measurement.textures_us = stage.elapsed().as_micros() as u64;
 
         stage = std::time::Instant::now();

@@ -237,7 +237,6 @@ impl Compositor {
         if let Some(encoder) = copy_encoder {
             self.pending.push(encoder.finish());
         }
-        self.flush_pending();
         let Self { baked_effects, effect_scratch, .. } = self;
         baked_effects.sweep(effect_scratch);
         Ok((effective_textures, effective_paddings, effective_spills, checked_out))
@@ -537,6 +536,7 @@ impl Compositor {
     ) -> Result<Vec<u8>, CompositorError> {
         let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
+        self.flush_pending();
 
         let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
 
@@ -572,6 +572,7 @@ impl Compositor {
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
+        self.flush_pending();
 
         let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
 
