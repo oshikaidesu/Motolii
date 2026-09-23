@@ -5,7 +5,7 @@
 comp({ width: 1920, height: 1080, fps: 30, seconds: 3, background: "#FFFFFF" });
 const OUT = { kind: "Bezier", x1: 0, y1: 0, x2: 0.58, y2: 1 }, IO = { kind: "Bezier", x1: 0.42, y1: 0, x2: 0.58, y2: 1 };
 const BLUE = "#FFFFFF", INK = "#FFFFFF", D = 270;
-media("/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/photo2.png", { name: "Photo" });
+media("mat/photo2.png", { name: "Photo" });
 const end = (name, x, y) => ellipse({ name }).fill("#FFFFFF00").set("Scale", [4 / D, 4 / D]).set("Position", [x, y]);
 const a = end("Line start", -40, 760), b = end("Line end", 1960, 380);
 const stroke = line({ name: "Line" }).fill(BLUE).set("Connect From", a).set("Connect To", b)

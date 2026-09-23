@@ -5,7 +5,7 @@
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#0E0E10" });
 const SIZE = 132, EACH = 0.05, CLEAR = 1.0, INK = "#F1EDE4";
 const lines = ["EVERY LETTER", "COMES OUT OF", "THE DARK"];
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/";
+const MAT = "mat/";
 const clip = media(MAT + "clip2.mp4", { name: "Clip" }).set("Position", [960, 540]).set("Opacity", 0.55);
 clip.effect("Blur", { "Radius": 10 }).key("Radius", 0.2, 10, "Linear").key("Radius", 2.2, 0);
 clip.effect("Gain", { "Gain": 0 }).key("Gain", 0.2, 0, "Linear").key("Gain", 2.2, 1);

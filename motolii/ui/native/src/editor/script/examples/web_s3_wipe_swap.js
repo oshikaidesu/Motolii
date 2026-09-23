@@ -3,7 +3,7 @@
 // Auto-advance every 2.0s. Slides are made last-to-first so the first one is on top, as in the DOM.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 5, background: "#111111" });
 const EASE = { kind: "Bezier", x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 };
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/";
+const MAT = "mat/";
 const slides = ["photo1.png", "photo2.png", "photo3.png"];
 const D = 0.8, EVERY = 2.0;
 slides.map((file, i) => [file, i]).reverse().forEach(([file, i]) => {

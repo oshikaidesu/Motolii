@@ -236,7 +236,8 @@ mod tests {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "js") {
-                let (rt, outcome) = run(&std::fs::read_to_string(&path).unwrap());
+                let mut rt = crate::EditorRuntime::open("").unwrap();
+                let outcome = rt.run_script(&std::fs::read_to_string(&path).unwrap(), &path.to_string_lossy());
                 outcome.unwrap_or_else(|message| panic!("{}: {message}", path.display()));
                 let view = rt.doc.view();
                 let layers = view.layers();

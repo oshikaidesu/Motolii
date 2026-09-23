@@ -3,7 +3,7 @@
 // scrollTrigger {scrub: true, start: 'clamp(center center)'}; gsap.fromTo(oneElement, {filter:'brightness(80%)'}, {filter:'brightness(100%)'}).
 // Scroll = time: the page (a 9-row grid) moves up; the one element's cell is switched with Hold keys and its Transition carries it (FLIP).
 comp({ width: 1920, height: 1080, fps: 30, seconds: 5, background: "#101014" });
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/";
+const MAT = "mat/";
 // The frames the element visits: [column start, column span, row start, row span] in a 12 × 9 grid of 160 × 300 cells.
 const steps = [[2, 4, 1, 2], [7, 5, 4, 3], [1, 12, 7, 3]];
 const frames = steps.map((s, i) => rectangle({ name: `Step ${i + 1}` }).fill("#23232b"));

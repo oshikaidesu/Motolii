@@ -165,8 +165,9 @@ const create = (kind, extra = {}) => (options = {}) => {
   return layer;
 };
 
-/** A picture, video or 3D file placed as a layer. The path is absolute. */
-globalThis.media = (path, options = {}) => {
+/** A picture, video or 3D file placed as a layer. A relative path is read from the script's folder. */
+globalThis.media = (given, options = {}) => {
+  const path = given.startsWith("/") || !__scriptDir ? given : `${__scriptDir}/${given}`;
   op("import", { paths: [path] });
   const name = path.split("/").pop();
   const asset = JSON.parse(__assets()).reverse().find((a) => a.path === path || (a.path ?? "").endsWith(`/${name}`));

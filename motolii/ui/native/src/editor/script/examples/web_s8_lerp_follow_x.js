@@ -13,7 +13,7 @@ const g = (t) => { let i = 0; while (i + 2 < K.length && t >= K[i + 1][0]) i++; 
   const u = Math.min(1, (t - t0) / (t1 - t0)); return [0, 1].map((a) => p0[a] + (p1[a] - p0[a]) * u); };
 const slope = (i) => (i < 0 || i + 1 >= K.length) ? [0, 0] : [0, 1].map((a) => (K[i + 1][1][a] - K[i][1][a]) / (K[i + 1][0] - K[i][0]));
 const lag = (t) => g(t).map((x, a) => x - TAU * K.reduce((s, [tk], k) => tk <= t ? s + (slope(k)[a] - slope(k - 1)[a]) * (1 - Math.exp(-(t - tk) / TAU)) : s, 0));
-const thumb = media("/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/clip2.mp4", { name: "Thumb" })
+const thumb = media("mat/clip2.mp4", { name: "Thumb" })
   .set("Scale", [0.25, 0.25]);
 for (let f = 0; f < SEC * FPS; f++) { const t = f / FPS, v = lag(t), p = g(t); thumb.key("Position", t, v, "Linear").key("Tilt Y", t, (p[0] - v[0]) * 0.12, "Linear").key("Tilt X", t, (v[1] - p[1]) * 0.12, "Linear"); }
 thumb.projection("3D");
