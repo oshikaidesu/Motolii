@@ -30,6 +30,9 @@ pub(super) struct EngineFrameGraph {
     background: [f32; 4],
     in_points: HashMap<LayerId, i64>,
     frame: Option<EvaluatedFrame>,
+    /// The effect catalog's generation `frame` was evaluated with: the shelf's cassettes are inputs
+    /// of the scene as the document is, so a saved WGSL makes the frame again.
+    catalog: u64,
     generation: u64,
     prepare_us: u64,
     measured: bool,
@@ -48,10 +51,14 @@ impl EngineFrameGraph {
         let solver = program.solver().key();
         let overlay = program.overlay().output();
         let topology = GraphTopology::try_new(program.nodes().collect::<Vec<_>>(), vec![scene, document_camera, solver, overlay]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, prepared_for: None, comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, prepared_for: None, comp, fps, background, in_points, frame: None, catalog: 0, generation: 0, prepare_us: 0, measured: false })
     }
     /// The semantic scene is a function of the document and the time only.
-    fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+    fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool {
+        self.graph.revision() == revision
+            && self.catalog == crate::render::compositor::catalog_generation()
+            && self.frame.as_ref().is_some_and(|frame| frame.time() == time)
+    }
 
     /// The semantic scene at `time`: the graph's evaluation, with no GPU preparation of its own.
     fn evaluate_scene(
@@ -77,6 +84,7 @@ impl EngineFrameGraph {
             .ok_or_else(|| EngineError::Store("FrameGraph overlay set has the wrong type".into()))?;
         engine.install_frame_graph_overlays(overlays);
         self.frame = Some(evaluated);
+        self.catalog = crate::render::compositor::catalog_generation();
         Ok(())
     }
 
