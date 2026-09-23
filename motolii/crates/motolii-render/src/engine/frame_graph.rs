@@ -319,6 +319,7 @@ impl Engine {
         }
         let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
         let texture = self.compositor.render_to_texture(state.comp, document_camera, &layers, background)?;
+        self.compositor.flush_pending();
         self.frame_graph = Some(state);
         Ok(texture)
     }
@@ -336,6 +337,10 @@ impl Engine {
             }
             state.prepare_us = started.elapsed().as_micros() as u64;
             state.measured = false;
+            // Outside a tick (an editor query, a capture) the work it recorded finishes here.
+            if !self.in_tick {
+                self.compositor.flush_pending();
+            }
         }
         Ok(state)
     }

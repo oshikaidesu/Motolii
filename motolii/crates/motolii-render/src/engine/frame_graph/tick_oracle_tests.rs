@@ -49,14 +49,20 @@ pub(super) fn assert_matches_oracle(doc: &Document, what: &str) {
     let mut new = Engine::new().unwrap();
     let shown = views();
     let targets: Vec<_> = shown.iter().map(|s| target(&new, s.window)).collect();
-    let document_camera = new.frame_graph_document_camera(&doc.view(), time).unwrap();
     let requests: Vec<_> = shown.iter().zip(&targets).map(|(s, target)| ViewRequest {
-        target, window: s.window, camera: s.camera.unwrap_or(document_camera), projection: s.projection, include_background: true,
+        target, window: s.window, camera: s.camera, projection: s.projection, include_background: true,
     }).collect();
     new.tick(&doc.view(), time, &requests).unwrap();
     for ((s, texture), expected) in shown.iter().zip(&targets).zip(&expected) {
         let actual = new.compositor.read_texture_bytes(texture).unwrap();
         let worst = actual.iter().zip(expected).map(|(a, b)| a.abs_diff(*b)).max().unwrap_or(0);
+        if worst > 1 {
+            if let Ok(dir) = std::env::var("MOTOLII_ORACLE_DUMP") {
+                let name = format!("{dir}/{}-{:?}", what.replace(' ', "_"), s.projection);
+                image::RgbaImage::from_raw(s.window.width, s.window.height, actual.clone()).unwrap().save(format!("{name}-tick.png")).unwrap();
+                image::RgbaImage::from_raw(s.window.width, s.window.height, expected.clone()).unwrap().save(format!("{name}-old.png")).unwrap();
+            }
+        }
         assert!(worst <= 1, "{what}, {:?} view: differs from the old path by up to {worst}", s.projection);
     }
 }
@@ -207,4 +213,40 @@ fn effects_on_the_views_picture_match_the_old_path() {
     let mut doc = scene(dir.path(), &sky, true);
     doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] }).unwrap();
     assert_matches_oracle(&doc, "a blurred mesh");
+}
+
+/// A group repeated as a whole with a glow on the whole (Glass Garden's rings): the copies are
+/// baked into one plate inside the preparation, the glow reads the plate. One member is a glass
+/// mesh, so the plate has its own light.
+pub(super) fn plate(dir: &std::path::Path) -> Document {
+    use crate::doc::store::{EffectId, EffectInstance, EffectScope, LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming};
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    let sky = sky_png(dir, "sky.png", 40, 220);
+    let mut doc = scene(dir, &sky, true);
+    let group = LayerId(10);
+    doc.apply_all([
+        Intent::AddLayer(group),
+        Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 5, timing: LayerTiming::place(0, None, 1) } },
+        Intent::SetEffects { layer: group, effects: vec![
+            EffectInstance { id: EffectId(0), plugin_id: crate::extensions::placement::REPEAT.to_owned() },
+            EffectInstance { id: EffectId(1), plugin_id: "motolii.glow".to_owned() },
+        ] },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "count").unwrap(), value: Value::F64(3.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "position_each").unwrap(), value: Value::Vec2([12.0, 6.0]) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(EffectScope::Whole.enum_value()) },
+    ]).unwrap();
+    let dot = file_layer(&mut doc, 11, 6, &png(dir, "dot.png", [255, 200, 40, 255]));
+    let glass = crate::render::engine::environment_tests::file_layer(&mut doc, 12, 7, &dir.join("quad.obj"));
+    for member in [dot, glass] {
+        doc.apply(Intent::SetAttrs { layer: member, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } }).unwrap();
+    }
+    doc.apply(Intent::SetConstant { layer: glass, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([6.0, 6.0]) }).unwrap();
+    doc.apply(Intent::SetEffects { layer: glass, effects: vec![EffectInstance { id: EffectId(2), plugin_id: "motolii.glass".into() }] }).unwrap();
+    doc
+}
+
+#[test]
+fn a_repeated_whole_group_with_a_glow_matches_the_old_path() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_matches_oracle(&plate(dir.path()), "a repeated group baked into a glowing plate");
 }

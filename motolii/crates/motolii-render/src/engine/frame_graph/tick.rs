@@ -25,7 +25,8 @@ use crate::render::engine::{Engine, EngineError};
 pub struct ViewRequest<'a> {
     pub target: &'a wgpu::Texture,
     pub window: Window,
-    pub camera: ResolvedCamera,
+    /// The view's camera; `None` is the work's own camera (the Camera view, export).
+    pub camera: Option<ResolvedCamera>,
     pub projection: ViewProjection,
     pub include_background: bool,
 }
@@ -47,25 +48,35 @@ impl Engine {
     /// One application tick: every shown view of the document at `time`.
     pub fn tick(&mut self, doc: &StoreView<'_>, time: RationalTime, views: &[ViewRequest<'_>]) -> Result<TickStats, EngineError> {
         let mut stats = TickStats::default();
+        // Work recorded outside a tick finishes outside it; nothing crosses the frame boundary.
+        debug_assert!(self.compositor.pending.is_empty(), "GPU work was recorded outside a tick and left for it");
         let submitted_before = self.compositor.sequential_submits();
+        self.in_tick = true;
+        let ticked = self.tick_inside(doc, time, views, &mut stats);
+        self.in_tick = false;
+        ticked?;
+        stats.submits += (self.compositor.sequential_submits() - submitted_before) as u32;
+        self.compositor.ctx.before_submit();
+        let commands = std::mem::take(&mut self.tick_commands);
+        self.compositor.last_submission = Some(self.compositor.ctx.queue.submit(commands));
+        stats.submits += 1;
+        self.tick_stats = stats;
+        Ok(stats)
+    }
+
+    fn tick_inside(&mut self, doc: &StoreView<'_>, time: RationalTime, views: &[ViewRequest<'_>], stats: &mut TickStats) -> Result<(), EngineError> {
         self.compositor.ctx.begin_frame();
         stats.begin_frames += 1;
 
-        let prepared = self.prepare_document_frame(doc, time, views, &mut stats)?;
+        let prepared = self.prepare_document_frame(doc, time, views, stats)?;
 
         let mut commands = std::mem::take(&mut self.compositor.pending);
         for view in views {
             commands.extend(self.record_view(&prepared, view)?);
             stats.views += 1;
         }
-
-        // Anything the old nested bakes still submitted on their own counts too.
-        stats.submits += (self.compositor.sequential_submits() - submitted_before) as u32;
-        self.compositor.ctx.before_submit();
-        self.compositor.last_submission = Some(self.compositor.ctx.queue.submit(commands));
-        stats.submits += 1;
-        self.tick_stats = stats;
-        Ok(stats)
+        self.tick_commands = commands;
+        Ok(())
     }
 
     /// The document frame every view of this tick reads, prepared as densely as the densest view
@@ -122,7 +133,8 @@ impl Engine {
         let background = if view.include_background { frame.background } else { crate::render::compositor::NO_BACKGROUND };
         let mut commands = Vec::new();
         let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref() };
-        let shown = self.compositor.record_view(frame.comp, view.window, view.camera, &inputs, background, &world, &mut commands)?;
+        let camera = view.camera.unwrap_or(frame.document_camera);
+        let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, &mut commands)?;
 
         let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });

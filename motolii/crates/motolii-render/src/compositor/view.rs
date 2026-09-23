@@ -41,6 +41,73 @@ impl Compositor {
         world: &ViewWorld<'_>,
         commands: &mut Vec<wgpu::CommandBuffer>,
     ) -> Result<ViewBuilder, CompositorError> {
+        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, commands)?;
+        // The view shows the stack (or, with nothing drawn, the background).
+        let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
+            .map_err(|e| CompositorError::View(e.to_string()))?;
+        self.next_readback += 1;
+        let clear = match &stack {
+            Some(picture) => {
+                let imported = self.import_premultiplied(&picture.texture)?;
+                let rects: Vec<TexturedRect> = vec![screen_rect(window, imported)];
+                shown.queue_draw(&self.ctx, RectangleDrawData::new(&self.ctx, &rects).map_err(|e| CompositorError::Rectangles(e.to_string()))?);
+                Rgba::TRANSPARENT
+            }
+            None => clear_color(background_color),
+        };
+        commands.push(shown.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        Ok(shown)
+    }
+
+    /// A picture of `inputs` made inside a preparation (a plate, a matte's source, a clip group, an
+    /// image input): the same ordered composition as a view, into a texture of its own that the
+    /// prepared frame keeps (not the pool's: it outlives the tick).
+    pub(crate) fn record_picture(
+        &mut self,
+        comp: CompSpec,
+        window: Window,
+        camera: ResolvedCamera,
+        inputs: &[SequentialInput<'_>],
+        background_color: [f32; 4],
+        world: &ViewWorld<'_>,
+        commands: &mut Vec<wgpu::CommandBuffer>,
+    ) -> Result<wgpu::Texture, CompositorError> {
+        let picture = self.create_blend_scratch_texture(window.width, window.height);
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
+        match self.record_stack(comp, window, camera, inputs, background_color, world, commands)? {
+            Some(stack) => {
+                let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
+                encoder.copy_texture_to_texture(stack.texture.as_image_copy(), picture.as_image_copy(), size);
+            }
+            None => {
+                let view = picture.create_view(&Default::default());
+                let c = clear_color(background_color);
+                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("motolii-picture-background"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view, depth_slice: None, resolve_target: None,
+                        ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r: c.r() as f64, g: c.g() as f64, b: c.b() as f64, a: c.a() as f64 }), store: wgpu::StoreOp::Store },
+                    })],
+                    depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None,
+                });
+            }
+        }
+        commands.push(encoder.finish());
+        Ok(picture)
+    }
+
+    /// Every layer in order, stacked bottom to top; `None` when nothing is drawn.
+    #[allow(clippy::too_many_arguments)]
+    fn record_stack(
+        &mut self,
+        comp: CompSpec,
+        window: Window,
+        camera: ResolvedCamera,
+        inputs: &[SequentialInput<'_>],
+        background_color: [f32; 4],
+        world: &ViewWorld<'_>,
+        commands: &mut Vec<wgpu::CommandBuffer>,
+    ) -> Result<Option<re_renderer::GpuTexture>, CompositorError> {
         // The light is the composition's: the top environment layer, else the world's.
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
@@ -138,25 +205,8 @@ impl Compositor {
             });
         }
 
-        // The view shows the stack (or, with nothing drawn, the background).
-        let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
-            .map_err(|e| CompositorError::View(e.to_string()))?;
-        self.next_readback += 1;
-        let clear = match &stack {
-            Some(picture) => {
-                self.next_effect_key += 1;
-                let imported = self.ctx.texture_manager_2d
-                    .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &picture.texture)
-                    .map_err(|e| CompositorError::Effect(e.to_string()))?;
-                let rects: Vec<TexturedRect> = vec![screen_rect(window, imported)];
-                shown.queue_draw(&self.ctx, RectangleDrawData::new(&self.ctx, &rects).map_err(|e| CompositorError::Rectangles(e.to_string()))?);
-                Rgba::TRANSPARENT
-            }
-            None => clear_color(background_color),
-        };
-        commands.push(shown.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
         drop(backdrops);
-        Ok(shown)
+        Ok(stack)
     }
 
     /// A layer's effects run on its drawn canvas (it had no picture of its own to bake them into, or

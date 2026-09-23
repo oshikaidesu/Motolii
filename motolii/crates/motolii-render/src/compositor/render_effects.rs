@@ -561,7 +561,10 @@ impl Compositor {
         self.render_to_texture_at(comp, camera, layers, background_color, 1.0)
     }
 
-    /// The whole composition into a picture `density` device pixels per composition pixel.
+    /// The whole composition into a picture `density` device pixels per composition pixel: a picture
+    /// made inside a preparation (a plate, a matte, a clip group, an image input). Its layers' own
+    /// effects and its light are its own, like a frame's; it is recorded with the frame's other work
+    /// and submitted with it.
     pub fn render_to_texture_at(
         &mut self,
         comp: CompSpec,
@@ -570,28 +573,24 @@ impl Compositor {
         background_color: [f32; 4],
         density: f32,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
-        let (effective_textures, effective_paddings, effective_spills, checked_out) =
-            self.effective_layer_textures(layers)?;
-        self.flush_pending();
-
-        let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
-
+        let (pictures, paddings, spills, _always_empty) = self.effective_layer_textures(layers)?;
+        let inputs = sequential_inputs(layers, &pictures, &paddings, &spills);
         let full = crate::render::compositor::Window::output(comp);
-        self.window = if density >= 1.0 { full } else {
+        let window = if density >= 1.0 { full } else {
             crate::render::compositor::Window {
                 width: ((comp.width as f32 * density).ceil() as u32).max(1),
                 height: ((comp.height as f32 * density).ceil() as u32).max(1),
                 ..full
             }
         };
-        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        let (texture, view) = self.finalize_texture(comp, camera, background, background_color)?;
-
-        for (width, height, format, scratch_texture) in checked_out {
-            self.effect_scratch
-                .release(width, height, format, scratch_texture);
-        }
-
+        let environment = self.world_environment.clone();
+        let motion = self.motion.clone();
+        let (reflection, light) = self.capture_world_light(comp, &inputs, environment.as_deref())?;
+        let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), reflection: reflection.as_ref(), light: light.as_ref() };
+        let mut commands = std::mem::take(&mut self.pending);
+        let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, &mut commands)?;
+        self.pending = commands;
+        let view = texture.create_view(&Default::default());
         Ok((texture, view))
     }
 }

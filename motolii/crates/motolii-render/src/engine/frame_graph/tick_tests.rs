@@ -36,7 +36,7 @@ fn tick(engine: &mut Engine, doc: &motolii_edit::Document, time: RationalTime, n
     let windows = windows(n);
     let targets: Vec<_> = windows.iter().map(|(w, _)| target(engine, *w)).collect();
     let views: Vec<_> = windows.iter().zip(&targets).map(|((window, projection), target)| ViewRequest {
-        target, window: *window, camera: Default::default(), projection: *projection, include_background: true,
+        target, window: *window, camera: (*projection == ViewProjection::Stage).then(Default::default), projection: *projection, include_background: true,
     }).collect();
     engine.tick(&doc.view(), time, &views).unwrap()
 }
@@ -100,5 +100,17 @@ fn world_captures_do_not_grow_with_views() {
         let (stats, c, l, b) = work(n);
         assert_eq!((stats.preparations, stats.submits, c, l), (one.preparations, one.submits, captures, lights), "{n} views: the world is made once");
         assert_eq!(b, copies * n as u64, "{n} views: each view copies its own backdrop");
+    }
+}
+
+/// A plate is made inside the preparation and goes out with the tick's one submission.
+#[test]
+fn a_plate_is_recorded_with_the_tick() {
+    let dir = tempfile::tempdir().unwrap();
+    let doc = super::tick_oracle_tests::plate(dir.path());
+    for n in [1, 2] {
+        let mut engine = Engine::new().unwrap();
+        let stats = tick(&mut engine, &doc, RationalTime::ZERO, n);
+        assert_eq!(stats, TickStats { begin_frames: 1, preparations: 1, views: n as u32, submits: 1 }, "{n} view(s)");
     }
 }

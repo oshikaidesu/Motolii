@@ -182,6 +182,9 @@ pub struct Engine {
     /// The document frame the last tick's views read.
     tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
     tick_stats: frame_graph::tick::TickStats,
+    /// Inside `tick`: the GPU work it records goes out with its one submission.
+    in_tick: bool,
+    tick_commands: Vec<wgpu::CommandBuffer>,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
@@ -268,6 +271,8 @@ impl Engine {
             prepared_contributions: 0,
             tick_frame: None,
             tick_stats: Default::default(),
+            in_tick: false,
+            tick_commands: Vec::new(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
@@ -362,6 +367,8 @@ impl Engine {
             prepared_contributions: 0,
             tick_frame: None,
             tick_stats: Default::default(),
+            in_tick: false,
+            tick_commands: Vec::new(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
