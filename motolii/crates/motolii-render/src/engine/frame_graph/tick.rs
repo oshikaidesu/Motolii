@@ -29,6 +29,8 @@ pub struct ViewRequest<'a> {
     pub camera: Option<ResolvedCamera>,
     pub projection: ViewProjection,
     pub include_background: bool,
+    /// The layers selected in this view (editor state: the view's, never the prepared frame's).
+    pub outline: &'a [crate::doc::store::LayerId],
 }
 
 /// What one tick did. The architecture's invariants are stated over these counts.
@@ -60,6 +62,9 @@ impl Engine {
         let commands = std::mem::take(&mut self.tick_commands);
         self.compositor.last_submission = Some(self.compositor.ctx.queue.submit(commands));
         stats.submits += 1;
+        if std::mem::take(&mut self.tick_outlined) {
+            if let Some(bounds) = self.compositor.selection_bounds.as_mut() { bounds.schedule_map(); }
+        }
         self.tick_stats = stats;
         Ok(stats)
     }
@@ -123,7 +128,9 @@ impl Engine {
         // the rest by the view's own (a Stage's default camera).
         let placing = view.window.projection_camera.unwrap_or(frame.document_camera);
         let mut layers = frame.scene.layers.clone();
-        for layer in &mut layers {
+        let outline: Vec<_> = view.outline.iter().copied().take(255).collect();
+        for (layer, id) in layers.iter_mut().zip(&frame.scene.layer_ids) {
+            layer.layer.outline = outline.iter().position(|l| l == id).map_or(0, |i| i as u8 + 1);
             if let Some(feature) = not_ported(layer) {
                 return Err(EngineError::Store(format!("tick: {feature} is not ported to the tick yet")));
             }
@@ -135,6 +142,10 @@ impl Engine {
         let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), reflection: frame.reflection.as_ref(), light: frame.light.as_ref() };
         let camera = view.camera.unwrap_or(frame.document_camera);
         let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, &mut commands)?;
+        if self.compositor.record_outline(frame.comp, view.window, camera, &inputs, &mut commands)? {
+            self.outline_order = outline;
+            self.tick_outlined = true;
+        }
 
         let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });

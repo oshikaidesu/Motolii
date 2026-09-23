@@ -36,7 +36,7 @@ fn tick(engine: &mut Engine, doc: &motolii_edit::Document, time: RationalTime, n
     let windows = windows(n);
     let targets: Vec<_> = windows.iter().map(|(w, _)| target(engine, *w)).collect();
     let views: Vec<_> = windows.iter().zip(&targets).map(|((window, projection), target)| ViewRequest {
-        target, window: *window, camera: (*projection == ViewProjection::Stage).then(Default::default), projection: *projection, include_background: true,
+        target, window: *window, camera: (*projection == ViewProjection::Stage).then(Default::default), projection: *projection, include_background: true, outline: &[],
     }).collect();
     engine.tick(&doc.view(), time, &views).unwrap()
 }

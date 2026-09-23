@@ -50,7 +50,7 @@ pub(super) fn assert_matches_oracle(doc: &Document, what: &str) {
     let shown = views();
     let targets: Vec<_> = shown.iter().map(|s| target(&new, s.window)).collect();
     let requests: Vec<_> = shown.iter().zip(&targets).map(|(s, target)| ViewRequest {
-        target, window: s.window, camera: s.camera, projection: s.projection, include_background: true,
+        target, window: s.window, camera: s.camera, projection: s.projection, include_background: true, outline: &[],
     }).collect();
     new.tick(&doc.view(), time, &requests).unwrap();
     for ((s, texture), expected) in shown.iter().zip(&targets).zip(&expected) {
