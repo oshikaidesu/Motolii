@@ -273,6 +273,20 @@ mod tests {
     }
 
     #[test]
+    fn a_layer_can_be_seen_through_another_layers_matte() {
+        let (rt, outcome) = run(r##"
+            comp({ seconds: 1 });
+            const mask = ellipse({ name: "Mask" });
+            rectangle({ name: "Through" }).matte(mask, "Luma");
+        "##);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let find = |name: &str| view.layers().into_iter().find(|id| view.attrs(*id).unwrap().unwrap().name == name).unwrap();
+        let matte = view.attrs(find("Through")).unwrap().unwrap().matte.unwrap();
+        assert_eq!((matte.layer, matte.mode), (find("Mask"), MatteMode::Luma));
+    }
+
+    #[test]
     fn saving_the_script_reruns_it_on_the_next_wake() {
         let dir = std::env::temp_dir().join(format!("motolii-live-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

@@ -168,6 +168,12 @@ class Layer {
   name(text) { op("setAttrs", { layers: [this.id], patch: { name: text } }); return this; }
   parent(layer) { op("setAttrs", { layers: [this.id], patch: { parent: layer ? layer.id : null } }); return this; }
   blend(mode) { op("setAttrs", { layers: [this.id], patch: { blendMode: mode } }); return this; }
+  /** Show this layer through another layer's coverage (a track matte): mode "Alpha", "InvertedAlpha",
+   * "Luma" or "InvertedLuma"; the source is not drawn itself. `matte(null)` removes it. */
+  matte(source, mode = "Alpha") {
+    op("setAttrs", { layers: [this.id], patch: { matte: source ? { layer: source.id, mode } : null } });
+    return this;
+  }
   /** Show this layer only where the layer just below it is (a clipping mask). */
   clip(on = true) { op("setAttrs", { layers: [this.id], patch: { clipToBelow: on } }); return this; }
   projection(kind) { op("setAttrs", { layers: [this.id], patch: { projection: kind } }); return this; }
