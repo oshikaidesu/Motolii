@@ -74,9 +74,8 @@ fn saving_a_vism_reaches_a_still_layer_and_its_views() {
     let vism = |views: &str, rgb: &str| format!(
         "/*{{ \"ID\": \"probe.zz_view\", \"LABEL\": \"View Probe\", \"STAGE\": \"surface\"{views} }}*/\nfn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {{ return vec3f({rgb}) + view_sample(0u, vec2f(0.5), 0.0).rgb * 0.0; }}\n");
     let one_view = r#", "VIEWS": [ { "FROM": "layer", "LOOK": [0, 0, -1] } ], "VIEW_SIZE": 32"#;
-    std::fs::write(&file.0, vism(one_view, "1.0, 0.0, 0.0")).unwrap();
+    let _ = std::fs::remove_file(&file.0);
     let mut rt = crate::EditorRuntime::open("").unwrap();
-    rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
     let woke = Arc::new(AtomicBool::new(false));
     let flag = woke.clone();
     let _watch = crate::render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release)).unwrap();
@@ -87,6 +86,7 @@ fn saving_a_vism_reaches_a_still_layer_and_its_views() {
         assert!(await_wake(&woke), "the watcher did not wake");
         rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
     };
+    save(&mut rt, vism(one_view, "1.0, 0.0, 0.0"));
     rt.request(serde_json::json!({"op":"create","kind":"rectangle"})).unwrap();
     rt.request(serde_json::json!({"op":"applyEffect","pluginId":"probe.zz_view"})).unwrap();
     let mut draw = |rt: &mut crate::EditorRuntime| {
