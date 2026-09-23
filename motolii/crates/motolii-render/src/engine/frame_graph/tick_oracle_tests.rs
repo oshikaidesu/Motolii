@@ -159,3 +159,40 @@ fn glass_mirror_and_cast_shadow_match_the_old_path() {
     assert_matches_oracle(&surface(&[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)], false), "a mirror");
     assert_matches_oracle(&surface(&[("transmission", 0.0)], true), "a layer casting a shadow");
 }
+
+/// A filled and stroked shape, a line of text, and a point cloud.
+#[test]
+fn shapes_text_and_a_point_cloud_match_the_old_path() {
+    use crate::doc::store::{ContentKeyframe, ContentTrack, FontRef, LayerMeta, LayerSource, LayerTiming, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId};
+    use crate::doc::vector::{Brush, Fill, FillRule, LineCap, LineJoin, PathSource, Point, Rgb, Shape, Stroke};
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
+    comp(&mut doc);
+    let shape = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(shape),
+        Intent::SetMeta { layer: shape, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 1) } },
+        Intent::SetShapes { layer: shape, shapes: vec![ShapeNode::Leaf(Shape {
+            source: PathSource::Rectangle { size: Point { x: 32.0, y: 24.0 } },
+            ops: Vec::new(),
+            fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 0.9, b: 0.2 }), rule: FillRule::NonZero, opacity: 1.0, hidden: false }),
+            stroke: Some(Stroke { brush: Brush::Solid(Rgb { r: 0.1, g: 0.2, b: 1.0 }), width: 3.0, cap: LineCap::Butt, join: LineJoin::Miter, miter_limit: 4.0, opacity: 1.0, hidden: false, dash: None }),
+        })] },
+        Intent::SetConstant { layer: shape, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([20.0, 18.0]) },
+    ]).unwrap();
+    let mut content = ContentTrack::new();
+    content.insert(ContentKeyframe { t: RationalTime::ZERO, content: "Mo".into() });
+    let text = LayerId(2);
+    let style = TextDocumentStyle { id: TextStyleId(0), font: FontRef { path: String::new(), fingerprint: None, family: "Helvetica Neue".into(), style: String::new() }, size: 24.0, fill: [1.0; 4], line_height: None, tracking: 0.0, axes: vec![], features: vec![] };
+    doc.apply_all([
+        Intent::AddLayer(text),
+        Intent::SetMeta { layer: text, meta: LayerMeta { source: LayerSource::Text, order: 1, timing: LayerTiming::place(0, None, 1) } },
+        Intent::SetTextDocument { layer: text, document: TextDocument { content, justify: TextJustify::Center, wrap_size: None, styles: vec![style], slot_id: None, ranges: vec![], alignment: TextAlignmentOptions::default(), runs: vec![] } },
+        Intent::SetConstant { layer: text, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([32.0, 44.0]) },
+    ]).unwrap();
+    let ply = dir.path().join("points.ply");
+    std::fs::write(&ply, "ply\nformat ascii 1.0\nelement vertex 4\nproperty float x\nproperty float y\nproperty float z\nend_header\n-1 -1 0\n1 -1 0\n0 1 0\n0 0 1\n").unwrap();
+    let cloud = file_layer(&mut doc, 3, 2, &ply);
+    doc.apply(Intent::SetConstant { layer: cloud, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([10.0, 10.0]) }).unwrap();
+    assert_matches_oracle(&doc, "a shape, text and a point cloud");
+}

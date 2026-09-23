@@ -157,8 +157,7 @@ fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'st
     if layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite()) { return Some("an effect reading the view's picture"); }
     if layer.layer.clip.is_some() { return Some("a clip"); }
     match layer.layer.content {
-        LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) => None,
-        _ => Some("a cloud or path layer"),
+        LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) | LayerContent::Cloud { .. } => None,
     }
 }
 
