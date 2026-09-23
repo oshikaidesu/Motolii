@@ -196,3 +196,15 @@ fn shapes_text_and_a_point_cloud_match_the_old_path() {
     doc.apply(Intent::SetConstant { layer: cloud, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([10.0, 10.0]) }).unwrap();
     assert_matches_oracle(&doc, "a shape, text and a point cloud");
 }
+
+/// Effects with no picture of their own to bake into run on the view's canvas: a blurred mesh.
+#[test]
+fn effects_on_the_views_picture_match_the_old_path() {
+    use crate::doc::store::{EffectId, EffectInstance};
+    use crate::render::engine::environment_tests::{scene, sky_png};
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "sky.png", 40, 220);
+    let mut doc = scene(dir.path(), &sky, true);
+    doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] }).unwrap();
+    assert_matches_oracle(&doc, "a blurred mesh");
+}

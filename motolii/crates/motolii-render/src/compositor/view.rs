@@ -75,8 +75,16 @@ impl Compositor {
                     if index > start && (inputs[index].shading.reads_backdrop || (has_rect && matches!(inputs[index].content, SequentialContent::Model(_)))) {
                         break;
                     }
+                    // A layer whose effects run on the view's picture is a run of its own: its neighbours
+                    // must not be in the picture its effects see.
+                    if index > start && !inputs[index].screen_passes.is_empty() {
+                        break;
+                    }
                     has_rect |= matches!(inputs[index].content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
                     index += 1;
+                    if !inputs[index - 1].screen_passes.is_empty() {
+                        break;
+                    }
                 }
                 (start, SRC_OVER)
             };
@@ -120,6 +128,10 @@ impl Compositor {
             // The bottom of the stack starts from the background; everything above is drawn on clear.
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             commands.push(builder.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
+            let canvas = match run {
+                [only] if !only.screen_passes.is_empty() => self.screen_passes(window, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), commands)?,
+                _ => canvas,
+            };
             stack = Some(match stack.take() {
                 None => canvas,
                 Some(below) => self.mix_onto(window, &below, &canvas, mode, commands),
@@ -145,6 +157,53 @@ impl Compositor {
         commands.push(shown.draw(&self.ctx, clear).map_err(|e| CompositorError::Draw(e.to_string()))?);
         drop(backdrops);
         Ok(shown)
+    }
+
+    /// A layer's effects run on its drawn canvas (it had no picture of its own to bake them into, or
+    /// they read the view's picture below): the view's work, at the view's size.
+    fn screen_passes(
+        &mut self,
+        window: Window,
+        canvas: re_renderer::GpuTexture,
+        passes: &[EffectPass],
+        sources: &[Vec<GpuTexture2D>],
+        below: Option<&re_renderer::GpuTexture>,
+        commands: &mut Vec<wgpu::CommandBuffer>,
+    ) -> Result<re_renderer::GpuTexture, CompositorError> {
+        let (width, height) = (window.width, window.height);
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-view-screen-passes") });
+        // A pass reading what is below gets the view's stack so far (nothing yet: transparent);
+        // another reads the pictures the frame prepared for it (another time's composite).
+        let below: Option<wgpu::Texture> = passes.iter().any(|p| p.reads_backdrop).then(|| match below {
+            Some(below) => below.texture.clone(),
+            None => self.ctx.texture_manager_2d.zeroed_texture_float().texture.clone(),
+        });
+        let others: Vec<Vec<wgpu::Texture>> = passes.iter().enumerate().map(|(i, p)| match (&below, p.reads_backdrop) {
+            (Some(b), true) => vec![b.clone()],
+            _ => sources.get(i).map(|row| row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()).unwrap_or_default(),
+        }).collect();
+        let (mut current, linear, premultiplied, mut scratch) = self.record_pass_chain(
+            &mut encoder, canvas.texture.clone(), true, true, false, passes, &others, None, [width, height], 0, [width, height],
+        )?;
+        if !linear {
+            let back = self.convert_image_encoding(&mut encoder, &current, true, true, premultiplied);
+            if scratch { self.effect_scratch.release(width, height, current.format(), current); }
+            current = back;
+            scratch = true;
+        }
+        // The effects' result replaces the canvas (compose 1 = copy).
+        const COPY: u32 = 1;
+        let out = self.view_canvas(window);
+        let canvas_view = canvas.texture.create_view(&Default::default());
+        let result_view = current.create_view(&Default::default());
+        let out_view = out.texture.create_view(&Default::default());
+        {
+            let Self { ctx, blend_vism, effect_scratch, .. } = self;
+            blend_vism.get(ctx).record_over(ctx, &mut encoder, effect_scratch, &[&canvas_view, &result_view], &out_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
+        }
+        if scratch { self.effect_scratch.release(width, height, current.format(), current); }
+        commands.push(encoder.finish());
+        Ok(out)
     }
 
     /// What is below, copied with the mip levels the roughest reader needs (glass blurs by reading

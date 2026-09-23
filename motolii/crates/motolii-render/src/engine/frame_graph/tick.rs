@@ -154,7 +154,8 @@ impl Engine {
 /// What the tick cannot draw yet, named; the old path draws it until it is ported.
 fn not_ported(layer: &crate::render::compositor::LayerWithPasses) -> Option<&'static str> {
     use crate::render::compositor::LayerContent;
-    if layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite()) { return Some("an effect reading the view's picture"); }
+    let on_the_view = layer.layer.content.texture().is_none() || layer.passes.iter().any(|pass| pass.reads_backdrop || pass.reads_composite());
+    if on_the_view && layer.passes.iter().any(|pass| pass.feedback.is_some()) { return Some("feedback on the view's picture"); }
     if layer.layer.clip.is_some() { return Some("a clip"); }
     match layer.layer.content {
         LayerContent::Texture(_) | LayerContent::LinearTexture(_) | LayerContent::Model(_) | LayerContent::Environment(_) | LayerContent::Cloud { .. } => None,
