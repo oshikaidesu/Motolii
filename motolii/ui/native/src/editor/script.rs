@@ -31,8 +31,12 @@ impl EditorRuntime {
 
     fn run_script_with_budget(&mut self, source: &str, name: &str, budget: std::time::Duration) -> Result<(), String> {
         let head = self.doc.edit_head();
+        // A run states its loop from scratch: a script that no longer asks for one plays on.
+        let loop_before = self.viewer.clock.loop_range();
+        self.viewer.clock.set_loop(None);
         let outcome = self.run_script_inner(source, name, budget);
         if outcome.is_err() {
+            self.viewer.clock.set_loop(loop_before);
             // 途中で断られたスクリプトは何も残さない。直して走らせ直す時、前の半端な層が混ざらない。
             while self.doc.edit_head() > head && self.doc.undo() {}
             self.viewer.selected_keys.clear();
@@ -317,6 +321,22 @@ mod tests {
         let mut names: Vec<_> = view.layers().iter().map(|id| view.attrs(*id).unwrap().unwrap().name).collect();
         names.sort();
         assert_eq!(names, ["One", "Two"], "the saved script replaced the old run");
+    }
+
+    #[test]
+    fn a_loop_is_only_what_the_script_asks_for() {
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.run_script(r#"comp({ seconds: 8 }); rectangle();"#, "plain.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), None, "no loop unless asked");
+        rt.run_script(r#"comp({ seconds: 8, loop: [2, 6] }); rectangle();"#, "range.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), Some((2.0, 6.0)));
+        rt.run_script(r#"comp({ seconds: 8, loop: true });"#, "whole.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), Some((0.0, 8.0)));
+        assert!(rt.run_script(r#"comp({ loop: [1, 2] }); throw new Error("half done");"#, "broken.js").is_err());
+        assert_eq!(rt.viewer.clock.loop_range(), Some((0.0, 8.0)), "a refused run leaves the last loop");
+        rt.run_script(r#"comp({ seconds: 8 });"#, "again.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), None, "removing loop from the script removes it on rerun");
+        assert!(rt.run_script(r#"comp({ loop: [6, 2] });"#, "reversed.js").is_err());
     }
 
     #[test]

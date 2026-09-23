@@ -1,6 +1,6 @@
 // Motolii Live — a bloom of petals: CSS gradients, a circular Repeater, a slow turn and a glow.
 // Run it with `scripts/motolii-ui.sh dev <this file>`; saving the file redraws the window.
-comp({ width: 1920, height: 1080, fps: 60, seconds: 8, background: "#0B0A12" });
+comp({ width: 1920, height: 1080, fps: 60, seconds: 8, background: "#0B0A12", loop: true });
 
 // One petal, squashed and set out from the centre; the group turns a copy of it every 15°.
 const petal = ellipse({ name: "Petal" })

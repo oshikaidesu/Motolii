@@ -244,7 +244,11 @@ globalThis.media = (given, options = {}) => {
 };
 
 /** The composition: { width, height, fps, seconds, background }. */
-globalThis.comp = ({ width, height, fps, seconds, background } = {}) => {
+/**
+ * The composition. `loop` repeats playback, only when given: `true` for the whole composition or
+ * `[start, end]` in seconds. Without it the playhead runs on until stopped.
+ */
+globalThis.comp = ({ width, height, fps, seconds, background, loop } = {}) => {
   const c = compInfo();
   op("composition", {
     width: width ?? c.width,
@@ -254,6 +258,11 @@ globalThis.comp = ({ width, height, fps, seconds, background } = {}) => {
     durationFrames: Math.round((seconds ?? c.seconds) * (fps ?? c.fps)),
     ...(background === undefined ? {} : { background: colorOf(background) }),
   });
+  if (loop !== undefined && loop !== false) {
+    const range = loop === true ? [0, compInfo().seconds] : loop;
+    if (!Array.isArray(range) || range.length !== 2) throw new Error("loop is true or [start, end] in seconds");
+    op("setLoop", { start: range[0], end: range[1] });
+  }
   return compInfo();
 };
 globalThis.text = (content, options = {}) => create("text")(options).text(content);

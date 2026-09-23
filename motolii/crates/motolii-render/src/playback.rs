@@ -108,6 +108,9 @@ struct PlaybackState {
     audio_key: Option<String>,
     session: Option<PlaybackSession>,
     health: PlaybackHealth,
+    /// A range, in seconds, that playback repeats. Only when set: without it the playhead runs on
+    /// until a person stops it.
+    loop_range: Option<(f64, f64)>,
 }
 
 /// Space、seek、現在位置の唯一のowner。
@@ -157,6 +160,7 @@ impl PlaybackController {
                 audio_key: None,
                 session: None,
                 health,
+                loop_range: None,
             }),
         }
     }
@@ -336,7 +340,24 @@ impl PlaybackController {
         let now = Instant::now();
         let duration = state.duration;
         // 尺の終わりでは止めない・戻さない。止めるのは人だけで、尺は後から伸ばせる(Ableton と同じ、利用者 2026-09-07)。
-        position_of(&state, now, duration)
+        let position = position_of(&state, now, duration);
+        // 繰り返すのは、範囲を明示した時だけ(利用者 2026-09-23)。
+        let Some((start, end)) = state.loop_range.filter(|_| state.playing) else { return position };
+        if position < end { return position; }
+        let wrapped = start + (position - start).rem_euclid(end - start);
+        drop(state);
+        self.seek(wrapped);
+        wrapped
+    }
+
+    /// Repeats `[start, end)` seconds while playing, or clears the loop with `None`. An empty or
+    /// reversed range clears it.
+    pub fn set_loop(&self, range: Option<(f64, f64)>) {
+        self.state.lock().unwrap().loop_range = range.filter(|(start, end)| *start >= 0.0 && end > start);
+    }
+
+    pub fn loop_range(&self) -> Option<(f64, f64)> {
+        self.state.lock().unwrap().loop_range
     }
 
     pub fn current_frame(&self) -> i64 {
@@ -467,6 +488,26 @@ mod tests {
             clock.health(),
             PlaybackHealth::VisualOnly(VisualFallback::NoAudio)
         );
+    }
+
+    #[test]
+    /// 繰り返しは明示した時だけ(利用者 2026-09-23): 無ければ再生は越えて進み、あれば範囲の頭へ戻る。
+    fn only_a_set_loop_repeats() {
+        let timebase = CompositionTimebase::from_view(&document_at(24, 1, 240).view()).unwrap();
+        let clock = PlaybackController::visual_only(timebase);
+        clock.toggle();
+        clock.seek(12.5);
+        assert!(clock.now_sec() >= 12.5, "without a loop the playhead runs past the end");
+        clock.set_loop(Some((2.0, 6.0)));
+        clock.seek(6.5);
+        let wrapped = clock.now_sec();
+        assert!((2.5..3.0).contains(&wrapped), "past the range end it comes back into the range: {wrapped}");
+        assert!(clock.now_sec() >= wrapped, "and keeps playing from there");
+        clock.set_loop(None);
+        clock.seek(6.5);
+        assert!(clock.now_sec() >= 6.5, "clearing the loop restores the run-on transport");
+        clock.set_loop(Some((5.0, 5.0)));
+        assert_eq!(clock.loop_range(), None, "an empty range is no loop");
     }
 
     #[test]
