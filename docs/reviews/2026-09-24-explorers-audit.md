@@ -76,6 +76,18 @@
 - 人間へ: pool の retire を N コマにする(fork の memory residency の contract)。
 - 副産物: wgpu-core 30 は pass ごとに Metal command buffer を 1 本作る(1 コマ約 650 本、`vism-pass` 分の driver CPU 5.4 ms)。CPU の pass 比例費用の正体。
 
+## K: 曲線塗りの帯表(fork の patch 候補 `explore/curve-fill` = `66a439b20f`、**bit 同一を証明、採択候補・未 push**)
+
+- Lengyel 式の行/列の帯表を upload 時に CPU で作り、同じ data texture に置く。fragment は自分の行帯と列帯の曲線だけを走査(曲線ごとの式と順序は不変)。公開 API 不変、fork の試験 66 + oracle(楕円・五芒星・5 px の薄片・穴・gradient、64² と 512²、18 枚の参照 PNG)で **0 画素差**。
+- Motolii 側 A/B(file:// pin、push なし): Prism Garden 1080p の t=0 を別 build の before と比較して **2,073,600 画素すべて一致**。全試験は基準と同じ失敗 8 件。**GPU 71.2 → 39.2 ms**。CPU +2 ms は帯表(約 0.4 ms)ではなく、path mesh を毎コマ作り直す既存の仕事(`path_model` → `into_gpu_meshes` 約 1.1 ms)。
+- K は最終形ではない: M の順位では「帯表 → 曲線塗りの画素ごと実行(縁の品質 seam)→ coverage mask pass + atlas(View 間で共有)」、または Vello 系の strips。P(2026 の prior-art 監査)の結果次第で CurveFill 自体を捨てる可能性を残す。
+
+## M: 品質 rendering の調査(vector raster)
+
+- 現行方式の異常さ(業界比): fragment で全曲線走査(Slug が最初に最適化で消す baseline)、標本ごとに材質まで再実行(UE/Skia/Rive/Slug は画素ごと)、coverage の前に paint を計算、coverage と shading が 1 つの program に融合(StC・Rive・Vello・Pathfinder・Graphite は全部分離)、仕事が bbox × 標本に比例(他は縁や tile に比例)。
+- 対応表(抜粋): 帯表 = GENERIC(K)。bbox → 8 角形の cover polygon。coverage mask の DrawData(view 空間、または shape 空間の atlas を revision で共有 → 6 面の View が coverage を 1 回で済ませる)= GENERIC「Coverage」資源。`SurfaceProgram` ごとの標本率(曲線塗りは centroid、glass は sample)。paint を coverage の後に(bit 同一)。Thin Translucent 相当の dual-source blend(透過色と反射を 1 pass、glass の分散は Vism 側)= UPSTREAM_SEAM。TAA/TSR は不要(解析的 AA が既に決定論的)。
+- 順位: 1 K(同一)→ 2 K + 曲線塗りの画素ごと実行(縁の seam)→ 3 coverage mask + atlas → 4 Loop–Blinn(縁の品質は Rive 級)。stencil-then-cover は 4× MSAA では品質が下がるので却下。
+
 ## 自分で確かめた物
 
 - run の切れ目 MeshAfterRect は歴史的ではなかった: 消すと 2 本の contract の絵が変わる(gap 台帳に記録)。
