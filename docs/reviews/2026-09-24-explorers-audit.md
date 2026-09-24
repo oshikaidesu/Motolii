@@ -121,6 +121,12 @@
 - **HDR/EDR の出力は wgpu 30 が既に持つ**(`SurfaceColorSpace::ExtendedSrgbLinear`/`ExtendedDisplayP3`、`Surface::display_hdr_info()` に EDR の headroom、Metal で動く)。float canvas ができれば「値 > 1 を Apple のディスプレイへ」まで届く(注意: Metal の sRGB が colorspace = nil になる不具合の修正は 30.0.1 に未収載)。
 - 使えない/避ける: rend3(archived)、three-d(OpenGL)、Solari(DLSS-RR のみ)、DLSS、wgpu-ffx(実験、wgpu 29、SPIR-V)、MetalFX(wgpu に API 無し)、OCIO は `ocio-rs` が MSL text までで WGSL 無し。IBL の prefilter を CPU で焼く `ibl_core`(MIT)もあるが、Bevy の GPU 版の方が素直。
 
+### Q: 2024–26 の real-time 研究(wgpu 30 / Metal の forward renderer に載る物)
+- 前提: Metal で使えるのは compute・storage・atomics・`DUAL_SOURCE_BLENDING`・`SUBGROUP`・`SHADER_F16`・`TIMESTAMP_QUERY`・HDR surface(`ExtendedSrgbLinear`)。**RT(ray query/pipeline)は Vulkan/DX12 のみと読む資料があり、Metal は experimental で open bug 2 件(#9100・#9215)**(探索者の間で記述が割れている: wgpu の docstring が古い)。**ROV/pixel-local storage/tile shader は wgpu に無い**。coop-vector・MetalFX は wgpu から届かない。
+- **この scene 種(球・板・花弁)は解析形/SDF で書けるので、「解析 occluder buffer + WGSL `trace()`」を 1 つ持てば RT 前提の研究(DDGI/SDFDDGI・Radiance Cascades・ReSTIR 系)の多くが RT 無しで動く**。
+- 順位(効果 ÷ (コスト + fork 表面)): ①rough refraction = scene-color の mip pyramid + slab/sphere の解析 2 界面(Substrate/Frostbite、コスト低)、②specular AA(Tokuyoshi 2021 の射影空間版、コスト ≈ 0)、③GGX prefilter の IBL(または HPG 2025 の Spherical Harmonic Exponentials)、④EDR 出力 + headroom を見る view transform(PBR Neutral / AgX / ACES 2.0 を LUT 化、ACES 2.0 は Apple silicon で shader が遅いので LUT)、⑤vector 層の Vello sparse strips(3D の後に合成)、⑥glass 層の Moment-Based OIT(ROV 不要)、⑦発光の SG area light(Tokuyoshi 2024)、⑧SDF DDGI の probe(拡散の相互反射)、⑨Newton 法の screen-space 屈折(JCGT 2026、vector 背景の屈折)、⑩physically based bloom/glare(separable は Glow に既にある)。TAA/TSR/MetalFX は vector 層に不適(文字と細線がにじむ)。時間方向の蓄積は 3D の glass 層に限る。
+- 未確認: 「PaRas(SIGGRAPH 2025)」は論文一覧で見つからない。
+
 ### 捨てられるもの / 残すもの(現時点の仮判定、P と R の結果で更新)
 - **捨てる候補(証拠が揃った順)**: ①曲線塗りの自作(`paths.rs` の exact fill・`CurveFill`・curve loop)→ Vello GPU sparse strips への thin seam(ただし beta・wgpu 30 は main のみ・斜めの View は再 raster が要る)。当面は K(帯表、採択済み)で持たせる。②radiance の 2×2 box mip → GGX prefilter(Filament/Frostbite の標準)。③Motolii 側の Karis 近似の env BRDF → DFG LUT。④8 bit の run stack → float canvas。⑤自作の tone(saturate だけ)→ view transform(AgX)。
 - **残す(上流に無い一般 primitive)**: surface hook、View/Backdrop/Environment の per-view 資源、DrawOrder、ClipPlane、mipmap 生成、外部 texture の取り込み、data texture。上流は 2026-09 時点でも IBL・path・tonemap・HDR・mipmap・clip を持たない。
