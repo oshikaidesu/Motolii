@@ -392,6 +392,18 @@ wgpu_pbr の 4k と 15.2k の差は「11k 多い」ではなく、4k が品質�
 - Motolii への含意: 戻り口は「BRDF 前注入」を一級に。scene geometry の共有は先例に無い = Motolii が scene 側で出すなら新規だが、全員が再建している事実は共有の価値を示す。
 - 撮影: `explore/U62/cap_*.png`。
 
+### U71 motion host の先例(Premation / ONDA / TiXL、2026-09-25、読むだけ、全て REFERENCE ONLY)
+
+clone: `explore/U71/` premation@6c688c63(github.com/isroil01/motion-editor)、onda@3ddf1780、tixl@0026f482。
+
+- **license**: Premation = **AGPL-3.0**(閉じていない、写すと感染)、ONDA = FSL-1.1(Competing Use 禁止、Motolii は該当、2 年後 Apache-2.0)、TiXL = MIT だが C#/DX11 で考え方のみ。
+- **Premation**(AE Classic 3D の再現): renderer は scene graph/timeline を import せず、snapshot builder 1 つが解決済みの paint 順 layer 列を渡す(`packages/renderer/src/scene/FrameScene.ts:1-7`)。**Casts Shadows と Accepts Lights は独立**(unlit のカードも光を遮る、`:1040-1050`)。Casts/Accepts Shadows は **Off/On/Only**、Light Transmission 有り(`docs/3d-layer-model.md:283-305`)。Appears in Reflections は画素が変わらないので**あえて持たない**(`:320-326`)。3D layer = 世界空間の平面、間の 2D layer は **壁**として 3D run を分ける(lights は例外)。影は投影コピー + opt-in shadow map、GI 無し。決定性: 時刻 = `index / fps`、「6 箇所から呼ぶ 1 つの renderer」、particles は (inputs, seed) の純関数。pixel harness 359 参照、pixelmatch 0.02 / 0.5%、WebGL2 SwiftShader で bless、WebGPU は意味の gate + 乖離の **ratchet**、**animation gate**(フレームが変わること)、CPU/GPU light の読む field が全部消費されるかの parity test。
+- **ONDA**: scene graph は serde の data のみ(`packages/scene-rs/src/lib.rs:1-13`)。**既定 camera は z=0 を画素一致で映す = 3D 化しても z を動かすまで何も変わらない**(`:506-515`)。light・影参加・GI 無し(extrude は shader 直書きの平行光 1 本)。CPU reference(tiny-skia)は 3D を 2.5D に落とす等**劣化を明記** = 決定性の oracle であって parity の oracle ではない。golden 30 本、1/255 超が 0.5%。
+- **TiXL**: 中立境界無し(operator が DX11 Command を直に出す)。参加は flag でなく **scope**(SetPointLight が push → 部分 graph 評価 → pop、最大 8 灯)。RT 既定は RGBA16F だが作業色空間の宣言が無く tone map は置き場所次第(反面教師、`ToneMap.hlsl:84-113` に到達不能 branch)。VisualTest は warm-up sub-step 付き。
+
+**Renderable 案の改訂(U71 合成、案)**: `placement = Screen2D | Plane3D | Solid3D{mesh: GeomReq}`(不変条件: z=0 の Plane3D == Screen2D 画素一致)、`sort = Participant | Wall`、`Part = Off | On | Only`、`Participation { camera, accepts_lights, casts_shadow: Part, accepts_shadow: Part, light_transmission, gi_contribute: Option<Albedo>, gi_receive, in_reflections, composited }`、`LightingPack::{needs(r), realize(r, needs, cache), honours() -> ParticipationSupport}`(対応しない flag は明示的に Unsupported、黙って無視しない)。host は既定以外の参加/surface を持つ物にだけ Need を建て、(id, revision) で surface 表現を cache、Lighting Pack が無ければ surface 作業 0。
+- 先例からの swap 不変の規則: 時刻評価は snapshot 1 か所、2 経路は共有の eligibility 関数で分岐、新 field は既定で byte 一致、backend ごとの乖離 ratchet、animation gate、read-field parity test。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
