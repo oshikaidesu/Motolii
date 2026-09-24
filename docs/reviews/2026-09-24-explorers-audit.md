@@ -103,7 +103,23 @@
 ### Rerun upstream(2026-09)
 - upstream `main` は wgpu 30、0.38.1(09-16)。**環境光/IBL・vector path・tonemap・HDR・mipmap・clip・標本ごと shading は上流に無い**。sorted transparency と custom `Renderer` の registry(`renderers_mut().register`)、group 1 = phase data(scene depth)、3D texture、Gaussian splat・voxel・volume raymarcher が入った。`re_renderer` は `crates/viewer/` → `crates/viewer_support/` へ移動済み(fork は既に新 path)。`Renderer` trait が `DrawInstruction` 形へ、`DrawPhase` に `Volume`。→ fork の一般 primitive のうち上流が持っていない物は依然として fork にしか居ない。
 
-### 待ち: Lighting(N2)、Optics(N3)、2026 prior-art の捨てる物の監査(P)、Cycles の参照 oracle(R)、SIGGRAPH 2024–26(Q)。目標画像が届けば、5 班の対応表に花弁・板・球・ハイライト・暗部の個別比較を載せる。
+### N2 Lighting(現行が持たないもの)
+- 環境は LDR の PNG(≤ 1.0、`.hdr/.exr` だけが float)、irradiance 32×16、radiance の mip は **2×2 box 平均(GGX の prefilter ではない)**、DFG LUT・多重散乱・specular/horizon occlusion・AO 無し。**直接光の sun 項が無い**(sun は影を引くだけ)。影は 512² の cookie(depth 無し)で、**Prism Garden には Cast Shadow の層が無く影は 0**。**発光層(Core・Heart)は何も照らさない**(絵として View に写るだけ、`shade_surface` は環境 texture しか読まない)。局所光・area light 無し。Caustic は海の矩形に描く 2D の pass で、レンズとは無関係。exposure・tone mapping 無し。
+- 上位 5: ①Core/Heart を光にする(発光層 → area light + View を SH へ畳んで局所 probe。Frostbite §4.8、Lumen の emissive)、②HDR 環境 + exposure + 直接 sun 項(EEVEE の world sun 抽出)、③GGX prefilter の radiance + DFG LUT + 多重散乱 + dominant direction(upload 時に 1 回、コマ費用 0)、④depth/normal の capture → AO + specular/horizon occlusion + 柔らかい depth shadow、⑤lens の screen-space caustics(JCGT 2026 Newton 法、light-view の G-buffer)。
+### N3 Optics(「宝石」感)
+- `thickness` は placeholder(rect は 1.0 固定・Motolii は一度も設定しない、mesh は x 軸の scale)。**Extrude の深さ(doc に在る)が shader へ届かない**。TIR の場合に反射方向の backdrop を読んでいる(誤った絵)。第 2 界面・Beer–Lambert・内部反射・分散が経路長と結び付かない。
+- 上位 5: ①instance ごとの実厚み + slab/sphere の形 flag(host + document、小)、②2 界面の出射 + Beer–Lambert(Filament/EEVEE/KHR_volume の解析式、Vism のみ)、③Fresnel 重み付き内部反射と正しい TIR(Environment/View を使う)、④分散を 2 界面の経路の上に置き直す + 粗さの LOD ∝ 厚み、⑤sun cookie での面積比 caustic(受け面距離の定数を 1 つ)。fallback: Wyman の back-face capture(fork の GENERIC、大)。
+### 2026 の既製部品(2D vector と周辺、要約)
+- **Vello の状況**: sparse strips は `vello_hybrid 0.2.0`(2026-08-07)→ `vello_gpu` へ改名中(crate 名は予約のみ)。released は wgpu 29、**wgpu 30 は main のみ(2026-09-15)**。beta 品質(mask layer・一部 blend・複雑な filter は panic、API 安定性の保証なし)。HDR 無し、2D アフィンのみ、MSAA 無し(解析的 AA)。`TargetInit`/depth は main のみ。**MSAA を持つのは古典の compute Vello(0.10.0、research 扱い)だけ**。
+- Rive Renderer は C++ で Rust/wgpu の経路が無い。Skia Graphite は rust-skia 0.153 で Metal が使えるが wgpu と device を共有する公式手段が無い。Pathfinder は死んでいる。lyon は AA 無し。femtovg 0.27 は wgpu 30 だが stencil-and-fringe(正確な coverage では無い)。**成熟した Rust/wgpu の置換部品は Vello 系だけで、それも今は beta**。
+- SIGGRAPH 2025–26: Metal で動く物は mip/FFT bloom、HypeHype の stochastic tile lighting(pixel shader のみ、RT 不要)、PPLL/WBOIT/MBOIT の透過、Hable の compute tessellation、Vello の sparse strips。MegaLights・idTech8・ORCA は RT 前提。wgpu の Metal ray query は 2026-02 に入ったが open bug が 2 件(#9100、#9215)で、product の毎コマ経路には不向き。NVIDIA の neural shading SDK は Metal/wgpu では動かない。Bevy 自身が ReSTIR を既定で切った。OIT は AE 風の層には不要(painter's order が意味)。bloom は Bevy の `bloom.wesl`(COD 方式)が WESL の先例で、Motolii の Glow と同じ。
+
+### 捨てられるもの / 残すもの(現時点の仮判定、P と R の結果で更新)
+- **捨てる候補(証拠が揃った順)**: ①曲線塗りの自作(`paths.rs` の exact fill・`CurveFill`・curve loop)→ Vello GPU sparse strips への thin seam(ただし beta・wgpu 30 は main のみ・斜めの View は再 raster が要る)。当面は K(帯表、採択済み)で持たせる。②radiance の 2×2 box mip → GGX prefilter(Filament/Frostbite の標準)。③Motolii 側の Karis 近似の env BRDF → DFG LUT。④8 bit の run stack → float canvas。⑤自作の tone(saturate だけ)→ view transform(AgX)。
+- **残す(上流に無い一般 primitive)**: surface hook、View/Backdrop/Environment の per-view 資源、DrawOrder、ClipPlane、mipmap 生成、外部 texture の取り込み、data texture。上流は 2026-09 時点でも IBL・path・tonemap・HDR・mipmap・clip を持たない。
+- **人間が決めること(生き残る seam)**: 何を Vism から操作可能にするか(厚み・減衰・薄膜・exposure・view transform の選択)、Core/Heart のような発光層を「光」として扱うかの製品上の意味。
+
+### 待ち: Cycles の参照 oracle(R)、P の最終報告(wgpu 生態系の PBR/IBL/tonemap の部品)、Q。目標画像が届けば、5 班の対応表に花弁・板・球・ハイライト・暗部の個別比較を載せる。
 
 ## 自分で確かめた物
 
