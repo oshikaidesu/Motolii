@@ -483,6 +483,10 @@ pub(crate) struct PreparedMembers {
     pub(crate) pictures: Vec<LayerContent>,
     pub(crate) paddings: Vec<u32>,
     pub(crate) spills: Vec<render_effects::LayerSpill>,
+    /// The members' mesh instances, placed by the plate's camera and uploaded once for the frame:
+    /// every stack that draws the plate (a view, a View's face) selects its runs from them, as
+    /// the views do from the frame's top-level scene ([`SharedMeshScene`]).
+    pub(crate) meshes: Option<SharedMeshScene>,
 }
 
 impl LayerContent {

@@ -382,6 +382,47 @@ mod frame_reflection {
         assert!(plate_runs > 0, "the Views draw the plate's members from where they stand, not its card");
     }
 
+    /// A plate's members' mesh instances are uploaded once for the frame, with the members'
+    /// pictures: every stack that draws the plate — each view, and each face of a View a member
+    /// asks for — selects its runs from that one upload, as the views do from the frame's top-level
+    /// scene. The picture is the one the instances made again for every stack give.
+    #[test]
+    fn plate_members_mesh_instances_are_uploaded_once_however_many_views_or_faces() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut doc, members) = plates(dir.path(), 2);
+        // One member of each plate asks for six Views; the other stays glass.
+        for (i, member) in members.iter().enumerate() {
+            if i % 2 == 0 {
+                doc.apply(Intent::SetEffects { layer: *member, effects: vec![EffectInstance { id: EffectId(3000 + i as u32), plugin_id: "motolii.cube_mirror".into() }] }).unwrap();
+            }
+        }
+        // A second top-level mesh beside the scene's one: the top level is a shared scene too (a
+        // lone mesh is made per stack, as before).
+        let other = file_layer(&mut doc, 3, 2, &dir.path().join("quad.obj"));
+        doc.apply(Intent::SetConstant { layer: other, property: PropertyId::new(crate::doc::store::property::POSITION).unwrap(), value: Value::Vec2([10.0, 10.0]) }).unwrap();
+        let uploaded = |views: usize, sharing: bool| {
+            let mut engine = Engine::new().unwrap();
+            engine.set_gpu_instance_sharing_enabled(sharing);
+            let before = engine.surface_work();
+            let _ = tick(&mut engine, &doc, RationalTime::ZERO, views);
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            let after = engine.surface_work();
+            assert!(after.layer_views - before.layer_views > 0, "the members' Views are drawn");
+            after.mesh_instances_uploaded - before.mesh_instances_uploaded
+        };
+        let (one, three) = (uploaded(1, true), uploaded(3, true));
+        assert!(one > 0, "the members are meshes");
+        assert_eq!(one, three, "three views upload the members' instances no more than one");
+        assert!(uploaded(3, false) > three, "made again for every stack, the instances are uploaded more");
+        // The shared upload draws what the instances made again for every stack draw.
+        let picture = |sharing: bool| {
+            let mut engine = Engine::new().unwrap();
+            engine.set_gpu_instance_sharing_enabled(sharing);
+            engine.export_frame(&doc.view(), RationalTime::ZERO, true, None).unwrap()
+        };
+        assert_eq!(picture(true), picture(false), "the shared upload gives the same picture");
+    }
+
     /// One capture, before every bake, and every bake lit by it — however many plates or views.
     #[test]
     fn one_capture_lights_every_plate_however_many_plates_or_views() {

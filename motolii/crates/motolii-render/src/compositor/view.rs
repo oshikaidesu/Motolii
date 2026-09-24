@@ -313,13 +313,17 @@ impl Compositor {
         // the members. A View leaves out the copies of the layer that asked for it.
         let pictured = |input: &SequentialInput<'_>| !observer.requested && matches!(input.content, SequentialContent::Plate(plate) if plate.camera_picture.is_some());
         let kept: Vec<SequentialInput<'_>>;
+        // Each kept input's index in the list given (what the world's shared meshes are indexed by).
+        let origin: Vec<usize>;
         let inputs = if without.is_some() || inputs.iter().any(pictured) {
-            kept = inputs.iter().filter(|input| without.is_none() || view_owner(input) != without).map(|input| match input.content {
+            let (indices, inputs): (Vec<usize>, Vec<SequentialInput<'_>>) = inputs.iter().enumerate().filter(|(_, input)| without.is_none() || view_owner(input) != without).map(|(index, input)| (index, match input.content {
                 SequentialContent::Plate(plate) if pictured(input) => SequentialInput { content: SequentialContent::Rect(plate.camera_picture.as_ref().expect("pictured")), ..input.clone() },
                 _ => input.clone(),
-            }).collect();
+            })).unzip();
+            (origin, kept) = (indices, inputs);
             kept.as_slice()
         } else {
+            origin = (0..inputs.len()).collect();
             inputs
         };
         // The light is the composition's: the top environment layer, else the world's.
@@ -363,8 +367,8 @@ impl Compositor {
                 let Some(members) = plate.prepared.get() else { continue };
                 let member_inputs = sequential_inputs(&plate.sources, &members.pictures, &members.paddings, &members.spills, plate.camera, plate.camera);
                 let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
-                // The world's shared mesh instances are indexed by the top-level list, not the members'.
-                let members_world = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: world.views, meshes: None };
+                // The members' instances were uploaded with their pictures: this stack selects from them.
+                let members_world = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: world.views, meshes: members.meshes.as_ref() };
                 let Some(mut canvas) = self.record_stack(comp, window, observer, &member_inputs, NO_BACKGROUND, &members_world, view, beneath.as_ref(), without, encoder)? else { continue };
                 if !input.screen_passes.is_empty() {
                     let density = pass_density(comp, window, observer, input);
@@ -448,7 +452,12 @@ impl Compositor {
             } else {
                 run
             };
-            self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, world.meshes, start)?.queue(&self.ctx, &mut builder)?;
+            // This run's layers, by their index in the given list (`kept` is in order, so a
+            // binary search finds a layer left out by `without` absent).
+            let sources = &origin[planned.range.clone()];
+            let in_run = |layer: usize| sources.binary_search(&layer).is_ok();
+            let shared = world.meshes.map(|scene| super::surface_scene::SharedSelection { scene, keep: &in_run });
+            self.surface_scene_draws(comp, drawn, Vec::new(), false, &|_| false, shared)?.queue(&self.ctx, &mut builder)?;
             // The bottom of the stack starts from the background; everything above is drawn on clear.
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             builder.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;

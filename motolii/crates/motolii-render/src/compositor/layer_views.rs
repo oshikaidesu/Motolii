@@ -115,7 +115,7 @@ impl Compositor {
             // The whole face is the View (the window's region is the composition's own).
             let window = Window { width: size, height: size, roi: [0.0, 0.0, comp.width as f32, comp.height as f32] };
             // What this View sees shows the Views drawn before it.
-            let inside = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: &drawn, meshes: None };
+            let inside = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: &drawn, meshes: world.meshes };
             let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("layer-views") });
             for (i, view) in needs.views.iter().enumerate() {
                 let look = glam::Mat4::look_at_rh(origin, origin + glam::Vec3::from(view.look), glam::Vec3::from(view.up));

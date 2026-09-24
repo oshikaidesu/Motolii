@@ -82,7 +82,8 @@ impl Compositor {
                 LightCookieResources { texture, imported }
             }
         };
-        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| inputs[layer].shadow <= 0.0, shared, 0)?;
+        let occludes = |layer: usize| inputs[layer].shadow > 0.0;
+        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| !occludes(layer), shared.map(|scene| SharedSelection { scene, keep: &occludes }))?;
         let mut config = TargetConfiguration {
             name: "light-cookie".into(),
             render_mode: RenderMode::Deterministic,
@@ -119,21 +120,20 @@ pub(crate) struct SharedMeshScene {
 }
 
 impl SharedMeshScene {
-    fn select(&self, range: std::ops::Range<usize>, skip: &dyn Fn(usize) -> bool) -> MeshDrawData {
-        if !self.source_layers.iter().any(|&l| skip(l))
-            && self
-                .source_layers
-                .first()
-                .zip(self.source_layers.last())
-                .is_some_and(|(&first, &last)| range.contains(&first) && range.contains(&last))
-        {
+    /// The instances of the layers `keep` names (by their index in the list the scene was built
+    /// from), as one draw over the shared upload.
+    pub(crate) fn select(&self, keep: &dyn Fn(usize) -> bool) -> MeshDrawData {
+        if self.source_layers.iter().all(|&l| keep(l)) {
             return self.draw.clone();
         }
-        self.draw.select_source_instances(|source| {
-            let layer = self.source_layers[source];
-            range.contains(&layer) && !skip(layer)
-        })
+        self.draw.select_source_instances(|source| keep(self.source_layers[source]))
     }
+}
+
+/// The shared scene a drawing selects from: the scene, and which of its layers this drawing draws.
+pub(crate) struct SharedSelection<'a> {
+    pub scene: &'a SharedMeshScene,
+    pub keep: &'a dyn Fn(usize) -> bool,
 }
 
 pub(crate) struct SceneDraws {
@@ -222,15 +222,13 @@ impl Compositor {
         let mut instance_count = 0usize;
         for input in inputs {
             if let SequentialContent::Model(model) = input.content {
+                // Geometry, materials and instance data are shared however the surface is drawn
+                // (ruling 2026-09-24): a transparent instance's order is the view's, taken from its
+                // camera when the draw is queued, not from this upload. A backdrop reader stays in
+                // the scene: its own run selects just its instances.
+                // Opacity is instance data (the tint) and shared with it.
                 if input.blend_mode != BlendMode::Normal
-                    || input.opacity != 1.0
-                    // A backdrop reader stays in the scene: its own run selects just its instances,
-                    // and a capture (which feeds no transmission) draws it with the rest.
                     || input.clip.is_some()
-                    || model
-                        .instances
-                        .iter()
-                        .any(|i| i.gpu_mesh.materials.iter().any(|m| m.has_transparency))
                 {
                     return Ok(None);
                 }
@@ -238,7 +236,9 @@ impl Compositor {
                 instance_count = instance_count.saturating_add(model.instances.len());
             }
         }
-        if count < 2
+        // One layer's copies are as shared as many layers' (every stack that draws the plate reuses
+        // the upload).
+        if count == 0
             || instance_count > u32::MAX as usize
             || instance_count.saturating_mul(MeshDrawData::gpu_instance_size_bytes()) as u64
                 > self.ctx.device.limits().max_buffer_size
@@ -287,10 +287,11 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         mut rects: Vec<TexturedRect>,
         capture: bool,
-        // Layers (absolute input index) left out of these draws.
+        // Layers (index in `inputs`) left out of these draws.
         skip: &dyn Fn(usize) -> bool,
-        shared: Option<&SharedMeshScene>,
-        input_offset: usize,
+        // The frame's shared mesh upload, when these inputs' meshes are in it: they are selected
+        // from it instead of being made again.
+        shared: Option<SharedSelection<'_>>,
     ) -> Result<SceneDraws, CompositorError> {
         let started = std::time::Instant::now();
         let mut clouds = Vec::new();
@@ -298,7 +299,7 @@ impl Compositor {
         let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>, Vec<re_renderer::renderer::DrawOrder>)> = Vec::new();
         let mut rect_layers = vec![re_renderer::renderer::DrawOrder::default(); rects.len()];
         for (index, input) in inputs.iter().enumerate() {
-            if skip(input_offset + index)
+            if skip(index)
                 || (shared.is_some() && matches!(input.content, SequentialContent::Model(_)))
             {
                 continue;
@@ -423,7 +424,7 @@ impl Compositor {
             })
             .collect::<Result<_, _>>()?;
         if let Some(shared) = shared {
-            meshes.push(shared.select(input_offset..input_offset + inputs.len(), skip));
+            meshes.push(shared.scene.select(shared.keep));
         }
         self.surface_work.draw_data_prepare_us += started.elapsed().as_micros() as u64;
         Ok(SceneDraws {

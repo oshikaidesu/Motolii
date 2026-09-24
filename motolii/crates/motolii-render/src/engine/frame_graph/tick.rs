@@ -143,7 +143,7 @@ impl Engine {
             None => self.compositor.shared_mesh_scene(state.comp, &inputs)?,
         };
         // The Views the layers asked for see the frame every view shows: drawn once, here.
-        let seen = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &[], meshes: None };
+        let seen = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &[], meshes: meshes.as_ref() };
         let layer_views = self.compositor.draw_layer_views(state.comp, &inputs, &seen)?;
         drop(inputs);
         let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, light, meshes, views: layer_views, comp: state.comp, background: state.background, document_camera });

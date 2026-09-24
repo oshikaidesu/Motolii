@@ -149,7 +149,7 @@ impl Engine {
             self.compositor.bake_picture(plate.comp, plate.camera, &plate.sources, crate::render::compositor::NO_BACKGROUND, plate.density, Some(light), Some(&plate.target))?;
         }
         for plate in std::mem::take(&mut prep.plates.view) {
-            self.prepare_view_plate(&plate)?;
+            self.prepare_view_plate(prep.comp, &plate)?;
         }
         Ok(())
     }
@@ -186,14 +186,20 @@ impl Engine {
             prep.plates.light_scene.extend(plate.sources.iter().cloned());
             prep.plates.view.push(plate);
         } else {
-            self.prepare_view_plate(&plate)?;
+            self.prepare_view_plate(comp, &plate)?;
         }
         Ok(layer)
     }
 
-    fn prepare_view_plate(&mut self, plate: &crate::render::compositor::ViewPlate) -> Result<(), EngineError> {
+    /// The members' pictures, and their mesh instances uploaded once (each view, and each View's
+    /// face, draws the members at the plate's place: the same instances, selected per run).
+    fn prepare_view_plate(&mut self, comp: CompSpec, plate: &crate::render::compositor::ViewPlate) -> Result<(), EngineError> {
         let (pictures, paddings, spills) = self.compositor.effective_layer_textures(&plate.sources)?;
-        let _ = plate.prepared.set(crate::render::compositor::PreparedMembers { pictures, paddings, spills });
+        let meshes = {
+            let inputs = crate::render::compositor::sequential_inputs(&plate.sources, &pictures, &paddings, &spills, plate.camera, plate.camera);
+            self.compositor.shared_mesh_scene(comp, &inputs)?
+        };
+        let _ = plate.prepared.set(crate::render::compositor::PreparedMembers { pictures, paddings, spills, meshes });
         Ok(())
     }
 
