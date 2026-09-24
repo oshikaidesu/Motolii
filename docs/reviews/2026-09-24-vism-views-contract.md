@@ -82,3 +82,16 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 3. ~~View の atlas の mip を、Vism が読む段数だけ作る(`BACKDROP_BLUR` と同じ形の `VIEW_BLUR`): 約 −20 pass/コマ。~~ 施工(上の契約、`surface_tests::view_mips_stop_where_the_declared_roughness_stops_reading`)。
 4. MeshAfterRect の切れ目を消す(歴史的。絵の試験 1 本と一緒に)。
 5. run を中間 canvas なしで stack に直接描く(MSAA の target に load): fork の seam(UPSTREAM_SEAM)。今回はしない。
+
+### 裁定 B を本番経路で有効にした後の実測(2026-09-24、`eafbf7144`、Prism Garden 第 2 版)
+
+| | 直前(View は plate をカードで見ていた) | 今(中身をその目から) |
+|---|---|---|
+| GPU/コマ(headless warm) | 48.5 ms | 72.2 ms |
+| CPU/コマ | 10.4 ms | 13.3 ms |
+| run/コマ | 66(空 7・alone 28) | 45(空 0・alone 0・plate 12) |
+| View atlas の mip pass | 20 | 2 |
+| release 実窓 | 約 19 fps | 約 14 fps(745 描画 / 2420 落ち) |
+
+増分の持ち主: Heart の plate 2 つ(各 約 20 ms)。View の面 6 枚それぞれで、面いっぱいに重なる花弁(曲線の塗り、MSAA 標本ごとの shading)を描くため。Glow の鎖は 約 7 ms。粒の plate 約 3 ms。板の窓の中には光る花が 3D で写る(カードではない)。
+取り返す候補(裁定待ち): rect の per-draw blend(Screen/Add)、透明 mesh instance の共有(C の patch)、mesh の標本ごと shading を画素ごとへ(fork が上流の既定を変えている件、絵の縁が変わる)。
