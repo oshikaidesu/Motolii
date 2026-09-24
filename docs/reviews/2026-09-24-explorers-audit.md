@@ -158,6 +158,14 @@
 
 Motolii 固有として残るもの: View / Plate / Repeater / 2D・2.5D・3D の composition / Vism の resource graph / timeline。**最初の実装は float scene-linear の pipeline**(8 bit のままだと後の GGX・Glass・Emission が頭打ち)。S(8 bit 経路の完全追跡)と R(Cycles 参照画像)の結果を待つ。
 
+## 部品取りの結果(T1〜T3、現物監査 2026-09-24)と、次の探索枠
+
+- **T1 renderling**(0.6.0、MIT/Apache、wgpu 26・rust-gpu、shader は Rust → SPIR-V を naga spv-in で Metal へ、保守者 実質 1 人): 直接依存 0、削れる行 0〜約 200(IBL の標準アルゴリズム)。理由: wgpu が 4 メジャー遅れ、入力が crabslab の slab に結合、fork の pool/ViewBuilder へつなぐ seam が無い、曲線は lyon の CPU テッセレーション(fork の解析的 coverage より劣る)、OIT・SSAO は無い、transmission/volume/iridescence/分散は無い、tone map は ACES と Reinhard のみ(AgX/PBR Neutral 無し)。**負けた理由は「adapter が大きい割に消える物が少ない」であって「renderer を丸ごと/半分刺す発想」が悪いのではない**。
+- **T3 Vello GPU**(main `a31f319`、wgpu 30.0.0 で動作): Rgba16Float への楕円 + radial gradient を実測、CPU は花弁 3000 枚で 1 view 約 4 ms(6 面を面ごとに作ると 約 24 ms)。**8 bit の中間形式で HDR 不可**(gradient は sRGB エンコード空間、1.0 超は保てない)、affine のみ・mask 無し・diamond gradient 無し・3D 押し出しや頂点変形無し。fork の曲線塗りは削れず、平面 2D の分(約 400〜600 行 + shader 約 70 行)だけが対象、当面は「速い経路の追加」。Penumbra は無視、rend3 は参考のみ。
+- **判定式(2026-09-24 の方針)**: 採用の評価は接続コストだけにしない。**削れる量(fork の行数・shader の数・独自 material 基盤・public seam)と品質の増分の差引**で判断する。例: adapter +1,500 行 / fork −9,000 行 / WGSL −12 file / public seam −20 / 品質 ↑↑ なら勝ち。
+- **次の探索枠(候補集めは利用者側、現物の照合は Fable 側)**: 「Rerun を host のまま、外部 renderer に共有の device/target を渡して描かせ、Rerun の Texture として合成する」経路を探す。外部 renderer が device まで所有する必要は無く、「この Texture にこの DrawData を描いて」だけ任せられればよい。条件: Rust/wgpu なら最良だが限定しない、共有 device/target へ描ける、render graph が分離可能、headless/offscreen 可、PBR/HDR/transmission が強い、shader 層だけでも使える、scene の所有を強制しない。分類: DIRECT EMBED / RENDER-TO-TEXTURE / SUBSYSTEM EXTRACTION / REFERENCE ONLY。
+- **完成した renderer を読む価値(問いの入れ替え)**: 今の Motolii を基準にすると「Karis をどう改善するか」になるが、Filament を基準にすると「なぜ DFG LUT + 多重散乱 GGX でないのか」になる。Cycles なら「Glass の改善」でなく「なぜ volume boundary/thickness/absorption が無いのか」、Vello なら「40 curve の loop をどう速くするか」でなく「なぜ fragment が全 curve を読んでいるのか」。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
