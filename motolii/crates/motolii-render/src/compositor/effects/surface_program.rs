@@ -45,6 +45,9 @@ pub struct ViewNeeds {
     pub owner: u64,
     pub views: Vec<super::isf::IsfView>,
     pub size: u32,
+    /// The roughness bounding how far the Vism reads the Views' mips (manifest `VIEW_BLUR`);
+    /// none declared = every level.
+    pub roughness: Option<f32>,
 }
 
 impl SurfaceShading {
@@ -81,6 +84,8 @@ pub struct SurfaceRecipe {
     /// The surface Vism's `VIEWS` and `VIEW_SIZE`.
     pub views: Vec<super::isf::IsfView>,
     pub view_size: u32,
+    /// The roughness that bounds the Views' mips read (`VIEW_BLUR`); none declared = every level.
+    pub view_roughness: Option<f32>,
     /// The layer the Views are for (`LayerId`); set where the layer is prepared.
     pub owner: u64,
 }
@@ -101,12 +106,18 @@ impl SurfaceRecipe {
             let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
             Some(params[offset + i].clamp(0.0, 1.0))
         }).unwrap_or(1.0);
+        let view_roughness = surface.and_then(|d| {
+            let name = d.manifest.view_blur_input.as_ref()?;
+            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
+            Some(params[offset + i].clamp(0.0, 1.0))
+        });
         Self {
             field: field.map(|d| d.plugin_id().to_string()),
             surface: surface.map(|d| d.plugin_id().to_string()),
             params, reads_backdrop, backdrop_roughness, unlit,
             views: surface.map(|d| d.manifest.views.clone()).unwrap_or_default(),
             view_size: surface.map_or(0, |d| d.manifest.view_size),
+            view_roughness,
             owner: 0,
         }
     }
@@ -271,7 +282,7 @@ impl crate::render::compositor::Compositor {
             }
         };
         Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(),
-            views: (!recipe.views.is_empty()).then(|| Arc::new(ViewNeeds { owner: recipe.owner, views: recipe.views.clone(), size: recipe.view_size })) })
+            views: (!recipe.views.is_empty()).then(|| Arc::new(ViewNeeds { owner: recipe.owner, views: recipe.views.clone(), size: recipe.view_size, roughness: recipe.view_roughness })) })
     }
 
     /// The program of a surface without effects: its Block's motion and the standard material.

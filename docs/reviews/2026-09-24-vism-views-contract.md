@@ -15,7 +15,8 @@
 - View の中の View: host が「各面の視野(円錐)に相手の境界球が入るか」で依存を張り、見る物を先に描く(Main → View A → View B が解ける)。同じコマの循環は検出して各 1 回・固定順で描く(`SameFrameCycle`)。**循環で未だ描かれていない View を何で埋めるかは型付きの seam**(今は束ねない = `view_count()` 0)。再帰の深さは表現の契約に入れない。
 - plate: 1 回で撮れる plate は作中カメラの絵を Camera/Stage に出す(`composition_picture` の seam は不変)。コマに別の目がある時は中身も持ち、依頼された View がその目から組み立てる。中身が View を読む plate は view ごとに組み立てる(依存で決める、効果名で分けない)。
 - screen pass の長さは層の px(既決 2026-09-13): 密度 = この目に写る層の大きさ ÷ 出力での大きさ。窓が comp と違う Stage/Camera の既存のずれも同じ式で直る。
-- WGSL: `view_count()`、`view_origin()`、`view_sample(i, uv, lod)`(`vism/material.wgsl`)。
+- WGSL: `view_count()`、`view_origin()`、`view_sample(i, uv, lod)`、`view_lod(roughness)`(`vism/material.wgsl`)。
+- `"VIEW_BLUR": "roughness"`(任意、`BACKDROP_BLUR` と同じ形): その float 入力の粗さが `view_sample` の lod の上限。host は View の atlas の mip をその段まで(`backdrop_levels_read`)しか焼かず、`view_sample` は焼いた段で clamp する。宣言する Vism は lod を `view_lod(p.roughness)` で出す(backdrop と同じ写像)。無ければ全段(既存 Vism は不変)。無い名前は名指しで拒否。
 - 要求は層に属する: Repeater の複製 1/10/200、View(Stage/Camera)1/2/5、Plate の中でも 6 枚は 6 枚(`surface_tests`、`tick_tests`)。
 - `SurfaceIn::uv` は絵の上の 0..1: 画像・図形(path mesh)・押し出しで同じ(fork `Material::texcoord_frame`、`a_surfaces_uv_is_the_same_on_an_image_a_shape_and_a_solid`)。
 
@@ -78,4 +79,6 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 2. plate の中身の mesh instance を stack 間で共有(`SharedMeshScene` の先例を plate へ): upload 2178 → 約 400/コマ。
 3. View の atlas の mip を、Vism が読む段数だけ作る(`BACKDROP_BLUR` と同じ形の `VIEW_BLUR`): 約 −20 pass/コマ。
 4. ~~MeshAfterRect の切れ目を消す~~ → **消せない(2026-09-24 実測)**: 消すと `glass_refracts_the_layers_drawn_behind_it` と `gpu_instance_subsets_preserve_rect_mesh_boundaries_and_surface_parameters` の絵が変わる(rect と mesh を 1 つの ViewBuilder に入れると同じ絵にならない)。さらに「先の 3D の絵が後の mesh より手前にある」場面で、切っても切らなくても絵が手前に出ない(中心が mesh の色)。rect と mesh の深度の意味(Opaque 段の mesh と Transparent 段の rect)は未監査 = gap。境目は残す。
+3. ~~View の atlas の mip を、Vism が読む段数だけ作る(`BACKDROP_BLUR` と同じ形の `VIEW_BLUR`): 約 −20 pass/コマ。~~ 施工(上の契約、`surface_tests::view_mips_stop_where_the_declared_roughness_stops_reading`)。
+4. MeshAfterRect の切れ目を消す(歴史的。絵の試験 1 本と一緒に)。
 5. run を中間 canvas なしで stack に直接描く(MSAA の target に load): fork の seam(UPSTREAM_SEAM)。今回はしない。

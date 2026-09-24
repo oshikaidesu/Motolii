@@ -172,7 +172,7 @@ pub(crate) fn plan_runs(inputs: &[SequentialInput<'_>]) -> Vec<PlannedRun> {
 /// most `max_roughness`: the twin of `vism/material.wgsl`'s lod (`pow(r, 0.8) * (levels - 1) *
 /// 0.55`, and trilinear reads the level above), so no level nobody samples is generated. The
 /// curve is Motolii's standard material's, so it lives here and not in the host.
-fn backdrop_levels_read(max_roughness: f32, level_count: u32) -> u32 {
+pub(super) fn backdrop_levels_read(max_roughness: f32, level_count: u32) -> u32 {
     let lod = max_roughness.clamp(0.0, 1.0).powf(0.8) * level_count.max(1).saturating_sub(1) as f32 * 0.55;
     (lod.ceil() as u32 + 1).clamp(1, level_count.max(1))
 }

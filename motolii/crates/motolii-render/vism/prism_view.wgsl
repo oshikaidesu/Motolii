@@ -4,6 +4,7 @@
   "STAGE": "surface",
   "BACKDROP_INPUT": "transmission",
   "BACKDROP_BLUR": "roughness",
+  "VIEW_BLUR": "roughness",
   "DESCRIPTION": "Glass that shows the world from its layer's centre: three Views, one per colour (a many-eyed dispersion), folded like a kaleidoscope and mixed with what the glass refracts",
   "VIEWS": [
     { "FROM": "layer", "LOOK": [-0.06, -0.02, 1], "UP": [0, -1, 0], "FOV": 96 },
@@ -88,6 +89,7 @@ fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {
     let lens_uv = 0.5 + prism_turn(ray.xy, spin * t) * (0.5 / max(p.zoom, 0.05));
     let uv = prism_mirror(mix(v + 0.5 + lean + drift, lens_uv, p.lens));
 
+    // Its own reach, within the levels the declared roughness has the host generate (view_sample clamps).
     let lod = p.roughness * 5.0;
     let split = 0.012 * p.dispersion * (0.5 + id.x);
     let one = view_sample(min(1u, n - 1u), uv, lod);

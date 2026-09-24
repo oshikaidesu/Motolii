@@ -28,12 +28,14 @@ pub struct LayerViews {
     /// Where they were taken from: the centre of the layer (all its copies).
     pub origin: glam::Vec3,
     pub count: u32,
+    /// Mip levels the host generated (base included): what `view_sample` may read.
+    pub levels: u32,
 }
 
 /// Binds a layer's Views to the draw that shades it. The layout is material.wgsl's `view_*`.
 pub(crate) fn bind_views(config: &mut TargetConfiguration, views: &LayerViews) {
     config.view_capture = Some(views.picture.clone());
-    config.program_constants[6] = glam::vec4(views.count as f32, 0.0, 0.0, 0.0);
+    config.program_constants[6] = glam::vec4(views.count as f32, views.levels.max(1) as f32 - 1.0, 0.0, 0.0);
     config.program_constants[7] = views.origin.extend(0.0);
 }
 

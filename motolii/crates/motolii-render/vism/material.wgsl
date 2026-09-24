@@ -15,11 +15,21 @@ fn light_uv_from_world() -> mat4x4f {
 /// The Views this surface's Vism asked for (`VIEWS`, in their order), side by side in one picture;
 /// 0 when it asked for none or the host drew none.
 fn view_count() -> u32 { return u32(frame.program_constants[6].x); }
+/// The coarsest mip level the host generated for the Views (`VIEW_BLUR`); reads are clamped to it.
+fn view_lod_limit() -> f32 { return frame.program_constants[6].y; }
+/// The lod a roughness (0..1) reads the Views at: the backdrop's mapping (`transmitted_backdrop`,
+/// mirrored by the host's `backdrop_levels_read`), so a Vism declaring `VIEW_BLUR` reads no
+/// level the host did not generate.
+fn view_lod(roughness: f32) -> f32 {
+    let levels = f32(textureNumLevels(view_capture_texture));
+    return pow(clamp(roughness, 0.0, 1.0), 0.8) * max(levels - 1.0, 0.0) * 0.55;
+}
 /// Where they were taken from: the centre of the requesting layer (world).
 fn view_origin() -> vec3f { return frame.program_constants[7].xyz; }
 /// View `i` at `uv` (0..1 across that View, +y down), premultiplied: alpha is what the View saw
-/// there. `lod` blurs it by mip level.
-fn view_sample(i: u32, uv: vec2f, lod: f32) -> vec4f {
+/// there. `lod` blurs it by mip level, no coarser than the host generated.
+fn view_sample(i: u32, uv: vec2f, lod_asked: f32) -> vec4f {
+    let lod = min(lod_asked, view_lod_limit());
     let n = f32(max(view_count(), 1u));
     let size = vec2f(textureDimensions(view_capture_texture));
     let margin = min(0.49, exp2(lod) * n / size.x);

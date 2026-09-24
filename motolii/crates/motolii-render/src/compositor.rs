@@ -356,6 +356,8 @@ pub struct SurfaceWork {
     pub backdrop_allocations: u64,
     /// backdrop の写しごとに焼いた mip の段数(base 込み)の合計。
     pub backdrop_mip_levels: u64,
+    /// 層の View の絵ごとに焼いた mip の段数(base 込み)の合計。
+    pub view_mip_levels: u64,
     pub mesh_batches: u64,
     pub mesh_instances_uploaded: u64,
     pub mesh_instance_upload_bytes: u64,

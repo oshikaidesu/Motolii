@@ -325,6 +325,39 @@ fn a_repeaters_copies_share_their_layers_views() {
     }
 }
 
+/// A Vism that declares `VIEW_BLUR` (the float input whose roughness bounds how far `view_sample`
+/// reads the Views' mips, BACKDROP_BLUR's shape) gets only those levels generated: roughness 0 is
+/// the base alone, roughness 1 a chain no longer than the full one. A Vism declaring nothing
+/// (Cube Mirror) gets the full chain, as before.
+#[test]
+fn view_mips_stop_where_the_declared_roughness_stops_reading() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let mesh = LayerId(2);
+    let mut engine = Engine::new().unwrap();
+    let mut levels_per_request = |doc: &mut Document, plugin: &str, roughness: Option<f64>| -> (u64, u64) {
+        doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: plugin.into() }] }).unwrap();
+        if let Some(r) = roughness { effect(doc, mesh, 0, "roughness", Value::F64(r)); }
+        let before = engine.surface_work();
+        engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let after = engine.surface_work();
+        let faces = after.layer_views - before.layer_views;
+        assert!(faces > 0, "{plugin} asks for Views");
+        let (size, count) = crate::render::compositor::effects::catalog::catalog_snapshot().definitions.iter().find(|d| d.plugin_id() == plugin).map(|d| (d.manifest.view_size, d.manifest.views.len() as u32)).unwrap();
+        assert_eq!(faces, u64::from(count));
+        let full = u64::from(re_renderer::resource_managers::MipmapGenerator::mip_level_count(size * count, size));
+        (after.view_mip_levels - before.view_mip_levels, full)
+    };
+    let (smooth, full) = levels_per_request(&mut doc, "shelf.prism_view", Some(0.0));
+    assert_eq!(smooth, 1, "roughness 0 reads the base alone, of {full}");
+    let (rough, full) = levels_per_request(&mut doc, "shelf.prism_view", Some(1.0));
+    assert!(rough > 1 && rough <= full, "roughness 1 reads a chain: {rough} of {full}");
+    let (undeclared, full) = levels_per_request(&mut doc, "motolii.cube_mirror", None);
+    assert_eq!(undeclared, full, "no VIEW_BLUR: the full chain");
+}
+
 /// `SurfaceIn::uv` means the same on every picture: a Checker of 2×2 cells lights the same corners
 /// of an image, a shape (a path mesh, whose texcoords are path points) and an extruded solid.
 #[test]

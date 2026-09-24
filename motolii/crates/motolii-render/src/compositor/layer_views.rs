@@ -102,10 +102,11 @@ impl Compositor {
             let near = ((*hi - *lo).length() * 1e-4).clamp(0.01, 1.0);
             let size = needs.size;
             let count = needs.views.len() as u32;
+            let mip_level_count = re_renderer::resource_managers::MipmapGenerator::mip_level_count(size * count, size);
             let picture = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
                 label: "layer-views".into(),
                 size: wgpu::Extent3d { width: size * count, height: size, depth_or_array_layers: 1 },
-                mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(size * count, size),
+                mip_level_count,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: BLEND_TARGET_FORMAT,
@@ -140,10 +141,14 @@ impl Compositor {
                 }
                 self.surface_work.layer_views += 1;
             }
-            self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, &picture.texture);
+            // Only the levels the Vism's declared roughness reads (`VIEW_BLUR`), as the backdrop's
+            // are; a Vism declaring none may read any level.
+            let levels = needs.roughness.map_or(mip_level_count, |roughness| super::view::backdrop_levels_read(roughness, mip_level_count));
+            self.surface_work.view_mip_levels += u64::from(levels);
+            self.ctx.texture_manager_2d.generate_mipmap_levels(&self.ctx, &mut encoder, &picture.texture, levels);
             self.ctx.queue_commands([encoder.finish()]);
             let picture = self.import_premultiplied(&picture)?;
-            drawn.push(crate::render::compositor::light::LayerViews { owner, picture, origin, count });
+            drawn.push(crate::render::compositor::light::LayerViews { owner, picture, origin, count, levels });
         }
         Ok(drawn)
     }
