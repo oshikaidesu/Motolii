@@ -76,7 +76,7 @@
 - 人間へ: pool の retire を N コマにする(fork の memory residency の contract)。
 - 副産物: wgpu-core 30 は pass ごとに Metal command buffer を 1 本作る(1 コマ約 650 本、`vism-pass` 分の driver CPU 5.4 ms)。CPU の pass 比例費用の正体。
 
-## K: 曲線塗りの帯表(fork の patch 候補 `explore/curve-fill` = `66a439b20f`、**bit 同一を証明、採択候補・未 push**)
+## K: 曲線塗りの帯表(fork `66a439b20f`、**採択**: ESTABLISHED_RENDERING_TECHNIQUE の裁定で push・pin)
 
 - Lengyel 式の行/列の帯表を upload 時に CPU で作り、同じ data texture に置く。fragment は自分の行帯と列帯の曲線だけを走査(曲線ごとの式と順序は不変)。公開 API 不変、fork の試験 66 + oracle(楕円・五芒星・5 px の薄片・穴・gradient、64² と 512²、18 枚の参照 PNG)で **0 画素差**。
 - Motolii 側 A/B(file:// pin、push なし): Prism Garden 1080p の t=0 を別 build の before と比較して **2,073,600 画素すべて一致**。全試験は基準と同じ失敗 8 件。**GPU 71.2 → 39.2 ms**。CPU +2 ms は帯表(約 0.4 ms)ではなく、path mesh を毎コマ作り直す既存の仕事(`path_model` → `into_gpu_meshes` 約 1.1 ms)。
