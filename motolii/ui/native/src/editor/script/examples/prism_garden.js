@@ -37,7 +37,7 @@ studio.environment().set("Opacity", 0);
 // The sea stands in the 3D world behind the heart, so the glass refracts it. The Views draw no
 // pass effects: they see its own dark paint, the ground every window's picture sits on.
 const sea = rectangle({ name: "Sea" }).fill("radial-gradient(#1C1448, #0A0720 55%, #030308)").set("Position", [960, 540]).set("Scale", [20, 11.5]).set("Position Z", 1500).projection("3D");
-cycle(sea.effect("Caustic Light", { "Caustics": 1.1, "Scale": 900 }));
+cycle(sea.effect("Caustic Light", { "Caustics": 1.3, "Scale": 900, "Color 1": "#03020A", "Color 2": "#140A36", "Color 3": "#05303F", "Color 4": "#3A0B34", "Caustic Color": "#9FE4FF" }));
 
 const heart = (name, color, count, scale, reach, z, turn) => {
   const petal = ellipse({ name: `${name} Petal` }).fill(color).set("Scale", scale).set("Position", [reach, 0]);

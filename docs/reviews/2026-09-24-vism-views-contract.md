@@ -1,6 +1,6 @@
 # Vism が View を要求する(VIEWS)と、surface の uv
 
-状態: **施工済み**(2026-09-24、利用者方針「表現を Rust に焼かない。Vism は要求を宣言し、実体化は host」)。
+状態: **施工済み**(2026-09-24、利用者方針「表現を Rust に焼かない。Vism は要求を宣言し、実体化は host」。同日「View は作品の view、依存グラフは制限しない、実行だけ有限」)。
 
 ## 契約
 
@@ -10,7 +10,11 @@
 ```
 
 - `FROM` は必須。今ある語は `"layer"` だけ: 層(全ての複製)の中心に立ち、その層を除いた世界を見る。カメラ相対(Mirror の鏡像カメラ、Portal の別カメラ)は未決の意味論(下)。
-- host が準備(prepare)で層ごとに 1 回描く: re_renderer の ViewBuilder・texture pool・`queue_commands`。並べた 1 枚を、その層の run の `view_capture` に束ねる。
+- **View は作品の view**(利用者裁定 2026-09-24「世界を素材として読める。読んだ世界の中にも、また世界を読む表現を置ける」): Camera・Stage と同じ `record_stack`(層の順・run・plate・2D の順・screen pass・Backdrop・空・View)を、別の観測者(`Observer`: 投影と near fade)から記録する。違いは観測者・解像度・要求した層(その複製は写らない)だけ。第二の場面組み立ては削除(`compositor/layer_views.rs`)。
+- 準備済みのコマから tick に 1 回描く(Stage/Camera の数で増えない)。並べた 1 枚を、その層の run の `view_capture` に束ねる。
+- View の中の View: host が「各面の視野(円錐)に相手の境界球が入るか」で依存を張り、見る物を先に描く(Main → View A → View B が解ける)。同じコマの循環は検出して各 1 回・固定順で描く(`SameFrameCycle`)。**循環で未だ描かれていない View を何で埋めるかは型付きの seam**(今は束ねない = `view_count()` 0)。再帰の深さは表現の契約に入れない。
+- plate: 1 回で撮れる plate は作中カメラの絵を Camera/Stage に出す(`composition_picture` の seam は不変)。コマに別の目がある時は中身も持ち、依頼された View がその目から組み立てる。中身が View を読む plate は view ごとに組み立てる(依存で決める、効果名で分けない)。
+- screen pass の長さは層の px(既決 2026-09-13): 密度 = この目に写る層の大きさ ÷ 出力での大きさ。窓が comp と違う Stage/Camera の既存のずれも同じ式で直る。
 - WGSL: `view_count()`、`view_origin()`、`view_sample(i, uv, lod)`(`vism/material.wgsl`)。
 - 要求は層に属する: Repeater の複製 1/10/200、View(Stage/Camera)1/2/5、Plate の中でも 6 枚は 6 枚(`surface_tests`、`tick_tests`)。
 - `SurfaceIn::uv` は絵の上の 0..1: 画像・図形(path mesh)・押し出しで同じ(fork `Material::texcoord_frame`、`a_surfaces_uv_is_the_same_on_an_image_a_shape_and_a_solid`)。
@@ -30,9 +34,22 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 
 - `FROM` のカメラ相対(鏡像・別カメラ): 「どの View のカメラか」(Stage と Camera で違う)を決める意味論が要る。
 - release build は Vism を焼き込む(見張りは debug workspace だけ): 出荷した窓へ第三者の Vism を足す置き場は未決。
-- Prism Garden(`examples/prism_garden.js`・`vism/prism_view.wgsl`)で見つけた gap(2026-09-24、Rust は触らず既存語彙で回避):
-  - View は面の場面(3D の世界)だけを描く: pass 段の効果(Caustic Light・Glow)と 2D 層は写らない。2D 層は 3D ガラスの Backdrop にも入らない。
-  - 3D ファイル(obj)の層に View が届かない(`view_count()` 0 の見た目)。押し出し + Bevel では届く。
-  - Vism の INPUTS を増やして保存すると書類に編集が積まれ、script の再実行が「changed after the script ran」で断られる(再起動で回避)。
-  - MP4 書き出しの R と B が入れ替わる(窓とは一致しない)。
-  - 実測(M4、1920×1080、headless warm): CPU 5.5 ms・GPU 68 ms/コマ。効果を全部外しても GPU 36 ms。窓の実効: View 0 枚 約 30 fps・3 枚 約 18・6 枚 約 14。板 24→96 枚で変わらない(View は層 2 × 3 = 6 枚のまま)。
+- Prism Garden(`examples/prism_garden.js`・`vism/prism_view.wgsl`)の gap 台帳(2026-09-24):
+
+| # | gap | 分類 | 状態 |
+|---|---|---|---|
+| 1 | View は 3D の一部だけ(第二の場面組み立て) | CURRENT_CONTRACT_VIOLATION | 解決: 本番の `record_stack` |
+| 2 | 2D が View に入らない | 誤認(2D は作中カメラ平面に居る)+ capture で 2D の順が落ちる IMPLEMENTATION_GAP | 解決: 順も本番どおり。球の View に文字が写る |
+| 3 | 効果後の絵が View に入らない | screen pass と plate の効果が落ちる IMPLEMENTATION_GAP | 解決 |
+| 4 | OBJ に View が届かない | 誤認: 届いている。`vt` の無い OBJ の uv が 0 | uv を読む Vism には座標が無い: 自動 uv は作らない。`world_position`・`normal`・屈折方向(Lens)で読める。正規化した局所座標を generic な入力にするかは NEW_PRODUCT_SEMANTICS(seam) |
+| 5 | FROM が layer だけ | NEW_PRODUCT_SEMANTICS(鏡像・別カメラ) | 未解決(seam) |
+| 6 | View 数に比例して GPU が増える | 面ごとの raster は View 依存。run ごとの固定費(1080p で約 2 ms、512² で約 0.24 ms)が同じ仕事の繰り返し | 一部解決(下の数字)。run の束ね方は未着手 |
+| 7 | View なしでも GPU 36 ms | 誤帰属: frame_cost の no_effects は Repeater も外す。本当の持ち主は花の輪(Repeater の plate + Glow)が View の 6 面で複製ごとに描かれていたこと | 解決 |
+| 8 | 循環の埋め方 | NEW_PRODUCT_SEMANTICS | seam(`SameFrameCycle`) |
+| 9 | 面の札が WESL の import を解決しない(block の札だけ) | IMPLEMENTATION_GAP | 未解決(同じ shader を 2 枚に書かないため、View の向きの違う札を作らなかった) |
+| 10 | Vism の INPUTS を増やすと書類に編集が積まれ、script の再実行が断られる | IMPLEMENTATION_GAP | 未解決(再起動で回避) |
+| 11 | MP4 書き出しの R と B が入れ替わる | IMPLEMENTATION_GAP | 未解決(ffmpeg で戻して納品) |
+| 12 | `shelf.prism_view` に棚の見本画像が無い | 既存の失敗試験に 1 件追加 | 未解決 |
+| 13 | CPU 1 コマ 5.5 → 10.4 ms: View の面ごとに本番の run を組む | 観測(layout ではない) | 未着手 |
+
+実測(M4、1920×1080、headless warm、同じ書類 = 旧 Prism Garden): GPU 待ち 67.9 → 46.1 ms。持ち主(Metal System Trace): View の面の raster 38.6 → 16.6 ms・View の Blit 7.5 → 0.7 ms・本番 view の raster 30.0 → 30.2 ms・効果と合成 7.6 → 9.8 ms。新しい Prism Garden(板 96・OBJ 7・View 2 層 × 3 = 6 枚、要求 6 = 実体化 6): GPU 48.5 ms・CPU 10.4 ms。release 実窓 843 描画 / 1769 落ち(約 19 fps、前版 約 14 fps)。
