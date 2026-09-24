@@ -404,6 +404,19 @@ clone: `explore/U71/` premation@6c688c63(github.com/isroil01/motion-editor)、on
 **Renderable 案の改訂(U71 合成、案)**: `placement = Screen2D | Plane3D | Solid3D{mesh: GeomReq}`(不変条件: z=0 の Plane3D == Screen2D 画素一致)、`sort = Participant | Wall`、`Part = Off | On | Only`、`Participation { camera, accepts_lights, casts_shadow: Part, accepts_shadow: Part, light_transmission, gi_contribute: Option<Albedo>, gi_receive, in_reflections, composited }`、`LightingPack::{needs(r), realize(r, needs, cache), honours() -> ParticipationSupport}`(対応しない flag は明示的に Unsupported、黙って無視しない)。host は既定以外の参加/surface を持つ物にだけ Need を建て、(id, revision) で surface 表現を cache、Lighting Pack が無ければ surface 作業 0。
 - 先例からの swap 不変の規則: 時刻評価は snapshot 1 か所、2 経路は共有の eligibility 関数で分岐、新 field は既定で byte 一致、backend ごとの乖離 ratchet、animation gate、read-field parity test。
 
+### U69 shader mod / ReShade / engine GI の追加探索(2026-09-25、実行無し、gallery と動画のフレームで判定)
+
+30 件。既監査の 4 pack 以外で方向が合う open な物は 2 本だけ、どちらも**動いている映像が無く「動いて綺麗」は未確認**。
+
+- **PathMax**(MIT は Modrinth 表記のみ、zip に LICENSE 無し、2026-08-11 v1.0): stained glass が床・空気・bounce を色付け、灯りの霧が遮蔽される。構造 = shadow pass から毎コマ 128³ block grid、32³ occupancy、16³ emitter list(cell あたり 64 slot = 2 灯を平均しない)、**32³ irradiance volume を空気の march が読む**(空気が壁越しに光らない理由)。1 spp/1 bounce、4 px に 1 本回転、SVGF 64 コマ history、AgX。弱点: 光の変化に最大 64 コマ遅れ、端の暗い縁、GI 範囲 16 block、macOS 不可(GL 4.6)。
+- **Dirt RT**(GPL-3、github.com/sjrsjz/Dirt-RT、Vulkanite 上の HW ray tracing): 6 ray pass、voxel の sparse radiance cache が前コマの cache を読んで multi-bounce、pixel ごとの path guiding、participating media で光の筋。`doc/shader_architecture.md` が buffer layout と pass 順を明記 = denoise contract の最良の open 参照。
+- Zephyr Starlight(CC BY-NC-SA、商用不可): 厳密な block 交差 + sparse irradiance cache + Hillaire sky + 反射の motion vector。
+- 参照のみ(権利): Kappa/KappaPT(空気と天気が最良)、SEUS PTGI GFME(色光の fill が最良)。Radiance(HW RT + NRD、動いて安定だが空と空気が平板、C++ 側 license 無し)。Godot HDDAGI + screen probes draft PR #122999(MIT、M2 Metal で実時間、美しさは中)。Noble(GPL-3、無料版は GI 無しだが空気が写真的)。
+- 落選: Lyrae(動くと noise が沸く)、Camellia(自称非実時間)、ReShade 系(screen space のみ、RTGI は閉鎖)、Unity SEGI 系(放棄・漏れ)。
+- **contract への追加**: 出力は diffuse / specular の分離(demodulate)に加え **空気(volumetric)項を独立 RGBA16F 出力**にするか、fog pass が読める irradiance volume を出す。FrameContext に前 view-proj と jitter index。
+- **決定性**: 全 pack が frame counter で seed、8〜64 コマ history 依存 = seek と再生で一致しない。既定の解(seed = hash(timeline frame, iteration, pixel)、seek で reset、export 前に固定 N コマ warm-up)で足りるが、**回転する 1/4 ray と float atomics の voxel 構築**は別に検査が要る。
+- 未到達: CurseForge 一覧、shaderLABS Discord、Bedrock pack。場所: `explore/U69/`。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
