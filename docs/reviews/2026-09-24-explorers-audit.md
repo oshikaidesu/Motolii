@@ -32,6 +32,26 @@
 - **候補(比率は低いが fork が最も縮む)**: paths module(約 1000 行)を Motolii 側の lowering へ(`into_mesh` が既に上流の `CpuMesh` を出す)。`draw_into` を上流の `draw()` + `queue_commands` で置換。
 - **人間へ**: `layer_sort_key`(消すと opt-in していない描画物との順序が変わる)、`SurfaceSampling::FilteredPixel`(production は使っていない、試験だけ)。
 
+## B: 1 コマ約 250 の GPU pass の分解
+
+- 家系ごと(view-run 10・plate の bake 2・View の面の run 48・sky 7・合成の mix 66・Glow の鎖 26・海の Caustic 14・View atlas の mip 20・backdrop の mip 7・blit 20・shown/composite 2)を、どの code が出すか、view ごと/run ごと/plate ごと/コマに 1 回かで分類。
+- **発見**: 本番の準備経路(incremental)では `observed` が立たず、View は plate をカードとして見ていた(Plate の run = 0)。裁定 B と食い違い → **修正済み**(`9e2c65f79`: scene 自身に `asks_for_views` を問う)。
+- 採択(code から一意、`9e2c65f79`): 環境だけの run は builder も mix も作らない(−14 pass)、後で誰も読まない非 glass の絵を更新しない(−7)、canvas と同じ形式の screen pass 結果は COPY しない(−7)、spill の coverage は padded 済みの元を使う(−6 blit)。
+- 採択(D、`eafbf7144`): View atlas の mip を宣言した段数だけ(20 → 2)。
+- **裁定待ち**: rect の per-draw blend(Screen/Add を固定機能で。fork の GENERIC_PRIMITIVE + 「混色の単位は下を読む」の裁定)→ Heart の alone 4 本/面が run に入る。海の Caustic を観測者ごとでなく層に 1 回描く(意味の seam: 効果は層に塗るか観測者に塗るか)。
+- fork の seam(UPSTREAM_SEAM、今回はしない): 面を array layer へ直接描く(複写と mip の bleed が消える)、stack を shown 無しで composite、SRC_OVER の run を stack へ load で描く(MSAA 4x では疑わしい)。
+
+## C: plate の中身の mesh instance を stack 間で共有(patch は `explore/C-shared-plate-meshes`、保留)
+
+- 形は `SharedMeshScene` の先例どおり(`PreparedMembers.meshes`、コマに 1 回)。試験 35 通過、gate PASS、契約試験 1 本追加。
+- **Prism Garden では利得 0**(2178 → 2178): 先例の `shared_mesh_scene` が「透明な材質の mesh は共有しない」と拒む(OBJ の材質が透明扱い、板は Glass)。透明 instance の共有 = **seam**(透明物の順序は目のもの、という判断を崩すか)。裁定が出れば patch はそのまま載る。
+
+## D: `VIEW_BLUR`(採択、`eafbf7144`)
+
+- Backdrop の `BACKDROP_BLUR` と 1 対 1: 名前の無い欄は名前で拒む、宣言無しは全段(Cube Mirror・CCTV は不変)、`view_sample` は host が作った段数で clamp(`program_constants[6].y`)。
+- 発見: fork の `backdrop_levels_read(1.0, 11)` は 7(粗さ 1 = 全段ではない)。宣言無しは `Option` で「全段」。
+- seam(Composer が「絵を動かさない」で決めた): 宣言する Vism の lod の写像は Vism 自身の式のまま(Prism View は `roughness * 5`)、host の曲線 `view_lod()` は棚に置く。
+
 ## 自分で確かめた物
 
 - run の切れ目 MeshAfterRect は歴史的ではなかった: 消すと 2 本の contract の絵が変わる(gap 台帳に記録)。
