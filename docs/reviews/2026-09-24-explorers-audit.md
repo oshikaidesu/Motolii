@@ -59,6 +59,15 @@
 - 上流の既存 contract で足りるか: rect は pipeline 1 本の固定 blend、mesh も同じ。draw 単位の blend 口は無い。fork の gate も「一般 primitive の family に無い」5 件で FAIL。
 - 結論: 裁定「blend を理由に run を分けることを意味論にしない」は保つが、実現は固定機能 blend では無い。run の分離は現状維持、Prism Garden の現在の画には alone の run は無い(0/コマ)。
 
+## I: View の面の中の花弁 1 枚が 0.1〜0.3 ms かかる理由(証拠)
+
+- 重なりではない(輪の花弁の重なりは 1.02〜1.11 倍、面の 5〜24 %)。**画素あたり 65〜210 ns**: 楕円 1 つ = 4 本の 3 次曲線 → tolerance 1e‑5·extent で約 40 本の 2 次曲線、bbox 四角形の全 fragment が 40 本を走査(1 本につき依存する `textureLoad` 2 回 + 約 65 ALU)、latency 律速(ALU 利用率 約 8〜10 %)。細い花弁(Inner、5〜13 px)は 2×2 quad の無駄で約 2 倍。shading(IBL)の取り分 ≈ 0(Studio Light を隠しても差 0)。
+- fork の既定 `SurfaceSampling::Sample` で fragment shader が **MSAA 標本ごとに 4 回**走る。曲線の被覆は texcoord(中心補間)から計算するので 4 回とも同じ値。
+- 面ごとに繰り返している view 非依存の仕事: 曲線の被覆・gradient・拡散(法線は instance で一定)。View 依存: 投影・raster・AA 幅・specular の view_dir。
+- 候補(絵を変えない): fork の CurveFill 内部の帯表で走査本数を 5〜10 分の 1 に(推定 −18〜22 ms、**K で patch 候補 + pixel oracle**)、curve data の詰め込みと展開(−8〜13)、bbox より狭い hull(−4)。
+- **人間へ(品質の seam)**: 曲線塗りの quad を画素ごとに実行(標本補間の入力に標本ごとの情報が無い、推定 −18〜20 ms)、tolerance 1e‑5 → 1e‑3(40 → 12 本、≤ 0.1 画面 px、推定 −15〜19 ms)、x/y 2 本の ray を 1 本に(縁の AA が変わる)。
+- 計測の限界: M4 の xctrace では shader profiler / GPU counters が空(Xcode の GPU frame capture が残る道)。
+
 ## 自分で確かめた物
 
 - run の切れ目 MeshAfterRect は歴史的ではなかった: 消すと 2 本の contract の絵が変わる(gap 台帳に記録)。
