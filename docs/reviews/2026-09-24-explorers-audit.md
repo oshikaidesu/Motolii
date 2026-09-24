@@ -442,6 +442,10 @@ clone: `explore/U71/` premation@6c688c63(github.com/isroil01/motion-editor)、on
 2. **Renderable は surface である必要すら無い**: 赤字幕なら camera = 普通の RGBA、shadow = coverage のみ、GI = emission + coverage + placement、specular = 不参加、volumetric = emitter として参加。2D を PBR material に押し込まない。
 3. **participation は bool 群ではなく domain ごとの visibility algebra**(Premation の Off/On/Only から): Camera = On|Off、ShadowCast / ShadowRecv / Indirect / Reflection = On|Off|Only。例: 見えない巨大な赤文字の形に部屋だけ赤く照らされる。
 
+4. **camera への可視と lighting/visibility query への参加は別の bit**(利用者 2026-09-25、U64 で強化): Premation では DCC の明示 UI(Only)、SceneVM では renderer の構造(shadow ray が非表示 geometry に当たる)から同じ現象が自然発生。ただし Off/On/Only という API に固定する証拠ではない。TiXL の graph scope 方式もあるので、**意味論と UI/API 表現を分けて扱う**。
+5. **Rendiation は採用候補ではなく contract の oracle**: depth/normal/entity-id の G-buffer → `surface_bridge` → lighting/PT、GPU BVH、`reset_sample` + sample index が 1 か所にあり、M4 Metal で raster 5.14ms を実走 = この境界は机上案ではない証拠。
+6. **正本の分布(negative result)**: 画 = Webgiya / 影 MOD / production renderer、Surface Contract = Rendiation / three addon 生態系、motion semantics = Premation / TiXL / SceneVM、ray/lighting 研究 = U50〜U59。それぞれ別の成熟した共同体にあり、交換可能に組み合わせる host はまだ無い = Motolii が作る意味のある空白。
+
 U70・U64 には各 renderer の domain 別 visibility・非 surface の参加・volumetric 出力の有無を追加で確認させた。新しい agent は増やさず U64/U67/U68/U70 を回収する。
 
 ## 調査の品質規則(2026-09-24 追加)
