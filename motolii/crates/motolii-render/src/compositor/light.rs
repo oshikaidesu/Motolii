@@ -1,6 +1,6 @@
 //! The world's light as Motolii lays it into a view: the sun and what blocks it (a coverage
 //! picture), the Views a layer asked for (a view capture), and the constants the standard material
-//! reads (`effects/program/material.wgsl`).
+//! reads (`vism/material.wgsl`).
 
 use re_renderer::resource_managers::GpuTexture2D;
 use re_renderer::view_builder::TargetConfiguration;

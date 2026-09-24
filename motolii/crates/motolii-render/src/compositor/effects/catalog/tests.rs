@@ -78,6 +78,7 @@ fn copied_entrypoint_rebinds_the_watcher_runtime_and_last_good_snapshot() {
         descriptors: descriptors(std::slice::from_ref(&good)),
         definitions: vec![good].into(),
         errors: vec!["invalid replacement retained the valid program".into()],
+        modules: Vec::new().into(),
     });
     runtime.0.owner.lock().unwrap().snapshot = Some(snapshot.clone());
     runtime.0.generation.store(7, Ordering::Release);
@@ -153,6 +154,7 @@ fn catalog_refresh_keeps_the_open_renderer_frame_and_device() {
         definitions: current.definitions.clone(),
         descriptors: current.descriptors.clone(),
         errors: Vec::new(),
+        modules: current.modules.clone(),
     });
     let frame = compositor.ctx.active_frame.frame_index;
     let device = compositor.ctx.device.clone();

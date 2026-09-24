@@ -107,6 +107,15 @@ pub(crate) struct CatalogSnapshot {
     pub(crate) definitions: Arc<[VismDefinition]>,
     pub(crate) descriptors: Arc<[EffectDescriptor]>,
     pub(crate) errors: Vec<String>,
+    /// The shelf's modules (`.wgsl` without a head): name and source.
+    pub(crate) modules: Arc<[(String, String)]>,
+}
+
+impl CatalogSnapshot {
+    /// A module on the shelf by name; empty when there is none (what includes it then fails to compile, by name).
+    pub(crate) fn module(&self, name: &str) -> &str {
+        self.modules.iter().find(|(n, _)| n == name).map_or("", |(_, source)| source.as_str())
+    }
 }
 
 #[derive(Default)]
@@ -559,9 +568,11 @@ fn refresh_runtime(runtime: &CatalogRuntime) -> CatalogRefresh {
     }
     let generation = previous.as_ref().map_or(0, |p| p.generation) + u64::from(changed);
     let definitions: Arc<[VismDefinition]> = definitions.into_values().collect::<Vec<_>>().into();
-    owner.snapshot = Some(Arc::new(CatalogSnapshot { generation, descriptors: descriptors(&definitions), definitions, errors: errors.clone() }));
+    let modules_changed = previous.as_ref().is_some_and(|p| *p.modules != modules[..]);
+    let generation = generation + u64::from(modules_changed && !changed);
+    owner.snapshot = Some(Arc::new(CatalogSnapshot { generation, descriptors: descriptors(&definitions), definitions, errors: errors.clone(), modules: modules.into() }));
     runtime.0.generation.store(generation, Ordering::Release);
-    CatalogRefresh { generation, changed, errors }
+    CatalogRefresh { generation, changed: changed || modules_changed, errors }
 }
 
 pub struct CatalogWatcher {

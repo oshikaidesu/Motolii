@@ -58,7 +58,6 @@ impl SurfaceShading {
 /// (environment light, the sun's cookie, transmission of the backdrop, the requested Views).
 const NOISE: &str = include_str!("program/noise.wgsl");
 const MOTION: &str = include_str!("program/motion.wgsl");
-const MATERIAL: &str = include_str!("program/material.wgsl");
 /// Every surface takes its Block's motion (the last param is its entry).
 const MOTION_HOOKS: &str = "fn program_motion(slot: f32, world_position: vec3f) -> vec3f { return motion_offset(slot, world_position); }\nfn program_tint(slot: f32) -> vec4f { return motion_tint(slot); }";
 /// A mesh without a surface effect: a rough dielectric.
@@ -164,7 +163,8 @@ fn snippet(def: &VismDefinition, stage: EffectStage, offset: usize) -> String {
 }
 
 /// 変種の宣言。欄の slot は field → surface の順。
-pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>) -> Result<SurfaceProgramDesc, String> {
+/// `material`: the shelf's standard material module (`vism/material.wgsl`), which every surface program starts from.
+pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>, material: &str) -> Result<SurfaceProgramDesc, String> {
     let field_count = field.map_or(0, |d| d.manifest.param_inputs().count());
     let surface_count = surface.map_or(0, |d| d.manifest.param_inputs().count());
     if field_count + surface_count > HOOK_SLOTS {
@@ -181,8 +181,8 @@ pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&Vism
         prelude: Some(format!("{NOISE}\n{MOTION}")),
         field: field.map(|d| snippet(d, EffectStage::Field, 0)),
         motion: Some(MOTION_HOOKS.to_owned()),
-        surface: Some(format!("{MATERIAL}\n{}", surface_hook.as_deref().unwrap_or(STANDARD_MESH))),
-        rectangle_surface: Some(format!("{MATERIAL}\n{picture}")),
+        surface: Some(format!("{material}\n{}", surface_hook.as_deref().unwrap_or(STANDARD_MESH))),
+        rectangle_surface: Some(format!("{material}\n{picture}")),
     })
 }
 
@@ -222,7 +222,7 @@ mod tests {
             source: "/*{ \"ID\": \"x.t\", \"STAGE\": \"field\", \"INPUTS\": [ {\"NAME\":\"amount\",\"TYPE\":\"float\",\"DEFAULT\":2.0}, {\"NAME\":\"along\",\"TYPE\":\"long\",\"LABELS\":[\"A\",\"B\"]} ] }*/\nfn field(in: FieldIn, p: FieldParams) -> FieldOut { return FieldOut(vec3f(p.amount), in.normal); }".into() };
         let (manifest, body) = super::super::isf::parse_isf_source(&src.source).unwrap();
         let def = VismDefinition { subtypes: Vec::new(), source: src, manifest, interface: String::new(), vertex_text: body.clone(), fragment_text: body, vertex_entry: String::new(), fragment_entry: String::new() };
-        let desc = program_desc(Some(&def), None).unwrap();
+        let desc = program_desc(Some(&def), None, "").unwrap();
         let field = desc.field.unwrap();
         assert!(field.contains("struct FieldParams {\n    amount: f32,\n    along: f32,\n};"), "{field}");
         assert!(field.contains("let p = FieldParams(in.params[0][0], in.params[0][1]);"), "{field}");
@@ -259,9 +259,10 @@ impl crate::render::compositor::Compositor {
         let program = match self.surface_programs.get(&key) {
             Some(program) => program.clone(),
             None => {
-                let mut desc = program_desc(field, surface)?;
+                let material = catalog.module("material");
+                let mut desc = program_desc(field, surface, material)?;
                 if recipe.unlit && surface.is_none() {
-                    desc.surface = Some(format!("{MATERIAL}\n{UNLIT}"));
+                    desc.surface = Some(format!("{material}\n{UNLIT}"));
                     desc.rectangle_surface = desc.surface.clone();
                 }
                 let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
@@ -275,12 +276,14 @@ impl crate::render::compositor::Compositor {
 
     /// The program of a surface without effects: its Block's motion and the standard material.
     pub(crate) fn standard_surface_program(&mut self) -> Option<Arc<SurfaceProgram>> {
-        const KEY: &str = "standard";
-        if let Some(program) = self.surface_programs.get(KEY) {
+        self.refresh_catalog_programs();
+        let catalog = self.catalog.clone();
+        let key = format!("standard|{}", catalog.generation);
+        if let Some(program) = self.surface_programs.get(&key) {
             return Some(program.clone());
         }
-        let program = Arc::new(SurfaceProgram::new(&self.ctx, program_desc(None, None).ok()?).ok()?);
-        self.surface_programs.insert(KEY.to_owned(), program.clone());
+        let program = Arc::new(SurfaceProgram::new(&self.ctx, program_desc(None, None, catalog.module("material")).ok()?).ok()?);
+        self.surface_programs.insert(key, program.clone());
         Some(program)
     }
 

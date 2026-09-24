@@ -120,3 +120,42 @@ fn saving_a_vism_reaches_a_still_layer_and_its_views() {
     assert_ne!(green, blue, "fixed, it recovers");
     assert_eq!(views, 1);
 }
+
+/// Puts a file back as it was when dropped (a shelf file the probe edits in place).
+struct Restore(std::path::PathBuf, String);
+impl Drop for Restore { fn drop(&mut self) { let _ = std::fs::write(&self.0, &self.1); } }
+
+/// The standard material is a module on the shelf: saving it reaches every surface (Standard
+/// Glass included) with no build, as a Vism does.
+#[test]
+#[ignore]
+fn saving_the_standard_material_reaches_its_surfaces() {
+    assert!(crate::render::engine::catalog_reads_disk(), "焼き込み build: .cargo/config.toml の IS_IN_RERUN_WORKSPACE が無い");
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/motolii-render/vism/material.wgsl");
+    let original = std::fs::read_to_string(&path).unwrap();
+    let _restore = Restore(path.clone(), original.clone());
+    // Every path through shade_surface starts here (with or without an environment).
+    let returned = "    let roughness = clamp(surface.x, 0.0, 1.0);";
+    assert!(original.contains(returned), "shade_surface's first line moved; update the probe");
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    let woke = Arc::new(AtomicBool::new(false));
+    let flag = woke.clone();
+    let _watch = crate::render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release)).unwrap();
+    rt.request(serde_json::json!({"op":"create","kind":"rectangle"})).unwrap();
+    rt.request(serde_json::json!({"op":"applyEffect","pluginId":"motolii.glass"})).unwrap();
+    let draw = |rt: &mut crate::EditorRuntime| rt.engine.render_frame(&rt.doc.view(), crate::render::doc::core::RationalTime::ZERO).unwrap();
+    let before = draw(&mut rt);
+    assert!(before.chunks_exact(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0), "the glass is drawn");
+    a_moment();
+    std::fs::write(&path, original.replace(returned, &format!("    if surface.x > -1.0 {{ return vec3f(1.0, 0.0, 1.0); }}\n{returned}"))).unwrap();
+    assert!(await_wake(&woke), "the watcher did not wake");
+    rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+    let magenta = draw(&mut rt);
+    assert!(rt.engine.layer_failures().is_empty(), "{:?}", rt.engine.layer_failures());
+    assert_ne!(magenta, before, "a saved material reaches the glass");
+    a_moment();
+    std::fs::write(&path, &original).unwrap();
+    assert!(await_wake(&woke));
+    rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+    assert_eq!(draw(&mut rt), before, "and back");
+}
