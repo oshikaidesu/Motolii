@@ -135,15 +135,17 @@ impl Engine {
         // (captured in the preparation, where it saw every plate's members).
         let environment = self.compositor.world_environment.clone();
         let motion = self.compositor.motion.clone();
-        let crate::render::compositor::WorldLight { light, meshes, views: layer_views, .. } = scene.light.clone();
+        let crate::render::compositor::WorldLight { light, meshes, .. } = scene.light.clone();
+        let inputs = crate::render::compositor::sequential_inputs(&scene.layers, &pictures, &paddings, &spills, document_camera, document_camera);
         // The mesh instances a view placing the layers as the output does can draw as they are.
         let meshes = match meshes {
             Some(meshes) => Some(meshes),
-            None => {
-                let inputs = crate::render::compositor::sequential_inputs(&scene.layers, &pictures, &paddings, &spills, document_camera, document_camera);
-                self.compositor.shared_mesh_scene(state.comp, &inputs)?
-            }
+            None => self.compositor.shared_mesh_scene(state.comp, &inputs)?,
         };
+        // The Views the layers asked for see the frame every view shows: drawn once, here.
+        let seen = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &[], meshes: None };
+        let layer_views = self.compositor.draw_layer_views(state.comp, &inputs, &seen)?;
+        drop(inputs);
         let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, light, meshes, views: layer_views, comp: state.comp, background: state.background, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());

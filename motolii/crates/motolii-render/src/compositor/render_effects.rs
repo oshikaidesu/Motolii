@@ -496,10 +496,13 @@ impl Compositor {
         };
         let environment = self.world_environment.clone();
         let motion = self.motion.clone();
-        let (light, meshes, views) = match world_light {
-            Some(world) => (world.light.clone(), self.shared_mesh_scene(comp, &inputs)?, world.views.clone()),
+        let (light, meshes) = match world_light {
+            Some(world) => (world.light.clone(), self.shared_mesh_scene(comp, &inputs)?),
             None => self.capture_world_light(comp, &inputs, environment.as_deref())?,
         };
+        // The picture's own Views: its layers are the world they see.
+        let seen = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &[], meshes: None };
+        let views = self.draw_layer_views(comp, &inputs, &seen)?;
         let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &views, meshes: meshes.as_ref() };
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
         let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, into, &mut encoder)?;

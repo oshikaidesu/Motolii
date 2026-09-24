@@ -160,7 +160,7 @@ impl SceneDraws {
     }
 }
 
-fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, glam::Vec3)> {
+pub(super) fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, glam::Vec3)> {
     let spatial = match input.content {
         // A plate's members stand for it wherever the world is looked at.
         SequentialContent::Environment(_) | SequentialContent::Plate(_) => return None,
@@ -437,90 +437,6 @@ impl Compositor {
 }
 
 impl Compositor {
-    /// The Views the layers asked for (a surface Vism's `VIEWS`), each layer's drawn once from the
-    /// centre of all its copies, of the world without them, side by side in one picture. The Views
-    /// are re_renderer views of the same draw data; nothing here decides what they are for.
-    pub(crate) fn draw_layer_views(
-        &mut self,
-        comp: CompSpec,
-        inputs: &[SequentialInput<'_>],
-        environment: Option<&GpuEnvironmentData>,
-        sun: Option<&crate::render::compositor::light::SunLight>,
-        shared: Option<&SharedMeshScene>,
-    ) -> Result<Vec<crate::render::compositor::light::LayerViews>, CompositorError> {
-        let mut requests: Vec<std::sync::Arc<super::effects::surface_program::ViewNeeds>> = Vec::new();
-        for input in inputs {
-            if let Some(needs) = &input.shading.views {
-                if !requests.iter().any(|r| r.owner == needs.owner) {
-                    requests.push(needs.clone());
-                }
-            }
-        }
-        let mut drawn = Vec::new();
-        for needs in requests {
-            let owner = needs.owner;
-            let own = |i: usize| inputs[i].shading.views.as_ref().is_some_and(|v| v.owner == owner);
-            let (mut lo, mut hi, mut any) = (glam::Vec3::INFINITY, glam::Vec3::NEG_INFINITY, false);
-            for (i, input) in inputs.iter().enumerate() {
-                if let Some((a, b)) = own(i).then(|| bounds(comp, input)).flatten() {
-                    lo = lo.min(a);
-                    hi = hi.max(b);
-                    any = true;
-                }
-            }
-            if !any {
-                continue;
-            }
-            let origin = (lo + hi) * 0.5;
-            let near = ((hi - lo).length() * 1e-4).clamp(0.01, 1.0);
-            let size = needs.size;
-            let count = needs.views.len() as u32;
-            let picture = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
-                label: "layer-views".into(),
-                size: wgpu::Extent3d { width: size * count, height: size, depth_or_array_layers: 1 },
-                mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(size * count, size),
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: BLEND_TARGET_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
-            });
-            let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &own, shared, 0)?;
-            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("layer-views") });
-            for (i, view) in needs.views.iter().enumerate() {
-                let face = self.picture_texture(size, size);
-                let look = glam::Mat4::look_at_rh(origin, origin + glam::Vec3::from(view.look), glam::Vec3::from(view.up));
-                let mut config = TargetConfiguration {
-                    name: "layer-view".into(),
-                    render_mode: RenderMode::Deterministic,
-                    resolution_in_pixel: [size, size],
-                    view_from_world: macaw::IsoTransform::from_rotation_translation(glam::Quat::from_mat3(&glam::Mat3::from_mat4(look)), look.w_axis.truncate()),
-                    projection_from_view: Projection::Perspective { vertical_fov: view.fov.to_radians(), near_plane_distance: near, aspect_ratio: 1.0 },
-                    pixels_per_point: 1.0,
-                    blend_with_background: BlendWithBackground::Premultiplied,
-                    environment: environment.map(|e| e.environment.clone()),
-                    motion: self.motion.clone(),
-                    ..Default::default()
-                };
-                super::light::light_view(&mut config, sun, false);
-                let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &face.texture)
-                    .map_err(|e| CompositorError::View(e.to_string()))?;
-                self.next_readback += 1;
-                draws.queue(&self.ctx, &mut builder)?;
-                builder.draw_into(&self.ctx, Rgba::TRANSPARENT, &mut encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
-                encoder.copy_texture_to_texture(
-                    wgpu::TexelCopyTextureInfo { texture: &face.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                    wgpu::TexelCopyTextureInfo { texture: &picture.texture, mip_level: 0, origin: wgpu::Origin3d { x: i as u32 * size, y: 0, z: 0 }, aspect: wgpu::TextureAspect::All },
-                    wgpu::Extent3d { width: size, height: size, depth_or_array_layers: 1 },
-                );
-                self.surface_work.layer_views += 1;
-            }
-            self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, &picture.texture);
-            self.ctx.queue_commands([encoder.finish()]);
-            let picture = self.import_premultiplied(&picture)?;
-            drawn.push(crate::render::compositor::light::LayerViews { owner, picture, origin, count });
-        }
-        Ok(drawn)
-    }
 }
 
 /// 2D は積み順だけで重なる(法 2026-09-12)。同じ面に重なった物の描き順を sort key の同点に

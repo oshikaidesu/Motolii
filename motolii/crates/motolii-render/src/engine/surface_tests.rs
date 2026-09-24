@@ -277,6 +277,29 @@ fn a_vism_asks_for_views_and_the_host_draws_them() {
     assert_eq!(engine.surface_work().layer_views - before.layer_views, 0, "Glass asks for no View");
 }
 
+/// A View is a view of the work, Views included: two mirrors that see each other are a cycle the
+/// host makes finite. Each layer's Views are drawn once per frame, and the frame is the same every
+/// time it is drawn.
+#[test]
+fn mirrors_that_see_each_other_are_drawn_once_each_and_the_same_every_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let other = file_layer(&mut doc, 3, 3, &dir.path().join("quad.obj"));
+    set(&mut doc, other, property::POSITION, Value::Vec2([60.0, 0.0]));
+    set(&mut doc, other, property::SCALE, Value::Vec2([8.0, 8.0]));
+    for mirror in [LayerId(2), other] {
+        doc.apply(Intent::SetEffects { layer: mirror, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.cube_mirror".into() }] }).unwrap();
+    }
+    let mut engine = Engine::new().unwrap();
+    let before = engine.surface_work().layer_views;
+    let first = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert_eq!(engine.surface_work().layer_views - before, 12, "two layers, six Views each, once");
+    let again = Engine::new().unwrap().render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert_eq!(first, again, "the cycle is made finite the same way every time");
+}
+
 /// A Repeater's copies are one layer's: its Views are drawn once, however many copies there are,
 /// and the copies are left out of what the Views see.
 #[test]

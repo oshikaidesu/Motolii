@@ -65,6 +65,9 @@ pub(in crate::engine) struct Preparation {
     pub(in crate::engine) precision: Precision,
     pub(in crate::engine) seam: LegacyCameraSeam,
     pub(in crate::engine) plates: PlateWork,
+    /// The frame is seen from eyes other than the work's camera (a Vism asked for Views): a plate
+    /// is then a picture only an eye can make, and every view (Views too) materializes it.
+    pub(in crate::engine) observed: bool,
 }
 
 /// Plates whose picture waits for the preparation's world light, the members they hold (the
@@ -84,11 +87,11 @@ pub(in crate::engine) struct PlateWork {
 
 impl Preparation {
     pub(in crate::engine) fn new(comp: CompSpec, precision: Precision, seam: LegacyCameraSeam) -> Self {
-        Self { comp, precision, seam, plates: PlateWork::default() }
+        Self { comp, precision, seam, plates: PlateWork::default(), observed: false }
     }
     /// A picture prepared as a frame of its own inside this one (another time's composite, an
     /// analysis picture): same composition, precision and seam; its own plates.
-    fn nested(&self) -> Self { Self::new(self.comp, self.precision, self.seam) }
+    fn nested(&self) -> Self { Self { observed: self.observed, ..Self::new(self.comp, self.precision, self.seam) } }
 }
 
 impl Engine {
@@ -168,11 +171,11 @@ impl Engine {
         let world = prep.seam.camera_relative_world();
         let inputs = crate::render::compositor::sequential_inputs(&scene, &pictures, &paddings, &spills, world, world);
         let environment = self.compositor.world_environment.clone();
-        let (light, meshes, views) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
+        let (light, meshes) = self.compositor.capture_world_light(prep.comp, &inputs, environment.as_deref())?;
         drop(inputs);
         self.world_light_captures += 1;
         self.preparation_events.push(PreparationEvent::Capture(self.world_light_captures));
-        Ok(WorldLight { views, light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
+        Ok(WorldLight { light, meshes: meshes.filter(|_| same_as_frame), serial: self.world_light_captures })
     }
 
     fn prepare_gpu_scene_with_solver_members(
@@ -223,6 +226,7 @@ impl Engine {
         let graph = crate::render_lowering::lower_scene(scene, &catalog)
             .map_err(|error| EngineError::Store(error.to_string()))?;
         self.adopt_world_environment(&graph)?;
+        prep.observed = graph.asks_for_views();
         self.execute_render_graph(&graph, prep)
     }
 
@@ -365,7 +369,7 @@ impl Engine {
                         rotation_y: 0.0,
                         plane: None,
                     };
-                    let baked = if Self::plate_reads_view(&prepared.layers) {
+                    let baked = if prep.observed || Self::plate_reads_view(&prepared.layers) {
                         if prep.plates.deferring || prep.plates.known_light.is_none() {
                             prep.plates.member_ids.extend(prepared.layer_ids.iter().copied());
                         }

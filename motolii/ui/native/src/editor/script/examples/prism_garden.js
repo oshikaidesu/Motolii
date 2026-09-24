@@ -7,8 +7,12 @@
 //             asks for three Views from the garden's centre; every copy reads those same three
 //             pictures its own way — turned, folded like a kaleidoscope, bent by how it faces — and
 //             reads red, green and blue from three slightly different Views (a many-eyed dispersion)
-//   lenses  — bevelled glass discs orbiting the heart; the same Vism reads the Views along the ray
-//             each one refracts (a crystal ball), so one lens shows the whole heart
+//   orbs    — glass spheres (an imported OBJ, no texture coordinates) orbiting in front of the garden.
+//             The same Vism: their Views look past the words on the camera's plane into the garden,
+//             whose panes show their own Views. Read along the ray each sphere refracts, not across
+//             a picture it does not have. Main → an orb's View → a pane's View: a world read inside
+//             a world that was read.
+//   words   — 2D type on the camera's plane: the output shows it, and so do the orbs' Views
 // The piece is one 16-second cycle: every motion closes on itself.
 
 const SECONDS = 16;
@@ -16,7 +20,7 @@ comp({ width: 1920, height: 1080, fps: 60, seconds: SECONDS, background: "#03030
 
 // The knobs a live session turns.
 const PANES = 96;
-const LENSES = 8;
+const ORBS = 7;
 const RING = 660;             // the garden's radius round the heart, px
 const SPREAD = [420, 240];    // how far a pane strays from the ring, px
 const DEPTH = 360;            // how deep the garden is, px
@@ -71,20 +75,21 @@ garden.effect("Repeater", {
 breathe(garden, "Tilt Y", -10, 10);
 garden.keys("Rotation", [[0, 0, "Linear"], [SECONDS, 360]]);
 
-// ── lenses ─────────────────────────────────────────────────────────────────────────────────
-const lens = ellipse({ name: "Lens" }).fill("#F4F7FF").set("Scale", [0.75, 0.75]).set("Position", [0, 0]).set("Tilt X", -52);
-lens.effect("Extrude", { "Depth": 36 });
-lens.effect("Bevel", { "Radius": 16 });
-cycle(lens.effect("Prism View", { "View": 0.9, "Eyes": 1, "Fold": 6, "Zoom": 2.0, "Scatter": 0, "Lens": 0, "Bend": 0.15, "Rim": 0.5, "Roughness": 0.02, "Dispersion": 1.8 }), -1);
-const orbit = group(lens).name("Orbit").set("Position", [960, 540]).set("Position Z", -60).projection("3D");
-orbit.effect("Repeater", { "Along": "Circle", "Count": LENSES, "Radius": 430, "Rotation Each": 0 }).whole();
-orbit.set("Tilt X", 64);
-orbit.keys("Rotation", [[0, 0, "Linear"], [SECONDS, -2 * 360 / LENSES]]);
+// ── orbs ───────────────────────────────────────────────────────────────────────────────────
+const orb = media("glass_garden/orb.obj", { name: "Orb" }).set("Scale", [95, 95]).set("Position", [0, 0]);
+cycle(orb.effect("Prism View", { "View": 0.95, "Eyes": 1, "Fold": 0, "Zoom": 0.42, "Scatter": 0, "Lens": 1, "Rim": 0, "Roughness": 0.02, "Dispersion": 1.6 }), -1);
+const orbit = group(orb).name("Orbit").set("Position", [960, 880]).set("Position Z", -250).projection("3D");
+orbit.effect("Repeater", { "Along": "Circle", "Count": ORBS, "Radius": 560, "Rotation Each": 0 }).whole();
+orbit.set("Tilt X", 58);
+orbit.keys("Rotation", [[0, 0, "Linear"], [SECONDS, -360 / ORBS]]);
+
+// ── words on the camera's plane ────────────────────────────────────────────────────────────
+text("W O R L D   I N   T H E   G L A S S", { name: "Words" }).fill("#F4F2FA").set("Position", [960, 930]).set("Size", 64).set("Opacity", 70).projection("2D");
 
 // ── type ───────────────────────────────────────────────────────────────────────────────────
 const label = (lines, [x, y], size, color = "#D8DCE8", gap = size * 1.45) =>
   lines.forEach((line, i) =>
     text(line, { name: line }).fill(color).set("Position", [x, y + i * gap]).set("Size", size).projection("2D"));
 label(["P R I S M   G A R D E N"], [150, 96], 26, "#F4F2FA");
-label(["1   W O R L D", "3   E Y E S", `${PANES + LENSES}   W I N D O W S`], [150, 150], 12, "#8A8FA3", 22);
+label(["1   W O R L D", "3   E Y E S", `${PANES + ORBS}   W I N D O W S`], [150, 150], 12, "#8A8FA3", 22);
 label(["M O T O L I I   ·   V I S M   V I E W S"], [1600, 1010], 11, "#8A8FA3");

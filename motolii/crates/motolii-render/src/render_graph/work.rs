@@ -112,4 +112,9 @@ pub struct RenderGraph {
 
 impl RenderGraph {
     pub fn is_empty(&self) -> bool { self.output.is_empty() }
+    /// Whether a layer anywhere in the graph (inside plates too) asks for Views: the frame is then
+    /// seen from eyes other than the work's camera.
+    pub fn asks_for_views(&self) -> bool {
+        self.layers.iter().any(|work| !work.surface.views.is_empty() || matches!(&work.content, RasterSource::Isolate { graph, .. } if graph.asks_for_views()))
+    }
 }

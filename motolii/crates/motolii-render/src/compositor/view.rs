@@ -19,15 +19,128 @@ fn view_owner(input: &SequentialInput<'_>) -> Option<u64> {
     input.shading.views.as_ref().map(|v| v.owner)
 }
 
+/// How the host makes Views that see each other in one frame finite. A policy of the host's
+/// execution, not of the work: a Vism only says which Views it reads.
+///
+/// Adopted: cycles are detected and every request is drawn once, in a fixed order.
+/// Typed seam, not decided (2026-09-24): what stands in for a View a cycle has not drawn yet.
+/// Today it is simply not bound (that surface reads no Views, `view_count() == 0`).
+pub(crate) enum SameFrameCycle {
+    /// Requests are drawn so that a View comes after every View it sees; within a cycle, in the
+    /// order the layers were asked, each seeing the Views drawn before it in this frame.
+    EarlierFirst,
+}
+
+impl SameFrameCycle {
+    const POLICY: Self = Self::EarlierFirst;
+
+    /// The order to draw `n` requests in, where `sees(a, b)` is true when `a`'s faces see `b`.
+    fn order(n: usize, sees: impl Fn(usize, usize) -> bool) -> Vec<usize> {
+        match Self::POLICY {
+            Self::EarlierFirst => {
+                // Depth-first post-order: what a request sees is drawn before it. An edge back into
+                // the path is a cycle, and it is not followed.
+                fn visit(at: usize, n: usize, sees: &dyn Fn(usize, usize) -> bool, state: &mut [u8], out: &mut Vec<usize>) {
+                    state[at] = 1;
+                    for next in 0..n {
+                        if state[next] == 0 && sees(at, next) {
+                            visit(next, n, sees, state, out);
+                        }
+                    }
+                    state[at] = 2;
+                    out.push(at);
+                }
+                let mut state = vec![0u8; n];
+                let mut out = Vec::with_capacity(n);
+                for at in 0..n {
+                    if state[at] == 0 {
+                        visit(at, n, &sees, &mut state, &mut out);
+                    }
+                }
+                out
+            }
+        }
+    }
+}
+
+/// How many of the view's pixels one of the layer's (composition) pixels covers where the view
+/// sees it: its size in this view over its size in the work's output. A Camera or Stage view gives
+/// its window's zoom; another eye, how large the layer looks to it. 1 when it cannot be seen.
+fn pass_density(comp: CompSpec, window: Window, observer: Observer, input: &SequentialInput<'_>) -> f32 {
+    let (mut lo, mut hi, mut any) = (glam::Vec3::INFINITY, glam::Vec3::NEG_INFINITY, false);
+    let mut add = |input: &SequentialInput<'_>| {
+        if let Some((a, b)) = super::surface_scene::bounds(comp, input) {
+            lo = lo.min(a);
+            hi = hi.max(b);
+            any = true;
+        }
+    };
+    visit_inputs(std::slice::from_ref(input), &mut add);
+    if !any { return 1.0; }
+    let corners: Vec<glam::Vec3> = (0..8).map(|i| glam::vec3(
+        if i & 1 == 0 { lo.x } else { hi.x }, if i & 2 == 0 { lo.y } else { hi.y }, if i & 4 == 0 { lo.z } else { hi.z },
+    )).collect();
+    // The extent on screen (comp px scaled to the window) of the corners in front of the eye.
+    let extent = |projection: crate::doc::core::CameraProjection, pixels: [f32; 2]| {
+        let clip_from_world = projection.projection_matrix() * projection.view_matrix();
+        let (mut a, mut b, mut seen) = (glam::Vec2::INFINITY, glam::Vec2::NEG_INFINITY, false);
+        for corner in &corners {
+            let clip = clip_from_world * corner.extend(1.0);
+            if clip.w <= 1e-6 { continue; }
+            let p = glam::vec2(clip.x, clip.y) / clip.w * glam::Vec2::from(pixels) * 0.5;
+            a = a.min(p);
+            b = b.max(p);
+            seen = true;
+        }
+        seen.then(|| (b - a).length())
+    };
+    let zoom = [window.width as f32 / window.roi[2].max(1.0), window.height as f32 / window.roi[3].max(1.0)];
+    let here = extent(observer.projection, [comp.width as f32 * zoom[0], comp.height as f32 * zoom[1]]);
+    let output = extent(Observer::camera(comp, input.projection_camera).projection, [comp.width as f32, comp.height as f32]);
+    match (here, output) {
+        (Some(here), Some(output)) if here > 1e-3 && output > 1e-3 => (here / output).clamp(1.0 / 64.0, 64.0),
+        _ => 1.0,
+    }
+}
+
+/// Every input, and every member of a plate the views materialize, in order.
+fn visit_inputs(inputs: &[SequentialInput<'_>], f: &mut dyn FnMut(&SequentialInput<'_>)) {
+    for input in inputs {
+        if let SequentialContent::Plate(plate) = input.content {
+            if let Some(members) = plate.prepared.get() {
+                let member_inputs = sequential_inputs(&plate.sources, &members.pictures, &members.paddings, &members.spills, plate.camera, plate.camera);
+                visit_inputs(&member_inputs, f);
+            }
+            continue;
+        }
+        f(input);
+    }
+}
+
 /// The Normal blend (Porter-Duff source-over) in `vism/blend.wgsl`'s numbering.
 const SRC_OVER: u32 = 3;
 /// What is below stays on top (the sky under what is drawn).
 const DEST_OVER: u32 = 4;
 
-/// The world's light for one frame: the sun's occluder map, and the Views the layers asked for.
+/// Where a view looks from. A Camera or Stage view, and a picture a preparation makes, look from a
+/// camera of the work; a View a Vism asks for looks from its layer. What the view draws — the
+/// work's layers in order, placed where the work places them — does not depend on the eye.
+#[derive(Clone, Copy)]
+pub(crate) struct Observer {
+    pub projection: crate::doc::core::CameraProjection,
+    /// The work's camera fades what is near it; another eye fades nothing.
+    pub near_fade: f32,
+}
+
+impl Observer {
+    pub(crate) fn camera(comp: CompSpec, camera: ResolvedCamera) -> Self {
+        Self { projection: crate::doc::core::camera_projection(comp, camera), near_fade: camera.near_fade }
+    }
+}
+
+/// The world's light for one frame: the sun's occluder map.
 #[derive(Clone, Default)]
 pub(crate) struct WorldLight {
-    pub views: Vec<crate::render::compositor::light::LayerViews>,
     pub light: Option<crate::render::compositor::light::SunLight>,
     /// The mesh instances the capture uploaded, when its scene is the frame's own layer list (no
     /// plate members added): the views place them the same way and draw them as they are.
@@ -60,7 +173,7 @@ impl Compositor {
         view: u32,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<ViewBuilder, CompositorError> {
-        let stack = self.record_stack(comp, window, camera, inputs, background_color, world, view, None, encoder)?;
+        let stack = self.record_stack(comp, window, Observer::camera(comp, camera), inputs, background_color, world, view, None, None, encoder)?;
         // The view shows the stack (or, with nothing drawn, the background).
         let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -95,7 +208,7 @@ impl Compositor {
     ) -> Result<re_renderer::GpuTexture, CompositorError> {
         let picture = into.cloned().unwrap_or_else(|| self.picture_texture(window.width, window.height));
         // A picture is a drawing of its own (view 0): its histories are not a view's.
-        match self.record_stack(comp, window, camera, inputs, background_color, world, 0, None, encoder)? {
+        match self.record_stack(comp, window, Observer::camera(comp, camera), inputs, background_color, world, 0, None, None, encoder)? {
             Some(stack) => {
                 let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
                 encoder.copy_texture_to_texture(stack.texture.as_image_copy(), picture.texture.as_image_copy(), size);
@@ -118,26 +231,36 @@ impl Compositor {
 
     /// Every layer in order, stacked bottom to top; `None` when nothing is drawn. `below` is the
     /// view's picture beneath these layers when they are a plate's members: glass among them
-    /// refracts it (with the members' own non-glass picture over it).
+    /// refracts it (with the members' own non-glass picture over it). `without` leaves out the
+    /// copies of the layer whose View this is, wherever they stand (a plate's members too).
     #[allow(clippy::too_many_arguments)]
     fn record_stack(
         &mut self,
         comp: CompSpec,
         window: Window,
-        camera: ResolvedCamera,
+        observer: Observer,
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
         world: &ViewWorld<'_>,
         view: u32,
         below: Option<&re_renderer::GpuTexture>,
+        without: Option<u64>,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<Option<re_renderer::GpuTexture>, CompositorError> {
+        let kept: Vec<SequentialInput<'_>>;
+        let inputs = match without {
+            Some(owner) => {
+                kept = inputs.iter().filter(|input| view_owner(input) != Some(owner)).cloned().collect();
+                kept.as_slice()
+            }
+            None => inputs,
+        };
         // The light is the composition's: the top environment layer, else the world's.
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,
         }).or(world.environment);
-        let projection = crate::doc::core::camera_projection(comp, camera);
+        let projection = observer.projection;
         let view_from_world = macaw::IsoTransform::from_rotation_translation(projection.rotation, -(projection.rotation * projection.eye));
         let flat = |input: &SequentialInput<'_>| input.projection == crate::doc::store::LayerProjection::TwoD;
         let alone = |input: &SequentialInput<'_>| {
@@ -167,9 +290,12 @@ impl Compositor {
                 let Some(members) = plate.prepared.get() else { continue };
                 let member_inputs = sequential_inputs(&plate.sources, &members.pictures, &members.paddings, &members.spills, plate.camera, plate.camera);
                 let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
-                let Some(mut canvas) = self.record_stack(comp, window, camera, &member_inputs, NO_BACKGROUND, world, view, beneath.as_ref(), encoder)? else { continue };
+                // The world's shared mesh instances are indexed by the top-level list, not the members'.
+                let members_world = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: world.views, meshes: None };
+                let Some(mut canvas) = self.record_stack(comp, window, observer, &member_inputs, NO_BACKGROUND, &members_world, view, beneath.as_ref(), without, encoder)? else { continue };
                 if !input.screen_passes.is_empty() {
-                    canvas = self.screen_passes(window, view, canvas, input.screen_passes, input.screen_sources, stack.as_ref(), encoder)?;
+                    let density = pass_density(comp, window, observer, input);
+                    canvas = self.screen_passes(window, view, density, canvas, input.screen_passes, input.screen_sources, stack.as_ref(), encoder)?;
                 }
                 // The plate holds glass: what is above refracts the picture below it, as for a glass run.
                 if !glazed {
@@ -259,7 +385,7 @@ impl Compositor {
             }
             // Near things fade: the work's camera fades (an observer's has no fade), only what is in the world.
             if !flat(&run[0]) {
-                config.near_fade_distance = camera.near_fade;
+                config.near_fade_distance = observer.near_fade;
             }
             self.surface_work.main_runs += 1;
             let canvas = self.view_canvas(window);
@@ -279,7 +405,10 @@ impl Compositor {
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             builder.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
             let canvas = match run {
-                [only] if !only.screen_passes.is_empty() => self.screen_passes(window, view, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), encoder)?,
+                [only] if !only.screen_passes.is_empty() => {
+                    let density = pass_density(comp, window, observer, only);
+                    self.screen_passes(window, view, density, canvas, only.screen_passes, only.screen_sources, stack.as_ref(), encoder)?
+                }
                 _ => canvas,
             };
             if glass_run && !glazed {
@@ -310,6 +439,7 @@ impl Compositor {
         &mut self,
         window: Window,
         view: u32,
+        density: f32,
         canvas: re_renderer::GpuTexture,
         passes: &[EffectPass],
         sources: &[Vec<GpuTexture2D>],
@@ -327,8 +457,10 @@ impl Compositor {
             (Some(b), true) => vec![b.clone()],
             _ => sources.get(i).map(|row| row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok()).collect()).unwrap_or_default(),
         }).collect();
+        // The effects' lengths are the layer's (2026-09-13): the canvas's pixels per layer px here.
+        let frame = effects::vism::ImageFrame { size: [width as f32 / density, height as f32 / density], origin: [0.0; 2], pixels: [width, height] };
         let (mut current, linear, premultiplied) = self.record_pass_chain(
-            encoder, canvas.clone(), true, true, passes, &others, None, [width, height], 0, [width, height], Some([view, width, height]),
+            encoder, canvas.clone(), true, true, passes, &others, Some(frame), [width, height], 0, [width, height], Some([view, width, height]),
         )?;
         if !linear {
             current = self.convert_image_encoding(encoder, &current, true, true, premultiplied);
@@ -383,13 +515,13 @@ impl Compositor {
     }
 
     /// The world's light, captured once per document frame from the world's layers (placed as the
-    /// output places them): the sun's occluder map and the Views the layers asked for.
+    /// output places them): the sun's occluder map, and the mesh instances the views share.
     pub(crate) fn capture_world_light(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
-    ) -> Result<(Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>, Vec<crate::render::compositor::light::LayerViews>), CompositorError> {
+    ) -> Result<(Option<crate::render::compositor::light::SunLight>, Option<super::surface_scene::SharedMeshScene>), CompositorError> {
         let environment = inputs.iter().rev().find_map(|input| match input.content {
             SequentialContent::Environment(e) => Some(e),
             _ => None,
@@ -397,8 +529,103 @@ impl Compositor {
         // The meshes' instances, placed as the output places them, uploaded once for the frame.
         let shared = self.shared_mesh_scene(comp, inputs)?;
         let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
-        let views = self.draw_layer_views(comp, inputs, environment, light.as_ref(), shared.as_ref())?;
-        Ok((light, shared, views))
+        Ok((light, shared))
+    }
+
+    /// The Views the layers asked for (a surface Vism's `VIEWS`): each layer's once per frame, from
+    /// the centre of all its copies, side by side in one picture. A View is a view of the work like
+    /// the Camera's and the Stage's — the same layers, runs, plates, effects, glass and Views,
+    /// recorded by the same stack — from another eye, without the asking layer's own copies. What
+    /// the Views draw is the frame's own inputs, so it is the frame's (prepared once, for every view).
+    ///
+    /// A View shows the Views of the layers it sees: those are drawn first (the host orders the
+    /// requests by what each one's faces can see). Layers that see each other in the same frame are
+    /// a cycle the host makes finite ([`SameFrameCycle`]); the work does not say how.
+    pub(crate) fn draw_layer_views(
+        &mut self,
+        comp: CompSpec,
+        inputs: &[SequentialInput<'_>],
+        world: &ViewWorld<'_>,
+    ) -> Result<Vec<crate::render::compositor::light::LayerViews>, CompositorError> {
+        struct Request {
+            needs: std::sync::Arc<super::effects::surface_program::ViewNeeds>,
+            lo: glam::Vec3,
+            hi: glam::Vec3,
+        }
+        let mut requests: Vec<Request> = Vec::new();
+        visit_inputs(inputs, &mut |input| {
+            let Some(needs) = &input.shading.views else { return };
+            let Some((a, b)) = super::surface_scene::bounds(comp, input) else { return };
+            match requests.iter_mut().find(|r| r.needs.owner == needs.owner) {
+                Some(r) => { r.lo = r.lo.min(a); r.hi = r.hi.max(b); }
+                None => requests.push(Request { needs: needs.clone(), lo: a, hi: b }),
+            }
+        });
+        // Which requests each one's faces see (a cone per face against the other's bounding sphere).
+        let sees = |a: &Request, b: &Request| {
+            let origin = (a.lo + a.hi) * 0.5;
+            let (centre, radius) = ((b.lo + b.hi) * 0.5, (b.hi - b.lo).length() * 0.5);
+            let to = centre - origin;
+            let distance = to.length();
+            if distance <= radius { return true; }
+            a.needs.views.iter().any(|view| {
+                let look = glam::Vec3::from(view.look).normalize_or_zero();
+                let half = ((view.fov.to_radians() * 0.5).tan() * std::f32::consts::SQRT_2).atan();
+                look.angle_between(to) <= half + (radius / distance).asin()
+            })
+        };
+        let order = SameFrameCycle::order(requests.len(), |a, b| a != b && sees(&requests[a], &requests[b]));
+        let mut drawn: Vec<crate::render::compositor::light::LayerViews> = Vec::new();
+        for at in order {
+            let Request { needs, lo, hi } = &requests[at];
+            let owner = needs.owner;
+            let origin = (*lo + *hi) * 0.5;
+            let near = ((*hi - *lo).length() * 1e-4).clamp(0.01, 1.0);
+            let size = needs.size;
+            let count = needs.views.len() as u32;
+            let picture = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
+                label: "layer-views".into(),
+                size: wgpu::Extent3d { width: size * count, height: size, depth_or_array_layers: 1 },
+                mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(size * count, size),
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: BLEND_TARGET_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
+            });
+            // The whole face is the View (the window's region is the composition's own).
+            let window = Window { width: size, height: size, roi: [0.0, 0.0, comp.width as f32, comp.height as f32] };
+            // What this View sees shows the Views drawn before it.
+            let inside = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: &drawn, meshes: None };
+            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("layer-views") });
+            for (i, view) in needs.views.iter().enumerate() {
+                let look = glam::Mat4::look_at_rh(origin, origin + glam::Vec3::from(view.look), glam::Vec3::from(view.up));
+                let observer = Observer {
+                    projection: crate::doc::core::CameraProjection {
+                        eye: origin,
+                        rotation: glam::Quat::from_mat3(&glam::Mat3::from_mat4(look)),
+                        vertical_fov_radians: view.fov.to_radians(),
+                        aspect_ratio: 1.0,
+                        near_plane_distance: near,
+                    },
+                    near_fade: 0.0,
+                };
+                // Histories of effects seen in a View are that View's own.
+                let history = 0x8000_0000 | ((owner as u32 & 0x00ff_ffff) << 4) | i as u32;
+                if let Some(face) = self.record_stack(comp, window, observer, inputs, NO_BACKGROUND, &inside, history, None, Some(owner), &mut encoder)? {
+                    encoder.copy_texture_to_texture(
+                        wgpu::TexelCopyTextureInfo { texture: &face.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                        wgpu::TexelCopyTextureInfo { texture: &picture.texture, mip_level: 0, origin: wgpu::Origin3d { x: i as u32 * size, y: 0, z: 0 }, aspect: wgpu::TextureAspect::All },
+                        wgpu::Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+                    );
+                }
+                self.surface_work.layer_views += 1;
+            }
+            self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, &picture.texture);
+            self.ctx.queue_commands([encoder.finish()]);
+            let picture = self.import_premultiplied(&picture)?;
+            drawn.push(crate::render::compositor::light::LayerViews { owner, picture, origin, count });
+        }
+        Ok(drawn)
     }
 
     /// A canvas the size of the view's window, from re_renderer's pool: it returns to the pool when
@@ -425,5 +652,28 @@ impl Compositor {
         let Self { ctx, blend_vism, .. } = self;
         blend_vism.get(ctx).record_over(ctx, encoder, &[below, above], &out.default_view, &[("mode".to_owned(), mode as f32)], window.size_f32());
         out
+    }
+}
+
+#[cfg(test)]
+mod same_frame_cycle_tests {
+    use super::SameFrameCycle;
+
+    #[test]
+    fn a_view_is_drawn_after_the_views_it_sees() {
+        // 0 sees 1, 1 sees 2: Main → View 0 → View 1 → View 2.
+        let order = SameFrameCycle::order(3, |a, b| (a, b) == (0, 1) || (a, b) == (1, 2));
+        let at = |i| order.iter().position(|&o| o == i).unwrap();
+        assert!(at(2) < at(1) && at(1) < at(0), "{order:?}");
+    }
+
+    #[test]
+    fn views_that_see_each_other_are_drawn_once_each_in_a_fixed_order() {
+        let order = SameFrameCycle::order(3, |a, b| a != b);
+        assert_eq!(order.len(), 3);
+        assert_eq!(order, SameFrameCycle::order(3, |a, b| a != b));
+        let mut seen = order.clone();
+        seen.sort();
+        assert_eq!(seen, vec![0, 1, 2]);
     }
 }

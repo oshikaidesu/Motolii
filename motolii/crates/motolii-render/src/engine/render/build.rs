@@ -154,10 +154,11 @@ impl Engine {
         Ok(())
     }
 
-    /// Whether a plate's members read the picture below them (standard glass, or a plate holding
-    /// it): such a plate is the view's to materialize, where that picture is (2026-09-23).
+    /// Whether a plate's members read what only the frame's views have: the picture below them
+    /// (standard glass, or a plate holding it, 2026-09-23), or the Views a Vism asked for (drawn
+    /// from the frame, after its plates). Such a plate is the view's to materialize.
     pub(in crate::engine) fn plate_reads_view(sources: &[LayerWithPasses]) -> bool {
-        sources.iter().any(|source| source.layer.shading.reads_backdrop || matches!(source.layer.content, LayerContent::Plate(_)))
+        sources.iter().any(|source| source.layer.shading.reads_backdrop || source.layer.shading.views.is_some() || matches!(source.layer.content, LayerContent::Plate(_)))
     }
 
     /// A plate the views materialize: its members, whose pictures are prepared with the frame's
