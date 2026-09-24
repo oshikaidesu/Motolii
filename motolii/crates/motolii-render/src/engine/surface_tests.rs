@@ -411,3 +411,33 @@ fn a_surfaces_uv_is_the_same_on_an_image_a_shape_and_a_solid() {
     assert_eq!(corners("shape"), image, "a shape's uv is its box's, as an image's");
     assert_eq!(corners("solid"), image, "a solid's front is its box's too");
 }
+
+/// A picture with a mix blend reads everything below it, whatever run drew it: half-red Screen
+/// over blue gives linear (0.5, 0, 1) whether the blue is 2D beside it or 3D in a run of its own.
+/// (Counterexample to composing Screen by the draw inside a run's canvas, 2026-09-24: there the
+/// blue in another run is not read, and the red is laid over it instead.)
+#[test]
+fn a_mix_blend_reads_the_picture_below_across_runs() {
+    use crate::doc::store::{BlendMode, Composition, Fps, LayerAttrsPatch, LayerProjection};
+    let dir = tempfile::tempdir().unwrap();
+    let blue = dir.path().join("blue.png");
+    image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([0, 0, 255, 255])).save(&blue).unwrap();
+    let red = dir.path().join("red.png");
+    image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 128])).save(&red).unwrap();
+    let srgb = |v: f64| (if v <= 0.0031308 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 } * 255.0).round() as u8;
+    let expected = [srgb(0.5), 0, 255];
+    for (mode, below_projection) in [(BlendMode::Screen, LayerProjection::TwoD), (BlendMode::Screen, LayerProjection::ThreeD), (BlendMode::Add, LayerProjection::ThreeD)] {
+        let mut doc = Document::new().with_programs(crate::extensions::bundled());
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let below = file_layer(&mut doc, 1, 0, &blue);
+        let above = file_layer(&mut doc, 2, 1, &red);
+        doc.apply(Intent::SetAttrs { layer: below, patch: LayerAttrsPatch { projection: Some(below_projection), ..Default::default() } }).unwrap();
+        doc.apply(Intent::SetAttrs { layer: above, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoD), blend_mode: Some(mode), ..Default::default() } }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let frame = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let i = ((SIZE / 2) * SIZE + SIZE / 2) as usize * 4;
+        let centre = [frame[i], frame[i + 1], frame[i + 2]];
+        assert!(centre.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2), "{mode:?} over {below_projection:?}: got {centre:?}, expected {expected:?}");
+    }
+}

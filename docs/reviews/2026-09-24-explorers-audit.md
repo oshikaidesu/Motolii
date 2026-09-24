@@ -52,6 +52,13 @@
 - 発見: fork の `backdrop_levels_read(1.0, 11)` は 7(粗さ 1 = 全段ではない)。宣言無しは `Option` で「全段」。
 - seam(Composer が「絵を動かさない」で決めた): 宣言する Vism の lod の写像は Vism 自身の式のまま(Prism View は `roughness * 5`)、host の曲線 `view_lod()` は棚に置く。
 
+## H: rect の draw 単位 blend(fork の patch 候補 `explore/rect-blend`、**不採択**)
+
+- 候補: `RectangleOptions.blend: PremultipliedBlend { Over, Plus, Screen }`、blend ごとの pipeline(fork +233/−71、re_renderer の試験 67 本 green)。式は正しい(premultiplied の Screen = Cs + Cb − Cs·Cb、α = αs + αb − αs·αb は wgpu の `One / OneMinusSrc` で厳密)。
+- **同値でない**(pixel の反例、`a_mix_blend_reads_the_picture_below_across_runs`): run の中で draw 単位に混ぜると相手は **その run の canvas** だけ。下の層が別の run(例: 3D の層、glass の境)にあると読まれず、半分の赤の Screen が 3D の青の上で `[188, 0, 187]`(正解 `[188, 0, 255]`)。旧経路(Alone → 中間 → mix pass)は stack 全体を相手にする。同値になるのは run を stack へ直接描く(MSAA target への load)場合だけで、それは別の UPSTREAM_SEAM。
+- 上流の既存 contract で足りるか: rect は pipeline 1 本の固定 blend、mesh も同じ。draw 単位の blend 口は無い。fork の gate も「一般 primitive の family に無い」5 件で FAIL。
+- 結論: 裁定「blend を理由に run を分けることを意味論にしない」は保つが、実現は固定機能 blend では無い。run の分離は現状維持、Prism Garden の現在の画には alone の run は無い(0/コマ)。
+
 ## 自分で確かめた物
 
 - run の切れ目 MeshAfterRect は歴史的ではなかった: 消すと 2 本の contract の絵が変わる(gap 台帳に記録)。
