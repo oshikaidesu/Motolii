@@ -369,17 +369,25 @@ impl Engine {
                         rotation_y: 0.0,
                         plane: None,
                     };
-                    let baked = if prep.observed || Self::plate_reads_view(&prepared.layers) {
-                        if prep.plates.deferring || prep.plates.known_light.is_none() {
-                            prep.plates.member_ids.extend(prepared.layer_ids.iter().copied());
-                        }
-                        self.view_plate(prep, prepared.layers, placement, *average)?
-                    } else if prep.plates.deferring || prep.plates.known_light.is_none() {
+                    let reads_view = Self::plate_reads_view(&prepared.layers);
+                    // The plate's picture from its camera, when the frame can take it once.
+                    let pictured = if reads_view { None } else if prep.plates.deferring || prep.plates.known_light.is_none() {
                         prep.plates.member_ids.extend(prepared.layer_ids.iter().copied());
-                        self.defer_isolated_layers(prep, prepared.layers, placement, *average)?
+                        Some(self.defer_isolated_layers(prep, prepared.layers.clone(), placement, *average)?)
                     } else {
                         let density = prep.precision.picture;
-                        self.bake_isolated_layers(prep, prepared.layers, CompositeBlendMode::Normal, placement, *average, density)?
+                        Some(self.bake_isolated_layers(prep, prepared.layers.clone(), CompositeBlendMode::Normal, placement, *average, density)?)
+                    };
+                    // Seen from an eye other than its camera, a plate is drawn by that eye (2026-09-24).
+                    let baked = match pictured {
+                        Some(picture) if !prep.observed => picture,
+                        pictured => {
+                            if reads_view && (prep.plates.deferring || prep.plates.known_light.is_none()) {
+                                prep.plates.member_ids.extend(prepared.layer_ids.iter().copied());
+                            }
+                            let camera_picture = pictured.and_then(|picture| picture.content.texture().cloned());
+                            self.view_plate(prep, prepared.layers, placement, *average, camera_picture)?
+                        }
                     };
                     (Some(baked.content), baked.size)
                 }

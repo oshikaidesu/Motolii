@@ -169,6 +169,7 @@ impl Engine {
         mut sources: Vec<LayerWithPasses>,
         placement: crate::doc::core::LayerPlacement,
         average: bool,
+        camera_picture: Option<crate::render::compositor::GpuTexture2D>,
     ) -> Result<Layer, EngineError> {
         for source in &mut sources {
             source.layer.blend_mode = if average { CompositeBlendMode::Add } else { CompositeBlendMode::Normal };
@@ -178,6 +179,7 @@ impl Engine {
             sources,
             camera: prep.seam.composition_picture(),
             prepared: std::sync::OnceLock::new(),
+            camera_picture,
         });
         let layer = Self::plate_layer(LayerContent::Plate(plate.clone()), comp, &plate.sources, CompositeBlendMode::Normal, placement);
         if prep.plates.deferring || prep.plates.known_light.is_none() {

@@ -15,6 +15,7 @@ pub(crate) mod mesh;
 mod surface_scene;
 pub(crate) use surface_scene::SharedMeshScene;
 mod view;
+mod layer_views;
 pub(crate) use view::{ViewWorld, WorldLight};
 mod measurement;
 pub use measurement::FrameMeasurement;
@@ -462,6 +463,10 @@ pub struct ViewPlate {
     pub(crate) camera: crate::doc::core::ResolvedCamera,
     /// The members' pictures, prepared with the frame's other plates.
     pub(crate) prepared: std::sync::OnceLock<PreparedMembers>,
+    /// The plate's picture as its camera takes it, when it can be taken once for the frame (no
+    /// member reads what only a view has). The work's views show it; an eye elsewhere (a View a
+    /// Vism asked for) draws the members from where it stands.
+    pub(crate) camera_picture: Option<GpuTexture2D>,
 }
 
 pub(crate) struct PreparedMembers {
