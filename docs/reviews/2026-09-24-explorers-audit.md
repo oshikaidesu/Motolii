@@ -124,7 +124,7 @@
 ### 捨てられるもの / 残すもの(現時点の仮判定、P と R の結果で更新)
 - **捨てる候補(証拠が揃った順)**: ①曲線塗りの自作(`paths.rs` の exact fill・`CurveFill`・curve loop)→ Vello GPU sparse strips への thin seam(ただし beta・wgpu 30 は main のみ・斜めの View は再 raster が要る)。当面は K(帯表、採択済み)で持たせる。②radiance の 2×2 box mip → GGX prefilter(Filament/Frostbite の標準)。③Motolii 側の Karis 近似の env BRDF → DFG LUT。④8 bit の run stack → float canvas。⑤自作の tone(saturate だけ)→ view transform(AgX)。
 - **残す(上流に無い一般 primitive)**: surface hook、View/Backdrop/Environment の per-view 資源、DrawOrder、ClipPlane、mipmap 生成、外部 texture の取り込み、data texture。上流は 2026-09 時点でも IBL・path・tonemap・HDR・mipmap・clip を持たない。
-- **人間が決めること(生き残る seam)**: 何を Vism から操作可能にするか(厚み・減衰・薄膜・exposure・view transform の選択)、Core/Heart のような発光層を「光」として扱うかの製品上の意味。
+- **人間が決めること(生き残る seam)**: 何を Vism から操作可能にするか(厚み・減衰・薄膜・exposure・view transform の選択)。**裁定済み(2026-09-24)**: Emission と Light Contribution は分離。発光は scene-linear HDR radiance(> 1.0 可)で、bloom/glare や反射・屈折から明るい物として観測される。周囲を照らすのは別の generic 能力で、Emission だけを理由に自動で照明/GI にはしない。N2 の「Core/Heart を光にする」は Light Contribution の realization 候補として別 lane に置く(seam: 新しい Motolii semantic として公開する必要が生じた時だけ報告)。
 
 ### 待ち: Cycles の参照 oracle(R)、P の最終報告(wgpu 生態系の PBR/IBL/tonemap の部品)、Q。目標画像が届けば、5 班の対応表に花弁・板・球・ハイライト・暗部の個別比較を載せる。
 
