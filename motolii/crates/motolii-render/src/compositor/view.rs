@@ -268,9 +268,15 @@ impl Compositor {
         into: Option<&re_renderer::GpuTexture>,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<re_renderer::GpuTexture, CompositorError> {
-        let picture = into.cloned().unwrap_or_else(|| self.picture_texture(window.width, window.height));
         // A picture is a drawing of its own (view 0): its histories are not a view's.
-        match self.record_stack(comp, window, Observer::camera(comp, camera), inputs, background_color, world, 0, None, None, encoder)? {
+        let stack = self.record_stack(comp, window, Observer::camera(comp, camera), inputs, background_color, world, 0, None, None, encoder)?;
+        // The finished stack is the picture; only a texture handed out before the drawing is copied into.
+        let picture = match (into, &stack) {
+            (None, Some(stack)) => return Ok(stack.clone()),
+            (Some(into), _) => into.clone(),
+            (None, None) => self.picture_texture(window.width, window.height),
+        };
+        match stack {
             Some(stack) => {
                 let size = wgpu::Extent3d { width: window.width, height: window.height, depth_or_array_layers: 1 };
                 encoder.copy_texture_to_texture(stack.texture.as_image_copy(), picture.texture.as_image_copy(), size);

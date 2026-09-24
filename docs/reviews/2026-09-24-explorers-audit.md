@@ -68,6 +68,14 @@
 - **人間へ(品質の seam)**: 曲線塗りの quad を画素ごとに実行(標本補間の入力に標本ごとの情報が無い、推定 −18〜20 ms)、tolerance 1e‑5 → 1e‑3(40 → 12 本、≤ 0.1 画面 px、推定 −15〜19 ms)、x/y 2 本の ray を 1 本に(縁の AA が変わる)。
 - 計測の限界: M4 の xctrace では shader profiler / GPU counters が空(Xcode の GPU frame capture が残る道)。
 
+## J: plate の bake の複写 2.2 ms(証拠 → **測り方の誤り**)
+
+- 複写そのものは 0.07〜0.13 ms(1080p RGBA8、約 16 MB)。2.2 ms は Metal が compute channel の copy kernel を次の command buffer の fragment pass と同時に走らせ、fragment に押されて区間が伸びた見かけ。ラベルごとの区間の総和(`gpu_owners.py`)は channel の重なりを二重に数える。critical path(`explore/J/critical.py`): frame 73.0 ms、fragment busy 66.1、compute busy 5.4(全部 fragment の中)。
+- zero-init も sRGB の再解釈も無し(両側 `Rgba8UnormSrgb`、全面複写)。pool の churn(1 コマ約 10 枚の生成/破棄、re_renderer の 1 コマ retire)はあるが原因ではない。
+- 採択: `record_picture` は `into` 無しなら stack をそのまま絵にする(複写と 8 MiB の pool churn 1 枚が消える、実費 0.1〜0.2 ms)。
+- 人間へ: pool の retire を N コマにする(fork の memory residency の contract)。
+- 副産物: wgpu-core 30 は pass ごとに Metal command buffer を 1 本作る(1 コマ約 650 本、`vism-pass` 分の driver CPU 5.4 ms)。CPU の pass 比例費用の正体。
+
 ## 自分で確かめた物
 
 - run の切れ目 MeshAfterRect は歴史的ではなかった: 消すと 2 本の contract の絵が変わる(gap 台帳に記録)。
