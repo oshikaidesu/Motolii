@@ -162,8 +162,11 @@ impl Compositor {
                     })
             });
 
+            // The padded picture before its effects is also the coverage a spill is cut by.
+            let mut padded_source = None;
             if padding > 0 {
                 current = self.padded_copy(encoder, &current.texture, [width, height], padding);
+                padded_source = Some(current.clone());
             }
 
             // 別の時刻の絵(pool の texture のまま)。
@@ -190,7 +193,10 @@ impl Compositor {
             let spill_mode = lwp.passes.iter().find_map(|pass| pass.spill);
             let mut spill: LayerSpill = None;
             if let Some(mode) = spill_mode {
-                let coverage = self.padded_copy(encoder, &src.texture, [width, height], padding);
+                let coverage = match &padded_source {
+                    Some(padded) => padded.clone(),
+                    None => self.padded_copy(encoder, &src.texture, [width, height], padding),
+                };
                 let format = current.texture.format();
                 let inside = self.matte_by_coverage(encoder, &current, &coverage, [padded_width, padded_height], format, 0.0)?;
                 let outside = self.matte_by_coverage(encoder, &current, &coverage, [padded_width, padded_height], format, 1.0)?;

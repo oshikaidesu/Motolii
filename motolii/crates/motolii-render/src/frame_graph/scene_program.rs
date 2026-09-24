@@ -51,6 +51,16 @@ impl SceneLayerValue {
 }
 
 impl SceneValue {
+    /// Whether any layer, inside plates too, carries an effect that `asks_for_views(plugin id)`:
+    /// the frame is then seen from eyes other than the work's camera.
+    pub fn asks_for_views(&self, asks: &dyn Fn(&str) -> bool) -> bool {
+        fn any(layer: &SceneLayerValue, asks: &dyn Fn(&str) -> bool) -> bool {
+            layer.effects.iter().chain(&layer.after_effects).any(|effect| asks(&effect.plugin_id))
+                || matches!(&layer.content, SceneContentValue::Plate(plate) if plate.members.iter().filter_map(|member| member.layer.as_ref()).any(|child| any(child, asks)))
+        }
+        self.layers.iter().any(|layer| any(layer, asks))
+    }
+
     /// Authoring layer as evaluated by the FrameGraph. Plates and placement
     /// copies are an execution/semantic detail; editor callers ask by LayerId
     /// and get the original instance when one exists.

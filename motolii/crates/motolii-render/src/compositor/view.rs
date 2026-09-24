@@ -347,9 +347,15 @@ impl Compositor {
         let roughest = inputs.iter().filter(|input| input.shading.reads_backdrop).map(|input| input.shading.backdrop_roughness).fold(0.0f32, f32::max);
         // Backdrops a recorded draw still reads; kept until the view is recorded.
         let mut backdrops = Vec::new();
-        for planned in plan_runs(inputs) {
+        let planned_runs = plan_runs(inputs);
+        for (at, planned) in planned_runs.iter().enumerate() {
             self.surface_work.run_breaks[planned.ended_by as usize] += 1;
             let start = planned.range.start;
+            // Whether a later run reads the non-glass picture below it (glass, or a plate).
+            let later_reads_below = planned_runs[at + 1..].iter().any(|later| {
+                let first = &inputs[later.range.start];
+                first.shading.reads_backdrop || matches!(first.content, SequentialContent::Plate(_))
+            });
             // A plate the view materializes: its members drawn here, over the view's picture below
             // the plate (what its glass refracts), then the plate's effects, then onto the stack.
             if let SequentialContent::Plate(plate) = inputs[start].content {
@@ -397,6 +403,11 @@ impl Compositor {
                     None => sky,
                     Some(below) => self.mix_onto(window, &below, &sky, DEST_OVER, encoder),
                 });
+            }
+            // An environment alone draws nothing of its own (the sky above is its picture): no
+            // builder, no mix.
+            if run.iter().all(|input| matches!(input.content, SequentialContent::Environment(_)) && input.screen_passes.is_empty()) {
+                continue;
             }
             let glass_run = run[0].shading.reads_backdrop;
 
@@ -454,10 +465,15 @@ impl Compositor {
                 unglazed = stack.clone();
                 glazed = true;
             } else if !glass_run && glazed {
-                unglazed = Some(match unglazed.take() {
-                    None => canvas.clone(),
-                    Some(below) => self.mix_onto(window, &below, &canvas, mode, encoder),
-                });
+                // The non-glass picture is kept only while something later reads it.
+                unglazed = if later_reads_below {
+                    Some(match unglazed.take() {
+                        None => canvas.clone(),
+                        Some(below) => self.mix_onto(window, &below, &canvas, mode, encoder),
+                    })
+                } else {
+                    None
+                };
                 transmission = None;
             }
             stack = Some(match stack.take() {
@@ -503,7 +519,11 @@ impl Compositor {
         if !linear {
             current = self.convert_image_encoding(encoder, &current, true, true, premultiplied);
         }
-        // The effects' result replaces the canvas (compose 1 = copy).
+        // The effects' result replaces the canvas: as it is when it is already in the canvas's
+        // format, else copied into one (compose 1 = copy).
+        if current.texture.format() == canvas.texture.format() {
+            return Ok(current);
+        }
         const COPY: u32 = 1;
         let out = self.view_canvas(window);
         {

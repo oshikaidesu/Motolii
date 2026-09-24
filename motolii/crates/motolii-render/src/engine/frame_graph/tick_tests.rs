@@ -365,6 +365,23 @@ mod frame_reflection {
         }
     }
 
+    /// A frame a View sees (a Vism asked for Views) shows its plates as their members from that
+    /// eye (ruling 2026-09-24: a plate is not a card): the requested faces record the plate as a
+    /// stack of its own, on the production preparation path.
+    #[test]
+    fn a_plate_is_drawn_by_a_views_eye() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut doc, members) = plates(dir.path(), 1);
+        for member in members {
+            doc.apply(Intent::SetEffects { layer: member, effects: vec![] }).unwrap();
+        }
+        // Another layer asks for Views: the frame has eyes other than the work's camera.
+        doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.cube_mirror".into() }] }).unwrap();
+        let engine = prepare(&doc, 1);
+        let plate_runs = engine.surface_work().run_breaks[crate::render::compositor::RunBreak::Plate as usize];
+        assert!(plate_runs > 0, "the Views draw the plate's members from where they stand, not its card");
+    }
+
     /// One capture, before every bake, and every bake lit by it — however many plates or views.
     #[test]
     fn one_capture_lights_every_plate_however_many_plates_or_views() {

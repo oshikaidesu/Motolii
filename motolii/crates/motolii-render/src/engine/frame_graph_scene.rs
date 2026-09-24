@@ -186,6 +186,9 @@ impl Engine {
         time: crate::doc::core::RationalTime,
         fps: crate::doc::store::Fps,
     ) -> Result<GpuSceneValue, EngineError> {
+        // Eyes other than the work's camera see this frame when a Vism asks for Views: a plate is
+        // then drawn by each eye from where it stands (ruling 2026-09-24), on every preparation path.
+        prep.observed = scene.asks_for_views(&|id| self.compositor.catalog.definitions.iter().any(|d| d.plugin_id() == id && !d.manifest.views.is_empty()));
         let physics_overlays: std::collections::HashSet<LayerId> = self.overlay_frames.iter()
             .filter_map(|(layer, frame)| frame.physics.then_some(*layer))
             .collect();
@@ -226,7 +229,6 @@ impl Engine {
         let graph = crate::render_lowering::lower_scene(scene, &catalog)
             .map_err(|error| EngineError::Store(error.to_string()))?;
         self.adopt_world_environment(&graph)?;
-        prep.observed = graph.asks_for_views();
         self.execute_render_graph(&graph, prep)
     }
 

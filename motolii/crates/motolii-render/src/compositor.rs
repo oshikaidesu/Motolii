@@ -16,6 +16,7 @@ mod surface_scene;
 pub(crate) use surface_scene::SharedMeshScene;
 mod view;
 mod layer_views;
+pub(crate) use view::RunBreak;
 pub(crate) use view::{ViewWorld, WorldLight};
 mod measurement;
 pub use measurement::FrameMeasurement;
