@@ -30,3 +30,9 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 
 - `FROM` のカメラ相対(鏡像・別カメラ): 「どの View のカメラか」(Stage と Camera で違う)を決める意味論が要る。
 - release build は Vism を焼き込む(見張りは debug workspace だけ): 出荷した窓へ第三者の Vism を足す置き場は未決。
+- Prism Garden(`examples/prism_garden.js`・`vism/prism_view.wgsl`)で見つけた gap(2026-09-24、Rust は触らず既存語彙で回避):
+  - View は面の場面(3D の世界)だけを描く: pass 段の効果(Caustic Light・Glow)と 2D 層は写らない。2D 層は 3D ガラスの Backdrop にも入らない。
+  - 3D ファイル(obj)の層に View が届かない(`view_count()` 0 の見た目)。押し出し + Bevel では届く。
+  - Vism の INPUTS を増やして保存すると書類に編集が積まれ、script の再実行が「changed after the script ran」で断られる(再起動で回避)。
+  - MP4 書き出しの R と B が入れ替わる(窓とは一致しない)。
+  - 実測(M4、1920×1080、headless warm): CPU 5.5 ms・GPU 68 ms/コマ。効果を全部外しても GPU 36 ms。窓の実効: View 0 枚 約 30 fps・3 枚 約 18・6 枚 約 14。板 24→96 枚で変わらない(View は層 2 × 3 = 6 枚のまま)。
