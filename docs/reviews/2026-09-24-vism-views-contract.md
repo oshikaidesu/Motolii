@@ -74,7 +74,7 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 - GPU 48.5 ms の持ち主: Heart(2 つの 2D plate を View の面 6 枚が中身から描き直す: 花弁 raster・Glow・spill の alone 4 本/面)16.7、板 96 枚(Prism View の shading の重なり)13、球 7 個(含 3 面)11、残り(海・粒・核・文字・present)11.6。
 
 構造として一度にできる候補(cache ではない):
-1. **seam**: 2D の plate を View が見る時、作中カメラの絵(Stage と同じ)か、中身をその目から描くか。今は後者(この session の選択)。前者なら −16.7 ms GPU・−約 3 ms CPU・alone 28 → 0。
+1. ~~seam~~ **利用者裁定(2026-09-24)**: 「Plate だから平面カードになる、は無し。View から見ればその View の意味で見える」。View は plate の中身をその目から描く(現状の実装)。Plate = semantic isolation + optimization permission であって rasterize 命令ではない(既決)に沿う。16.7 ms は払うのではなく、2〜5 の構造で取り返す。Camera/Stage が plate の作中カメラの絵を見る件は `composition_picture` seam のまま(この裁定は「別 View から見る時」について)。
 2. plate の中身の mesh instance を stack 間で共有(`SharedMeshScene` の先例を plate へ): upload 2178 → 約 400/コマ。
 3. View の atlas の mip を、Vism が読む段数だけ作る(`BACKDROP_BLUR` と同じ形の `VIEW_BLUR`): 約 −20 pass/コマ。
 4. MeshAfterRect の切れ目を消す(歴史的。絵の試験 1 本と一緒に)。
