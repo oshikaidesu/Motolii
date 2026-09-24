@@ -348,6 +348,14 @@ wgpu_pbr の 4k と 15.2k の差は「11k 多い」ではなく、4k が品質�
 
 **GI の設計材料が揃った(U50〜U59)**: (1) **trace 基盤** = TinyBVH 型の 64 B BVH + TLAS を Motolii が 1 つ持ち、WESL の `rayq` module で GI・影・反射・caustics が共有(hardware ray query 非依存、Metal で動く、refit で動く layer)。(2) **GI の cache** = SurfelGI の algorithm(動く物体に追従)を土台に、Webgiya の radial-depth・guiding、Capsaicin の integer atomic 蓄積。RC は history-free が 1 段の emissive まで(three-rc)、多重 bounce は反復が要る(providentia)。(3) **決定性** = 全系譜共通の解: 再生は履歴再利用、seek/export は reset + K 反復(固定点、seed は timeline frame から)。(4) **粒状感** = FAST の noise + spatial filter(export は spatial-only で決定的に)。(5) **完成 renderer の本線** = Bevy(Solari は M4 で動くが hardware ray query 依存・denoise 無し)を `SurfaceRealizer` 越しに。GI を Bevy Solari に任せるか (1)〜(4) で自前に持つかは、Bevy spike で「共有 device で ray query と上限を要求できるか」「cache reset で bit 一致するか」を測ってから決める。
 
+### Helio U60(2026-09-25)— 規則どおり「M4 で描けるまで昇格させない」→ REJECT
+
+- `Far-Beyond-Pulsar/Helio` `a92c251`(2026-09-24)、MIT、wgpu 30.0.1(Motolii と一致)、1,733 commit(Tristan Poland 1,487、「Claude」9・copilot 6)、2026-02-04 開始。`cargo build --release` は 3 分 28 秒で通る。
+- **`indoor_cathedral` と `outdoor_city` は M4 の Metal で最初のコマの前に panic**: `config.rs:72-77` が adapter が報告すれば backend を見ずに `EXPERIMENTAL_RAY_QUERY` を要求(comment は「Vulkan 必須」)→ wgpu 30 の Metal は M4 で報告する → RC pass が ray trace 経路に切替 → `rc_trace.wgsl:151-157` が **`for` loop の中で `var sq: ray_query;` を宣言** → naga の MSL 出力が loop ごとに代入で再初期化 → Metal は `intersection_query` への代入を禁止(`deleted operator '='`)。**naga の bug**(wgpu 自身が「report してくれ」と log)に Helio の shader が当たる。Motolii が将来 hardware ray query を使う時の注意点: **ray_query 変数を loop 内で宣言しない**。
+- `indoor_cathedral_hlfs`(HLFS graph、RC 無し)は 8 秒 crash せず動いたが window capture 取れず、画は無し。
+- code 読みのみ: **既定 graph では RC の出力が画に届いていない**(`RadianceCascadesPass` は `rc_cascades` を書き、`DeferredLightPass` は `rc_view` を読むが誰も公開していない → `has_rc_gi = 0`、未実測)。RC 自体も 8³ probe・4×4 方向・固定 box の 1 cascade で、前コマの depth/color を screen-space で march、deferred shader は 16³ を仮定して不一致。**HLFS = Hierarchical Light-Field Sampling = 多灯の確率的直接光**(reservoir + temporal/spatial denoise + screen-space shadow)で GI ではない。既定 graph は 8 bit sRGB に照明して >1 が消える(HLFS graph は R11G11B10/Rgba16Float)。`Renderer::render(&Camera, &TextureView)` と `RendererBuilder::with_external_device()` は実在、submit は自前、自前 device 時は毎コマ cull 統計を readback。
+- 判定: 規則(HEAD を M4 で描けなければ昇格させない)により **REJECT**。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
