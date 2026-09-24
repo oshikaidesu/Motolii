@@ -436,13 +436,28 @@ clone: `explore/U71/` premation@6c688c63(github.com/isroil01/motion-editor)、on
 - 次に実際につなぐ 3 本: Rendiation(device 注入と HDR 化の patch が要る)、SceneVM、helmer(または INOX を形の参照に)。
 - 未網羅: GitHub の rate limit で一部の複数語 query が未回答、npm と Filament WebGPU backend は未確認。場所: `explore/U64/`。
 
+### U70 SceneVM 現物監査(2026-09-25、M4 Metal で実走、**REFERENCE ONLY**、WGSL の BVH 走査と ray traced 影/AO だけ弱い部品取り候補)
+
+pin: Eldiron `f4fee22b8`(`crates/scenevm`、MIT、Markus Moenig 単独 84 commit、crates.io 0.93.0、wgpu 29.0.3)。画: `explore/U70/`(cornell 2 枚、自作 mixdemo の raster3d / compute3d の camera 周回 a/b)。
+
+- **U64 の記述の訂正**: SceneVM は 2D と 3D を一つの world の一級 primitive として持っていない。`RenderMode` は VM layer ごと(`src/core.rs:455`)、layer 同士は Alpha / AlphaLinear 合成だけで depth を共有しない(`core.rs:465`)。**2D layer の poly は 3D lighting に一切参加しない**。2D が 3D に入るのは camera 向き billboard(`src/dynamic.rs:8-13`)か自分で作る textured Poly3D quad だけ。
+- **「見えないのに ray には存在する」も訂正**: Compute3D では非表示三角形も shadow ray に当たる(`3d_header.wgsl:~670`)が、Raster3D の shadow pass は可視 index だけを描く(`vm.rs:10869-10878`)ので**非表示は影を落とさない。2 つの mode で食い違っており、どちらも設定として出していない** = 設計された shadow-only ではなく経路の副作用。物ごとの参加 flag は無い(`visible` / `opacity`、`Light.emitting`、compile 時定数 `DEBUG_BB_NO_SHADOW_CAST` だけ)。
+- 非 surface の参加: textured billboard は alpha を切り抜いて影を落とす(raster の画でカードの影に字の隙間が抜ける、`3d_body.wgsl:39-51`)。発光は material の emissive nibble が要り、光に変えるのは Raster3D だけ(CPU で point light 化、`vm.rs:8418`)。
+- BVH: CPU で静的 3D 三角形からのみ構築、変更で全再構築(refit 無し、`vm.rs:13018`)。billboard は BVH 外の線形 loop、2D poly は入らない。
+- 光: `LightType::Point` のみ + sun/ambient は汎用 uniform。Raster3D = sun shadow map + CPU irradiance grid、Compute3D = RT 影・AO・GGX 反射、実の間接光は cornell example の shader だけ。霧は距離の exp² のみで volumetric ではない。
+- 出力: layer texture は 8bit RGBA、tone map は raster shader の中 = HDR 出力無し。device は process 全体の `OnceLock` で自前生成、queue submit を自分で 8 か所、`render_frame` は毎コマ readback。時刻入力は整数の `SetAnimationCounter` のみ。
+- 実測(960×540、同期 readback 込み): raster 中央値 ~3.9ms、compute ~4.2–4.9ms、初回は shader compile で 4.4s / 11s。**同じ入力で 2 回描いて 0 byte 差**。
+- Renderable との対応: coverage 有り(3D ではほぼ cutout)、transform は 2D = Mat3 / 3D = world 座標頂点で物ごと transform 無し、emission 4bit、motion 無し、participation 無し。
+
+**仮説への影響**: 仮説 2(非 surface の参加)は SceneVM では「billboard の alpha 影」までしか成立せず、発光・GI への参加は material 経由。仮説 4 の SceneVM 側の根拠は「設計」ではなく「mode 間で食い違う副作用」に格下げ。残る明示的な先例は Premation の Only、three `ShadowMaterial`、Babylon `ShadowOnlyMaterial`。
+
 ### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
 
 1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
 2. **Renderable は surface である必要すら無い**: 赤字幕なら camera = 普通の RGBA、shadow = coverage のみ、GI = emission + coverage + placement、specular = 不参加、volumetric = emitter として参加。2D を PBR material に押し込まない。
 3. **participation は bool 群ではなく domain ごとの visibility algebra**(Premation の Off/On/Only から): Camera = On|Off、ShadowCast / ShadowRecv / Indirect / Reflection = On|Off|Only。例: 見えない巨大な赤文字の形に部屋だけ赤く照らされる。
 
-4. **camera への可視と lighting/visibility query への参加は別の bit**(利用者 2026-09-25、U64 で強化): Premation では DCC の明示 UI(Only)、SceneVM では renderer の構造(shadow ray が非表示 geometry に当たる)から同じ現象が自然発生。ただし Off/On/Only という API に固定する証拠ではない。TiXL の graph scope 方式もあるので、**意味論と UI/API 表現を分けて扱う**。
+4. **camera への可視と lighting/visibility query への参加は別の bit**(利用者 2026-09-25、U64 で強化): Premation では DCC の明示 UI(Only)。SceneVM の「非表示も shadow ray に当たる」は U70 で Compute3D だけの副作用と判明(Raster3D は逆、設定無し)= 根拠としては弱い。ただし Off/On/Only という API に固定する証拠ではない。TiXL の graph scope 方式もあるので、**意味論と UI/API 表現を分けて扱う**。
 5. **Rendiation は採用候補ではなく contract の oracle**: depth/normal/entity-id の G-buffer → `surface_bridge` → lighting/PT、GPU BVH、`reset_sample` + sample index が 1 か所にあり、M4 Metal で raster 5.14ms を実走 = この境界は机上案ではない証拠。
 6. **正本の分布(negative result)**: 画 = Webgiya / 影 MOD / production renderer、Surface Contract = Rendiation / three addon 生態系、motion semantics = Premation / TiXL / SceneVM、ray/lighting 研究 = U50〜U59。それぞれ別の成熟した共同体にあり、交換可能に組み合わせる host はまだ無い = Motolii が作る意味のある空白。
 
