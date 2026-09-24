@@ -95,3 +95,14 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 
 増分の持ち主: Heart の plate 2 つ(各 約 20 ms)。View の面 6 枚それぞれで、面いっぱいに重なる花弁(曲線の塗り、MSAA 標本ごとの shading)を描くため。Glow の鎖は 約 7 ms。粒の plate 約 3 ms。板の窓の中には光る花が 3D で写る(カードではない)。
 取り返す候補(裁定待ち): rect の per-draw blend(Screen/Add)、透明 mesh instance の共有(C の patch)、mesh の標本ごと shading を画素ごとへ(fork が上流の既定を変えている件、絵の縁が変わる)。
+
+### 裁定 2(透明 instance の共有)の後(`c24f9c3dc`)
+
+| | 前 | 後 |
+|---|---|---|
+| mesh instance の upload/コマ | 2208 | 822 |
+| mesh batch/コマ | 33 | 6 |
+| CPU/コマ | 13.3 ms | 12.5 ms |
+| GPU/コマ | 71.5 ms | 71.5 ms(raster は View ごと、想定どおり) |
+
+固定した契約(試験): `a_plate_is_drawn_by_a_views_eye`(View は plate の中身を描く)、`plate_members_views_are_drawn_once_however_many_views`(要求 View = 実体化 View、view 数で増えない)、`plate_members_mesh_instances_are_uploaded_once_however_many_views_or_faces`(共有あり/なしで絵が同じ)、`a_views_picture_holds_the_2d_layers_too`(2D が View に写る)、`mirrors_that_see_each_other_are_drawn_once_each_and_the_same_every_time`、`a_mix_blend_reads_the_picture_below_across_runs`(Screen/Add の絵は不変)。

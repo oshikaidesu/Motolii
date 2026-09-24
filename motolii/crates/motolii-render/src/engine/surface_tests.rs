@@ -277,6 +277,29 @@ fn a_vism_asks_for_views_and_the_host_draws_them() {
     assert_eq!(engine.surface_work().layer_views - before.layer_views, 0, "Glass asks for no View");
 }
 
+/// A View sees the work as the Camera does, 2D included (ruling 2026-09-24): a 2D picture on the
+/// work's camera plane reaches a mirror's Views, so hiding it changes the mirror.
+#[test]
+fn a_views_picture_holds_the_2d_layers_too() {
+    use crate::doc::store::{LayerAttrsPatch, LayerProjection};
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let red = dir.path().join("red.png");
+    image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+    // A 2D picture where the mirror's forward View looks (the mirror faces the camera, -z).
+    let sender = file_layer(&mut doc, 3, 0, &red);
+    doc.apply(Intent::SetAttrs { layer: sender, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() } }).unwrap();
+    set(&mut doc, sender, "scale", Value::Vec2([3.0, 3.0]));
+    doc.apply(Intent::SetEffects { layer: LayerId(2), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.cube_mirror".into() }] }).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let seen = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    set(&mut doc, sender, "opacity", Value::F64(0.0));
+    let unseen = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert_ne!(seen, unseen, "the 2D picture reaches the mirror's Views");
+}
+
 /// A View is a view of the work, Views included: two mirrors that see each other are a cycle the
 /// host makes finite. Each layer's Views are drawn once per frame, and the frame is the same every
 /// time it is drawn.
