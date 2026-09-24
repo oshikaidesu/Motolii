@@ -451,6 +451,17 @@ pin: Eldiron `f4fee22b8`(`crates/scenevm`、MIT、Markus Moenig 単独 84 commit
 
 **仮説への影響**: 仮説 2(非 surface の参加)は SceneVM では「billboard の alpha 影」までしか成立せず、発光・GI への参加は material 経由。仮説 4 の SceneVM 側の根拠は「設計」ではなく「mode 間で食い違う副作用」に格下げ。残る明示的な先例は Premation の Only、three `ShadowMaterial`、Babylon `ShadowOnlyMaterial`。
 
+### U67 デモシーン・論文・showcase の網(2026-09-25、26 件、**大物無し**)
+
+M4 で実走できた 6 本(headless Chrome で静止 / drag 中 / 離して 150ms / 3 秒後、+ Blender EEVEE の headless 部屋)のうち「動いて綺麗」を通ったのは部品 2 つだけ。上位 3 本は talk で、画は自分で見ていない(YouTube フレーム取得の実行は利用者が拒否、再試行せず)。
+
+- **通過(部品)**: ① **SSILVB**(Therrien 2023、visibility bitmask の screen-space 間接光、three 移植で実走、drag 中も安定 60fps、**history 無し**、code 公開。ただし画面内の bounce のみで部屋は満たさない、demo が白一色で色の bounce は未証明)。② **webgpu-sky-atmosphere**(Hillaire の空 + aerial perspective、MIT、LUT 方式、history 無し、60fps。屋外の「空気」を出す lighting 部品。見たのは正午の空だけ)。
+- **talk のみ(閉じた code)**: Enshrouded の GI + volumetric fog(破壊可能な世界で bake 不可、自前の distance field ray、霧の森・暗い洞窟)、idTech8「Fast as Hell」(ray GI + light grid + irradiance volume、bake 無し、全機種 60Hz)、HypeHype Stochastic Tile-Based Lighting(depth/normal/material + light list → direct diffuse/specular、Surface Contract にそのまま合う、時間 filter で noise と交換)。どれも cut 後の回復速度は未確認。
+- 落選(実走): Blender EEVEE(1 sample は粒状、probe の bake 無しだと空の光が壁を抜け平板 = 収束と bake に依存)、web-gi(動くと 360×300 に落ちる)、three-realtime-rt(Cornell がまだら、drag 後に黒フレーム)、Pooya restirgi(1fps)、Octo(web demo が panic)。
+- demoscene: GI の source を出した作品は見つからず(Fairlight Mechasm 等は Windows binary のみ)。
+- contract への含意: 「空気」は独立した lighting 部品にもなる(sky atmosphere = sun + camera → sky + haze)。SSILVB は depth/normal/前コマ lighting → bounce/occlusion の単 pass で、history 無しの部品の実例。
+- 場所: `explore/U67/`(shots/*_grid.png、eevee/eevee_grid.png)。
+
 ### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
 
 1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
