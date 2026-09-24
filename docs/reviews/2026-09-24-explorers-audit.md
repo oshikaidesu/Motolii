@@ -462,6 +462,15 @@ M4 で実走できた 6 本(headless Chrome で静止 / drag 中 / 離して 150
 - contract への含意: 「空気」は独立した lighting 部品にもなる(sky atmosphere = sun + camera → sky + haze)。SSILVB は depth/normal/前コマ lighting → bounce/occlusion の単 pass で、history 無しの部品の実例。
 - 場所: `explore/U67/`(shots/*_grid.png、eevee/eevee_grid.png)。
 
+### U68 crates.io 逆依存の全数 + 一般名 + showcase(2026-09-25、**新しい Rust/wgpu の大物無し**)
+
+crates.io 逆依存を全頁: `wgpu` 1,637 / `naga` 224 / `wesl` 14 / `wgpu-core` 24 を描画・GI 語で絞り約 70 本の README、+ keyword と GitHub 一般名検索、wgpu wiki Users(古く GI 無し)。未到達: Matrix/Discord。
+
+- M4 で基準(常時リアルタイムで空間に光)を満たしたのは **Speedball GI だけ**(JS/three、MIT、U61 と同一)。追加の実測: 1536×1152 で 60fps、40 コマ周回の途中コマに破綻無し、停止後 120 コマ byte 一致(gated mode)。**光の cut(太陽 119°/62.5° → 220°/28°)後の平均画素差(0–255)**: 0 コマ 10.4 / 1 7.5 / 2 5.4 / 4 2.7 / 8 0.66 / 16 0.1 / 24 0.02 / 32 0 = 約 8 コマで見た目が落ち着き 32 で完全静止(hysteresis 0.6)。出力は irradiance probe volume なので、Motolii では WGSL 移植 + probe を画面へ解く小 pass が要る。保存した原寸フレームの一部に構図のずれ、未解決。
+- 落選: Split RC WebGPU(M4 で 11–13fps、約 217×135 へ自動縮小、~27 秒で黒)、blade-render(自前 API、Metal backend が storage buffer の binding array を持たず RT shader が拒否、`ray-trace.wgsl` に間接 pass 無し)、ignis-web(60fps だが同梱 scene で黒、license 無し)、Gizmo(wgpu 30、screen-space GI、README の画が平板)、concinnity / web-falcor / kosm / Lupin / solstrale / Lambent 等(収束型か GI 無し)、Dreamwell(repo 404)。Rendiation の path tracing は README 上 offline/progressive(U64 の「contract の oracle であり採用候補ではない」と整合)。
+- Bevy plugin(Lighting Pack の証拠としてのみ): 新しい 3D 実時間 GI plugin 無し(bevy-hikari は 2022 で停止)。
+- 場所: `explore/U68/`(frames/speedball_*、rdeps/、gh/、pw/)。
+
 ### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
 
 1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
