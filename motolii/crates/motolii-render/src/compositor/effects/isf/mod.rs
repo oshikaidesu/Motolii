@@ -11,6 +11,9 @@ pub(crate) enum IsfError {
     },
     #[error("naga が生成した Module を検証できない: {0}")]
     Validate(String),
+    /// The head's declarations (what the file asks for), not the shader.
+    #[error("manifest: {0}")]
+    Manifest(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
     #[error("STAGE `{0}` は知らない(pass / warp / surface / field / clip / shadow / block)")]
@@ -346,7 +349,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
     });
     let spill = value.get("SPILL").map(|v| match v.as_str() {
         Some(mode @ ("screen" | "add" | "multiply")) => Ok(mode.to_owned()),
-        _ => Err(IsfError::Validate("SPILL must be \"screen\", \"add\" or \"multiply\"".into())),
+        _ => Err(IsfError::Manifest("SPILL must be \"screen\", \"add\" or \"multiply\"".into())),
     }).transpose()?;
     let description = value
         .get("DESCRIPTION")
@@ -441,7 +444,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     .unwrap_or(false)
             };
             if truthy("PERSISTENT") && entry.get("TARGET").and_then(|v| v.as_str()).is_none() {
-                return Err(IsfError::Validate("PERSISTENT pass needs a TARGET".into()));
+                return Err(IsfError::Manifest("PERSISTENT pass needs a TARGET".into()));
             }
             let dimension = |key: &str| -> Result<Option<IsfDimension>, IsfError> {
                 let Some(value) = entry.get(key) else { return Ok(None) };
@@ -449,7 +452,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     if let (Ok(tile), Ok(size)) = (tile.parse::<u32>(), size.parse::<u32>()) {
                         if tile > 0 && size > 0 && size <= 16384 { return Ok(Some(IsfDimension::Tiles(tile, size))); }
                     }
-                    return Err(IsfError::Validate(format!("invalid {key} tile expression")));
+                    return Err(IsfError::Manifest(format!("invalid {key} tile expression")));
                 }
                 if let Some(divisor) = value.as_str().and_then(|s| s.strip_prefix(&format!("${key}/"))).and_then(|s| s.parse::<u32>().ok()).filter(|n| *n > 0) {
                     return Ok(Some(IsfDimension::Divided(divisor)));
@@ -457,7 +460,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 let number = value.as_f64().or_else(|| value.as_str()?.parse().ok());
                 match number {
                     Some(n) if n.is_finite() && n >= 1.0 && n <= 16384.0 && n.fract() == 0.0 => Ok(Some(IsfDimension::Fixed(n as u32))),
-                    _ => Err(IsfError::Validate(format!("{key} must be a positive constant integer no greater than 16384"))),
+                    _ => Err(IsfError::Manifest(format!("{key} must be a positive constant integer no greater than 16384"))),
                 }
             };
             passes.push(IsfPass {
@@ -469,14 +472,14 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     .map(str::to_owned),
                 float: truthy("FLOAT"),
                 persistent: truthy("PERSISTENT"),
-                channels: match entry.get("CHANNELS").and_then(|v| v.as_u64()) { None => 4, Some(n @ (1 | 2 | 4)) => n as u8, _ => return Err(IsfError::Validate("CHANNELS must be 1, 2, or 4".into())) },
+                channels: match entry.get("CHANNELS").and_then(|v| v.as_u64()) { None => 4, Some(n @ (1 | 2 | 4)) => n as u8, _ => return Err(IsfError::Manifest("CHANNELS must be 1, 2, or 4".into())) },
             });
         }
     }
     // BACKDROP_INPUT = 下の合成を受ける口。surface では「読むかどうか」の数の欄、pass では
     // 下の合成そのものが入る image の欄(2 枚目。アライトモーションの「背景のコピー」の型)。
     let backdrop_input = value.get("BACKDROP_INPUT").map(|v| {
-        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_INPUT must name an input".into()))?;
+        let name = v.as_str().ok_or_else(|| IsfError::Manifest("BACKDROP_INPUT must name an input".into()))?;
         let ok = match stage {
             IsfStage::Surface => inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float | IsfInputType::Long | IsfInputType::Bool)),
             IsfStage::Pass => {
@@ -486,14 +489,14 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             _ => false,
         };
         if !ok {
-            return Err(IsfError::Validate("BACKDROP_INPUT: surface では数の欄を、pass では 2 枚目の image(唯一の追加の image、TIME_OFFSET とは併用しない)を名指す".into()));
+            return Err(IsfError::Manifest("BACKDROP_INPUT: surface では数の欄を、pass では 2 枚目の image(唯一の追加の image、TIME_OFFSET とは併用しない)を名指す".into()));
         }
         Ok(name.to_owned())
     }).transpose()?;
     let backdrop_blur_input = value.get("BACKDROP_BLUR").map(|v| {
-        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_BLUR must name a float input".into()))?;
+        let name = v.as_str().ok_or_else(|| IsfError::Manifest("BACKDROP_BLUR must name a float input".into()))?;
         if stage != IsfStage::Surface || !inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float)) {
-            return Err(IsfError::Validate("BACKDROP_BLUR must name a float surface parameter".into()));
+            return Err(IsfError::Manifest("BACKDROP_BLUR must name a float surface parameter".into()));
         }
         Ok(name.to_owned())
     }).transpose()?;
@@ -504,28 +507,28 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
         Some(serde_json::Value::Array(items)) if stage == IsfStage::Surface && items.len() <= 16 => items.iter().map(|item| {
             let vec3 = |key: &str, fallback: Option<[f32; 3]>| match item.get(key).and_then(|v| v.as_array()) {
                 Some(a) if a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite)) => { let c = read_components(item.get(key)); Ok([c[0], c[1], c[2]]) }
-                None => fallback.ok_or_else(|| IsfError::Validate(format!("VIEWS: {key} is three numbers"))),
-                _ => Err(IsfError::Validate(format!("VIEWS: {key} is three numbers"))),
+                None => fallback.ok_or_else(|| IsfError::Manifest(format!("VIEWS: {key} is three numbers"))),
+                _ => Err(IsfError::Manifest(format!("VIEWS: {key} is three numbers"))),
             };
             if item.get("FROM").and_then(|v| v.as_str()) != Some("layer") {
-                return Err(IsfError::Validate("VIEWS: FROM says where the View stands; \"layer\" (the layer's centre, seeing the world without it) is the one place so far".into()));
+                return Err(IsfError::Manifest("VIEWS: FROM says where the View stands; \"layer\" (the layer's centre, seeing the world without it) is the one place so far".into()));
             }
             let look: [f32; 3] = vec3("LOOK", None)?;
             let up: [f32; 3] = vec3("UP", Some([0.0, 1.0, 0.0]))?;
             let fov = item.get("FOV").map_or(Some(90.0), |v| v.as_f64()).filter(|f| (1.0..=179.0).contains(f))
-                .ok_or_else(|| IsfError::Validate("VIEWS: FOV is degrees in 1..179".into()))? as f32;
+                .ok_or_else(|| IsfError::Manifest("VIEWS: FOV is degrees in 1..179".into()))? as f32;
             let (l, u) = (glam::Vec3::from(look), glam::Vec3::from(up));
             if l.length_squared() < 1e-12 || l.normalize().cross(u.normalize_or_zero()).length_squared() < 1e-6 {
-                return Err(IsfError::Validate("VIEWS: LOOK is a direction and UP is not along it".into()));
+                return Err(IsfError::Manifest("VIEWS: LOOK is a direction and UP is not along it".into()));
             }
             Ok(IsfView { look, up, fov })
         }).collect::<Result<Vec<_>, _>>()?,
-        Some(_) => return Err(IsfError::Validate("VIEWS: a surface asks for a list of at most 16 Views".into())),
+        Some(_) => return Err(IsfError::Manifest("VIEWS: a surface asks for a list of at most 16 Views".into())),
     };
     let view_size = match value.get("VIEW_SIZE").map(|v| v.as_u64()) {
         None => 256,
         Some(Some(n)) if (16..=1024).contains(&n) => n as u32,
-        _ => return Err(IsfError::Validate("VIEW_SIZE is pixels in 16..1024".into())),
+        _ => return Err(IsfError::Manifest("VIEW_SIZE is pixels in 16..1024".into())),
     };
     Ok((
         IsfManifest {

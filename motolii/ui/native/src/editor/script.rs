@@ -450,7 +450,10 @@ mod frames {
             let time = crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap();
             let pixels = engine.render_frame(&view, time).unwrap();
             for failure in engine.layer_failures() { eprintln!("frame {frame}: {failure}"); }
-            image::save_buffer(format!("{out}/frame_{frame:04}.png"), &pixels, comp.width, comp.height, image::ColorType::Rgba8).unwrap();
+            // The frame comes back in the presentable format's byte order; a PNG is RGBA.
+            let bgra = crate::render::compositor::PRESENTABLE_FORMAT == wgpu::TextureFormat::Bgra8Unorm;
+            let rgba: Vec<u8> = if bgra { pixels.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect() } else { pixels };
+            image::save_buffer(format!("{out}/frame_{frame:04}.png"), &rgba, comp.width, comp.height, image::ColorType::Rgba8).unwrap();
         }
     }
 }
