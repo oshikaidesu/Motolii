@@ -417,6 +417,25 @@ clone: `explore/U71/` premation@6c688c63(github.com/isroil01/motion-editor)、on
 - **決定性**: 全 pack が frame counter で seed、8〜64 コマ history 依存 = seek と再生で一致しない。既定の解(seed = hash(timeline frame, iteration, pixel)、seek で reset、export 前に固定 N コマ warm-up)で足りるが、**回転する 1/4 ray と float atomics の voxel 構築**は別に検査が要る。
 - 未到達: CurseForge 一覧、shaderLABS Discord、Bedrock pack。場所: `explore/U69/`。
 
+### U64 contract 基準での Surface Renderer 探索(2026-09-25、Bevy は比較行の 1 つ)
+
+新規 8 本(wgpu 7 + 利用者指定の SceneVM)。**contract を薄く出せる完成 renderer は無し**。近いのは 3 本で、近さの種類が違う。M4 で動いたのは Rendiation(Metal、既定 forward raster 1600×1200 で 59.5fps / GPU 5.14ms)と C2(web、progressive で非実時間)。fazil47 は起動時 panic、helmer は audio 初期化で停止(renderer の欠陥ではない)、built-in browser は他 agent と pane を共有して WebGPU adapter が返らず nightshade・gpu-curtains は未描画。
+
+| 候補 | contract への近さ | 欠け | 2D の一級性 / 参加 flag / volumetric |
+|---|---|---|---|
+| **Rendiation**(MIT、77★、2026-09 活発、wgpu 29、nightly) | 最も contract 形の内部: `FrameGeometryBuffer`(depth + normal RGBA16F + entity id R32Uint、`application/viewer-content/src/rendering/g_buffer.rs:5`)、deferred protocol + `LightableSurfaceProvider`、Photonics 型の surface trait `DevicePathTracingSurface`(`path_tracing/surface_bridge.rs:5`)、GPU BVH、`reset_sample()` + sample counter(`path_tracing/mod.rs:121`) | device 注入不可(`GPU::new` が自前生成)、path trace 出力が Rgba8Unorm(HDR でない) | 2D layer 無し、flag 見つからず、volumetric は path tracer 内のみ |
+| **SceneVM**(MIT、Eldiron の sub-crate、wgpu 29.0.3) | motion graphics に最も合う: Poly2D が独立 layer、RGBA billboard が統一 trace に当たって alpha 影を落とす(`3d_body.wgsl:609-640`)、**shadow ray は非表示 geometry も含む = 「描かずに影だけ」が暗黙に成立**(`3d_body.wgsl:484`)、poly ごと `visible`(`poly2d.rs:16`)、2D/3D/SDF body shader を実行時に差し替え(`lib.rs:2525-2537`)、host が frame counter を駆動 | surface texture の export 無し(3D は compute ray-cast が atlas を直接読む)、top level が device を自前生成(`init_gpu(&Device)` は有り) | volumetric 見つからず。詳細は U70 待ち |
+| **helmer**(MIT、38★、pre-alpha、最終 2026-04、wgpu 28) | G-buffer が contract の列に最も近い(normal/albedo/emission RGBA16F、MRA、depth + R32F copy、`passes/gbuffer.rs:133-138`)、差し替え可能な render graph template、BLAS/TLAS、SSGI/DDGI/RT 反射 | device は自前、M4 で未確認 | 物ごとの `casts_shadow` のみ |
+| INOX(MIT、127★) | **diffuse と specular を別 pass で出す** = contract の出力形そのもの。engine は採らず形だけ参照 | Blender 変換データが要り未実行 | — |
+| nightshade-renderer(0.57、wgpu 29) | `new_with_device(adapter, device, queue, surface)` で注入可、名前付き slot(scene_color HDR / depth / view_normals / velocity) | albedo 無し(forward)、BVH 無し、GitHub URL 不明 | 光の cast_shadows のみ、距離霧のみ |
+| scenix(5★、wgpu 29) | GBuffer + HDR + `render_to_texture` | device 自前、BVH は CPU raycast のみ | — |
+| gpu-curtains(WebGPU、MIT、188★) | adapter/device 注入可、MRT は自分で組む | 何も持っていない | DOM 同期 plane が一級 |
+| C2-Renderer(WebGPU、MIT) | ReSTIR-PT + energy-compensated BRDF、今回で最良の画質だが progressive | 実時間でない | **renderer ではなく Lighting Pack の参照** |
+
+- 既存行の flag 事実(再監査はしておらず、各 library の公開 API に基づく): Bevy `NotShadowCaster`/`NotShadowReceiver`、three `castShadow`/`receiveShadow` + `ShadowMaterial`(shadow catcher)、Babylon `ShadowOnlyMaterial`。**新規で holdout / shadow catcher を持つ物は無し**、Only 相当は SceneVM の暗黙の shadow-only だけ。
+- 次に実際につなぐ 3 本: Rendiation(device 注入と HDR 化の patch が要る)、SceneVM、helmer(または INOX を形の参照に)。
+- 未網羅: GitHub の rate limit で一部の複数語 query が未回答、npm と Filament WebGPU backend は未確認。場所: `explore/U64/`。
+
 ### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
 
 1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
