@@ -77,5 +77,5 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 1. ~~seam~~ **利用者裁定(2026-09-24)**: 「Plate だから平面カードになる、は無し。View から見ればその View の意味で見える」。View は plate の中身をその目から描く(現状の実装)。Plate = semantic isolation + optimization permission であって rasterize 命令ではない(既決)に沿う。16.7 ms は払うのではなく、2〜5 の構造で取り返す。Camera/Stage が plate の作中カメラの絵を見る件は `composition_picture` seam のまま(この裁定は「別 View から見る時」について)。
 2. plate の中身の mesh instance を stack 間で共有(`SharedMeshScene` の先例を plate へ): upload 2178 → 約 400/コマ。
 3. View の atlas の mip を、Vism が読む段数だけ作る(`BACKDROP_BLUR` と同じ形の `VIEW_BLUR`): 約 −20 pass/コマ。
-4. MeshAfterRect の切れ目を消す(歴史的。絵の試験 1 本と一緒に)。
+4. ~~MeshAfterRect の切れ目を消す~~ → **消せない(2026-09-24 実測)**: 消すと `glass_refracts_the_layers_drawn_behind_it` と `gpu_instance_subsets_preserve_rect_mesh_boundaries_and_surface_parameters` の絵が変わる(rect と mesh を 1 つの ViewBuilder に入れると同じ絵にならない)。さらに「先の 3D の絵が後の mesh より手前にある」場面で、切っても切らなくても絵が手前に出ない(中心が mesh の色)。rect と mesh の深度の意味(Opaque 段の mesh と Transparent 段の rect)は未監査 = gap。境目は残す。
 5. run を中間 canvas なしで stack に直接描く(MSAA の target に load): fork の seam(UPSTREAM_SEAM)。今回はしない。

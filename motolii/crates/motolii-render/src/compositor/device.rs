@@ -98,17 +98,6 @@ impl Compositor {
         self.catalog = next;
     }
 
-    pub fn with_device_using_headless_defaults(
-        device: wgpu::Device,
-        queue: wgpu::Queue,
-    ) -> Result<Self, CompositorError> {
-        Self::with_device(
-            device,
-            queue,
-            crate::render::compositor::PRESENTABLE_FORMAT,
-            re_renderer::RenderConfig::best_for_device_caps,
-        )
-    }
 
     pub fn upload_rgba(
         &self,

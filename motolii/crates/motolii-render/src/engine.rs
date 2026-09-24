@@ -296,62 +296,6 @@ impl Engine {
         self.compositor.device()
     }
 
-
-    pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
-        #[cfg(test)]
-        let _gpu = GpuLease::take();
-        Ok(Self {
-            frame_graph: None,
-            resolve_tally: Vec::new(),
-            resolve_worst: Vec::new(),
-            layout_flow: Default::default(),
-            #[cfg(test)]
-            _gpu,
-            compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
-            materials: HashMap::new(),
-            probes: HashMap::new(),
-            shape_textures: HashMap::new(),
-            failed_probes: HashMap::new(),
-            layer_failures: Vec::new(),
-            drawn_layers: 0,
-            ledger: Default::default(),
-            contributions: Default::default(),
-            prepared_contributions: 0,
-            world_light_captures: 0,
-            plate_bakes: 0,
-            light_scene_ids: Vec::new(),
-            preparation_events: Vec::new(),
-            tick_frame: None,
-            tick_stats: Default::default(),
-            analysis_pictures: HashMap::new(),
-            view_readbacks: Vec::new(),
-            models: HashMap::new(),
-            extrusions: HashMap::new(),
-            failed_meshes: HashMap::new(),
-            environments: HashMap::new(),
-            containers: HashMap::new(),
-            failed_containers: HashMap::new(),
-            point_clouds: HashMap::new(),
-            particle_frames: HashMap::new(),
-            overlay_frames: HashMap::new(),
-            failed_point_clouds: HashMap::new(),
-            pixels: still_pixels(),
-            videos: HashMap::new(),
-            realtime: false,
-            renders_since_video_purge: 0,
-            video_stream_namespace: 0,
-            feedback_namespace: 0,
-            frozen: Default::default(),
-            freezing: None,
-            blocks: Default::default(),
-            frame_cache: HashMap::new(),
-            frame_cache_bytes: 0,
-            frame_cache_budget: texture::FRAME_CACHE_BUDGET,
-            frame_cache_tick: 0,
-            frame_cache_hits: 0,
-        })
-    }
-
     pub fn set_realtime(&mut self, realtime: bool) {
         self.realtime = realtime;
     }

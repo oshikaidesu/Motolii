@@ -168,6 +168,15 @@ pub(crate) fn plan_runs(inputs: &[SequentialInput<'_>]) -> Vec<PlannedRun> {
     out
 }
 
+/// Mip levels a surface reads from a backdrop of `level_count` levels when its roughness is at
+/// most `max_roughness`: the twin of `vism/material.wgsl`'s lod (`pow(r, 0.8) * (levels - 1) *
+/// 0.55`, and trilinear reads the level above), so no level nobody samples is generated. The
+/// curve is Motolii's standard material's, so it lives here and not in the host.
+fn backdrop_levels_read(max_roughness: f32, level_count: u32) -> u32 {
+    let lod = max_roughness.clamp(0.0, 1.0).powf(0.8) * level_count.max(1).saturating_sub(1) as f32 * 0.55;
+    (lod.ceil() as u32 + 1).clamp(1, level_count.max(1))
+}
+
 /// The Normal blend (Porter-Duff source-over) in `vism/blend.wgsl`'s numbering.
 const SRC_OVER: u32 = 3;
 /// What is below stays on top (the sky under what is drawn).
@@ -536,7 +545,7 @@ impl Compositor {
         });
         let level0 = |texture| wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All };
         encoder.copy_texture_to_texture(level0(&below.texture), level0(&pyramid.texture), size);
-        let levels = re_renderer::backdrop_levels_read(roughness, pyramid.texture.mip_level_count());
+        let levels = backdrop_levels_read(roughness, pyramid.texture.mip_level_count());
         self.surface_work.backdrop_mip_levels += u64::from(levels);
         self.ctx.texture_manager_2d.generate_mipmap_levels(&self.ctx, encoder, &pyramid.texture, levels);
         let imported = self.import_premultiplied(&pyramid)?;
