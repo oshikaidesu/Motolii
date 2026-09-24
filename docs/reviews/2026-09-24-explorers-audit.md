@@ -382,6 +382,16 @@ wgpu_pbr の 4k と 15.2k の差は「11k 多い」ではなく、4k が品質�
 - **renderer-neutral な振り分け**: (1) **Lighting Pack**(GI・色の伝播): voxel irradiance cache の自己参照 bounce、柔らかい遮蔽の直接光、flood-fill volume、半透明 tint — Rethinking Voxels は履歴依存、**flood fill は静的 scene で固定点に収束するので毎コマ収束まで回せば履歴が消える**。contract が運ぶ物: cell ごとの occupancy・albedo・emissive 色と強度・半透明 tint(RGB + α)・空の可視性・太陽方向と影。(2) **空気 / volumetric**: 高さ層の密度 + noise、天候の密度と色、空色の ambient、洞窟の kill switch、光 volume による色付き fog、水の吸収 — parameter の純関数(Bliss の smooth uniform と ray march dither の TAA を除く)。contract が運ぶ物: fog parameter(Rayleigh/Mie・高さ減衰・密度・色)、天候状態(雨・濡れ・砂・雪・湿度・温度・風)、洞窟係数、空の irradiance、水の volume と吸収。(3) **画の仕上げ**: 露出(手動/log 平均/histogram 中央値)、bloom、bloomy fog、Purkinje、tone 前 grade、tone(Lottes/AgX/Uncharted2)、tone 後 HSL、vignette、TAA — auto exposure と TAA は履歴依存、Photon の既定(手動露出・grain 無し)は毎コマ決定的。contract が運ぶ物: scene-linear radiance、pixel ごとの fog 透過率、motion、**コマごとに明示した露出値**。(4) **残す価値のある演出 fake**: Solas の power 空間 flood fill + 色付き光 fog、Bliss の露出反比例の block 光、Rethinking Voxels の光色の彩度強調と GI の ambient 下限、手調整の光色 table — 収束後は毎コマ決定的。contract が運ぶ物: **物理 albedo と分けた光ごとの artistic な色・強度・「半径指数」の override**。
 - **license**: 4 pack とも code は持ち出さない。一次資料(Lottes 2016、CoD:AW の post 講演、INSIDE の TAA、Bruneton)から再実装する。
 
+### U62 Speedball の兄弟(WebGPU host に後付けする GI、2026-09-25、headless Chrome で 5 本撮影)
+
+- 22 件。2026-07〜09 に npm 初出が 9 件 = 後付け GI は今の潮流。
+- **最重要: three r186 の `builtinGIContext(ao, gi)`**(`src/nodes/core/ContextNode.js`)。AO と間接光を全 material の BRDF の前へ入れる公式の口。three 自身の VXGINode(2026-08-31 追加、voxel cone GI、history 任意)と第三者 three-gtvbao がこの口で刺さる。
+- 上位: ① VXGINode + builtinGIContext(60fps Sponza)② pixi-rcgi(2D の holographic RC、**既定で history 無し**、sprite に emissive/occlusion/normalMap を tag、MIT)③ Speedball(world 空間 probe の blend、変更 event API)④ SSGINode(MRT 上の post、history 無し preset 有り)⑤ three-gtvbao(AO、license 要確認)。path tracer 系・lightmap baker は renderer 乗っ取り/offline で落選。
+- **後付け GI が host に求める物(先例からの帰納)**: depth + 今/前 camera 行列、normal、別出しの diffuse albedo、motion は history を使う時だけ、emissive、trace できる scene geometry(**どの host も共有していない、全員自前 BVH/voxel を建てる** + 変更 event)、light・shadow map・sky、戻り口は 3 種(BRDF 前の注入 > `color·ao + albedo·gi` の post 合成 > 乗っ取り)。
+- host の自然さ: three WebGPU(任意 MRT・linear HDR・注入口が一級)> Babylon(GeometryBufferRenderer + MaterialPluginBase)> PlayCanvas(depth のみ、GI add-on 皆無)。PixiJS は add-on が container を所有。
+- Motolii への含意: 戻り口は「BRDF 前注入」を一級に。scene geometry の共有は先例に無い = Motolii が scene 側で出すなら新規だが、全員が再建している事実は共有の価値を示す。
+- 撮影: `explore/U62/cap_*.png`。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
