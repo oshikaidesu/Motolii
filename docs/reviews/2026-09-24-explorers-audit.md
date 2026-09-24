@@ -166,6 +166,18 @@ Motolii 固有として残るもの: View / Plate / Repeater / 2D・2.5D・3D �
 - **次の探索枠(候補集めは利用者側、現物の照合は Fable 側)**: 「Rerun を host のまま、外部 renderer に共有の device/target を渡して描かせ、Rerun の Texture として合成する」経路を探す。外部 renderer が device まで所有する必要は無く、「この Texture にこの DrawData を描いて」だけ任せられればよい。条件: Rust/wgpu なら最良だが限定しない、共有 device/target へ描ける、render graph が分離可能、headless/offscreen 可、PBR/HDR/transmission が強い、shader 層だけでも使える、scene の所有を強制しない。分類: DIRECT EMBED / RENDER-TO-TEXTURE / SUBSYSTEM EXTRACTION / REFERENCE ONLY。
 - **完成した renderer を読む価値(問いの入れ替え)**: 今の Motolii を基準にすると「Karis をどう改善するか」になるが、Filament を基準にすると「なぜ DFG LUT + 多重散乱 GGX でないのか」になる。Cycles なら「Glass の改善」でなく「なぜ volume boundary/thickness/absorption が無いのか」、Vello なら「40 curve の loop をどう速くするか」でなく「なぜ fragment が全 curve を読んでいるのか」。
 
+## T2 Bevy PBR(部品取り、現物監査 2026-09-24)
+
+- Bevy main `ad31a06` / 0.20-rc.1 は wgpu 30・`wesl 0.4.2`(`naga-ext`)で Motolii と同じ pin。WESL 0.5(PR #25768)は未マージの WIP。0.19.1 は naga_oil の `.wgsl`。
+- `environment_filter.wesl`・`tonemapping.wesl`・`bloom.wesl` を `wesl =0.4.2` + `VirtualResolver` でコンパイル、naga 29.0.4 で検証して通った(naga 30 は未検証)。書き換えは import 行と binding 2 か所。
+- Rust crate は ECS に結合していて依存にできない、再利用できるのは shader 文字列だけ。`mesh_view_bindings` を import する物(transmission・shadow・light probe・decal・OIT・`pbr_lighting` 全体・`pbr_functions`)は取れない。
+- prefilter は fork の equirect(2D texture)用に書き直しが要る。DFG LUT の生成器はライセンス表記の無い gist なので自前(約 40 行)。AgX/Filmic の LUT はライセンス未確認。LTC LUT は論文の引用が要る。Motolii の `glow.wgsl` は既に Bevy の bloom の写し。
+- **部品取り(A)としての数字**: 追加 shader 約 640 行 + Rust 約 150 行、削除 約 140 行。**この数字は旧前提(今の renderer を残す)の問いへの答え**で、下の前提変更で B を別に評価する。
+
+## 前提変更: Destructive replacement(利用者裁定 2026-09-24)
+
+今の renderer 実装は保存しない。守るのは上位 semantic(Document/Timeline、FrameGraph の依存、Vism、View、Plate/Flatten/Matte/Clip、Repeater、2D/2.5D/3D、composition order と blend、hot reload)だけ。候補ごとに **A Surgical** と **B Destructive** を出し、B は「その候補を正本にしたら今の Motolii/fork の renderer を何丸ごと消せるか」で評価する。**最終 owned complexity = 旧経路の削除 + adapter**、依存の内部 LOC は数えない。binding layout・Stage・material 構造の不一致は B の棄却理由にならない。移行は 新経路完成 → oracle/reference で検証 → 切替 → 旧経路削除、恒久の二重経路は作らない。T1〜T3 はこの基準で再評価する(U5: 所有コードの棚卸し = 分母、U6: Bevy/renderling の B、U1 Rendiation・U2 threers・U3 netrender/Vello・U4 接続雛形にも同じ基準を追記)。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
