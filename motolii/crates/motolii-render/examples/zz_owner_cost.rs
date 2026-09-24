@@ -35,22 +35,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format: motolii_render::compositor::PRESENTABLE_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, view_formats: &[],
     });
+    let passes: usize = std::env::args().nth(4).and_then(|v| v.parse().ok()).unwrap_or(2);
     let mut wait = Vec::new();
-    for pass in 0..2 {
+    let mut cpu = Vec::new();
+    for pass in 0..passes {
         let before = engine.surface_work();
         wait.clear();
+        cpu.clear();
         for frame in (0..300).step_by(10) {
             let t = RationalTime::try_from_frame(frame, comp.fps)?;
+            let start = Instant::now();
             engine.render_frame_into(&doc.view(), t, &target)?;
             let submitted = Instant::now();
+            cpu.push(submitted.duration_since(start).as_secs_f64() * 1000.0);
             device.poll(wgpu::PollType::wait_indefinitely())?;
             wait.push(submitted.elapsed().as_secs_f64() * 1000.0);
         }
         if pass == 1 {
             let after = engine.surface_work();
             wait.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            println!("hide={:?} mode={mode} gpu_wait_median_ms={:.2} layer_views={} main_runs={} backdrop_copies={}",
-                hide, wait[wait.len() / 2], (after.layer_views - before.layer_views) / 30, (after.main_runs - before.main_runs) / 30, (after.backdrop_copies - before.backdrop_copies) / 30);
+            cpu.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            println!("run_setup_ms/frame={:.2} run_record_ms/frame={:.2} run_mix_ms/frame={:.2}", (after.run_setup_us - before.run_setup_us) as f64 / 30000.0, (after.run_record_us - before.run_record_us) as f64 / 30000.0, (after.run_mix_us - before.run_mix_us) as f64 / 30000.0);
+            println!("cpu_median_ms={:.2} draw_data_prepare_ms/frame={:.2} mesh_batches/frame={} mesh_instances_uploaded/frame={}", cpu[cpu.len() / 2], (after.draw_data_prepare_us - before.draw_data_prepare_us) as f64 / 30000.0, (after.mesh_batches - before.mesh_batches) / 30, (after.mesh_instances_uploaded - before.mesh_instances_uploaded) / 30);
+            println!("hide={:?} mode={mode} gpu_wait_median_ms={:.2} layer_views={} main_runs={} backdrop_copies={} run_breaks[end,alone,plate,flat,glass,mesh_after_rect,screen_passes,view_owner]={:?}",
+                hide, wait[wait.len() / 2], (after.layer_views - before.layer_views) / 30, (after.main_runs - before.main_runs) / 30, (after.backdrop_copies - before.backdrop_copies) / 30,
+                after.run_breaks.iter().zip(before.run_breaks.iter()).map(|(a, b)| (a - b) / 30).collect::<Vec<_>>());
         }
     }
     let _ = hidden;

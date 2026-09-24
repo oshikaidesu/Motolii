@@ -53,3 +53,29 @@ Cube Mirror の VIEWS 有無、CCTV の追加・LOOK/FOV の変更・VIEWS の�
 | 13 | CPU 1 コマ 5.5 → 10.4 ms: View の面ごとに本番の run を組む | 観測(layout ではない) | 未着手 |
 
 実測(M4、1920×1080、headless warm、同じ書類 = 旧 Prism Garden): GPU 待ち 67.9 → 46.1 ms。持ち主(Metal System Trace): View の面の raster 38.6 → 16.6 ms・View の Blit 7.5 → 0.7 ms・本番 view の raster 30.0 → 30.2 ms・効果と合成 7.6 → 9.8 ms。新しい Prism Garden(板 96・OBJ 7・View 2 層 × 3 = 6 枚、要求 6 = 実体化 6): GPU 48.5 ms・CPU 10.4 ms。release 実窓 843 描画 / 1769 落ち(約 19 fps、前版 約 14 fps)。
+
+## run の境目と 1 コマの pass 数(計測 2026-09-24、Prism Garden 第 2 版、M4、headless warm)
+
+`compositor/view.rs` の `plan_runs` が run(1 つの ViewBuilder が一緒に描く層)の切れ目と理由を返す(純関数)。`SurfaceWork::run_breaks` が理由ごとに数える。`zz_run_cost` が空の run の固定費、`zz_owner_cost` が層ごとの費用と CPU の内訳を出す。
+
+| 切れ目 | 根拠 | 1 コマの数(view 1 + View の面 6) |
+|---|---|---|
+| Alone(mix blend の絵は単独) | 混色は下を読む(Glow の SPILL "screen") | 28 — 全部 Heart の plate の中 |
+| Plate | plate は自分の stack | 0(plate は Flat で切れていた。今は明示) |
+| Flat(2D / 非 2D) | 2026-09-12 の法 | 7 |
+| Glass | 2026-09-23 の法 | 7 |
+| MeshAfterRect | **歴史的**(e761117e6)。今は Transparent 段が rect と mesh を DrawOrder で一緒に並べる | 0 |
+| ScreenPasses | 効果は自分の絵だけを見る | 14 |
+| ViewOwner | 1 draw に束ねられる View は 1 層分 | 1 |
+
+- 空の run の固定費(GPU): 1080p 約 0.08 ms、512² 約 0.09 ms。前の報告の「1 run 約 2 ms」は誤り。
+- 1 コマの GPU pass: view-run 10・layer-view-run 51・vism-pass(合成・効果)124・mip 44・sky 10、合計約 250。
+- CPU 10.4 ms の持ち主(`sample`): wgpu の `CommandEncoder::finish`(pass ごとの Metal encoder 生成・pipeline 切替)が View の面 6 枚分で約 4 ms(39%)。run の準備 0.53・記録 0.78・合成 0.12。`before_submit`(staging の upload: plate の中身の mesh instance を stack ごとに再 upload、2178 個/コマ)約 0.7。frame graph・lowering 約 0.4。layout ではない。
+- GPU 48.5 ms の持ち主: Heart(2 つの 2D plate を View の面 6 枚が中身から描き直す: 花弁 raster・Glow・spill の alone 4 本/面)16.7、板 96 枚(Prism View の shading の重なり)13、球 7 個(含 3 面)11、残り(海・粒・核・文字・present)11.6。
+
+構造として一度にできる候補(cache ではない):
+1. **seam**: 2D の plate を View が見る時、作中カメラの絵(Stage と同じ)か、中身をその目から描くか。今は後者(この session の選択)。前者なら −16.7 ms GPU・−約 3 ms CPU・alone 28 → 0。
+2. plate の中身の mesh instance を stack 間で共有(`SharedMeshScene` の先例を plate へ): upload 2178 → 約 400/コマ。
+3. View の atlas の mip を、Vism が読む段数だけ作る(`BACKDROP_BLUR` と同じ形の `VIEW_BLUR`): 約 −20 pass/コマ。
+4. MeshAfterRect の切れ目を消す(歴史的。絵の試験 1 本と一緒に)。
+5. run を中間 canvas なしで stack に直接描く(MSAA の target に load): fork の seam(UPSTREAM_SEAM)。今回はしない。

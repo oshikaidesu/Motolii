@@ -73,6 +73,101 @@ pub(super) fn visit_inputs(inputs: &[SequentialInput<'_>], f: &mut dyn FnMut(&Se
     }
 }
 
+/// What ended a run (the layers one `ViewBuilder` draws together) and began the next. Each is a
+/// reading of the work — which picture a layer sees below it, or in what order it stacks — or a
+/// binding a draw can hold only one of; none is a cache.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+pub(crate) enum RunBreak {
+    /// The last run of the stack.
+    End = 0,
+    /// A picture with a mix blend is drawn alone: its blend reads what is below it.
+    Alone,
+    /// A plate the view materializes is a stack of its own, at its place.
+    Plate,
+    /// 2D is not in the world (2026-09-12): a run is all 2D or all not.
+    Flat,
+    /// Glass reads the non-glass picture, which the non-glass runs build (2026-09-23).
+    Glass,
+    /// A mesh after a picture.
+    MeshAfterRect,
+    /// A layer whose effects run on the view's picture sees only itself.
+    ScreenPasses,
+    /// A run binds one layer's Views.
+    ViewOwner,
+}
+pub(crate) const RUN_BREAKS: usize = 8;
+
+pub(crate) struct PlannedRun {
+    pub range: std::ops::Range<usize>,
+    /// The blend onto the stack (`vism/blend.wgsl`'s numbering).
+    pub mode: u32,
+    pub ended_by: RunBreak,
+}
+
+/// The runs of a stack, in order: which layers each `ViewBuilder` draws together and why the
+/// next one starts. Pure: the same inputs always plan the same runs.
+pub(crate) fn plan_runs(inputs: &[SequentialInput<'_>]) -> Vec<PlannedRun> {
+    let flat = |input: &SequentialInput<'_>| input.projection == crate::doc::store::LayerProjection::TwoD;
+    let alone = |input: &SequentialInput<'_>| {
+        matches!(input.content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_)) && vello_blend_mode(input.blend_mode).is_some()
+    };
+    let mut out = Vec::new();
+    let mut index = 0;
+    while index < inputs.len() {
+        let start = index;
+        if matches!(inputs[start].content, SequentialContent::Plate(_)) {
+            out.push(PlannedRun { range: start..start + 1, mode: SRC_OVER, ended_by: RunBreak::Plate });
+            index += 1;
+            continue;
+        }
+        if let Some(mode) = vello_blend_mode(inputs[start].blend_mode).filter(|_| alone(&inputs[start])) {
+            out.push(PlannedRun { range: start..start + 1, mode, ended_by: RunBreak::Alone });
+            index += 1;
+            continue;
+        }
+        let mut has_rect = false;
+        let mut ended_by = RunBreak::End;
+        while index < inputs.len() {
+            let input = &inputs[index];
+            let reason = if index == start {
+                None
+            } else if alone(input) {
+                Some(RunBreak::Alone)
+            } else if matches!(input.content, SequentialContent::Plate(_)) {
+                Some(RunBreak::Plate)
+            } else if flat(input) != flat(&inputs[start]) {
+                Some(RunBreak::Flat)
+            } else if input.shading.reads_backdrop != inputs[start].shading.reads_backdrop {
+                Some(RunBreak::Glass)
+            } else if has_rect && matches!(input.content, SequentialContent::Model(_)) {
+                Some(RunBreak::MeshAfterRect)
+            } else if !input.screen_passes.is_empty() {
+                Some(RunBreak::ScreenPasses)
+            } else if view_owner(input) != view_owner(&inputs[start]) {
+                Some(RunBreak::ViewOwner)
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                ended_by = reason;
+                break;
+            }
+            has_rect |= matches!(input.content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
+            index += 1;
+            if !input.screen_passes.is_empty() {
+                ended_by = RunBreak::ScreenPasses;
+                break;
+            }
+        }
+        out.push(PlannedRun { range: start..index, mode: SRC_OVER, ended_by });
+    }
+    if let Some(last) = out.last_mut() {
+        last.ended_by = RunBreak::End;
+    }
+    out
+}
+
 /// The Normal blend (Porter-Duff source-over) in `vism/blend.wgsl`'s numbering.
 const SRC_OVER: u32 = 3;
 /// What is below stays on top (the sky under what is drawn).
@@ -243,13 +338,13 @@ impl Compositor {
         let roughest = inputs.iter().filter(|input| input.shading.reads_backdrop).map(|input| input.shading.backdrop_roughness).fold(0.0f32, f32::max);
         // Backdrops a recorded draw still reads; kept until the view is recorded.
         let mut backdrops = Vec::new();
-        let mut index = 0;
-        while index < inputs.len() {
+        for planned in plan_runs(inputs) {
+            self.surface_work.run_breaks[planned.ended_by as usize] += 1;
+            let start = planned.range.start;
             // A plate the view materializes: its members drawn here, over the view's picture below
             // the plate (what its glass refracts), then the plate's effects, then onto the stack.
-            if let SequentialContent::Plate(plate) = inputs[index].content {
-                let input = &inputs[index];
-                index += 1;
+            if let SequentialContent::Plate(plate) = inputs[start].content {
+                let input = &inputs[start];
                 let Some(members) = plate.prepared.get() else { continue };
                 let member_inputs = sequential_inputs(&plate.sources, &members.pictures, &members.paddings, &members.spills, plate.camera, plate.camera);
                 let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
@@ -272,41 +367,8 @@ impl Compositor {
                 });
                 continue;
             }
-            // A mix blend reads what is below: the picture is drawn alone, then mixed onto the stack.
-            let (start, mode) = if let Some(mode) = vello_blend_mode(inputs[index].blend_mode).filter(|_| alone(&inputs[index])) {
-                index += 1;
-                (index - 1, mode)
-            } else {
-                // 2D is not in the world (2026-09-12): a run is all 2D or all not, and runs stack in order.
-                let start = index;
-                let mut has_rect = false;
-                while index < inputs.len() && !alone(&inputs[index]) {
-                    if index > start && flat(&inputs[index]) != flat(&inputs[start]) {
-                        break;
-                    }
-                    // A run is all glass or all not: glass reads the non-glass picture, which the
-                    // non-glass runs build. A mesh after a picture starts a run too.
-                    if index > start && (inputs[index].shading.reads_backdrop != inputs[start].shading.reads_backdrop || (has_rect && matches!(inputs[index].content, SequentialContent::Model(_)))) {
-                        break;
-                    }
-                    // A layer whose effects run on the view's picture is a run of its own: its neighbours
-                    // must not be in the picture its effects see.
-                    if index > start && !inputs[index].screen_passes.is_empty() {
-                        break;
-                    }
-                    // A layer that asked for Views reads its own: a run is one layer's copies or none's.
-                    if index > start && view_owner(&inputs[index]) != view_owner(&inputs[start]) {
-                        break;
-                    }
-                    has_rect |= matches!(inputs[index].content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
-                    index += 1;
-                    if !inputs[index - 1].screen_passes.is_empty() {
-                        break;
-                    }
-                }
-                (start, SRC_OVER)
-            };
-            let run = &inputs[start..index];
+            let mode = planned.mode;
+            let run = &inputs[planned.range.clone()];
 
             // The sky is the ground: the run holding the top environment lays it under the stack.
             if run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e)))) {
@@ -351,10 +413,13 @@ impl Compositor {
                 config.near_fade_distance = observer.near_fade;
             }
             self.surface_work.main_runs += 1;
+            let setup_started = std::time::Instant::now();
             let canvas = self.view_canvas(window);
             let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &canvas.texture)
                 .map_err(|e| CompositorError::View(e.to_string()))?;
             self.next_readback += 1;
+            self.surface_work.run_setup_us += setup_started.elapsed().as_micros() as u64;
+            let record_started = std::time::Instant::now();
             // A picture drawn alone for a mix blend is drawn plainly; its blend is the mix onto the stack.
             let plain: Vec<SequentialInput<'_>>;
             let drawn = if mode != SRC_OVER || alone(&run[0]) {
@@ -367,6 +432,7 @@ impl Compositor {
             // The bottom of the stack starts from the background; everything above is drawn on clear.
             let clear = if stack.is_none() { clear_color(background_color) } else { Rgba::TRANSPARENT };
             builder.draw_into(&self.ctx, clear, encoder).map_err(|e| CompositorError::Draw(e.to_string()))?;
+            self.surface_work.run_record_us += record_started.elapsed().as_micros() as u64;
             let canvas = match run {
                 [only] if !only.screen_passes.is_empty() => {
                     let density = pass_density(comp, window, observer, only);
@@ -515,9 +581,11 @@ impl Compositor {
         mode: u32,
         encoder: &mut wgpu::CommandEncoder,
     ) -> re_renderer::GpuTexture {
+        let started = std::time::Instant::now();
         let out = self.view_canvas(window);
-        let Self { ctx, blend_vism, .. } = self;
+        let Self { ctx, blend_vism, surface_work, .. } = self;
         blend_vism.get(ctx).record_over(ctx, encoder, &[below, above], &out.default_view, &[("mode".to_owned(), mode as f32)], window.size_f32());
+        surface_work.run_mix_us += started.elapsed().as_micros() as u64;
         out
     }
 }

@@ -368,6 +368,13 @@ pub struct SurfaceWork {
     pub cache_evictions: u64,
     pub cache_key_us: u64,
     pub cache_retained_texture_bytes: u64,
+    /// Why each run of a recorded stack ended, by [`view::RunBreak`] (the last run's is End).
+    pub run_breaks: [u64; view::RUN_BREAKS],
+    /// CPU time in a recorded stack: making each run's `ViewBuilder`, recording its draws, and
+    /// mixing runs onto the stack (µs).
+    pub run_setup_us: u64,
+    pub run_record_us: u64,
+    pub run_mix_us: u64,
 }
 
 pub struct Compositor {
