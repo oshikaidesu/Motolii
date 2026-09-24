@@ -159,3 +159,31 @@ fn saving_the_standard_material_reaches_its_surfaces() {
     rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
     assert_eq!(draw(&mut rt), before, "and back");
 }
+
+/// A card is found by its STAGE, not by which card it is: a shadow card from outside the motolii
+/// namespace makes its layer a light blocker as Cast Shadow does.
+#[test]
+#[ignore]
+fn a_shadow_card_from_anywhere_blocks_the_light() {
+    assert!(crate::render::engine::catalog_reads_disk(), "焼き込み build: .cargo/config.toml の IS_IN_RERUN_WORKSPACE が無い");
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/motolii-render/vism");
+    let file = Probe(dir.join("zz_shadow_probe.wgsl"));
+    let _ = std::fs::remove_file(&file.0);
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    let woke = Arc::new(AtomicBool::new(false));
+    let flag = woke.clone();
+    let _watch = crate::render::engine::watch_effect_catalog(move || flag.store(true, Ordering::Release)).unwrap();
+    a_moment();
+    std::fs::write(&file.0, "/*{ \"ID\": \"elsewhere.blocker\", \"LABEL\": \"Blocker\", \"STAGE\": \"shadow\", \"INPUTS\": [ { \"NAME\": \"strength\", \"TYPE\": \"float\", \"DEFAULT\": 1.0, \"MIN\": 0.0, \"MAX\": 1.0 } ] }*/\n").unwrap();
+    assert!(await_wake(&woke), "the watcher did not wake");
+    rt.request(serde_json::json!({"op":"reloadEffects"})).unwrap();
+    rt.request(serde_json::json!({"op":"create","kind":"rectangle"})).unwrap();
+    let lights = |rt: &mut crate::EditorRuntime| {
+        let before = rt.engine.surface_work().light_captures;
+        rt.engine.render_frame(&rt.doc.view(), crate::render::doc::core::RationalTime::ZERO).unwrap();
+        rt.engine.surface_work().light_captures - before
+    };
+    assert_eq!(lights(&mut rt), 0, "nothing blocks the light yet");
+    rt.request(serde_json::json!({"op":"applyEffect","pluginId":"elsewhere.blocker"})).unwrap();
+    assert_eq!(lights(&mut rt), 1, "the card's layer is drawn into the sun's stencil");
+}

@@ -166,12 +166,16 @@ pub(crate) fn translate_point_displace(
     }
 }
 
-/// Clip の欄 → 層の枠での切断。平面を世界へ写すのは描く側(枠が決まる所)。
-pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
-    const ID: &str = "motolii.clip";
-    let effect = effects.iter().rev().find(|e| e.plugin_id == ID)?;
+/// The last effect of a stage in the chain and its shelf declaration: a card is found by what it
+/// is (`STAGE`), not by which card it is, so a card of the same stage from anywhere works alike.
+fn last_of_stage(effects: &[crate::picture::resolved::ResolvedEffect], stage: crate::render::compositor::EffectStage) -> Option<(&crate::picture::resolved::ResolvedEffect, EffectDescriptor)> {
     let catalog = known_effects();
-    let descriptor = catalog.iter().find(|d| d.plugin_id == ID)?;
+    effects.iter().rev().find_map(|e| catalog.iter().find(|d| d.plugin_id == e.plugin_id && d.stage == stage).map(|d| (e, d.clone())))
+}
+
+/// A `STAGE: clip` card's inputs `axis` / `offset` / `cap` → 層の枠での切断。平面を世界へ写すのは描く側(枠が決まる所)。
+pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
+    let (effect, descriptor) = last_of_stage(effects, crate::render::compositor::EffectStage::Clip)?;
     let read = |name: &str| -> f32 {
         effect.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v {
             crate::doc::store::Value::F64(v) => Some(*v as f32),
@@ -191,15 +195,11 @@ pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect
     Some(crate::render::compositor::ClipSpec { axis, offset: read("offset"), cap: read("cap") > 0.5 })
 }
 
-/// Cast Shadow の欄 → 型紙の濃さ。掛かっていなければ 0(影を落とさない)。
+/// A `STAGE: shadow` card's input `strength` → 型紙の濃さ。掛かっていなければ 0(影を落とさない)。
 /// 柔らかさ・灯の選択・距離は compositor に実装が無いので欄も無い(2026-09-20)。
 pub(crate) fn translate_cast_shadow(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
-    const ID: &str = "motolii.cast_shadow";
-    let Some(effect) = effects.iter().rev().find(|e| e.plugin_id == ID) else { return 0.0 };
-    let catalog = known_effects();
-    let default = catalog.iter().find(|d| d.plugin_id == ID)
-        .and_then(|d| d.params.iter().find(|p| p.name == "strength"))
-        .map_or(1.0, |p| p.default as f32);
+    let Some((effect, descriptor)) = last_of_stage(effects, crate::render::compositor::EffectStage::Shadow) else { return 0.0 };
+    let default = descriptor.params.iter().find(|p| p.name == "strength").map_or(1.0, |p| p.default as f32);
     effect.params.iter().find(|(n, _)| n == "strength").and_then(|(_, v)| match v {
         crate::doc::store::Value::F64(v) => Some(*v as f32),
         _ => None,
