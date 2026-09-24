@@ -88,6 +88,23 @@
 - 対応表(抜粋): 帯表 = GENERIC(K)。bbox → 8 角形の cover polygon。coverage mask の DrawData(view 空間、または shape 空間の atlas を revision で共有 → 6 面の View が coverage を 1 回で済ませる)= GENERIC「Coverage」資源。`SurfaceProgram` ごとの標本率(曲線塗りは centroid、glass は sample)。paint を coverage の後に(bit 同一)。Thin Translucent 相当の dual-source blend(透過色と反射を 1 pass、glass の分散は Vism 側)= UPSTREAM_SEAM。TAA/TSR は不要(解析的 AA が既に決定論的)。
 - 順位: 1 K(同一)→ 2 K + 曲線塗りの画素ごと実行(縁の seam)→ 3 coverage mask + atlas → 4 Loop–Blinn(縁の品質は Rive 級)。stencil-then-cover は 4× MSAA では品質が下がるので却下。
 
+## 品質 rendering の調査(2026-09-24、調査のみ・実装なし。ESTABLISHED_RENDERING_TECHNIQUE の裁定下)
+
+### N1 Material(現行 BSDF が持たないもの)
+- 厚みが無い: `SurfaceIn::thickness` は instance の scale(板は約 1 で屈折量ほぼ 0 = 「透明な四角形」、球だけ屈折する)。Extrude の深さはシェーダに届かない。Beer–Lambert・第 2 界面・全反射・内部反射が無い。単散乱のみ(多重散乱の補償無し、拡散の重みが Fresnel を無視 → 「黒いプラスチック」)。Fresnel は n·v の Schlick だけで F90 も薄殻の 2 界面も無い(縁の線に見える)。specular AA 無し。粗さの空間変化の入力が無い。粗い屈折は backdrop の mip だけで、宣言した粗さ 0.05 では **11 段のうち 2 段しか host が作らない**(ぼけの予算が無い)。薄膜は cos の虹の縁で Fresnel 項ではない。
+- 上位 5(見た目の効きの順): ①実厚み + Beer–Lambert + 薄殻の 2 界面 Fresnel(fork の GENERIC: instance に幾何の厚みと slab/sphere の bit、doc に厚み・減衰色/距離)、②多重散乱 + エネルギー整合の誘電体(Vism のみ 15 行、Fdez-Agüera 2019)、③specular AA(Tokuyoshi–Kaplanyan)+ 粗さ依存 F90 + 第 2 lobe、④粗い屈折(IOR 依存の cone、`BACKDROP_BLUR` を実効粗さで)、⑤薄膜を Fresnel 項に(Belcour–Barla、KHR_iridescence)。先例: KHR_volume/transmission/iridescence/clearcoat、Filament、three.js、OpenPBR/Standard Surface、EEVEE Next。
+### N4 Image formation(**HDR は run の前段(ROP)で既に潰れている**)
+- ViewBuilder の main target が `Rgba8UnormSrgb`(fork `view_builder.rs:411`、`new_with_external_resolved` が同形式を強制)で、最初の描画から [0,1] の 8 bit。stack・backdrop の mip・View の絵も 8 bit。`composite.wgsl:83` の `saturate` が事実上の tone mapper、exposure・view transform・dither 無し。glow は float だが入力が ≤ 1(閾値 0.6 は「明るい粥色」)。現行画像の実測: 全 chan が 255 の画素 4.5 %、真っ白 0.09 %(1 chan だけ飽和して色相が飛ぶ = 6 原色への崩れ)、黒 0 %(輝度 1 %tile = 45/255、海の床が浮いている)。
+- 上位 5: ①float canvas の policy(fork の main target 形式 + Motolii の `BLEND_TARGET_FORMAT` → `Rgba16Float`、`saturate` 除去。土台)、②view transform の Vism + exposure(AgX 既定、ACES/PBR Neutral、dither 込み。**expression は Vism/document、host は「最後の Vism が出力変換」の契約だけ**)、③glow を radiance 域へ(閾値・spill を add)、④HDR 対応の MSAA resolve(fork の GENERIC: 可逆 tonemap resolve、fork 自身のコメントが既に指摘)、⑤export の 2× supersample + float で downsample。TAA/TSR と auto-exposure は不要。
+### M Vector raster / 2026 の先例(**Vello sparse strips が現実の選択肢**)
+- 現行の fork の異常さ: 曲線の全走査(Slug が最初に消す baseline)、標本ごとに材質まで、coverage と paint と material が 1 program、仕事が bbox × 標本に比例。他(Vello/Rive/Graphite/Pathfinder)は coverage を画素ごと・縁だけ・paint と分離。
+- **Vello GPU(sparse strips、0.10.0 = 2026-08-14、main は 09-24)**: CPU が flatten → tile → strip、GPU は strip の画素だけ。wgpu 30(fork と同じ)、呼び出し口は「caller の TextureView へ render」。fork の `paths.rs` の exact fill(`CurveFill`・`quadratic_curves`・gradient ramp・curve loop)を **丸ごと捨てられる**。ただし: 平面/アフィン前提(斜めの View では View 解像度で再 raster が要る)、API 安定性の保証無し、MSAA target には直接描けず非 MSAA の Picture を挟む(seam は「外部 pass が texture を提供」)。Motolii の wgpu 29 pin を 30 に上げる必要。
+- 順位: 1 Vello GPU(捨てる量が最大)/ 2 coverage mask pass + 画素ごとの shading(`Coverage` 資源)/ 3 K(帯表、採択・pin 済み)/ 4 Loop–Blinn(縁が今より落ちる)/ 5 標本率の per-program 化。
+### Rerun upstream(2026-09)
+- upstream `main` は wgpu 30、0.38.1(09-16)。**環境光/IBL・vector path・tonemap・HDR・mipmap・clip・標本ごと shading は上流に無い**。sorted transparency と custom `Renderer` の registry(`renderers_mut().register`)、group 1 = phase data(scene depth)、3D texture、Gaussian splat・voxel・volume raymarcher が入った。`re_renderer` は `crates/viewer/` → `crates/viewer_support/` へ移動済み(fork は既に新 path)。`Renderer` trait が `DrawInstruction` 形へ、`DrawPhase` に `Volume`。→ fork の一般 primitive のうち上流が持っていない物は依然として fork にしか居ない。
+
+### 待ち: Lighting(N2)、Optics(N3)、2026 prior-art の捨てる物の監査(P)、Cycles の参照 oracle(R)、SIGGRAPH 2024–26(Q)。目標画像が届けば、5 班の対応表に花弁・板・球・ハイライト・暗部の個別比較を載せる。
+
 ## 自分で確かめた物
 
 - run の切れ目 MeshAfterRect は歴史的ではなかった: 消すと 2 本の contract の絵が変わる(gap 台帳に記録)。
