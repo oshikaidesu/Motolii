@@ -272,6 +272,10 @@ wgpu_pbr の 4k と 15.2k の差は「11k 多い」ではなく、4k が品質�
 
 **この批の結論**: (1) Impeller は「既に app にいるから安い」が成立せず、Skia bridge と同じ「成熟 raster を hal 越しに借りる、代価は ABI と build」の席。(2) 交換可能 boundary の形は g3d(encoder 注入)と Satin(Context 値型 + caller 所有 command buffer + per-object per-context state)から取り、Bevy は submit 境界として同じ trait に収める(`RecordSurface::{Encoder|OwnSubmit}` + `capabilities()`)。(3) **JS renderer は deno_webgpu 経由で同一 MTLDevice に zero copy で回せる(fork 無し)** ことが初めて現物で立ち、PlayCanvas が「線形 HDR + alpha を post 前で出せて hot reload が本物」で Bevy に品質で並ぶ最初の challenger。勝ち負けは「Rust 内 ECS sync 3.5〜5k」vs「V8 + deno_webgpu + polyfill + wgpu 29 固定 + GC の非決定性」のどちらを owned に持つか。
 
+### 訂正: wgpu の Ray Query は Metal でも立つ(2026-09-24、Bloom 監査で発見、私が現物確認)
+
+`wgpu-hal-29.0.4/src/metal/adapter.rs:1019-1028` は `supportsRaytracing` + `supportsRaytracingFromRender` の両方が真なら `supports_raytracing` を立て、`:1155` で `features.set(F::EXPERIMENTAL_RAY_QUERY, self.supports_raytracing)`。Bloom の golden PT test と bench は この M4 で実際に `hw-ray-query` tier で走った。**以前の「wgpu の Ray Query は Vulkan のみ、Metal 非対応」(Q 班、および docs の記述)は wgpu 29 の code と一致しない。** ただし experimental で、Motolii の production 経路でこれを前提にしない方針(Metal でも動く software 経路を正とする)は据え置く。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
