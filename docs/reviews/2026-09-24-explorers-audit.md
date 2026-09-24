@@ -199,6 +199,28 @@ Motolii 固有として残るもの: View / Plate / Repeater / 2D・2.5D・3D �
 
 **結論**: 「Rerun の Device/Queue → 外部 3D quality subsystem → Rgba16F → Motolii compositor」に入れる候補で生き残ったのは Bevy だけ。理由は機能数ではなく境界の実在。SDK 形の完成品は存在せず、SDK に最も近い実現は Bevy の WESL 層を SUBSYSTEM EXTRACTION で切り出す形(Bevy B の fallback)。「Rerun + Impact の image formation + Bevy の WESL PBR 部品」という第二案は、Impact の縦串が shader 文字列としてしか取れず、その中身(ACES/PBR Neutral、Jimenez bloom、TAA)は Bevy の WESL にも同等以上があるので、**第二案 = SUBSYSTEM EXTRACTION と同じ物**に畳まれる。次の実験は 100〜300 行の spike(decision-index 参照)。
 
+### 15,200 行の 3 分割と「Motolii が今後理解・保守する graphics 技術」(利用者の指標、2026-09-24)
+
+U5 の分類から私が振り分けた概算(行単位の数えではない):
+
+| 区分 | 概算 | 中身 | 行き先 |
+|---|---|---|---|
+| 1. Motolii 固有 semantic が renderer code の中に埋まっている分 | 約 1.0〜1.5k | `SurfaceIn`/`program_*` の hook 契約(fork `surface.wgsl`)、`translate.rs` の AE 慣習(y-down・camera zoom・2D in 3D)、`BlendMode` の W3C 番号、`RunBreak` の理由、Clip の意味 | **Motolii に残る**(capability lowering として再配置) |
+| 2. 既存技術なのに自作している quality rendering | 約 6〜6.5k | fork: curve fill 1,016、surface programs/mesh 1,677、rect surface 461、environment/IBL 864。Motolii: host shader 709(material/encoding/glow/glass/blend/matte/noise/motion)、environment/light/mesh 330、extrude・material.rs・vism.rs・surface_program の GPU 側 約 1.2k | **Bevy(3D)/ Vello(vector)/ Khronos(語彙)へ** |
+| 3. 手書きの GPU scheduling / infrastructure | 約 5.5〜6k | `view.rs` の run 実行(texture 確保・保持・順序)、`layer_views.rs` の DFS と atlas、`compositor.rs` の format/texture plumbing、`frame_graph_scene`・`analysis`・`render/build`・`blocks`・`tick`・`warm`・`reuse`・`frozen`・`texture*.rs`、fork の views/embedding/targets 698 と pool 群 | **Rerun + render graph へ**(usage id の read-after-write で寿命・順序・cull を決める型) |
+
+wgpu_pbr の 4k と 15.2k の差は「11k 多い」ではなく、4k が品質と composition semantics を捨てている分。理想の最終状態は 1 だけが Motolii に残る。
+
+| 案 | Motolii が今後理解・保守する graphics 技術 |
+|---|---|
+| 現状 | PBR・IBL・DFG・glass/transmission・vector raster(curve fill)・HDR・bloom・tone・MSAA・texture 寿命と pass 順の手書き scheduling・fork の re_renderer 差分 |
+| Bevy B(render-to-texture) | AE composition(blend・Plate/Matte/Clip)、Vism → `VismExt` の統合、capability lowering、ECS sync、時刻ランダムアクセスと temporal state の reset、CurveFill(残る) |
+| threers B | AE composition + three.js 移植の差分(HDR clamp・MSAA)+ Vism の vertex patch + CurveFill |
+| Bevy SUBSYSTEM EXTRACTION(WESL 輸入) | PBR の plumbing・pass・binding・IBL prefilter の dispatch・tone/bloom の pass は依然 Motolii 側。数式だけ借りる |
+| Bevy + Vello + render graph(傾いている形) | composition / Vism 境界と capability lowering が中心。3D = Bevy、vector = Vello、video = re_video、host = Rerun、oracle = threers PT / Cycles |
+
+この列は「映像表現ソフト」から「PBR renderer 研究」へ脱線しない指標。新候補は「Bevy B より何が明確に良いか」の challenger 方式で見る。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
