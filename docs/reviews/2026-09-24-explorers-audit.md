@@ -125,7 +125,7 @@
 - 前提: Metal で使えるのは compute・storage・atomics・`DUAL_SOURCE_BLENDING`・`SUBGROUP`・`SHADER_F16`・`TIMESTAMP_QUERY`・HDR surface(`ExtendedSrgbLinear`)。**RT(ray query/pipeline)は Vulkan/DX12 のみと読む資料があり、Metal は experimental で open bug 2 件(#9100・#9215)**(探索者の間で記述が割れている: wgpu の docstring が古い)。**ROV/pixel-local storage/tile shader は wgpu に無い**。coop-vector・MetalFX は wgpu から届かない。
 - **この scene 種(球・板・花弁)は解析形/SDF で書けるので、「解析 occluder buffer + WGSL `trace()`」を 1 つ持てば RT 前提の研究(DDGI/SDFDDGI・Radiance Cascades・ReSTIR 系)の多くが RT 無しで動く**。
 - 順位(効果 ÷ (コスト + fork 表面)): ①rough refraction = scene-color の mip pyramid + slab/sphere の解析 2 界面(Substrate/Frostbite、コスト低)、②specular AA(Tokuyoshi 2021 の射影空間版、コスト ≈ 0)、③GGX prefilter の IBL(または HPG 2025 の Spherical Harmonic Exponentials)、④EDR 出力 + headroom を見る view transform(PBR Neutral / AgX / ACES 2.0 を LUT 化、ACES 2.0 は Apple silicon で shader が遅いので LUT)、⑤vector 層の Vello sparse strips(3D の後に合成)、⑥glass 層の Moment-Based OIT(ROV 不要)、⑦発光の SG area light(Tokuyoshi 2024)、⑧SDF DDGI の probe(拡散の相互反射)、⑨Newton 法の screen-space 屈折(JCGT 2026、vector 背景の屈折)、⑩physically based bloom/glare(separable は Glow に既にある)。TAA/TSR/MetalFX は vector 層に不適(文字と細線がにじむ)。時間方向の蓄積は 3D の glass 層に限る。
-- 未確認: 「PaRas(SIGGRAPH 2025)」は論文一覧で見つからない。
+- **訂正(2026-09-24、利用者が一次資料で確認)**: PaRas は実在する。「PaRas: A Rasterizer for Large-Scale Parametric Surfaces」(Kechun Wang / Renjie Chen、SIGGRAPH 2025 Conference Papers、DOI 10.1145/3721238.3730658、167:1–167:9、著者実装 github.com/renjiec/Paras)。対象は quartic triangular / bicubic rational Bézier など高次の 3D parametric surface を GPU 上の Newton 型反復で直接 rasterize する手法で、**2D の CurveFill の直接代替ではない**が、将来の高品質な曲面 primitive の先例。Q の「一覧で見つからない」は検索の取りこぼし。
 
 ### 捨てられるもの / 残すもの(現時点の仮判定、P と R の結果で更新)
 - **捨てる候補(証拠が揃った順)**: ①曲線塗りの自作(`paths.rs` の exact fill・`CurveFill`・curve loop)→ Vello GPU sparse strips への thin seam(ただし beta・wgpu 30 は main のみ・斜めの View は再 raster が要る)。当面は K(帯表、採択済み)で持たせる。②radiance の 2×2 box mip → GGX prefilter(Filament/Frostbite の標準)。③Motolii 側の Karis 近似の env BRDF → DFG LUT。④8 bit の run stack → float canvas。⑤自作の tone(saturate だけ)→ view transform(AgX)。
@@ -133,6 +133,10 @@
 - **人間が決めること(生き残る seam)**: 何を Vism から操作可能にするか(厚み・減衰・薄膜・exposure・view transform の選択)。**裁定済み(2026-09-24)**: Emission と Light Contribution は分離。発光は scene-linear HDR radiance(> 1.0 可)で、bloom/glare や反射・屈折から明るい物として観測される。周囲を照らすのは別の generic 能力で、Emission だけを理由に自動で照明/GI にはしない。N2 の「Core/Heart を光にする」は Light Contribution の realization 候補として別 lane に置く(seam: 新しい Motolii semantic として公開する必要が生じた時だけ報告)。
 
 ### 待ち: Cycles の参照 oracle(R)、P の最終報告(wgpu 生態系の PBR/IBL/tonemap の部品)、Q。目標画像が届けば、5 班の対応表に花弁・板・球・ハイライト・暗部の個別比較を載せる。
+
+## 調査の品質規則(2026-09-24 追加)
+
+**「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
 
 ## 自分で確かめた物
 
