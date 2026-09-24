@@ -134,6 +134,30 @@
 
 ### 待ち: Cycles の参照 oracle(R)、P の最終報告(wgpu 生態系の PBR/IBL/tonemap の部品)、Q。目標画像が届けば、5 班の対応表に花弁・板・球・ハイライト・暗部の個別比較を載せる。
 
+## Quality migration の正本と、捨てられる自作の地図(利用者の整理 2026-09-24、調査に基づく)
+
+正本の並び: **Khronos PBR の語彙 → Filament/EEVEE の realtime 実現 → Cycles の oracle → Vello/Rive(vector)→ wgpu の HDR 出力**。
+
+- **Material の意味は Khronos に既にある**: transmission・volume(thickness・attenuation・refraction・absorption)・ior・specular・clearcoat・sheen・iridescence・anisotropy・dispersion(2024 から正式)・emissive strength。Khronos glTF-Sample-Viewer は float framebuffer・HDR environment・transmission・volume・volume scattering・iridescence・dispersion を実装済みで reference になる。Standard Glass の意味を Motolii が発明する必要は薄い。
+- **Filament は realtime の教科書**: transmission・absorption・thickness/microThickness・ior・dispersion・iridescence・clearcoat・anisotropy・emissive、refraction は cubemap(遠景の安い近似)と screenspace(scene の物まで屈折)の 2 種で、Motolii の Environment + Backdrop と同型。IBL は roughness の prefilter・DFG LUT・多重散乱 GGX・拡散の irradiance/SH の生成道具を持つ。post は HDR bloom・AgX・PBR Neutral・ACES・filmic・gamut mapping・exposure・white balance・color grading・TAA/FXAA/MSAA。
+- **HDR は wgpu が持つ**: `ExtendedSrgb`/`ExtendedSrgbLinear`・DisplayP3・HDR10 PQ・HLG と `Surface::display_hdr_info()`(輝度・EDR headroom・primaries・bit 深度)、Metal/macOS 実装済み。scene-linear float → view transform → EDR の経路が正式に想定されている。
+- **Vector は Vello GPU(sparse strips: CPU で path/tile/strip、GPU で strip raster + 合成、wgpu backend、compute 不要)が本命候補**、Rive(Bézier を triangle patch に幾何的に還元して標準の rasterizer で描く)が別解。
+- **Cycles/EEVEE の分担**: Cycles は path tracer(oracle)、EEVEE は realtime、両者は shader node を共有。意味は Cycles 級、実現は EEVEE 級。Cycles は Emission を「見た目の発光」と「light として sampling するか」に分ける(Emission Sampling: None/Auto/Front/Back)→ 2026-09-24 の Emission ≠ Light Contribution の裁定と一致。
+- neural appearance(NVIDIA の Real-Time Neural Appearance Models)・Falcor(NRD 付きの denoised real-time path tracer)は研究資料。DX12/Vulkan 中心で今の Metal/wgpu へは入れない。
+
+| Motolii/fork の現在 | 2026 の先例 |
+|---|---|
+| CurveFill の全 curve fragment 走査 | Vello GPU sparse strips / Rive Renderer(当面は K = 帯表で持たせる) |
+| box 平均の env mip | Filament 式の GGX prefilter |
+| Karis のみの env BRDF | DFG LUT + 多重散乱 GGX |
+| `saturate` の出力 | scene-linear HDR + AgX/PBR Neutral + EDR |
+| thickness が placeholder の Glass | KHR Volume/IOR/Transmission + Filament の realtime 実現 |
+| 独自の分散・iridescence の意味 | KHR_materials_dispersion / iridescence を意味の正本に |
+| 発光の意味を発明 | KHR emissive strength + Cycles の light sampling 分離 |
+| 8 bit sRGB の中間形式 | float scene color + wgpu の HDR surface |
+
+Motolii 固有として残るもの: View / Plate / Repeater / 2D・2.5D・3D の composition / Vism の resource graph / timeline。**最初の実装は float scene-linear の pipeline**(8 bit のままだと後の GGX・Glass・Emission が頭打ち)。S(8 bit 経路の完全追跡)と R(Cycles 参照画像)の結果を待つ。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
