@@ -417,6 +417,14 @@ clone: `explore/U71/` premation@6c688c63(github.com/isroil01/motion-editor)、on
 - **決定性**: 全 pack が frame counter で seed、8〜64 コマ history 依存 = seek と再生で一致しない。既定の解(seed = hash(timeline frame, iteration, pixel)、seek で reset、export 前に固定 N コマ warm-up)で足りるが、**回転する 1/4 ray と float atomics の voxel 構築**は別に検査が要る。
 - 未到達: CurseForge 一覧、shaderLABS Discord、Bedrock pack。場所: `explore/U69/`。
 
+### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
+
+1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
+2. **Renderable は surface である必要すら無い**: 赤字幕なら camera = 普通の RGBA、shadow = coverage のみ、GI = emission + coverage + placement、specular = 不参加、volumetric = emitter として参加。2D を PBR material に押し込まない。
+3. **participation は bool 群ではなく domain ごとの visibility algebra**(Premation の Off/On/Only から): Camera = On|Off、ShadowCast / ShadowRecv / Indirect / Reflection = On|Off|Only。例: 見えない巨大な赤文字の形に部屋だけ赤く照らされる。
+
+U70・U64 には各 renderer の domain 別 visibility・非 surface の参加・volumetric 出力の有無を追加で確認させた。新しい agent は増やさず U64/U67/U68/U70 を回収する。
+
 ## 調査の品質規則(2026-09-24 追加)
 
 **「見つからない」は「存在しない」の証拠にしない。** 論文名・著者・会議名まで分かっている物は、公式 conference program → DOI/DBLP → 著者の repo の順にクロスチェックしてから NOT_FOUND と判定する。(例: PaRas は SIGGRAPH 2025 の公式一覧に載っていたのに Q 班が取りこぼし、M 班は「3D 曲面用で 2D の塗りには使えない」と正しく書いたが実在は未確認のままだった。)探索者への指示には「NOT_FOUND は検索した場所と語を列挙して出す」を入れる。
