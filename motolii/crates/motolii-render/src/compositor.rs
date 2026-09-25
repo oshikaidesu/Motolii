@@ -354,6 +354,13 @@ pub enum CompositorError {
     PresentableUsage,
 }
 
+/// `MOTOLII_GPU_LABELS=1` names each view run and effect pass by what it draws, so a Metal System
+/// Trace reads by layer and effect (development only; read once).
+pub(crate) fn gpu_labels() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("MOTOLII_GPU_LABELS").is_ok())
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SurfaceWork {
     /// 太陽から見た型紙(light cookie)を描いた回数。

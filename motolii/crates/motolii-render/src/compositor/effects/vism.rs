@@ -432,8 +432,10 @@ impl VismProgram {
                 .get(self.pipelines[pass_index])
                 .expect("vism pipeline");
 
+            // MOTOLII_GPU_LABELS names each pass by its effect so a Metal System Trace reads by effect.
+            let label = crate::render::compositor::gpu_labels().then(|| format!("vism {} pass {pass_index}/{pass_count} {}x{}", self.manifest.id.as_deref().unwrap_or("?"), render_size[0], render_size[1]));
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("vism-pass"),
+                label: Some(label.as_deref().unwrap_or("vism-pass")),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target_view,
                     depth_slice: None,

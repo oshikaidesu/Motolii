@@ -382,7 +382,7 @@ impl Compositor {
                 // The members' instances were uploaded with their pictures: this stack selects from them.
                 let members_world = ViewWorld { environment: world.environment, motion: world.motion, light: world.light, views: world.views, meshes: members.meshes.as_ref() };
                 let Some(mut canvas) = self.record_stack(comp, window, observer, &member_inputs, NO_BACKGROUND, &members_world, view, beneath.as_ref(), without, encoder)? else { continue };
-                if !input.screen_passes.is_empty() {
+                if !input.screen_passes.is_empty()  {
                     let density = pass_density(comp, window, observer, input);
                     canvas = self.screen_passes(window, view, density, canvas, input.screen_passes, input.screen_sources, stack.as_ref(), encoder)?;
                 }
@@ -452,6 +452,10 @@ impl Compositor {
             }
 
             let mut config = sequential_target_config(if observer.requested { "layer-view-run" } else { "motolii-view-run" }, comp, window, view_from_world, projection, environment);
+            if super::gpu_labels() {
+                let kinds: String = run.iter().map(|i| match i.content { SequentialContent::Rect(_) => 'r', SequentialContent::LinearRect(_) => 'l', SequentialContent::Model(_) => 'm', SequentialContent::Cloud { .. } => 'c', SequentialContent::Environment(_) => 'e', SequentialContent::Plate(_) => 'p' }).collect();
+                config.name = format!("RUN{at}[{}] n{} {kinds} glass{} flat{}", start, run.len(), glass_run as u8, flat(&run[0]) as u8).into();
+            }
             config.motion = world.motion.cloned();
             super::light::light_view(&mut config, world.light, false);
             if let Some(views) = run[0].shading.views.as_ref().and_then(|needs| world.views.iter().find(|v| v.owner == needs.owner)) {

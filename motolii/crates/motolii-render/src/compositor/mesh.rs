@@ -79,8 +79,10 @@ impl Compositor {
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let tint = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
         let mut program = shading.program.clone().or_else(|| self.standard_surface_program());
-        // A field bends the solid on the GPU: its caps are no longer planes.
-        let flat_program = if shading.field_effect { program.clone() } else { shading.program_small.clone().or_else(|| program.clone()) };
+        // A solid's caps vary smoothly even when a field bends them on the GPU (a wave, a twist), so
+        // they shade once per pixel too: MSAA still resolves the silhouette from coverage. Only the rim
+        // (walls and bevels) keeps per-sample shading.
+        let flat_program = shading.program_small.clone().or_else(|| program.clone());
         // U79 spike: a cut stone smaller than a hero on screen shades once per pixel.
         if model.faceted && shading.program_small.is_some() {
             let (scale, _, _) = world_from_object.to_scale_rotation_translation();
