@@ -4,6 +4,8 @@
 
 進行中の引き継ぎ作業は[2026-09-11作業表](claude-handoff-2026-09-11.md)に記録する。
 
+UIの移行(2026-09-25〜)は[UI rebaseline](ui-rebaseline/README.md)が正本。現行UIは能力の正本であって配置の正本ではない。Classic UIを残し、同じDocumentに新しいUI shellを足す。
+
 最小コア化の到達点・検証・残件は[2026-09-19進捗・引き継ぎ](minimal-core-progress-2026-09-19.md)を参照。
 
 ## コンセプトと採用事項
