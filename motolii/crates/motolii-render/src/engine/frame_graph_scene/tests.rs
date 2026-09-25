@@ -171,6 +171,44 @@ fn a_lowered_matte_draws_real_pixels_through_the_cassette() {
 }
 
 
+/// A shape's colour is its `shape.fill_color` property; the document's brush is only the default.
+/// A property written over a white brush draws in its colour, on every projection, and a keyed one
+/// changes the picture over time (the legacy `shapes_at` is the oracle).
+#[test]
+fn a_shape_draws_its_fill_color_property_over_the_documents_brush() {
+    use crate::doc::store::{property, Interp, KeyframeTrack, LayerProjection, PropertyId, Value};
+    use crate::doc::eval::Keyframe;
+    let fps = Fps::try_new(30, 1).unwrap();
+    let at = |frame| crate::doc::core::RationalTime::try_from_frame(frame, fps).unwrap();
+    let fill = PropertyId::new(property::SHAPE_FILL_COLOR).unwrap();
+    for projection in [LayerProjection::TwoD, LayerProjection::TwoPointFiveD, LayerProjection::ThreeD] {
+        let mut doc = document();
+        let layer = add_shape(&mut doc, 1, 0, Rgb { r: 1.0, g: 1.0, b: 1.0 });
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe { t: at(0), value: Value::Color([1.0, 0.0, 0.0, 1.0]), interp: Interp::Linear, spatial: None });
+        track.insert(Keyframe { t: at(10), value: Value::Color([0.0, 0.0, 1.0, 1.0]), interp: Interp::Linear, spatial: None });
+        doc.apply_all([
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch { projection: Some(projection), ..Default::default() } },
+            Intent::SetTrack { layer, property: fill.clone(), track },
+        ]).unwrap();
+        let oracle = crate::picture::shapes::shapes_at(&doc.view(), layer, at(0)).unwrap();
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let key = program.content().binding(layer).and_then(|binding| binding.content).unwrap();
+        let topology = GraphTopology::try_new(program.nodes(), vec![key]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let frame = graph.evaluate(&mut Executor(&program), at(0), FrameQuality::Export, Generation::new(1)).unwrap();
+        assert_eq!(frame.value(key).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()), Some(&oracle), "{projection:?}: the geometry is the legacy shape at t");
+
+        let mut engine = Engine::new().unwrap();
+        let count = |pixels: &[u8], red: bool| pixels.chunks_exact(4).filter(|p| if red { p[0] > 200 && p[2] < 40 } else { p[2] > 200 && p[0] < 40 }).count();
+        let first = engine.render_with_camera_override(&doc.view(), at(0), true, None).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        assert!(count(&first, true) > 50, "{projection:?}: the property's red, not the brush's white");
+        let last = engine.render_with_camera_override(&doc.view(), at(10), true, None).unwrap();
+        assert!(count(&last, false) > 50, "{projection:?}: the keyed colour changes the picture");
+    }
+}
+
 #[test]
 fn a_frame_that_only_moves_things_is_not_prepared_again() {
     use crate::doc::store::{property, Interp, KeyframeTrack, PropertyId, Value};
