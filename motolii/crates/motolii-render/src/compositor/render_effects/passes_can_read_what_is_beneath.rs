@@ -25,7 +25,7 @@ fn a_blurred_copy_fades_at_its_edge_without_going_dark() {
     let white = png(dir.path(), "white.png", SIZE, [255, 255, 255, 255]);
     let grey = png(dir.path(), "grey.png", 32, [128, 128, 128, 255]);
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     for (id, path, order, at) in [(1u64, &white, 0i16, 0.0), (2, &grey, 1, 16.0)] {
         let layer = LayerId(id);
         doc.apply_all([
@@ -57,7 +57,7 @@ fn a_blurred_layer_fades_at_its_edge_without_going_dark_on_the_baked_path() {
     let white = png(dir.path(), "white.png", SIZE, [255, 255, 255, 255]);
     let square = png(dir.path(), "square.png", 32, [255, 255, 255, 255]);
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     for (id, path, order, at) in [(1u64, &white, 0i16, 0.0), (2, &square, 1, 16.0)] {
         let layer = LayerId(id);
         doc.apply_all([
@@ -84,7 +84,7 @@ fn background_copy_then_gain_brightens_what_is_below_and_hides_the_layer() {
     let blue = png(dir.path(), "blue.png", SIZE, [0, 0, 100, 255]);
     let red = png(dir.path(), "red.png", 32, [255, 0, 0, 255]);
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     for (id, path, order, at) in [(1u64, &blue, 0i16, 0.0), (2, &red, 1, 16.0)] {
         let layer = LayerId(id);
         doc.apply_all([

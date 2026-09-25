@@ -56,7 +56,7 @@ fn a_24fps_clip_in_a_30fps_comp_keeps_its_own_speed() {
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
         // 層が出なかった時に黒と見分けるため、背景は赤。
-        background: [1.0, 0.0, 0.0, 1.0],
+        background: [1.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -110,7 +110,7 @@ fn a_variable_frame_rate_clip_is_placed_by_time() {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
-        background: [1.0, 0.0, 0.0, 1.0],
+        background: [1.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -148,7 +148,7 @@ fn a_layer_that_starts_later_is_drawn_from_its_first_frame_while_playing() {
         .expect("spawn ffmpeg");
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [1.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(30, Some(30), 90) } }).unwrap();
@@ -192,7 +192,7 @@ fn hdr_bt2020_clips_are_admitted_and_shown() {
     assert!(status.success());
     crate::render::media::probe(&clip).expect("HDR must be admitted");
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0, 1.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0, 1.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(30), 30) } }).unwrap();
@@ -222,7 +222,7 @@ fn an_audio_only_layer_is_silent_on_stage_and_not_a_failure() {
         .arg(&clip).status().unwrap();
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     for (id, path) in [(1, &clip), (2, &song)] {
         let layer = LayerId(id);
         doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -248,7 +248,7 @@ fn frames_seen_once_come_from_the_cache_within_the_budget() {
         .arg(&clip).status().unwrap();
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(30), 30) } }).unwrap();
@@ -305,7 +305,7 @@ fn limited_range_bt709_colors_come_out_right() {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 45,
-        background: [0.0, 1.0, 0.0, 1.0],
+        background: [0.0, 1.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -345,7 +345,7 @@ fn full_hd_playback_pace() {
         .expect("spawn ffmpeg");
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(90), 90) } }).unwrap();
@@ -375,7 +375,7 @@ fn four_k_playback_pace() {
         .expect("spawn ffmpeg");
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 3840, height: 2160, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 3840, height: 2160, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(90), 90) } }).unwrap();

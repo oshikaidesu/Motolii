@@ -18,7 +18,7 @@ fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).u
 /// 下 = 動画、上 = 白い板(comp 全面)に効果。`top` が None なら下だけ。
 fn document(clip: &std::path::Path, top: Option<(&std::path::Path, &str)>) -> Document {
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let below = LayerId(1);
     doc.apply_all([
         Intent::AddLayer(below),

@@ -52,6 +52,7 @@ impl Compositor {
             surface_work: Default::default(),
             light_cookie: None,
             light_pack: None,
+            look: None,
             gpu_instance_sharing_enabled: true,
             next_readback: 1,
             baked_effects: Default::default(),

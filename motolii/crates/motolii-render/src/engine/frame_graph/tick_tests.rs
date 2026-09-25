@@ -576,7 +576,7 @@ fn png(dir: &std::path::Path, name: &str, rgba: [u8; 4]) -> std::path::PathBuf {
 
 fn comp(doc: &mut Document) {
     doc.apply(Intent::SetComposition(crate::doc::store::Composition {
-        width: SIZE, height: SIZE, fps: crate::doc::store::Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.1, 0.2, 0.3, 1.0],
+        width: SIZE, height: SIZE, fps: crate::doc::store::Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.1, 0.2, 0.3, 1.0], look: Default::default()
     })).unwrap();
 }
 

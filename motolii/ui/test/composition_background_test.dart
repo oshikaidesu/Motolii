@@ -69,4 +69,38 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('the Look row writes Studio / Poster / Jewel', (tester) async {
+    final c = RecordingSession();
+    c.document.value = {
+      'width': 1920,
+      'height': 1080,
+      'durationFrames': 300,
+      'fps': 30.0,
+      'background': [0.0, 0.0, 0.0, 1.0],
+      'look': 'Studio',
+      'capabilities': <String>[],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: editorTestTheme,
+        home: Scaffold(
+          body: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: CompositionControls(controller: c),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (final look in ['Poster', 'Jewel', 'Studio']) {
+      await tester.tap(find.text(look));
+      await tester.pump();
+      expect(c.commands.last.$1, 'composition');
+      expect(c.commands.last.$2, {'look': look});
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
 }

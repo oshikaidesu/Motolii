@@ -132,6 +132,7 @@ pub fn build() -> Fixture {
         fps: Fps::try_new(FPS_NUM, 1).expect("30fps"),
         duration_frames: DURATION_FRAMES,
         background: [0.0, 0.0, 0.0, 1.0],
+        look: motolii_doc::store::Look::Studio,
     }))
     .expect("comp を置ける");
 

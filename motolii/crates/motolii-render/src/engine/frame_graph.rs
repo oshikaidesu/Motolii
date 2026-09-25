@@ -28,6 +28,7 @@ pub(super) struct EngineFrameGraph {
     comp: CompSpec,
     fps: crate::doc::store::Fps,
     background: [f32; 4],
+    look: crate::doc::store::Look,
     in_points: HashMap<LayerId, i64>,
     frame: Option<EvaluatedFrame>,
     /// The effect catalog's generation `frame` was evaluated with: the shelf's cassettes are inputs
@@ -41,7 +42,7 @@ pub(super) struct EngineFrameGraph {
 impl EngineFrameGraph {
     fn new(view: &StoreView<'_>, revision: GraphRevision) -> Result<Self, EngineError> {
         let composition = view.composition().map_err(store)?.ok_or(EngineError::NoComposition)?;
-        let (comp, fps, background) = (composition.spec(), composition.fps, composition.background);
+        let (comp, fps, background, look) = (composition.spec(), composition.fps, composition.background, composition.look);
         let in_points = view.layers().into_iter().filter_map(|layer| {
             view.meta(layer).ok().flatten().map(|meta| (layer, meta.timing.start))
         }).collect();
@@ -51,7 +52,7 @@ impl EngineFrameGraph {
         let solver = program.solver().key();
         let overlay = program.overlay().output();
         let topology = GraphTopology::try_new(program.nodes().collect::<Vec<_>>(), vec![scene, document_camera, solver, overlay]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, prepared_for: None, comp, fps, background, in_points, frame: None, catalog: 0, generation: 0, prepare_us: 0, measured: false })
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, prepared_for: None, comp, fps, background, look, in_points, frame: None, catalog: 0, generation: 0, prepare_us: 0, measured: false })
     }
     /// The semantic scene is a function of the document and the time only.
     fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool {

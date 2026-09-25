@@ -146,7 +146,7 @@ impl Engine {
         let seen = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &[], meshes: meshes.as_ref() };
         let layer_views = self.compositor.draw_layer_views(state.comp, &inputs, &seen)?;
         drop(inputs);
-        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, light, meshes, views: layer_views, comp: state.comp, background: state.background, document_camera });
+        let frame = Arc::new(PreparedFrame { scene, pictures, paddings, spills, environment, motion, light, meshes, views: layer_views, comp: state.comp, background: state.background, look: state.look, document_camera });
         self.frame_graph = Some(state);
         self.tick_frame = Some(frame.clone());
         Ok(frame)
@@ -165,7 +165,7 @@ impl Engine {
         let world = crate::render::compositor::ViewWorld { environment: frame.environment.as_deref(), motion: frame.motion.as_ref(), light: frame.light.as_ref(), views: &frame.views, meshes: frame.meshes.as_ref() };
         let camera = view.camera.unwrap_or(frame.document_camera);
         // A history on the view's own picture is the view's: keyed by which view it is.
-        let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, &world, 1 + view.projection as u32, &mut encoder)?;
+        let shown = self.compositor.record_view(frame.comp, view.window, camera, &inputs, background, frame.look, &world, 1 + view.projection as u32, &mut encoder)?;
 
         let ctx = &self.compositor.ctx;
         let surface = view.target.create_view(&wgpu::TextureViewDescriptor { format: Some(ctx.output_format_color()), ..Default::default() });
@@ -242,5 +242,6 @@ pub(in crate::engine) struct PreparedFrame {
     meshes: Option<crate::render::compositor::SharedMeshScene>,
     comp: crate::doc::core::CompSpec,
     background: [f32; 4],
+    look: crate::doc::store::Look,
     document_camera: ResolvedCamera,
 }

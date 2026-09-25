@@ -118,7 +118,7 @@ mod clipping_contract {
             height,
             fps: Fps::try_new(30, 1).unwrap(),
             duration_frames: 1,
-            background: [0.0; 4],
+            background: [0.0; 4], look: Default::default()
         }))
         .unwrap();
         doc

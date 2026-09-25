@@ -15,7 +15,7 @@ fn clip(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 }
 fn document(path: &std::path::Path) -> Document {
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 30, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply_all([
         Intent::AddLayer(layer),
@@ -37,7 +37,7 @@ fn a_plain_shape_freezes_to_material_space_without_changing_its_picture() {
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
     let layer = LayerId(1);
     doc.apply_all([
-        Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] }),
+        Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() }),
         Intent::AddLayer(layer),
         Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 1) } },
         Intent::SetShapes { layer, shapes: vec![crate::doc::store::rect_shape([255; 4], [16.0, 16.0])] },

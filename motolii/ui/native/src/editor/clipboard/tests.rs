@@ -68,7 +68,7 @@ fn copied_keys_keep_spacing_and_paste_at_the_requested_frame() {
             height: 480,
             fps,
             duration_frames: 300,
-            background: [0.0, 0.0, 0.0, 1.0],
+            background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
         }),
         Intent::AddLayer(layer),
         Intent::SetMeta {
@@ -132,7 +132,7 @@ fn key_paste_uses_the_selected_destination_and_undo_restores_its_track() {
         height: 480,
         fps,
         duration_frames: 300,
-        background: [0.0, 0.0, 0.0, 1.0],
+        background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     for (layer, frame, value) in [(source, 3, 0.2), (destination, 30, 0.8)] {
@@ -237,7 +237,7 @@ fn aggregate_text_cut_paste_preserves_content_and_properties_as_one_undo_step() 
         height: 480,
         fps,
         duration_frames: 300,
-        background: [0.0, 0.0, 0.0, 1.0],
+        background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     for layer in [source, destination, shape] {

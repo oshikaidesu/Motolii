@@ -190,7 +190,7 @@ mod tests {
                 height: 360,
                 fps,
                 duration_frames: 120,
-                background: [0.0; 4],
+                background: [0.0; 4], look: Default::default()
             }),
             Intent::AddLayer(layer),
             Intent::SetMeta {

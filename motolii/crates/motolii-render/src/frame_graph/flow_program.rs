@@ -398,7 +398,7 @@ mod tests {
             Keyframe { t: crate::doc::core::RationalTime::from_seconds(1), value: Value::F64(1.0), interp: Interp::Hold, spatial: None },
         ]).unwrap();
         doc.apply_all([
-            Intent::SetComposition(Composition { width: 640, height: 480, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] }),
+            Intent::SetComposition(Composition { width: 640, height: 480, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default() }),
             Intent::AddLayer(root),
             Intent::SetMeta { layer: root, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },
             Intent::SetConstant { layer: root, property: PropertyId::new(layout::DISPLAY).unwrap(), value: Value::Enum(2) },

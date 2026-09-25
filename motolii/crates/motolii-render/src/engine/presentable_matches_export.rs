@@ -13,7 +13,7 @@ fn the_window_target_holds_the_same_bytes_as_the_export_readback() {
         fps,
         duration_frames: 1,
         // 中間調でないと encode の回数が見えない
-        background: [0.5, 0.25, 0.1, 1.0],
+        background: [0.5, 0.25, 0.1, 1.0], look: Default::default()
     }))
     .unwrap();
     let mut engine = super::Engine::new().unwrap();

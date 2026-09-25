@@ -190,7 +190,7 @@ mod expand_contract {
             height: 64,
             fps: Fps::try_new(30, 1).unwrap(),
             duration_frames: 60,
-            background: [0.0; 4],
+            background: [0.0; 4], look: Default::default()
         }))
         .unwrap();
         let layer = LayerId(1);

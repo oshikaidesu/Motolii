@@ -326,7 +326,7 @@ mod tests {
     fn same_time_repeater_expands_scene_contributions_in_order() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
-            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default()
         })).unwrap();
         let layer = LayerId(2);
         let effect = EffectId(2);
@@ -357,7 +357,7 @@ mod tests {
     fn effects_below_repeater_receive_one_plate_not_each_copy() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
-            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default()
         })).unwrap();
         let layer = LayerId(3);
         let repeat = EffectId(3);
@@ -391,7 +391,7 @@ mod tests {
     fn repeater_outputs_current_time_copies_and_keeps_delayed_copies_explicit() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
-            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default()
         })).unwrap();
         let layer = LayerId(1);
         let effect = EffectId(1);

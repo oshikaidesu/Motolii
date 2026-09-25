@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn blob_track_places_the_material_on_each_mark_from_the_analysis() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: 640, height: 360, fps: Fps::try_new(25, 1).unwrap(), duration_frames: 10, background: [0.0; 4] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: 640, height: 360, fps: Fps::try_new(25, 1).unwrap(), duration_frames: 10, background: [0.0; 4], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
             Intent::AddLayer(layer),

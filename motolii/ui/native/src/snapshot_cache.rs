@@ -300,11 +300,28 @@ mod tests {
         step(&mut rt, "reorder", json!({"op":"select","ids":[a]}));
         step(&mut rt, "reorder now", json!({"op":"reorder","delta":1}));
         step(&mut rt, "composition", json!({"op":"composition","width":960,"height":540}));
+        step(&mut rt, "look", json!({"op":"composition","look":"Poster"}));
         step(&mut rt, "delete", json!({"op":"delete"}));
         rt.viewer.stage_window = Some(crate::render::engine::Window { width: 800, height: 500, roi: [-100.0, -50.0, 1600.0, 1000.0] });
         step(&mut rt, "stage window", Value::Null);
         rt.viewer.user_camera.orbit_degrees = [22.0, 8.0];
         step(&mut rt, "orbited stage", Value::Null);
+    }
+
+    /// A composition's Look is a document property written through the composition op (an Intent),
+    /// shown in the status, undoable, and Studio until chosen.
+    #[test]
+    fn a_compositions_look_is_a_document_property_that_undoes() {
+        let mut rt = EditorRuntime::open("").unwrap();
+        assert_eq!(request(&mut rt, json!({"op":"status"}))["look"], "Studio");
+        request(&mut rt, json!({"op":"composition","look":"Jewel"}));
+        assert_eq!(request(&mut rt, json!({"op":"status"}))["look"], "Jewel");
+        // Other composition fields keep the Look.
+        request(&mut rt, json!({"op":"composition","width":960,"height":540}));
+        assert_eq!(request(&mut rt, json!({"op":"status"}))["look"], "Jewel");
+        request(&mut rt, json!({"op":"undo"}));
+        request(&mut rt, json!({"op":"undo"}));
+        assert_eq!(request(&mut rt, json!({"op":"status"}))["look"], "Studio");
     }
 
     #[test]

@@ -132,7 +132,7 @@ mod tests {
     fn ghost_reads_the_same_contribution_at_an_offset_time_before_current() {
         let fps = Fps::try_new(10, 1).unwrap();
         let mut doc = Document::new();
-        doc.apply(Intent::SetComposition(Composition { width: 100, height: 100, fps, duration_frames: 40, background: [0.0; 4] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: 100, height: 100, fps, duration_frames: 40, background: [0.0; 4], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
             Intent::AddLayer(layer),

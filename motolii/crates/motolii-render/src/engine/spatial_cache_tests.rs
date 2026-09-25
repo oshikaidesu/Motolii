@@ -12,7 +12,7 @@ fn document(path: &std::path::Path) -> Document {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 1,
-        background: [0.0, 0.0, 0.0, 1.0],
+        background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);

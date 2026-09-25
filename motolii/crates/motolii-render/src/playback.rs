@@ -454,7 +454,7 @@ mod tests {
             height: 1080,
             fps: Fps::try_new(fps_num, fps_den).unwrap(),
             duration_frames,
-            background: Composition::default_background(),
+            background: Composition::default_background(), look: Default::default()
         }))
         .unwrap();
         doc

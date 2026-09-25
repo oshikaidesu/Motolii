@@ -12,7 +12,7 @@ const H: u32 = 100;
 /// そうでなければ親の Overflow = Bounce(書類の CPU の法)。
 fn scene(gpu: bool) -> Document {
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     let (group, child) = (LayerId(1), LayerId(2));
     let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
     doc.apply_all([
@@ -48,7 +48,7 @@ fn scene(gpu: bool) -> Document {
 /// `start` コマ目から Arrive で下から来る(From 90・Distance 80・Arrive 0.7・Bounce 0・Stagger 0・Spin 0)。
 fn arrive_scene(start: i64, clip: bool) -> Document {
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     let (group, child) = (LayerId(1), LayerId(2));
     let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
     doc.apply_all([
@@ -163,7 +163,7 @@ fn the_bounce_block_draws_where_the_cpu_bounce_does() {
 fn a_field_moves_everyone_in_its_room_who_carries_no_effect() {
     let fps = Fps::try_new(30, 1).unwrap();
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
     let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
     let square = |size: f32, fill: Rgb| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size as f64, y: size as f64 } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(fill), ..Default::default() }) });
@@ -223,7 +223,7 @@ fn a_field_moves_everyone_in_its_room_who_carries_no_effect() {
 fn a_field_moves_without_jumping_between_frames() {
     let fps = Fps::try_new(30, 1).unwrap();
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0; 4], look: Default::default() })).unwrap();
     let (group, ball, field) = (LayerId(1), LayerId(2), LayerId(3));
     let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
     let square = |size: f64, fill: Rgb| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(fill), ..Default::default() }) });
@@ -280,7 +280,7 @@ fn a_field_moves_without_jumping_between_frames() {
 fn things_stop_moving_once_they_have_settled() {
     let fps = Fps::try_new(30, 1).unwrap();
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     let (group, field) = (LayerId(1), LayerId(2));
     let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
     let square = |size: f64| ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }) });
@@ -341,7 +341,7 @@ fn the_push_apart_block_pushes_like_the_margin_law() {
     use crate::render::compositor::effects::block_program::{program_for, read_state, BlockItem, BlockWorld};
     let place = |margin: bool| {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4], look: Default::default() })).unwrap();
         let spots = [[40.0, 40.0], [52.0, 44.0], [60.0, 30.0], [100.0, 60.0], [104.0, 64.0], [20.0, 80.0]];
         for (i, at) in spots.iter().enumerate() {
             let layer = LayerId(i as u64 + 1);
@@ -489,7 +489,7 @@ fn an_anchored_label_follows_what_a_block_moved() {
 fn an_effector_takes_its_centre_from_the_hub_the_tile_is_anchored_to() {
     use crate::render::compositor::effects::block_program::read_state;
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     let (hub, tile) = (LayerId(1), LayerId(2));
     let two_d = LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() };
     let square = |size: f64| vec![ShapeNode::Leaf(Shape { source: PathSource::Rectangle { size: Point { x: size, y: size } }, ops: Vec::new(), stroke: None, fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), ..Default::default() }) })];

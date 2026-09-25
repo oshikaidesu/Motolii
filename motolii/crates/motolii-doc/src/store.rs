@@ -280,6 +280,36 @@ pub struct Composition {
     pub duration_frames: i64,
     #[serde(default = "Composition::default_background")]
     pub background: [f32; 4],
+    /// How the picture is formed from its light: the glare, halation and colour split of every view.
+    /// Older documents have none and take the default.
+    #[serde(default)]
+    pub look: Look,
+}
+
+/// A composition's Look (decision 2026-09-25): the one bright-pass of the view (bloom, halation,
+/// star, streak) and where colours part (lateral aberration, print plates, rims of glass, a cut
+/// stone's sparkle), in three strengths. Studio unless chosen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Look {
+    /// Subtle: only real highlights glow.
+    #[default]
+    Studio,
+    /// Medium: type splits at its edges, plates slip, highlights halate and streak.
+    Poster,
+    /// Strong stars with coloured blades, restrained bloom.
+    Jewel,
+}
+
+impl Look {
+    pub const ALL: [Self; 3] = [Self::Studio, Self::Poster, Self::Jewel];
+
+    pub const fn label(self) -> &'static str {
+        match self { Self::Studio => "Studio", Self::Poster => "Poster", Self::Jewel => "Jewel" }
+    }
+
+    pub fn from_label(label: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|look| look.label() == label)
+    }
 }
 
 impl Composition {

@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = size_hint;
     for (label, roughness) in [("roughness 0", 0.0), ("roughness 1", 1.0)] {
         let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: 256, height: 256, fps: Fps::try_new(30, 1)?, duration_frames: 1, background: [1.0, 1.0, 1.0, 1.0] }))?;
+        doc.apply(Intent::SetComposition(Composition { width: 256, height: 256, fps: Fps::try_new(30, 1)?, duration_frames: 1, background: [1.0, 1.0, 1.0, 1.0], look: Default::default() }))?;
         doc.apply_all([
             Intent::AddLayer(LayerId(1)),
             Intent::SetMeta { layer: LayerId(1), meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 1) } },

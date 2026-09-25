@@ -20,6 +20,7 @@ class CompositionControls extends StatelessWidget {
           'fpsNum',
           'fpsDen',
           'background',
+          'look',
           'capabilities',
         ]),
         builder: (_, s, __) => Padding(
@@ -99,6 +100,19 @@ class CompositionControls extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
+              ),
+              // 2026-09-25 裁定: Look は Composition 単位、既定 Studio、Poster/Jewel は明示選択。
+              // 1 つの Look pass(bloom/halation/star/色ズレ)の強さの選択で、3D 専用の値ではない。
+              Row(
+                children: [
+                  const SizedBox(width: EditorMetrics.s90, child: Text('look')),
+                  for (final look in ['Studio', 'Poster', 'Jewel'])
+                    EditorButton(
+                      look,
+                      () => controller.command('composition', {'look': look}),
+                      selected: s['look'] == look,
+                    ),
                 ],
               ),
               Wrap(

@@ -24,7 +24,7 @@ mod pixel_motion_blur_follows_the_motion {
     fn document(path: &std::path::Path, fps: i64, shutter: Option<f64>) -> Document {
         let fps = Fps::try_new(fps, 1).unwrap();
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps, duration_frames: 40, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
             Intent::AddLayer(layer),
@@ -89,7 +89,7 @@ mod motion_blur_follows_the_keyframes {
 
     fn document(moving: bool, blur: Option<&[(&str, f64)]>) -> Document {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         let mut track = KeyframeTrack::new();
         track.insert(Keyframe { t: RationalTime::ZERO, value: Value::Vec2([0.0, 60.0]), interp: Interp::Linear, spatial: None });
@@ -170,7 +170,7 @@ mod particles_are_a_closed_form {
 
     fn document(values: &[(&str, Value)]) -> Document {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 96, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 96, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
             Intent::AddLayer(layer),

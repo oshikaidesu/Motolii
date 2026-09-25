@@ -33,7 +33,7 @@ fn document() -> Document {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 30,
-        background: [0.0; 4],
+        background: [0.0; 4], look: Default::default()
     })).unwrap();
     doc
 }
@@ -239,7 +239,7 @@ fn only_the_contribution_that_changed_is_prepared_again() {
     let fps = Fps::try_new(30, 1).unwrap();
     let at = |frame| crate::doc::core::RationalTime::try_from_frame(frame, fps).unwrap();
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps, duration_frames: 30, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps, duration_frames: 30, background: [0.0; 4], look: Default::default() })).unwrap();
     add_shape(&mut doc, 1, 0, Rgb { r: 0.0, g: 1.0, b: 0.0 });
     let blurred = add_shape(&mut doc, 2, 1, Rgb { r: 1.0, g: 0.0, b: 0.0 });
     doc.apply(Intent::SetEffects { layer: blurred, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] }).unwrap();
@@ -266,7 +266,7 @@ fn a_repeater_on_a_group_copies_its_children() {
     use crate::doc::store::{EffectId, EffectInstance, EffectScope, PropertyId, Value};
     use crate::extensions::placement;
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 400, height: 200, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 400, height: 200, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0; 4], look: Default::default() })).unwrap();
     let group = LayerId(1);
     doc.apply_all([
         Intent::AddLayer(group),

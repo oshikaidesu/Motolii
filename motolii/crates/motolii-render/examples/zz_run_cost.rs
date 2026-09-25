@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     image::RgbaImage::from_pixel(4, 4, image::Rgba([200, 120, 40, 255])).save(&png)?;
     let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
     let fps = Fps::try_new(60, 1).unwrap();
-    doc.apply(Intent::SetComposition(Composition { width, height, fps, duration_frames: 300, background: [0.02, 0.02, 0.03, 1.0] }))?;
+    doc.apply(Intent::SetComposition(Composition { width, height, fps, duration_frames: 300, background: [0.02, 0.02, 0.03, 1.0], look: Default::default() }))?;
     for i in 0..n {
         let layer = LayerId(1 + i);
         doc.apply_all([
