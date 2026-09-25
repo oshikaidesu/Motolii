@@ -12,9 +12,9 @@ pub enum EffectStage {
     Pass,
     /// Material-local XY warp; independent of layer projection.
     Warp,
-    /// 網の面の hook(fork の `motolii_surface`)。
+    /// 網の面の hook(surface program の `program_surface`)。
     Surface,
-    /// 網の頂点の hook(fork の `motolii_field`)。点群は CPU の写しで受ける。
+    /// 網の頂点の hook(surface program の `program_field`)。点群は CPU の写しで受ける。
     Field,
     /// 世界の平面で切る。板・点群・網が同じ式に従う。
     Clip,
@@ -107,6 +107,15 @@ pub(crate) struct CatalogSnapshot {
     pub(crate) definitions: Arc<[VismDefinition]>,
     pub(crate) descriptors: Arc<[EffectDescriptor]>,
     pub(crate) errors: Vec<String>,
+    /// The shelf's modules (`.wgsl` without a head): name and source.
+    pub(crate) modules: Arc<[(String, String)]>,
+}
+
+impl CatalogSnapshot {
+    /// A module on the shelf by name; empty when there is none (what includes it then fails to compile, by name).
+    pub(crate) fn module(&self, name: &str) -> &str {
+        self.modules.iter().find(|(n, _)| n == name).map_or("", |(_, source)| source.as_str())
+    }
 }
 
 #[derive(Default)]
@@ -377,7 +386,7 @@ fn prepare(source: VismSource, prelude: &str, modules: &[(String, String)]) -> R
     } else {
         let manifest = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?.0;
         let text = if manifest.stage == isf::IsfStage::Warp {
-            format!("{}\n{}", re_renderer::noise::WGSL, source.source)
+            format!("{}\n{}", crate::render::compositor::noise::WGSL, source.source)
         } else if matches!(source.name.as_str(), "blend" | "matte") {
             format!("{prelude}\n{}", source.source)
         } else { source.source.to_string() };
@@ -559,9 +568,11 @@ fn refresh_runtime(runtime: &CatalogRuntime) -> CatalogRefresh {
     }
     let generation = previous.as_ref().map_or(0, |p| p.generation) + u64::from(changed);
     let definitions: Arc<[VismDefinition]> = definitions.into_values().collect::<Vec<_>>().into();
-    owner.snapshot = Some(Arc::new(CatalogSnapshot { generation, descriptors: descriptors(&definitions), definitions, errors: errors.clone() }));
+    let modules_changed = previous.as_ref().is_some_and(|p| *p.modules != modules[..]);
+    let generation = generation + u64::from(modules_changed && !changed);
+    owner.snapshot = Some(Arc::new(CatalogSnapshot { generation, descriptors: descriptors(&definitions), definitions, errors: errors.clone(), modules: modules.into() }));
     runtime.0.generation.store(generation, Ordering::Release);
-    CatalogRefresh { generation, changed, errors }
+    CatalogRefresh { generation, changed: changed || modules_changed, errors }
 }
 
 pub struct CatalogWatcher {

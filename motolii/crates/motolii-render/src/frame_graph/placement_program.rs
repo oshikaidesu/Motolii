@@ -79,7 +79,6 @@ impl PlacementProgram {
 
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
-            if meta.source == LayerSource::Group { continue; }
             let Some(effect_binding) = effects.binding(layer) else { continue };
 
             let programs: Vec<_> = effect_binding.effects.iter().map(|key| effects.placement_program(*key)).collect();
@@ -316,6 +315,7 @@ mod tests {
     struct Executor<'a>(&'a SceneProgram);
     impl NodeExecutor for Executor<'_> {
         type Error = SceneProgramError;
+        fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> { self.0.dynamic_inputs(node, inputs, context) }
         fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
             self.0.execute(node, &inputs, &context)
         }
@@ -326,7 +326,7 @@ mod tests {
     fn same_time_repeater_expands_scene_contributions_in_order() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
-            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default()
         })).unwrap();
         let layer = LayerId(2);
         let effect = EffectId(2);
@@ -357,7 +357,7 @@ mod tests {
     fn effects_below_repeater_receive_one_plate_not_each_copy() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
-            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default()
         })).unwrap();
         let layer = LayerId(3);
         let repeat = EffectId(3);
@@ -382,7 +382,7 @@ mod tests {
         let scene = frame.value(root).and_then(|value| value.downcast_ref::<crate::frame_graph::SceneValue>()).unwrap();
 
         assert_eq!(scene.layers.len(), 1);
-        assert_eq!(scene.layers[0].effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(), ["test.after"]);
+        assert_eq!(scene.layers[0].after_effects.iter().map(|effect| effect.plugin_id.as_str()).collect::<Vec<_>>(), ["test.after"]);
         let crate::frame_graph::SceneContentValue::Plate(plate) = &scene.layers[0].content else { panic!("copies must be one plate before downstream effects"); };
         assert_eq!(plate.members.len(), 2);
     }
@@ -391,7 +391,7 @@ mod tests {
     fn repeater_outputs_current_time_copies_and_keeps_delayed_copies_explicit() {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
         doc.apply(Intent::SetComposition(Composition {
-            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4],
+            width: 640, height: 360, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default()
         })).unwrap();
         let layer = LayerId(1);
         let effect = EffectId(1);
@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(set.selected_effect, Some(0));
         assert_eq!(set.copies.len(), 3);
         assert!(set.copies[0].transform.is_some());
-        assert!(set.copies[1].transform.is_none());
+        assert!(set.copies[1].transform.is_some(), "a delayed copy carries its transform sampled at its own time");
         assert_eq!(set.copies[1].time_offset, RationalTime::try_new(1, 2).unwrap());
     }
 }

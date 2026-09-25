@@ -56,7 +56,7 @@ fn a_24fps_clip_in_a_30fps_comp_keeps_its_own_speed() {
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
         // 層が出なかった時に黒と見分けるため、背景は赤。
-        background: [1.0, 0.0, 0.0, 1.0],
+        background: [1.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -110,7 +110,7 @@ fn a_variable_frame_rate_clip_is_placed_by_time() {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
-        background: [1.0, 0.0, 0.0, 1.0],
+        background: [1.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -131,54 +131,6 @@ fn a_variable_frame_rate_clip_is_placed_by_time() {
     assert!(at_1_1.iter().all(|c| *c > 200), "1.1s should be white, got {at_1_1:?}");
 }
 
-/// 上の不透明な動画に丸ごと覆われた動画は復号も描画もしない。半透明なら両方描く。
-#[test]
-fn a_video_hidden_behind_an_opaque_video_is_not_drawn() {
-    if !ffmpeg_available() {
-        eprintln!("skip: ffmpeg not on PATH");
-        return;
-    }
-    let dir = tempfile::tempdir().unwrap();
-    let clip = |name: &str, color: &str| {
-        let path = dir.path().join(name);
-        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
-            .args(["-v", "error", "-y", "-f", "lavfi", "-i", &format!("color=c={color}:s=64x64:r=30:d=1"), "-pix_fmt", "yuv420p", "-c:v", "libx264"])
-            .arg(&path)
-            .status()
-            .expect("spawn ffmpeg");
-        assert!(status.success());
-        path
-    };
-    let below = clip("below.mp4", "black");
-    let above = clip("above.mp4", "white");
-
-    let build = |top_opacity: Option<f64>| {
-        let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
-        for (id, path, order) in [(1, &below, 0), (2, &above, 1)] {
-            let layer = LayerId(id);
-            doc.apply(Intent::AddLayer(layer)).unwrap();
-            doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: path.to_str().unwrap().to_owned(), fingerprint: None }, order, timing: LayerTiming::place(0, Some(30), 30) } }).unwrap();
-        }
-        if let Some(opacity) = top_opacity {
-            doc.apply(Intent::SetConstant { layer: LayerId(2), property: crate::doc::store::PropertyId::new(crate::doc::store::property::OPACITY).unwrap(), value: crate::doc::eval::Value::F64(opacity) }).unwrap();
-        }
-        doc
-    };
-
-    let mut engine = Engine::new().unwrap();
-    let opaque = build(None);
-    // 1 コマ目は寸を知るために両方開く。2 コマ目から隠れが効く。
-    let _ = center_pixel(&mut engine, &opaque, 1);
-    let px = center_pixel(&mut engine, &opaque, 2);
-    assert!(px.iter().all(|c| *c > 200), "the white layer on top should show, got {px:?}");
-    assert_eq!(engine.drawn_layers(), 1, "the covered layer must not be drawn");
-
-    let translucent = build(Some(0.5));
-    let _ = center_pixel(&mut engine, &translucent, 1);
-    let _ = center_pixel(&mut engine, &translucent, 2);
-    assert_eq!(engine.drawn_layers(), 2, "a translucent layer hides nothing");
-}
 
 /// 30 コマ目から始まる層は、再生中にその瞬間から描かれる。先読みが復号器を開いておくから。
 #[test]
@@ -196,7 +148,7 @@ fn a_layer_that_starts_later_is_drawn_from_its_first_frame_while_playing() {
         .expect("spawn ffmpeg");
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [1.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(30, Some(30), 90) } }).unwrap();
@@ -240,7 +192,7 @@ fn hdr_bt2020_clips_are_admitted_and_shown() {
     assert!(status.success());
     crate::render::media::probe(&clip).expect("HDR must be admitted");
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0, 1.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [0.0, 1.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(30), 30) } }).unwrap();
@@ -270,7 +222,7 @@ fn an_audio_only_layer_is_silent_on_stage_and_not_a_failure() {
         .arg(&clip).status().unwrap();
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     for (id, path) in [(1, &clip), (2, &song)] {
         let layer = LayerId(id);
         doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -296,7 +248,7 @@ fn frames_seen_once_come_from_the_cache_within_the_budget() {
         .arg(&clip).status().unwrap();
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 30, background: [1.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(30), 30) } }).unwrap();
@@ -353,7 +305,7 @@ fn limited_range_bt709_colors_come_out_right() {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 45,
-        background: [0.0, 1.0, 0.0, 1.0],
+        background: [0.0, 1.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -393,7 +345,7 @@ fn full_hd_playback_pace() {
         .expect("spawn ffmpeg");
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(90), 90) } }).unwrap();
@@ -423,7 +375,7 @@ fn four_k_playback_pace() {
         .expect("spawn ffmpeg");
     assert!(status.success());
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: 3840, height: 2160, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 3840, height: 2160, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(90), 90) } }).unwrap();

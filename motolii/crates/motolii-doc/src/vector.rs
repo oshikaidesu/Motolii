@@ -211,6 +211,77 @@ pub struct Gradient {
     /// stop の間を色がどう渡るか。書類に書く定義で、鍵は打たない。
     #[serde(default)]
     pub blend: GradientBlend,
+    /// `start`・`end` の座標系。欄の無い書類は層の座標。
+    #[serde(default, skip_serializing_if = "GradientUnits::is_user_space")]
+    pub units: GradientUnits,
+}
+
+/// Which frame `start`/`end` are in. `ObjectBoundingBox`: the painted object's geometry bounds (no
+/// stroke) as the unit square, read CSS-style (see [`Gradient::in_user_space`]), so the gradient
+/// follows the object when it is resized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GradientUnits {
+    #[default]
+    UserSpaceOnUse,
+    ObjectBoundingBox,
+}
+
+impl GradientUnits {
+    fn is_user_space(&self) -> bool { *self == Self::UserSpaceOnUse }
+}
+
+/// A gradient's axis as ratios of a frame: direction (degrees, as seen), centre offset (% of the
+/// frame's half width and half height), spread (%). A linear spread of 100% runs the frame end to
+/// end along its direction (CSS gradient length); a radial one reaches the frame's larger half-side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientAxis { pub angle: f64, pub center: [f64; 2], pub spread: f64 }
+
+/// Half the length of a CSS gradient line through `bounds` at `angle`.
+pub fn half_extent(bounds: [f64; 4], angle: f64) -> f64 {
+    let (w, h) = (bounds[2] - bounds[0], bounds[3] - bounds[1]);
+    let (s, c) = angle.to_radians().sin_cos();
+    (c.abs() * w + s.abs() * h) * 0.5
+}
+
+/// The two points of `axis` placed in `frame`; inverse of [`Gradient::axis_in`].
+pub fn axis_points_in(kind: GradientType, frame: [f64; 4], axis: &GradientAxis) -> (Point, Point) {
+    let b = frame;
+    let (hw, hh) = ((b[2] - b[0]) * 0.5, (b[3] - b[1]) * 0.5);
+    let c = Point { x: (b[0] + b[2]) * 0.5 + axis.center[0] / 100.0 * hw, y: (b[1] + b[3]) * 0.5 + axis.center[1] / 100.0 * hh };
+    let (s, co) = axis.angle.to_radians().sin_cos();
+    match kind {
+        GradientType::Linear => {
+            let half = axis.spread / 100.0 * half_extent(b, axis.angle);
+            let d = Point { x: co * half, y: s * half };
+            (c.sub(d), c.add(d))
+        }
+        GradientType::Radial | GradientType::Angular | GradientType::Diamond => {
+            let r = axis.spread / 100.0 * hw.max(hh);
+            (c, c.add(Point { x: co * r, y: s * r }))
+        }
+    }
+}
+
+/// Tight geometric bounds `[x0, y0, x1, y1]` of the contours (curve extrema, no stroke), the
+/// object bounding box of SVG. `None` for no geometry.
+pub fn geometry_bounds<'a>(contours: impl IntoIterator<Item = &'a Contour>) -> Option<[f64; 4]> {
+    use kurbo::Shape as _;
+    let mut path = kurbo::BezPath::new();
+    let at = |p: Point| kurbo::Point::new(p.x, p.y);
+    for contour in contours {
+        let n = contour.vertices.len();
+        let Some(first) = contour.vertices.first() else { continue };
+        path.move_to(at(first.point));
+        let edges = if contour.closed { n } else { n - 1 };
+        for i in 0..edges {
+            let (a, b) = (&contour.vertices[i], &contour.vertices[(i + 1) % n]);
+            path.curve_to(at(a.point.add(a.out_tangent)), at(b.point.add(b.in_tangent)), at(b.point));
+        }
+    }
+    if path.elements().is_empty() { return None; }
+    let r = path.bounding_box();
+    Some([r.x0, r.y0, r.x1, r.y1])
 }
 
 /// 2 つの stop の間の道。空間の一覧は CSS Color 4 の閉集合(sRGB・linear・Oklab・Oklch の短/長)と段階。
@@ -309,6 +380,36 @@ pub enum GradientType {
 }
 
 impl Gradient {
+    /// The gradient in user space for an object with these geometry bounds. An object-bounding-box
+    /// gradient is read CSS-style: its two points, taken in the unit square, give an angle, a
+    /// centre and a spread; on the object the angle is kept as seen, the centre is a fraction of
+    /// the box, and a linear spread of 100% runs corner to corner along that angle (a radial one
+    /// reaches the box's larger half-side), so the gradient follows the object without skewing.
+    pub fn in_user_space(&self, bounds: [f64; 4]) -> Gradient {
+        match self.units {
+            GradientUnits::UserSpaceOnUse => self.clone(),
+            GradientUnits::ObjectBoundingBox => {
+                let axis = self.axis_in([0.0, 0.0, 1.0, 1.0]);
+                let (start, end) = axis_points_in(self.kind, bounds, &axis);
+                Gradient { start, end, units: GradientUnits::UserSpaceOnUse, ..self.clone() }
+            }
+        }
+    }
+
+    /// The two points read as an axis measured in `frame`.
+    pub fn axis_in(&self, frame: [f64; 4]) -> GradientAxis {
+        let b = frame;
+        let (hw, hh) = (((b[2] - b[0]) * 0.5).max(1e-6), ((b[3] - b[1]) * 0.5).max(1e-6));
+        let c0 = Point { x: (b[0] + b[2]) * 0.5, y: (b[1] + b[3]) * 0.5 };
+        let d = self.end.sub(self.start);
+        let angle = d.y.atan2(d.x).to_degrees();
+        let (mid, spread) = match self.kind {
+            GradientType::Linear => (self.start.add(self.end).scale(0.5), d.length() * 0.5 / half_extent(b, angle).max(1e-6) * 100.0),
+            GradientType::Radial | GradientType::Angular | GradientType::Diamond => (self.start, d.length() / hw.max(hh) * 100.0),
+        };
+        GradientAxis { angle, center: [(mid.x - c0.x) / hw * 100.0, (mid.y - c0.y) / hh * 100.0], spread }
+    }
+
     pub fn stop_id(&self, index: usize) -> usize { self.stop_ids.get(index).copied().unwrap_or(index) }
     pub fn stop_index(&self, id: usize) -> Option<usize> { (0..self.stops.len()).find(|&i| self.stop_id(i) == id) }
     pub fn identify_stops(&mut self) {
@@ -504,3 +605,6 @@ pub enum VectorError {
 
 
 
+
+#[cfg(test)]
+mod gradient_units_tests;

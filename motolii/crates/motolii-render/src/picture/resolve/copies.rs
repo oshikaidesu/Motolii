@@ -301,7 +301,7 @@ mod ghost_contract {
     fn document() -> (Document, Fps) {
         let fps = Fps::try_new(10, 1).unwrap();
         let mut doc = Document::new();
-        doc.apply(Intent::SetComposition(Composition { width: 100, height: 100, fps, duration_frames: 40, background: [0.0; 4] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: 100, height: 100, fps, duration_frames: 40, background: [0.0; 4], look: Default::default() })).unwrap();
         (doc, fps)
     }
 

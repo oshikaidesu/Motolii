@@ -5,7 +5,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use crate::viewer::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","setLoop","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -126,7 +126,9 @@ impl EditorRuntime{
         crate::render::engine::refresh_effect_catalog();
         // 焼いている間は disk にコマが増える: 「無い」の記憶を捨てて見に行く。
         if self.freezer.running().is_some(){self.engine.refresh_frozen();}
-        if op=="status"||op=="exportStatus"||op=="reloadEffects"{return Ok(())}
+        // A watcher woke the window: the effect shelf is refreshed above; a saved script reruns.
+        if op=="reloadEffects"{return self.rerun_script_if_saved()}
+        if op=="status"||op=="exportStatus"{return Ok(())}
         if op=="stageView" {
             self.cancel_preview();
             if let Some(orbit)=j["orbit"].as_array() {
@@ -230,7 +232,7 @@ impl EditorRuntime{
             "clip"=>{let id=layer(&j)?;let clipped=self.doc.view().attrs(id).map_err(e)?.unwrap_or_default().clip_to_below;self.apply([Intent::SetAttrs{layer:id,patch:LayerAttrsPatch{clip_to_below:Some(!clipped),..Default::default()}}])?;}
             "previewBlend"=>{let layers=if j["layers"].is_array(){ids(&j["layers"])?}else{vec![layer(&j)?]};let mode:BlendMode=serde_json::from_value(j["mode"].clone()).map_err(e)?;self.set_preview(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{blend_mode:Some(mode),..Default::default()}}).collect())?;}
             "addMarker"|"setMarker"|"deleteMarker"=>self.edit_marker(op,&j)?,
-            "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
+            "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};let look=if j.get("look").is_some(){serde_json::from_value(j["look"].clone()).map_err(e)?}else{current.look};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background,look})])?;}
             "import"=>{let paths:Vec<std::path::PathBuf>=j["paths"].as_array().ok_or("Expected paths")?.iter().map(|p|p.as_str().map(std::path::PathBuf::from).ok_or("Invalid path".into())).collect::<Result<_,String>>()?;let paths=editor::fixture::expand_folders(&paths);if paths.is_empty(){return Err("No files to import".into())}let mut intents=Vec::new();let mut known:std::collections::HashSet<_>=self.doc.view().assets().map_err(e)?.iter().map(|a|a.content_hash.clone()).collect();for path in paths{let draft=editor::fixture::prepare_path(&path,if j["role"]=="reference"{AssetRole::Reference}else{AssetRole::Material})?;if known.insert(draft.content_hash.clone()){intents.push(Intent::AdmitAsset{draft});}}self.apply(intents)?;}
             "placeAsset"|"replaceAsset"=>{let a=self.doc.view().asset(asset_id(&j)?).map_err(e)?.ok_or("Asset missing")?;let path=a.path_absolute.ok_or("Asset path missing")?;if !std::path::Path::new(&path).exists(){return Err("Asset file missing".into())}if op=="placeAsset"{let start=j["start"].as_i64().unwrap_or(self.viewer.frame);let landing=j["placement"].as_str().map(|p|(j["target"].as_u64().map(LayerId),p.to_owned()));self.place_layer(editor::create::NewKind::Media{path,name:a.name},start,landing,j["visibleFrames"].as_i64(),None)?;}else{let layer=self.viewer.selected().ok_or("Select layer to replace")?;self.apply([Intent::SetSource{layer,source:LayerSource::File{path,fingerprint:None}}])?;}}
             "relinkAsset"=>{let id=asset_id(&j)?;let path=j["path"].as_str().ok_or("Missing path")?.to_owned();if !std::path::Path::new(&path).exists(){return Err("No file at that path".into())}let a=self.doc.view().asset(id).map_err(e)?.ok_or("Asset missing")?;let kind=std::path::Path::new(&path).extension().and_then(|x|x.to_str()).and_then(crate::render::media::asset_type_for_extension).ok_or("Unsupported file type")?;let same_family=kind.split('/').next()==a.asset_type.split('/').next();if !same_family{return Err(format!("Pick a {} file",a.asset_type.split('/').next().unwrap_or("matching")))}self.apply([Intent::RelinkAsset{asset:id,path_absolute:path,project_root:None}])?;}
@@ -254,6 +256,8 @@ impl EditorRuntime{
                 if self.doc.edit_head()!=target{return Err("That history point is no longer reachable".into())}
                 self.viewer.selected_keys.clear();
             }
+            // 繰り返しは明示した時だけ: {start,end} 秒で範囲、{} で解除。再生そのものの意味は変えない。
+            "setLoop"=>{let range=match (j["start"].as_f64(),j["end"].as_f64()){(Some(start),Some(end))=>{if !(start>=0.0&&end>start){return Err("A loop needs 0 <= start < end".into())}Some((start,end))},(None,None)=>None,_=>return Err("A loop needs both start and end".into())};self.viewer.clock.set_loop(range);self.error=None;return Ok(())}
             "play"=>{if !self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.owners.clear(self.frames.skipped());self.clock_frame();}
             "pause"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.report_owners();self.clock_frame();}
             "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;self.viewer.picked_color=Some([px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0));self.viewer.pick_serial+=1;}
@@ -306,9 +310,8 @@ impl EditorRuntime{
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
                 let at=self.time()?;
-                let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
                 let observer=self.view_camera(seen)?;
-                let projection_camera=self.projection_camera(seen,projection)?;
+                let projection_camera=self.placement_camera()?;
                 let drag=editor::stage::DragSession::begin(&self.doc,&mut self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
@@ -353,7 +356,8 @@ impl EditorRuntime{
 mod playback_probe;
 
 /// 効果のホットリロードの一連: 見張りが起きる → reloadEffects で世代が進む → 壊しても前の物が残り理由が出る → 消せば理由が変わる。
-/// 本物の vism/ に file を置くので、他の試験と並べず単独で回す(cargo test -p motolii-ui --lib hot_reload -- --ignored)。
+/// 本物の vism/ に file を置き、棚と見張りは process に 1 つなので、互いにも並べず回す
+/// (cargo test -p motolii-ui --lib hot_reload -- --ignored --test-threads=1)。
 #[cfg(test)]
 mod hot_reload_probe;
 

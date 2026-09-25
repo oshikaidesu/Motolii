@@ -1,8 +1,12 @@
 name: cassette-check
 on:
+  pull_request:
   push:
     branches:
-      - gpt/render-cassette-bootstrap-20260922
+      - main
+concurrency:
+  group: cassette-check-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -15,8 +19,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo check -p motolii-render
       - run: cargo test -p motolii-render render_lowering --lib
-      - run: cargo test -p motolii-render render_backend --lib
+      - run: cargo test -p motolii-render composite_plan --lib
       - name: Prove the cassette path produces real pixels
         env:
           WGPU_BACKEND: vulkan
-        run: cargo test -p motolii-render plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation --lib -- --nocapture
+        run: cargo test -p motolii-render a_lowered_matte_draws_real_pixels_through_the_cassette --lib -- --nocapture
+      - name: No failure beyond the known ones
+        env:
+          WGPU_BACKEND: vulkan
+        run: |
+          set +e
+          cargo test -p motolii-render --lib --no-fail-fast 2>&1 | tee test.log
+          set -e
+          grep -E '^    [a-z_:]+$' test.log | sed 's/^ *//' | sort -u > failed.txt
+          echo "failed: $(wc -l < failed.txt)"
+          if comm -23 failed.txt <(grep -v -e '^#' -e '^$' .github/known-failures.txt | sort -u) | grep .; then
+            echo "::error::failures above are new: fix them or, if they are inherited, record why in .github/known-failures.txt"
+            exit 1
+          fi

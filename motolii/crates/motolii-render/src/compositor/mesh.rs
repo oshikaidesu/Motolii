@@ -11,10 +11,9 @@ use crate::render::compositor::{
 };
 use crate::render::media::SpatialBounds;
 
-pub(crate) fn next_model_revision() -> u64 {
-    static NEXT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-    NEXT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-}
+/// U79 spike: a stone at least this large on screen (radius, px) is a hero — shaded per sample (twin of
+/// `JEWEL_HERO_PX` in `vism/material_filament.wgsl`).
+const STONE_HERO_PX: f32 = 90.0;
 
 impl Compositor {
     pub(crate) fn import_model(&mut self, path: &str) -> Result<GpuModelData, CompositorError> {
@@ -45,15 +44,17 @@ impl Compositor {
         let bounds = SpatialBounds::from_points([bbox.min.to_array(), bbox.max.to_array()])
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
         let vertices = crate::render::media::silhouette_points(cpu.instance_vertex_positions());
+        let faceted = cpu.is_faceted();
         let instances = cpu
             .into_gpu_meshes(&self.ctx)
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
         Ok(GpuModelData {
             planar_size: None,
-            revision: next_model_revision(),
             instances: Arc::new(instances),
             bounds,
             vertices: Arc::new(vertices),
+            faceted,
+            flat_parts: std::sync::Arc::from([]),
         })
     }
 
@@ -77,35 +78,46 @@ impl Compositor {
         let clip = clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world(centre, world_from_object));
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let tint = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
+        let mut program = shading.program.clone().or_else(|| self.standard_surface_program());
+        // A solid's caps vary smoothly even when a field bends them on the GPU (a wave, a twist), so
+        // they shade once per pixel too: MSAA still resolves the silhouette from coverage. Only the rim
+        // (walls and bevels) keeps per-sample shading.
+        let flat_program = shading.program_small.clone().or_else(|| program.clone());
+        // U79 spike: a cut stone smaller than a hero on screen shades once per pixel.
+        if model.faceted && shading.program_small.is_some() {
+            let (scale, _, _) = world_from_object.to_scale_rotation_translation();
+            let radius = ((glam::Vec3::from(model.bounds.max) - glam::Vec3::from(model.bounds.min)) * 0.5 * scale.abs()).max_element();
+            let eye = crate::doc::core::camera_projection(comp, camera);
+            let distance = (centre - eye.eye).length().max(1e-3);
+            let pixels = radius / distance * comp.height as f32 * 0.5 / (eye.vertical_fov_radians * 0.5).tan();
+            if pixels < STONE_HERO_PX {
+                program = shading.program_small.clone();
+            }
+        }
+        // U78 spike: a solid's surface gets its object frame (centre, radius, rotation) in spare slots.
+        let mut params = shading.params;
+        if params[super::effects::surface_program::SOLID_SLOT] > 0.0 {
+            let (scale, rotation, _) = world_from_object.to_scale_rotation_translation();
+            let half = (glam::Vec3::from(model.bounds.max) - glam::Vec3::from(model.bounds.min)) * 0.5 * scale.abs();
+            params[12..15].copy_from_slice(&centre.to_array());
+            params[15] = half.max_element();
+            params[16..20].copy_from_slice(&rotation.to_array());
+            params[21] = half.z;
+        }
         let instances: Vec<GpuMeshInstance> = model
             .instances
             .iter()
             .cloned()
-            .map(|mut instance| {
+            .enumerate()
+            .map(|(part, mut instance)| {
                 instance.world_from_mesh = world_from_object * instance.world_from_mesh;
                 instance.additive_tint = tint;
-                instance.program = shading.program.clone();
-                instance.params = shading.params;
+                instance.program = if model.flat_parts.get(part).copied().unwrap_or(false) { flat_program.clone() } else { program.clone() };
+                instance.params = params;
                 instance
             })
             .collect();
         (instances, clip)
-    }
-    pub(crate) fn model_draw_data(
-        &mut self,
-        model: &GpuModelData,
-        size: [f32; 2],
-        placement: crate::doc::core::LayerPlacement,
-        opacity: f32,
-        comp: crate::doc::core::CompSpec,
-        camera: crate::doc::core::ResolvedCamera,
-        projection: crate::doc::store::LayerProjection,
-        shading: &SurfaceShading,
-        clip: Option<super::ClipSpec>,
-    ) -> Result<MeshDrawData, CompositorError> {
-        let (instances, clip) = self.model_instances(model, size, placement, opacity, comp, camera, projection, shading, clip);
-        MeshDrawData::new_clipped(&self.ctx, &instances, clip)
-            .map_err(|error| CompositorError::Draw(error.to_string()))
     }
 
 }

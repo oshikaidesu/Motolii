@@ -9,13 +9,13 @@ tobj = "4"
 gltf = "1.4"
 stl_io = "0.11.0"
 smallvec = "1"
-wgpu = "29"
+wgpu = "30"
 peniko = "0.6"
 # 三次ベジェの根。CSS の easing は三次方程式を解く話なので、自分で Newton も二分探索も書かない
 # (Blinn の方法。kurbo が peniko 経由で既に依存木に居た — 2026-09-21 に気付いた)。
 kurbo = "0.13"
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["setup"] }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
+re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290", features = ["setup"] }
 # 物理の解き手は借りる(自作しない): 積み上げの warm start・摩擦・joint・snapshot を持っている。
 # 先例: Cavalry は Box2D。Rapier はその Rust 版で、状態の保存と復元がある(Apache-2.0)。
 rapier3d = "0.32"
@@ -29,24 +29,24 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
-re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["lavc"] }
-naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
+re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290", features = ["lavc"] }
+naga = { version = "30.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
-re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
-re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290", default-features = false }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290", default-features = false }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
 serde = { version = "1", features = ["derive"] }
 arrow = { version = "58.3", default-features = false }
 sha2 = "0.10"
 proptest = "1"
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", features = ["encoder", "decoder"] }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290", features = ["encoder", "decoder"] }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 cosmic-text = "0.19"
 taffy = "0.13"
@@ -62,7 +62,7 @@ quick_cache = "0.7.0"
 tempfile = "3"
 rtsan-standalone = "=0.3.0"
 memmap2 = "0.9"
-re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "1e479e1f9c9a23dfd3335068b23bb1959cd45290" }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"
@@ -85,6 +85,13 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+
+# objc2 verifies every Objective-C message's signature at run time when built with
+# debug-assertions — every Metal call. In the Live window that was about half of all command
+# encoding. Our own crates keep debug-assertions (motolii-render reads the shelf from disk with
+# them); only this runtime check is turned off.
+[profile.dev.package.objc2]
+debug-assertions = false
 
 # 描く側の見張り(zz_watch)用: release の最適化のまま debug-assertions だけ立てる。
 # motolii-render の build.rs は cfg!(debug_assertions) で「焼き込み/disk」を分けるので、

@@ -6,7 +6,7 @@
 comp({ width: 1920, height: 1080, fps: 30, seconds: 6, background: "#EDEAE3" });
 const FPS = 30, SEC = 6, COLS = 5, ROWS = 4, CW = 340, CH = 420, GAP = 30, TOP = 80, mid = (COLS - 1) / 2;
 const C = ["#E4572E", "#2E5EAA", "#F3B61F", "#534AB7", "#7FA37A", "#D9553A", "#1C1C1E"];
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/";
+const MAT = "mat/";
 // The scroll: runs of the page's Y (a scroll down, a stop, further, then back up).
 const K = [[0, 0], [1.0, -700], [1.6, -700], [2.8, -1300], [3.4, -1300], [4.6, -300], [SEC, -300]];
 const g = (t) => { let i = 0; while (i + 2 < K.length && t >= K[i + 1][0]) i++; const [t0, p0] = K[i], [t1, p1] = K[i + 1];

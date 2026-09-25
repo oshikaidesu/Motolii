@@ -13,7 +13,7 @@ fn the_window_target_holds_the_same_bytes_as_the_export_readback() {
         fps,
         duration_frames: 1,
         // 中間調でないと encode の回数が見えない
-        background: [0.5, 0.25, 0.1, 1.0],
+        background: [0.5, 0.25, 0.1, 1.0], look: Default::default()
     }))
     .unwrap();
     let mut engine = super::Engine::new().unwrap();
@@ -22,47 +22,12 @@ fn the_window_target_holds_the_same_bytes_as_the_export_readback() {
     assert!(export[0] > 8 && export[0] < 247, "中間調のはず: {:?}", &export[..4]);
 
     let format = crate::render::compositor::PRESENTABLE_FORMAT;
-    let device = engine.gpu_device().clone();
-    let size = wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 };
-    let target = device.create_texture(&wgpu::TextureDescriptor {
-        label: None,
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::COPY_SRC
-            | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-    engine.render_frame_into(&doc.view(), t, &target).unwrap();
-
-    let bytes_per_row = (w * 4).div_ceil(256) * 256;
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: u64::from(bytes_per_row * h),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = device.create_command_encoder(&Default::default());
-    encoder.copy_texture_to_buffer(
-        target.as_image_copy(),
-        wgpu::TexelCopyBufferInfo {
-            buffer: &buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(bytes_per_row),
-                rows_per_image: Some(h),
-            },
-        },
-        size,
-    );
-    engine.gpu_queue().submit([encoder.finish()]);
-    let slice = buffer.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |_| {});
-    crate::compositor::wait_for_gpu(&device, "presentable-export-test").unwrap();
-    let data = slice.get_mapped_range();
+    // The window's target is the embedder's (the native bridge hands one over); here the test is
+    // the embedder and takes one from the pool.
+    let target = engine.compositor.view_canvas_for(crate::render::compositor::Window::output(doc.view().composition().unwrap().unwrap().spec()), format);
+    engine.render_frame_into(&doc.view(), t, &target.texture).unwrap();
+    let data = engine.read_texture_offline(&target.texture).unwrap();
+    let bytes_per_row = w * 4;
 
     let bgra = format!("{format:?}").starts_with("Bgra");
     for y in 0..h as usize {

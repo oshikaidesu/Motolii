@@ -166,7 +166,7 @@ pub(super) fn freeze_attrs_batch(
         group.entity_path(),
         vec![SerializedComponentBatch {
             descriptor: descriptor_attrs(),
-            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+            array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                 .map_err(|e| StoreError::Chunk(e.to_string()))?,
         }],
     ))

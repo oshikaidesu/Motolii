@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::collections::BTreeMap;
 
 use crate::doc::core::RationalTime;
@@ -11,8 +12,9 @@ use super::scene_policy::ScenePolicy;
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneContentValue {
     None,
-    Text(TextShapeValue),
-    Shape(Vec<ShapeNode>),
+    /// Shared with the evaluated node: an unchanged value is the same allocation frame to frame.
+    Text(Arc<TextShapeValue>),
+    Shape(Arc<Vec<ShapeNode>>),
     Material(MaterialValue),
     Media { source: MediaSourceValue, time: RationalTime },
     Particles(ParticleValue),
@@ -30,6 +32,8 @@ pub struct ScenePlateValue {
 pub enum SceneImageSourceValue {
     Content { layer: LayerId, content: SceneContentValue, time: RationalTime, namespace: u64 },
     Scene { scene: SceneValue, background: [f32; 4], time: RationalTime, namespace: u64 },
+    /// A named layer that cannot be read: the consumer itself, or absent.
+    Refused { layer: LayerId },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,7 +42,25 @@ pub struct SceneLayerValue { pub layer: LayerId, pub instance: u32, pub source: 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneValue { pub layers: Vec<SceneLayerValue> }
 
+impl SceneLayerValue {
+    /// Whether an effect reads another layer's or another time's picture. Every pass has a row;
+    /// only a row with sources reads anything.
+    pub fn reads_other_pictures(&self) -> bool {
+        self.image_sources.iter().any(|row| !row.is_empty())
+    }
+}
+
 impl SceneValue {
+    /// Whether any layer, inside plates too, carries an effect that `asks_for_views(plugin id)`:
+    /// the frame is then seen from eyes other than the work's camera.
+    pub fn asks_for_views(&self, asks: &dyn Fn(&str) -> bool) -> bool {
+        fn any(layer: &SceneLayerValue, asks: &dyn Fn(&str) -> bool) -> bool {
+            layer.effects.iter().chain(&layer.after_effects).any(|effect| asks(&effect.plugin_id))
+                || matches!(&layer.content, SceneContentValue::Plate(plate) if plate.members.iter().filter_map(|member| member.layer.as_ref()).any(|child| any(child, asks)))
+        }
+        self.layers.iter().any(|layer| any(layer, asks))
+    }
+
     /// Authoring layer as evaluated by the FrameGraph. Plates and placement
     /// copies are an execution/semantic detail; editor callers ask by LayerId
     /// and get the original instance when one exists.
@@ -151,7 +173,8 @@ impl SceneNodeProgram {
                     placement_effects.push(effect_program.is_placement(*key));
                 }
             }
-            let placement = placement_program.binding(layer).map(|binding| {
+            // A group's placement copies its children (GroupCompositeProgram), not the group itself.
+            let placement = placement_program.binding(layer).filter(|_| meta.source != LayerSource::Group).map(|binding| {
                 let at = inputs.len();
                 inputs.push(binding.node);
                 at
@@ -183,7 +206,7 @@ impl SceneNodeProgram {
                 hierarchy_bindings.insert(layer, key);
             }
         }
-        let group_composite = GroupCompositeProgram::compile(view, effect_program, &hierarchy_bindings)?;
+        let group_composite = GroupCompositeProgram::compile(view, effect_program, placement_program, &hierarchy_bindings)?;
         for node in group_composite.nodes() {
             nodes.insert(node.key(), node);
         }
@@ -237,8 +260,8 @@ impl SceneNodeProgram {
                 let transform = inputs.at(0).and_then(|value| value.downcast_ref::<TransformValue>()).copied().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                 let content_key = content.map(|index| node.identity().inputs[index]);
                 let scene_content = match (*kind, *content) {
-                    (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_ref::<TextShapeValue>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
-                    (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_ref::<Vec<ShapeNode>>()).cloned().ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
+                    (1, Some(index)) => SceneContentValue::Text(inputs.at(index).and_then(|value| value.downcast_arc::<TextShapeValue>()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
+                    (2, Some(index)) => SceneContentValue::Shape(inputs.at(index).and_then(|value| value.downcast_arc::<Vec<ShapeNode>>()).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?),
                     (3, Some(index)) => {
                         let value = inputs.at(index).ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                         if let Some(material) = value.downcast_ref::<MaterialValue>() {
@@ -365,6 +388,7 @@ impl SceneNodeProgram {
                         layer.freeze_eligible = false;
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                        layer.shape_stretch = copy.outline_stretch;
                         members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
                         continue;
                     }
@@ -409,6 +433,7 @@ impl SceneNodeProgram {
                     if sampled_selected.is_some() {
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                        layer.shape_stretch = copy.outline_stretch;
                     } else {
                         // The placement effect was disabled at the sampled
                         // source time. Legacy push_placements emits that sampled
@@ -532,14 +557,12 @@ fn sampled_content(
     Ok(match (kind, content) {
         (1, Some(index)) => SceneContentValue::Text(
             sampled_value(inputs, index, sample_indices, sample_start)
-                .and_then(|value| value.downcast_ref::<TextShapeValue>())
-                .cloned()
+                .and_then(|value| value.downcast_arc::<TextShapeValue>())
                 .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
         ),
         (2, Some(index)) => SceneContentValue::Shape(
             sampled_value(inputs, index, sample_indices, sample_start)
-                .and_then(|value| value.downcast_ref::<Vec<ShapeNode>>())
-                .cloned()
+                .and_then(|value| value.downcast_arc::<Vec<ShapeNode>>())
                 .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?,
         ),
         (3, Some(index)) => {

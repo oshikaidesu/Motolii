@@ -393,7 +393,7 @@ mod background_decode {
             height: 16,
             fps: Fps::try_new(30, 1).unwrap(),
             duration_frames: 30,
-            background: [0.0, 0.0, 0.0, 1.0],
+            background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
         }))
         .unwrap();
         let layer = LayerId(1);

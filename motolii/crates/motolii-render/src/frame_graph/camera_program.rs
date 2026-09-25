@@ -92,7 +92,7 @@ mod tests {
         let mut doc = Document::new();
         let target = crate::doc::store::LayerId(1); let camera = crate::doc::store::LayerId(2);
         doc.apply_all([
-            Intent::SetComposition(Composition { width: 640, height: 480, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] }),
+            Intent::SetComposition(Composition { width: 640, height: 480, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4], look: Default::default() }),
             Intent::AddLayer(target), Intent::SetMeta { layer: target, meta: LayerMeta { source: LayerSource::Null, order: 0, timing: LayerTiming::place(0, None, 90) } },
             Intent::SetConstant { layer: target, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([400.0, 300.0]) },
             Intent::AddLayer(camera), Intent::SetMeta { layer: camera, meta: LayerMeta { source: LayerSource::Camera, order: 1, timing: LayerTiming::place(0, None, 90) } },

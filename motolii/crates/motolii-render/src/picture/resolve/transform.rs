@@ -286,7 +286,7 @@ mod spatial_tests {
         let (mut doc, parent, child) = pair();
         doc.apply(Intent::SetComposition(Composition {
             width: 640, height: 480, fps: Fps::try_new(30, 1).unwrap(),
-            duration_frames: 30, background: Composition::default_background(),
+            duration_frames: 30, background: Composition::default_background(), look: Default::default()
         })).unwrap();
         for layer in [parent, child] {
             doc.apply(Intent::SetMeta { layer, meta: LayerMeta {

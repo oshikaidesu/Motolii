@@ -9,7 +9,7 @@ fn a_timed_size_updates_the_reused_taffy_node() {
     let mut doc = Document::new();
     let fps = Fps::try_new(30, 1).unwrap();
     let group = LayerId(1);
-    doc.apply(Intent::SetComposition(Composition { width: 640, height: 480, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 640, height: 480, fps, duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     let width = KeyframeTrack::try_from_keys(vec![
         Keyframe { t: RationalTime::ZERO, value: Value::F64(120.0), interp: Interp::Linear, spatial: None },
         Keyframe { t: RationalTime::try_new(1, 1).unwrap(), value: Value::F64(240.0), interp: Interp::Linear, spatial: None },
@@ -57,7 +57,7 @@ fn a_static_layout_does_not_rebuild_its_plan_each_frame() {
     let mut doc = Document::new();
     let fps = Fps::try_new(30, 1).unwrap();
     let group = LayerId(1);
-    doc.apply(Intent::SetComposition(Composition { width: 640, height: 480, fps, duration_frames: 90, background: [0.0; 4] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: 640, height: 480, fps, duration_frames: 90, background: [0.0; 4], look: Default::default() })).unwrap();
     doc.apply_all([
         Intent::AddLayer(group),
         Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 90) } },

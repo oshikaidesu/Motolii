@@ -1,9 +1,6 @@
 
 
-use crate::render::compositor::{
-    CompSpec, Compositor, CompositorError,
-    LayerWithPasses, ResolvedCamera, Window,
-};
+use crate::render::compositor::{Compositor, CompositorError, Window};
 
 impl Compositor {
     pub fn device(&self) -> &wgpu::Device {
@@ -12,66 +9,6 @@ impl Compositor {
 
     pub fn render_context(&self) -> &re_renderer::RenderContext {
         &self.ctx
-    }
-
-    pub fn render_into(
-        &mut self,
-        target: &wgpu::Texture,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        layers: &[LayerWithPasses],
-        background_color: [f32; 4],
-    ) -> Result<(), CompositorError> {
-        self.render_into_window(target, comp, camera, layers, background_color, Window::output(comp))
-    }
-
-    /// 出力寸法以外の窓へ描く(Stage: タブの寸法へ、関心域で pan & scan)。
-    pub fn render_into_window(
-        &mut self,
-        target: &wgpu::Texture,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        layers: &[LayerWithPasses],
-        background_color: [f32; 4],
-        window: Window,
-    ) -> Result<(), CompositorError> {
-        check_presentable_target(target, window)?;
-        self.window = window;
-
-        let mut stage = std::time::Instant::now();
-        let (effective_textures, effective_paddings, effective_spills, checked_out) =
-            self.effective_layer_textures(layers)?;
-        self.measurement.textures_us = stage.elapsed().as_micros() as u64;
-
-        stage = std::time::Instant::now();
-        let inputs = crate::render::compositor::render_effects::sequential_inputs(
-            layers,
-            &effective_textures,
-            &effective_paddings,
-            &effective_spills,
-        );
-        self.measurement.inputs_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        self.measurement.accumulate_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        let outline = self.outline_view(comp, camera, &inputs)?;
-        self.measurement.outline_us = stage.elapsed().as_micros() as u64;
-        stage = std::time::Instant::now();
-        self.finalize_into(target, comp, camera, background, background_color, outline)?;
-        self.measurement.finalize_us = stage.elapsed().as_micros() as u64;
-
-        for (width, height, format, scratch_texture) in checked_out {
-            self.effect_scratch
-                .release(width, height, format, scratch_texture);
-        }
-        Ok(())
-    }
-
-    /// 直前の `render_into` で選ばれていた層の画面上の広がり(番号 → `[x0, y0, x1, y1]` 画素)。
-    /// GPU から届く前なら `None`。
-    pub fn selection_screen_bounds(&mut self) -> Option<Vec<(u8, [f32; 4])>> {
-        self.selection_bounds.as_mut()?.take(&self.ctx.device)
     }
 }
 

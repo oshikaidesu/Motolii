@@ -20,20 +20,20 @@ pub(super) struct MaterialCache {
 fn image_layer(texture: GpuTexture2D, size: [f32; 2]) -> Layer {
     Layer {
         content: LayerContent::LinearTexture(texture), size, placement: Default::default(),
-        projection: LayerProjection::TwoD, projection_camera: Default::default(),
+        projection: LayerProjection::TwoD,
         blend_mode: BlendMode::Normal, shading: Default::default(), displace: Default::default(),
-        clip: None, shadow: 0.0, outline: 0, frame: None,
+        clip: None, shadow: 0.0, emission: 0.0, frame: None,
     }
 }
 
 impl Compositor {
     fn normalized_material(&mut self, texture: &GpuTexture2D) -> Result<GpuTexture2D, CompositorError> {
-        if texture.format().is_srgb() { return Ok(texture.clone()); }
-        let source = self.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| CompositorError::Effect(e.to_string()))?.texture.clone();
+        if crate::render::compositor::linear_premultiplied(texture.format()) { return Ok(texture.clone()); }
+        let source = self.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| CompositorError::Effect(e.to_string()))?;
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("material normalization") });
-        let srgb = source.format().is_srgb();
+        let srgb = source.texture.format().is_srgb();
         let out = self.convert_image_encoding(&mut encoder, &source, true, !srgb, srgb);
-        self.pending.push(encoder.finish()); self.flush_pending();
+        self.ctx.queue_commands([encoder.finish()]);
         self.import_premultiplied(&out)
     }
 
@@ -46,53 +46,26 @@ impl Compositor {
         let instances = re_renderer::CpuModel::from_single_mesh(mesh).into_gpu_meshes(&self.ctx)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
         Ok(Arc::new(GpuModelData {
-            revision: super::super::compositor::mesh::next_model_revision(),
             planar_size: Some(natural),
             bounds: crate::render::media::SpatialBounds { min: [min.x,min.y,0.0], max: [max.x,max.y,0.0] },
-            instances: Arc::new(instances), vertices,
+            instances: Arc::new(instances), vertices, faceted: false, flat_parts: std::sync::Arc::from([]),
         }))
     }
 }
 
 impl Engine {
-    pub(super) fn apply_material_domains(
-        &mut self,
-        layer: Layer,
-        resolved: &ResolvedLayer,
-        natural: [f32; 2],
-        source_frame: Option<ImageFrame>,
-    ) -> Result<Layer, EngineError> {
-        self.apply_material_domains_semantic(
-            layer,
-            resolved.id,
-            &resolved.effects,
-            matches!(resolved.source, crate::doc::store::LayerSource::File { .. }),
-            resolved.source_frame,
-            natural,
-            source_frame,
-        )
-    }
 
-    pub(in crate::engine) fn apply_material_domains_semantic(
+    pub(in crate::engine) fn apply_material_recipe(
         &mut self,
         mut layer: Layer,
         layer_id: crate::doc::store::LayerId,
-        effects: &[ResolvedEffect],
+        recipe: &MaterialRecipe,
         source_is_file: bool,
         source_tick: i64,
         natural: [f32; 2],
         source_frame: Option<ImageFrame>,
     ) -> Result<Layer, EngineError> {
-        let mut spatial_seen = false;
-        for effect in effects {
-            match self.compositor.catalog.descriptors.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
-                Some(EffectStage::Field | EffectStage::Surface) => spatial_seen = true,
-                Some(EffectStage::Warp) if spatial_seen => return Err(EngineError::Store("2D warps must precede spatial effects in one material".into())),
-                _ => {},
-            }
-        }
-        let warps = super::translate::translate_image_effects(effects, EffectStage::Warp);
-        let spatial = self.compositor.catalog.descriptors.iter().any(|d| d.stage == EffectStage::Field && effects.iter().any(|e| e.plugin_id == d.plugin_id));
+        let (warps, spatial) = (recipe.warps.clone(), recipe.spatial);
         if warps.is_empty() && !spatial && source_frame.is_none() { self.materials.remove(&layer_id); return Ok(layer); }
         let Some(source) = layer.content.texture().cloned() else {
             if !warps.is_empty() { return Err(EngineError::Store("2D warp requires a planar material".into())); }
@@ -114,7 +87,7 @@ impl Engine {
             let mut frame = source_frame.unwrap_or(ImageFrame { size: natural, origin: [0.0;2], pixels: texture.width_height() });
             for pass in warps {
                 let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass], pass_sources: Vec::new(), padding: 0, cut: Vec::new() };
-                let (mut outputs,padding,_spills,_owned_outputs) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
+                let (mut outputs,padding,_spills) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
                 texture = outputs.remove(0).texture().expect("image effect output").clone();
                 frame = frame.padded(padding[0]);
             }
@@ -174,6 +147,47 @@ mod domain_contract {
     }
 
     fn differing(a:&[u8],b:&[u8]) -> usize { a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a,b)| a.iter().zip(b.iter()).any(|(a,b)| a.abs_diff(*b)>3)).count() }
+
+    /// 2D Emissive (decision 2026-09-25): a flat shape is emissive by a Gain above 1 — the composition
+    /// is scene-linear half float, so the value survives the stack and the view's Look (bloom /
+    /// halation / star) takes it up. No glow path of its own: the same Look as a 3D highlight.
+    #[test]
+    fn a_flat_shape_with_gain_above_one_glows_through_the_looks_bloom() {
+        let mut engine=Engine::new().unwrap();
+        let mut halo_of=|gain: f64| -> u32 {
+            let mut doc=document(LayerSource::Shape,128,[40.0,40.0]); shape(&mut doc);
+            effect(&mut doc,0,"motolii.gain",&[("gain",gain)]);
+            let px=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(),"{:?}",engine.layer_failures());
+            // Pixels just outside the shape's left edge (the shape covers x 40..72).
+            (28..38u32).map(|x| { let i=((56*128+x)*4) as usize; px[i..i+3].iter().map(|v|*v as u32).sum::<u32>() }).sum()
+        };
+        let plain=halo_of(1.0);
+        let emissive=halo_of(12.0);
+        assert!(emissive > plain + 30, "an emissive shape halates past its edge: plain {plain}, emissive {emissive}");
+    }
+
+    /// The Look is the composition's (Studio unless chosen): changing it changes the picture of the
+    /// same emissive shape, and setting it back gives the same picture again.
+    #[test]
+    fn the_compositions_look_decides_how_an_emissive_shape_glows() {
+        use crate::doc::store::Look;
+        let mut engine=Engine::new().unwrap();
+        let mut doc=document(LayerSource::Shape,128,[40.0,40.0]); shape(&mut doc);
+        effect(&mut doc,0,"motolii.gain",&[("gain",12.0)]);
+        let mut comp=doc.view().composition().unwrap().unwrap();
+        assert_eq!(comp.look,Look::Studio,"a composition is Studio unless another Look is chosen");
+        let mut render=|look: Look| {
+            comp.look=look; doc.apply(Intent::SetComposition(comp.clone())).unwrap();
+            engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap()
+        };
+        let studio=render(Look::Studio);
+        let poster=render(Look::Poster);
+        let jewel=render(Look::Jewel);
+        assert!(differing(&studio,&poster)>20,"Poster is not Studio");
+        assert!(differing(&studio,&jewel)>20,"Jewel is not Studio");
+        assert_eq!(render(Look::Studio),studio,"the same Look draws the same picture");
+    }
 
     #[test]
     fn the_same_material_displaces_the_same_as_pixels_or_paths_and_survives_spatial_placement() {
@@ -334,4 +348,24 @@ mod domain_contract {
         }
 
     }
+}
+
+pub(crate) use crate::render_graph::MaterialRecipe;
+
+pub(crate) fn material_recipe(
+    effects: &[ResolvedEffect],
+    catalog: &crate::render::compositor::effects::catalog::CatalogSnapshot,
+) -> Result<MaterialRecipe, String> {
+    let mut spatial_seen = false;
+    for effect in effects {
+        match catalog.descriptors.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
+            Some(EffectStage::Field | EffectStage::Surface) => spatial_seen = true,
+            Some(EffectStage::Warp) if spatial_seen => return Err("2D warps must precede spatial effects in one material".into()),
+            _ => {},
+        }
+    }
+    Ok(MaterialRecipe {
+        warps: super::translate::translate_image_effects(effects, EffectStage::Warp),
+        spatial: catalog.descriptors.iter().any(|d| d.stage == EffectStage::Field && effects.iter().any(|e| e.plugin_id == d.plugin_id)),
+    })
 }

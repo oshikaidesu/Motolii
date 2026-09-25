@@ -280,7 +280,7 @@ mod tests {
         let mut doc = Document::new();
         let layer = LayerId(1);
         doc.apply_all([
-            Intent::SetComposition(Composition { width: 320, height: 180, fps, duration_frames: 50, background: [0.0; 4] }),
+            Intent::SetComposition(Composition { width: 320, height: 180, fps, duration_frames: 50, background: [0.0; 4], look: Default::default() }),
             Intent::AddLayer(layer),
             Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Particles, order: 0, timing: LayerTiming::place(0, None, 50) } },
         ]).unwrap();

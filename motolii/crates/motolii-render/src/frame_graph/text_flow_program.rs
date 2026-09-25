@@ -496,7 +496,7 @@ fn layout_text(
         &canvas,
         &around,
     ).map_err(|error| TextFlowProgramError::Shape(error.to_string()))?.unwrap_or_default();
-    Ok(TextShapeValue { document: base.document, shaped })
+    Ok(TextShapeValue::new(base.document, shaped))
 }
 
 fn extend_obstacles(

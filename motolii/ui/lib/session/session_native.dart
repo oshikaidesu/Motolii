@@ -56,6 +56,9 @@ mixin SessionNative on SessionCore {
     }
     if (envelope['textureId'] is num)
       textureId.value = (envelope['textureId'] as num).toInt();
+    // Texture ids come only beside the status their pictures were drawn for (a render's
+    // reply, a broadcast frame): both land in this one call, so one build places the
+    // picture by its own window.
     if (envelope['textureIds'] is Map) {
       final ids = {
         for (final e in (envelope['textureIds'] as Map).entries)
@@ -163,6 +166,17 @@ mixin SessionNative on SessionCore {
             EditorSession.map(envelope['status'])['needsRender'] == true &&
             windowInfo['main'] != false) {
           refreshPreview();
+        }
+      }
+      // While playing, a finished picture arrives on its own (the window holds still).
+      if (call.method == 'presented') {
+        final ids = EditorSession.map(call.arguments)['textureIds'];
+        if (ids is Map) {
+          final next = {
+            for (final e in ids.entries)
+              if (e.value is num) '${e.key}': (e.value as num).toInt(),
+          };
+          if (!sameValue(next, textureIds.value)) textureIds.value = next;
         }
       }
       if (call.method == 'playbackFrame') {

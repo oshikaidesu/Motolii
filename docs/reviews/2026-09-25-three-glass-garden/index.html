@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Glass Garden three WebGPU</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./node_modules/three/build/three.webgpu.js",
+  "three/webgpu": "./node_modules/three/build/three.webgpu.js",
+  "three/tsl": "./node_modules/three/build/three.tsl.js",
+  "three/addons/": "./node_modules/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three/webgpu';
+import { pass, mrt, output, normalView, diffuseColor, velocity, vec2, vec3, vec4, float, uniform, texture, uv,
+  refract, div, positionViewDirection, positionLocal, positionWorld, packNormalToRGB, unpackRGBToNormal, sample, screenUV,
+  builtinGIContext, Fn, mix, smoothstep, sin, cos, time, color } from 'three/tsl';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { vxgi } from 'three/addons/lighting/vxgi/VXGINode.js';
+import { ssgi } from 'three/addons/tsl/display/SSGINode.js';
+import { traa } from 'three/addons/tsl/display/TRAANode.js';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+
+const P = new URLSearchParams(location.search);
+const STAGE = Number(P.get('stage') || 1);
+const TM = P.get('tm') || 'agx';
+const GI = P.get('gi') || 'vxgi';           // vxgi | ssgi
+const W = 1920, H = 1080;
+const LOG = (...a) => { console.log('[gg]', ...a); };
+
+const renderer = new THREE.WebGPURenderer({ antialias: STAGE <= 2, trackTimestamp: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H);
+renderer.toneMapping = TM === 'neutral' ? THREE.NeutralToneMapping : THREE.AgXToneMapping;
+renderer.toneMappingExposure = STAGE >= 4 ? 1.15 : 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.transmitted = STAGE >= 2;
+document.body.appendChild(renderer.domElement);
+await renderer.init();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030306);
+const camera = new THREE.PerspectiveCamera(36, W / H, 0.1, 100);
+const GIL = 2; // layer used by the VXGI voxelizer (opaque stuff only)
+
+// ---------- environment: studio HDRI + rainbow strips, baked once into a cube ----------
+const hdr = await new HDRLoader().loadAsync('./studio_small_09_2k.hdr');
+hdr.mapping = THREE.EquirectangularReflectionMapping;
+const envScene = new THREE.Scene();
+envScene.background = hdr;
+const stripGeo = new THREE.PlaneGeometry(0.35, 6);
+const rainbow = ['#ff3040', '#ff9a20', '#f6ff30', '#30ff70', '#30b8ff', '#7040ff', '#ff40e0'];
+rainbow.forEach((c, i) => {
+  const m = new THREE.Mesh(stripGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(6), side: THREE.DoubleSide }));
+  const a = -0.9 + i * 0.3;
+  m.position.set(Math.sin(a) * 8, 2.5, Math.cos(a) * 8 - 0.0);
+  m.lookAt(0, 2.5, 0);
+  envScene.add(m);
+});
+{ // a second, overhead white softbox strip pair
+  for (const x of [-2.5, 2.5]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 9), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(10), side: THREE.DoubleSide }));
+    m.position.set(x, 7, -1); m.rotation.x = Math.PI / 2; envScene.add(m);
+  }
+}
+const cubeRT = new THREE.CubeRenderTarget(1024, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+const cubeCam = new THREE.CubeCamera(0.1, 100, cubeRT);
+cubeCam.update(renderer, envScene);
+scene.environment = cubeRT.texture;
+scene.environmentIntensity = 1.0;
+
+// ---------- textures ----------
+const tl = new THREE.TextureLoader();
+const causticMap = tl.load('./Caustic_Free.jpg');
+causticMap.wrapS = causticMap.wrapT = THREE.RepeatWrapping;
+causticMap.colorSpace = THREE.SRGBColorSpace;
+const graphic = await tl.loadAsync('./graphic.png');
+graphic.colorSpace = THREE.SRGBColorSpace;
+graphic.anisotropy = 8;
+
+function labelTexture(lines, w = 2048, h = 1024) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  lines.forEach(([txt, size, y, spacing]) => {
+    g.font = `300 ${size}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+    if ('letterSpacing' in g) g.letterSpacing = `${spacing}px`;
+    g.fillText(txt, w / 2, y);
+  });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+
+// ---------- frame-driven animation state ----------
+const frameU = uniform(0);          // frame index, drives shaders deterministically
+const FPS = 60, CYCLE = 480;         // 8 s loop
+
+// ---------- stage: cyclorama floor + back wall ----------
+const cyc = (() => {
+  const g = new THREE.PlaneGeometry(40, 24, 200, 120);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), v = p.getY(i) + 12; // v: 0..24 along the sheet
+    const R = 4, flat = 12;                   // floor depth before the curve
+    let y, z;
+    if (v < flat) { y = 0; z = 6 - v; }
+    else if (v < flat + Math.PI * R / 2) { const a = (v - flat) / R; y = R - R * Math.cos(a); z = 6 - flat - R * Math.sin(a); }
+    else { y = R + (v - flat - Math.PI * R / 2); z = 6 - flat - R; }
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  const m = new THREE.MeshPhysicalNodeMaterial({ color: 0x262630, roughness: 0.42, metalness: 0.0, envMap: cubeRT.texture, envMapIntensity: 0.06, specularIntensity: 0.6 });
+  // dark caustic mesh gradient on the wall (the "water" of glass_garden.js)
+  m.emissiveNode = Fn(() => {
+    const wp = positionWorld;
+    const t = frameU.div(CYCLE).mul(6.2831853);
+    const c1 = texture(causticMap, wp.xy.mul(0.09).add(vec2(sin(t).mul(0.05), cos(t).mul(0.05)))).r;
+    const c2 = texture(causticMap, wp.xy.mul(0.13).add(vec2(0.3, 0.1)).sub(vec2(cos(t).mul(0.04), sin(t).mul(0.06)))).r;
+    const caustic = c1.mul(c2).pow(1.3);
+    const grad = mix(color('#2a0d5c'), color('#07344a'), smoothstep(-8.0, 8.0, wp.x.add(sin(wp.y.mul(0.4).add(t)).mul(2.0))));
+    const hmask = smoothstep(0.5, 3.0, wp.y);
+    return grad.mul(caustic.mul(2.2).add(0.12)).mul(hmask).mul(0.55);
+  })();
+  const mesh = new THREE.Mesh(g, m);
+  mesh.receiveShadow = true;
+  mesh.layers.enable(GIL);
+  return mesh;
+})();
+scene.add(cyc);
+
+// ---------- key light (spot) — drives shadows / caustics / VXGI injection ----------
+const spot = new THREE.SpotLight(0xffffff, 500);
+spot.position.set(1.5, 7.5, 3.5);
+spot.target.position.set(0, 0.2, -0.5);
+spot.angle = Math.PI / 5; spot.penumbra = 0.8; spot.decay = 2; spot.distance = 0;
+spot.castShadow = true;
+spot.shadow.mapType = THREE.HalfFloatType;
+spot.shadow.mapSize.set(2048, 2048);
+spot.shadow.camera.near = 2; spot.shadow.camera.far = 15;
+spot.shadow.intensity = 0.95;
+spot.shadow.bias = -0.0005;
+scene.add(spot, spot.target);
+// a low warm rim (the "Ember")
+const ember = new THREE.PointLight(0xffb0e0, 6, 0, 2);
+ember.position.set(0, 1.4, -1.8);
+scene.add(ember);
+
+// ---------- glass helpers ----------
+const glassMaterials = [];
+function glass(o = {}) {
+  const m = new THREE.MeshPhysicalNodeMaterial({
+    color: 0xffffff, metalness: 0, roughness: 0.04, transmission: 1, ior: 1.5, thickness: 0.2,
+    dispersion: 1.2, transparent: true, side: THREE.DoubleSide, envMapIntensity: 1.0, ...o });
+  glassMaterials.push(m);
+  return m;
+}
+const causticOcclusion = uniform(2);
+function addCaustics(mat, strength = 25) {
+  if (STAGE < 2) return;
+  mat.castShadowPositionNode = positionLocal;
+  mat.castShadowNode = Fn(() => {
+    const rv = refract(positionViewDirection.negate(), normalView, div(1.0, mat.ior)).normalize();
+    const vz = normalView.z.abs().pow(causticOcclusion);
+    const tuv = rv.xy.mul(0.6).add(vec2(frameU.mul(0.0007), 0));
+    const ca = normalView.z.abs().max(0.05).pow(-0.9).mul(0.004);
+    const cp = vec3(
+      texture(causticMap, tuv.add(vec2(ca.negate(), 0))).r,
+      texture(causticMap, tuv.add(vec2(0, ca.negate()))).g,
+      texture(causticMap, tuv.add(vec2(ca, ca))).b);
+    return cp.mul(vz.mul(strength)).add(vz).mul(uniform(mat.attenuationColor ?? new THREE.Color(1, 1, 1)));
+  })();
+}
+function glassMesh(geo, mat, castCaustic = true) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = STAGE >= 2 && castCaustic;
+  m.receiveShadow = false;
+  if (castCaustic) addCaustics(mat);
+  return m;
+}
+
+// ---------- the flower ----------
+const flower = new THREE.Group();
+flower.position.set(0, 1.35, -0.4);
+flower.rotation.x = -0.55; // tilted back, facing camera and the key light
+scene.add(flower);
+
+function petalGeometry(len, wid, depth, bevel, lift, twist) {
+  const s = new THREE.Shape();
+  s.absellipse(len / 2, 0, len / 2, wid / 2, 0, Math.PI * 2, false, 0);
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.9, bevelSegments: 6, curveSegments: 64, steps: 1 });
+  g.translate(0, 0, -depth / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const u = x / len;                         // 0 at the centre, 1 at the tip
+    z += lift * u * u;                         // cup upwards
+    z += -0.35 * wid * (y / wid) ** 2 * 2;     // shallow trough across the petal
+    const a = twist * u;                       // twist along the length
+    const y2 = y * Math.cos(a) - z * 0 , z2 = z + y * Math.sin(a);
+    p.setXYZ(i, x, y2, z2);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const OUTER = 24, INNER = 16;
+const outerMat = glass({ roughness: 0.02, dispersion: 1.6, thickness: 0.08, ior: 1.5, attenuationColor: new THREE.Color(0.85, 0.92, 1.0), attenuationDistance: 1.5 });
+const outerGeo = petalGeometry(1.25, 0.34, 0.035, 0.018, 0.55, 0.45);
+const outerPetals = new THREE.InstancedMesh(outerGeo, outerMat, OUTER);
+const innerMat = glass({ roughness: 0.03, dispersion: 1.0, thickness: 0.12, ior: 1.55, color: 0xffffff, attenuationColor: new THREE.Color(0.18, 0.08, 0.35), attenuationDistance: 0.08 });
+const innerGeo = petalGeometry(0.5, 0.1, 0.03, 0.012, 0.35, 0.9);
+const innerPetals = new THREE.InstancedMesh(innerGeo, innerMat, INNER);
+const dummy = new THREE.Object3D();
+function layoutPetals(frame) {
+  const t = frame / CYCLE;
+  for (let i = 0; i < OUTER; i++) {
+    dummy.position.set(0, 0, 0);
+    dummy.rotation.set(0, 0, (i / OUTER) * Math.PI * 2 + t * (Math.PI * 2 / OUTER));
+    const breathe = 1 + 0.04 * Math.sin(t * Math.PI * 2);
+    dummy.scale.set(breathe, 1, 1);
+    dummy.translateX(0.08);
+    dummy.rotateY(-0.12 - 0.06 * Math.sin(t * Math.PI * 2 + i * 0.5));
+    dummy.updateMatrix();
+    outerPetals.setMatrixAt(i, dummy.matrix);
+  }
+  for (let i = 0; i < INNER; i++) {
+    dummy.position.set(0, 0, 0.06);
+    dummy.rotation.set(0, 0, (i / INNER) * Math.PI * 2 - t * (Math.PI * 2 / INNER));
+    dummy.scale.set(1, 1, 1);
+    dummy.translateX(0.03);
+    dummy.rotateY(-0.5);
+    dummy.updateMatrix();
+    innerPetals.setMatrixAt(i, dummy.matrix);
+  }
+  outerPetals.instanceMatrix.needsUpdate = true;
+  innerPetals.instanceMatrix.needsUpdate = true;
+}
+for (const ip of [outerPetals, innerPetals]) { ip.castShadow = STAGE >= 2; flower.add(ip); }
+addCaustics(outerMat); addCaustics(innerMat, 10);
+const heart = new THREE.Mesh(new THREE.SphereGeometry(0.1, 48, 32), new THREE.MeshPhysicalNodeMaterial({ color: 0x0b0b16, roughness: 0.05, metalness: 0.0, clearcoat: 1, clearcoatRoughness: 0.02 }));
+heart.position.z = 0.12; heart.castShadow = true; heart.layers.enable(GIL);
+flower.add(heart);
+
+// ---------- glass disc (clear, lightly rough) and frosted slab ----------
+const discGeo = (() => { const s = new THREE.Shape(); s.absarc(0, 0, 0.85, 0, Math.PI * 2); const g = new THREE.ExtrudeGeometry(s, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 8, curveSegments: 128 }); g.center(); return g; })();
+const disc = glassMesh(discGeo, glass({ roughness: 0.08, thickness: 0.18, dispersion: 1.2 }));
+disc.position.set(-2.3, 1.35, -1.3); disc.rotation.y = 0.45;
+scene.add(disc);
+
+const slabGeo = (() => { const s = new THREE.Shape(); const w = 0.7, h = 2.4, r = 0.12; s.moveTo(-w / 2 + r, -h / 2); s.lineTo(w / 2 - r, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); s.lineTo(w / 2, h / 2 - r); s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); s.lineTo(-w / 2 + r, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); s.lineTo(-w / 2, -h / 2 + r); s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2); const g = new THREE.ExtrudeGeometry(s, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 6, curveSegments: 32 }); g.center(); return g; })();
+const slab = glassMesh(slabGeo, glass({ roughness: 0.42, thickness: 0.25, dispersion: 0.6 }));
+slab.position.set(2.2, 1.2, -1.4); slab.rotation.y = -0.35;
+scene.add(slab);
+
+// ---------- chrome sphere, translucent coloured knot ----------
+const chrome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 96, 64), new THREE.MeshPhysicalNodeMaterial({ color: 0xffffff, metalness: 1, roughness: 0.04 }));
+chrome.position.set(-1.25, 0.42, 0.9); chrome.castShadow = true; chrome.layers.enable(GIL);
+scene.add(chrome);
+const knotMat = glass({ roughness: 0.06, thickness: 0.6, ior: 1.45, dispersion: 0.8, attenuationColor: new THREE.Color('#ff2f7a'), attenuationDistance: 0.25 });
+const knot = glassMesh(new THREE.TorusKnotGeometry(0.28, 0.1, 256, 48), knotMat);
+knot.position.set(1.35, 0.45, 0.8); knot.rotation.set(0.4, 0.3, 0);
+scene.add(knot);
+
+// ---------- orbit of clear glass spheres ----------
+const ORB = 5;
+const orbs = [];
+const orbGeo = new THREE.SphereGeometry(0.16, 64, 48);
+const orbMat = glass({ roughness: 0.01, thickness: 0.32, dispersion: 1.4 });
+addCaustics(orbMat);
+for (let i = 0; i < ORB; i++) { const o = new THREE.Mesh(orbGeo, orbMat); o.castShadow = STAGE >= 2; orbs.push(o); scene.add(o); }
+const orbitCenter = new THREE.Vector3(0, 1.35, -0.4);
+function layoutOrbs(frame) {
+  const t = frame / CYCLE * Math.PI * 2;
+  orbs.forEach((o, i) => {
+    const a = t + i * Math.PI * 2 / ORB;
+    const x = Math.cos(a) * 2.1, z = Math.sin(a) * 1.0;
+    o.position.set(orbitCenter.x + x, orbitCenter.y + x * -0.15 + z * 0.35, orbitCenter.z + z);
+  });
+}
+// orbit line (thin emissive torus) — the "Prism Orbit"
+const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.004, 8, 512), new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(0.8, 0.85, 1).multiplyScalar(4) }));
+ring.scale.set(2.1, 1.0, 1); ring.position.copy(orbitCenter);
+ring.rotation.set(Math.PI / 2 - Math.atan(0.35), 0, Math.atan(0.15));
+scene.add(ring);
+
+// ---------- 2D graphics inside the 3D scene ----------
+const titleTex = labelTexture([['MOTOLII', 300, 330, 30], ['G L A S S   G A R D E N', 110, 640, 18], ['L I V E   0 0 1', 70, 830, 12]]);
+const title = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 2.0), new THREE.MeshStandardNodeMaterial({ map: titleTex, alphaTest: 0.35, roughness: 0.6, emissive: 0xffffff, emissiveMap: titleTex, emissiveIntensity: 0.35, side: THREE.DoubleSide }));
+title.position.set(2.4, 2.45, -3.4); title.rotation.y = -0.2; title.castShadow = true; title.layers.enable(GIL);
+scene.add(title);
+const img = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.7), new THREE.MeshStandardNodeMaterial({ map: graphic, alphaTest: 0.35, roughness: 0.5, emissive: 0xffffff, emissiveMap: graphic, emissiveIntensity: 0.5, side: THREE.DoubleSide }));
+img.position.set(-2.7, 1.5, -3.0); img.rotation.y = 0.3; img.castShadow = true; img.layers.enable(GIL);
+scene.add(img);
+
+// every glass: excluded from the voxelizer (layer 0 only); camera sees layers 0 and GIL
+camera.layers.enable(GIL);
+spot.shadow.camera.layers.enable(GIL);
+
+// ---------- camera path (frame-driven) ----------
+const target = new THREE.Vector3(0, 1.15, -0.6);
+function layoutCamera(frame) {
+  const a = 0.42 * Math.sin(frame / CYCLE * Math.PI * 2);
+  const r = 8.6;
+  camera.position.set(target.x + Math.sin(a) * r, 2.1 + 0.25 * Math.cos(frame / CYCLE * Math.PI * 4), target.z + Math.cos(a) * r);
+  camera.lookAt(target);
+}
+function setFrame(f) { frameU.value = f; layoutPetals(f); layoutOrbs(f); layoutCamera(f); if (window.__preCam) { window.__preCam.copy(camera); window.__preCam.updateMatrixWorld(); } }
+setFrame(0);
+
+// ---------- pipelines ----------
+let pipe = null, giPass = null, notes = [];
+if (STAGE >= 3) {
+  pipe = new THREE.RenderPipeline(renderer);
+  if (GI === 'none') {
+    const sp = pass(scene, camera); sp.setMRT(mrt({ output, velocity }));
+    const col = sp.getTextureNode('output');
+    let o = STAGE >= 4 ? col.add(bloom(col, 0.18, 0.3, 1.6)) : col;
+    pipe.outputNode = traa(o, sp.getTextureNode('depth'), sp.getTextureNode('velocity'), camera);
+    notes.push('no-gi+traa');
+  } else if (GI === 'vxgi') {
+    // separate camera object for the opaque pre-pass: ShadowNode renders each light's map once per (camera, frame)
+    // (ShadowNode.js ~L804), so a transparent=false pre-pass on the main camera would bake the map without glass casters.
+    const preCam = camera.clone(); window.__preCam = preCam;
+    { const so = camera.setViewOffset.bind(camera), co = camera.clearViewOffset.bind(camera);
+      camera.setViewOffset = (...a) => { so(...a); preCam.setViewOffset(...a); };
+      camera.clearViewOffset = () => { co(); preCam.clearViewOffset(); }; } // keep TRAA jitter identical in both passes
+    const pre = pass(scene, preCam); pre.transparent = false;
+    pre.setMRT(mrt({ output: packNormalToRGB(normalView), velocity }));
+    pre.getTexture('output').type = THREE.UnsignedByteType;
+    const preNormal = sample((u) => unpackRGBToNormal(pre.getTextureNode().sample(u)));
+    const preDepth = pre.getTextureNode('depth');
+    const preVel = pre.getTextureNode('velocity');
+    giPass = vxgi(preDepth, preNormal, scene, preCam, 96);
+    giPass.volume.layers.set(GIL);
+    giPass.giIntensity.value = 1.0;
+    const ao = giPass.getAONode(), gi = giPass.getGINode();
+    const scenePass = pass(scene, camera);
+    scenePass.contextNode = builtinGIContext(ao.sample(screenUV).r, gi.sample(screenUV).rgb);
+    let out = scenePass;
+    if (STAGE >= 4) {
+      const b = bloom(scenePass, 0.18, 0.3, 1.6);
+      out = scenePass.add(b);
+    }
+    pipe.outputNode = traa(out, preDepth, preVel, camera);
+    notes.push('vxgi96+builtinGIContext+traa');
+  } else {
+    const sp = pass(scene, camera);
+    sp.setMRT(mrt({ output, diffuseColor, normal: packNormalToRGB(normalView), velocity }));
+    const col = sp.getTextureNode('output'), dif = sp.getTextureNode('diffuseColor'), dep = sp.getTextureNode('depth'), vel = sp.getTextureNode('velocity');
+    sp.getTexture('diffuseColor').type = THREE.UnsignedByteType; sp.getTexture('normal').type = THREE.UnsignedByteType;
+    const nrm = sample((u) => unpackRGBToNormal(sp.getTextureNode('normal').sample(u)));
+    giPass = ssgi(col, dep, nrm, camera); giPass.sliceCount.value = 2; giPass.stepCount.value = 8; giPass.radius.value = 3;
+    const ao = giPass.getAONode(), gi = giPass.getGINode();
+    let comp = vec4(col.rgb.mul(ao).add(dif.rgb.mul(gi.rgb)), col.a);
+    if (STAGE >= 4) comp = comp.add(bloom(comp, 0.18, 0.3, 1.6));
+    pipe.outputNode = traa(comp, dep, vel, camera);
+    notes.push('ssgi(post-composite)+traa');
+  }
+}
+
+async function renderOnce() {
+  // host-driven frame: FRAME-type nodes (passes, TRAA, shadows, VXGI) only update when nodeFrame advances,
+  // which the renderer otherwise does only in its own rAF loop (Animation.js ~L83)
+  renderer._nodes.nodeFrame.update();
+  if (renderer.info.autoReset === true) renderer.info.reset();
+  if (pipe) pipe.render(); else renderer.render(scene, camera);
+}
+const device = renderer.backend.device;
+window.GG = {
+  renderer, scene, camera,
+  async cpu(n) { const c = []; for (let i = 0; i < n; i++) { setFrame(i); const t = performance.now(); await renderOnce(); c.push(performance.now() - t); await device.queue.onSubmittedWorkDone(); } c.sort((a, b) => a - b); return { cpuMedian: c[n >> 1], drawCalls: renderer.info.render.drawCalls, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }; },
+  ready: true, stage: STAGE, tm: TM, gi: GI, notes, three: THREE.REVISION,
+  features: [...device.features],
+  timestamp: renderer.backend.trackTimestamp,
+  async adapterInfo() { return device.adapterInfo ? { ...['vendor', 'architecture', 'device', 'description'].reduce((o, k) => (o[k] = device.adapterInfo[k], o), {}) } : null; },
+  // render frames [from..to] sequentially, fully synced
+  async run(from, to) { for (let f = from; f <= to; f++) { setFrame(f); await renderOnce(); } await device.queue.onSubmittedWorkDone(); },
+  async hold(f, n) { setFrame(f); for (let i = 0; i < n; i++) await renderOnce(); await device.queue.onSubmittedWorkDone(); },
+  // rAF-paced animation, returns deltas
+  bench(n, start = 0) {
+    return new Promise((res) => {
+      const d = []; let last = null, f = start;
+      const tick = (t) => { if (last !== null) d.push(t - last); last = t; setFrame(f++); renderOnce(); if (d.length < n) requestAnimationFrame(tick); else res(d); };
+      requestAnimationFrame(tick);
+    });
+  },
+  // pipelined throughput: n frames back to back, one wait at the end (repeated k times)
+  async throughput(n, k = 5) { const r = []; for (let j = 0; j < k; j++) { await device.queue.onSubmittedWorkDone(); const t0 = performance.now(); for (let i = 0; i < n; i++) { setFrame(j * n + i); await renderOnce(); } await device.queue.onSubmittedWorkDone(); r.push((performance.now() - t0) / n); } return r; },
+  // serialized: render + wait GPU done each frame (uncapped by vsync) + timestamp queries
+  async serial(n, start = 0) {
+    const wall = [], gpu = [], comp = [];
+    for (let i = 0; i < n; i++) {
+      setFrame(start + i);
+      const t0 = performance.now();
+      await renderOnce();
+      await device.queue.onSubmittedWorkDone();
+      wall.push(performance.now() - t0);
+      if (renderer.backend.trackTimestamp) {
+        gpu.push(await renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER));
+        comp.push(await renderer.resolveTimestampsAsync(THREE.TimestampQuery.COMPUTE));
+      }
+    }
+    return { wall, gpu, comp };
+  },
+};
+LOG('ready', STAGE, TM, GI);
+</script>
+</body>
+</html>

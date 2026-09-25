@@ -54,7 +54,7 @@ fn document() -> Document {
         height: 480,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 300,
-        background: Composition::default_background(),
+        background: Composition::default_background(), look: Default::default()
     }))
     .unwrap();
     doc

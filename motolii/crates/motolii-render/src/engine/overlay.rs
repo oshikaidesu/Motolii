@@ -313,11 +313,6 @@ fn well_shapes(params: &Params, wells: &[([f32; 2], f32, [f32; 2])]) -> Vec<Shap
     out
 }
 
-/// このコマの塊から、Grid → Box → Push → Marker → Labels の順に形を組む(comp の座標)。`pushes` は Layers の時だけ(塊と同じ順)。
-pub(crate) fn overlay_shapes(params: &Params, marks: &[BlobMark], pushes: &[[f32; 2]], comp: [f64; 2]) -> Vec<ShapeNode> {
-    overlay_shapes_with(params, marks, pushes, &PhysicsTrace::default(), comp)
-}
-
 /// 物理の可視が描く物(解き手から取る)。
 #[derive(Default)]
 pub(crate) struct PhysicsTrace<'a> {
@@ -434,22 +429,22 @@ mod tests {
     #[test]
     fn boxes_follow_the_shape_choice_and_markers_are_optional() {
         let marks = [BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 }];
-        let shapes = overlay_shapes(&params(&[]), &marks, &[], [400.0, 300.0]);
+        let shapes = overlay_shapes_with(&params(&[]), &marks, &[], &PhysicsTrace::default(), [400.0, 300.0]);
         assert_eq!(shapes.len(), 1, "既定は箱だけ");
         let ShapeNode::Group(g) = &shapes[0] else { panic!() };
         assert_eq!((g.transform.position.x, g.transform.position.y), (100.0, 50.0));
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert_eq!(leaf.source, PathSource::Rectangle { size: Point { x: 40.0, y: 20.0 } });
-        let circle = overlay_shapes(&params(&[("box_shape", Value::F64(3.0)), ("marker", Value::F64(1.0))]), &marks, &[], [400.0, 300.0]);
+        let circle = overlay_shapes_with(&params(&[("box_shape", Value::F64(3.0)), ("marker", Value::F64(1.0))]), &marks, &[], &PhysicsTrace::default(), [400.0, 300.0]);
         assert_eq!(circle.len(), 2, "箱 + 印");
         let ShapeNode::Group(g) = &circle[0] else { panic!() };
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert_eq!(leaf.source, PathSource::Ellipse { size: Point { x: 40.0, y: 40.0 } }, "Circle は長辺の円");
-        let gapped = overlay_shapes(&params(&[("box_gap", Value::F64(1.0))]), &marks, &[], [400.0, 300.0]);
+        let gapped = overlay_shapes_with(&params(&[("box_gap", Value::F64(1.0))]), &marks, &[], &PhysicsTrace::default(), [400.0, 300.0]);
         let ShapeNode::Group(g) = &gapped[0] else { panic!() };
         let ShapeNode::Leaf(leaf) = &g.children[0] else { panic!() };
         assert!(leaf.stroke.as_ref().and_then(|s| s.dash.as_ref()).is_some_and(|d| d.pattern.len() == 2), "Gap は破線");
-        assert!(overlay_shapes(&params(&[("box", Value::F64(0.0))]), &marks, &[], [400.0, 300.0]).is_empty());
+        assert!(overlay_shapes_with(&params(&[("box", Value::F64(0.0))]), &marks, &[], &PhysicsTrace::default(), [400.0, 300.0]).is_empty());
     }
 
     /// 奥行きの違う物を読むと、奥行きの面ごとの線と、面を貫く柱が立つ。奥行きが 1 つなら柱は無い。
@@ -479,7 +474,7 @@ mod tests {
             BlobMark { id: 1, center: [300.0, 150.0], size: [40.0, 20.0], age: 0 },
         ];
         let p = crate::extensions::overlay::with_defaults(crate::extensions::overlay::PUSH_TRACE, &[("box", Value::F64(0.0))].map(|(n, v)| (n.to_owned(), v)));
-        let shapes = overlay_shapes(&p, &marks, &[[30.0, -40.0], [0.0, 0.0]], [400.0, 300.0]);
+        let shapes = overlay_shapes_with(&p, &marks, &[[30.0, -40.0], [0.0, 0.0]], &PhysicsTrace::default(), [400.0, 300.0]);
         let paths: Vec<&Vec<Contour>> = shapes.iter().filter_map(|n| match n { ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), stroke: Some(_), .. }) => Some(path), _ => None }).collect();
         assert_eq!(paths.len(), 2, "one trace per thing");
         assert_eq!(paths[0].len(), 3, "pushed: the wanted box, the shaft and the head");
@@ -495,7 +490,7 @@ mod tests {
             BlobMark { id: 0, center: [100.0, 50.0], size: [40.0, 20.0], age: 0 },
             BlobMark { id: 1, center: [102.0, 150.0], size: [40.0, 20.0], age: 0 },
         ];
-        let grid = overlay_shapes(&params(&[("box", Value::F64(0.0)), ("grid", Value::F64(1.0)), ("grid_merge", Value::F64(10.0))]), &marks, &[], [400.0, 300.0]);
+        let grid = overlay_shapes_with(&params(&[("box", Value::F64(0.0)), ("grid", Value::F64(1.0)), ("grid_merge", Value::F64(10.0))]), &marks, &[], &PhysicsTrace::default(), [400.0, 300.0]);
         assert_eq!(grid.len(), 8, "left, right, top, bottom of each box");
         let xs: Vec<f64> = grid.iter().filter_map(|n| match n {
             ShapeNode::Leaf(Shape { source: PathSource::Bezier(path), .. }) if path[0].vertices[0].point.x == path[0].vertices[1].point.x => Some(path[0].vertices[0].point.x),

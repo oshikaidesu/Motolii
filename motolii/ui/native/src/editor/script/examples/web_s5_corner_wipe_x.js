@@ -3,7 +3,7 @@
 // -bottom are the same law with another edge. One box per word, clip-path: inset(): the near edge closes first
 // (Clip Left W → 0 for -left), then the far edge closes (Clip Right 0 → W). The times are not in the CSS; 2.0 s here.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#091E2D" });
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/";
+const MAT = "mat/";
 const SIZE = 150, W = 1000, H = SIZE * 1.2, LEN = 2.0;
 const OPPOSITE = { left: "right", right: "left", top: "bottom", bottom: "top" };
 const edge = (side) => `Clip ${side[0].toUpperCase()}${side.slice(1)}`;

@@ -122,27 +122,21 @@ impl EffectProgram {
     pub(crate) fn params_at_density(&self, params: &[(String, f32)], density: f32) -> Vec<(String, f32)> { self.0.params_at_density(params, density) }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], render_size: [f32; 2]) {
-        self.0.record(ctx, encoder, scratch, sources, dst_view, params, render_size)
-    }
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
-        params: &[(String, f32)], frame: vism::ImageFrame) {
-        self.0.record_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame)
+        self.0.record(ctx, encoder, sources, dst_view, params, render_size)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_feedback_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], frame: vism::ImageFrame, feedback: Option<(&mut FeedbackState, FeedbackStep)>) {
-        self.0.record_feedback_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame, feedback)
+        self.0.record_feedback_in_frame(ctx, encoder, sources, dst_view, params, frame, feedback)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_over(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        sources: &[&re_renderer::GpuTexture], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], render_size: [f32; 2]) {
-        self.record(ctx, encoder, scratch, sources, dst_view, params, render_size)
+        self.record(ctx, encoder, sources, dst_view, params, render_size)
     }
 }
 
@@ -154,8 +148,9 @@ pub struct FeedbackKey {
     pub copy: u32,
     pub chain: u8,
     pub index: u16,
-    /// 画面の道(板に焼けない層・下の合成を読む列)は窓ごとに状態を持つ: 窓の寸法。板の道は None。
-    pub screen: Option<[u32; 2]>,
+    /// 画面の道(板に焼けない層・下の合成を読む列)は view ごとに状態を持つ: `[view, 幅, 高さ]`
+    /// (view の絵の履歴。Camera と Stage が同じ寸法でも混ざらない)。板の道は None。
+    pub screen: Option<[u32; 3]>,
     /// 0 = 本番。別の時刻の合成(SOURCE below / group / comp)を描く間は時刻のずれごとの値:
     /// t′ の列は t′ の列で 1 歩ずつ進み、本番の状態を汚さない(辿り直しの対象外)。
     pub namespace: u64,
@@ -163,8 +158,8 @@ pub struct FeedbackKey {
 
 /// 1 つの PERSISTENT target の 2 枚: 前のフレーム(読む)と今のフレーム(書く)。
 pub(crate) struct FeedbackTarget {
-    pub(crate) prev: wgpu::Texture,
-    pub(crate) next: wgpu::Texture,
+    pub(crate) prev: re_renderer::GpuTexture,
+    pub(crate) next: re_renderer::GpuTexture,
 }
 
 /// 層 × 効果の feedback の状態。`frame` は `next` が表すフレーム(comp の frame 番号)。
@@ -175,7 +170,7 @@ pub(crate) struct FeedbackState {
     pub(crate) fresh: bool,
     pub(crate) targets: std::collections::HashMap<String, FeedbackTarget>,
     /// K フレームごとの写し(frame, target 名 → texture)。スクラブは直近の写しから辿り直す。
-    pub(crate) checkpoints: Vec<(i64, std::collections::HashMap<String, wgpu::Texture>)>,
+    pub(crate) checkpoints: Vec<(i64, std::collections::HashMap<String, re_renderer::GpuTexture>)>,
 }
 
 /// このフレームで状態をどう扱うか(compositor が frame の並びから決める)。
@@ -256,60 +251,3 @@ impl EffectPass {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct EffectScratch {
-    free: HashMap<(u32, u32, wgpu::TextureFormat), Vec<wgpu::Texture>>,
-    created: u64,
-}
-
-impl EffectScratch {
-    pub(crate) fn acquire(
-        &mut self,
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-    ) -> wgpu::Texture {
-        let key = (width, height, format);
-        if let Some(pool) = self.free.get_mut(&key) {
-            if let Some(texture) = pool.pop() {
-                return texture;
-            }
-        }
-        self.created += 1;
-        device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("motolii-compositor-effect-scratch"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        })
-    }
-
-    pub(crate) fn release(
-        &mut self,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-        texture: wgpu::Texture,
-    ) {
-        self.free
-            .entry((width, height, format))
-            .or_default()
-            .push(texture);
-    }
-
-    pub(crate) fn created_count(&self) -> u64 {
-        self.created
-    }
-}

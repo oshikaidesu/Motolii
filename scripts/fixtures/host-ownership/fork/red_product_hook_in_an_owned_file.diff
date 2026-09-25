@@ -1,0 +1,7 @@
+--- a/crates/viewer_support/re_renderer/shader/surface.wgsl
++++ b/crates/viewer_support/re_renderer/shader/surface.wgsl
+@@ -10,3 +10,7 @@
++// The file is the surface programs' own, but a product meaning is not a generic hook.
++fn motolii_rope_sag(t: f32) -> f32 {
++    return t * (1.0 - t);
++}

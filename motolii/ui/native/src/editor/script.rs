@@ -31,8 +31,12 @@ impl EditorRuntime {
 
     fn run_script_with_budget(&mut self, source: &str, name: &str, budget: std::time::Duration) -> Result<(), String> {
         let head = self.doc.edit_head();
+        // A run states its loop from scratch: a script that no longer asks for one plays on.
+        let loop_before = self.viewer.clock.loop_range();
+        self.viewer.clock.set_loop(None);
         let outcome = self.run_script_inner(source, name, budget);
         if outcome.is_err() {
+            self.viewer.clock.set_loop(loop_before);
             // 途中で断られたスクリプトは何も残さない。直して走らせ直す時、前の半端な層が混ざらない。
             while self.doc.edit_head() > head && self.doc.undo() {}
             self.viewer.selected_keys.clear();
@@ -52,7 +56,33 @@ impl EditorRuntime {
         let before = self.doc.edit_head();
         self.run_script(&source, path)?;
         self.last_script = Some((path.to_owned(), before, self.doc.edit_head()));
+        self.last_script_source = Some(source);
+        self.watch_script(path);
         Ok(())
+    }
+
+    /// Saving the script wakes the window, which asks for `reloadEffects`; that reruns the script
+    /// when its source changed. The folder is watched, not the file: editors save by replacing it.
+    fn watch_script(&mut self, path: &str) {
+        use notify::Watcher;
+        let Some(wake) = self.wake.clone() else { return };
+        let file = std::path::PathBuf::from(path);
+        let (Some(folder), Some(name)) = (file.parent().map(std::path::Path::to_path_buf), file.file_name().map(std::ffi::OsStr::to_owned)) else { return };
+        let watcher = notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
+            let Ok(event) = event else { return };
+            let touched = matches!(event.kind, notify::EventKind::Create(_) | notify::EventKind::Modify(_))
+                && event.paths.iter().any(|p| p.file_name() == Some(name.as_os_str()));
+            if touched { wake(); }
+        });
+        self.script_watch = watcher.ok().and_then(|mut w| w.watch(&folder, notify::RecursiveMode::NonRecursive).ok().map(|_| w));
+    }
+
+    /// Reruns the last script file if its source is no longer what it ran with.
+    pub(crate) fn rerun_script_if_saved(&mut self) -> Result<(), String> {
+        let Some((path, _, _)) = self.last_script.clone() else { return Ok(()) };
+        let Ok(source) = std::fs::read_to_string(&path) else { return Ok(()) };
+        if self.last_script_source.as_deref() == Some(source.as_str()) { return Ok(()); }
+        self.rerun_script()
     }
 
     /// 直前のスクリプトの結果を戻して、同じ file を読み直して走らせる(書いて・保存して・見る)。
@@ -228,6 +258,101 @@ mod tests {
         assert_eq!(rt.doc.view().layers().len(), 2);
     }
 
+    #[test]
+    fn a_css_gradient_fills_a_shape_across_its_box() {
+        let (rt, outcome) = run(r##"
+            comp({ seconds: 1 });
+            rectangle({ name: "Band" }).fill("linear-gradient(to right, #000000, #ff0000 25%, #ffffff)");
+        "##);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let layer = view.layers()[0];
+        let shapes = view.shapes(layer).unwrap();
+        let crate::doc::store::ShapeNode::Leaf(shape) = &shapes[0] else { panic!("a leaf") };
+        let crate::doc::vector::Brush::Gradient(g) = &shape.fill.as_ref().unwrap().brush else { panic!("a gradient fill") };
+        assert_eq!(g.units, crate::doc::vector::GradientUnits::ObjectBoundingBox);
+        assert_eq!(g.stops.iter().map(|s| s.offset).collect::<Vec<_>>(), [0.0, 0.25, 1.0]);
+        let d = g.end.sub(g.start);
+        assert!(d.x > 0.0 && d.y.abs() < 1e-9, "\"to right\" runs left to right: {:?} → {:?}", g.start, g.end);
+    }
+
+    #[test]
+    fn a_css_radial_gradient_centres_on_the_box() {
+        let (rt, outcome) = run(r##"
+            comp({ seconds: 1 });
+            ellipse({ name: "Core" }).fill("radial-gradient(#FFFFFF, #000000)");
+        "##);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let shapes = view.shapes(view.layers()[0]).unwrap();
+        let crate::doc::store::ShapeNode::Leaf(shape) = &shapes[0] else { panic!("a leaf") };
+        let crate::doc::vector::Brush::Gradient(g) = &shape.fill.as_ref().unwrap().brush else { panic!("a gradient fill") };
+        assert_eq!(g.kind, crate::doc::vector::GradientType::Radial);
+        assert_eq!((g.start.x, g.start.y), (0.5, 0.5), "CSS radial gradients centre on the box");
+    }
+
+    #[test]
+    fn a_layer_can_be_seen_through_another_layers_matte() {
+        let (rt, outcome) = run(r##"
+            comp({ seconds: 1 });
+            const mask = ellipse({ name: "Mask" });
+            rectangle({ name: "Through" }).matte(mask, "Luma");
+        "##);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let find = |name: &str| view.layers().into_iter().find(|id| view.attrs(*id).unwrap().unwrap().name == name).unwrap();
+        let matte = view.attrs(find("Through")).unwrap().unwrap().matte.unwrap();
+        assert_eq!((matte.layer, matte.mode), (find("Mask"), MatteMode::Luma));
+    }
+
+    #[test]
+    fn saving_the_script_reruns_it_on_the_next_wake() {
+        let dir = std::env::temp_dir().join(format!("motolii-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("live.js");
+        std::fs::write(&path, r#"comp({ seconds: 1 }); rectangle({ name: "One" });"#).unwrap();
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.request(serde_json::json!({ "op": "runScript", "path": path })).unwrap();
+        rt.request(serde_json::json!({ "op": "reloadEffects" })).unwrap();
+        assert_eq!(rt.doc.view().layers().len(), 1, "an unchanged file is not run again");
+        std::fs::write(&path, r#"comp({ seconds: 1 }); rectangle({ name: "One" }); ellipse({ name: "Two" });"#).unwrap();
+        rt.request(serde_json::json!({ "op": "reloadEffects" })).unwrap();
+        let view = rt.doc.view();
+        let mut names: Vec<_> = view.layers().iter().map(|id| view.attrs(*id).unwrap().unwrap().name).collect();
+        names.sort();
+        assert_eq!(names, ["One", "Two"], "the saved script replaced the old run");
+    }
+
+    #[test]
+    fn a_loop_is_only_what_the_script_asks_for() {
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.run_script(r#"comp({ seconds: 8 }); rectangle();"#, "plain.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), None, "no loop unless asked");
+        rt.run_script(r#"comp({ seconds: 8, loop: [2, 6] }); rectangle();"#, "range.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), Some((2.0, 6.0)));
+        rt.run_script(r#"comp({ seconds: 8, loop: true });"#, "whole.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), Some((0.0, 8.0)));
+        assert!(rt.run_script(r#"comp({ loop: [1, 2] }); throw new Error("half done");"#, "broken.js").is_err());
+        assert_eq!(rt.viewer.clock.loop_range(), Some((0.0, 8.0)), "a refused run leaves the last loop");
+        rt.run_script(r#"comp({ seconds: 8 });"#, "again.js").unwrap();
+        assert_eq!(rt.viewer.clock.loop_range(), None, "removing loop from the script removes it on rerun");
+        assert!(rt.run_script(r#"comp({ loop: [6, 2] });"#, "reversed.js").is_err());
+    }
+
+    #[test]
+    fn an_effect_written_after_a_repeater_reads_the_copies() {
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.run_script(r#"comp({ seconds: 1 });
+            const bloom = group(ellipse({ name: "Petal" })).name("Bloom");
+            bloom.effect("Repeater", { "Count": 4 });
+            bloom.effect("Glow");"#, "order.js").unwrap();
+        let view = rt.doc.view();
+        let bloom = view.layers().into_iter().find(|id| view.attrs(*id).unwrap().unwrap().name == "Bloom").unwrap();
+        let ids: Vec<_> = view.effects(bloom).unwrap().iter().map(|e| e.plugin_id.clone()).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(crate::render::extensions::placement::kind(&ids[0]).is_some(), "written order is the order: {ids:?}");
+    }
+
     /// 同梱の例は説明書の一部。窓の名前が変わったらここが赤。
     #[test]
     fn every_example_builds_its_document() {
@@ -236,7 +361,8 @@ mod tests {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|e| e == "js") {
-                let (rt, outcome) = run(&std::fs::read_to_string(&path).unwrap());
+                let mut rt = crate::EditorRuntime::open("").unwrap();
+                let outcome = rt.run_script(&std::fs::read_to_string(&path).unwrap(), &path.to_string_lossy());
                 outcome.unwrap_or_else(|message| panic!("{}: {message}", path.display()));
                 let view = rt.doc.view();
                 let layers = view.layers();
@@ -282,6 +408,111 @@ mod file {
     }
 }
 
+/// `MOTOLII_SCRIPT=作品.js MOTOLII_OUT=dir MOTOLII_FRAMES=0,120,240 cargo test -p motolii-ui --lib -- --ignored script_frames`
+/// 台本を走らせ、指定のコマを comp の大きさの PNG に描く(窓を開かずに絵を見る)。
+#[cfg(test)]
+mod frames {
+    #[test]
+    #[ignore]
+    fn script_frames() {
+        let path = std::env::var("MOTOLII_SCRIPT").expect("MOTOLII_SCRIPT");
+        let out = std::env::var("MOTOLII_OUT").expect("MOTOLII_OUT");
+        let frames: Vec<i64> = std::env::var("MOTOLII_FRAMES").unwrap_or("0".into()).split(',').map(|f| f.trim().parse().unwrap()).collect();
+        std::fs::create_dir_all(&out).unwrap();
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        rt.run_script(&std::fs::read_to_string(&path).unwrap(), &path).unwrap_or_else(|m| panic!("{m}"));
+        let view = rt.doc.view();
+        let comp = view.composition().unwrap().unwrap();
+        let mut engine = crate::render::engine::Engine::new().unwrap();
+        engine.set_realtime(true);
+        if let Ok(count) = std::env::var("MOTOLII_TIMING") {
+            // Time a run of consecutive frames (after one warm frame) and name what the last one spent.
+            let count: i64 = count.parse().unwrap();
+            let start = frames.first().copied().unwrap_or(0);
+            engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start, comp.fps).unwrap()).unwrap();
+            let began = std::time::Instant::now();
+            // MOTOLII_TIMING_WINDOW=1: draw into a window-sized target as the window does (no readback)
+            // and wait for the GPU, so each sample is the frame's whole CPU + GPU time.
+            let window = std::env::var("MOTOLII_TIMING_WINDOW").is_ok().then(|| engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("timing window"), size: wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1,
+                dimension: wgpu::TextureDimension::D2, format: crate::render::compositor::PRESENTABLE_FORMAT, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
+            }));
+            let mut each = Vec::with_capacity(count as usize);
+            // Window path: the CPU's share (record + submit) and the GPU wait after it, apart.
+            let (mut cpu, mut gpu) = (Vec::with_capacity(count as usize), Vec::with_capacity(count as usize));
+            for frame in start + 1..=start + count {
+                let one = std::time::Instant::now();
+                let time = crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap();
+                match &window {
+                    Some(target) => {
+                        engine.render_frame_into(&view, time, target).unwrap();
+                        let recorded = one.elapsed().as_secs_f64() * 1e3;
+                        engine.gpu_device().poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).unwrap();
+                        if std::env::var("MOTOLII_TIMING_SPIKES").is_ok() && recorded > 8.0 {
+                            let mut claims = engine.frame_claims().to_vec();
+                            claims.sort_by(|a, b| b.us.cmp(&a.us));
+                            eprintln!("  spike frame {frame}: cpu {recorded:.2} ms; {}", claims.iter().take(4).map(|c| format!("{} {} {:.2}ms ({})", c.stage, c.who, c.us as f64 / 1e3, c.why)).collect::<Vec<_>>().join(" | "));
+                        }
+                        cpu.push(recorded);
+                        gpu.push(one.elapsed().as_secs_f64() * 1e3 - recorded);
+                    }
+                    None => { engine.render_frame(&view, time).unwrap(); }
+                }
+                each.push(one.elapsed().as_secs_f64() * 1e3);
+            }
+            eprintln!("TIMING {:.2} ms/frame over {count} frames", began.elapsed().as_secs_f64() * 1e3 / count as f64);
+            for (name, v) in [("total", &mut each), ("cpu", &mut cpu), ("gpu wait", &mut gpu)] {
+                if v.is_empty() { continue; }
+                v.sort_by(f64::total_cmp);
+                let at = |q: f64| v[((v.len() - 1) as f64 * q).round() as usize];
+                eprintln!("  {name:>8}: p50 {:.2} ms  p95 {:.2} ms  worst {:.2} ms", at(0.5), at(0.95), at(1.0));
+            }
+            let before = engine.surface_work();
+            engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start + count + 1, comp.fps).unwrap()).unwrap();
+            let after = engine.surface_work();
+            eprintln!("  one frame: light captures {} runs {} backdrop copies {} mesh batches {} instances uploaded {}",
+                after.light_captures - before.light_captures, after.main_runs - before.main_runs, after.backdrop_copies - before.backdrop_copies,
+                after.mesh_batches - before.mesh_batches, after.mesh_instances_uploaded - before.mesh_instances_uploaded);
+            let mut claims = engine.frame_claims().to_vec();
+            claims.sort_by(|a, b| b.us.cmp(&a.us));
+            for c in claims.iter().take(10) { eprintln!("  {:>8.2} ms {:<8} {} x{} — {}", c.us as f64 / 1e3, c.stage, c.who, c.count, c.why); }
+            return;
+        }
+        for frame in frames {
+            let time = crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap();
+            let pixels = engine.render_frame(&view, time).unwrap();
+            for failure in engine.layer_failures() { eprintln!("frame {frame}: {failure}"); }
+            // The frame comes back in the presentable format's byte order; a PNG is RGBA.
+            let bgra = crate::render::compositor::PRESENTABLE_FORMAT == wgpu::TextureFormat::Bgra8Unorm;
+            let rgba: Vec<u8> = if bgra { pixels.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect() } else { pixels };
+            image::save_buffer(format!("{out}/frame_{frame:04}.png"), &rgba, comp.width, comp.height, image::ColorType::Rgba8).unwrap();
+        }
+    }
+}
+
+/// `MOTOLII_HDR_IN=a.hdr MOTOLII_HDR_OUT=b.hdr MOTOLII_HDR_KEEP=1.0 cargo test -p motolii-ui --lib -- --ignored hdr_lights_only`
+/// 環境マップから光源だけを残す(明るさが KEEP 未満の部屋を黒へ落とす)。暗いスタジオで硝子を見せる時に。
+#[cfg(test)]
+mod hdr {
+    #[test]
+    #[ignore]
+    fn hdr_lights_only() {
+        let input = std::env::var("MOTOLII_HDR_IN").expect("MOTOLII_HDR_IN");
+        let output = std::env::var("MOTOLII_HDR_OUT").expect("MOTOLII_HDR_OUT");
+        let keep: f32 = std::env::var("MOTOLII_HDR_KEEP").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
+        let image = image::open(&input).unwrap().into_rgb32f();
+        let (w, h) = image.dimensions();
+        let pixels: Vec<image::Rgb<f32>> = image.pixels().map(|p| {
+            let l = 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+            let t = ((l - keep * 0.5) / (keep * 0.5)).clamp(0.0, 1.0);
+            let k = t * t * (3.0 - 2.0 * t);
+            image::Rgb([p[0] * k, p[1] * k, p[2] * k])
+        }).collect();
+        let file = std::io::BufWriter::new(std::fs::File::create(&output).unwrap());
+        image::codecs::hdr::HdrEncoder::new(file).encode(&pixels, w as usize, h as usize).unwrap();
+    }
+}
+
 /// 常駐の見張り・台本の側(往復を速くする、2026-09-16 利用者「こういう往復を早くしたい」「リリースいるかなー」):
 /// 台本の保存を見張り、変わる度に 台本 → 書類(`MOTOLII_OUT/shot.rrd`)を、cargo を起動せずに作り直す。
 /// 描くのは render の側の見張り(`zz_watch`、release で組んである)に任せる — ここは描かないので debug で足りる。
@@ -320,3 +551,7 @@ mod watch {
 #[cfg(test)]
 #[path = "script/sweep.rs"]
 mod sweep;
+
+#[cfg(test)]
+#[path = "script/gates.rs"]
+mod gates;

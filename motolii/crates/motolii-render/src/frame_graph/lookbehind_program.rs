@@ -177,9 +177,9 @@ impl LookbehindProgram {
         for request in requests {
             let row = if !request.named_layers.is_empty() {
                 request.named_layers.iter().map(|target| {
-                    if *target == layer.layer { return None; }
-                    find_layer(current, *target, false).map(|target| content_source(target, now, 0))
-                }).collect::<Option<Vec<_>>>().unwrap_or_default()
+                    let found = (*target != layer.layer).then(|| find_layer(current, *target, false)).flatten();
+                    found.map_or(SceneImageSourceValue::Refused { layer: *target }, |found| content_source(found, now, 0))
+                }).collect()
             } else {
                 request.temporal.iter().map(|(offset, base, source)| {
                     let at = self.time_for(layer.layer, now, *offset, *base);

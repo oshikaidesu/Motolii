@@ -41,7 +41,8 @@ MOTOLII_SCRIPT=$PWD/作品.js MOTOLII_SAVE=$PWD/作品.rrd cargo test -p motolii
 ```text
 Motolii script API. Every call is a window operation; names are the window's names.
 
-comp({ width, height, fps, seconds, background })   // background "#rrggbb"
+comp({ width, height, fps, seconds, background, loop })   // background "#rrggbb"
+  loop: true | [start, end]                            // seconds; playback repeats only when given, else runs on
 text(content, options) / rectangle(options) / roundedRectangle / ellipse / star / polygon / line
 nullLayer(options) / particles(options) / camera(options)
 media(absolutePath, options)                         // a picture, video or 3D file as a layer

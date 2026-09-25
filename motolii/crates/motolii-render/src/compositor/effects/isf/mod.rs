@@ -11,6 +11,9 @@ pub(crate) enum IsfError {
     },
     #[error("naga が生成した Module を検証できない: {0}")]
     Validate(String),
+    /// The head's declarations (what the file asks for), not the shader.
+    #[error("manifest: {0}")]
+    Manifest(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
     #[error("STAGE `{0}` は知らない(pass / warp / surface / field / clip / shadow / block)")]
@@ -185,6 +188,17 @@ pub struct IsfPass {
     pub persistent: bool,
 }
 
+/// One View a surface asks for (`"VIEWS"`): where it stands (`"FROM"`), looking along `look` with
+/// `up`, through a square perspective of `fov` degrees. `"FROM": "layer"` stands at the centre of
+/// the requesting layer (all its copies) and sees the world without that layer. The host draws it
+/// (re_renderer's ViewBuilder) and hands the surface every View side by side (`view_sample`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct IsfView {
+    pub look: [f32; 3],
+    pub up: [f32; 3],
+    pub fov: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct IsfPadding {
     pub param: String,
@@ -207,6 +221,12 @@ pub struct IsfManifest {
     pub backdrop_input: Option<String>,
     /// The roughness-like input that decides how far down the backdrop's mip chain reads go.
     pub backdrop_blur_input: Option<String>,
+    /// The float input whose value (roughness, 0..1) bounds how far `view_sample` reads the Views'
+    /// mips (`"VIEW_BLUR"`); none = the Vism may read every level.
+    pub view_blur_input: Option<String>,
+    /// Views of the world the surface reads (`"VIEWS"`), each `"VIEW_SIZE"` pixels square.
+    pub views: Vec<IsfView>,
+    pub view_size: u32,
     pub padding: Option<IsfPadding>,
     /// 溢れの法: 素材の coverage の外へ出た出力(光・影)を、層の Blend と独立にこの混ぜ方で下へ合成する
     /// (`"SPILL": "screen" | "add" | "multiply"`。Photoshop の layer style が効果ごとに blend を持つのと同じ)。
@@ -249,6 +269,9 @@ impl Default for IsfManifest {
         output_float: false,
             backdrop_input: None,
             backdrop_blur_input: None,
+            view_blur_input: None,
+            views: Vec::new(),
+            view_size: 256,
             padding: None,
             spill: None,
             description: None,
@@ -330,7 +353,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
     });
     let spill = value.get("SPILL").map(|v| match v.as_str() {
         Some(mode @ ("screen" | "add" | "multiply")) => Ok(mode.to_owned()),
-        _ => Err(IsfError::Validate("SPILL must be \"screen\", \"add\" or \"multiply\"".into())),
+        _ => Err(IsfError::Manifest("SPILL must be \"screen\", \"add\" or \"multiply\"".into())),
     }).transpose()?;
     let description = value
         .get("DESCRIPTION")
@@ -425,7 +448,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     .unwrap_or(false)
             };
             if truthy("PERSISTENT") && entry.get("TARGET").and_then(|v| v.as_str()).is_none() {
-                return Err(IsfError::Validate("PERSISTENT pass needs a TARGET".into()));
+                return Err(IsfError::Manifest("PERSISTENT pass needs a TARGET".into()));
             }
             let dimension = |key: &str| -> Result<Option<IsfDimension>, IsfError> {
                 let Some(value) = entry.get(key) else { return Ok(None) };
@@ -433,7 +456,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     if let (Ok(tile), Ok(size)) = (tile.parse::<u32>(), size.parse::<u32>()) {
                         if tile > 0 && size > 0 && size <= 16384 { return Ok(Some(IsfDimension::Tiles(tile, size))); }
                     }
-                    return Err(IsfError::Validate(format!("invalid {key} tile expression")));
+                    return Err(IsfError::Manifest(format!("invalid {key} tile expression")));
                 }
                 if let Some(divisor) = value.as_str().and_then(|s| s.strip_prefix(&format!("${key}/"))).and_then(|s| s.parse::<u32>().ok()).filter(|n| *n > 0) {
                     return Ok(Some(IsfDimension::Divided(divisor)));
@@ -441,7 +464,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                 let number = value.as_f64().or_else(|| value.as_str()?.parse().ok());
                 match number {
                     Some(n) if n.is_finite() && n >= 1.0 && n <= 16384.0 && n.fract() == 0.0 => Ok(Some(IsfDimension::Fixed(n as u32))),
-                    _ => Err(IsfError::Validate(format!("{key} must be a positive constant integer no greater than 16384"))),
+                    _ => Err(IsfError::Manifest(format!("{key} must be a positive constant integer no greater than 16384"))),
                 }
             };
             passes.push(IsfPass {
@@ -453,14 +476,14 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
                     .map(str::to_owned),
                 float: truthy("FLOAT"),
                 persistent: truthy("PERSISTENT"),
-                channels: match entry.get("CHANNELS").and_then(|v| v.as_u64()) { None => 4, Some(n @ (1 | 2 | 4)) => n as u8, _ => return Err(IsfError::Validate("CHANNELS must be 1, 2, or 4".into())) },
+                channels: match entry.get("CHANNELS").and_then(|v| v.as_u64()) { None => 4, Some(n @ (1 | 2 | 4)) => n as u8, _ => return Err(IsfError::Manifest("CHANNELS must be 1, 2, or 4".into())) },
             });
         }
     }
     // BACKDROP_INPUT = 下の合成を受ける口。surface では「読むかどうか」の数の欄、pass では
     // 下の合成そのものが入る image の欄(2 枚目。アライトモーションの「背景のコピー」の型)。
     let backdrop_input = value.get("BACKDROP_INPUT").map(|v| {
-        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_INPUT must name an input".into()))?;
+        let name = v.as_str().ok_or_else(|| IsfError::Manifest("BACKDROP_INPUT must name an input".into()))?;
         let ok = match stage {
             IsfStage::Surface => inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float | IsfInputType::Long | IsfInputType::Bool)),
             IsfStage::Pass => {
@@ -470,17 +493,56 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             _ => false,
         };
         if !ok {
-            return Err(IsfError::Validate("BACKDROP_INPUT: surface では数の欄を、pass では 2 枚目の image(唯一の追加の image、TIME_OFFSET とは併用しない)を名指す".into()));
+            return Err(IsfError::Manifest("BACKDROP_INPUT: surface では数の欄を、pass では 2 枚目の image(唯一の追加の image、TIME_OFFSET とは併用しない)を名指す".into()));
         }
         Ok(name.to_owned())
     }).transpose()?;
     let backdrop_blur_input = value.get("BACKDROP_BLUR").map(|v| {
-        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_BLUR must name a float input".into()))?;
+        let name = v.as_str().ok_or_else(|| IsfError::Manifest("BACKDROP_BLUR must name a float input".into()))?;
         if stage != IsfStage::Surface || !inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float)) {
-            return Err(IsfError::Validate("BACKDROP_BLUR must name a float surface parameter".into()));
+            return Err(IsfError::Manifest("BACKDROP_BLUR must name a float surface parameter".into()));
         }
         Ok(name.to_owned())
     }).transpose()?;
+    // VIEW_BLUR = the input whose roughness bounds the Views' mips the surface reads (the shape of
+    // BACKDROP_BLUR): the host generates only those levels.
+    let view_blur_input = value.get("VIEW_BLUR").map(|v| {
+        let name = v.as_str().ok_or_else(|| IsfError::Manifest("VIEW_BLUR must name a float input".into()))?;
+        if stage != IsfStage::Surface || !inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float)) {
+            return Err(IsfError::Manifest(format!("VIEW_BLUR: \"{name}\" is not a float surface parameter")));
+        }
+        Ok(name.to_owned())
+    }).transpose()?;
+    // VIEWS = Views of the world the surface reads (a Mirror asks one, a cube six). What they are is
+    // data here; drawing them is the host's.
+    let views = match value.get("VIEWS") {
+        None => Vec::new(),
+        Some(serde_json::Value::Array(items)) if stage == IsfStage::Surface && items.len() <= 16 => items.iter().map(|item| {
+            let vec3 = |key: &str, fallback: Option<[f32; 3]>| match item.get(key).and_then(|v| v.as_array()) {
+                Some(a) if a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite)) => { let c = read_components(item.get(key)); Ok([c[0], c[1], c[2]]) }
+                None => fallback.ok_or_else(|| IsfError::Manifest(format!("VIEWS: {key} is three numbers"))),
+                _ => Err(IsfError::Manifest(format!("VIEWS: {key} is three numbers"))),
+            };
+            if item.get("FROM").and_then(|v| v.as_str()) != Some("layer") {
+                return Err(IsfError::Manifest("VIEWS: FROM says where the View stands; \"layer\" (the layer's centre, seeing the world without it) is the one place so far".into()));
+            }
+            let look: [f32; 3] = vec3("LOOK", None)?;
+            let up: [f32; 3] = vec3("UP", Some([0.0, 1.0, 0.0]))?;
+            let fov = item.get("FOV").map_or(Some(90.0), |v| v.as_f64()).filter(|f| (1.0..=179.0).contains(f))
+                .ok_or_else(|| IsfError::Manifest("VIEWS: FOV is degrees in 1..179".into()))? as f32;
+            let (l, u) = (glam::Vec3::from(look), glam::Vec3::from(up));
+            if l.length_squared() < 1e-12 || l.normalize().cross(u.normalize_or_zero()).length_squared() < 1e-6 {
+                return Err(IsfError::Manifest("VIEWS: LOOK is a direction and UP is not along it".into()));
+            }
+            Ok(IsfView { look, up, fov })
+        }).collect::<Result<Vec<_>, _>>()?,
+        Some(_) => return Err(IsfError::Manifest("VIEWS: a surface asks for a list of at most 16 Views".into())),
+    };
+    let view_size = match value.get("VIEW_SIZE").map(|v| v.as_u64()) {
+        None => 256,
+        Some(Some(n)) if (16..=1024).contains(&n) => n as u32,
+        _ => return Err(IsfError::Manifest("VIEW_SIZE is pixels in 16..1024".into())),
+    };
     Ok((
         IsfManifest {
             id,
@@ -493,6 +555,9 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             uses_clock: reads_clock(&body),
             backdrop_input,
             backdrop_blur_input,
+            view_blur_input,
+            views,
+            view_size,
             padding,
             spill,
             description,
@@ -641,96 +706,7 @@ pub(super) fn compiled_stages(isf_source: &str) -> Result<(IsfManifest, String, 
 }
 
 #[cfg(test)]
-mod manifest_tests {
-    use super::*;
-
-    fn manifest(header: &str) -> Result<IsfManifest, IsfError> {
-        parse_isf_source(&format!("/*{{ \"INPUTS\": [{{\"NAME\":\"source\",\"TYPE\":\"image\"}}, {{\"NAME\":\"gain\",\"TYPE\":\"float\",\"DEFAULT\":1.0}}]{header} }}*/ fn f() {{}}")).map(|(m, _)| m)
-    }
-
-    /// 複数パスの器: 何段目か(PASSINDEX)と中間 buffer の名前が、shader から見えること。
-    /// どちらも host 側の束縛は在ったのに宣言が無く、PASSES を書いた効果が通らなかった
-    /// (2026-09-12、実写の bloom で発覚)。
-    #[test]
-    fn a_multi_pass_effect_can_see_its_index_and_its_buffers() {
-        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}], \"PASSES\": [{\"TARGET\":\"half\"}, {}] }*/\n\
-                      void main() { gl_FragColor = PASSINDEX == 0 ? IMG_THIS_PIXEL(inputImage) : IMG_THIS_PIXEL(half); }";
-        let (_manifest, _vertex, fragment) = compiled_stages(source).expect("PASSES が書ける");
-        assert!(fragment.contains("fn main"), "{fragment}");
-    }
-
-    /// 上下の向き: ISF の座標は下端が 0、wgpu の texture は上端が 0。読む macro で裏返す。
-    /// 裏返さないと実写が上下逆になる(対称な効果では気づけない)。
-    #[test]
-    fn the_picture_is_read_right_side_up() {
-        let (manifest, body) = parse_isf_source("/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}] }*/ void main() {}").unwrap();
-        let (images, params) = crate::render::compositor::effects::vism::orders(&manifest);
-        let glsl = wrap_fragment_source(&manifest, &images, &params, &body);
-        assert!(glsl.contains("1.0 - isf_FragNormCoord.y"), "{glsl}");
-    }
-
-    /// TIME_OFFSET が名指す欄が無い(か float でない)なら、黙って 0 にせず名前を挙げて断る。
-    #[test]
-    fn a_time_offset_naming_a_missing_field_is_refused() {
-        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"past\",\"TYPE\":\"image\",\"TIME_OFFSET\":\"nope\"}] }*/ void main() {}";
-        let error = parse_isf_source(source).err().expect("断る").to_string();
-        assert!(error.contains("nope") && error.contains("past"), "{error}");
-    }
-
-    /// 隣のコマは `TIME_OFFSET_FRAMES`(コマ数)で読む。時刻の読み方は 1 つの image に 1 つだけ。
-    #[test]
-    fn a_time_offset_in_frames_is_one_of_the_three_time_bases() {
-        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"previous\",\"TYPE\":\"image\",\"TIME_OFFSET_FRAMES\":-1}] }*/ void main() {}";
-        let previous = &parse_isf_source(source).unwrap().0.inputs[1];
-        assert_eq!((previous.time_offset.clone(), previous.time_base), (Some(TimeOffset::Fixed(-1.0)), TimeBase::Frames));
-        let both = source.replace("\"TIME_OFFSET_FRAMES\":-1", "\"TIME_OFFSET_FRAMES\":-1,\"TIME_AT\":0");
-        let error = parse_isf_source(&both).err().expect("断る").to_string();
-        assert!(error.contains("previous") && error.contains("1 つだけ"), "{error}");
-    }
-
-    /// 時計は ISF の綴り(TIME / TIMEDELTA / FRAMEINDEX / DATE)で、ホストの uniform として届く。
-    /// 読む効果だけ `uses_clock` が立つ(注釈の中の語や TIMER のような別名では立たない)。
-    #[test]
-    fn the_clock_is_declared_and_only_readers_are_marked() {
-        let reader = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}] }*/\nvoid main() { gl_FragColor = vec4(sin(TIME), float(FRAMEINDEX), TIMEDELTA, 1.0) + DATE; }";
-        let (manifest, _v, fragment) = compiled_stages(reader).expect("時計が読める");
-        assert!(manifest.uses_clock);
-        assert!(fragment.contains("fn main"), "{fragment}");
-        let quiet = "/*{ \"INPUTS\": [] }*/\n// TIME is only mentioned here\nfloat TIMER = 1.0; void main() { gl_FragColor = vec4(TIMER); }";
-        assert!(!parse_isf_source(quiet).unwrap().0.uses_clock);
-    }
-
-    /// point3D は 3 成分の欄。窓には x,y だけが出て z は既定のまま(取説に明記)。
-    #[test]
-    fn a_point3d_field_has_three_components() {
-        let source = "/*{ \"INPUTS\": [{\"NAME\":\"p\",\"TYPE\":\"point3D\",\"DEFAULT\":[1.0,2.0,3.0]}] }*/ void main() { gl_FragColor = vec4(p, 1.0); }";
-        let (manifest, _v, fragment) = compiled_stages(source).expect("point3D が通る");
-        let p = &manifest.inputs[0];
-        assert_eq!((p.ty, p.ty.component_count()), (IsfInputType::Point3D, 3));
-        assert_eq!(&p.default[..3], &[1.0, 2.0, 3.0]);
-        assert!(fragment.contains("fn main"), "{fragment}");
-    }
-
-    /// image の LAYER が名指す欄が無い(か layer でない)なら、名前を挙げて断る。
-    #[test]
-    fn an_image_naming_a_missing_layer_field_is_refused() {
-        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"matte\",\"TYPE\":\"image\",\"LAYER\":\"nope\"}] }*/ void main() {}";
-        let error = parse_isf_source(source).err().expect("断る").to_string();
-        assert!(error.contains("nope") && error.contains("matte"), "{error}");
-    }
-
-    #[test]
-    fn constant_pass_dimensions_follow_isf_target_declarations() {
-        let m = manifest(r#", "PASSES": [{"TARGET":"summary","WIDTH":"64","HEIGHT":"8","FLOAT":true},{}]"#).unwrap();
-        assert_eq!((m.passes[0].width, m.passes[0].height), (Some(IsfDimension::Fixed(64)), Some(IsfDimension::Fixed(8))));
-        assert_eq!((m.passes[1].width, m.passes[1].height), (None, None));
-        let m = manifest(r#", "PASSES": [{"TARGET":"half","WIDTH":"$WIDTH/2","HEIGHT":"$HEIGHT/2"}]"#).unwrap();
-        assert_eq!(m.passes[0].width.unwrap().resolve(97), 49);
-        for value in ["0", "-1", "1.5", "16385", "\"$WIDTH/0\""] {
-            assert!(manifest(&format!(", \"PASSES\": [{{\"TARGET\":\"summary\",\"WIDTH\":{value}}}]")).is_err());
-        }
-    }
-}
+mod manifest_tests;
 
 /// 本文が時計の名前を識別子として読むか(注釈は外して見る)。
 fn reads_clock(body: &str) -> bool {

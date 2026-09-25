@@ -6,8 +6,6 @@ use re_renderer::{RenderContext, Rgba};
 
 mod clip;
 mod device;
-#[cfg(test)]
-pub(crate) use device::wait_for_gpu;
 pub(crate) mod effects;
 mod environment;
 pub(crate) mod extrude;
@@ -15,18 +13,23 @@ mod headless;
 mod matte;
 pub(crate) mod mesh;
 mod surface_scene;
-#[cfg(test)]
-mod reflection_diagnostic;
-mod reflection_cache;
+pub(crate) use surface_scene::SharedMeshScene;
+mod view;
+mod layer_views;
+pub(crate) use view::RunBreak;
+pub(crate) use view::{ViewWorld, WorldLight};
 mod measurement;
 pub use measurement::FrameMeasurement;
+pub(crate) mod light;
+pub(crate) mod noise;
 mod point_cloud;
+pub(crate) mod readback;
 mod presentable;
-mod render_basic;
 mod render_effects;
 pub(crate) mod paths;
 mod sequential;
-mod selection_bounds;
+mod light_pack;
+mod look;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BlendMode {
@@ -79,15 +82,8 @@ fn vello_blend_mode(mode: BlendMode) -> Option<u32> {
 }
 
 /// 合成の中間テクスチャの形式(累算器・blend/matte の出力)。
-pub(crate) const BLEND_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+pub(crate) const BLEND_TARGET_FORMAT: wgpu::TextureFormat = re_renderer::ViewBuilder::MAIN_TARGET_COLOR_FORMAT;
 
-fn fixed_function_tint_alpha(mode: BlendMode, opacity: f32) -> Result<f32, CompositorError> {
-    match mode {
-        BlendMode::Normal => Ok(opacity),
-        BlendMode::Add => Ok(0.0),
-        other => Err(CompositorError::UnsupportedBlendMode(other)),
-    }
-}
 
 pub(crate) fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
     glam::vec3(v.x, v.y, z)
@@ -213,8 +209,13 @@ pub fn projected_placement_corners(
 /// 上げた画素の扱い。sRGB 形式(blend の scratch)は乗算済みで、decode は hardware。
 /// それ以外(文字・図形・静止画・動画)は**非乗算の sRGB** で上げ、shader が decode → 乗算の順で扱う。
 /// 乗算済みを非乗算として decode すると α の中間(文字の縁)が暗く沈む(色の再点検 CV2)。
+/// U79 spike: a view canvas is scene-linear HDR (Rgba16Float), premultiplied like the sRGB canvases were.
+pub(crate) fn linear_premultiplied(format: wgpu::TextureFormat) -> bool {
+    format.is_srgb() || format == BLEND_TARGET_FORMAT
+}
+
 pub(crate) fn premultiplied_texture(texture: GpuTexture2D) -> ColormappedTexture {
-    let srgb = texture.format().is_srgb();
+    let srgb = linear_premultiplied(texture.format());
     ColormappedTexture {
         decode_srgb: !srgb,
         texture,
@@ -254,6 +255,7 @@ pub(crate) use effects::IsfStage;
 pub use matte::MatteMode;
 
 pub use presentable::{check_presentable_target, PRESENTABLE_FORMAT};
+pub(crate) use render_effects::{sequential_inputs, LayerSpill};
 
 /// 描く先の窓: target の画素寸法と、comp 画像(出力寸法の投影)のどの矩形をそこへ写すか。
 /// Camera View は出力そのもの(窓 = comp、関心域 = 全体)。Stage はタブの寸法へ描き、
@@ -265,14 +267,11 @@ pub struct Window {
     pub height: u32,
     /// comp 画像の px で `[x, y, w, h]`。
     pub roi: [f32; 4],
-    /// 2D・2.5D を置くカメラ。`None` は作中カメラ(出力 = 箱の中身)。Stage は既定カメラ:
-    /// Boxcam の Original Comp で、作中カメラが動いても世界は動かず、箱だけが動く。
-    pub projection_camera: Option<crate::doc::core::ResolvedCamera>,
 }
 
 impl Window {
     pub fn output(comp: CompSpec) -> Self {
-        Self { width: comp.width, height: comp.height, roi: [0.0, 0.0, comp.width as f32, comp.height as f32], projection_camera: None }
+        Self { width: comp.width, height: comp.height, roi: [0.0, 0.0, comp.width as f32, comp.height as f32] }
     }
     pub(crate) fn viewport(&self, comp: CompSpec) -> re_renderer::RectTransform {
         re_renderer::RectTransform {
@@ -294,7 +293,6 @@ pub struct Layer {
     pub size: [f32; 2],
     pub placement: LayerPlacement,
     pub projection: crate::doc::store::LayerProjection,
-    pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
     /// 板・網が共有する場と表面のプログラムとパラメータ(板は場を標本位置のずれとして見せる)。
     pub shading: effects::surface_program::SurfaceShading,
@@ -304,9 +302,8 @@ pub struct Layer {
     pub clip: Option<clip::ClipSpec>,
     /// 影の濃さ(0 なら落とさない): 太陽から見た型紙に描かれ、表面を持つ全ての層へ影(透過なら色)を落とす。
     pub shadow: f32,
-    /// Stage で選ばれている層の番号(1..=255、0 は無し): outline の object-id mask に描かれ、
-    /// その画面上の広がりが籠になる(export には出ない)。
-    pub outline: u8,
+    /// Light the layer gives (its Glow), read by the scratch Lighting Pack.
+    pub emission: f32,
     /// 絵の論理の枠(素材座標の大きさ・原点・画素数)。効果はこの枠の論理 px で評価し、
     /// 描画密度を上げても reach・radius が変わらない。無ければ 1 px = 1 論理 px。
     pub frame: Option<effects::vism::ImageFrame>,
@@ -357,29 +354,26 @@ pub enum CompositorError {
     PresentableUsage,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RenderTiming {
-    pub build_us: u128,
-    pub gpu_us: u128,
-    pub readback_us: u128,
-}
-
-impl RenderTiming {
-    pub fn total_us(&self) -> u128 {
-        self.build_us + self.gpu_us + self.readback_us
-    }
+/// `MOTOLII_GPU_LABELS=1` names each view run and effect pass by what it draws, so a Metal System
+/// Trace reads by layer and effect (development only; read once).
+pub(crate) fn gpu_labels() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("MOTOLII_GPU_LABELS").is_ok())
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SurfaceWork {
-    pub scene_captures: u64,
     /// 太陽から見た型紙(light cookie)を描いた回数。
     pub light_captures: u64,
+    /// 層が頼んだ View(Vism の `VIEWS`)を描いた枚数。
+    pub layer_views: u64,
     pub main_runs: u64,
     pub backdrop_copies: u64,
     pub backdrop_allocations: u64,
     /// backdrop の写しごとに焼いた mip の段数(base 込み)の合計。
     pub backdrop_mip_levels: u64,
+    /// 層の View の絵ごとに焼いた mip の段数(base 込み)の合計。
+    pub view_mip_levels: u64,
     pub mesh_batches: u64,
     pub mesh_instances_uploaded: u64,
     pub mesh_instance_upload_bytes: u64,
@@ -393,36 +387,27 @@ pub struct SurfaceWork {
     pub cache_evictions: u64,
     pub cache_key_us: u64,
     pub cache_retained_texture_bytes: u64,
+    /// Why each run of a recorded stack ended, by [`view::RunBreak`] (the last run's is End).
+    pub run_breaks: [u64; view::RUN_BREAKS],
+    /// CPU time in a recorded stack: making each run's `ViewBuilder`, recording its draws, and
+    /// mixing runs onto the stack (µs).
+    pub run_setup_us: u64,
+    pub run_record_us: u64,
+    pub run_mix_us: u64,
 }
 
 pub struct Compositor {
     pub(crate) ctx: RenderContext,
-    /// 今描いている窓。`render_into_window` が置く。
-    pub(crate) window: Window,
+    /// The composition's environment (its one light, AE's Environment Layer). A draw that carries
+    /// no environment layer of its own — a group's plate — is lit and reflected by this one, and
+    /// does not draw its sky again.
+    pub(crate) world_environment: Option<std::sync::Arc<GpuEnvironmentData>>,
     pub(crate) measurement_enabled: bool,
     pub(crate) measurement: FrameMeasurement,
     pub(crate) surface_work: SurfaceWork,
-    pub(crate) backdrop_resource: Option<sequential::BackdropResource>,
-    pub(crate) reflection_cache_enabled: bool,
     pub(crate) gpu_instance_sharing_enabled: bool,
-    /// 反射の撮影点を受け手ではなく送り手の箱に固定し、受け手は撮影から外す(Arm の local cubemap)。
-    pub(crate) reflection_scene_probe: bool,
-    #[cfg(test)]
-    pub(crate) reflection_probe_experiment: u8,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic_enabled: bool,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic: Option<reflection_diagnostic::CaptureDiagnostic>,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic_skip: Option<usize>,
-    #[cfg(test)]
-    pub(crate) reflection_diagnostic_near: Option<f32>,
-    pub(crate) reflection_entry: Option<reflection_cache::ReflectionEntry>,
-    pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) light_cookie: Option<surface_scene::LightCookieResources>,
     pub(crate) next_readback: u64,
-    pub(crate) next_effect_key: u64,
-    pub(crate) effect_scratch: effects::EffectScratch,
     /// 層の持ち物: 焼いた効果。view が何枚でも、静止した層は焼かない。
     pub(crate) baked_effects: render_effects::BakedEffects,
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
@@ -434,33 +419,36 @@ pub struct Compositor {
     pub(crate) feedback: std::collections::HashMap<effects::FeedbackKey, effects::FeedbackState>,
     /// 状態を作った書類の指紋。変われば全部捨てて入点からやり直す(同じ時刻は同じ絵、の保証)。
     pub(crate) feedback_revision: u64,
+    /// The histories read in the frame being drawn (a jump replays them from the in-point).
+    pub(crate) feedback_seen: Vec<effects::FeedbackKey>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::LazyEffectProgram,
-    pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
     pub(crate) matte_vism: effects::LazyEffectProgram,
     /// 同じ matte を、生成器の出力 format ごとに組んだ物(生成器を素材の alpha に閉じ込める)。
     pub(crate) coverage_programs: std::collections::HashMap<wgpu::TextureFormat, effects::EffectProgram>,
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
     /// このコマの箱のブロックが GPU に書いた、物ごとの world のずれ(view の設定に差す)。
-    pub(crate) motion: Option<re_renderer::MotionBuffer>,
-    pub(crate) sequential_submits: u64,
+    pub(crate) motion: Option<re_renderer::DataTexture>,
     /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
-    /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
-    pub(crate) pending: Vec<wgpu::CommandBuffer>,
+    /// The scratch Lighting Pack's resources, made on its first run.
+    pub(crate) light_pack: Option<light_pack::LightPack>,
+    pub(crate) look: Option<look::LookPipelines>,
 }
-
-type AccumulatorBacking = wgpu::Texture;
 
 #[derive(Clone)]
 pub struct GpuModelData {
     pub(crate) planar_size: Option<[f32; 2]>,
-    pub(crate) revision: u64,
     pub(crate) instances: std::sync::Arc<Vec<re_renderer::renderer::GpuMeshInstance>>,
     pub(crate) bounds: crate::render::media::SpatialBounds,
     /// Every drawn vertex in model space. The Stage fits its frame to these, not to `bounds`.
     pub(crate) vertices: std::sync::Arc<Vec<glam::Vec3>>,
+    /// U79 spike: every triangle flat-shaded (a cut stone): its interior needs no per-sample shading.
+    pub(crate) faceted: bool,
+    /// U79 spike: which of `instances` are flat faces (an extruded solid's caps): shaded once per pixel
+    /// at any size, since a plane's normal does not vary inside a pixel. Empty = none.
+    pub(crate) flat_parts: std::sync::Arc<[bool]>,
 }
 
 impl GpuModelData {
@@ -495,13 +483,41 @@ pub enum LayerContent {
     Model(std::sync::Arc<GpuModelData>),
     /// 環境(空)。板にならず、run の背景と網の照明になる。
     Environment(std::sync::Arc<GpuEnvironmentData>),
+    /// A plate the view materializes: a plate is an intent (isolate these, one picture if pixels are
+    /// needed), not a raster. Its members' pictures are prepared once for the frame; each view draws
+    /// them at the plate's place in its stack, so glass inside reads that view's picture below the
+    /// plate (2026-09-23). The plate's effects run on that drawing, as any effect with no picture.
+    Plate(std::sync::Arc<ViewPlate>),
+}
+
+/// The members of a plate a view materializes (see [`LayerContent::Plate`]).
+pub struct ViewPlate {
+    pub(crate) sources: Vec<LayerWithPasses>,
+    /// The camera the members are placed by (the composition's picture camera).
+    pub(crate) camera: crate::doc::core::ResolvedCamera,
+    /// The members' pictures, prepared with the frame's other plates.
+    pub(crate) prepared: std::sync::OnceLock<PreparedMembers>,
+    /// The plate's picture as its camera takes it, when it can be taken once for the frame (no
+    /// member reads what only a view has). The work's views show it; an eye elsewhere (a View a
+    /// Vism asked for) draws the members from where it stands.
+    pub(crate) camera_picture: Option<GpuTexture2D>,
+}
+
+pub(crate) struct PreparedMembers {
+    pub(crate) pictures: Vec<LayerContent>,
+    pub(crate) paddings: Vec<u32>,
+    pub(crate) spills: Vec<render_effects::LayerSpill>,
+    /// The members' mesh instances, placed by the plate's camera and uploaded once for the frame:
+    /// every stack that draws the plate (a view, a View's face) selects its runs from them, as
+    /// the views do from the frame's top-level scene ([`SharedMeshScene`]).
+    pub(crate) meshes: Option<SharedMeshScene>,
 }
 
 impl LayerContent {
     pub fn texture(&self) -> Option<&GpuTexture2D> {
         match self {
             Self::Texture(t) | Self::LinearTexture(t) => Some(t),
-            Self::Cloud { .. } | Self::Model(_) | Self::Environment(_) => None,
+            Self::Cloud { .. } | Self::Model(_) | Self::Environment(_) | Self::Plate(_) => None,
         }
     }
 }
@@ -523,6 +539,7 @@ pub(crate) enum SequentialContent<'a> {
     },
     Model(&'a GpuModelData),
     Environment(&'a GpuEnvironmentData),
+    Plate(&'a ViewPlate),
 }
 
 impl SequentialContent<'_> {
@@ -557,17 +574,13 @@ pub(crate) struct SequentialInput<'a> {
     displace: point_cloud::PointDisplace,
     clip: Option<clip::ClipSpec>,
     shadow: f32,
-    outline: u8,
+    /// Light the layer gives (its Glow's intensity; 0 = none). Read only by the scratch Lighting Pack.
+    emission: f32,
     /// 層の絵へ焼けなかった効果列(網・点群・環境には焼く先の絵が無い)。
     /// 画面へ描いた後で、その窓の絵に対して流す。AE のプリコンポと同じ位置。
     screen_passes: &'a [EffectPass],
     /// 画面の道の効果ごとの 2 枚目以降(別の時刻の合成)。`screen_passes` と同じ並び。
     screen_sources: &'a [Vec<GpuTexture2D>],
-}
-
-/// 選択の mask: channel A に層の番号。B は空けておく(hover を後で載せる口)。
-pub(crate) fn outline_mask(id: u8) -> re_renderer::OutlineMaskPreference {
-    if id != 0 { re_renderer::OutlineMaskPreference::some(id, 0) } else { re_renderer::OutlineMaskPreference::NONE }
 }
 
 pub(crate) fn sequential_target_config(

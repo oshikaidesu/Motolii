@@ -25,15 +25,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let t = RationalTime::try_from_frame(frame, comp.fps)?;
     let mut engine = Engine::new()?;
     if let Ok(mode) = std::env::var("MOTOLII_PRESENT") {
-        // 実窓と同じ入口: presentable texture + 観測カメラ + 選択の outline。その後の通常描画が生きているか。
+        // 実窓と同じ入口: presentable texture + 観測カメラ。その後の通常描画が生きているか。
         let texture = engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
             label: Some("present probe"), size: wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1,
             dimension: wgpu::TextureDimension::D2, format: motolii_render::render::compositor::PRESENTABLE_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC, view_formats: &[],
         });
-        let outline: Vec<LayerId> = if mode == "outline" { vec![LayerId(1)] } else { Vec::new() };
         let camera = motolii_render::doc::core::ResolvedCamera::default();
-        engine.render_frame_into_with_camera(&doc.view(), t, &texture, camera, true, &outline)?;
+        engine.render_frame_into_with_camera(&doc.view(), t, &texture, camera, true)?;
         engine.gpu_device().poll(wgpu::PollType::wait_indefinitely())?;
         eprintln!("present ({mode}): ok; drawn layers {}; failures {:?}", engine.drawn_layers(), engine.layer_failures());
     }

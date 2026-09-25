@@ -28,8 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         elapsed.push(started.elapsed().as_micros());
     }
     let after = engine.surface_work();
-    println!("total_with_readback_us={elapsed:?} captures={} main_runs={} backdrop_copies={} mesh_data_batches={}",
-        (after.scene_captures-before.scene_captures)/frames as u64,
+    println!("total_with_readback_us={elapsed:?} main_runs={} backdrop_copies={} mesh_data_batches={}",
         (after.main_runs-before.main_runs)/frames as u64,
         (after.backdrop_copies-before.backdrop_copies)/frames as u64,
         (after.mesh_batches-before.mesh_batches)/frames as u64);

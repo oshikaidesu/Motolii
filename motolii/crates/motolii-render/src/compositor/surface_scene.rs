@@ -1,4 +1,3 @@
-use re_renderer::environment::SceneReflection;
 use re_renderer::renderer::{
     GpuMeshInstance, MeshDrawData, PointCloudDrawData, RectangleDrawData, RectangleOptions,
     TexturedRect,
@@ -10,16 +9,9 @@ use re_renderer::{ClipPlane, Rgba};
 
 use super::*;
 
-pub(crate) struct ReflectionResources {
-    face_size: u32,
-    faces: [wgpu::Texture; 6],
-    atlas: wgpu::Texture,
-    imported: GpuTexture2D,
-}
-
 /// 太陽から見た型紙(light cookie)の置き場。1 枚を frame ごとに描き直す。
 pub(crate) struct LightCookieResources {
-    texture: wgpu::Texture,
+    texture: re_renderer::GpuTexture,
     imported: GpuTexture2D,
 }
 
@@ -35,7 +27,7 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
         shared: Option<&SharedMeshScene>,
-    ) -> Result<Option<re_renderer::environment::SunLight>, CompositorError> {
+    ) -> Result<Option<crate::render::compositor::light::SunLight>, CompositorError> {
         if !inputs.iter().any(|i| i.shadow > 0.0) {
             return Ok(None);
         }
@@ -85,13 +77,14 @@ impl Compositor {
         let resources = match self.light_cookie.take() {
             Some(r) => r,
             None => {
-                let texture = self.create_blend_scratch_texture(LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE);
+                let texture = self.picture_texture(LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE);
                 let imported = self.import_premultiplied(&texture)?;
                 LightCookieResources { texture, imported }
             }
         };
-        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| inputs[layer].shadow <= 0.0, shared, 0)?;
-        let config = TargetConfiguration {
+        let occludes = |layer: usize| inputs[layer].shadow > 0.0;
+        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| !occludes(layer), shared.map(|scene| SharedSelection { scene, keep: &occludes }))?;
+        let mut config = TargetConfiguration {
             name: "light-cookie".into(),
             render_mode: RenderMode::Deterministic,
             resolution_in_pixel: [LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE],
@@ -104,52 +97,52 @@ impl Compositor {
             pixels_per_point: 1.0,
             blend_with_background: BlendWithBackground::Premultiplied,
             environment: environment.map(|e| e.environment.clone()),
-            light_capture: true,
             motion: self.motion.clone(),
             ..Default::default()
         };
-        let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture)
+        super::light::light_view(&mut config, None, true);
+        let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture.texture)
             .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
-        builder.queue_draw(&self.ctx, draws.rects.clone());
-        for cloud in &draws.clouds {
-            builder.queue_draw(&self.ctx, cloud.clone());
-        }
-        for line in &draws.lines {
-            builder.queue_draw(&self.ctx, line.clone());
-        }
-        for mesh in &draws.meshes {
-            builder.queue_draw(&self.ctx, mesh.clone());
-        }
-        self.pending.push(builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        draws.queue(&self.ctx, &mut builder)?;
+        self.ctx.queue_commands([builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?]);
         self.surface_work.light_captures += 1;
         let cookie = resources.imported.clone();
         self.light_cookie = Some(resources);
-        Ok(Some(re_renderer::environment::SunLight { direction, weight: sun.weight, color: sun.color, uv_from_world, cookie }))
+        Ok(Some(crate::render::compositor::light::SunLight { direction, weight: sun.weight, color: sun.color, uv_from_world, cookie }))
     }
 }
 
-pub(super) struct SharedMeshScene {
+/// U79 spike: a solid's copies each carry a stable seed (their place in the layer list), which the
+/// jewel shading turns into facet and sparkle variation — no work of their own per copy.
+fn seed_copies(instances: &mut [GpuMeshInstance], index: usize) {
+    use super::effects::surface_program::{SEED_SLOT, SOLID_SLOT};
+    for instance in instances.iter_mut().filter(|i| i.params[SOLID_SLOT] > 0.0) {
+        instance.params[SEED_SLOT] = index as f32;
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct SharedMeshScene {
     draw: MeshDrawData,
     source_layers: Vec<usize>,
 }
 
 impl SharedMeshScene {
-    fn select(&self, range: std::ops::Range<usize>, skip: &dyn Fn(usize) -> bool) -> MeshDrawData {
-        if !self.source_layers.iter().any(|&l| skip(l))
-            && self
-                .source_layers
-                .first()
-                .zip(self.source_layers.last())
-                .is_some_and(|(&first, &last)| range.contains(&first) && range.contains(&last))
-        {
+    /// The instances of the layers `keep` names (by their index in the list the scene was built
+    /// from), as one draw over the shared upload.
+    pub(crate) fn select(&self, keep: &dyn Fn(usize) -> bool) -> MeshDrawData {
+        if self.source_layers.iter().all(|&l| keep(l)) {
             return self.draw.clone();
         }
-        self.draw.select_source_instances(|source| {
-            let layer = self.source_layers[source];
-            range.contains(&layer) && !skip(layer)
-        })
+        self.draw.select_source_instances(|source| keep(self.source_layers[source]))
     }
+}
+
+/// The shared scene a drawing selects from: the scene, and which of its layers this drawing draws.
+pub(crate) struct SharedSelection<'a> {
+    pub scene: &'a SharedMeshScene,
+    pub keep: &'a dyn Fn(usize) -> bool,
 }
 
 pub(crate) struct SceneDraws {
@@ -160,23 +153,26 @@ pub(crate) struct SceneDraws {
 }
 
 impl SceneDraws {
-    pub(super) fn queue(self, ctx: &re_renderer::RenderContext, view: &mut ViewBuilder) {
-        view.queue_draw(ctx, self.rects);
-        for cloud in self.clouds {
-            view.queue_draw(ctx, cloud);
+    pub(crate) fn queue(&self, ctx: &re_renderer::RenderContext, view: &mut ViewBuilder) -> Result<(), CompositorError> {
+        let draw = |e: re_renderer::RendererRegistrationError| CompositorError::Draw(e.to_string());
+        view.queue_draw(ctx, self.rects.clone()).map_err(draw)?;
+        for cloud in &self.clouds {
+            view.queue_draw(ctx, cloud.clone()).map_err(draw)?;
         }
-        for line in self.lines {
-            view.queue_draw(ctx, line);
+        for line in &self.lines {
+            view.queue_draw(ctx, line.clone()).map_err(draw)?;
         }
-        for mesh in self.meshes {
-            view.queue_draw(ctx, mesh);
+        for mesh in &self.meshes {
+            view.queue_draw(ctx, mesh.clone()).map_err(draw)?;
         }
+        Ok(())
     }
 }
 
-fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, glam::Vec3)> {
+pub(super) fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, glam::Vec3)> {
     let spatial = match input.content {
-        SequentialContent::Environment(_) => return None,
+        // A plate's members stand for it wherever the world is looked at.
+        SequentialContent::Environment(_) | SequentialContent::Plate(_) => return None,
         SequentialContent::Model(m) => Some(m.bounds),
         SequentialContent::Cloud { bounds, .. } => Some(bounds),
         SequentialContent::Rect(_) | SequentialContent::LinearRect(_) => None,
@@ -223,7 +219,7 @@ fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, gl
 }
 
 impl Compositor {
-    pub(super) fn shared_mesh_scene(
+    pub(crate) fn shared_mesh_scene(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
@@ -235,14 +231,13 @@ impl Compositor {
         let mut instance_count = 0usize;
         for input in inputs {
             if let SequentialContent::Model(model) = input.content {
+                // Geometry, materials and instance data are shared however the surface is drawn
+                // (ruling 2026-09-24): a transparent instance's order is the view's, taken from its
+                // camera when the draw is queued, not from this upload. A backdrop reader stays in
+                // the scene: its own run selects just its instances.
+                // Opacity is instance data (the tint) and shared with it.
                 if input.blend_mode != BlendMode::Normal
-                    || input.opacity != 1.0
-                    || input.shading.reads_backdrop
                     || input.clip.is_some()
-                    || model
-                        .instances
-                        .iter()
-                        .any(|i| i.gpu_mesh.materials.iter().any(|m| m.has_transparency))
                 {
                     return Ok(None);
                 }
@@ -250,7 +245,9 @@ impl Compositor {
                 instance_count = instance_count.saturating_add(model.instances.len());
             }
         }
-        if count < 2
+        // One layer's copies are as shared as many layers' (every stack that draws the plate reuses
+        // the upload).
+        if count == 0
             || instance_count > u32::MAX as usize
             || instance_count.saturating_mul(MeshDrawData::gpu_instance_size_bytes()) as u64
                 > self.ctx.device.limits().max_buffer_size
@@ -274,6 +271,8 @@ impl Compositor {
                     &input.shading,
                     input.clip,
                 );
+                let mut made = made;
+                seed_copies(&mut made, index);
                 layers.extend(std::iter::repeat_n(draw_order(input), made.len()));
                 source_layers.extend(std::iter::repeat_n(index, made.len()));
                 instances.extend(made);
@@ -293,16 +292,17 @@ impl Compositor {
     }
 
     /// One geometry conversion for the main view and auxiliary reflection views.
-    pub(super) fn surface_scene_draws(
+    pub(crate) fn surface_scene_draws(
         &mut self,
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         mut rects: Vec<TexturedRect>,
         capture: bool,
-        // Layers (absolute input index) left out of these draws.
+        // Layers (index in `inputs`) left out of these draws.
         skip: &dyn Fn(usize) -> bool,
-        shared: Option<&SharedMeshScene>,
-        input_offset: usize,
+        // The frame's shared mesh upload, when these inputs' meshes are in it: they are selected
+        // from it instead of being made again.
+        shared: Option<SharedSelection<'_>>,
     ) -> Result<SceneDraws, CompositorError> {
         let started = std::time::Instant::now();
         let mut clouds = Vec::new();
@@ -310,18 +310,15 @@ impl Compositor {
         let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>, Vec<re_renderer::renderer::DrawOrder>)> = Vec::new();
         let mut rect_layers = vec![re_renderer::renderer::DrawOrder::default(); rects.len()];
         for (index, input) in inputs.iter().enumerate() {
-            #[cfg(test)]
-            if capture && self.reflection_diagnostic_skip == Some(index) {
-                continue;
-            }
-            if skip(input_offset + index)
+            if skip(index)
                 || (shared.is_some() && matches!(input.content, SequentialContent::Model(_)))
             {
                 continue;
             }
             let shading = input.shading.clone();
             match input.content {
-                SequentialContent::Environment(_) => {}
+                // A plate is drawn by the view's stack, at its place, never inside a run.
+                SequentialContent::Environment(_) | SequentialContent::Plate(_) => {}
                 SequentialContent::Cloud {
                     positions,
                     colors,
@@ -348,7 +345,6 @@ impl Compositor {
                         input.projection,
                         input.displace,
                         input.clip,
-                        outline_mask(input.outline),
                     )?);
                 }
                 SequentialContent::Model(model) => {
@@ -363,8 +359,8 @@ impl Compositor {
                         &shading,
                         input.clip,
                     );
+                    seed_copies(&mut instances, index);
                     for instance in &mut instances {
-                        instance.outline_mask_ids = outline_mask(input.outline);
                         if input.projection == crate::doc::store::LayerProjection::TwoD && !capture {
                             // 輪郭のままの文字・図形(planar な網)も同じ法: 面の法線に沿ってカメラ側へ積み順ぶん。
                             // 奥行きがずらされた変形では z 列は面の法線ではない。矩形と同じく面の 2 辺の外積。
@@ -415,10 +411,9 @@ impl Compositor {
                             clip: input
                                 .clip
                                 .map_or(ClipPlane::NONE, |c| c.world_for_rect(corner, u, v)),
-                            field_grid: shading.field_grid(),
-                            surface: shading.program,
+                            subdivisions: shading.field_grid(),
+                            surface: shading.program.or_else(|| self.standard_surface_program()),
                             surface_params: shading.params,
-                            outline_mask: outline_mask(input.outline),
                             ..Default::default()
                         },
                     });
@@ -441,7 +436,7 @@ impl Compositor {
             })
             .collect::<Result<_, _>>()?;
         if let Some(shared) = shared {
-            meshes.push(shared.select(input_offset..input_offset + inputs.len(), skip));
+            meshes.push(shared.scene.select(shared.keep));
         }
         self.surface_work.draw_data_prepare_us += started.elapsed().as_micros() as u64;
         Ok(SceneDraws {
@@ -452,309 +447,9 @@ impl Compositor {
             meshes,
         })
     }
+}
 
-    /// At most two shared, single-bounce captures per scene evaluation. No per-copy probes.
-    pub(super) fn capture_scene_reflection(
-        &mut self,
-        comp: CompSpec,
-        inputs: &[SequentialInput<'_>],
-        environment: Option<&GpuEnvironmentData>,
-        shared: &mut Option<SharedMeshScene>,
-    ) -> Result<Option<SceneReflection>, CompositorError> {
-        let candidates: Vec<_> = inputs
-            .iter()
-            .enumerate()
-            .filter_map(|(index, input)| {
-                if matches!(input.content, SequentialContent::Model(m) if m.planar_size.is_some()) && !input.shading.reads_backdrop {
-                    return None;
-                }
-                if !input
-                    .shading
-                    .program
-                    .as_ref()
-                    .is_some_and(|p| p.desc().surface.is_some())
-                {
-                    return None;
-                }
-                bounds(comp, input).map(|(lo, hi)| (index, lo, hi))
-            })
-            .collect();
-        let Some(first) = candidates.first() else {
-            return Ok(None);
-        };
-        let last = candidates.last().expect("nonempty candidates");
-        #[cfg(test)]
-        let (first, last) = if matches!(self.reflection_probe_experiment, 0 | 2) {
-            let compare = |a: &&(usize, glam::Vec3, glam::Vec3),
-                           b: &&(usize, glam::Vec3, glam::Vec3)| {
-                let a = (a.1 + a.2) * 0.5;
-                let b = (b.1 + b.2) * 0.5;
-                a.x.total_cmp(&b.x)
-                    .then(a.y.total_cmp(&b.y))
-                    .then(a.z.total_cmp(&b.z))
-            };
-            (
-                candidates.iter().min_by(compare).unwrap(),
-                candidates.iter().max_by(compare).unwrap(),
-            )
-        } else {
-            (first, last)
-        };
-        let (receiver, receiver_min, receiver_max) = *first;
-        let first_origin = (first.1 + first.2) * 0.5;
-        let last_origin = (last.1 + last.2) * 0.5;
-        let is_receiver = |i: usize| candidates.iter().any(|(c, _, _)| *c == i);
-        // Arm's local cubemap: the senders are captured once from the middle of their box and every
-        // receiver reads it through box projection, so a receiver moving does not retake the scene.
-        // Receivers are not in the capture (no self-image, no receiver-to-receiver reflection).
-        let scene_probe = self.reflection_scene_probe;
-        let mut lo = if scene_probe { glam::Vec3::INFINITY } else { receiver_min };
-        let mut hi = if scene_probe { glam::Vec3::NEG_INFINITY } else { receiver_max };
-        let mut has_other = false;
-        for (i, input) in inputs.iter().enumerate() {
-            if i == receiver || (scene_probe && is_receiver(i)) {
-                continue;
-            }
-            if let Some((a, b)) = bounds(comp, input) {
-                lo = lo.min(a);
-                hi = hi.max(b);
-                has_other = true;
-            }
-        }
-        if !has_other {
-            return Ok(None);
-        }
-        let (receivers, origins) = if scene_probe {
-            (vec![usize::MAX], vec![(lo + hi) * 0.5])
-        } else if first.0 == last.0 {
-            (vec![receiver], vec![first_origin])
-        } else {
-            (vec![receiver, last.0], vec![first_origin, last_origin])
-        };
-        let near = ((hi - lo).length() * 1e-5).clamp(0.001, 0.01);
-        #[cfg(test)]
-        let near = self.reflection_diagnostic_near.unwrap_or(near);
-        // Tight box projection aligns planar senders between probes. Expand only degenerate axes.
-        for axis in 0..3 {
-            if hi[axis] - lo[axis] < 1.0 {
-                let center = (lo[axis] + hi[axis]) * 0.5;
-                lo[axis] = center - 0.5;
-                hi[axis] = center + 0.5;
-            }
-        }
-        #[cfg(test)]
-        let (receivers, origins) = if self.reflection_probe_experiment == 2 {
-            let center = (lo + hi) * 0.5;
-            let offset = glam::Vec3::X * (hi.x - lo.x) * 0.25;
-            (vec![usize::MAX; 2], vec![center - offset, center + offset])
-        } else {
-            (receivers, origins)
-        };
-        let face_size = (comp.width.min(comp.height) / 2)
-            .next_power_of_two()
-            .clamp(64, 512);
-        let resources = match self.reflection_resources.take() {
-            Some(r) if r.face_size == face_size => r,
-            _ => {
-                let atlas = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("shared-scene-reflection"),
-                    size: wgpu::Extent3d {
-                        width: face_size * 3,
-                        height: face_size * 4,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count:
-                        re_renderer::resource_managers::MipmapGenerator::mip_level_count(
-                            face_size * 3,
-                            face_size * 4,
-                        ),
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: BLEND_TARGET_FORMAT,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::COPY_DST
-                        | wgpu::TextureUsages::COPY_SRC
-                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                });
-                let imported = self.import_premultiplied(&atlas)?;
-                ReflectionResources {
-                    face_size,
-                    faces: std::array::from_fn(|_| {
-                        self.create_blend_scratch_texture(face_size, face_size)
-                    }),
-                    atlas,
-                    imported,
-                }
-            }
-        };
-        *shared = self.shared_mesh_scene(comp, inputs)?;
-        let directions = [
-            glam::Vec3::X,
-            glam::Vec3::NEG_X,
-            glam::Vec3::Y,
-            glam::Vec3::NEG_Y,
-            glam::Vec3::Z,
-            glam::Vec3::NEG_Z,
-        ];
-        let ups = [
-            glam::Vec3::NEG_Y,
-            glam::Vec3::NEG_Y,
-            glam::Vec3::Z,
-            glam::Vec3::NEG_Z,
-            glam::Vec3::NEG_Y,
-            glam::Vec3::NEG_Y,
-        ];
-        for (probe, (&receiver, &origin)) in receivers.iter().zip(&origins).enumerate() {
-            // Draw data is reusable across all six camera views.
-            let skip = |layer: usize| if scene_probe { is_receiver(layer) } else { layer == receiver };
-            let draws = self.surface_scene_draws(
-                comp,
-                inputs,
-                Vec::new(),
-                true,
-                &skip,
-                shared.as_ref(),
-                0,
-            )?;
-            for face in 0..6 {
-                let view = glam::Mat4::look_at_rh(origin, origin + directions[face], ups[face]);
-                let rotation = glam::Quat::from_mat3(&glam::Mat3::from_mat4(view));
-                let config = TargetConfiguration {
-                    name: "shared-scene-reflection-face".into(),
-                    render_mode: RenderMode::Deterministic,
-                    resolution_in_pixel: [face_size, face_size],
-                    view_from_world: macaw::IsoTransform::from_rotation_translation(
-                        rotation,
-                        view.w_axis.truncate(),
-                    ),
-                    projection_from_view: Projection::Perspective {
-                        vertical_fov: std::f32::consts::FRAC_PI_2,
-                        near_plane_distance: near,
-                        aspect_ratio: 1.0,
-                    },
-                    pixels_per_point: 1.0,
-                    blend_with_background: BlendWithBackground::Premultiplied,
-                    environment: environment.map(|e| e.environment.clone()),
-                    motion: self.motion.clone(),
-                    ..Default::default()
-                };
-                let mut builder = ViewBuilder::new_with_external_resolved(
-                    &self.ctx,
-                    config,
-                    ViewBuilderId::new(self.next_readback),
-                    &resources.faces[face],
-                )
-                .map_err(|e| CompositorError::View(e.to_string()))?;
-                self.next_readback += 1;
-                builder.queue_draw(&self.ctx, draws.rects.clone());
-                for cloud in &draws.clouds {
-                    builder.queue_draw(&self.ctx, cloud.clone());
-                }
-                for line in &draws.lines {
-                    builder.queue_draw(&self.ctx, line.clone());
-                }
-                for mesh in &draws.meshes {
-                    builder.queue_draw(&self.ctx, mesh.clone());
-                }
-                self.pending.push(
-                    builder
-                        .draw(&self.ctx, Rgba::TRANSPARENT)
-                        .map_err(|e| CompositorError::Draw(e.to_string()))?,
-                );
-                self.surface_work.scene_captures += 1;
-            }
-            let mut encoder =
-                self.ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("shared-reflection-atlas"),
-                    });
-            for face in 0..6 {
-                encoder.copy_texture_to_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &resources.faces[face],
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &resources.atlas,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: face as u32 % 3 * face_size,
-                            y: (face as u32 / 3 + probe as u32 * 2) * face_size,
-                            z: 0,
-                        },
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::Extent3d {
-                        width: face_size,
-                        height: face_size,
-                        depth_or_array_layers: 1,
-                    },
-                );
-            }
-            self.pending.push(encoder.finish());
-        }
-        let mut encoder = self
-            .ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("shared-reflection-mips"),
-            });
-        self.ctx
-            .texture_manager_2d
-            .generate_mipmaps(&self.ctx, &mut encoder, &resources.atlas);
-        self.pending.push(encoder.finish());
-        let influence_radii = [origins[0], *origins.last().unwrap()].map(|origin| {
-            candidates
-                .iter()
-                .map(|(_, a, b)| origin.distance((*a + *b) * 0.5) + (*b - *a).length() * 0.5)
-                .fold(1.0_f32, f32::max)
-        });
-        #[cfg(test)]
-        let influence_radii = if self.reflection_probe_experiment == 3 {
-            influence_radii
-        } else {
-            [0.0; 2]
-        };
-        let result = SceneReflection {
-            atlas: resources.imported.clone(),
-            origins: [origins[0], *origins.last().unwrap()],
-            count: origins.len() as u32,
-            bounds_min: lo,
-            bounds_max: hi,
-            influence_radii,
-        };
-        #[cfg(test)]
-        if self.reflection_diagnostic_enabled {
-            let input_metadata: Vec<_> = inputs.iter().enumerate().map(|(index, input)| {
-                let mut item = serde_json::json!({"index":index,"opacity":input.opacity,
-                    "surface":input.shading.program.as_ref().is_some_and(|p|p.desc().surface.is_some()),
-                    "params":input.shading.params,"bounds":bounds(comp,input).map(|(a,b)|[a.to_array(),b.to_array()])});
-                if let SequentialContent::Model(model) = input.content {
-                    let world = projected_spatial_placement(comp,input.projection_camera,input.projection,input.placement,model.bounds);
-                    item["model_bounds"] = serde_json::json!([model.bounds.min,model.bounds.max]);
-                    item["world_from_object"] = serde_json::json!(glam::Mat4::from(world).to_cols_array());
-                }
-                item
-            }).collect();
-            let metadata = serde_json::json!({"near_plane":near,"receivers":receivers,
-                "origins":origins.iter().map(|p|p.to_array()).collect::<Vec<_>>(),
-                "bounds_min":lo.to_array(),"bounds_max":hi.to_array(),"radii":influence_radii,
-                "inputs":input_metadata,"skipped_capture_input":self.reflection_diagnostic_skip});
-            self.reflection_diagnostic =
-                Some(super::reflection_diagnostic::CaptureDiagnostic::enqueue(
-                    &self.ctx,
-                    &mut self.pending,
-                    &resources.atlas,
-                    metadata,
-                ));
-        }
-        self.reflection_resources = Some(resources);
-        Ok(Some(result))
-    }
+impl Compositor {
 }
 
 /// 2D は積み順だけで重なる(法 2026-09-12)。同じ面に重なった物の描き順を sort key の同点に

@@ -1,11 +1,11 @@
 use crate::render::compositor::*;
 
-/// 層ごとの (効果後の絵, 余白 px, 溢れ) と、フレーム後に pool へ返す scratch。
+/// 層ごとの (効果後の絵, 余白 px, 溢れ)。
 /// 溢れ = coverage の外へ出た分の絵と、その混ぜ方(溢れの法、manifest の `SPILL`)。
 pub(crate) type LayerSpill = Option<(LayerContent, BlendMode)>;
 /// 層の持ち物: 焼いた効果。鍵(素材の texture・効果列の値・枠)が同じ間は焼き直さない。
 /// Stage と Camera の 2 枚も、静止した層の次のコマも、同じ物を覗く(rerun の store と同じ持ち方)。
-/// 2 render 続けて使われなかった物は scratch へ返す。
+/// 2 render 続けて使われなかった物は手放す(絵の texture は re_renderer の pool へ戻る)。
 #[derive(Default)]
 pub(crate) struct BakedEffects {
     entries: Vec<BakedEntry>,
@@ -20,7 +20,7 @@ impl PartialEq for BakedKey {
             && self.others.iter().zip(&other.others).all(|(a, b)| a.handle() == b.handle())
     }
 }
-struct BakedEntry { key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill, owned: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>, used: u64 }
+struct BakedEntry { key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill, used: u64 }
 impl BakedEffects {
     fn hit(&mut self, key: &BakedKey) -> Option<(LayerContent, u32, LayerSpill)> {
         let generation = self.generation;
@@ -28,42 +28,36 @@ impl BakedEffects {
         entry.used = generation;
         Some((entry.content.clone(), entry.padding, entry.spill.clone()))
     }
-    fn keep(&mut self, key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill, owned: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>) {
+    fn keep(&mut self, key: BakedKey, content: LayerContent, padding: u32, spill: LayerSpill) {
         let used = self.generation;
-        self.entries.push(BakedEntry { key, content, padding, spill, owned, used });
+        self.entries.push(BakedEntry { key, content, padding, spill, used });
     }
-    fn sweep(&mut self, scratch: &mut effects::EffectScratch) {
+    fn sweep(&mut self) {
         let generation = self.generation;
         self.generation += 1;
-        let (kept, stale): (Vec<_>, Vec<_>) = self.entries.drain(..).partition(|e| e.used + 1 >= generation);
-        self.entries = kept;
-        for entry in stale {
-            for (width, height, format, texture) in entry.owned { scratch.release(width, height, format, texture); }
-        }
+        self.entries.retain(|e| e.used + 1 >= generation);
     }
-    pub(crate) fn clear(&mut self, scratch: &mut effects::EffectScratch) {
-        for entry in self.entries.drain(..) {
-            for (width, height, format, texture) in entry.owned { scratch.release(width, height, format, texture); }
-        }
+    pub(crate) fn clear(&mut self) {
+        self.entries.clear();
     }
 }
 
-type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<LayerSpill>, Vec<(u32,u32,wgpu::TextureFormat,wgpu::Texture)>);
+type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<LayerSpill>);
 
 impl Compositor {
     /// 色の規約を写す。出口は乗算済み線形(`to_linear`)か乗算済み sRGB。入口の素性は
     /// `source_encoded`(sRGB 符号化か)と `source_premultiplied` で言う。
-    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, to_linear: bool, source_encoded: bool, source_premultiplied: bool) -> wgpu::Texture {
+    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &re_renderer::GpuTexture, to_linear: bool, source_encoded: bool, source_premultiplied: bool) -> re_renderer::GpuTexture {
         const ID: &str = "motolii.material_encoding";
         if !self.effect_programs.contains_key(ID) {
             let definition = self.catalog.definitions.iter().find(|d| d.plugin_id() == ID).expect("material encoding shader");
             self.effect_programs.insert(ID.into(), effects::EffectProgram::compile_for(&self.ctx, definition, wgpu::TextureFormat::Rgba16Float));
         }
-        let out = self.effect_scratch.acquire(&self.ctx.device,source.width(),source.height(),wgpu::TextureFormat::Rgba16Float);
+        let out = effects::vism::pass_texture(&self.ctx, source.texture.width(), source.texture.height(), wgpu::TextureFormat::Rgba16Float);
         let flag = |b: bool| if b { 1.0 } else { 0.0 };
-        self.effect_programs[ID].record(&self.ctx, encoder, &mut self.effect_scratch, &[&source.create_view(&Default::default())], &out.create_view(&Default::default()),
+        self.effect_programs[ID].record(&self.ctx, encoder, &[source], &out.default_view,
             &[("to_linear".into(), flag(to_linear)), ("source_encoded".into(), flag(source_encoded)), ("source_premultiplied".into(), flag(source_premultiplied))],
-            [source.width() as f32,source.height() as f32]);
+            [source.texture.width() as f32,source.texture.height() as f32]);
         out
     }
 
@@ -86,7 +80,6 @@ impl Compositor {
         let mut effective_textures = Vec::with_capacity(layers.len());
         let mut effective_paddings = Vec::with_capacity(layers.len());
         let mut effective_spills: Vec<LayerSpill> = Vec::with_capacity(layers.len());
-        let checked_out = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
         // 同じ素材に同じ効果列が続く(配置効果の複製)なら、鎖は 1 回だけ流して結果を配る。
         let mut previous: Option<(GpuTexture2D, &[EffectPass], LayerContent, u32, LayerSpill)> = None;
@@ -131,7 +124,6 @@ impl Compositor {
                 continue;
             }
             self.surface_work.bakes += 1;
-            let mut owned = Vec::new();
             let [width, height] = layer_texture.width_height();
             let padding = lwp
                 .passes
@@ -158,11 +150,10 @@ impl Compositor {
                 .textures
                 .get_from_handle(layer_texture.handle())
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
-            let mut current = src.texture.clone();
+            let mut current = src.clone();
             // 素材の素性: 線形テクスチャと sRGB 形式は乗算済み線形、それ以外は非乗算 sRGB(層の法)。
-            let mut current_linear = matches!(lwp.layer.content, LayerContent::LinearTexture(_)) || layer_texture.format().is_srgb();
+            let mut current_linear = matches!(lwp.layer.content, LayerContent::LinearTexture(_)) || crate::render::compositor::linear_premultiplied(layer_texture.format());
             let mut current_premultiplied = current_linear;
-            let mut current_is_scratch = false;
             let encoder = copy_encoder.get_or_insert_with(|| {
                 self.ctx
                     .device
@@ -171,33 +162,30 @@ impl Compositor {
                     })
             });
 
+            // The padded picture before its effects is also the coverage a spill is cut by.
+            let mut padded_source = None;
             if padding > 0 {
-                let padded = self.padded_copy(encoder, &current, [width, height], padding);
-                current = padded;
-                current_is_scratch = true;
+                current = self.padded_copy(encoder, &current.texture, [width, height], padding);
+                padded_source = Some(current.clone());
             }
 
-            // 別の時刻の絵を、束ねられる形へ(pool の借りはここで解く)。
-            let others: Vec<Vec<wgpu::Texture>> = lwp.pass_sources.iter().map(|row| {
-                row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok().map(|g| g.texture.clone())).collect()
+            // 別の時刻の絵(pool の texture のまま)。
+            let others: Vec<Vec<re_renderer::GpuTexture>> = lwp.pass_sources.iter().map(|row| {
+                row.iter().filter_map(|t| self.ctx.gpu_resources.textures.get_from_handle(t.handle()).ok()).collect()
             }).collect();
             let encoder = copy_encoder.as_mut().expect("直前に用意した");
-            let (next, next_linear, next_premultiplied, next_is_scratch) = self.record_pass_chain(
-                encoder, current, current_linear, current_premultiplied, current_is_scratch,
-                &lwp.passes, &others, frame, [padded_width, padded_height], padding, [width, height],
+            let (next, next_linear, next_premultiplied) = self.record_pass_chain(
+                encoder, current, current_linear, current_premultiplied,
+                &lwp.passes, &others, frame, [padded_width, padded_height], padding, [width, height], None,
             )?;
             current = next;
             current_linear = next_linear;
             current_premultiplied = next_premultiplied;
-            current_is_scratch = next_is_scratch;
             // 置く時は乗算済み線形(rerun の AlreadyPremultiplied)。列の出口が乗算済み sRGB ならここで戻す。
             if !current_linear {
-                let back = self.convert_image_encoding(encoder, &current, true, true, current_premultiplied);
-                if current_is_scratch { self.effect_scratch.release(padded_width, padded_height, current.format(), current); }
-                current = back;
+                current = self.convert_image_encoding(encoder, &current, true, true, current_premultiplied);
                 current_linear = true;
                 current_premultiplied = true;
-                current_is_scratch = true;
             }
 
             // 溢れの法: SPILL を宣言した効果があれば、出力を素材の coverage の内と外に分ける。
@@ -205,42 +193,29 @@ impl Compositor {
             let spill_mode = lwp.passes.iter().find_map(|pass| pass.spill);
             let mut spill: LayerSpill = None;
             if let Some(mode) = spill_mode {
-                let coverage = self.padded_copy(encoder, &src.texture, [width, height], padding);
-                let format = current.format();
+                let coverage = match &padded_source {
+                    Some(padded) => padded.clone(),
+                    None => self.padded_copy(encoder, &src.texture, [width, height], padding),
+                };
+                let format = current.texture.format();
                 let inside = self.matte_by_coverage(encoder, &current, &coverage, [padded_width, padded_height], format, 0.0)?;
                 let outside = self.matte_by_coverage(encoder, &current, &coverage, [padded_width, padded_height], format, 1.0)?;
-                self.effect_scratch.release(padded_width, padded_height, coverage.format(), coverage);
-                if current_is_scratch { self.effect_scratch.release(padded_width, padded_height, format, current); }
                 current = inside;
-                current_is_scratch = true;
-                self.next_effect_key += 1;
-                let imported = self.ctx.texture_manager_2d.import_gpu_premultiplied(self.next_effect_key, &self.ctx, &outside)
-                    .map_err(|error| CompositorError::Effect(error.to_string()))?;
-                spill = Some((LayerContent::LinearTexture(imported), mode));
-                owned.push((padded_width, padded_height, outside.format(), outside));
+                spill = Some((LayerContent::LinearTexture(self.import_premultiplied(&outside)?), mode));
             }
 
-            self.next_effect_key += 1;
-            let imported = self
-                .ctx
-                .texture_manager_2d
-                .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &current)
-                .map_err(|error| CompositorError::Effect(error.to_string()))?;
-            let content = LayerContent::LinearTexture(imported);
+            let content = LayerContent::LinearTexture(self.import_premultiplied(&current)?);
             previous = Some((layer_texture.clone(), lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
             effective_textures.push(content.clone());
             effective_paddings.push(padding);
             effective_spills.push(spill.clone());
-            owned.push((padded_width, padded_height, current.format(), current));
-            self.baked_effects.keep(baked_key, content, padding, spill, owned);
+            self.baked_effects.keep(baked_key, content, padding, spill);
         }
         if let Some(encoder) = copy_encoder {
-            self.pending.push(encoder.finish());
+            self.ctx.queue_commands([encoder.finish()]);
         }
-        self.flush_pending();
-        let Self { baked_effects, effect_scratch, .. } = self;
-        baked_effects.sweep(effect_scratch);
-        Ok((effective_textures, effective_paddings, effective_spills, checked_out))
+        self.baked_effects.sweep();
+        Ok((effective_textures, effective_paddings, effective_spills))
     }
 
     /// 生成器(image 入力なし)は矩形全面を塗るので、直前の絵の alpha の中へ閉じ込める。
@@ -249,27 +224,25 @@ impl Compositor {
     fn confine_to_coverage(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
-        generated: wgpu::Texture,
-        coverage: &wgpu::Texture,
+        generated: &re_renderer::GpuTexture,
+        coverage: &re_renderer::GpuTexture,
         size: [u32; 2],
         format: wgpu::TextureFormat,
-    ) -> Result<wgpu::Texture, CompositorError> {
-        let confined = self.matte_by_coverage(encoder, &generated, coverage, size, format, 0.0)?;
-        self.effect_scratch.release(size[0], size[1], format, generated);
-        Ok(confined)
+    ) -> Result<re_renderer::GpuTexture, CompositorError> {
+        self.matte_by_coverage(encoder, generated, coverage, size, format, 0.0)
     }
 
     /// 元の絵を、別の絵の coverage で切る(mode 0 = alpha の内側、1 = 外側)。生成器の閉じ込めと溢れの分離が共有する 1 箇所。
     fn matte_by_coverage(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
-        source: &wgpu::Texture,
-        coverage: &wgpu::Texture,
+        source: &re_renderer::GpuTexture,
+        coverage: &re_renderer::GpuTexture,
         [width, height]: [u32; 2],
         format: wgpu::TextureFormat,
         mode: f32,
-    ) -> Result<wgpu::Texture, CompositorError> {
-        let confined = self.effect_scratch.acquire(&self.ctx.device, width, height, format);
+    ) -> Result<re_renderer::GpuTexture, CompositorError> {
+        let confined = effects::vism::pass_texture(&self.ctx, width, height, format);
         let program = match self.coverage_programs.entry(format) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
@@ -285,9 +258,8 @@ impl Compositor {
         program.record_over(
             &self.ctx,
             encoder,
-            &mut self.effect_scratch,
-            &[&source.create_view(&Default::default()), &coverage.create_view(&Default::default())],
-            &confined.create_view(&Default::default()),
+            &[source, coverage],
+            &confined.default_view,
             &[("mode".to_owned(), mode)],
             [width as f32, height as f32],
         );
@@ -301,18 +273,20 @@ impl Compositor {
     pub(crate) fn record_pass_chain(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
-        mut current: wgpu::Texture,
+        mut current: re_renderer::GpuTexture,
         mut current_linear: bool,
         mut current_premultiplied: bool,
-        mut current_is_scratch: bool,
         passes: &[EffectPass],
         // `others` は効果ごとの「別の時刻の絵」(`passes` と同じ並び)。空なら層の絵 1 枚だけ。
-        others: &[Vec<wgpu::Texture>],
+        others: &[Vec<re_renderer::GpuTexture>],
         frame: Option<effects::vism::ImageFrame>,
         size: [u32; 2],
         padding: u32,
         unpadded: [u32; 2],
-    ) -> Result<(wgpu::Texture, bool, bool, bool), CompositorError> {
+        // The drawing whose picture these passes read (a view: its projection and size). A history
+        // on it is that drawing's own, as re_renderer keys per-view caches by `ViewBuilderId`.
+        screen: Option<[u32; 3]>,
+    ) -> Result<(re_renderer::GpuTexture, bool, bool), CompositorError> {
         let [padded_width, padded_height] = size;
         let [width, height] = unpadded;
         for (index, pass) in passes.iter().enumerate() {
@@ -321,42 +295,31 @@ impl Compositor {
             // 縁で over が成り立たず沈む。素材(非乗算 sRGB)は最初の効果の前で 1 度だけ写す。
             let _ = is_warp;
             if !current_linear || !current_premultiplied {
-                let converted = self.convert_image_encoding(encoder, &current, true, !current_linear, current_premultiplied);
-                if current_is_scratch { self.effect_scratch.release(padded_width,padded_height,current.format(),current); }
-                current = converted;
-                current_is_scratch = true;
+                current = self.convert_image_encoding(encoder, &current, true, !current_linear, current_premultiplied);
             }
             current_linear = true;
             current_premultiplied = true;
             // 2 枚目以降も 1 枚目と同じ空間(乗算済み線形)で渡す。層の絵の写し(非乗算 sRGB)はここで写す。
             // 線形の texture(float)と sRGB 形式は既に乗算済み線形(層の法)。
-            let mut converted_others: Vec<wgpu::Texture> = Vec::new();
-            let mut other_textures: Vec<wgpu::Texture> = Vec::new();
+            let mut other_textures: Vec<re_renderer::GpuTexture> = Vec::new();
             for t in others.get(index).map(|row| row.as_slice()).unwrap_or(&[]) {
-                let linear = t.format().is_srgb() || matches!(t.format(), wgpu::TextureFormat::Rgba16Float | wgpu::TextureFormat::Rgba32Float);
+                let linear = t.texture.format().is_srgb() || matches!(t.texture.format(), wgpu::TextureFormat::Rgba16Float | wgpu::TextureFormat::Rgba32Float);
                 if linear { other_textures.push(t.clone()); continue; }
-                let converted = self.convert_image_encoding(encoder, t, true, true, false);
-                converted_others.push(converted.clone());
-                other_textures.push(converted);
+                other_textures.push(self.convert_image_encoding(encoder, t, true, true, false));
             }
             let program = &self.effect_programs[&pass.plugin_id];
             let format = pass
                 .intermediate_format()
-                .unwrap_or_else(|| current.format());
-            let destination = self.effect_scratch.acquire(
-                &self.ctx.device,
-                padded_width,
-                padded_height,
-                format,
-            );
-            let source_view = (program.image_input_count() > 0)
-                .then(|| current.create_view(&Default::default()));
-            let other_views: Vec<wgpu::TextureView> = other_textures.iter().map(|t| t.create_view(&Default::default())).collect();
-            let sources: Vec<_> = source_view.iter().chain(other_views.iter()).collect();
-            let destination_view = destination.create_view(&Default::default());
+                .unwrap_or_else(|| current.texture.format());
+            let destination = effects::vism::pass_texture(&self.ctx, padded_width, padded_height, format);
+            let source = (program.image_input_count() > 0).then_some(&current);
+            let sources: Vec<_> = source.into_iter().chain(other_textures.iter()).collect();
+            let destination_view = destination.default_view.clone();
             // feedback: 状態の持ち主は host。frame の並びから今フレームの扱いを決める。
             let frame_index = self.frame_index();
-            let feedback = pass.feedback.map(|key| {
+            let feedback = pass.feedback.map(|mut key| {
+                if screen.is_some() { key.screen = screen; }
+                if key.namespace == 0 { self.feedback_seen.push(key); }
                 let state = self.feedback.entry(key).or_default();
                 let step = match (state.frame, frame_index) {
                     (Some(have), Some(now)) if have == now => effects::FeedbackStep::Reuse,
@@ -369,7 +332,7 @@ impl Compositor {
             let state = feedback.map(|(key, step)| (self.feedback.get_mut(&key).expect("entry"), step));
             if is_warp {
                 let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
-                program.record_feedback_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame, state);
+                program.record_feedback_in_frame(&self.ctx, encoder, &sources, &destination_view, &pass.params, frame, state);
             } else {
                 // pass は ISF の作法(render_size = 画素)。論理 px の欄だけ host が密度で画素へ写す。
                 let density = frame.map_or(1.0, |f| f.density().into_iter().fold(1.0f32, f32::max));
@@ -378,7 +341,7 @@ impl Compositor {
                     params.extend(clock_params);
                 }
                 let render_size = [padded_width as f32, padded_height as f32];
-                program.record_feedback_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, effects::vism::ImageFrame { size: render_size, origin: [0.0;2], pixels: [padded_width, padded_height] }, state);
+                program.record_feedback_in_frame(&self.ctx, encoder, &sources, &destination_view, &params, effects::vism::ImageFrame { size: render_size, origin: [0.0;2], pixels: [padded_width, padded_height] }, state);
             }
             if let (Some((key, step)), Some(now)) = (feedback, frame_index) {
                 let state = self.feedback.get_mut(&key).expect("entry");
@@ -387,12 +350,9 @@ impl Compositor {
                 // K フレームごとに写しを焼く(同じフレームの描き直しでは焼かない)。
                 if step != effects::FeedbackStep::Reuse && now.rem_euclid(effects::FEEDBACK_CHECKPOINT_EVERY) == 0 && !state.checkpoints.iter().any(|(f, _)| *f == now) {
                     let copies = state.targets.iter().map(|(name, target)| {
-                        let copy = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
-                            label: Some("motolii-feedback-checkpoint"), size: target.next.size(), mip_level_count: 1, sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2, format: target.next.format(),
-                            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST, view_formats: &[],
-                        });
-                        encoder.copy_texture_to_texture(target.next.as_image_copy(), copy.as_image_copy(), target.next.size());
+                        let next = &target.next.texture;
+                        let copy = effects::vism::pass_texture(&self.ctx, next.width(), next.height(), next.format());
+                        encoder.copy_texture_to_texture(next.as_image_copy(), copy.texture.as_image_copy(), next.size());
                         (name.clone(), copy)
                     }).collect();
                     state.checkpoints.push((now, copies));
@@ -400,28 +360,14 @@ impl Compositor {
                     while state.checkpoints.len() > effects::FEEDBACK_CHECKPOINTS_MAX { state.checkpoints.remove(0); }
                 }
             }
-            for converted in converted_others {
-                self.effect_scratch.release(converted.width(), converted.height(), converted.format(), converted);
-            }
             let destination = if program.image_input_count() == 0 {
-                self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
+                self.confine_to_coverage(encoder, &destination, &current, [padded_width, padded_height], format)?
             } else {
                 destination
             };
-            // The previous output stays checked out until its consuming pass is recorded.
-            // Reuse thereafter is ordered by this command encoder, never within the same pass.
-            if current_is_scratch {
-                self.effect_scratch.release(
-                    padded_width,
-                    padded_height,
-                    current.format(),
-                    current,
-                );
-            }
             current = destination;
-            current_is_scratch = true;
         }
-        Ok((current, current_linear, current_premultiplied, current_is_scratch))
+        Ok((current, current_linear, current_premultiplied))
     }
 
     /// 今のフレーム番号(engine が置いた時計から)。無ければ feedback は毎回初期条件。
@@ -439,11 +385,11 @@ impl Compositor {
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-feedback-restore") });
         for (name, copy) in copies {
             let Some(target) = state.targets.get(name) else { return None };
-            encoder.copy_texture_to_texture(copy.as_image_copy(), target.next.as_image_copy(), copy.size());
+            encoder.copy_texture_to_texture(copy.texture.as_image_copy(), target.next.texture.as_image_copy(), copy.texture.size());
         }
         state.frame = Some(*at);
         let at = *at;
-        self.pending.push(encoder.finish());
+        self.ctx.queue_commands([encoder.finish()]);
         Some(at)
     }
 
@@ -466,45 +412,36 @@ impl Compositor {
     /// 素材の texture は時刻ごとに**同じ 1 枚へ上書き**されるので(動画は path ごとに 1 枚)、
     /// 写さずに持つと、後の復号で中身が入れ替わる。写した物だけが「あの時刻の絵」でいられる。
     pub(crate) fn snapshot_texture(&mut self, source: &GpuTexture2D) -> Option<GpuTexture2D> {
-        let size;
-        let copy;
-        {
-            let src = self.ctx.gpu_resources.textures.get_from_handle(source.handle()).ok()?;
-            if !src.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
-                return None;
-            }
-            size = src.texture.size();
-            copy = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("motolii-other-time"),
-                size,
-                mip_level_count: src.texture.mip_level_count(),
-                sample_count: src.texture.sample_count(),
-                dimension: wgpu::TextureDimension::D2,
-                format: src.texture.format(),
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("motolii-other-time-copy"),
-            });
-            encoder.copy_texture_to_texture(src.texture.as_image_copy(), copy.as_image_copy(), size);
-            // ここで submit しない。復号したコマの転送は frame 共通の encoder に積まれていて、
-            // 流れるのは `before_submit` の中 — 先に打つと、まだ届いていない texture を写す
-            // (冷えていれば零、暖まっていれば前のコマ。同じ時刻の絵が辿り方で変わる)。
-            // pending に積めば `flush_pending` が `before_submit` → この写し、の順で流す。
-            self.pending.push(encoder.finish());
+        let src = self.ctx.gpu_resources.textures.get_from_handle(source.handle()).ok()?;
+        if !src.texture.usage().contains(wgpu::TextureUsages::COPY_SRC) {
+            return None;
         }
-        self.next_effect_key += 1;
-        self.ctx
-            .texture_manager_2d
-            .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &copy)
-            .ok()
+        let size = src.texture.size();
+        let copy = self.ctx.gpu_resources.textures.alloc(&self.ctx.device, &re_renderer::TextureDesc {
+            label: "motolii-other-time".into(),
+            size,
+            mip_level_count: src.texture.mip_level_count(),
+            sample_count: src.texture.sample_count(),
+            dimension: wgpu::TextureDimension::D2,
+            format: src.texture.format(),
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
+        });
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("motolii-other-time-copy"),
+        });
+        encoder.copy_texture_to_texture(src.texture.as_image_copy(), copy.texture.as_image_copy(), size);
+        // ここで submit しない。復号したコマの転送は frame 共通の encoder に積まれていて、
+        // 流れるのは frame の終わり — 先に打つと、まだ届いていない texture を写す
+        // (冷えていれば零、暖まっていれば前のコマ。同じ時刻の絵が辿り方で変わる)。
+        // frame に積めば frame 共通の encoder → この写し、の順で流れる。
+        self.ctx.queue_commands([encoder.finish()]);
+        self.import_premultiplied(&copy).ok()
     }
 
     /// 元の絵を余白ぶん広げた scratch の中央へ写す(周りは透明)。効果の入力と、溢れを分ける coverage が使う。
-    fn padded_copy(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, [width, height]: [u32; 2], padding: u32) -> wgpu::Texture {
-        let padded = self.effect_scratch.acquire(&self.ctx.device, width + 2 * padding, height + 2 * padding, source.format());
-        let padded_view = padded.create_view(&Default::default());
+    fn padded_copy(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, [width, height]: [u32; 2], padding: u32) -> re_renderer::GpuTexture {
+        let padded = effects::vism::pass_texture(&self.ctx, width + 2 * padding, height + 2 * padding, source.format());
+        let padded_view = padded.default_view.clone();
         {
             let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("motolii-compositor-vism-padded-source-clear"),
@@ -522,34 +459,12 @@ impl Compositor {
         }
         encoder.copy_texture_to_texture(
             wgpu::TexelCopyTextureInfo { texture: source, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            wgpu::TexelCopyTextureInfo { texture: &padded, mip_level: 0, origin: wgpu::Origin3d { x: padding, y: padding, z: 0 }, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo { texture: &padded.texture, mip_level: 0, origin: wgpu::Origin3d { x: padding, y: padding, z: 0 }, aspect: wgpu::TextureAspect::All },
             wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
         );
         padded
     }
 
-    pub fn render_with_effects(
-        &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
-        layers: &[LayerWithPasses],
-        background_color: [f32; 4],
-    ) -> Result<Vec<u8>, CompositorError> {
-        let (effective_textures, effective_paddings, effective_spills, checked_out) =
-            self.effective_layer_textures(layers)?;
-
-        let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
-
-        self.window = crate::render::compositor::Window::output(comp);
-        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        let frame = self.finalize_readback(comp, camera, background, background_color)?;
-
-        for (width, height, format, texture) in checked_out {
-            self.effect_scratch.release(width, height, format, texture);
-        }
-
-        Ok(frame)
-    }
 
     pub fn render_to_texture(
         &mut self,
@@ -557,30 +472,61 @@ impl Compositor {
         camera: ResolvedCamera,
         layers: &[LayerWithPasses],
         background_color: [f32; 4],
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
-        let (effective_textures, effective_paddings, effective_spills, checked_out) =
-            self.effective_layer_textures(layers)?;
+    ) -> Result<re_renderer::GpuTexture, CompositorError> {
+        self.bake_picture(comp, camera, layers, background_color, 1.0, None, None)
+    }
 
-        let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings, &effective_spills);
 
-        self.window = crate::render::compositor::Window::output(comp);
-        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        let (texture, view) = self.finalize_texture(comp, camera, background, background_color)?;
-
-        for (width, height, format, scratch_texture) in checked_out {
-            self.effect_scratch
-                .release(width, height, format, scratch_texture);
-        }
-
-        Ok((texture, view))
+    /// A picture of `layers`, lit by the frame's world light when given (a plate baked after the
+    /// frame's one light capture), else by its own capture; into `into` when given.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn bake_picture(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+        background_color: [f32; 4],
+        density: f32,
+        world_light: Option<&WorldLight>,
+        into: Option<&re_renderer::GpuTexture>,
+    ) -> Result<re_renderer::GpuTexture, CompositorError> {
+        let (pictures, paddings, spills) = self.effective_layer_textures(layers)?;
+        let inputs = sequential_inputs(layers, &pictures, &paddings, &spills, camera, camera);
+        let full = crate::render::compositor::Window::output(comp);
+        let window = if density >= 1.0 { full } else {
+            crate::render::compositor::Window {
+                width: ((comp.width as f32 * density).ceil() as u32).max(1),
+                height: ((comp.height as f32 * density).ceil() as u32).max(1),
+                ..full
+            }
+        };
+        let environment = self.world_environment.clone();
+        let motion = self.motion.clone();
+        let (light, meshes) = match world_light {
+            Some(world) => (world.light.clone(), self.shared_mesh_scene(comp, &inputs)?),
+            None => self.capture_world_light(comp, &inputs, environment.as_deref())?,
+        };
+        // The picture's own Views: its layers are the world they see.
+        let seen = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &[], meshes: meshes.as_ref() };
+        let views = self.draw_layer_views(comp, &inputs, &seen)?;
+        let world = crate::render::compositor::ViewWorld { environment: environment.as_deref(), motion: motion.as_ref(), light: light.as_ref(), views: &views, meshes: meshes.as_ref() };
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-picture") });
+        let texture = self.record_picture(comp, window, camera, &inputs, background_color, &world, into, &mut encoder)?;
+        self.ctx.queue_commands([encoder.finish()]);
+        Ok(texture)
     }
 }
 
+/// One drawing's instances of the prepared layers, as a re_renderer visualizer builds a view's
+/// draw data from shared resources: the placement cameras come from the drawing (2D by `document`,
+/// 2.5D and 3D by `world`), never from the prepared layers.
 pub(crate) fn sequential_inputs<'a>(
     layers: &'a [LayerWithPasses],
     effective_textures: &'a [LayerContent],
     effective_paddings: &[u32],
     effective_spills: &'a [LayerSpill],
+    document: ResolvedCamera,
+    world: ResolvedCamera,
 ) -> Vec<SequentialInput<'a>> {
     layers
         .iter()
@@ -615,12 +561,13 @@ pub(crate) fn sequential_inputs<'a>(
                     },
                     LayerContent::Model(model) => SequentialContent::Model(model),
                     LayerContent::Environment(e) => SequentialContent::Environment(e),
+                    LayerContent::Plate(plate) => SequentialContent::Plate(plate),
                 },
                 local_min: glam::Vec2::new(-pad[0], -pad[1]),
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad[0], layer.size[1] + 2.0 * pad[1]),
                 placement: layer.placement,
                 projection: layer.projection,
-                projection_camera: layer.projection_camera,
+                projection_camera: if layer.projection == crate::doc::store::LayerProjection::TwoD { document } else { world },
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,
                 blend_mode: layer.blend_mode,
@@ -628,7 +575,7 @@ pub(crate) fn sequential_inputs<'a>(
                 displace: layer.displace,
                 clip: layer.clip,
                 shadow: layer.shadow,
-                outline: layer.outline,
+                emission: layer.emission,
                 // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
                 // 焼く先の絵が無い層(網・点群・環境)と、下の合成を読む効果列は、画面へ持って行く。
                 screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) { lwp.passes.as_slice() } else { &[] },
@@ -637,7 +584,7 @@ pub(crate) fn sequential_inputs<'a>(
             // 溢れ: 同じ置き場に、coverage 外の絵だけを宣言された混ぜ方で重ねる(層の Blend と独立)。
             let spilled = spill.as_ref().and_then(|(content, mode)| {
                 let texture = match content { LayerContent::Texture(t) => SequentialContent::Rect(t), LayerContent::LinearTexture(t) => SequentialContent::LinearRect(t), _ => return None };
-                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), shadow: 0.0, outline: 0, screen_passes: &[], screen_sources: &[], ..body })
+                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), shadow: 0.0, emission: 0.0, screen_passes: &[], screen_sources: &[], ..body })
             });
             std::iter::once(body).chain(spilled)
         })

@@ -444,7 +444,7 @@ impl Document {
         };
         let batch = SerializedComponentBatch {
             descriptor,
-            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+            array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                 .map_err(|e| StoreError::Chunk(e.to_string()))?,
         };
         self.ingest(path, vec![batch], at)
@@ -473,7 +473,7 @@ impl Document {
         let json = serde_json::to_string(&source)?;
         let batch = SerializedComponentBatch {
             descriptor: descriptor_track(property),
-            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+            array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                 .map_err(|e| StoreError::Chunk(e.to_string()))?,
         };
         self.ingest(path, vec![batch], at)

@@ -25,7 +25,6 @@ impl Compositor {
         projection: crate::doc::store::LayerProjection,
         displace: PointDisplace,
         clip: Option<super::ClipSpec>,
-        outline: re_renderer::OutlineMaskPreference,
     ) -> Result<re_renderer::renderer::PointCloudDrawData, CompositorError> {
         let world_from_obj = projected_spatial_placement(comp, camera, projection, placement, bounds);
         let centre = world_from_obj.transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5);
@@ -54,7 +53,6 @@ impl Compositor {
             .batch("motolii-point-cloud")
             .world_from_obj(world_from_obj)
             .clip(clip)
-            .outline_mask_ids(outline)
             .add_points_slow(&points, &radii, &colors, &picking_ids)
             // 嘘(2026-09-15): 2.5D の球は円で塗る。本物の視線で球を切ると画面の端で楕円になり、正面から見た形の法と食い違う。
             .flags(if sprites { PointCloudBatchFlags::FLAG_DRAW_AS_CIRCLES }
@@ -194,9 +192,9 @@ pub(crate) fn displaced_points(
             let frame_position = frame * p;
             let q = (frame_position + displace.offset) / size + displace.evolution * glam::vec3(0.53, 0.71, 0.89);
             let field = glam::vec3(
-                re_renderer::noise::fbm3(q, octaves),
-                re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), octaves),
-                re_renderer::noise::fbm3(q + glam::vec3(0.0, 47.3, 0.0), octaves),
+                crate::render::compositor::noise::fbm3(q, octaves),
+                crate::render::compositor::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), octaves),
+                crate::render::compositor::noise::fbm3(q + glam::vec3(0.0, 47.3, 0.0), octaves),
             );
             p + obj_from_frame * (field * displace.mask * displace.amount)
         })

@@ -24,9 +24,10 @@ pub(super) fn shape_location(slot: &ColorSlot) -> Option<(LayerId, &[usize])> {
         _ => None,
     }
 }
-pub(super) fn gradient_axis(source: &PathSource) -> (Point, Point) {
-    let b = crate::render::picture::shape_props::source_bounds(source);
-    (Point { x: b[0], y: (b[1] + b[3]) * 0.5 }, Point { x: b[2], y: (b[1] + b[3]) * 0.5 })
+/// A new gradient spans its object left to right through the middle, in object-bounding-box units
+/// (the SVG default), so it follows the object when it is resized.
+pub(super) fn gradient_axis(_source: &PathSource) -> (Point, Point) {
+    (Point { x: 0.0, y: 0.5 }, Point { x: 1.0, y: 0.5 })
 }
 fn endpoint_color(gradient: &Gradient, end: bool) -> Option<Rgb> {
     let choose = if end {
@@ -104,7 +105,7 @@ pub(crate) fn set_shape_gradient(
         (true, Brush::Solid(color)) => {
             let (start, end) = gradient_axis(&shape.source);
             let color = shown.unwrap_or(color);
-            Brush::Gradient(Gradient { stop_ids: Vec::new(), next_stop_id: 0,
+            Brush::Gradient(Gradient { units: crate::doc::vector::GradientUnits::ObjectBoundingBox, stop_ids: Vec::new(), next_stop_id: 0,
                 kind: GradientType::Linear,
                 start,
                 end,

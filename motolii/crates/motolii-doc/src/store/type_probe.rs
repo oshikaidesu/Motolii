@@ -9,7 +9,7 @@ use crate::doc::store::components::{LayerPresent, TrackJson};
 #[test]
 fn one_component_may_change_type_across_edits() {
     use re_log_types::{EntityPath, TimePoint, Timeline};
-    use re_types_core::{Component as _, ComponentDescriptor, Loggable, SerializedComponentBatch};
+    use re_types_core::{Component as _, ComponentDescriptor, SerializedComponentBatch, ToArrow};
 
     let mut db = re_entity_db::EntityDb::new(re_log_types::StoreId::random(
         re_log_types::StoreKind::Recording,
@@ -32,11 +32,11 @@ fn one_component_may_change_type_across_edits() {
 
     write(1, SerializedComponentBatch {
         descriptor: as_text,
-        array: <TrackJson as Loggable>::to_arrow([TrackJson("{\"k\":1}".to_owned())]).unwrap(),
+        array: <TrackJson as ToArrow>::to_arrow([TrackJson("{\"k\":1}".to_owned())]).unwrap(),
     });
     write(2, SerializedComponentBatch {
         descriptor: as_bool,
-        array: <LayerPresent as Loggable>::to_arrow([LayerPresent(true)]).unwrap(),
+        array: <LayerPresent as ToArrow>::to_arrow([LayerPresent(true)]).unwrap(),
     });
 
     let at = |t: i64| re_chunk_store::LatestAtQuery::new(*timeline.name(), t);

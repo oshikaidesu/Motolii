@@ -7,7 +7,6 @@ pub mod strokes;
 mod analysis;
 #[cfg(test)]
 mod analysis_contracts;
-mod motion;
 mod overlay;
 #[cfg(test)]
 mod motion_contracts;
@@ -16,14 +15,16 @@ mod light_reach_contracts;
 mod clip;
 mod render;
 mod texture;
-mod material;
+pub(crate) mod material;
+pub mod ledger;
 pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
-mod translate;
+pub(crate) mod translate;
 mod blocks;
-mod physics;
+pub(crate) mod physics;
 mod frozen;
 mod frame_graph;
+pub use frame_graph::tick::{TickStats, ViewRequest};
 mod frame_graph_scene;
 
 use crate::doc::core::ResolvedCamera;
@@ -35,7 +36,7 @@ use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
 use crate::render::media::PointCloudData;
 
-use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey, TextTexture};
+use crate::render::engine::texture::{ShapeCacheKey, ShapeTexture};
 
 pub use crate::render::compositor::{Window, bind_catalog_runtime, catalog_errors, catalog_generation, catalog_reads_disk, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
@@ -131,52 +132,54 @@ pub struct Engine {
     pub(crate) compositor: Compositor,
     materials: HashMap<LayerId, material::MaterialCache>,
     probes: HashMap<String, MediaInfo>,
-    text_textures: HashMap<TextCacheKey, TextTexture>,
-    /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
-    text_order: std::collections::VecDeque<TextCacheKey>,
-    shape_textures: HashMap<ShapeCacheKey, TextTexture>,
+    shape_textures: HashMap<ShapeCacheKey, ShapeTexture>,
     failed_probes: HashMap<String, String>,
     layer_failures: Vec<String>,
-    /// feedback の辿り直しの最中(入れ子で辿り直さない・素材の棚を掃除しない)。
-    feedback_replaying: bool,
-    /// 抜いた後の形(層 → 素材座標の輪郭)。解析の段で読み、物理の当たりに使う。
-    keyed_outlines: HashMap<LayerId, std::sync::Arc<Vec<[f32; 2]>>>,
-    /// 形の覚え: 書類の版とコマが同じなら読み戻さない。止まった絵は 1 回だけ。
-    keyed_cache: HashMap<LayerId, (u64, i64, std::sync::Arc<Vec<[f32; 2]>>)>,
-    /// 今描いている窓(画面の道の feedback は窓ごとに状態を持つ)。読み戻しの道では None = 出力寸法。
-    feedback_window: Option<crate::render::compositor::Window>,
     /// 動画の復号の流れの名前空間(0 = 本番)。合成を別の時刻で描く間だけ別の値にする。
     video_stream_namespace: u64,
     /// feedback の鍵の名前空間(0 = 本番)。別の時刻の合成を描く間だけ時刻のずれの値。
     feedback_namespace: u64,
-    /// この frame に別の時刻の合成(SOURCE)があった: 辿り直しはフレームを丸ごと(t′ の列も進める)。
-    feedback_saw_composites: bool,
     /// Freeze の cache(層の投影の前の絵、書類の隣)。
     pub(crate) frozen: frozen::FrozenStore,
     /// 今この層を焼いている(凍った絵で差し替えず、本物を組む)。
     freezing: Option<LayerId>,
-    material_picture: Option<LayerId>,
-    /// この frame の組み立てで刻んだ feedback の鍵(板に焼く途中で消費された物も含む)。
-    feedback_keys_seen: Vec<crate::render::compositor::FeedbackKey>,
     /// 箱のブロックの GPU の道と、このコマに集めた箱。
     blocks: blocks::BlockState,
-    /// このコマで誰かの clip の下地になっている層(形でも絵に描く)。
-    clip_bases: std::collections::HashSet<LayerId>,
-    /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
-    outline_layers: Vec<LayerId>,
-    /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
-    outline_order: Vec<LayerId>,
+    /// The selection ids the last outlined view drew, in mask order (the tick keeps the view's answer).
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
+    /// Who worked in the current frame, and why.
+    ledger: ledger::FrameLedger,
+    /// Each contribution's last preparation, reused while only its placement changes.
+    contributions: frame_graph_scene::ContributionCache,
+    /// Contributions lowered and prepared on the production path (reused ones are not counted).
+    prepared_contributions: u64,
+    /// Counters for the invariants: frame-level light captures and plate bakes.
+    world_light_captures: u64,
+    plate_bakes: u64,
+    /// The plate members in the last frame-level capture's scene, and what the preparation did in
+    /// order: read by the invariant tests.
+    light_scene_ids: Vec<LayerId>,
+    preparation_events: Vec<frame_graph_scene::PreparationEvent>,
+    /// The document frame the last tick's views read.
+    tick_frame: Option<std::sync::Arc<frame_graph::tick::PreparedFrame>>,
+    tick_stats: frame_graph::tick::TickStats,
+    /// The pictures analyses asked the GPU for, by node and time (they arrive in a later frame).
+    analysis_pictures: HashMap<(crate::frame_graph::NodeKey, RationalTime), analysis::AnalysisPicture>,
+    /// Readbacks the last tick's views asked for (an offline route reads its output).
+    view_readbacks: Vec<re_renderer::GpuReadbackIdentifier>,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
+    /// What each solid's shape was built from (outline, size, depth): a new picture on the same shape
+    /// keeps the shape's silhouette instead of measuring the mesh again.
+    extrusion_shapes: HashMap<LayerId, (u64, Option<std::sync::Arc<Vec<crate::doc::store::ShapeNode>>>)>,
     failed_meshes: HashMap<String, String>,
     environments: HashMap<String, std::sync::Arc<crate::render::compositor::GpuEnvironmentData>>,
     containers: HashMap<String, ContainerInfo>,
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
-    /// このコマの粒子の層の点(build_layers の頭で書類から解く)。
+    /// このコマの粒子の層の点。
     particle_frames: HashMap<LayerId, ParticleFrame>,
     /// Track Overlay のこのコマの塊(解析の後、描く時に読む)。
     overlay_frames: HashMap<LayerId, analysis::OverlayFrame>,
@@ -191,8 +194,6 @@ pub struct Engine {
     frame_cache_budget: u64,
     frame_cache_tick: u64,
     frame_cache_hits: u64,
-    /// 揃ったコマの texture。中身は frame の提出で GPU に届くので、写すのは次の frame の頭。
-    pending_frame_copies: Vec<(String, i64, crate::render::compositor::GpuTexture2D)>,
     /// 再生中は間に合ったコマで描く。止めた時と書き出しは頼んだコマを待つ。
     realtime: bool,
     /// test では GPU を 1 つずつ使う(cargo test の並走で `a_field_moves_*` が落ちた)。持っている間は他の Engine を待たせる。
@@ -239,16 +240,24 @@ impl Engine {
             compositor: Compositor::headless()?,
             materials: HashMap::new(),
             probes: HashMap::new(),
-            text_textures: HashMap::new(),
-            text_order: std::collections::VecDeque::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
-            outline_layers: Vec::new(),
-            outline_order: Vec::new(),
             drawn_layers: 0,
+            ledger: Default::default(),
+            contributions: Default::default(),
+            prepared_contributions: 0,
+            world_light_captures: 0,
+            plate_bakes: 0,
+            light_scene_ids: Vec::new(),
+            preparation_events: Vec::new(),
+            tick_frame: None,
+            tick_stats: Default::default(),
+            analysis_pictures: HashMap::new(),
+            view_readbacks: Vec::new(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
+            extrusion_shapes: HashMap::new(),
             failed_meshes: HashMap::new(),
             environments: HashMap::new(),
             containers: HashMap::new(),
@@ -261,25 +270,16 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
-            feedback_replaying: false,
-            keyed_outlines: HashMap::new(),
-            keyed_cache: HashMap::new(),
-            feedback_window: None,
             video_stream_namespace: 0,
             feedback_namespace: 0,
-            feedback_saw_composites: false,
             frozen: Default::default(),
             freezing: None,
-            material_picture: None,
-            feedback_keys_seen: Vec::new(),
             blocks: Default::default(),
-            clip_bases: Default::default(),
             frame_cache: HashMap::new(),
             frame_cache_bytes: 0,
             frame_cache_budget: texture::FRAME_CACHE_BUDGET,
             frame_cache_tick: 0,
             frame_cache_hits: 0,
-            pending_frame_copies: Vec::new(),
         })
     }
 
@@ -298,77 +298,6 @@ impl Engine {
 
     pub fn gpu_device(&self) -> &wgpu::Device {
         self.compositor.device()
-    }
-
-    /// Stage で選ばれている層の mask の番号(1..=255)。選ばれていなければ 0。
-    fn outline_id(&self, id: LayerId) -> u8 {
-        self.outline_layers.iter().position(|l| *l == id).map_or(0, |i| i as u8 + 1)
-    }
-
-    /// 直前の Stage 描画で、選ばれた層が実際に描かれた画面上の範囲(comp 画素、右下は外側)。
-    /// GPU から届く前(初回)や何も描かれなかった層は入らない。
-    pub fn take_selection_bounds(&mut self) -> Option<Vec<(LayerId, [f32; 4])>> {
-        let order = self.outline_order.clone();
-        self.compositor.selection_screen_bounds().map(|found| {
-            found.into_iter().filter_map(|(id, b)| order.get(id as usize - 1).map(|l| (*l, b))).collect()
-        })
-    }
-
-    pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
-        #[cfg(test)]
-        let _gpu = GpuLease::take();
-        Ok(Self {
-            frame_graph: None,
-            resolve_tally: Vec::new(),
-            resolve_worst: Vec::new(),
-            layout_flow: Default::default(),
-            #[cfg(test)]
-            _gpu,
-            compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
-            materials: HashMap::new(),
-            probes: HashMap::new(),
-            text_textures: HashMap::new(),
-            text_order: std::collections::VecDeque::new(),
-            shape_textures: HashMap::new(),
-            failed_probes: HashMap::new(),
-            layer_failures: Vec::new(),
-            outline_layers: Vec::new(),
-            outline_order: Vec::new(),
-            drawn_layers: 0,
-            models: HashMap::new(),
-            extrusions: HashMap::new(),
-            failed_meshes: HashMap::new(),
-            environments: HashMap::new(),
-            containers: HashMap::new(),
-            failed_containers: HashMap::new(),
-            point_clouds: HashMap::new(),
-            particle_frames: HashMap::new(),
-            overlay_frames: HashMap::new(),
-            failed_point_clouds: HashMap::new(),
-            pixels: still_pixels(),
-            videos: HashMap::new(),
-            realtime: false,
-            renders_since_video_purge: 0,
-            feedback_replaying: false,
-            keyed_outlines: HashMap::new(),
-            keyed_cache: HashMap::new(),
-            feedback_window: None,
-            video_stream_namespace: 0,
-            feedback_namespace: 0,
-            feedback_saw_composites: false,
-            frozen: Default::default(),
-            freezing: None,
-            material_picture: None,
-            feedback_keys_seen: Vec::new(),
-            blocks: Default::default(),
-            clip_bases: Default::default(),
-            frame_cache: HashMap::new(),
-            frame_cache_bytes: 0,
-            frame_cache_budget: texture::FRAME_CACHE_BUDGET,
-            frame_cache_tick: 0,
-            frame_cache_hits: 0,
-            pending_frame_copies: Vec::new(),
-        })
     }
 
     pub fn set_realtime(&mut self, realtime: bool) {
@@ -403,25 +332,6 @@ impl Engine {
         self.compositor.measurement
     }
 
-    /// 反射の撮影点を送り手の箱に固定し、受け手を撮影から外す(比較用の切替、Document は変えない)。
-    pub fn set_reflection_scene_probe(&mut self, enabled: bool) {
-        self.compositor.reflection_scene_probe = enabled;
-        self.clear_reflection_cache();
-    }
-
-    /// Diagnostic switch; never changes the Document or reflection quality.
-    pub fn set_reflection_cache_enabled(&mut self, enabled: bool) {
-        self.compositor.reflection_cache_enabled = enabled;
-        self.clear_reflection_cache();
-    }
-
-    pub fn clear_reflection_cache(&mut self) {
-        if self.compositor.reflection_entry.take().is_some() {
-            self.compositor.surface_work.cache_evictions += 1;
-        }
-        self.compositor.surface_work.cache_retained_texture_bytes = 0;
-    }
-
     pub fn surface_work(&self) -> crate::render::compositor::SurfaceWork {
         self.compositor.surface_work
     }
@@ -436,6 +346,11 @@ impl Engine {
 
     pub fn layer_failures(&self) -> &[String] {
         &self.layer_failures
+    }
+
+    /// The current frame's claims: every piece of work that ran, with its owner and reason.
+    pub fn frame_claims(&self) -> &[ledger::Claim] {
+        self.ledger.claims()
     }
 
     pub fn drawn_layers(&self) -> usize {
@@ -466,10 +381,6 @@ impl Engine {
         include_background: bool,
     ) -> Result<Vec<u8>, EngineError> {
         self.render_with_camera_override(view, t, include_background, None)
-    }
-
-    pub fn cached_text_texture_count(&self) -> usize {
-        self.text_textures.len()
     }
 
     pub fn cached_shape_texture_count(&self) -> usize {
@@ -522,15 +433,9 @@ mod environment_tests;
 mod presentable_matches_export;
 
 #[cfg(test)]
-mod reflection_tests;
+mod surface_tests;
 #[cfg(test)]
 mod antialiasing_tests;
-
-#[cfg(test)]
-mod response_tests;
-
-#[cfg(test)]
-mod visibility_tests;
 
 /// 粒子の層の 1 コマ分の点(層の局所 px、出す元が 0)。
 #[derive(Clone)]
@@ -551,7 +456,7 @@ impl ParticleFrame {
             let mut at = glam::Vec3::from(p.position);
             if turbulence.amount != 0.0 {
                 let q = at / turbulence.size + glam::vec3(turbulence.seed * 1.31, turbulence.seed * 0.77, p.age * 0.6);
-                at += glam::vec3(re_renderer::noise::fbm3(q, 3), re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), 3), 0.0) * turbulence.amount * p.age.min(1.0);
+                at += glam::vec3(crate::render::compositor::noise::fbm3(q, 3), crate::render::compositor::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), 3), 0.0) * turbulence.amount * p.age.min(1.0);
             }
             max = [max[0].max(at.x), max[1].max(at.y)];
             at.into()

@@ -30,6 +30,53 @@ const colorOf = (value) => {
   }
   throw new Error(`A color is "#rrggbb", "#rrggbbaa" or [r, g, b, a] in 0..1, got ${JSON.stringify(value)}`);
 };
+/** A CSS gradient function (linear-, radial-, conic-gradient) as the window's gradient edit, or
+ * null for anything else. Angles and stop positions follow CSS: 0deg points up and turns clockwise,
+ * the default is "to bottom", and stops without a position are spread evenly between their
+ * neighbours. */
+const cssGradient = (text) => {
+  const m = /^\s*(linear|radial|conic)-gradient\((.*)\)\s*$/i.exec(String(text));
+  if (!m) return null;
+  const args = m[2].split(",").map((a) => a.trim()).filter(Boolean);
+  const kind = { linear: "linear", radial: "radial", conic: "angular" }[m[1].toLowerCase()];
+  const sides = { "to top": 0, "to right": 90, "to bottom": 180, "to left": 270, "to top right": 45, "to right top": 45, "to bottom right": 135, "to right bottom": 135, "to bottom left": 225, "to left bottom": 225, "to top left": 315, "to left top": 315 };
+  let css = kind === "angular" ? 0 : 180;
+  const first = args[0].toLowerCase();
+  const degrees = /^(?:from\s+)?(-?[\d.]+)(deg|turn|rad)$/.exec(first);
+  if (degrees) {
+    css = Number(degrees[1]) * { deg: 1, turn: 360, rad: 180 / Math.PI }[degrees[2]];
+    args.shift();
+  } else if (first in sides) {
+    css = sides[first];
+    args.shift();
+  } else if (!/^#|^\[/.test(first)) {
+    args.shift(); // a radial shape/size or position this gradient does not use
+  }
+  const stops = args.map((a) => {
+    const [color, at] = a.split(/\s+/);
+    return { rgba: colorOf(color), offset: at === undefined ? undefined : Number(at.replace("%", "")) / 100 };
+  });
+  if (stops.length < 2) throw new Error(`A gradient needs two colors, got ${JSON.stringify(text)}`);
+  if (stops[0].offset === undefined) stops[0].offset = 0;
+  if (stops[stops.length - 1].offset === undefined) stops[stops.length - 1].offset = 1;
+  for (let i = 1; i < stops.length - 1; i++) {
+    if (stops[i].offset !== undefined) continue;
+    let j = i;
+    while (stops[j].offset === undefined) j++;
+    const from = stops[i - 1].offset;
+    stops[i].offset = from + (stops[j].offset - from) / (j - i + 1);
+  }
+  const cleaned = stops.map((s) => ({ offset: Math.min(1, Math.max(0, s.offset)), rgba: s.rgba }));
+  // The window measures a gradient's angle from +x with y down; CSS from up, clockwise.
+  const angle = css - 90;
+  if (kind === "linear") return { kind, angle, stops: cleaned };
+  // Radial and conic gradients centre on the box. A radial one reaches the box's corners (CSS's
+  // farthest-corner; Motolii's radial gradient is a circle); a conic one starts at its "from" angle.
+  const turn = (angle * Math.PI) / 180;
+  const reach = kind === "radial" ? 0.5 * Math.SQRT2 : 0.5;
+  const end = kind === "radial" ? [0.5 + reach, 0.5] : [0.5 + reach * Math.cos(turn), 0.5 + reach * Math.sin(turn)];
+  return { kind, start: [0.5, 0.5], end, stops: cleaned };
+};
 /** What the window stores for a written value: a choice by its name, a layer by the layer, a color by hex. */
 const valueFor = (row, value) => {
   if (row.kind === "color" || row.subtype === "color") return colorOf(value);
@@ -88,6 +135,7 @@ class Effect {
   }
   set(name, value) { this.layer.write(this.property(name), value, undefined); return this; }
   key(name, seconds, value, ease) { this.layer.write(this.property(name), value, { seconds, ease }); return this; }
+  keys(name, list) { for (const [seconds, value, ease] of list) this.key(name, seconds, value, ease); return this; }
   names() { return this.rows().map((p) => p.label); }
   enabled(on) { op("enableEffect", { layer: this.layer.id, id: this.id, enabled: on }); return this; }
 }
@@ -129,8 +177,16 @@ class Layer {
   name(text) { op("setAttrs", { layers: [this.id], patch: { name: text } }); return this; }
   parent(layer) { op("setAttrs", { layers: [this.id], patch: { parent: layer ? layer.id : null } }); return this; }
   blend(mode) { op("setAttrs", { layers: [this.id], patch: { blendMode: mode } }); return this; }
+  /** Show this layer through another layer's coverage (a track matte): mode "Alpha", "InvertedAlpha",
+   * "Luma" or "InvertedLuma"; the source is not drawn itself. `matte(null)` removes it. */
+  matte(source, mode = "Alpha") {
+    op("setAttrs", { layers: [this.id], patch: { matte: source ? { layer: source.id, mode } : null } });
+    return this;
+  }
   /** Show this layer only where the layer just below it is (a clipping mask). */
   clip(on = true) { op("setAttrs", { layers: [this.id], patch: { clipToBelow: on } }); return this; }
+  /** The picture lights and is reflected by the scene (After Effects' Environment Layer). */
+  environment(on = true) { op("setAttrs", { layers: [this.id], patch: { environment: on } }); return this; }
   projection(kind) { op("setAttrs", { layers: [this.id], patch: { projection: kind } }); return this; }
   /** When the layer is on screen, in seconds. */
   time(start, duration) {
@@ -139,8 +195,16 @@ class Layer {
     return this;
   }
   text(content) { op("seek", { frame: 0 }); op("setText", { layer: this.id, content: String(content) }); return this; }
-  /** The fill of a shape or the color of a text: "#rrggbb". */
-  fill(color) { op("select", { id: this.id }); op("applyPalette", { rgba: colorOf(color) }); return this; }
+  /** The fill of a shape or the color of a text: "#rrggbb", or a CSS gradient on a shape
+   * ("linear-gradient(90deg, #ff66aa, #ffaa33)"), spanning the shape's box. */
+  fill(paint) {
+    const gradient = cssGradient(paint);
+    if (gradient) {
+      op("setGradient", { slot: { ShapeFill: { layer: this.id, path: [0] } }, ...gradient });
+      return this;
+    }
+    op("select", { id: this.id }); op("applyPalette", { rgba: colorOf(paint) }); return this;
+  }
   font(family) { op("setFont", { layer: this.id, family }); return this; }
   effect(name, values = {}) {
     const known = JSON.parse(__effects());
@@ -149,7 +213,10 @@ class Layer {
     const before = new Set(this.json().effects.map((e) => e.id));
     op("select", { id: this.id });
     op("applyEffect", { pluginId: found.pluginId });
-    const added = this.json().effects.find((e) => !before.has(e.id));
+    const effects = this.json().effects;
+    const added = effects.find((e) => !before.has(e.id));
+    // Written order is the order: an effect written after a Repeater reads the copies as one picture.
+    if (effects[effects.length - 1].id !== added.id) op("moveEffect", { layer: this.id, id: added.id, to: effects.length - 1 });
     const effect = new Effect(this, added.id);
     for (const [param, value] of Object.entries(values)) effect.set(param, value);
     return effect;
@@ -165,8 +232,9 @@ const create = (kind, extra = {}) => (options = {}) => {
   return layer;
 };
 
-/** A picture, video or 3D file placed as a layer. The path is absolute. */
-globalThis.media = (path, options = {}) => {
+/** A picture, video or 3D file placed as a layer. A relative path is read from the script's folder. */
+globalThis.media = (given, options = {}) => {
+  const path = given.startsWith("/") || !__scriptDir ? given : `${__scriptDir}/${given}`;
   op("import", { paths: [path] });
   const name = path.split("/").pop();
   const asset = JSON.parse(__assets()).reverse().find((a) => a.path === path || (a.path ?? "").endsWith(`/${name}`));
@@ -179,7 +247,11 @@ globalThis.media = (path, options = {}) => {
 };
 
 /** The composition: { width, height, fps, seconds, background }. */
-globalThis.comp = ({ width, height, fps, seconds, background } = {}) => {
+/**
+ * The composition. `loop` repeats playback, only when given: `true` for the whole composition or
+ * `[start, end]` in seconds. Without it the playhead runs on until stopped.
+ */
+globalThis.comp = ({ width, height, fps, seconds, background, loop } = {}) => {
   const c = compInfo();
   op("composition", {
     width: width ?? c.width,
@@ -189,6 +261,11 @@ globalThis.comp = ({ width, height, fps, seconds, background } = {}) => {
     durationFrames: Math.round((seconds ?? c.seconds) * (fps ?? c.fps)),
     ...(background === undefined ? {} : { background: colorOf(background) }),
   });
+  if (loop !== undefined && loop !== false) {
+    const range = loop === true ? [0, compInfo().seconds] : loop;
+    if (!Array.isArray(range) || range.length !== 2) throw new Error("loop is true or [start, end] in seconds");
+    op("setLoop", { start: range[0], end: range[1] });
+  }
   return compInfo();
 };
 globalThis.text = (content, options = {}) => create("text")(options).text(content);

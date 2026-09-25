@@ -16,6 +16,14 @@ use crate::picture::resolved::ResolvedEffect;
 /// 最後の 1 個は箱のブロックの motion の番号(fork が頂点の段で読む)なので、hook の欄は `HOOK_SLOTS` まで。
 pub(crate) const PARAM_SLOTS: usize = 24;
 pub(crate) const HOOK_SLOTS: usize = PARAM_SLOTS - 1;
+/// The first of the slots the host fills with a solid's frame (`in.params[3..6]`: centre and radius,
+/// rotation, kind / half depth / seed) when the Vism's own inputs leave them free (`material.wgsl`
+/// `surface_extras`).
+pub(crate) const SOLID_FRAME_SLOT: usize = 12;
+/// The solid's kind (1 = extruded slab, 2 = any other solid); `in.params[5].x`.
+pub(crate) const SOLID_SLOT: usize = 20;
+/// A copy's seed (its place in the frame's layer list); `in.params[5].z`.
+pub(crate) const SEED_SLOT: usize = 22;
 
 /// 場が板を動かす時の格子の細かさ(一辺の升の数)。板は四角 1 枚では 4 隅しか動かせないので、
 /// mesh の頂点と同じ密さで動けるよう割る。場を持たない層は割らない(既定の 1 = 三角形 2 枚)。
@@ -25,20 +33,108 @@ pub(crate) const FIELD_GRID: u32 = 128;
 #[derive(Clone, Default)]
 pub struct SurfaceShading {
     pub program: Option<Arc<SurfaceProgram>>,
+    /// The same program shaded once per pixel: a level of detail for flat faces (an extruded solid's
+    /// caps) and cut stones smaller on screen than a hero. MSAA still resolves their silhouettes and
+    /// facet edges.
+    pub program_small: Option<Arc<SurfaceProgram>>,
     pub params: [f32; PARAM_SLOTS],
     pub reads_backdrop: bool,
     /// backdrop の mip を何段まで読むかを決める粗さ(manifest の `BACKDROP_BLUR`、無ければ 1 = 全段)。
     pub backdrop_roughness: f32,
     /// 場が無くても板を刻む升の数(紐の線: 頂点が曲線に沿って動く)。0 / 1 = 刻まない。
     pub grid_hint: u32,
+    /// A field effect moves the surface (its vertices, a picture's samples).
+    pub field_effect: bool,
+    /// The Views of the world the surface's Vism asked for (`VIEWS`), and whose request they are.
+    pub views: Option<Arc<ViewNeeds>>,
+}
+
+/// A layer's request for Views of the world: the host draws them once per prepared frame for the
+/// layer (all its copies share them) and binds them to the layer's draws.
+#[derive(Debug, PartialEq)]
+pub struct ViewNeeds {
+    /// The requesting layer (`LayerId`), whose copies are left out of what the Views see.
+    pub owner: u64,
+    pub views: Vec<super::isf::IsfView>,
+    pub size: u32,
+    /// The roughness bounding how far the Vism reads the Views' mips (manifest `VIEW_BLUR`);
+    /// none declared = every level.
+    pub roughness: Option<f32>,
 }
 
 impl SurfaceShading {
     /// 板を割る升の数。場を持つ効果が乗っている時だけ割る。
     pub fn field_grid(&self) -> u32 {
-        match &self.program {
-            Some(p) if p.desc().field.is_some() => FIELD_GRID,
-            _ => self.grid_hint.max(1),
+        if self.field_effect { FIELD_GRID } else { self.grid_hint.max(1) }
+    }
+}
+
+/// The noise fields read, the meaning of a Block's motion entry, and Motolii's standard material
+/// (environment light, the sun's cookie, transmission of the backdrop, the requested Views).
+const NOISE: &str = include_str!("program/noise.wgsl");
+const MOTION: &str = include_str!("program/motion.wgsl");
+/// Every surface takes its Block's motion (the last param is its entry).
+const MOTION_HOOKS: &str = "fn program_motion(slot: f32, world_position: vec3f) -> vec3f { return motion_offset(slot, world_position); }\nfn program_tint(slot: f32) -> vec4f { return motion_tint(slot); }";
+/// A mesh without a surface effect: a rough dielectric.
+const STANDARD_MESH: &str = "fn program_surface(in: SurfaceIn) -> vec3f { return shade_surface(in.albedo, in.normal, in.view_dir, in.world_position, in.thickness, vec4f(1.0, 0.0, 0.0, 1.5), 0.0); }";
+/// A picture without effects: lit by the sun's share, and an opaque blocker in the light cookie.
+const STANDARD_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if sun_color().w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
+/// A picture a field moves: its picture as it is.
+const MOVED_PICTURE: &str = "fn program_surface(in: SurfaceIn) -> vec3f { return in.albedo; }";
+/// An unlit layer (`SurfaceRecipe::unlit`): the sun's shading only.
+const UNLIT: &str = "fn program_surface(in: SurfaceIn) -> vec3f { if sun_color().w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }";
+
+/// Which field/surface programs a material uses and with what values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceRecipe {
+    pub field: Option<String>,
+    pub surface: Option<String>,
+    pub params: [f32; PARAM_SLOTS],
+    pub reads_backdrop: bool,
+    pub backdrop_roughness: f32,
+    pub unlit: bool,
+    /// The surface Vism's `VIEWS` and `VIEW_SIZE`.
+    pub views: Vec<super::isf::IsfView>,
+    pub view_size: u32,
+    /// The roughness that bounds the Views' mips read (`VIEW_BLUR`); none declared = every level.
+    pub view_roughness: Option<f32>,
+    /// The layer the Views are for (`LayerId`); set where the layer is prepared.
+    pub owner: u64,
+    /// Slots the field and surface Vism take (field first); the host's solid frame goes after them
+    /// only when they leave `SOLID_FRAME_SLOT..` free.
+    pub inputs: usize,
+}
+
+impl SurfaceRecipe {
+    pub(crate) fn from_effects(effects: &[ResolvedEffect], catalog: &super::catalog::CatalogSnapshot, unlit: bool) -> Self {
+        let (field, surface) = hooks(effects, &catalog.definitions);
+        let params = params(effects, field, surface);
+        let offset = field.map_or(0, |d| d.manifest.param_inputs().count());
+        let reads_backdrop = surface.is_some_and(|d| {
+            d.manifest.backdrop_input.as_ref().map_or(true, |name| {
+                d.manifest.param_inputs().position(|p| &p.name == name)
+                    .is_none_or(|i| params[offset + i] != 0.0)
+            })
+        });
+        let backdrop_roughness = surface.and_then(|d| {
+            let name = d.manifest.backdrop_blur_input.as_ref()?;
+            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
+            Some(params[offset + i].clamp(0.0, 1.0))
+        }).unwrap_or(1.0);
+        let view_roughness = surface.and_then(|d| {
+            let name = d.manifest.view_blur_input.as_ref()?;
+            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
+            Some(params[offset + i].clamp(0.0, 1.0))
+        });
+        Self {
+            field: field.map(|d| d.plugin_id().to_string()),
+            surface: surface.map(|d| d.plugin_id().to_string()),
+            params, reads_backdrop, backdrop_roughness, unlit,
+            views: surface.map(|d| d.manifest.views.clone()).unwrap_or_default(),
+            view_size: surface.map_or(0, |d| d.manifest.view_size),
+            view_roughness,
+            owner: 0,
+            inputs: offset + surface.map_or(0, |d| d.manifest.param_inputs().count()),
         }
     }
 }
@@ -69,8 +165,8 @@ fn wgsl_ident(name: &str) -> String {
 /// 欄の struct と wrapper を足した snippet。`offset` は最初の欄の slot。
 fn snippet(def: &VismDefinition, stage: EffectStage, offset: usize) -> String {
     let (params_ty, hook, sig, call) = match stage {
-        EffectStage::Field => ("FieldParams", "motolii_field", "in: FieldIn) -> FieldOut", "field"),
-        _ => ("SurfaceParams", "motolii_surface", "in: SurfaceIn) -> vec3f", "surface"),
+        EffectStage::Field => ("FieldParams", "program_field", "in: FieldIn) -> FieldOut", "field"),
+        _ => ("SurfaceParams", "program_surface", "in: SurfaceIn) -> vec3f", "surface"),
     };
     let inputs: Vec<String> = def.manifest.param_inputs().map(|p| wgsl_ident(&p.name)).collect();
     let mut out = String::new();
@@ -94,16 +190,27 @@ fn snippet(def: &VismDefinition, stage: EffectStage, offset: usize) -> String {
 }
 
 /// 変種の宣言。欄の slot は field → surface の順。
-pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>) -> Result<SurfaceProgramDesc, String> {
+/// `material`: the shelf's standard material module (`vism/material.wgsl`), which every surface program starts from.
+pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>, material: &str) -> Result<SurfaceProgramDesc, String> {
     let field_count = field.map_or(0, |d| d.manifest.param_inputs().count());
     let surface_count = surface.map_or(0, |d| d.manifest.param_inputs().count());
     if field_count + surface_count > HOOK_SLOTS {
         return Err(format!("hook の欄が合わせて {HOOK_SLOTS} 個を越える"));
     }
+    let surface_hook = surface.map(|d| snippet(d, EffectStage::Surface, field_count));
+    let picture = match (&surface_hook, field) {
+        (Some(hook), _) => hook.clone(),
+        (None, Some(_)) => MOVED_PICTURE.to_owned(),
+        (None, None) => STANDARD_PICTURE.to_owned(),
+    };
     Ok(SurfaceProgramDesc {
         label: format!("{}+{}", field.map_or("-", |d| d.plugin_id()), surface.map_or("-", |d| d.plugin_id())),
+        prelude: Some(format!("{NOISE}\n{MOTION}")),
         field: field.map(|d| snippet(d, EffectStage::Field, 0)),
-        surface: surface.map(|d| snippet(d, EffectStage::Surface, field_count)),
+        motion: Some(MOTION_HOOKS.to_owned()),
+        surface: Some(format!("{material}\n{}", surface_hook.as_deref().unwrap_or(STANDARD_MESH))),
+        rectangle_surface: Some(format!("{material}\n{picture}")),
+        pixel_rate: false,
     })
 }
 
@@ -143,54 +250,94 @@ mod tests {
             source: "/*{ \"ID\": \"x.t\", \"STAGE\": \"field\", \"INPUTS\": [ {\"NAME\":\"amount\",\"TYPE\":\"float\",\"DEFAULT\":2.0}, {\"NAME\":\"along\",\"TYPE\":\"long\",\"LABELS\":[\"A\",\"B\"]} ] }*/\nfn field(in: FieldIn, p: FieldParams) -> FieldOut { return FieldOut(vec3f(p.amount), in.normal); }".into() };
         let (manifest, body) = super::super::isf::parse_isf_source(&src.source).unwrap();
         let def = VismDefinition { subtypes: Vec::new(), source: src, manifest, interface: String::new(), vertex_text: body.clone(), fragment_text: body, vertex_entry: String::new(), fragment_entry: String::new() };
-        let desc = program_desc(Some(&def), None).unwrap();
+        let desc = program_desc(Some(&def), None, "").unwrap();
         let field = desc.field.unwrap();
         assert!(field.contains("struct FieldParams {\n    amount: f32,\n    along: f32,\n};"), "{field}");
         assert!(field.contains("let p = FieldParams(in.params[0][0], in.params[0][1]);"), "{field}");
-        assert!(desc.surface.is_none());
+        // No surface effect: meshes take the standard material, a moved picture stays as it is.
+        assert!(desc.surface.as_deref().unwrap().ends_with(STANDARD_MESH));
+        assert!(desc.rectangle_surface.as_deref().unwrap().ends_with(MOVED_PICTURE));
         let p = params(&[ResolvedEffect { plugin_id: "x.t".into(), params: vec![("along".into(), crate::doc::store::Value::F64(1.0))], ..Default::default() }], Some(&def), None);
         assert_eq!(&p[..2], &[2.0, 1.0]);
     }
+
+    /// A View says where it stands: a manifest that leaves FROM out is refused, not given a place.
+    #[test]
+    fn a_view_names_where_it_stands() {
+        let with = |view: &str| format!("/*{{ \"ID\": \"x.v\", \"STAGE\": \"surface\", \"VIEWS\": [{view}] }}*/\nfn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {{ return in.albedo; }}");
+        let (manifest, _) = super::super::isf::parse_isf_source(&with(r#"{ "FROM": "layer", "LOOK": [0, 0, -1] }"#)).unwrap();
+        assert_eq!(manifest.views.len(), 1);
+        assert_eq!((manifest.views[0].up, manifest.views[0].fov, manifest.view_size), ([0.0, 1.0, 0.0], 90.0, 256));
+        assert!(super::super::isf::parse_isf_source(&with(r#"{ "LOOK": [0, 0, -1] }"#)).is_err());
+        assert!(super::super::isf::parse_isf_source(&with(r#"{ "FROM": "layer", "LOOK": [0, 1, 0], "UP": [0, 1, 0] }"#)).is_err());
+    }
+}
+
+/// Motolii's standard material: the frame side (`material`) and Filament's lit model (`material_filament`,
+/// with its naga-translated library and baked tables), shelf modules joined in that order.
+fn standard_material(catalog: &super::catalog::CatalogSnapshot) -> String {
+    ["material", "material_filament_naga", "material_filament_baked", "material_filament"].map(|name| catalog.module(name)).join("\n")
 }
 
 impl crate::render::compositor::Compositor {
-    /// 効果列の hook(field / surface)から共有プログラムを組む。変種は catalog の世代ごとに覚える。
-    pub(crate) fn surface_shading(&mut self, effects: &[crate::picture::resolved::ResolvedEffect]) -> Result<SurfaceShading, String> {
-        self.surface_shading_for(effects, false)
-    }
 
-    pub(crate) fn surface_shading_for(&mut self, effects: &[crate::picture::resolved::ResolvedEffect], unlit: bool) -> Result<SurfaceShading, String> {
+    pub(crate) fn surface_shading_from(&mut self, recipe: &SurfaceRecipe) -> Result<SurfaceShading, String> {
         self.refresh_catalog_programs();
         let catalog = self.catalog.clone();
-        let (field, surface) = hooks(effects, &catalog.definitions);
-        if !unlit && field.is_none() && surface.is_none() {
+        let find = |id: &Option<String>| id.as_ref().and_then(|id| catalog.definitions.iter().find(|d| d.plugin_id() == id));
+        let (field, surface) = (find(&recipe.field), find(&recipe.surface));
+        if !recipe.unlit && field.is_none() && surface.is_none() {
             return Ok(SurfaceShading::default());
         }
-        let key = format!("{unlit}|{}|{}|{}", field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
+        let key = format!("{}|{}|{}|{}", recipe.unlit, field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
+        // A surface effect also gets its pixel-rate twin (flat caps, small stones).
+        let program_small = if surface.is_some() {
+            let key = format!("{key}|pixel");
+            match self.surface_programs.get(&key) {
+                Some(program) => Some(program.clone()),
+                None => {
+                    let mut desc = program_desc(field, surface, &standard_material(&catalog))?;
+                    desc.pixel_rate = true;
+                    let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
+                    self.surface_programs.insert(key, program.clone());
+                    Some(program)
+                }
+            }
+        } else {
+            None
+        };
         let program = match self.surface_programs.get(&key) {
             Some(program) => program.clone(),
             None => {
-                let mut desc = program_desc(field, surface)?;
-                if unlit && surface.is_none() { desc.surface = Some("fn motolii_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }".into()); }
+                let material = &standard_material(&catalog);
+                let mut desc = program_desc(field, surface, material)?;
+                if recipe.unlit && surface.is_none() {
+                    desc.surface = Some(format!("{material}\n{UNLIT}"));
+                    desc.rectangle_surface = desc.surface.clone();
+                    // An unlit picture's colour is one value across a pixel (its texture and curve
+                    // coverage are read at the pixel's centre): shade it once, MSAA keeps its edges.
+                    desc.pixel_rate = true;
+                }
                 let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
                 self.surface_programs.insert(key, program.clone());
                 program
             }
         };
-        let params = params(effects, field, surface);
-        let offset = field.map_or(0, |d| d.manifest.param_inputs().count());
-        let reads_backdrop = surface.is_some_and(|d| {
-            d.manifest.backdrop_input.as_ref().map_or(true, |name| {
-                d.manifest.param_inputs().position(|p| &p.name == name)
-                    .is_none_or(|i| params[offset + i] != 0.0)
-            })
-        });
-        let backdrop_roughness = surface.and_then(|d| {
-            let name = d.manifest.backdrop_blur_input.as_ref()?;
-            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
-            Some(params[offset + i].clamp(0.0, 1.0))
-        }).unwrap_or(1.0);
-        Ok(SurfaceShading { program: Some(program), params, reads_backdrop, backdrop_roughness, grid_hint: 0 })
+        Ok(SurfaceShading { program: Some(program), program_small, params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(),
+            views: (!recipe.views.is_empty()).then(|| Arc::new(ViewNeeds { owner: recipe.owner, views: recipe.views.clone(), size: recipe.view_size, roughness: recipe.view_roughness })) })
+    }
+
+    /// The program of a surface without effects: its Block's motion and the standard material.
+    pub(crate) fn standard_surface_program(&mut self) -> Option<Arc<SurfaceProgram>> {
+        self.refresh_catalog_programs();
+        let catalog = self.catalog.clone();
+        let key = format!("standard|{}", catalog.generation);
+        if let Some(program) = self.surface_programs.get(&key) {
+            return Some(program.clone());
+        }
+        let program = Arc::new(SurfaceProgram::new(&self.ctx, program_desc(None, None, &standard_material(&catalog)).ok()?).ok()?);
+        self.surface_programs.insert(key, program.clone());
+        Some(program)
     }
 
 }
@@ -199,9 +346,16 @@ impl crate::render::compositor::Compositor {
 mod program_contract {
     use crate::picture::resolved::ResolvedEffect;
 
+    /// The effects' surface program, as the production route lowers it: a recipe, then its shading.
+    fn surface_shading(compositor: &mut crate::render::compositor::Compositor, effects: &[ResolvedEffect]) -> super::SurfaceShading {
+        compositor.refresh_catalog_programs();
+        let recipe = super::SurfaceRecipe::from_effects(effects, &compositor.catalog, false);
+        compositor.surface_shading_from(&recipe).unwrap()
+    }
+
     fn compiled_without_validation_error(compositor: &mut crate::render::compositor::Compositor, effects: &[ResolvedEffect]) {
         let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let shading = compositor.surface_shading(effects).unwrap();
+        let shading = surface_shading(compositor, effects);
         let error = pollster::block_on(scope.pop());
         assert!(error.is_none(), "{}", error.unwrap());
         assert_eq!(shading.program.is_some(), !effects.is_empty());
@@ -213,7 +367,7 @@ mod program_contract {
     fn default_and_shelf_hook_programs_compile() {
         let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
         let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let desc = re_renderer::renderer::SurfaceProgramDesc { label: "probe".into(), field: None, surface: None };
+        let desc = re_renderer::renderer::SurfaceProgramDesc { label: "probe".into(), ..Default::default() };
         re_renderer::renderer::SurfaceProgram::new(&compositor.ctx, desc).unwrap();
         let error = pollster::block_on(scope.pop());
         assert!(error.is_none(), "{}", error.unwrap());
@@ -225,10 +379,11 @@ mod program_contract {
         compiled_without_validation_error(&mut compositor, std::slice::from_ref(&turbulence));
         compiled_without_validation_error(&mut compositor, &[turbulence.clone(), glass.clone()]);
         // 同じ組は同じ変種。
-        let a = compositor.surface_shading(&[turbulence.clone(), glass.clone()]).unwrap().program.unwrap();
-        let b = compositor.surface_shading(&[glass, turbulence]).unwrap().program.unwrap();
+        let a = surface_shading(&mut compositor, &[turbulence.clone(), glass.clone()]).program.unwrap();
+        let b = surface_shading(&mut compositor, &[glass, turbulence]).program.unwrap();
         assert!(std::sync::Arc::ptr_eq(&a, &b));
-        assert_eq!(compositor.surface_programs.len(), 3);
+        // Each surface-effect program also has its pixel-rate twin (flat faces, small stones).
+        assert_eq!(compositor.surface_programs.len(), 5);
     }
 }
 
@@ -247,7 +402,7 @@ mod field_leaves_the_rectangle {
 
     fn document(path: &std::path::Path, amount: f64) -> Document {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
             Intent::AddLayer(layer),

@@ -1,0 +1,6 @@
+--- a/crates/viewer_support/re_renderer/shader/global_bindings.wgsl
++++ b/crates/viewer_support/re_renderer/shader/global_bindings.wgsl
+@@ -90,3 +90,6 @@ var motion_texture: texture_2d<f32>;
++
++@group(0) @binding(12)
++var isolated_layer_picture: texture_2d<f32>;

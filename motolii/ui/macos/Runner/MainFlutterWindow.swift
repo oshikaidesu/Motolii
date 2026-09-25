@@ -77,7 +77,8 @@ private enum ProbeFailure: Error {
 private final class ProbeRuntime {
   typealias Open = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
   typealias Request = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>) -> UnsafePointer<CChar>?
-  typealias Render = @convention(c) (UnsafeMutableRawPointer, UInt32, UnsafePointer<CChar>) -> Int32
+  /// One app tick: every shown view (`surfaces[i]` draws `views[i]`) from one prepared frame.
+  typealias Render = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<UInt32>, UnsafePointer<UnsafePointer<CChar>?>, Int) -> Int32
   typealias PlaybackTick = @convention(c) (UnsafeMutableRawPointer) -> Int64
   typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
   typealias Wake = @convention(c) (UnsafeMutableRawPointer?) -> Void
@@ -103,7 +104,6 @@ private final class ProbeRuntime {
   /// Samples are confined to `renderQueue`. They measure CPU time through the
   /// native tick and submit only; GPU completion remains the IOSurface signal.
   private var playbackSubmitUs: [UInt64] = []
-  private var playbackViewSubmitUs: [String: [UInt64]] = [:]
   private var library: UnsafeMutableRawPointer?
   /// The native host owns playback pulses; Dart retains this context only for
   /// one-shot commands and still frames. Both use the macOS main thread
@@ -130,7 +130,6 @@ private final class ProbeRuntime {
   fileprivate func resetPlaybackStats() {
     renderQueue.async { [weak self] in
       self?.playbackSubmitUs.removeAll(keepingCapacity: true)
-      self?.playbackViewSubmitUs.removeAll(keepingCapacity: true)
     }
     playbackGate.lock()
     playbackDropped = 0
@@ -142,8 +141,6 @@ private final class ProbeRuntime {
       guard let self else { return }
       let samples = self.playbackSubmitUs
       self.playbackSubmitUs.removeAll(keepingCapacity: true)
-      let byView = self.playbackViewSubmitUs
-      self.playbackViewSubmitUs.removeAll(keepingCapacity: true)
       self.playbackGate.lock()
       let dropped = self.playbackDropped
       self.playbackDropped = 0
@@ -154,13 +151,7 @@ private final class ProbeRuntime {
         guard !sorted.isEmpty else { return 0 }
         return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded(.up)))]
       }
-      let viewStats = byView.keys.sorted().map { view -> String in
-        let values = byView[view, default: []].sorted()
-        guard !values.isEmpty else { return "\(view)=—" }
-        let at = { (fraction: Double) in values[min(values.count - 1, Int((Double(values.count - 1) * fraction).rounded(.up)))] }
-        return "\(view)=\(Double(at(0.5)) / 1000.0)/\(Double(at(0.9)) / 1000.0)ms"
-      }.joined(separator: " ")
-      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0) views=\(viewStats)"
+      let message = "PROBE room=playback-native frames=\(samples.count) dropped=\(dropped) cpu-submit-ms median=\(Double(percentile(0.5)) / 1000.0) p90=\(Double(percentile(0.9)) / 1000.0) max=\(Double(sorted.last ?? 0) / 1000.0)"
       playbackLog.info("\(message, privacy: .public)")
       // Diagnostics are one line on pause, never a per-frame disk write. The
       // file is intentionally in tmp: it is not authored state or telemetry.
@@ -199,7 +190,7 @@ private final class ProbeRuntime {
       }
       let start = try symbol("motolii_probe_open", Open.self)
       requestFunction = try symbol("motolii_probe_request", Request.self)
-      renderFunction = try symbol("motolii_probe_render", Render.self)
+      renderFunction = try symbol("motolii_probe_tick", Render.self)
       playbackTickFunction = try symbol("motolii_probe_playback_tick", PlaybackTick.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
       finishFunction = try symbol("motolii_probe_finish_frames", FinishFrames.self)
@@ -267,19 +258,16 @@ private final class ProbeRuntime {
               let render = self.renderFunction else { throw ProbeFailure.message("Document is closed") }
         let frame = tick(context)
         guard frame >= 0 else { return nil }
-        for target in targets {
-          // `keepAlive` holds the IOSurface until Rust has imported it.
-          _ = target.keepAlive
-          let startedView = DispatchTime.now().uptimeNanoseconds
-          let code = target.view.withCString { render(context, target.surface, $0) }
-          if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
-          // Busy means Metal still owns this IOSurface. Do not advance the UI
-          // onto a frame that was never submitted; the next host pulse retries.
-          if code > 0 {
-            self.dropPlaybackFrame()
-            return nil
-          }
-          self.playbackViewSubmitUs[target.view, default: []].append((DispatchTime.now().uptimeNanoseconds - startedView) / 1_000)
+        // `keepAlive` holds each IOSurface until Rust has imported it.
+        let code = withExtendedLifetime(targets.map(\.keepAlive)) {
+          ProbeRuntime.tickViews(render, context, targets.map { ($0.surface, $0.view) })
+        }
+        if code < 0 { throw ProbeFailure.message("Native playback render failed: \(code)") }
+        // Busy means Metal still owns a surface. Do not advance the UI onto a frame that
+        // was never submitted; the next host pulse retries.
+        if code > 0 {
+          self.dropPlaybackFrame()
+          return nil
         }
         self.playbackSubmitUs.append((DispatchTime.now().uptimeNanoseconds - started) / 1_000)
         return frame
@@ -317,41 +305,6 @@ private final class ProbeRuntime {
 
   func status() throws -> [String: Any] { try request("{\"op\":\"status\",\"bootstrap\":true}") }
 
-  /// Every view Rust lists (Camera always; Stage while its tab holds a window) gets its own
-  /// surface and one render. Two pictures of one world, both live.
-  func render(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
-    try onRenderQueue { try renderOnRenderQueue(known: known, references: references) }
-  }
-
-  private func renderOnRenderQueue(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
-    let state = try request("{\"op\":\"renderInfo\"}")
-    guard let views = state["views"] as? [[String: Any]], !views.isEmpty else {
-      throw ProbeFailure.message("Document dimensions missing")
-    }
-    guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
-    var buffers: [String: CVPixelBuffer] = [:]
-    for entry in views {
-      guard let view = entry["view"] as? String,
-            let width = (entry["width"] as? NSNumber)?.intValue,
-            let height = (entry["height"] as? NSNumber)?.intValue,
-            width > 0, height > 0, width <= 16384, height <= 16384 else {
-        throw ProbeFailure.message("View dimensions missing or outside probe allocation limit")
-      }
-      let made = try ProbeRuntime.makeSurface(width: width, height: height)
-      let code = view.withCString { renderFunction(context, made.id, $0) }
-      guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(view): \(code)") }
-      buffers[view] = made.buffer
-    }
-    // この道は合図を待たずに buffer をそのまま返すので、ここで描き終わりを待つ。
-    _ = finishFunction?(context)
-    rendered += 1
-    var query: [String: Any] = ["op": "status"]
-    if let known { query["knownSnapshotId"] = known }
-    if let references { query["knownReferenceId"] = references }
-    let data = try JSONSerialization.data(withJSONObject: query)
-    return (buffers, try request(String(decoding: data, as: UTF8.self)), rendered)
-  }
-
   /// Still-frame channel path. The host owns these surfaces too, so Flutter
   /// never obtains a raw runtime pointer. This is intentionally synchronous:
   /// exact scrub/stop may wait, unlike playback.
@@ -360,16 +313,16 @@ private final class ProbeRuntime {
   ) throws -> ([String: Any], Int) {
     try onRenderQueue {
       guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
-      for target in targets {
-        _ = target.keepAlive
-        var code = target.view.withCString { renderFunction(context, target.surface, $0) }
+      try withExtendedLifetime(targets.map(\.keepAlive)) {
+        let views = targets.map { ($0.surface, $0.view) }
+        var code = ProbeRuntime.tickViews(renderFunction, context, views)
         // Playback may drop a busy surface. A still frame is exact: wait for
         // that prior submission, then submit this requested frame once.
         if code == 1 {
           _ = finishFunction?(context)
-          code = target.view.withCString { renderFunction(context, target.surface, $0) }
+          code = ProbeRuntime.tickViews(renderFunction, context, views)
         }
-        guard code == 0 else { throw ProbeFailure.message("Rust render failed for \(target.view): \(code)") }
+        guard code == 0 else { throw ProbeFailure.message("Rust render failed: \(code)") }
       }
       _ = finishFunction?(context)
       rendered += 1
@@ -378,6 +331,19 @@ private final class ProbeRuntime {
       if let references { query["knownReferenceId"] = references }
       let data = try JSONSerialization.data(withJSONObject: query)
       return (try requestOnRenderQueue(String(decoding: data, as: UTF8.self)), rendered)
+    }
+  }
+
+  /// One app tick through the FFI: every (surface, view) pair in one call.
+  static func tickViews(_ render: Render, _ context: UnsafeMutableRawPointer, _ targets: [(UInt32, String)]) -> Int32 {
+    let names = targets.map { strdup($0.1) }
+    defer { names.forEach { free($0) } }
+    let surfaces = targets.map(\.0)
+    let pointers: [UnsafePointer<CChar>?] = names.map { $0.map { UnsafePointer($0) } }
+    return surfaces.withUnsafeBufferPointer { s in
+      pointers.withUnsafeBufferPointer { n in
+        render(context, s.baseAddress ?? UnsafePointer(bitPattern: 1)!, n.baseAddress ?? UnsafePointer(bitPattern: 1)!, targets.count)
+      }
     }
   }
 
@@ -463,17 +429,21 @@ final class ProbeSession {
   fileprivate let hosts = NSHashTable<ProbeHost>.weakObjects()
   fileprivate var paneState: [String: Any] = [:]
   fileprivate var epoch: UInt64 = 0
-  fileprivate var latest: [String: CVPixelBuffer] = [:]
-  /// The surfaces Dart draws each view into: two per view, taken in turn, made
-  /// once per size. The Rust callback names the one it just filled.
+  /// The surfaces each view is drawn into: three per view, made once per size. Each has a
+  /// Flutter texture of its own, so a picture and the window it was drawn for reach Dart in
+  /// one message (the texture id beside the status), as Rerun hands egui a view's texture
+  /// with its rect in one callback.
   fileprivate var surfaces: [String: (width: Int, height: Int, entries: [(id: UInt32, buffer: CVPixelBuffer)])] = [:]
+  /// The surface holding each view's newest finished picture — what Dart shows, so never
+  /// drawn into.
+  fileprivate var presented: [String: UInt32] = [:]
+  private var cursor: [String: Int] = [:]
   fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
   /// The native host, not Flutter's `Ticker`, owns playback cadence.  The
   /// Flutter side receives a texture availability signal and a small playhead
   /// integer only.
   private var playbackTimer: DispatchSourceTimer?
-  private var playbackSurfaceFlip = false
   private var confirming = false
   var terminationApproved = false
 
@@ -484,19 +454,29 @@ final class ProbeSession {
     main.channel.invokeMethod("effectsChanged", arguments: nil)
   }
 
-  /// The GPU finished `view` in the surface `id`, and Rust said so on this thread,
-  /// inside Dart's render call — this frame's picture when it was waited for, the
-  /// previous one while playing. The main window's texture learns it now; the other
-  /// windows learn it with the status Dart broadcasts next, so their picture and its
-  /// size travel as one step.
+  /// The GPU finished `view` in the surface `id`. A still frame was already waited for and
+  /// travels in its render reply; while playing, this is where Dart hears of the picture
+  /// (the window does not move during playback).
   fileprivate func frameReady(_ view: String, _ id: UInt32) {
     precondition(Thread.isMainThread)
-    guard let buffer = surfaces[view]?.entries.first(where: { $0.id == id })?.buffer else { return }
-    latest[view] = buffer
-    for host in hosts.allObjects where !host.closed && host.attached && host.isMain {
-      try? host.ensureTexture(view)
-      host.publish(view, buffer)
+    guard playbackTimer != nil, surfaces[view]?.entries.contains(where: { $0.id == id }) == true else { return }
+    present([view: id])
+    for host in hosts.allObjects where !host.closed && host.attached {
+      host.channel.invokeMethod("presented", arguments: ["textureIds": host.presentedTextureIDs()])
     }
+  }
+
+  /// These surfaces now hold their views' newest pictures.
+  fileprivate func present(_ drawn: [String: UInt32]) {
+    presented.merge(drawn) { _, next in next }
+    for host in hosts.allObjects where !host.closed && host.attached {
+      for id in drawn.values { host.frameAvailable(id) }
+    }
+  }
+
+  fileprivate func buffer(_ id: UInt32) -> CVPixelBuffer? {
+    for surface in surfaces.values { if let entry = surface.entries.first(where: { $0.id == id }) { return entry.buffer } }
+    return nil
   }
 
   /// Surfaces for the views Dart lists, at their sizes; kept when the size holds,
@@ -515,7 +495,7 @@ final class ProbeSession {
       if let held = surfaces[view], held.width == width, held.height == height {
         next[view] = held
       } else {
-        next[view] = (width, height, try (0..<2).map { _ in try ProbeRuntime.makeSurface(width: width, height: height) })
+        next[view] = (width, height, try (0..<3).map { _ in try ProbeRuntime.makeSurface(width: width, height: height) })
       }
       reply[view] = ["width": width, "height": height, "ids": next[view]!.entries.map { Int($0.id) }]
     }
@@ -523,46 +503,35 @@ final class ProbeSession {
     return ["surfaces": reply]
   }
 
-  fileprivate func targets(for views: [[String: Any]], flip: Bool = false) -> [ProbeRuntime.PlaybackTarget] {
+  /// The next surface of each view to draw into: never the one Dart is showing.
+  fileprivate func targets(for views: [[String: Any]]) -> [ProbeRuntime.PlaybackTarget] {
     views.compactMap { entry in
       guard let view = entry["view"] as? String,
             let surface = surfaces[view], !surface.entries.isEmpty else { return nil }
-      let entry = surface.entries[flip ? 1 % surface.entries.count : 0]
+      let count = surface.entries.count
+      var index = ((cursor[view] ?? -1) + 1) % count
+      if surface.entries[index].id == presented[view] { index = (index + 1) % count }
+      cursor[view] = index
+      let entry = surface.entries[index]
       return ProbeRuntime.PlaybackTarget(view: view, surface: entry.id, keepAlive: entry.buffer)
     }
   }
 
-  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameReady: Bool = false, frameOnly: Bool = false, effectsReloaded: Bool = false) {
+  /// The other windows learn the outcome; a picture reaches each with the status it was
+  /// drawn for, in one message.
+  fileprivate func broadcast(_ state: [String: Any], origin: ProbeHost? = nil, frameReady: Bool = false, frameOnly: Bool = false, effectsReloaded: Bool = false) {
     precondition(Thread.isMainThread)
     self.state.merge(state) { _, next in next }
-    latest.merge(buffers) { _, next in next }
-    let fresh = frameReady ? latest : buffers
-    for host in hosts.allObjects where !host.closed && host.attached {
-      do {
-        try host.ensureTexture(ProbeHost.outputView)
-        if host !== origin {
-          var event = host.envelope(state, frameReady: !fresh.isEmpty)
-          event["frameOnly"] = frameOnly
-          event["effectsReloaded"] = effectsReloaded
-          // The picture and its size travel as one step: Dart learns the size
-          // (envelope) first, and only then is the frame made available to the
-          // raster thread. A resized Stage never paints an old frame stretched.
-          let attachmentID = host.attachmentID
-          host.channel.invokeMethod("documentChanged", arguments: event) { [weak host] _ in
-            guard let host, !host.closed, host.attached, host.attachmentID == attachmentID else { return }
-            for (view, buffer) in fresh { host.publish(view, buffer) }
-          }
-        } else {
-          for (view, buffer) in buffers { host.publish(view, buffer) }
-        }
-      } catch {
-        host.channel.invokeMethod("nativeError", arguments: String(describing: error))
-      }
+    for host in hosts.allObjects where !host.closed && host.attached && host !== origin {
+      var event = host.envelope(state, frameReady: frameReady)
+      event["frameOnly"] = frameOnly
+      event["effectsReloaded"] = effectsReloaded
+      host.channel.invokeMethod("documentChanged", arguments: event)
     }
   }
 
   fileprivate func clearFrames() {
-    latest = [:]
+    presented = [:]
     surfaces = [:]
     for host in hosts.allObjects { host.detachTexture() }
   }
@@ -594,9 +563,8 @@ final class ProbeSession {
 
   private func playbackPulse() {
     precondition(Thread.isMainThread)
-    playbackSurfaceFlip.toggle()
     let views: [[String: Any]] = surfaces.keys.map { ["view": $0] }
-    let targets = self.targets(for: views, flip: playbackSurfaceFlip)
+    let targets = self.targets(for: views)
     guard !targets.isEmpty else { return }
     _ = runtime.enqueuePlayback(targets: targets) { [weak self] outcome in
       guard let self else { return }
@@ -667,10 +635,12 @@ final class ProbeHost: NSObject {
   private let session = ProbeSession.shared
   private let registry: FlutterTextureRegistry
   fileprivate let channel: FlutterMethodChannel
-  /// One Flutter texture per view this window shows: "Camera" (the output) and "User" (the Stage).
+  /// "Camera" (the output) and "User" (the Stage) are the views; each surface of a view has
+  /// its own Flutter texture here.
   static let outputView = "Camera"
-  private var textures: [String: ProbeTexture] = [:]
-  private var textureIDs: [String: Int64] = [:]
+  private var textures: [UInt32: (texture: ProbeTexture, id: Int64)] = [:]
+  /// What this window was last told each view's picture is in: it may still be showing it.
+  private var shown: [String: Int64] = [:]
   fileprivate weak var window: NSWindow?
   fileprivate var closed = false
   private var attachment = WindowAttachment()
@@ -703,22 +673,42 @@ final class ProbeHost: NSObject {
     }
   }
 
-  fileprivate func ensureTexture(_ view: String) throws {
-    guard textureIDs[view] == nil else { return }
+  /// The texture showing `surface` in this window: its picture is fixed to that surface.
+  private func texture(for surface: UInt32) -> Int64? {
+    if let held = textures[surface] { return held.id }
+    guard let buffer = session.buffer(surface) else { return nil }
     let next = ProbeTexture()
+    next.publish(buffer)
     let id = registry.register(next)
-    guard id != 0 else { throw ProbeFailure.message("Flutter texture registration failed") }
-    textures[view] = next
-    textureIDs[view] = id
-    if let latest = session.latest[view] { publish(view, latest) }
+    guard id != 0 else { return nil }
+    textures[surface] = (next, id)
+    registry.textureFrameAvailable(id)
+    return id
   }
 
-  fileprivate func publish(_ view: String, _ buffer: CVPixelBuffer) {
-    guard let texture = textures[view], let textureID = textureIDs[view] else { return }
-    texture.publish(buffer)
-    registry.textureFrameAvailable(textureID)
+  /// `surface` was drawn again (never while this window shows it).
+  fileprivate func frameAvailable(_ surface: UInt32) {
+    if let held = textures[surface] { registry.textureFrameAvailable(held.id) }
   }
 
+  /// Each view's newest picture, as this window's texture ids. What is sent is what this
+  /// window may show next; textures of surfaces that are gone and not shown are released.
+  fileprivate func presentedTextureIDs() -> [String: Int64] {
+    var ids: [String: Int64] = [:]
+    for (view, surface) in session.presented { if let id = texture(for: surface) { ids[view] = id } }
+    shown = ids
+    let live = Set(session.surfaces.values.flatMap { $0.entries.map(\.id) })
+    let kept = Set(ids.values)
+    for (surface, held) in textures where !live.contains(surface) && !kept.contains(held.id) {
+      registry.unregisterTexture(held.id)
+      held.texture.clear()
+      textures[surface] = nil
+    }
+    return ids
+  }
+
+  /// A picture (`frameReady`) travels with the status it was drawn for: the texture ids are
+  /// sent only beside a rendered status, so Dart never places a picture by another frame's window.
   fileprivate func envelope(_ status: [String: Any], frameReady: Bool = false) -> [String: Any] {
     var reply: [String: Any] = ["status": status, "windowId": id, "frameReady": frameReady]
     reply["runtimeEpoch"] = session.epoch
@@ -727,20 +717,22 @@ final class ProbeHost: NSObject {
       reply["context"] = Int(bitPattern: context)
       reply["library"] = library
     }
-    if let textureID = textureIDs[ProbeHost.outputView] { reply["textureId"] = textureID }
-    reply["textureIds"] = textureIDs
+    let ids = frameReady ? presentedTextureIDs() : shown
+    if let textureID = ids[ProbeHost.outputView] { reply["textureId"] = textureID }
+    if frameReady { reply["textureIds"] = ids }
     if let width = status["width"] { reply["width"] = width }
     if let height = status["height"] { reply["height"] = height }
-    if let texture = textures[ProbeHost.outputView] { reply.merge(texture.counters()) { _, new in new } }
     return reply
   }
 
   fileprivate func detachTexture() {
     precondition(Thread.isMainThread)
-    for id in textureIDs.values { registry.unregisterTexture(id) }
-    for texture in textures.values { texture.clear() }
+    for held in textures.values {
+      registry.unregisterTexture(held.id)
+      held.texture.clear()
+    }
     textures = [:]
-    textureIDs = [:]
+    shown = [:]
   }
 
   func filesDropped(_ paths: [String], point: [CGFloat]) {
@@ -818,15 +810,6 @@ final class ProbeHost: NSObject {
       result(true)
     case "windowInfo":
       result(["id": id, "panels": panels, "main": isMain, "paneState": session.paneState, "panelWindows": session.windows.count])
-    case "ensureSurfaces":
-      guard let views = args["views"] as? [[String: Any]] else { fail(result, "ensureSurfaces requires views"); return }
-      do {
-        for view in views { if let name = view["view"] as? String { try ensureTexture(name) } }
-        var reply = try session.ensureSurfaces(views)
-        reply["textureIds"] = textureIDs
-        if let textureID = textureIDs[ProbeHost.outputView] { reply["textureId"] = textureID }
-        result(reply)
-      } catch { fail(result, String(describing: error)) }
     case "broadcast":
       // The main window drove the runtime itself; the other windows learn the outcome here.
       guard let text = args["status"] as? String, let data = text.data(using: .utf8),
@@ -852,12 +835,10 @@ final class ProbeHost: NSObject {
       guard !requested.isEmpty else { fail(result, "No supported panels requested"); return }
       result(session.openPanelWindow(requested))
     case "attach":
-      let view = args["view"] as? String ?? ProbeHost.outputView
       perform(result, work: { try self.session.runtime.status() }) { status in
         guard self.attachment.attach(reusing: (args["attachmentId"] as? NSNumber)?.intValue) != nil else {
           throw ProbeFailure.message("Stale UI attachment")
         }
-        try self.ensureTexture(view)
         return self.envelope(status)
       }
     case "detach":
@@ -959,15 +940,16 @@ final class ProbeHost: NSObject {
         guard let views = info["views"] as? [[String: Any]], !views.isEmpty else {
           throw ProbeFailure.message("Document dimensions missing")
         }
-        for view in views { if let name = view["view"] as? String { try self.ensureTexture(name) } }
         _ = try self.session.ensureSurfaces(views)
         let targets = self.session.targets(for: views)
         guard !targets.isEmpty else { throw ProbeFailure.message("No render surface") }
         let (status, rendered) = try self.session.runtime.renderInto(
           targets, known: args["knownSnapshotId"], references: args["knownReferenceId"]
         )
-        let buffers = Dictionary(uniqueKeysWithValues: targets.map { ($0.view, $0.keepAlive) })
-        self.session.broadcast(status, buffers: buffers, origin: self, frameReady: true, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
+        // Waited for (`renderInto` finishes the frame): these surfaces hold the pictures the
+        // reply's status was drawn for, and they travel together.
+        self.session.present(Dictionary(uniqueKeysWithValues: targets.map { ($0.view, $0.surface) }))
+        self.session.broadcast(status, origin: self, frameReady: true, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
         var reply = self.envelope(status, frameReady: true)
         reply["renderedFrames"] = rendered
         reply["frameOnly"] = args["frame"] != nil || args["playing"] as? Bool == true

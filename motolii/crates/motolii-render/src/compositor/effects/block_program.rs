@@ -127,7 +127,9 @@ pub(crate) fn neighbors(items: &[BlockItem], reach: f32) -> (Vec<u32>, Vec<u32>)
 mod passes;
 mod wgsl;
 
-pub(crate) use passes::{read_state, BlockProgram, BlockWorld, FollowPass, RopePass, WorldPass};
+#[cfg(test)]
+pub(crate) use passes::{read_back, read_state};
+pub(crate) use passes::{BlockProgram, BlockWorld, FollowPass, RopePass, WorldPass};
 pub(crate) use wgsl::{module_source, note_device, validate, wgsl_manifest};
 
 
@@ -138,10 +140,10 @@ pub(crate) fn catalog_definition(name: &str) -> super::VismDefinition {
 }
 
 #[cfg(test)]
-pub(crate) fn program_for(device: &wgpu::Device, name: &str) -> BlockProgram {
+pub(crate) fn program_for(ctx: &re_renderer::RenderContext, name: &str) -> BlockProgram {
     let definition = catalog_definition(name);
     assert_eq!(definition.manifest.stage, super::isf::IsfStage::Block);
-    BlockProgram::new(device, "block-test", &definition.vertex_text, definition.manifest.rounds)
+    BlockProgram::new(ctx, "block-test", &definition.vertex_text, definition.manifest.rounds)
 }
 
 #[cfg(test)]

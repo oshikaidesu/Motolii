@@ -3,7 +3,7 @@
 // cubic-bezier(.35,.75,.1,1), with a .2em push; hover out plays it back. Three links, hovered one after another.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 5, background: "#F4F1EA" });
 const IO = { kind: "Bezier", x1: 0.35, y1: 0.75, x2: 0.1, y2: 1 };
-const PHOTO = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/photo2.png";
+const PHOTO = "mat/photo2.png";
 const SIZE = 140, H = SIZE * 1.2, W = 1400, PUSH = SIZE * 0.2, T = 0.4;
 const link = (word, y, hoverIn, hoverOut) => {
   // Two boxes over the same spot, each a clip-path: inset(). The label loses its bottom (Clip Bottom 0 → H), the content

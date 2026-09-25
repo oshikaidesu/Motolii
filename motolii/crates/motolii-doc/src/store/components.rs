@@ -6,7 +6,7 @@ use arrow::array::{Array, ArrayRef, BooleanArray, StringArray};
 use arrow::datatypes::DataType;
 use re_byte_size::SizeBytes;
 use re_types_core::{
-    Component, ComponentDescriptor, ComponentType, DeserializationResult, Loggable,
+    Component, ComponentDescriptor, ComponentType, DeserializationResult, ArrowDataType, FromArrow, FromArrowOpt, ToArrow, ToArrowOpt,
     SerializationResult,
 };
 
@@ -54,11 +54,13 @@ impl<'a> From<&'a LayerPresent> for Cow<'a, LayerPresent> {
     }
 }
 
-impl Loggable for TrackJson {
-    fn arrow_datatype() -> DataType {
+impl ArrowDataType for TrackJson {
+    fn arrow_data_type() -> DataType {
         DataType::Utf8
     }
+}
 
+impl ToArrowOpt for TrackJson {
     fn to_arrow_opt<'a>(
         data: impl IntoIterator<Item = Option<impl Into<Cow<'a, Self>>>>,
     ) -> SerializationResult<ArrayRef>
@@ -71,7 +73,9 @@ impl Loggable for TrackJson {
             .collect();
         Ok(Arc::new(StringArray::from(values)))
     }
+}
 
+impl FromArrowOpt for TrackJson {
     fn from_arrow_opt(data: &dyn Array) -> DeserializationResult<Vec<Option<Self>>> {
         let array = data
             .as_any()
@@ -89,11 +93,28 @@ impl Loggable for TrackJson {
     }
 }
 
-impl Loggable for LayerPresent {
-    fn arrow_datatype() -> DataType {
+impl ToArrow for TrackJson {
+    fn to_arrow<'a>(data: impl IntoIterator<Item = impl Into<Cow<'a, Self>>>) -> SerializationResult<ArrayRef>
+    where
+        Self: 'a,
+    {
+        re_types_core::to_arrow_via_to_arrow_opt(data)
+    }
+}
+
+impl FromArrow for TrackJson {
+    fn from_arrow(data: &dyn Array) -> DeserializationResult<Vec<Self>> {
+        re_types_core::from_arrow_via_from_arrow_opt(data)
+    }
+}
+
+impl ArrowDataType for LayerPresent {
+    fn arrow_data_type() -> DataType {
         DataType::Boolean
     }
+}
 
+impl ToArrowOpt for LayerPresent {
     fn to_arrow_opt<'a>(
         data: impl IntoIterator<Item = Option<impl Into<Cow<'a, Self>>>>,
     ) -> SerializationResult<ArrayRef>
@@ -106,7 +127,9 @@ impl Loggable for LayerPresent {
             .collect();
         Ok(Arc::new(BooleanArray::from(values)))
     }
+}
 
+impl FromArrowOpt for LayerPresent {
     fn from_arrow_opt(data: &dyn Array) -> DeserializationResult<Vec<Option<Self>>> {
         let array = data
             .as_any()
@@ -118,6 +141,21 @@ impl Loggable for LayerPresent {
                 )
             })?;
         Ok(array.iter().map(|v| v.map(Self)).collect())
+    }
+}
+
+impl ToArrow for LayerPresent {
+    fn to_arrow<'a>(data: impl IntoIterator<Item = impl Into<Cow<'a, Self>>>) -> SerializationResult<ArrayRef>
+    where
+        Self: 'a,
+    {
+        re_types_core::to_arrow_via_to_arrow_opt(data)
+    }
+}
+
+impl FromArrow for LayerPresent {
+    fn from_arrow(data: &dyn Array) -> DeserializationResult<Vec<Self>> {
+        re_types_core::from_arrow_via_from_arrow_opt(data)
     }
 }
 

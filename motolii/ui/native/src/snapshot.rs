@@ -54,7 +54,7 @@ fn source_kind(source:&LayerSource)->&'static str{match source{
     }
 }}
 #[derive(Clone,Copy)]
-struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera,document:crate::doc::core::ResolvedCamera}
+struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,observer:crate::doc::core::ResolvedCamera,document:crate::doc::core::ResolvedCamera}
 use crate::viewer::View;
 
 impl EditorRuntime{
@@ -63,21 +63,16 @@ impl EditorRuntime{
         let time=self.time()?;let doc=self.doc.view();
         self.engine.frame_graph_document_camera(&doc,time).map_err(e)
     }
-    /// view の描く窓。Camera は出力寸法そのもの、Stage はタブが置いた窓(未設定なら出力寸法)。
+    /// view の描く窓。Camera はタブが見せている密度(未設定なら出力寸法)、Stage はタブが置いた窓(未設定なら出力寸法)。
     pub(crate) fn window(&self,view:View)->Result<crate::render::engine::Window,String>{
         let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?.spec();
-        Ok(match view{View::Camera=>crate::render::engine::Window::output(comp),View::User=>self.viewer.stage_window.unwrap_or(crate::render::engine::Window{projection_camera:Some(Default::default()),..crate::render::engine::Window::output(comp)})})
+        Ok(match view{View::Camera=>self.viewer.camera_window.unwrap_or(crate::render::engine::Window::output(comp)),View::User=>self.viewer.stage_window.unwrap_or(crate::render::engine::Window{..crate::render::engine::Window::output(comp)})})
     }
-    /// 層を置くカメラ。2D は出力の画面の物なのでどの view でも作中カメラの箱に貼り付く。
-    /// 2.5D・3D は世界に居る: Stage は既定(Boxcam の Original Comp)、Camera は作中カメラ。
-    pub(crate) fn projection_camera(&mut self,view:View,projection:LayerProjection)->Result<crate::doc::core::ResolvedCamera,String>{
-        match (view,projection){
-            (View::User,LayerProjection::TwoD)|(View::Camera,_)=>{
-                let time=self.time()?;let doc=self.doc.view();
-                self.engine.frame_graph_document_camera(&doc,time).map_err(e)
-            }
-            (View::User,_)=>Ok(Default::default())
-        }
+    /// 層を置くカメラ = 作中カメラ。2D はその箱に貼り付き、2.5D はそれとの相対で世界に居る(2026-09-23 裁定 B)。
+    /// Stage の観測者はその関係を外から見るだけで、層を自分へ向け直さない。
+    pub(crate) fn placement_camera(&mut self)->Result<crate::doc::core::ResolvedCamera,String>{
+        let time=self.time()?;let doc=self.doc.view();
+        self.engine.frame_graph_document_camera(&doc,time).map_err(e)
     }
     /// Flutter の Stage タブが窓を置く: 画素寸法と、comp 画像のどこを写すか。幅 0 は「隠れた」。
     pub(crate) fn set_stage_window(&mut self,j:&Json)->Result<bool,String>{
@@ -87,11 +82,14 @@ impl EditorRuntime{
             (width,height)=>{
                 let roi:[f32;4]=serde_json::from_value(j["roi"].clone()).map_err(|_|"stageWindow needs roi [x, y, w, h]")?;
                 if roi.iter().any(|v|!v.is_finite())||roi[2]<=0.0||roi[3]<=0.0{return Err("Invalid stageWindow roi".into())}
-                Some(crate::render::engine::Window{width,height,roi,projection_camera:Some(Default::default())})
+                let camera=j["view"]=="Camera";
+                Some(crate::render::engine::Window{width,height,roi })
             }
         };
-        let changed=self.viewer.stage_window!=next;
-        self.viewer.stage_window=next;
+        // The Camera tab sends its window too: the output drawn only as densely as it is shown.
+        let slot=if j["view"]=="Camera"{&mut self.viewer.camera_window}else{&mut self.viewer.stage_window};
+        let changed=*slot!=next;
+        *slot=next;
         Ok(changed)
     }
     fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{
@@ -210,32 +208,23 @@ impl EditorRuntime{
     fn eye(&self,seen:View)->Option<Eye>{
         let view=self.doc.view();let time=self.time().ok()?;
         let document=self.engine.resolve_camera(&view,time).ok()?;
-        let camera=if seen==View::Camera{document}else{Default::default()};
         let observer=if seen==View::Camera{document}else{self.viewer.user_camera};
-        Some(Eye{time,comp:view.composition().ok()??.spec(),camera,observer,document})
-    }
-    /// 描いた直後に GPU の mask から届いた範囲を、窓の px から comp 画像の px へ戻して取り込む。選択が変わるまで使う。
-    pub(crate) fn take_selection_bounds(&mut self,seen:View,window:crate::render::engine::Window){
-        if let Some(found)=self.engine.take_selection_bounds(){
-            let [x,y,w,h]=window.roi;let (sx,sy)=(w/window.width.max(1) as f32,h/window.height.max(1) as f32);
-            self.viewer.selection_bounds.insert(seen,found.into_iter().map(|(id,[x0,y0,x1,y1])|(id,[x+x0*sx,y+y0*sy,x+x1*sx,y+y1*sy])).collect());
-        }
+        Some(Eye{time,comp:view.composition().ok()??.spec(),observer,document})
     }
     fn bounds_from(&self,view:&crate::doc::store::StoreView<'_>,eye:&Eye,scene:&crate::render::frame_graph::SceneValue,layer:LayerId,seen:View)->Option<Json>{
-        let Eye{time,comp,camera,observer,document}=*eye;
-        let r=scene_layer(scene,layer)?;
-        let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
+        let Eye{time,comp,observer,document}=*eye;
+        let r=scene.layer(layer)?;
+        // 選択の枠は形の広がり(2026-09-23 裁定)。層は作中カメラとの関係で置かれ、観測者はそれを見る。
+        let camera=document;
         let b=self.engine.selected_scene_layer_bounds_in(view,&scene.layers,layer,time)?;
         let world=crate::doc::core::depth_scaled(r.transform.spatial);
-        let corners:Vec<_>=match (self.viewer.selection_bounds.get(&seen).and_then(|m|m.get(&layer)),r.projection){
-            (Some(&[x0,y0,x1,y1]),_)=>vec![[x0 as f64,y0 as f64],[x1 as f64,y0 as f64],[x1 as f64,y1 as f64],[x0 as f64,y1 as f64]],
-            (None,projection)=>match projection{
+        let corners:Vec<_>=match r.projection{
             LayerProjection::ThreeD=>crate::doc::core::projected_screen_corners(comp,camera,observer,r.projection,world,b.min,b.max).iter().map(|p|[p.x as f64,p.y as f64]).collect(),
             _=>{
                 let outline=self.engine.selected_scene_layer_outline_in(view,&scene.layers,layer,time).unwrap_or_else(||b.corners().to_vec());
                 crate::doc::core::facing_frame(comp,camera,observer,r.projection,world,b.min,b.max,&outline).iter().map(|p|[p.x as f64,p.y as f64]).collect()
             }
-        }};
+        };
         let anchor=match view.value_at(layer,&PropertyId::new(property::ANCHOR).ok()?,time).ok().flatten(){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
         let fractions:[f64;2]=std::array::from_fn(|i|(anchor[i]-b.min[i]as f64)/(b.max[i]-b.min[i]).max(1e-6)as f64);
         Some(json!({"layer":layer.0,"corners":corners,"localMin":b.min,"localMax":b.max,"anchorFraction":fractions}))
@@ -327,9 +316,10 @@ impl EditorRuntime{
         let selected_keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
         let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
-        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
+        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"look":comp.look,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
+        status["loop"]=json!(self.viewer.clock.loop_range().map(|(start,end)|json!({"start":start,"end":end})));
         status["visualSamples"]=json!(true);
         status["fontFamilies"]=json!(crate::render::picture::shaping::font_families());
         status["history"]=self.history.snapshot(self.doc.edit_head());

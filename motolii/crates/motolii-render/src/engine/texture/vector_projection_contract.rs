@@ -124,27 +124,6 @@ fn a_slow_field_does_not_tear_the_fill_and_stroke_of_one_plane() {
 }
 
 #[test]
-fn a_clipped_vector_selection_uses_only_the_visible_half() {
-    let mut doc = circle(320.0, 1.0, false);
-    doc.apply_all([
-        Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.clip".into() }] },
-        Intent::SetConstant { layer: LayerId(1), property: PropertyId::new("effect.0.param.axis").unwrap(), value: Value::F64(0.0) },
-    ]).unwrap();
-    let mut engine = Engine::new().unwrap();
-    let texture = engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
-        label: Some("clipped vector selection"), size: wgpu::Extent3d { width: 512, height: 512, depth_or_array_layers: 1 },
-        mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
-        format: crate::render::compositor::PRESENTABLE_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
-    });
-    engine.render_frame_into_with_camera(&doc.view(), RationalTime::ZERO, &texture, Default::default(), true, &[LayerId(1)]).unwrap();
-    crate::compositor::wait_for_gpu(engine.gpu_device(), "vector-selection-test").unwrap();
-    let bounds = engine.take_selection_bounds().unwrap();
-    let (_, b) = bounds.iter().find(|(id,_)| *id == LayerId(1)).unwrap();
-    assert!((95.0..=97.0).contains(&b[0]) && (255.0..=257.0).contains(&b[2]), "the clipped circle's mask must stop at its center: {b:?}");
-}
-
-#[test]
 fn camera_magnification_keeps_the_contour_at_output_precision() {
     let mut engine = Engine::new().unwrap();
     let mut doc = circle(16.0, 1.0, false);
@@ -186,5 +165,143 @@ fn enlarging_a_path_matches_drawing_the_large_contour_even_at_an_image_effect_bo
         }
         assert!(ink > 70000 && ink < 90000, "the unlit circle keeps its size and paint: {ink}");
         assert!(bad < 300, "magnifying a contour introduced {bad} differing pixels (image effect={pass})");
+    }
+}
+
+/// A solid fill is one quad whose coverage the GPU evaluates from the curves, so the outline stays
+/// a true circle however far it is magnified — nothing was tessellated to magnify.
+#[test]
+fn an_exact_fill_stays_a_true_circle_at_any_magnification() {
+    let scale = 40.0;
+    let doc = circle(16.0, scale as f64, false);
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert!(
+        engine.shape_textures.values().any(|c| matches!(&c.texture, LayerContent::Model(m) if m.vertices.len() == 4)),
+        "a solid fill is drawn as one quad, not a tessellation",
+    );
+    // The anchor is the shape origin (the circle's centre) placed at (256, 256).
+    let center = glam::vec2(256.0, 256.0);
+    let radius = 8.0 * scale;
+    let mut wrong = 0;
+    for y in 0..512usize {
+        for x in 0..512usize {
+            let distance = (glam::vec2(x as f32 + 0.5, y as f32 + 0.5) - center).length() - radius;
+            if distance.abs() < 1.5 { continue; }
+            let ink = pixels[(y * 512 + x) * 4] < 128;
+            if ink != (distance < 0.0) { wrong += 1; }
+        }
+    }
+    assert_eq!(wrong, 0, "pixels on the wrong side of the true circle");
+}
+
+/// A solid stroke is its outline as curves, filled exactly: a ring stays a true ring when magnified.
+#[test]
+fn an_exact_stroke_stays_a_true_ring_at_any_magnification() {
+    use crate::doc::vector::{LineCap, LineJoin, Stroke};
+    let scale = 40.0;
+    let mut doc = circle(16.0, scale as f64, false);
+    let mut shapes = doc.view().shapes(LayerId(1)).unwrap();
+    if let ShapeNode::Leaf(shape) = &mut shapes[0] {
+        shape.fill = None;
+        shape.stroke = Some(Stroke { brush: Brush::Solid(Rgb { r: 0.0, g: 0.0, b: 0.0 }), width: 2.0, cap: LineCap::Butt, join: LineJoin::Miter, miter_limit: 4.0, opacity: 1.0, hidden: false, dash: None });
+    }
+    let canvas = content_canvas(&shapes).unwrap().unwrap();
+    doc.apply_all([
+        Intent::SetShapes { layer: LayerId(1), shapes },
+        Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::ANCHOR).unwrap(), value: Value::Vec2([canvas.origin_x as f64, canvas.origin_y as f64]) },
+    ]).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert!(
+        engine.shape_textures.values().any(|c| matches!(&c.texture, LayerContent::Model(m) if m.vertices.len() % 4 == 0 && m.vertices.len() <= 8)),
+        "a solid stroke is drawn as quads over its outline curves, not a tessellation",
+    );
+    let (center, radius, half) = (glam::vec2(256.0, 256.0), 8.0 * scale, 1.0 * scale);
+    let mut wrong = 0;
+    for y in 0..512usize {
+        for x in 0..512usize {
+            let band = (glam::vec2(x as f32 + 0.5, y as f32 + 0.5) - center).length() - radius;
+            let distance = band.abs() - half;
+            if distance.abs() < 1.5 { continue; }
+            let ink = pixels[(y * 512 + x) * 4] < 128;
+            if ink != (distance < 0.0) { wrong += 1; }
+        }
+    }
+    assert_eq!(wrong, 0, "pixels on the wrong side of the true ring");
+}
+
+/// Gradient paint is located per fragment: magnified, each pixel still shows the colour the
+/// document's own gradient gives at that point.
+#[test]
+fn an_exact_gradient_is_located_per_pixel_at_any_magnification() {
+    use crate::doc::vector::{Gradient, GradientStop, GradientType};
+    let scale = 40.0;
+    let mut doc = circle(16.0, scale as f64, false);
+    let gradient = Gradient { units: Default::default(),
+        kind: GradientType::Linear,
+        start: Point { x: -8.0, y: 0.0 },
+        end: Point { x: 8.0, y: 0.0 },
+        stops: vec![GradientStop { offset: 0.0, color: Rgb { r: 0.0, g: 0.0, b: 0.0 } }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }],
+        stop_ids: Vec::new(),
+        next_stop_id: 0,
+        blend: Default::default(),
+    };
+    let mut shapes = doc.view().shapes(LayerId(1)).unwrap();
+    if let ShapeNode::Leaf(shape) = &mut shapes[0] {
+        shape.fill.as_mut().unwrap().brush = Brush::Gradient(gradient.clone());
+    }
+    doc.apply(Intent::SetShapes { layer: LayerId(1), shapes }).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    let mut worst = 0u8;
+    for x in 0..512usize {
+        // Inside the circle along its horizontal diameter; shape x = (x + 0.5 - 256) / scale.
+        let shape_x = (x as f64 + 0.5 - 256.0) / scale;
+        let want = gradient.color_at(gradient.parameter(Point { x: shape_x, y: 0.0 }));
+        let want = (want.r.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let got = pixels[(256 * 512 + x) * 4];
+        worst = worst.max(got.abs_diff(want));
+    }
+    assert!(worst <= 3, "the rendered gradient drifts from the document's by {worst}");
+}
+
+/// An object-bounding-box gradient (SVG's default) spans its object: resizing the object carries
+/// the gradient with it, so the same fraction of the object shows the same colour.
+#[test]
+fn an_object_bounding_box_gradient_follows_its_object() {
+    use crate::doc::vector::{Gradient, GradientStop, GradientType, GradientUnits};
+    let gradient = Gradient {
+        kind: GradientType::Linear,
+        start: Point { x: 0.0, y: 0.5 },
+        end: Point { x: 1.0, y: 0.5 },
+        stops: vec![GradientStop { offset: 0.0, color: Rgb { r: 0.0, g: 0.0, b: 0.0 } }, GradientStop { offset: 1.0, color: Rgb { r: 1.0, g: 1.0, b: 1.0 } }],
+        stop_ids: Vec::new(),
+        next_stop_id: 0,
+        blend: Default::default(),
+        units: GradientUnits::ObjectBoundingBox,
+    };
+    let sample = |size: f64| {
+        let scale = 10.0;
+        let mut doc = circle(size, scale, false);
+        let mut shapes = doc.view().shapes(LayerId(1)).unwrap();
+        if let ShapeNode::Leaf(shape) = &mut shapes[0] {
+            shape.fill.as_mut().unwrap().brush = Brush::Gradient(gradient.clone());
+        }
+        doc.apply(Intent::SetShapes { layer: LayerId(1), shapes }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        // A quarter of the way across the object, on its centre row.
+        let x = (256.0 - size * scale * 0.5 + size * scale * 0.25) as usize;
+        pixels[(256 * 512 + x) * 4]
+    };
+    let want = gradient.color_at(0.25).r;
+    let want = (want.clamp(0.0, 1.0) * 255.0).round() as u8;
+    for size in [16.0, 40.0] {
+        let got = sample(size);
+        assert!(got.abs_diff(want) <= 3, "size {size}: a quarter across shows {got}, the gradient gives {want}");
     }
 }

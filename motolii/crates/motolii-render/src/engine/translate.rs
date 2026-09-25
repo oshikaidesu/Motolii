@@ -46,12 +46,33 @@ pub(crate) fn translate_matte_mode(
 pub(crate) fn translate_effect_passes(
     effects: &[crate::picture::resolved::ResolvedEffect],
 ) -> Vec<crate::render::compositor::EffectPass> {
-    translate_image_effects(effects, crate::render::compositor::EffectStage::Pass)
+    let mut passes = translate_image_effects(effects, crate::render::compositor::EffectStage::Pass);
+    // U78 spike: a pass's `light_through` left on auto (< 0) is how much light the layer's own surface
+    // lets through — its surface Vism's backdrop input (Glass: transmission) × (1 − metallic).
+    for pass in &mut passes {
+        let Some(at) = pass.params.iter().position(|(name, _)| name == "light_through") else { continue };
+        if pass.params[at].1 >= 0.0 { continue; }
+        pass.params[at].1 = surface_light_through(effects);
+    }
+    passes
+}
+
+fn surface_light_through(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
+    let catalog = crate::render::compositor::catalog_snapshot();
+    let value = |effect: &crate::picture::resolved::ResolvedEffect, def: &crate::render::compositor::effects::VismDefinition, name: &str| {
+        effect.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v { crate::doc::store::Value::F64(v) => Some(*v as f32), _ => None })
+            .or_else(|| def.manifest.param_inputs().find(|p| p.name == name).map(|p| p.default[0]))
+    };
+    effects.iter().rev().find_map(|effect| {
+        let def = catalog.definitions.iter().find(|d| d.plugin_id() == effect.plugin_id && d.manifest.stage == crate::render::compositor::effects::isf::IsfStage::Surface)?;
+        let through = value(effect, def, def.manifest.backdrop_input.as_deref()?)?;
+        Some(through.clamp(0.0, 1.0) * (1.0 - value(effect, def, "metallic").unwrap_or(0.0).clamp(0.0, 1.0)))
+    }).unwrap_or(0.0)
 }
 
 /// feedback を持つ pass に、状態の持ち主の鍵(層 × 複製 × 列 × 番)を刻む。
 /// 列 0 = 層の効果、列 1 = 板(配置・Whole)の後の効果。
-pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass], layer: crate::doc::store::LayerId, copy: u32, chain: u8, screen: Option<[u32; 2]>, namespace: u64) {
+pub(crate) fn stamp_feedback(passes: &mut [crate::render::compositor::EffectPass], layer: crate::doc::store::LayerId, copy: u32, chain: u8, screen: Option<[u32; 3]>, namespace: u64) {
     for (index, pass) in passes.iter_mut().enumerate() {
         if pass.persistent {
             pass.feedback = Some(crate::render::compositor::FeedbackKey { layer, copy, chain, index: index as u16, screen, namespace });
@@ -166,12 +187,16 @@ pub(crate) fn translate_point_displace(
     }
 }
 
-/// Clip の欄 → 層の枠での切断。平面を世界へ写すのは描く側(枠が決まる所)。
-pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
-    const ID: &str = "motolii.clip";
-    let effect = effects.iter().rev().find(|e| e.plugin_id == ID)?;
+/// The last effect of a stage in the chain and its shelf declaration: a card is found by what it
+/// is (`STAGE`), not by which card it is, so a card of the same stage from anywhere works alike.
+fn last_of_stage(effects: &[crate::picture::resolved::ResolvedEffect], stage: crate::render::compositor::EffectStage) -> Option<(&crate::picture::resolved::ResolvedEffect, EffectDescriptor)> {
     let catalog = known_effects();
-    let descriptor = catalog.iter().find(|d| d.plugin_id == ID)?;
+    effects.iter().rev().find_map(|e| catalog.iter().find(|d| d.plugin_id == e.plugin_id && d.stage == stage).map(|d| (e, d.clone())))
+}
+
+/// A `STAGE: clip` card's inputs `axis` / `offset` / `cap` → 層の枠での切断。平面を世界へ写すのは描く側(枠が決まる所)。
+pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
+    let (effect, descriptor) = last_of_stage(effects, crate::render::compositor::EffectStage::Clip)?;
     let read = |name: &str| -> f32 {
         effect.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v {
             crate::doc::store::Value::F64(v) => Some(*v as f32),
@@ -191,19 +216,23 @@ pub(crate) fn translate_clip(effects: &[crate::picture::resolved::ResolvedEffect
     Some(crate::render::compositor::ClipSpec { axis, offset: read("offset"), cap: read("cap") > 0.5 })
 }
 
-/// Cast Shadow の欄 → 型紙の濃さ。掛かっていなければ 0(影を落とさない)。
+/// A `STAGE: shadow` card's input `strength` → 型紙の濃さ。掛かっていなければ 0(影を落とさない)。
 /// 柔らかさ・灯の選択・距離は compositor に実装が無いので欄も無い(2026-09-20)。
 pub(crate) fn translate_cast_shadow(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
-    const ID: &str = "motolii.cast_shadow";
-    let Some(effect) = effects.iter().rev().find(|e| e.plugin_id == ID) else { return 0.0 };
-    let catalog = known_effects();
-    let default = catalog.iter().find(|d| d.plugin_id == ID)
-        .and_then(|d| d.params.iter().find(|p| p.name == "strength"))
-        .map_or(1.0, |p| p.default as f32);
+    let Some((effect, descriptor)) = last_of_stage(effects, crate::render::compositor::EffectStage::Shadow) else { return 0.0 };
+    let default = descriptor.params.iter().find(|p| p.name == "strength").map_or(1.0, |p| p.default as f32);
     effect.params.iter().find(|(n, _)| n == "strength").and_then(|(_, v)| match v {
         crate::doc::store::Value::F64(v) => Some(*v as f32),
         _ => None,
     }).unwrap_or(default).clamp(0.0, 1.0)
+}
+
+/// Light a layer gives: its Glow's intensity (0 = none). Only the scratch Lighting Pack reads it.
+pub(crate) fn translate_emission(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
+    effects.iter().filter(|e| e.plugin_id == "motolii.glow").map(|e| e.params.iter().find(|(n, _)| n == "intensity").and_then(|(_, v)| match v {
+        crate::doc::store::Value::F64(v) => Some(*v as f32),
+        _ => None,
+    }).unwrap_or(1.5)).fold(0.0, f32::max)
 }
 
 pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {

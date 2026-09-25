@@ -19,7 +19,7 @@ use arrow::buffer::NullBuffer;
 use arrow::datatypes::{DataType, Field};
 use re_byte_size::SizeBytes;
 use re_types_core::{
-    Component, ComponentDescriptor, ComponentType, DeserializationResult, Loggable,
+    Component, ComponentDescriptor, ComponentType, DeserializationResult, ArrowDataType, FromArrow, FromArrowOpt, ToArrow, ToArrowOpt,
     SerializationResult, SerializedComponentBatch,
 };
 
@@ -44,9 +44,11 @@ macro_rules! value_component {
             fn from(v: &'a $name) -> Self { Self::Borrowed(v) }
         }
 
-        impl Loggable for $name {
-            fn arrow_datatype() -> DataType { DataType::$arrow }
+        impl ArrowDataType for $name {
+            fn arrow_data_type() -> DataType { DataType::$arrow }
+        }
 
+        impl ToArrowOpt for $name {
             fn to_arrow_opt<'a>(
                 data: impl IntoIterator<Item = Option<impl Into<Cow<'a, Self>>>>,
             ) -> SerializationResult<ArrayRef>
@@ -57,7 +59,9 @@ macro_rules! value_component {
                     data.into_iter().map(|v| v.map(|v| v.into().into_owned().0)).collect();
                 Ok(Arc::new($array::from(values)))
             }
+        }
 
+        impl FromArrowOpt for $name {
             fn from_arrow_opt(data: &dyn Array) -> DeserializationResult<Vec<Option<Self>>> {
                 let array = data.as_any().downcast_ref::<$array>().ok_or_else(|| {
                     re_types_core::DeserializationError::datatype_mismatch(
@@ -66,6 +70,21 @@ macro_rules! value_component {
                     )
                 })?;
                 Ok(array.iter().map(|v| v.map(Self)).collect())
+            }
+        }
+
+        impl ToArrow for $name {
+            fn to_arrow<'a>(data: impl IntoIterator<Item = impl Into<Cow<'a, Self>>>) -> SerializationResult<ArrayRef>
+            where
+                Self: 'a,
+            {
+                re_types_core::to_arrow_via_to_arrow_opt(data)
+            }
+        }
+
+        impl FromArrow for $name {
+            fn from_arrow(data: &dyn Array) -> DeserializationResult<Vec<Self>> {
+                re_types_core::from_arrow_via_from_arrow_opt(data)
             }
         }
 
@@ -94,11 +113,13 @@ macro_rules! tuple_component {
             fn from(v: &'a $name) -> Self { Self::Borrowed(v) }
         }
 
-        impl Loggable for $name {
-            fn arrow_datatype() -> DataType {
+        impl ArrowDataType for $name {
+            fn arrow_data_type() -> DataType {
                 DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float64, false)), $n)
             }
+        }
 
+        impl ToArrowOpt for $name {
             fn to_arrow_opt<'a>(
                 data: impl IntoIterator<Item = Option<impl Into<Cow<'a, Self>>>>,
             ) -> SerializationResult<ArrayRef>
@@ -117,11 +138,13 @@ macro_rules! tuple_component {
                     Some(nulls),
                 )))
             }
+        }
 
+        impl FromArrowOpt for $name {
             fn from_arrow_opt(data: &dyn Array) -> DeserializationResult<Vec<Option<Self>>> {
                 let array = data.as_any().downcast_ref::<FixedSizeListArray>().ok_or_else(|| {
                     re_types_core::DeserializationError::datatype_mismatch(
-                        Self::arrow_datatype(),
+                        Self::arrow_data_type(),
                         data.data_type().clone(),
                     )
                 })?;
@@ -129,7 +152,7 @@ macro_rules! tuple_component {
                 // 互いに読めてしまう(2 桁の口が 4 桁の値を先頭 2 つとして返す)。
                 if array.value_length() != $n {
                     return Err(re_types_core::DeserializationError::datatype_mismatch(
-                        Self::arrow_datatype(),
+                        Self::arrow_data_type(),
                         data.data_type().clone(),
                     ));
                 }
@@ -146,6 +169,21 @@ macro_rules! tuple_component {
                         })
                     })
                     .collect())
+            }
+        }
+
+        impl ToArrow for $name {
+            fn to_arrow<'a>(data: impl IntoIterator<Item = impl Into<Cow<'a, Self>>>) -> SerializationResult<ArrayRef>
+            where
+                Self: 'a,
+            {
+                re_types_core::to_arrow_via_to_arrow_opt(data)
+            }
+        }
+
+        impl FromArrow for $name {
+            fn from_arrow(data: &dyn Array) -> DeserializationResult<Vec<Self>> {
+                re_types_core::from_arrow_via_from_arrow_opt(data)
             }
         }
 

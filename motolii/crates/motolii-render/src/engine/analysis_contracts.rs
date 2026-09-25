@@ -30,7 +30,7 @@ fn document(path: &std::path::Path, persist: bool) -> Document {
 
 fn document_with(path: &std::path::Path, persist: bool, fill: Option<Fill>, stroke: Option<Stroke>) -> Document {
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let (source, material) = (LayerId(1), LayerId(2));
     doc.apply_all([
         Intent::AddLayer(source),
@@ -85,6 +85,9 @@ fn kept_ids_follow_the_moving_square_and_land_the_same_however_you_arrive() {
         marks.sort_by(|a, b| a.1.total_cmp(&b.1));
         marks.into_iter().map(|(id, _)| id).collect::<Vec<_>>()
     };
+    // An analysis's picture arrives a frame after it is asked for (2026-09-23): the frame is drawn
+    // (an offline draw waits for it) before its blobs are read.
+    walker.render_frame(&doc.view(), at(2)).unwrap();
     let first = ids(&mut walker, 2);
     assert_eq!(first.len(), 2, "四角 2 つ: {first:?}");
     let mut walked = Vec::new();
@@ -142,7 +145,7 @@ fn track_overlay_frames_what_it_finds_below() {
     let dir = tempfile::tempdir().unwrap();
     let Some(path) = clip(dir.path()) else { eprintln!("ffmpeg が無いので飛ばす"); return };
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: W, height: H, fps: fps(), duration_frames: 50, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let (video, host) = (LayerId(1), LayerId(2));
     doc.apply_all([
         Intent::AddLayer(video),

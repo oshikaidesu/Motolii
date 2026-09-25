@@ -237,7 +237,7 @@ mod tests {
             height: 360,
             fps,
             duration_frames: 120,
-            background: [0.0; 4],
+            background: [0.0; 4], look: Default::default()
         })).unwrap();
 
         let normal = LayerId(20);
@@ -300,7 +300,7 @@ mod tests {
                 height: 360,
                 fps,
                 duration_frames: 120,
-                background: [0.0, 0.0, 0.0, 1.0],
+                background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
             }),
             Intent::AddLayer(clip),
             Intent::SetMeta {
@@ -365,7 +365,7 @@ mod tests {
                 height: 360,
                 fps,
                 duration_frames: 120,
-                background: [0.0, 0.0, 0.0, 1.0],
+                background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
             }),
             Intent::AddLayer(clip),
             Intent::SetMeta {
@@ -426,7 +426,7 @@ mod tests {
                 height: 360,
                 fps,
                 duration_frames: 90,
-                background: [0.0, 0.0, 0.0, 1.0],
+                background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
             }),
             Intent::AddLayer(clip),
             Intent::SetMeta {

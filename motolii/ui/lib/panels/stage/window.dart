@@ -111,11 +111,24 @@ mixin _StageWindow on State<StagePanel>, _StageView {
   }
 
   void _syncWindow() {
-    if (!_userStage || !_shown || !mounted || !c.supports('stageWindow'))
-      return;
+    if (!_shown || !mounted || !c.supports('stageWindow')) return;
     if (_viewport.isEmpty) return;
     final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
     final origin = _origin, scale = _scale;
+    if (!_userStage) {
+      // The Camera picture is the whole output, drawn only as densely as this tab shows it
+      // (After Effects' Auto resolution) and never above the output's own pixels.
+      final camera = {
+        'view': 'Camera',
+        'width': (_width * scale * ratio).round().clamp(1, _width.round()),
+        'height': (_height * scale * ratio).round().clamp(1, _height.round()),
+        'roi': [0.0, 0.0, _width, _height],
+      };
+      if (sameValue(camera, _sentWindow)) return;
+      _sentWindow = camera;
+      c.command('stageWindow', camera);
+      return;
+    }
     final box = _coverBox();
     final window = {
       'width': (box.width * ratio).round(),

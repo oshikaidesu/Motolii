@@ -37,17 +37,16 @@ impl Engine {
             size,
             placement: LayerPlacement { transform, opacity, ..LayerPlacement::default() },
             projection: LayerProjection::TwoD,
-            projection_camera: flat,
             blend_mode: CompositeBlendMode::Normal,
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
             shadow: base.layer.shadow,
-            outline: base.layer.outline,
+            emission: base.layer.emission,
             frame: None,
         };
         let bake = |engine: &mut Self, layer: Layer, passes: &[EffectPass]| {
-            let (texture, _view) = engine.compositor.render_to_texture(
+            let texture = engine.compositor.render_to_texture(
                 local,
                 flat,
                 &[LayerWithPasses { layer, passes: passes.to_vec(), pass_sources: Vec::new(), padding: 0, cut: Vec::new() }],
@@ -119,7 +118,7 @@ mod clipping_contract {
             height,
             fps: Fps::try_new(30, 1).unwrap(),
             duration_frames: 1,
-            background: [0.0; 4],
+            background: [0.0; 4], look: Default::default()
         }))
         .unwrap();
         doc

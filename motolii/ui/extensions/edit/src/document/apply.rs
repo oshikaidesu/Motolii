@@ -50,7 +50,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_composition(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -60,7 +60,7 @@ impl Document {
                 let json = serde_json::to_string(&notebook)?;
                 (Self::composition_path(), vec![SerializedComponentBatch {
                     descriptor: descriptor_notebook(),
-                    array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)]).map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)]).map_err(|e| StoreError::Chunk(e.to_string()))?,
                 }])
             }
             Intent::SetMarkers { markers } => {
@@ -69,7 +69,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_markers(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -84,7 +84,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_masks(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -103,14 +103,14 @@ impl Document {
                     vec![
                         SerializedComponentBatch {
                             descriptor: descriptor_masks(),
-                            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(
+                            array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(
                                 masks_json,
                             )])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                         },
                         SerializedComponentBatch {
                             descriptor: descriptor_track(&shape_property),
-                            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(
+                            array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(
                                 shape_json,
                             )])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
@@ -134,7 +134,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_meta(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -152,7 +152,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_meta(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -173,7 +173,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_meta(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -194,7 +194,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_meta(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -251,7 +251,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_attrs(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -265,7 +265,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_effects(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -278,7 +278,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_shapes(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -292,7 +292,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_text(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -313,7 +313,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -340,7 +340,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -357,7 +357,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -375,7 +375,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -386,7 +386,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -414,7 +414,7 @@ impl Document {
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -436,7 +436,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -448,7 +448,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_slots(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -463,7 +463,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_assets(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -478,7 +478,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_assets(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -502,7 +502,7 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_assets(),
-                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
@@ -527,7 +527,7 @@ impl Document {
 fn serialize_present(present: bool) -> Result<SerializedComponentBatch, StoreError> {
     Ok(SerializedComponentBatch {
         descriptor: descriptor_present(),
-        array: <LayerPresent as re_types_core::Loggable>::to_arrow([LayerPresent(present)])
+        array: <LayerPresent as re_types_core::ToArrow>::to_arrow([LayerPresent(present)])
             .map_err(|e| StoreError::Chunk(e.to_string()))?,
     })
 }
@@ -544,7 +544,7 @@ fn constant_batch(
     let json = serde_json::to_string(&PropertySource::constant(value))?;
     Ok(SerializedComponentBatch {
         descriptor: descriptor_track(property),
-        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+        array: <TrackJson as re_types_core::ToArrow>::to_arrow([TrackJson(json)])
             .map_err(|e| StoreError::Chunk(e.to_string()))?,
     })
 }

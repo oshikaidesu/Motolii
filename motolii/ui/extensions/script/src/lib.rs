@@ -38,6 +38,10 @@ pub fn execute<H: Host + 'static>(
     let outcome = context.with(|ctx| -> Result<(), String> {
         let bind = || -> rquickjs::Result<()> {
             let globals = ctx.globals();
+            // Where the script lives: a relative material path is resolved from here, as a
+            // relative URL is from its page.
+            let dir = std::path::Path::new(name).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+            globals.set("__scriptDir", dir)?;
             globals.set(
                 "__op",
                 Function::new(

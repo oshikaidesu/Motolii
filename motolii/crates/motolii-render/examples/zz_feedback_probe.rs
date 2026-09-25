@@ -11,7 +11,7 @@ fn at(frame: i64) -> RationalTime { RationalTime::try_from_frame(frame, fps()).u
 
 fn document(echo: Option<(f64, f64)>) -> Document {
     let mut doc = Document::new().with_programs(motolii_render::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: fps(), duration_frames: FRAMES, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     let mut track = KeyframeTrack::new();
     track.insert(Keyframe { t: RationalTime::ZERO, value: Value::Vec2([8.0, 32.0]), interp: Interp::Linear, spatial: None });

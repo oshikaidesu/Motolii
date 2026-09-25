@@ -214,12 +214,21 @@ pub fn render_tree(nodes: &[ShapeNode], canvas: &Canvas) -> Result<crate::pictur
         x: canvas.origin_x as f64,
         y: canvas.origin_y as f64,
     };
+    let mut resolved = Vec::new();
     for shape in flatten(nodes)? {
-        for instance in crate::picture::shapes_ops::resolve(&shape)? {
+        let instances = crate::picture::shapes_ops::resolve(&shape)?;
+        resolved.push((shape, instances));
+    }
+    // The object an object-bounding-box gradient spans: every shape drawn here.
+    let bounds = crate::doc::vector::geometry_bounds(resolved.iter().flat_map(|(_, instances)| instances.iter().flat_map(|instance| instance.path.iter())))
+        .unwrap_or([0.0, 0.0, 1.0, 1.0]);
+    for (shape, instances) in resolved {
+        for instance in instances {
             crate::picture::shapes_ops::raster::draw(
                 &mut pixmap,
                 &instance.path,
                 origin,
+                bounds,
                 shape.fill.as_ref(),
                 shape.stroke.as_ref(),
                 instance.opacity,

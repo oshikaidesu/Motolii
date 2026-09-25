@@ -5,7 +5,7 @@
 // then to clip from, .35 'sine' after moverPauseBeforeExit .14; top-bottom: from = inset(0 0 100% 0) (pinned top), hide = inset(100% 0 0 0)
 // (pinned bottom). Panel: fromTo hide → reveal, .7 'sine.inOut', delay steps · .05. Clicked item: opacity 0 + clip from, .7 'sine'; others .8 scale.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 3, background: "#111114" });
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/"; const PHOTO = MAT + "photo2.png";
+const MAT = "mat/"; const PHOTO = MAT + "photo2.png";
 const SIN = "sine.in", SOUT = "sine", SIO = "sine.inOut";
 const STEPS = 6, DT = 0.05, DUR = 0.35, PAUSE = 0.14, CLICK = 0.3;
 // A picture in a box with clip-path: inset(). edge(t, state, ease): "bottom" = collapsed on the bottom edge (Clip Top = h),

@@ -7,108 +7,13 @@ use std::collections::HashMap;
 
 use crate::doc::core::CompSpec;
 use crate::frame_graph::{SceneContentValue, SceneLayerValue, SceneValue, SolverPlanValue};
-use crate::doc::store::{LayerId, MaskFrame, PropertyId, RationalTime, StoreView, Value};
+use crate::doc::store::{LayerId, RationalTime, Value};
 use crate::render::compositor::effects::block_program::{BlockItem, BlockProgram, BlockWorld, FollowPass, WorldPass};
 use crate::render::compositor::effects::isf::IsfStage;
 use crate::render::compositor::Layer;
 use crate::render::engine::{Engine, EngineError};
 
-/// 効果の列の何番目のブロックか・どのブロックか・欄の値が同じ物を、1 回の計算に束ねる。
-pub(crate) struct BlockBatch {
-    stage: usize,
-    plugin: String,
-    params: Vec<f32>,
-    members: Vec<u32>,
-    /// 場(`SCOPE: room`)の元の物の番号。掛かった層そのものが動くブロックは `u32::MAX`。
-    source: u32,
-    /// 名指しの深さ(親・anchor を辿った段数)。同じ stage では浅い方(読まれる側)が先に走る。
-    rank: usize,
-}
-
-/// 形の層の輪郭(素材座標)。当たりは四角ではなく、この形そのもので見る
-/// (利用者 2026-09-16「今のコリジョンの当たり判定は四角で変です。2d も 3d もシルエットが算出できるはず」)。
-/// 2D は書類の形(`vector::resolve`)、3D の網・粒は `media::silhouette_points`(まだ箱のまま)。
-fn outline_of(shapes: &[crate::doc::vector::ShapeNode], stretch: [f32; 2]) -> Option<Vec<[f32; 2]>> {
-    let shapes = if stretch == [1.0, 1.0] { shapes.to_vec() } else { crate::picture::shapes_ops::stretch_outline(shapes, stretch) };
-    let leaves = crate::picture::shapes_ops::flatten(&shapes).ok()?;
-    let canvas = crate::picture::shapes_ops::content_canvas(&shapes).ok().flatten()?;
-    let (ox, oy) = (canvas.origin_x as f32, canvas.origin_y as f32);
-    let mut points = Vec::new();
-    for shape in &leaves {
-        if shape.fill.is_none() {
-            continue;
-        }
-        for instance in crate::picture::shapes_ops::resolve(shape).ok()?.iter() {
-            flatten_contours(&instance.path, [ox, oy], &mut points);
-        }
-    }
-    (points.len() >= 3).then_some(points)
-}
-
-/// 輪郭の列を点に割る(曲がりに合わせて、lyon の適応分割)。文字も形も同じ。
-fn flatten_contours(contours: &[crate::doc::vector::Contour], offset: [f32; 2], points: &mut Vec<[f32; 2]>) {
-    let (ox, oy) = (offset[0], offset[1]);
-    for contour in contours {
-        let vs = &contour.vertices;
-        if vs.len() < 2 {
-            continue;
-        }
-        let last = if contour.closed { vs.len() } else { vs.len() - 1 };
-        for i in 0..last {
-            let (a, b) = (&vs[i], &vs[(i + 1) % vs.len()]);
-            let p = |x: f64, y: f64| lyon_geom::point(x as f32, y as f32);
-            let curve = lyon_geom::CubicBezierSegment {
-                from: p(a.point.x, a.point.y),
-                ctrl1: p(a.point.x + a.out_tangent.x, a.point.y + a.out_tangent.y),
-                ctrl2: p(b.point.x + b.in_tangent.x, b.point.y + b.in_tangent.y),
-                to: p(b.point.x, b.point.y),
-            };
-            points.push([curve.from.x + ox, curve.from.y + oy]);
-            curve.for_each_flattened(0.6, &mut |line| {
-                points.push([line.to.x + ox, line.to.y + oy]);
-            });
-        }
-    }
-}
-
-/// 名指しの深さ: 相手(親・anchor)の無い物は 0、相手が居れば相手の深さ + 1。輪は 0 で切る。
-/// 同じ stage の batch はこの順に走るので、読む側は読まれる側の今を見る。
-fn reference_depth(items: &[BlockItem]) -> Vec<usize> {
-    fn go(items: &[BlockItem], k: usize, memo: &mut [Option<usize>], visiting: &mut Vec<usize>) -> usize {
-        if let Some(d) = memo[k] {
-            return d;
-        }
-        if visiting.contains(&k) {
-            return 0;
-        }
-        visiting.push(k);
-        let d = [items[k].parent_slot, items[k].anchor_slot].into_iter()
-            .filter(|j| (*j as usize) < items.len())
-            .map(|j| go(items, j as usize, memo, visiting) + 1)
-            .max().unwrap_or(0);
-        visiting.pop();
-        memo[k] = Some(d);
-        d
-    }
-    let mut memo = vec![None; items.len()];
-    (0..items.len()).map(|k| go(items, k, &mut memo, &mut Vec::new())).collect()
-}
-
-/// 書類から先に読む、物ごとの住む箱と箱。
-#[derive(Clone)]
-struct Placed {
-    room: [f32; 4],
-    radius: f32,
-    own: [f32; 4],
-    group: u32,
-    weight: f32,
-    /// 書類の間合い(CSS の margin)。物同士はこれだけ空けて当たる。
-    margin: f32,
-    /// 手触り(0 返す ↔ 0.5 吸う ↔ 1 引きずる)。
-    hardness: f32,
-    /// 形そのものの輪郭(素材座標)。無ければ箱で当たる。
-    outline: Option<std::sync::Arc<Vec<[f32; 2]>>>,
-}
+use crate::render_lowering::{BlockBatch, Placed};
 
 #[derive(Default)]
 pub(crate) struct BlockState {
@@ -152,9 +57,9 @@ pub(crate) struct BlockState {
 }
 
 impl BlockState {
-    /// 解き手が動かす物か(描く前に間引かないため)。
-    pub(crate) fn moves(&self, layer: LayerId) -> bool {
-        self.slots.contains_key(&layer)
+    /// 解き手が動かす物の数。
+    pub(crate) fn object_count(&self) -> usize {
+        self.objects.len()
     }
 }
 
@@ -188,11 +93,6 @@ impl Engine {
                 age: 0,
             })
         }).collect()
-    }
-
-    /// 可視のモードが読む: 物ごとのずれ、触れ合いの線、場の元と届く輪。
-    pub(crate) fn physics_offset(&self, layer: LayerId) -> Option<([f32; 2], f32)> {
-        self.blocks.physics.offset(layer)
     }
 
     pub(crate) fn physics_links(&self) -> Vec<([f32; 2], [f32; 2])> {
@@ -233,760 +133,84 @@ impl Engine {
         self.blocks.physics.contacts()
     }
 
-    pub fn block_states(&self) -> Vec<[f32; 3]> {
-        let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
-        let ctx = &self.compositor.ctx;
-        let encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-read") });
-        crate::render::compositor::effects::block_program::read_state(&ctx.device, &ctx.queue, world, encoder)
-            .iter().map(|o| [o.translate[0], o.translate[1], o.rotate]).collect()
+    pub fn block_states(&mut self) -> Vec<[f32; 3]> {
+        self.block_state_now().iter().map(|o| [o.translate[0], o.translate[1], o.rotate]).collect()
     }
 
     /// 計測の口: 物ごとの今のずれを全部(位置 2・回転・大きさ・色 3・不透明)。描く道は読み戻さない。
-    pub fn block_offsets(&self) -> Vec<[f32; 8]> {
+    pub fn block_offsets(&mut self) -> Vec<[f32; 8]> {
+        self.block_state_now().iter().map(|o| [o.translate[0], o.translate[1], o.rotate, o.scale, o.tint[0], o.tint[1], o.tint[2], o.tint[3]]).collect()
+    }
+
+    /// Tests and measurement only: the blocks' state as this frame leaves it, now (the frame ends and
+    /// the GPU is waited for).
+    fn block_state_now(&mut self) -> Vec<crate::render::compositor::effects::block_program::BlockOffset> {
+        use crate::render::compositor::effects::block_program::{offsets_from_bytes, OFFSET_BYTES};
         let Some(world) = self.blocks.world.as_ref() else { return Vec::new() };
-        let ctx = &self.compositor.ctx;
-        let encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-block-read") });
-        crate::render::compositor::effects::block_program::read_state(&ctx.device, &ctx.queue, world, encoder)
-            .iter().map(|o| [o.translate[0], o.translate[1], o.rotate, o.scale, o.tint[0], o.tint[1], o.tint[2], o.tint[3]]).collect()
-    }
-
-    /// ブロックを持つ層の住む箱(書類の親の Group の箱、無ければ comp の枠)と、物の箱・組・譲る比を読む。
-    pub(super) fn prepare_blocks(&mut self, view: &StoreView<'_>, comp: CompSpec, t: RationalTime, resolved: &[ResolvedLayer]) -> Result<(), EngineError> {
-        let store = |e: crate::doc::store::StoreError| EngineError::Store(e.to_string());
-        let blocks: Vec<String> = self.compositor.catalog.definitions.iter().filter(|d| d.manifest.stage == IsfStage::Block).map(|d| d.plugin_id().to_owned()).collect();
-        // ブロックの宣言(id・場かどうか・欄の名前と既定)を先に写す(借りの重なりを避ける)。
-        let definitions: Vec<(String, bool, Vec<(String, f32)>)> = self.compositor.catalog.definitions.iter()
-            .filter(|d| d.manifest.stage == IsfStage::Block)
-            .map(|d| (
-                d.plugin_id().to_owned(),
-                d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room,
-                d.manifest.param_inputs().map(|p| (p.name.clone(), p.default[0])).collect(),
-            ))
-            .collect();
-        let field_blocks: Vec<String> = self.compositor.catalog.definitions.iter()
-            .filter(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room)
-            .map(|d| d.plugin_id().to_owned()).collect();
-        // 嘘と解き手の欄は棚の札から(場の vism の `"PHYSICS"`)。Rust は部品だけ。
-        let lies = self.compositor.catalog.definitions.iter()
-            .find(|d| d.manifest.stage == IsfStage::Block && d.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room && !d.manifest.physics.is_empty())
-            .map(|d| crate::render::engine::physics::Lies::from_manifest(&d.manifest.physics)).unwrap_or_default();
-        if self.blocks.physics.lies != lies {
-            self.blocks.physics = Default::default();
-            self.blocks.physics.lies = lies.clone();
-        }
-        // 抜いた後の形(効果を通した後の透過)は解析の段で取ってある。物理は「描かれた物の形」で当たる。
-        let mut extents: HashMap<LayerId, [f32; 4]> = HashMap::new();
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Shape)) {
-                continue;
-            }
-            let extent = match crate::picture::boxes::layer_box(view, layer.id, t).map_err(store)? {
-                Some(own) => Some(own),
-                // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
-                None => match view.meta(layer.id).map_err(store)?.map(|m| m.source) {
-                    Some(crate::doc::store::LayerSource::File { path, .. }) => self.material_extent(&path, comp).map(|e| [0.0, 0.0, e[0], e[1]]),
-                    _ => None,
-                },
-            };
-            if let Some(extent) = extent {
-                extents.insert(layer.id, extent);
-            }
-        }
-        let keyed = self.keyed_outlines.clone();
-        let state = &mut self.blocks;
-        state.fps = view.composition().ok().flatten().map_or(30.0, |c| c.fps.as_f64());
-        state.last_frame = view.composition().ok().flatten().map_or(0, |c| c.duration_frames.max(1) - 1);
-        state.now = Some(t);
-        state.placed.clear();
-        state.follows.clear();
-        state.object_layers.clear();
-        state.object_frames.clear();
-        state.slots.clear();
-        state.connectors.clear();
-        state.traces.clear();
-        state.ropes.clear();
-        state.field_rooms.clear();
-        state.fields.clear();
-        state.objects.clear();
-        state.bases.clear();
-        state.outlines.clear();
-        state.batches.clear();
-        if blocks.is_empty() {
-            return Ok(());
-        }
-        // 場が立っている住む箱を先に見る: その箱に居る物は、効果を持たなくても場に動かされる。
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost && l.effects.iter().any(|e| field_blocks.contains(&e.plugin_id))) {
-            let parent = view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent;
-            state.field_rooms.insert(parent.map_or(0, |p| p.0 as u32));
-        }
-        let field_rooms = state.field_rooms.clone();
-        let solved = crate::picture::frame::layout_frame(view, t).map_err(store)?;
-        // 部屋 = 場の立っている一番近い先祖の箱(提案 2026-09-16「場のある箱が部屋」)。入れ子の中の字も、
-        // ポスター全体に立った場で散れる。箱(Group)そのものは物にならず、中の葉が物。
-        let room_ancestor = lies.room_ancestor;
-        let room_of = |view: &StoreView<'_>, id: LayerId| -> Result<Option<u32>, EngineError> {
-            let mut at = view.attrs(id).map_err(store)?.unwrap_or_default().parent;
-            loop {
-                let key = at.map_or(0, |p| p.0 as u32);
-                if field_rooms.contains(&key) {
-                    return Ok(Some(key));
-                }
-                if !room_ancestor {
-                    return Ok(None);
-                }
-                let Some(p) = at else { return Ok(None) };
-                at = view.attrs(p).map_err(store)?.unwrap_or_default().parent;
-            }
-        };
-        let mut room_ids: HashMap<LayerId, u32> = HashMap::new();
-        let mut wanted = Vec::new();
-        // つなぐ線の両端は、ブロックを持たなくても物として並べる(線は両端の motion を読むので、動かない端にも項が要る)。
-        let mut needed: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if let Some((from, to)) = crate::picture::connect::connection(view, layer.id, t).map_err(store)? {
-                needed.insert(from);
-                needed.insert(to);
-            }
-            if let Some((target, _)) = crate::picture::connect::tracing(view, layer.id, t).map_err(store)? {
-                needed.insert(target);
-            }
-        }
-        // 名指しの相手(親の層、Position Anchor の層)は、ブロックがその今を読むので物として並べる(`parent(k)` / `anchor(k)`)。
-        // 番号は最後(名指しだけで物になる層を先に並べると、既存の物の `k` がずれて絵が変わる)。
-        let mut named: std::collections::HashSet<LayerId> = std::collections::HashSet::new();
-        let anchor_row = PropertyId::new(crate::doc::store::layout::POSITION_ANCHOR).map_err(store)?;
-        let anchor_of = |view: &StoreView<'_>, id: LayerId| -> Result<Option<LayerId>, EngineError> {
-            Ok(match view.value_at(id, &anchor_row, t).map_err(store)? {
-                Some(Value::LayerId(id)) if id != 0 => Some(LayerId(id)),
-                Some(Value::F64(v)) if v >= 1.0 => Some(LayerId(v.round() as u64)),
-                _ => None,
-            })
-        };
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost && l.effects.iter().any(|e| blocks.contains(&e.plugin_id))) {
-            if let Some(parent) = view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent {
-                named.insert(parent);
-            }
-            if let Some(target) = anchor_of(view, layer.id)? {
-                named.insert(target);
-            }
-        }
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            // 見せるための層(可視の重ね、つなぐ線)は物にしない。物理の相手は画の中身だけ。
-            if layer.effects.iter().any(|e| crate::extensions::overlay::is_track_overlay(&e.plugin_id)) {
-                continue;
-            }
-            let connects = |name: &str| -> Result<bool, EngineError> {
-                Ok(matches!(view.value_at(layer.id, &PropertyId::new(name).map_err(store)?, t).map_err(store)?,
-                    Some(Value::LayerId(id)) if id != 0) || matches!(view.value_at(layer.id, &PropertyId::new(name).map_err(store)?, t).map_err(store)?,
-                    Some(Value::F64(v)) if v >= 1.0))
-            };
-            let has_block = layer.effects.iter().any(|e| blocks.contains(&e.plugin_id));
-            // つなぐ線となぞる形は相手の motion を読む側。ただし自分がブロックを持つなら物として並ぶ(輪に札を掛ける Concentrick)。
-            if !has_block && (connects(crate::doc::store::layout::CONNECT_FROM)? || connects(crate::doc::store::layout::CONNECT_TO)?) {
-                continue;
-            }
-            let is_group = matches!(view.meta(layer.id).map_err(store)?.map(|m| m.source), Some(crate::doc::store::LayerSource::Group));
-            match room_of(view, layer.id)? {
-                Some(room) if has_block || !is_group || !room_ancestor => {
-                    room_ids.insert(layer.id, room);
-                    wanted.push(layer.id);
-                }
-                None if has_block || needed.contains(&layer.id) || named.contains(&layer.id) => wanted.push(layer.id),
-                _ => {}
-            }
-        }
-        let state = &mut self.blocks;
-        for layer in resolved.iter().filter(|l| wanted.contains(&l.id)) {
-            let frame = ([0.0, 0.0, comp.width as f32, comp.height as f32], 0.0);
-            // 住む箱: 場の部屋(先祖)か、無ければ直の親。
-            let parent = match room_ids.get(&layer.id) {
-                Some(0) => None,
-                Some(room) => Some(LayerId(*room as u64)),
-                None => view.attrs(layer.id).map_err(store)?.unwrap_or_default().parent,
-            };
-            let room = match parent {
-                Some(parent) => match (resolved.iter().find(|l| l.id == parent && l.copy == 0 && !l.ghost), crate::picture::boxes::layer_box(view, parent, t).map_err(store)?) {
-                    (Some(owner), Some(b)) => {
-                        let m = owner.placement.transform;
-                        let corners = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
-                        let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
-                        let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
-                        let radius = match view.value_at(parent, &PropertyId::new(crate::doc::store::layout::BORDER_RADIUS).map_err(store)?, t).map_err(store)? {
-                            Some(Value::F64(r)) => r.max(0.0) as f32 * m.matrix2.x_axis.length(),
-                            _ => 0.0,
-                        };
-                        ([lo.x, lo.y, hi.x, hi.y], radius)
-                    }
-                    _ => frame,
-                },
-                None => frame,
-            };
-            // 絵・動画の寸法は、書類の解析の口に入る前は描く側だけが知っている。物理は待たずに読む。
-            // 箱の無い相手(null の層)は置き方の点 1 つ。
-            let Some(own) = crate::picture::boxes::layer_box(view, layer.id, t).map_err(store)?.or_else(|| extents.get(&layer.id).copied()).or_else(|| named.contains(&layer.id).then_some([0.0; 4])) else { continue };
-            // 並べた結果、形が伸びていればその分(Fill の升目は輪郭を伸ばして解く)。伸びを見ないと、
-            // 当たりが元の形の大きさのままになる。
-            let stretch = solved.slots.get(&layer.id).map_or([1.0, 1.0], |slot| slot.stretch);
-            let outline = match view.meta(layer.id).map_err(store)?.map(|m| m.source) {
-                Some(crate::doc::store::LayerSource::Shape) => {
-                    let shapes = crate::picture::shapes::shapes_at(view, layer.id, t).map_err(store)?;
-                    outline_of(&shapes, stretch).map(std::sync::Arc::new)
-                }
-                // 文字はベクター: 字形の輪郭を形の層と同じ道で(絵の透過は読まない)。
-                Some(crate::doc::store::LayerSource::Text) => crate::picture::text::text_outline(view, layer.id, t).map_err(store)?.and_then(|contours| {
-                    let mut points = Vec::new();
-                    flatten_contours(&contours, [0.0, 0.0], &mut points);
-                    (points.len() >= 3).then(|| std::sync::Arc::new(points))
-                }),
-                // それ以外(絵・動画)は描かれた後の透過が形。抜き方を物理は知らない。
-                _ => keyed.get(&layer.id).cloned(),
-            };
-            let own = match solved.slots.get(&layer.id).map(|slot| slot.stretch) {
-                Some([sx, sy]) if sx > 0.0 && sy > 0.0 => [own[0] * sx, own[1] * sy, own[2] * sx, own[3] * sy],
-                _ => own,
-            };
-            let weight = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::FLEX_SHRINK).map_err(store)?, t).map_err(store)? {
-                Some(Value::F64(v)) => v.max(0.0) as f32,
-                _ => 1.0,
-            };
-            let margin = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::MARGIN).map_err(store)?, t).map_err(store)? {
-                Some(Value::F64(v)) => v.max(0.0) as f32,
-                _ => 0.0,
-            };
-            // 手触りの軸(提案 2026-09-16): 返す ↔ 吸う ↔ 引きずる。解き手の摩擦・反発へ訳す。
-            let hardness = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::HARDNESS).map_err(store)?, t).map_err(store)? {
-                Some(Value::F64(v)) => v.clamp(0.0, 1.0) as f32,
-                _ => 0.5,
-            };
-            let weight = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::HEAVINESS).map_err(store)?, t).map_err(store)? {
-                Some(Value::F64(v)) => v.max(0.0) as f32,
-                _ => weight,
-            };
-            state.placed.insert(layer.id, Placed { room: room.0, radius: room.1, own, group: parent.map_or(0, |p| p.0 as u32), weight, margin, hardness, outline });
-        }
-        // 付いて置く札の相手がブロックで動くなら、札も物として並べて付いて行かせる(CSS の transform を読まない anchor() とは違う、利用者 2026-09-15「付いていく方が自然」)。
-        let area_row = PropertyId::new(crate::doc::store::layout::POSITION_AREA).map_err(store)?;
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if !matches!(view.value_at(layer.id, &area_row, t).map_err(store)?, Some(Value::Enum(a)) if a > 0) {
-                continue;
-            }
-            let Some(target) = anchor_of(view, layer.id)? else { continue };
-            if state.placed.contains_key(&target) {
-                state.follows.insert(layer.id, target);
-                if !state.placed.contains_key(&layer.id) {
-                    let own = crate::picture::boxes::layer_box(view, layer.id, t).map_err(store)?.unwrap_or([0.0; 4]);
-                    state.placed.insert(layer.id, Placed { room: [0.0; 4], radius: 0.0, own, group: u32::MAX, weight: 0.0, margin: 0.0, hardness: 0.5, outline: None });
-                }
-            }
-        }
-        // 物を先に決める: 層を組む前に箱・輪郭・場を揃えて解く。こうすると、つなぐ線も札も可視も
-        // 同じコマの結果を読める(利用者 2026-09-16 の穴「つなぐ線が付いて来ない」)。
-        let mut pending: Vec<(u32, Vec<(String, Vec<f32>, bool)>)> = Vec::new();
-        let (mut order, mut late): (Vec<&ResolvedLayer>, Vec<&ResolvedLayer>) = (Vec::new(), Vec::new());
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            let Some(placed) = state.placed.get(&layer.id) else { continue };
-            let has_block = layer.effects.iter().any(|e| blocks.contains(&e.plugin_id));
-            if has_block || state.follows.contains_key(&layer.id) || state.field_rooms.contains(&placed.group) || needed.contains(&layer.id) {
-                order.push(layer);
-            } else if named.contains(&layer.id) {
-                late.push(layer);
-            }
-        }
-        order.extend(late);
-        for layer in order {
-            let Some(placed) = state.placed.get(&layer.id).cloned() else { continue };
-            let blocks_here: Vec<(String, Vec<f32>, bool)> = layer.effects.iter().filter_map(|e| {
-                let d = definitions.iter().find(|d| d.0 == e.plugin_id)?;
-                let params = d.2.iter().map(|(name, default)| {
-                    e.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v {
-                        Value::F64(v) => Some(*v as f32),
-                        Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
-                        _ => None,
-                    }).unwrap_or(*default)
-                }).collect();
-                Some((e.plugin_id.clone(), params, d.1))
-            }).collect();
-            let m = layer.placement.transform;
-            let own = placed.own;
-            let corners = [[own[0], own[1]], [own[2], own[1]], [own[0], own[3]], [own[2], own[3]]].map(|c| m.transform_point2(glam::Vec2::from(c)));
-            let lo = corners.iter().fold(glam::Vec2::MAX, |a, p| a.min(*p));
-            let hi = corners.iter().fold(glam::Vec2::MIN, |a, p| a.max(*p));
-            let k = state.objects.len() as u32;
-            state.slots.insert(layer.id, k);
-            state.objects.push(BlockItem {
-                lo: lo.to_array(),
-                hi: hi.to_array(),
-                room_lo: [placed.room[0], placed.room[1]],
-                room_size: [placed.room[2] - placed.room[0], placed.room[3] - placed.room[1]],
-                radius: placed.radius,
-                group: placed.group,
-                margin: placed.margin,
-                weight: placed.weight,
-                ..Default::default()
-            });
-            state.outlines.push(placed.outline.as_ref().map(|points| {
-                std::sync::Arc::new(points.iter().map(|p| m.transform_point2(glam::Vec2::from(*p)).to_array()).collect::<Vec<[f32; 2]>>())
-            }));
-            state.bases.push(([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]));
-            state.object_layers.push(layer.id);
-            state.object_frames.push((view.layer_time(layer.id, t).map_err(store)?.as_seconds_f64() * state.fps).round() as i64);
-            pending.push((k, blocks_here));
-        }
-        // 名指しの相手の番号は物が揃ってから引く。深さ = 親・anchor を辿った段数: 同じ stage では浅い方(読まれる側)が
-        // 先に走るので、子の block は親の block の結果を同じコマで読める(1 段ずつ、輪は 0)。
-        for k in 0..state.objects.len() {
-            let layer = state.object_layers[k];
-            let slot = |id: Option<LayerId>| id.and_then(|id| state.slots.get(&id).copied()).unwrap_or(crate::render::compositor::effects::block_program::NO_OBJECT);
-            state.objects[k].parent_slot = slot(view.attrs(layer).map_err(store)?.unwrap_or_default().parent);
-            state.objects[k].anchor_slot = slot(anchor_of(view, layer)?);
-        }
-        let depth = reference_depth(&state.objects);
-        for (k, blocks_here) in pending {
-            let rank = depth[k as usize];
-            for (stage, (plugin, params, is_field)) in blocks_here.into_iter().enumerate() {
-                if is_field {
-                    state.fields.push((stage, plugin, params, k));
-                    continue;
-                }
-                match state.batches.iter_mut().find(|b| b.stage == stage && b.rank == rank && b.plugin == plugin && b.params == params && b.source == u32::MAX) {
-                    Some(batch) => batch.members.push(k),
-                    None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX, rank }),
-                }
-            }
-        }
-        state.batches.sort_by_key(|b| (b.stage, b.rank));
-        // つなぐ線となぞる形は物にならないが、相手の motion を描く側で読む(利用者 2026-09-18「位置は毎コマ変わるのに
-        // GPU じゃないの変すぎ」)。CPU の道は動く前の箱から引き、動いた分は頂点で足す。
-        for layer in resolved.iter().filter(|l| l.copy == 0 && !l.ghost) {
-            if let Some((from, to)) = crate::picture::connect::connection(view, layer.id, t).map_err(store)? {
-                if let (Some(&a), Some(&b)) = (state.slots.get(&from), state.slots.get(&to)) {
-                    let path = view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::LINE_PATH).map_err(store)?, t).map_err(store)?;
-                    if matches!(path, Some(Value::Enum(4))) {
-                        let slack = match view.value_at(layer.id, &PropertyId::new(crate::doc::store::layout::SLACK).map_err(store)?, t).map_err(store)? { Some(Value::F64(v)) => v as f32, _ => 20.0 };
-                        // 硬さと減衰は今は定数(紐らしさの 1 点: 遅れて、揺れて、止まる)。欄にするかは絵を見てから。
-                        state.ropes.push((state.connectors.len() as u32, slack.max(0.0), 60.0, 6.0));
-                    }
-                    state.connectors.push((layer.id, a, b));
-                    continue;
-                }
-            }
-            if let Some((target, _)) = crate::picture::connect::tracing(view, layer.id, t).map_err(store)? {
-                if let Some(&k) = state.slots.get(&target) {
-                    state.traces.insert(layer.id, k);
-                }
-            }
-        }
-        self.solve_physics(t);
-        Ok(())
+        let bytes = u64::from(world.count) * OFFSET_BYTES;
+        if bytes == 0 { return Vec::new(); }
+        let Ok(id) = crate::render::compositor::readback::ask_buffer(&self.compositor.ctx, world.state(), bytes) else { return Vec::new() };
+        self.compositor.next_frame();
+        if self.compositor.wait_offline().is_err() { return Vec::new(); }
+        crate::render::compositor::readback::take_buffer(&self.compositor.ctx, id).map(|data| offsets_from_bytes(&data)).unwrap_or_default()
     }
 
 
-    /// FrameGraph path: build block/Follow/field/physics state from evaluated
-    /// scene + solver values only. No StoreView/document reads are allowed here.
+    /// Installs the lowered block plan, solves physics and runs the block programs.
     pub(in crate::engine) fn prepare_frame_graph_blocks(
         &mut self,
         scene: &SceneValue,
         solver: &SolverPlanValue,
-        comp: CompSpec,
+        prep: &super::frame_graph_scene::Preparation,
         t: RationalTime,
         fps: crate::doc::store::Fps,
         prepared: &mut super::frame_graph_scene::GpuSceneValue,
     ) -> Result<(), EngineError> {
-        let block_ids: Vec<String> = self.compositor.catalog.definitions.iter()
-            .filter(|definition| definition.manifest.stage == IsfStage::Block)
-            .map(|definition| definition.plugin_id().to_owned())
-            .collect();
-        let definitions: Vec<(String, bool, Vec<(String, f32)>)> = self.compositor.catalog.definitions.iter()
-            .filter(|definition| definition.manifest.stage == IsfStage::Block)
-            .map(|definition| (
-                definition.plugin_id().to_owned(),
-                definition.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room,
-                definition.manifest.param_inputs().map(|param| (param.name.clone(), param.default[0])).collect(),
-            ))
-            .collect();
-        let field_blocks: std::collections::HashSet<String> = definitions.iter()
-            .filter(|(_, field, _)| *field)
-            .map(|(plugin, _, _)| plugin.clone())
-            .collect();
-        let lies = self.compositor.catalog.definitions.iter()
-            .find(|definition| {
-                definition.manifest.stage == IsfStage::Block
-                    && definition.manifest.scope == crate::render::compositor::effects::isf::IsfScope::Room
-                    && !definition.manifest.physics.is_empty()
-            })
-            .map(|definition| crate::render::engine::physics::Lies::from_manifest(&definition.manifest.physics))
-            .unwrap_or_default();
-        if self.blocks.physics.lies != lies {
-            self.blocks.physics = Default::default();
-            self.blocks.physics.lies = lies.clone();
+        let comp = prep.comp;
+        let mut sizes: HashMap<LayerId, [f32; 2]> = HashMap::new();
+        for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter()) {
+            sizes.entry(id).or_insert(layer.layer.size);
         }
-
+        let catalog = self.compositor.catalog.clone();
+        let plan = crate::render_lowering::plan_blocks(scene, solver, &catalog, comp, t, fps, &sizes);
+        if self.blocks.physics.lies != plan.lies {
+            self.blocks.physics = Default::default();
+            self.blocks.physics.lies = plan.lies.clone();
+        }
         let state = &mut self.blocks;
         state.fps = fps.as_f64();
         state.last_frame = 0;
         state.now = Some(t);
-        state.placed.clear();
-        state.follows.clear();
-        state.object_layers.clear();
-        state.object_frames.clear();
-        state.slots.clear();
-        state.connectors.clear();
-        state.traces.clear();
-        state.ropes.clear();
-        state.field_rooms.clear();
-        state.fields.clear();
-        state.objects.clear();
-        state.bases.clear();
-        state.outlines.clear();
-        state.batches.clear();
-
-        if block_ids.is_empty() {
+        state.placed = plan.placed;
+        state.follows = plan.follows;
+        state.object_layers = plan.object_layers;
+        state.object_frames = plan.object_frames;
+        state.slots = plan.slots;
+        state.connectors = plan.connectors;
+        state.traces = plan.traces;
+        state.ropes = plan.ropes;
+        state.field_rooms = plan.field_rooms;
+        state.fields = plan.fields;
+        state.objects = plan.objects;
+        state.bases = plan.bases;
+        state.outlines = plan.outlines;
+        state.batches = plan.batches;
+        if !plan.active {
             self.compositor.motion = None;
             return Ok(());
-        }
-
-        let mut seen = std::collections::HashSet::new();
-        let primary: Vec<&SceneLayerValue> = scene.layers.iter()
-            .filter(|layer| layer.instance == 0 && !layer.ghost && seen.insert(layer.layer))
-            .collect();
-        let primary_by_id: HashMap<LayerId, &SceneLayerValue> =
-            primary.iter().map(|layer| (layer.layer, *layer)).collect();
-
-        let mut gpu_sizes: HashMap<LayerId, [f32; 2]> = HashMap::new();
-        for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter()) {
-            gpu_sizes.entry(id).or_insert(layer.layer.size);
-        }
-
-        let semantic_size = |layer: &SceneLayerValue| -> Option<[f32; 2]> {
-            let shapes: Option<Vec<crate::doc::store::ShapeNode>> = match &layer.content {
-                SceneContentValue::Shape(shapes) => Some(shapes.clone()),
-                SceneContentValue::Text(text) => Some(text.shapes()),
-                _ => None,
-            };
-            if let Some(shapes) = shapes {
-                if let Ok(Some(canvas)) = crate::picture::shapes_ops::content_canvas(&shapes) {
-                    return Some([canvas.width as f32, canvas.height as f32]);
-                }
-            }
-            match &layer.content {
-                SceneContentValue::Particles(value) => {
-                    let mut hi = glam::Vec2::ZERO;
-                    for particle in &value.particles {
-                        hi = hi.max(glam::Vec2::new(particle.position[0], particle.position[1]));
-                    }
-                    Some([hi.x.max(1.0), hi.y.max(1.0)])
-                }
-                SceneContentValue::Plate(_) => Some([comp.width as f32, comp.height as f32]),
-                _ => None,
-            }
-        };
-        let size_of = |id: LayerId| -> Option<[f32; 2]> {
-            solver.layers.get(&id).and_then(|layer| layer.size)
-                .filter(|size| size[0] > 0.0 && size[1] > 0.0)
-                .or_else(|| primary_by_id.get(&id).and_then(|layer| semantic_size(layer)))
-                .or_else(|| gpu_sizes.get(&id).copied())
-        };
-
-        // A field establishes a room at its nearest authored parent.
-        for layer in &primary {
-            let has_field = layer.effects.iter().any(|effect| field_blocks.contains(&effect.plugin_id));
-            if has_field {
-                let parent = solver.layers.get(&layer.layer).and_then(|value| value.relation.parent);
-                state.field_rooms.insert(parent.map_or(0, |parent| parent.0 as u32));
-            }
-        }
-        let field_rooms = state.field_rooms.clone();
-        let room_ancestor = lies.room_ancestor;
-        let room_of = |id: LayerId| -> Option<u32> {
-            let mut at = solver.layers.get(&id).and_then(|value| value.relation.parent);
-            loop {
-                let key = at.map_or(0, |parent| parent.0 as u32);
-                if field_rooms.contains(&key) {
-                    return Some(key);
-                }
-                if !room_ancestor {
-                    return None;
-                }
-                let parent = at?;
-                at = solver.layers.get(&parent).and_then(|value| value.relation.parent);
-            }
-        };
-
-        let mut needed = std::collections::HashSet::new();
-        for layer in &primary {
-            let Some(plan) = solver.layers.get(&layer.layer) else { continue };
-            if let Some((from, to)) = plan.relation.connection {
-                if primary_by_id.contains_key(&from) && primary_by_id.contains_key(&to) {
-                    needed.insert(from);
-                    needed.insert(to);
-                }
-            }
-            if let Some((target, _)) = plan.relation.trace {
-                if primary_by_id.contains_key(&target) {
-                    needed.insert(target);
-                }
-            }
-        }
-
-        let mut named = std::collections::HashSet::new();
-        for layer in &primary {
-            let has_block = layer.effects.iter().any(|effect| block_ids.contains(&effect.plugin_id));
-            if !has_block { continue; }
-            if let Some(plan) = solver.layers.get(&layer.layer) {
-                if let Some(parent) = plan.relation.parent { named.insert(parent); }
-                if let Some(anchor) = plan.relation.anchor { named.insert(anchor); }
-            }
-        }
-
-        let mut room_ids = HashMap::new();
-        let mut wanted = Vec::new();
-        for layer in &primary {
-            if layer.effects.iter().any(|effect| crate::extensions::overlay::is_track_overlay(&effect.plugin_id)) {
-                continue;
-            }
-            let plan = solver.layers.get(&layer.layer);
-            let has_block = layer.effects.iter().any(|effect| block_ids.contains(&effect.plugin_id));
-            if !has_block && plan.is_some_and(|plan| plan.relation.connection.is_some() || plan.relation.trace.is_some()) {
-                continue;
-            }
-            let is_group = layer.source == crate::doc::store::LayerSource::Group;
-            match room_of(layer.layer) {
-                Some(room) if has_block || !is_group || !room_ancestor => {
-                    room_ids.insert(layer.layer, room);
-                    wanted.push(layer.layer);
-                }
-                None if has_block || needed.contains(&layer.layer) || named.contains(&layer.layer) => {
-                    wanted.push(layer.layer);
-                }
-                _ => {}
-            }
-        }
-
-        // Build the semantic collision/input records. Rooms and own boxes come
-        // from evaluated transforms + Flow/content extents, not Document reads.
-        for id in &wanted {
-            let Some(layer) = primary_by_id.get(id).copied() else { continue };
-            let Some(plan) = solver.layers.get(id) else { continue };
-            let frame = ([0.0, 0.0, comp.width as f32, comp.height as f32], 0.0);
-            let parent = match room_ids.get(id) {
-                Some(0) => None,
-                Some(room) => Some(LayerId(*room as u64)),
-                None => plan.relation.parent,
-            };
-            let room = match parent.and_then(|parent| primary_by_id.get(&parent).map(|layer| (parent, *layer))) {
-                Some((parent_id, parent_layer)) => {
-                    let size = size_of(parent_id).unwrap_or([comp.width as f32, comp.height as f32]);
-                    let transform = parent_layer.transform.affine;
-                    let corners = [
-                        glam::Vec2::ZERO,
-                        glam::vec2(size[0], 0.0),
-                        glam::Vec2::from(size),
-                        glam::vec2(0.0, size[1]),
-                    ].map(|point| transform.transform_point2(point));
-                    let lo = corners.iter().fold(glam::Vec2::MAX, |acc, point| acc.min(*point));
-                    let hi = corners.iter().fold(glam::Vec2::MIN, |acc, point| acc.max(*point));
-                    let radius = solver.layers.get(&parent_id).map_or(0.0, |value| {
-                        value.border_radius * transform.matrix2.x_axis.length()
-                    });
-                    ([lo.x, lo.y, hi.x, hi.y], radius)
-                }
-                None => frame,
-            };
-
-            let own_size = size_of(*id).or_else(|| named.contains(id).then_some([0.0, 0.0]));
-            let Some(size) = own_size else { continue };
-            let stretch = plan.stretch;
-            let own = [0.0, 0.0, size[0] * stretch[0], size[1] * stretch[1]];
-            let outline = match &layer.content {
-                SceneContentValue::Shape(shapes) => outline_of(shapes, stretch).map(std::sync::Arc::new),
-                SceneContentValue::Text(text) => outline_of(&text.shapes(), stretch).map(std::sync::Arc::new),
-                _ => self.keyed_outlines.get(id).cloned(),
-            };
-            state.placed.insert(*id, Placed {
-                room: room.0,
-                radius: room.1,
-                own,
-                group: parent.map_or(0, |parent| parent.0 as u32),
-                weight: plan.weight,
-                margin: plan.margin,
-                hardness: plan.hardness,
-                outline,
-            });
-        }
-
-        // Follow is now a graph relation. It participates only when the target
-        // is one of the solver objects, exactly as the legacy GPU FollowPass.
-        for layer in &primary {
-            let Some(plan) = solver.layers.get(&layer.layer) else { continue };
-            let Some(target) = plan.relation.anchor.filter(|_| plan.relation.follow_anchor) else { continue };
-            if !state.placed.contains_key(&target) { continue; }
-            state.follows.insert(layer.layer, target);
-            if !state.placed.contains_key(&layer.layer) {
-                let size = size_of(layer.layer).unwrap_or([0.0, 0.0]);
-                state.placed.insert(layer.layer, Placed {
-                    room: [0.0; 4],
-                    radius: 0.0,
-                    own: [0.0, 0.0, size[0], size[1]],
-                    group: u32::MAX,
-                    weight: 0.0,
-                    margin: 0.0,
-                    hardness: 0.5,
-                    outline: None,
-                });
-            }
-        }
-
-        let mut pending: Vec<(u32, Vec<(String, Vec<f32>, bool)>)> = Vec::new();
-        let mut ordered = Vec::new();
-        let mut late = Vec::new();
-        for layer in &primary {
-            let Some(placed) = state.placed.get(&layer.layer) else { continue };
-            let has_block = layer.effects.iter().any(|effect| block_ids.contains(&effect.plugin_id));
-            if has_block || state.follows.contains_key(&layer.layer) || state.field_rooms.contains(&placed.group) || needed.contains(&layer.layer) {
-                ordered.push(*layer);
-            } else if named.contains(&layer.layer) {
-                late.push(*layer);
-            }
-        }
-        ordered.extend(late);
-
-        let current_frame = t.try_to_frame_round(fps).unwrap_or(0);
-        for layer in ordered {
-            let Some(placed) = state.placed.get(&layer.layer).cloned() else { continue };
-            let blocks_here: Vec<(String, Vec<f32>, bool)> = layer.effects.iter().filter_map(|effect| {
-                let definition = definitions.iter().find(|definition| definition.0 == effect.plugin_id)?;
-                let params = definition.2.iter().map(|(name, default)| {
-                    effect.params.iter().find(|(candidate, _)| candidate == name).and_then(|(_, value)| match value {
-                        Value::F64(value) => Some(*value as f32),
-                        Value::Bool(value) => Some(if *value { 1.0 } else { 0.0 }),
-                        _ => None,
-                    }).unwrap_or(*default)
-                }).collect();
-                Some((effect.plugin_id.clone(), params, definition.1))
-            }).collect();
-            let transform = layer.transform.affine;
-            let own = placed.own;
-            let corners = [
-                [own[0], own[1]], [own[2], own[1]], [own[0], own[3]], [own[2], own[3]],
-            ].map(|point| transform.transform_point2(glam::Vec2::from(point)));
-            let lo = corners.iter().fold(glam::Vec2::MAX, |acc, point| acc.min(*point));
-            let hi = corners.iter().fold(glam::Vec2::MIN, |acc, point| acc.max(*point));
-            let k = state.objects.len() as u32;
-            state.slots.insert(layer.layer, k);
-            state.objects.push(BlockItem {
-                lo: lo.to_array(),
-                hi: hi.to_array(),
-                room_lo: [placed.room[0], placed.room[1]],
-                room_size: [placed.room[2] - placed.room[0], placed.room[3] - placed.room[1]],
-                radius: placed.radius,
-                group: placed.group,
-                margin: placed.margin,
-                weight: placed.weight,
-                ..Default::default()
-            });
-            state.outlines.push(placed.outline.as_ref().map(|points| {
-                std::sync::Arc::new(points.iter().map(|point| transform.transform_point2(glam::Vec2::from(*point)).to_array()).collect())
-            }));
-            state.bases.push(([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]));
-            state.object_layers.push(layer.layer);
-            state.object_frames.push(current_frame);
-            pending.push((k, blocks_here));
-        }
-
-        for k in 0..state.objects.len() {
-            let id = state.object_layers[k];
-            let relation = solver.layers.get(&id).map(|value| &value.relation);
-            let slot = |target: Option<LayerId>| target
-                .and_then(|target| state.slots.get(&target).copied())
-                .unwrap_or(crate::render::compositor::effects::block_program::NO_OBJECT);
-            state.objects[k].parent_slot = slot(relation.and_then(|value| value.parent));
-            state.objects[k].anchor_slot = slot(relation.and_then(|value| value.anchor));
-        }
-
-        let depth = reference_depth(&state.objects);
-        for (k, blocks_here) in pending {
-            let rank = depth[k as usize];
-            for (stage, (plugin, params, is_field)) in blocks_here.into_iter().enumerate() {
-                if is_field {
-                    state.fields.push((stage, plugin, params, k));
-                } else {
-                    match state.batches.iter_mut().find(|batch| {
-                        batch.stage == stage && batch.rank == rank && batch.plugin == plugin && batch.params == params && batch.source == u32::MAX
-                    }) {
-                        Some(batch) => batch.members.push(k),
-                        None => state.batches.push(BlockBatch { stage, plugin, params, members: vec![k], source: u32::MAX, rank }),
-                    }
-                }
-            }
-        }
-        state.batches.sort_by_key(|batch| (batch.stage, batch.rank));
-
-        for layer in &primary {
-            let Some(relation) = solver.layers.get(&layer.layer).map(|value| &value.relation) else { continue };
-            if let Some((from, to)) = relation.connection {
-                if let (Some(&from_slot), Some(&to_slot)) = (state.slots.get(&from), state.slots.get(&to)) {
-                    let index = state.connectors.len() as u32;
-                    if let Some(slack) = relation.rope_slack {
-                        state.ropes.push((index, slack, 60.0, 6.0));
-                    }
-                    state.connectors.push((layer.layer, from_slot, to_slot));
-                    continue;
-                }
-            }
-            if let Some((target, _)) = relation.trace {
-                if let Some(&slot) = state.slots.get(&target) {
-                    state.traces.insert(layer.layer, slot);
-                }
-            }
         }
 
         self.solve_physics(t);
 
         for (id, layer) in prepared.layer_ids.iter().copied().zip(prepared.layers.iter_mut()) {
-            self.attach_block_id(id, &mut layer.layer, comp);
+            self.attach_block_id(id, &mut layer.layer, comp, prep.seam.camera_relative_world());
         }
         self.run_blocks(t, fps.as_f64());
         Ok(())
     }
 
-    /// 祖先の箱の切り(`MaskFrame::Box`)を、ブロックのずれの後に箱の枠で掛ける層か: 解き手が動かす、平らに置かれた、
-    /// 本番の組み(辿り直しの中でない)。
-    pub(super) fn cut_after_motion(&self, layer: &ResolvedLayer) -> bool {
-        !self.feedback_replaying
-            && self.blocks.moves(layer.id)
-            && layer.placement.z == 0.0 && layer.placement.rotation_x == 0.0 && layer.placement.rotation_y == 0.0
-            && layer.masks.iter().any(|m| m.frame == MaskFrame::Box)
-    }
-
-    /// 箱の切りを comp の px へ(素材座標 → 置き方)。ずれの後の絵は comp 大なので、そこで掛ける。
-    pub(super) fn box_cut_in_comp(&self, layer: &ResolvedLayer, built: &Layer) -> Vec<ResolvedMask> {
-        if !self.cut_after_motion(layer) {
-            return Vec::new();
-        }
-        let origin = built.frame.as_ref().map_or(glam::Vec2::ZERO, |f| glam::Vec2::from(f.origin));
-        let to = built.placement.transform * glam::Affine2::from_translation(-origin);
-        let scale = (to.matrix2.x_axis.length() + to.matrix2.y_axis.length()) * 0.5;
-        layer.masks.iter().filter(|m| m.frame == MaskFrame::Box).map(|m| {
-            let mut mask = m.clone();
-            for vertex in &mut mask.shape.vertices {
-                let p = to.transform_point2(glam::vec2(vertex.point[0] as f32, vertex.point[1] as f32));
-                vertex.point = [f64::from(p.x), f64::from(p.y)];
-                for tangent in [&mut vertex.in_tangent, &mut vertex.out_tangent] {
-                    let d = to.transform_vector2(glam::vec2(tangent[0] as f32, tangent[1] as f32));
-                    *tangent = [f64::from(d.x), f64::from(d.y)];
-                }
-            }
-            mask.expansion *= f64::from(scale);
-            mask
-        }).collect()
-    }
-
-    /// 組んだ 1 枚にブロックが掛かっていれば、描く時と同じ置き方の箱を物として並べ、motion の番号を最後の欄に入れる。
-    pub(super) fn attach_block(&mut self, layer: &ResolvedLayer, built: &mut Layer, comp: CompSpec) {
-        self.attach_block_id(layer.id, built, comp);
-    }
-
-    pub(in crate::engine) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec) {
+    /// `world`: where a 2D/2.5D layer stands in the solver's world (3D placement does not read it).
+    pub(in crate::engine) fn attach_block_id(&mut self, layer: LayerId, built: &mut Layer, comp: CompSpec, world: crate::doc::core::ResolvedCamera) {
         // 物は既に決まっている(層を組む前に揃えて解いた)。ここでするのは、描く側へ渡す番号と、
         // その物の comp → world の向き(組んだ素材の大きさが要るのでここでしか作れない)。
         let Some(&k) = self.blocks.slots.get(&layer) else {
@@ -1006,7 +230,7 @@ impl Engine {
         }
         built.shading.params[crate::render::compositor::effects::surface_program::PARAM_SLOTS - 1] = (k + 1) as f32;
         let m = built.placement.transform;
-        let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, built.projection_camera, built.projection, built.placement, glam::Vec2::ZERO, size);
+        let (origin, u, v) = crate::render::compositor::projected_placement_corners(comp, world, built.projection, built.placement, glam::Vec2::ZERO, size);
         let (per_x, per_y) = (u / size.x, v / size.y);
         let inverse = if m.matrix2.determinant().abs() > 1e-12 { m.matrix2.inverse() } else { glam::Mat2::IDENTITY };
         let world = |comp_step: glam::Vec2| { let material = inverse * comp_step; (per_x * material.x + per_y * material.y).to_array() };
@@ -1115,37 +339,61 @@ impl Engine {
             let name = d.manifest.reach.as_ref()?;
             d.manifest.param_inputs().position(|p| &p.name == name).and_then(|i| batch.params.get(i).copied())
         }).fold(0.0f32, f32::max);
-        let world = state.world.get_or_insert_with(|| BlockWorld::new(&ctx.device));
-        world.begin_from(&ctx.device, &ctx.queue, &state.objects, reach, &seed);
+        let world = state.world.get_or_insert_with(|| BlockWorld::new(ctx));
+        world.begin_from(ctx, &state.objects, reach, &seed);
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-blocks") });
         let stages = state.batches.iter().map(|b| b.stage + 1).max().unwrap_or(0);
         for stage in 0..stages {
             for batch in state.batches.iter().filter(|b| b.stage == stage) {
                 let Some(definition) = self.compositor.catalog.definitions.iter().find(|d| d.plugin_id() == batch.plugin) else { continue };
                 let (source, program) = state.programs.entry(batch.plugin.clone())
-                    .or_insert_with(|| (definition.vertex_text.clone(), BlockProgram::new(&ctx.device, &batch.plugin, &definition.vertex_text, definition.manifest.rounds)));
+                    .or_insert_with(|| (definition.vertex_text.clone(), BlockProgram::new(ctx, &batch.plugin, &definition.vertex_text, definition.manifest.rounds)));
                 if *source != definition.vertex_text {
                     *source = definition.vertex_text.clone();
-                    *program = BlockProgram::new(&ctx.device, &batch.plugin, source, definition.manifest.rounds);
-                    // 前の道の bind group は誰も呼ばない。世界に溜めない。
-                    world.forget_all();
+                    *program = BlockProgram::new(ctx, &batch.plugin, source, definition.manifest.rounds);
                 }
-                program.record_from(&ctx.device, &ctx.queue, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params, batch.source);
+                program.record_from(ctx, &mut encoder, world, t.as_seconds_f64() as f32, &batch.members, &batch.params, batch.source);
             }
         }
         let index_of = |id: LayerId| state.object_layers.iter().position(|l| *l == id).map(|k| k as u32);
         let pairs: Vec<(u32, u32)> = state.object_layers.iter().enumerate()
             .filter_map(|(k, id)| state.follows.get(id).and_then(|target| index_of(*target)).map(|target| (k as u32, target)))
             .collect();
-        state.follow_pass.get_or_insert_with(|| FollowPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &pairs);
+        state.follow_pass.get_or_insert_with(|| FollowPass::new(ctx)).record(ctx, &mut encoder, world, &pairs);
         let links: Vec<(u32, u32)> = state.connectors.iter().map(|(_, a, b)| (*a, *b)).collect();
-        let motion = re_renderer::MotionBuffer::new(ctx, (state.objects.len() + 2 * links.len()) as u64);
-        state.world_pass.get_or_insert_with(|| WorldPass::new(&ctx.device)).record(&ctx.device, &ctx.queue, &mut encoder, world, &state.bases, &links, motion.buffer());
+        // Four vec4 per entry (motion.wgsl); a rope takes two entries. The programs write a buffer; the
+        // view reads it as the host's motion data texture, `MOTION_ROW` texels a row.
+        const MOTION_ROW: u32 = 256;
+        let texels = ((state.objects.len() + 2 * links.len()).max(1) * 4) as u32;
+        let rows = texels.div_ceil(MOTION_ROW);
+        let motion = ctx.gpu_resources.buffers.alloc(&ctx.device, &re_renderer::BufferDesc {
+            label: "motion".into(),
+            size: u64::from(rows * MOTION_ROW) * 16,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        state.world_pass.get_or_insert_with(|| WorldPass::new(ctx)).record(ctx, &mut encoder, world, &state.bases, &links, &motion);
         let frame = (t.as_seconds_f64() * state.fps).round() as i64;
-        state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(&ctx.device))
-            .record(&ctx.device, &ctx.queue, &mut encoder, world, &state.ropes, motion.buffer(), frame, state.fps as f32);
-        ctx.queue.submit([encoder.finish()]);
-        self.compositor.motion = Some(motion);
+        state.rope_pass.get_or_insert_with(|| crate::render::compositor::effects::block_program::RopePass::new(ctx))
+            .record(ctx, &mut encoder, world, &state.ropes, &motion, frame, state.fps as f32);
+        let extent = wgpu::Extent3d { width: MOTION_ROW, height: rows, depth_or_array_layers: 1 };
+        let texture = ctx.gpu_resources.textures.alloc(&ctx.device, &re_renderer::TextureDesc {
+            label: "motion".into(),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        });
+        encoder.copy_buffer_to_texture(
+            wgpu::TexelCopyBufferInfo { buffer: &motion, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(MOTION_ROW * 16), rows_per_image: Some(rows) } },
+            texture.texture.as_image_copy(),
+            extent,
+        );
+        // Recorded, not submitted: it goes out with the frame's other work, ahead of every draw.
+        self.compositor.ctx.queue_commands([encoder.finish()]);
+        self.compositor.motion = Some(re_renderer::DataTexture { texture, len: texels });
     }
 }
 

@@ -246,16 +246,14 @@ impl AnalysisProgram {
                             let content = match plan.content {
                                 Some((1, _)) => {
                                     let value = inputs.at(cursor)
-                                        .and_then(|value| value.downcast_ref::<TextShapeValue>())
-                                        .cloned()
+                                        .and_then(|value| value.downcast_arc::<TextShapeValue>())
                                         .ok_or(AnalysisProgramError::InvalidInput(node.identity().kind))?;
                                     cursor += 1;
                                     SceneContentValue::Text(value)
                                 }
                                 Some((2, _)) => {
                                     let value = inputs.at(cursor)
-                                        .and_then(|value| value.downcast_ref::<Vec<crate::doc::store::ShapeNode>>())
-                                        .cloned()
+                                        .and_then(|value| value.downcast_arc::<Vec<crate::doc::store::ShapeNode>>())
                                         .ok_or(AnalysisProgramError::InvalidInput(node.identity().kind))?;
                                     cursor += 1;
                                     SceneContentValue::Shape(value)

@@ -31,6 +31,7 @@ pub fn blank_project() -> Document {
         fps: Fps::try_new(30, 1).expect("30fps"),
         duration_frames: 1800,
         background: [0.0, 0.0, 0.0, 1.0],
+        look: motolii_doc::store::Look::Studio,
     };
     let _ = doc.apply(Intent::SetComposition(comp));
     doc

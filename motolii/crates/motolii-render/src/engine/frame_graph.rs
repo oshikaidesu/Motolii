@@ -1,29 +1,39 @@
-//! Product playback owner: compile once per revision, evaluate once per exact
-//! comp time, prepare one GPU scene, then branch only for final projection.
+//! Product playback owner: compile once per revision, evaluate the semantic scene once per exact
+//! comp time, then prepare it — below the semantic graph — once per evaluation and precision. A view,
+//! its window or its zoom never evaluates the scene again.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::doc::core::{CompSpec, RationalTime, ResolvedCamera};
 use crate::doc::store::{LayerId, StoreView};
-use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
-use crate::picture::resolved::ResolvedLayer;
+use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue};
 
-use super::frame_graph_scene::GpuSceneValue;
+use super::frame_graph_scene::{GpuSceneValue, LegacyCameraSeam, Precision, Preparation};
+
+pub mod tick;
+#[cfg(test)]
+mod tick_tests;
 use super::{Engine, EngineError};
 
 pub(super) struct EngineFrameGraph {
     graph: CompiledGraph,
     program: SceneProgram,
     scene: NodeKey,
-    gpu: NodeKey,
-    camera: NodeKey,
-    stage: NodeKey,
+    solver: NodeKey,
+    overlay: NodeKey,
+    prepared: Option<Arc<GpuSceneValue>>,
+    /// What `prepared` was made from: the semantic evaluation (its generation) and the precision.
+    prepared_for: Option<(u64, Precision)>,
     comp: CompSpec,
     fps: crate::doc::store::Fps,
     background: [f32; 4],
+    look: crate::doc::store::Look,
     in_points: HashMap<LayerId, i64>,
     frame: Option<EvaluatedFrame>,
+    /// The effect catalog's generation `frame` was evaluated with: the shelf's cassettes are inputs
+    /// of the scene as the document is, so a saved WGSL makes the frame again.
+    catalog: u64,
     generation: u64,
     prepare_us: u64,
     measured: bool,
@@ -32,7 +42,7 @@ pub(super) struct EngineFrameGraph {
 impl EngineFrameGraph {
     fn new(view: &StoreView<'_>, revision: GraphRevision) -> Result<Self, EngineError> {
         let composition = view.composition().map_err(store)?.ok_or(EngineError::NoComposition)?;
-        let (comp, fps, background) = (composition.spec(), composition.fps, composition.background);
+        let (comp, fps, background, look) = (composition.spec(), composition.fps, composition.background, composition.look);
         let in_points = view.layers().into_iter().filter_map(|layer| {
             view.meta(layer).ok().flatten().map(|meta| (layer, meta.timing.start))
         }).collect();
@@ -41,32 +51,23 @@ impl EngineFrameGraph {
         let document_camera = program.camera();
         let solver = program.solver().key();
         let overlay = program.overlay().output();
-        let mut nodes: Vec<_> = program.nodes().collect();
-        let mut gpu_identity = NodeIdentity::new(NodeKind::GpuScene, vec![scene, document_camera, solver, overlay]);
-        gpu_identity.time_dependency = TimeDependency::Exact;
-        let gpu = GraphNode::new(gpu_identity);
-        let projection = |role| {
-            let mut identity = NodeIdentity::new(NodeKind::CameraProjection, vec![gpu.key()]);
-            identity.parameters = vec![role]; identity.time_dependency = TimeDependency::Exact;
-            GraphNode::new(identity)
-        };
-        let camera = projection(0); let stage = projection(1);
-        nodes.extend([gpu.clone(), camera.clone(), stage.clone()]);
-        let topology = GraphTopology::try_new(nodes, vec![scene, document_camera, gpu.key(), camera.key(), stage.key()]).map_err(|error| EngineError::Store(error.to_string()))?;
-        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, gpu: gpu.key(), camera: camera.key(), stage: stage.key(), comp, fps, background, in_points, frame: None, generation: 0, prepare_us: 0, measured: false })
+        let topology = GraphTopology::try_new(program.nodes().collect::<Vec<_>>(), vec![scene, document_camera, solver, overlay]).map_err(|error| EngineError::Store(error.to_string()))?;
+        Ok(Self { graph: CompiledGraph::with_topology(revision, topology), program, scene, solver, overlay, prepared: None, prepared_for: None, comp, fps, background, look, in_points, frame: None, catalog: 0, generation: 0, prepare_us: 0, measured: false })
     }
-    fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool { self.graph.revision() == revision && self.frame.as_ref().is_some_and(|frame| frame.time() == time) }
+    /// The semantic scene is a function of the document and the time only.
+    fn matches(&self, revision: GraphRevision, time: RationalTime) -> bool {
+        self.graph.revision() == revision
+            && self.catalog == crate::render::compositor::catalog_generation()
+            && self.frame.as_ref().is_some_and(|frame| frame.time() == time)
+    }
 
-    fn evaluate_at(
+    /// The semantic scene at `time`: the graph's evaluation, with no GPU preparation of its own.
+    fn evaluate_scene(
         &mut self,
         engine: &mut Engine,
         time: RationalTime,
         quality: FrameQuality,
-        force_gpu: bool,
     ) -> Result<(), EngineError> {
-        if force_gpu {
-            self.graph.invalidate([self.gpu]);
-        }
         self.generation += 1;
         let mut executor = ProgramExecutor {
             engine,
@@ -80,13 +81,37 @@ impl EngineFrameGraph {
             quality,
             Generation::new(self.generation),
         )?;
+        let overlays = evaluated.value(self.overlay).and_then(|value| value.downcast_ref::<OverlaySetValue>())
+            .ok_or_else(|| EngineError::Store("FrameGraph overlay set has the wrong type".into()))?;
+        engine.install_frame_graph_overlays(overlays);
         self.frame = Some(evaluated);
+        self.catalog = crate::render::compositor::catalog_generation();
+        Ok(())
+    }
+
+    /// The prepared world of the evaluated scene at `precision`: made once per evaluation and
+    /// precision, whatever views read it.
+    fn prepare(&mut self, engine: &mut Engine, precision: Precision) -> Result<(), EngineError> {
+        if self.prepared.is_some() && self.prepared_for == Some((self.generation, precision)) { return Ok(()); }
+        let frame = self.frame.as_ref().ok_or_else(|| EngineError::Store("FrameGraph scene is not evaluated".into()))?;
+        let value = |key: NodeKey| frame.value(key).ok_or_else(|| EngineError::Store("FrameGraph root is missing".into()));
+        let scene = value(self.scene)?.downcast_ref::<SceneValue>().ok_or_else(|| EngineError::Store("FrameGraph scene has the wrong type".into()))?;
+        let authored = value(self.program.camera())?.downcast_ref::<ResolvedCamera>().copied().unwrap_or_default();
+        let solver = value(self.solver)?.downcast_ref::<SolverPlanValue>().ok_or_else(|| EngineError::Store("FrameGraph solver has the wrong type".into()))?;
+        let time = frame.time();
+        engine.compositor.clock = Some([
+            time.as_seconds_f64() as f32,
+            self.fps.den() as f32 / self.fps.num() as f32,
+            time.try_to_frame_round(self.fps).unwrap_or(0) as f32,
+        ]);
+        let mut prep = Preparation::new(self.comp, precision, LegacyCameraSeam::new(authored));
+        let prepared = engine.prepare_gpu_scene_with_solver(scene, solver, &mut prep, time, self.fps)?;
+        self.prepared = Some(Arc::new(prepared));
+        self.prepared_for = Some((self.generation, precision));
         Ok(())
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)] enum ProjectionRole { Camera, Stage }
-#[derive(Clone)] struct Projection { scene: Arc<GpuSceneValue>, role: ProjectionRole }
 
 struct ProgramExecutor<'a> { engine: &'a mut Engine, program: &'a SceneProgram, comp: CompSpec, fps: crate::doc::store::Fps }
 impl NodeExecutor for ProgramExecutor<'_> {
@@ -97,6 +122,16 @@ impl NodeExecutor for ProgramExecutor<'_> {
     }
 
     fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> {
+        // Only nodes that are not reused reach here: each claims its recomputation.
+        let started = std::time::Instant::now();
+        let value = self.execute_node(node, inputs, context);
+        self.engine.ledger.claim("evaluate", format!("{:?}", node.identity().kind), "recomputed", started.elapsed());
+        value
+    }
+}
+
+impl ProgramExecutor<'_> {
+    fn execute_node(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, EngineError> {
         if node.identity().kind == NodeKind::MediaExtent {
             let source = self.program.content().extent_source(node.key())
                 .cloned()
@@ -113,7 +148,7 @@ impl NodeExecutor for ProgramExecutor<'_> {
             NodeKind::AnalysisBlob => {
                 let request = direct::<BlobAnalysisRequestValue>(node, &inputs, 0)?;
                 let previous = inputs.at(1).and_then(|value| value.downcast_ref::<BlobAnalysisValue>());
-                let value = self.engine.frame_graph_blob_analysis(request, previous, context.time, self.comp, self.fps)?;
+                let value = self.engine.frame_graph_blob_analysis(request, previous, context.time, self.comp, self.fps, node.key())?;
                 Ok(NodeValue::new(value))
             }
             NodeKind::AnalysisOverlay => {
@@ -128,29 +163,9 @@ impl NodeExecutor for ProgramExecutor<'_> {
                 let (layer, _order, parent) = self.program.overlay().recipe(node.key())
                     .ok_or_else(|| unsupported(node.identity().kind))?;
                 let value = self.engine.frame_graph_overlay_analysis(
-                    layer, parent, effect, scene, solver, camera, previous, context.time, self.comp,
+                    layer, parent, effect, scene, solver, camera, previous, context.time, self.comp, node.key(),
                 )?;
                 Ok(NodeValue::new(value))
-            }
-            NodeKind::GpuScene => {
-                let scene = direct::<SceneValue>(node, &inputs, 0)?;
-                let camera = *direct::<ResolvedCamera>(node, &inputs, 1)?;
-                let solver = direct::<SolverPlanValue>(node, &inputs, 2)?;
-                let overlays = direct::<OverlaySetValue>(node, &inputs, 3)?;
-                self.engine.install_frame_graph_overlays(overlays);
-                let frame = context.time.try_to_frame_round(self.fps).unwrap_or(0) as f32;
-                self.engine.compositor.clock = Some([
-                    context.time.as_seconds_f64() as f32,
-                    self.fps.den() as f32 / self.fps.num() as f32,
-                    frame,
-                ]);
-                let prepared = self.engine.prepare_gpu_scene_with_solver(scene, solver, self.comp, camera, context.time, self.fps)?;
-                Ok(NodeValue::new(Arc::new(prepared)))
-            }
-            NodeKind::CameraProjection => {
-                let scene = inputs.at(0).and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>()).cloned().ok_or_else(|| unsupported(node.identity().kind))?;
-                let role = match node.identity().parameters.as_slice() { [0] => ProjectionRole::Camera, [1] => ProjectionRole::Stage, _ => return Err(unsupported(node.identity().kind)) };
-                Ok(NodeValue::new(Arc::new(Projection { scene, role })))
             }
             kind => Err(unsupported(kind)),
         }
@@ -272,231 +287,63 @@ impl Engine {
         Ok(camera)
     }
 
-    /// First visual cassette slice. Semantic evaluation is lowered through the
-    /// backend-neutral RenderGraph; concrete layer resources still come from the
-    /// frozen GpuScene oracle until Raster/Transfer are migrated individually.
-    ///
-    /// This deliberately makes the new boundary draw real pixels before replacing
-    /// resource preparation. The RenderGraph, not GpuScene, owns the ordered
-    /// composite description on this path.
-    fn cassette_plain_layers(
-        &mut self,
-        scene: &SceneValue,
-        comp: CompSpec,
-        projection_camera: ResolvedCamera,
-    ) -> Result<Option<Vec<crate::render::compositor::LayerWithPasses>>, EngineError> {
-        use crate::frame_graph::SceneContentValue;
-        use crate::render::compositor::{Layer, LayerContent, LayerWithPasses};
 
-        let mut layers = Vec::new();
-        for source in &scene.layers {
-            if !source.effects.is_empty()
-                || !source.after_effects.is_empty()
-                || !source.image_sources.is_empty()
-                || !source.masks.is_empty()
-                || source.matte.is_some()
-                || source.clip_to_below
-                || source.flatten
-                || source.environment
-            {
-                return Ok(None);
-            }
 
-            let (content, natural) = match &source.content {
-                SceneContentValue::None => continue,
-                SceneContentValue::Text(text) => {
-                    self.text_texture_from_shapes(&text.shapes(), source.layer, comp)?
-                }
-                SceneContentValue::Shape(shapes) => {
-                    let stretched;
-                    let shapes = if source.shape_stretch != [1.0, 1.0] {
-                        stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);
-                        stretched.as_slice()
-                    } else {
-                        shapes.as_slice()
-                    };
-                    self.shape_texture_from_shapes(
-                        shapes,
-                        source.layer,
-                        true,
-                        0.05,
-                        comp,
-                        None,
-                        source.shape_stretch == [1.0, 1.0],
-                    )?
-                }
-                SceneContentValue::Material(material) => {
-                    self.mesh_content_for(&material.source.path, comp)?
-                }
-                SceneContentValue::Media { source: media, time } => {
-                    self.file_content_for(&media.path, *time, source.layer, comp)?
-                }
-                SceneContentValue::Particles(value) => {
-                    let frame = super::ParticleFrame::from_particles(
-                        &value.particles,
-                        value.turbulence,
-                        value.links,
-                    );
-                    let natural = [
-                        frame.bounds.max[0].max(1.0),
-                        frame.bounds.max[1].max(1.0),
-                    ];
-                    (
-                        Some(LayerContent::Cloud {
-                            positions: frame.positions,
-                            colors: frame.colors,
-                            bounds: frame.bounds,
-                            point_size: 1.0,
-                            sizes: Some(frame.sizes),
-                            sprites: true,
-                            links: frame.links,
-                        }),
-                        natural,
-                    )
-                }
-                // A plate is already a nested semantic composite. Keep it on the
-                // frozen oracle until RenderGraph owns nested composite resources.
-                SceneContentValue::Plate(_) => return Ok(None),
-            };
-            let Some(content) = content else { continue };
-
-            let placement = crate::doc::core::LayerPlacement {
-                transform: source.transform.affine,
-                world_transform: Some(source.transform.spatial),
-                opacity: source.opacity,
-                order: i32::from(source.order),
-                z: source.transform.spatial.translation.z,
-                rotation_x: 0.0,
-                rotation_y: 0.0,
-                plane: None,
-            };
-            let layer = Layer {
-                content,
-                size: natural,
-                placement,
-                projection: source.projection,
-                projection_camera,
-                blend_mode: crate::render::engine::translate::translate_blend_mode(source.blend)?,
-                shading: Default::default(),
-                displace: Default::default(),
-                clip: None,
-                shadow: 0.0,
-                outline: self.outline_id(source.layer),
-                frame: None,
-            };
-            layers.push(LayerWithPasses {
-                layer,
-                passes: Vec::new(),
-                padding: 0,
-                pass_sources: Vec::new(),
-                cut: Vec::new(),
-            });
-        }
-        Ok(Some(layers))
+    /// The members of the plates in the evaluated scene at `time` (for the invariant tests).
+    #[cfg(test)]
+    pub(crate) fn plate_member_ids(&mut self, doc: &motolii_edit::Document, time: RationalTime) -> Vec<LayerId> {
+        let scene = self.frame_graph_editor_scene(&doc.view(), time).unwrap();
+        scene.layers.iter().filter_map(|l| match &l.content {
+            crate::frame_graph::SceneContentValue::Plate(plate) => Some(plate.members.iter().filter_map(|m| m.layer.as_ref().map(|l| l.layer)).collect::<Vec<_>>()),
+            _ => None,
+        }).flatten().collect()
     }
 
-    pub(in crate::engine) fn render_frame_graph_cassette_pixels(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        include_background: bool,
-        camera_override: Option<ResolvedCamera>,
-    ) -> Result<Vec<u8>, EngineError> {
-        // Important: the supported cassette path evaluates only semantic roots.
-        // It must not construct/evaluate NodeKind::GpuScene just to discover
-        // whether the new lowering/backend path can render the scene.
-        let (scene, document_camera, comp, _fps) =
-            self.evaluate_frame_graph_semantics(view, time)?;
-        let _graph = crate::render_lowering::lower_scene(&scene)
-            .map_err(|_| EngineError::Store("Render lowering failed".into()))?;
-
-        if let Some(mut layers) = self.cassette_plain_layers(&scene, comp, document_camera)? {
-            for layer in &mut layers {
-                layer.layer.projection_camera = document_camera;
-            }
-            let camera = camera_override.unwrap_or(document_camera);
-            let background = if include_background {
-                view.composition().map_err(store)?
-                    .map_or(crate::render::compositor::NO_BACKGROUND, |c| c.background)
-            } else {
-                crate::render::compositor::NO_BACKGROUND
-            };
-            return self.compositor.render_with_effects(comp, camera, &layers, background)
-                .map_err(Into::into);
+    /// Pictures analyses asked for in earlier frames that have arrived: their nodes (and what reads
+    /// them) are evaluated again at the next evaluation.
+    pub(in crate::engine) fn collect_analysis_pictures(&mut self) {
+        let arrived = self.arrived_analysis_pictures();
+        if arrived.is_empty() {
+            return;
         }
-
-        // Unsupported semantics remain on the frozen reference path until their
-        // Raster/Filter/Composite work has been migrated with parity evidence.
-        self.render_frame_graph_pixels(view, time, include_background, camera_override)
+        if let Some(state) = self.frame_graph.as_mut() {
+            state.graph.invalidate(arrived);
+            state.frame = None;
+        }
+        self.tick_frame = None;
     }
 
-    pub(in crate::engine) fn render_frame_graph_pixels(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        include_background: bool,
-        camera_override: Option<ResolvedCamera>,
-    ) -> Result<Vec<u8>, EngineError> {
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        let camera = camera_override.unwrap_or(document_camera);
-        let mut layers = prepared.layers.clone();
-        for layer in &mut layers {
-            layer.layer.projection_camera = document_camera;
-        }
-        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
-        let pixels = self.compositor.render_with_effects(state.comp, camera, &layers, background)?;
-        self.frame_graph = Some(state);
-        Ok(pixels)
-    }
-
-    pub(in crate::engine) fn render_frame_graph_to_texture_output(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        include_background: bool,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Export)?;
-        let prepared = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.gpu))
-            .and_then(|value| value.downcast_ref::<Arc<GpuSceneValue>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph GPU scene is missing".into()))?;
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        let mut layers = prepared.layers.clone();
-        for layer in &mut layers {
-            layer.layer.projection_camera = document_camera;
-        }
-        let background = if include_background { state.background } else { crate::render::compositor::NO_BACKGROUND };
-        let texture = self.compositor.render_to_texture(state.comp, document_camera, &layers, background)?;
-        self.frame_graph = Some(state);
-        Ok(texture)
-    }
-
+    /// The semantic scene at `time` (editor reads, the tick's first step): no GPU preparation.
     fn evaluated_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality) -> Result<EngineFrameGraph, EngineError> {
         let revision = GraphRevision::new(view.revision_key());
-        let mut state = match self.frame_graph.take() { Some(state) if state.graph.revision() == revision => state, _ => EngineFrameGraph::new(view, revision)? };
+        let mut state = match self.frame_graph.take() {
+            Some(state) if state.graph.revision() == revision => state,
+            _ => {
+                // Another revision: what its analyses asked for describes a work that is gone.
+                self.analysis_pictures.clear();
+                EngineFrameGraph::new(view, revision)?
+            }
+        };
         self.compositor.feedback_set_revision(view.revision_key());
-        self.feedback_keys_seen.clear();
         if !state.matches(revision, time) {
-            let started = std::time::Instant::now();
-            if let Err(error) = state.evaluate_at(self, time, quality, false) {
+            if let Err(error) = state.evaluate_scene(self, time, quality) {
                 self.frame_graph = Some(state);
                 return Err(error);
             }
+        }
+        Ok(state)
+    }
+
+    /// The prepared world at `time` and `precision`, on the semantic scene of the same time.
+    fn prepared_frame_graph(&mut self, view: &StoreView<'_>, time: RationalTime, quality: FrameQuality, precision: Precision) -> Result<EngineFrameGraph, EngineError> {
+        let mut state = self.evaluated_frame_graph(view, time, quality)?;
+        let started = std::time::Instant::now();
+        let before = state.prepared_for;
+        if let Err(error) = state.prepare(self, precision) {
+            self.frame_graph = Some(state);
+            return Err(error);
+        }
+        if state.prepared_for != before {
             state.prepare_us = started.elapsed().as_micros() as u64;
             state.measured = false;
         }
@@ -507,128 +354,15 @@ impl Engine {
         self.frame_graph_cached_scene(view, time)?.layer(id)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn render_frame_graph_into_window(
-        &mut self,
-        view: &StoreView<'_>,
-        time: RationalTime,
-        target: &wgpu::Texture,
-        camera: ResolvedCamera,
-        include_background: bool,
-        outline: &[LayerId],
-        window: crate::render::compositor::Window,
-        projection: crate::frame_graph::ViewProjection,
-    ) -> Result<(), EngineError> {
-        let mut state = self.evaluated_frame_graph(view, time, FrameQuality::Preview { scale: 1 })?;
-        let frame_start = std::time::Instant::now();
-        self.compositor.measurement = Default::default();
-        if !state.measured {
-            self.compositor.measurement.resolve_us = state.prepare_us;
-            state.measured = true;
-        }
-        self.outline_layers = outline.iter().copied().take(255).collect();
-        self.outline_order = self.outline_layers.clone();
 
-        self.render_frame_graph_projection(
-            &state,
-            target,
-            camera,
-            include_background,
-            window,
-            projection,
-        )?;
 
-        let now = time.try_to_frame_round(state.fps).unwrap_or(0);
-        if let Some(start) = self.frame_graph_feedback_replay_start(&state, now) {
-            self.replay_frame_graph_feedback(
-                &mut state,
-                start,
-                now,
-                camera,
-                include_background,
-                window,
-                projection,
-            )?;
-
-            let c = &mut self.compositor;
-            c.baked_effects.clear(&mut c.effect_scratch);
-            self.feedback_keys_seen.clear();
-            state.evaluate_at(self, time, FrameQuality::Preview { scale: 1 }, true)?;
-            self.render_frame_graph_projection(
-                &state,
-                target,
-                camera,
-                include_background,
-                window,
-                projection,
-            )?;
-        }
-
-        self.outline_layers.clear();
-        self.compositor.measurement.total_us = frame_start.elapsed().as_micros() as u64;
-        self.frame_graph = Some(state);
-        Ok(())
-    }
-
-    fn render_frame_graph_projection(
-        &mut self,
-        state: &EngineFrameGraph,
-        target: &wgpu::Texture,
-        camera: ResolvedCamera,
-        include_background: bool,
-        window: crate::render::compositor::Window,
-        projection: crate::frame_graph::ViewProjection,
-    ) -> Result<(), EngineError> {
-        let root = match projection {
-            crate::frame_graph::ViewProjection::Camera => state.camera,
-            crate::frame_graph::ViewProjection::Stage => state.stage,
-            _ => return Err(EngineError::Store("Unsupported playback projection".into())),
-        };
-        let projected = state.frame.as_ref()
-            .and_then(|frame| frame.value(root))
-            .and_then(|value| value.downcast_ref::<Arc<Projection>>())
-            .cloned()
-            .ok_or_else(|| EngineError::Store("FrameGraph projection is missing".into()))?;
-        let expected = if projection == crate::frame_graph::ViewProjection::Camera {
-            ProjectionRole::Camera
-        } else {
-            ProjectionRole::Stage
-        };
-        if projected.role != expected {
-            return Err(EngineError::Store("FrameGraph projection role mismatch".into()));
-        }
-
-        let document_camera = state.frame.as_ref()
-            .and_then(|frame| frame.value(state.program.camera()))
-            .and_then(|value| value.downcast_ref::<ResolvedCamera>())
-            .copied()
-            .unwrap_or_default();
-        let projection_camera = window.projection_camera.unwrap_or(document_camera);
-        let mut layers = projected.scene.layers.clone();
-        for layer in &mut layers {
-            layer.layer.projection_camera =
-                if layer.layer.projection == crate::doc::store::LayerProjection::TwoD {
-                    document_camera
-                } else {
-                    projection_camera
-                };
-        }
-        self.stamp_frame_graph_window_feedback(&mut layers, window);
-        let background = if include_background {
-            state.background
-        } else {
-            crate::render::compositor::NO_BACKGROUND
-        };
-        self.compositor.render_into_window(target, state.comp, camera, &layers, background, window)?;
-        Ok(())
-    }
-
+    /// The earliest frame the histories read this tick must be replayed from (a jump).
     fn frame_graph_feedback_replay_start(
         &mut self,
         state: &EngineFrameGraph,
         now: i64,
     ) -> Option<i64> {
-        let seen = std::mem::take(&mut self.feedback_keys_seen);
+        let seen = std::mem::take(&mut self.compositor.feedback_seen);
         let mut unique = HashSet::new();
         let mut start: Option<i64> = None;
         for key in seen.into_iter().filter(|key| unique.insert(*key)) {
@@ -646,97 +380,8 @@ impl Engine {
         start
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn replay_frame_graph_feedback(
-        &mut self,
-        state: &mut EngineFrameGraph,
-        start: i64,
-        now: i64,
-        camera: ResolvedCamera,
-        include_background: bool,
-        window: crate::render::compositor::Window,
-        projection: crate::frame_graph::ViewProjection,
-    ) -> Result<(), EngineError> {
-        let replay_target = self.compositor.ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("motolii-frame-graph-feedback-replay"),
-            size: wgpu::Extent3d {
-                width: window.width,
-                height: window.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: crate::render::compositor::PRESENTABLE_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-
-        for frame in start..now {
-            self.pending_frame_copies.clear();
-            self.feedback_keys_seen.clear();
-            let at = RationalTime::try_from_frame(frame, state.fps)
-                .map_err(|error| EngineError::Time(error.to_string()))?;
-            state.evaluate_at(self, at, FrameQuality::Preview { scale: 1 }, true)?;
-            self.render_frame_graph_projection(
-                state,
-                &replay_target,
-                camera,
-                include_background,
-                window,
-                projection,
-            )?;
-        }
-        self.pending_frame_copies.clear();
-        self.feedback_keys_seen.clear();
-        Ok(())
-    }
 }
 
-
-
-#[cfg(test)]
-mod cassette_tests {
-    use super::*;
-    use motolii_edit::{Document, Intent};
-    use crate::doc::store::{Composition, Fps};
-
-    #[test]
-    fn plain_still_scene_renders_real_pixels_without_gpu_scene_resource_preparation() {
-        let dir = tempfile::tempdir().unwrap();
-        let image_path = dir.path().join("cassette-red.png");
-        image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 0, 0, 255]))
-            .save(&image_path)
-            .unwrap();
-
-        let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition {
-            width: 64,
-            height: 64,
-            fps: Fps::try_new(30, 1).unwrap(),
-            duration_frames: 1,
-            background: [0.0, 0.0, 0.0, 1.0],
-        })).unwrap();
-        super::super::environment_tests::file_layer(&mut doc, 1, 0, &image_path);
-
-        let mut engine = Engine::new().unwrap();
-        let (scene, camera, comp, _) = engine
-            .evaluate_frame_graph_semantics(&doc.view(), RationalTime::ZERO)
-            .unwrap();
-        let cassette = engine
-            .cassette_plain_layers(&scene, comp, camera)
-            .unwrap()
-            .expect("plain still scene must be fully owned by the cassette path");
-        assert_eq!(cassette.len(), 1);
-
-        let pixels = engine
-            .render_with_camera_override(&doc.view(), RationalTime::ZERO, true, None)
-            .unwrap();
-        assert_eq!(pixels.len(), 64 * 64 * 4);
-        assert!(pixels.chunks_exact(4).any(|p| p[0] > 200 && p[1] < 40 && p[2] < 40));
-        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
-    }
-}
 
 
 fn direct<'a, T: 'static>(node: &GraphNode, inputs: &'a NodeInputs, index: usize) -> Result<&'a T, EngineError> { inputs.at(index).and_then(|value| value.downcast_ref::<T>()).ok_or_else(|| EngineError::Store(format!("FrameGraph {:?} has invalid input {index}", node.identity().kind))) }

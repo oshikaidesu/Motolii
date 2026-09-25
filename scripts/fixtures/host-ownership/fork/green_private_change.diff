@@ -1,0 +1,6 @@
+--- a/crates/viewer_support/re_renderer/src/view_builder.rs
++++ b/crates/viewer_support/re_renderer/src/view_builder.rs
+@@ -700,3 +700,6 @@ impl ViewBuilder {
++    fn clear_value(config: &TargetConfiguration) -> wgpu::Color {
++        wgpu::Color::TRANSPARENT
++    }

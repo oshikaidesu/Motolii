@@ -5,7 +5,7 @@
 // from 80% to 20% of the viewport. The overlay is a black box at 50% (#00000080) times the value.
 comp({ width: 1920, height: 1080, fps: 30, seconds: 4, background: "#FFFFFF" });
 const SPEED = 400, TOP0 = 1400, D = 270;
-media("/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/photo1.png", { name: "MV (sticky)" });
+media("mat/photo1.png", { name: "MV (sticky)" });
 const t0 = (TOP0 - 0.8 * 1080) / SPEED, t1 = (TOP0 - 0.2 * 1080) / SPEED;
 rectangle({ name: "Scrub overlay" }).fill("#000000").set("Anchor", [0, 0]).set("Position", [0, 0]).set("Scale", [1920 / D, 1080 / D])
   .set("Opacity", 0).key("Opacity", t0, 0, "Linear").key("Opacity", t1, 0.5);

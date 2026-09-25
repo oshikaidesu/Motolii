@@ -24,7 +24,7 @@ fn set_matte_cuts_by_the_layer_the_user_picked() {
     image::save_buffer(&red, &[255u8, 0, 0, 255].repeat((SIZE * SIZE) as usize), SIZE, SIZE, image::ColorType::Rgba8).unwrap();
 
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     for (id, path, order) in [(1u64, &blue, 0i16), (2, &matte, 1), (3, &red, 2)] {
         let layer = LayerId(id);
         doc.apply_all([

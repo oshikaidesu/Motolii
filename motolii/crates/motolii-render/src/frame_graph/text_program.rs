@@ -7,18 +7,28 @@ use crate::picture::shapes_ops::Canvas;
 use super::{ContentProgram, DynamicInput, EvaluationContext, FlowFrameValue, FlowProgram, GraphNode, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, PropertyProgram, TimeDependency};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText }
+pub struct TextShapeValue { pub document: TextDocument, pub shaped: ShapedText, outlines: std::sync::Arc<Vec<crate::doc::store::ShapeNode>> }
 
 impl TextShapeValue {
-    pub fn shapes(&self) -> Vec<crate::doc::store::ShapeNode> {
+    pub fn new(document: TextDocument, shaped: ShapedText) -> Self {
+        let outlines = std::sync::Arc::new(Self::outlines_of(&document, &shaped));
+        Self { document, shaped, outlines }
+    }
+
+    /// The glyph outlines as shapes, built once with the value.
+    pub fn shapes(&self) -> std::sync::Arc<Vec<crate::doc::store::ShapeNode>> {
+        self.outlines.clone()
+    }
+
+    fn outlines_of(document: &TextDocument, shaped: &ShapedText) -> Vec<crate::doc::store::ShapeNode> {
         use crate::doc::vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape};
         let mut batches: Vec<(usize, Vec<crate::doc::vector::Contour>)> = Vec::new();
-        for (contour, style) in self.shaped.contours.iter().cloned().zip(&self.shaped.contour_styles) {
+        for (contour, style) in shaped.contours.iter().cloned().zip(&shaped.contour_styles) {
             if let Some((_, contours)) = batches.last_mut().filter(|(index, _)| index == style) { contours.push(contour); }
             else { batches.push((*style, vec![contour])); }
         }
         batches.into_iter().filter_map(|(index, contours)| {
-            let style = self.document.styles.get(index)?;
+            let style = document.styles.get(index)?;
             Some(crate::doc::store::ShapeNode::Leaf(Shape { source: PathSource::Bezier(contours), ops: Vec::new(), fill: Some(Fill { brush: Brush::Solid(Rgb { r: style.fill[0], g: style.fill[1], b: style.fill[2] }), rule: FillRule::NonZero, opacity: style.fill[3], hidden: false }), stroke: None }))
         }).collect()
     }
@@ -37,7 +47,7 @@ struct StyleInputs {
 
 #[derive(Clone)]
 struct Recipe {
-    flow_input: usize,
+    flow_input: Option<usize>,
     flow_index: usize,
     canvas: Canvas,
     justify: Option<usize>,
@@ -65,12 +75,18 @@ impl TextProgram {
         let comp = view.composition()?.map(|comp| [comp.width, comp.height]).unwrap_or([1920, 1080]);
         let canvas = Canvas { width: comp[0], height: comp[1], origin_x: 0, origin_y: 0 };
         let mut nodes = BTreeMap::new(); let mut recipes = BTreeMap::new(); let mut motion = BTreeMap::new(); let mut bindings = BTreeMap::new();
+        let timed: std::collections::BTreeSet<NodeKey> = properties.nodes().chain(content.nodes())
+            .filter(|node| node.identity().time_dependency == TimeDependency::Exact)
+            .map(|node| node.key())
+            .collect();
         for layer in view.layers() {
             if !view.meta(layer)?.is_some_and(|meta| meta.source == LayerSource::Text) { continue; }
             let Some(text) = content.binding(layer).and_then(|binding| binding.content) else { continue };
             let Some(flow_binding) = flow.binding(layer) else { continue };
             let Some(document) = view.text_document(layer)? else { continue };
-            let mut inputs = vec![text, flow.key()];
+            // Only a child can be given a layout slot (wrap width, transition): a top-level text never reads the flow.
+            let in_flow = view.attrs(layer)?.unwrap_or_default().parent.is_some();
+            let mut inputs = if in_flow { vec![text, flow.key()] } else { vec![text] };
             let mut input = |property: crate::doc::store::PropertyId| {
                 properties.node_for(layer, &property).map(|key| {
                     let at = inputs.len();
@@ -88,13 +104,14 @@ impl TextProgram {
                 tracking: input(crate::doc::store::PropertyId::text_style_tracking(style.id)),
                 fill: input(crate::doc::store::PropertyId::text_style_fill_color(style.id)),
             }).collect::<Vec<_>>();
+            let varies = in_flow || document.content.keys().len() > 1 || inputs.iter().any(|input| timed.contains(input));
             let mut identity = NodeIdentity::new(NodeKind::TextShape, inputs);
             identity.parameters = (flow_binding.index as u64).to_be_bytes().to_vec();
-            identity.time_dependency = TimeDependency::Exact;
+            identity.time_dependency = if varies { TimeDependency::Exact } else { TimeDependency::Static };
             let node = GraphNode::new(identity);
             let base = node.key();
             recipes.entry(base).or_insert(Recipe {
-                flow_input: 1,
+                flow_input: in_flow.then_some(1),
                 flow_index: flow_binding.index,
                 canvas,
                 justify,
@@ -104,6 +121,11 @@ impl TextProgram {
                 styles,
             });
             nodes.entry(base).or_insert(node);
+            // A glyph transition blends this shape with its own past; a shape that never changes has none.
+            if !varies {
+                bindings.insert(layer, TextBinding { layer, shape: base });
+                continue;
+            }
 
             let mut motion_identity = NodeIdentity::new(NodeKind::TextShape, vec![base, flow.key()]);
             motion_identity.parameters = b"glyph-transition".to_vec();
@@ -197,10 +219,12 @@ impl TextProgram {
                     }
                 }
             }
-            let flow = inputs.at(recipe.flow_input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
-            if let Some(wrap) = flow.slots.get(recipe.flow_index).copied().flatten().and_then(|slot| slot.wrap) { document.wrap_size = Some([wrap.max(1.0), recipe.canvas.height as f32]); }
+            if let Some(flow_input) = recipe.flow_input {
+                let flow = inputs.at(flow_input).and_then(|value| value.downcast_ref::<FlowFrameValue>()).ok_or(TextProgramError::InvalidInput(node.identity().kind))?;
+                if let Some(wrap) = flow.slots.get(recipe.flow_index).copied().flatten().and_then(|slot| slot.wrap) { document.wrap_size = Some([wrap.max(1.0), recipe.canvas.height as f32]); }
+            }
             let shaped = crate::picture::text_frame::shape_document(&document, context.time, &recipe.canvas).map_err(|error| TextProgramError::Shape(error.to_string()))?.unwrap_or_default();
-            Ok(NodeValue::new(TextShapeValue { document, shaped }))
+            Ok(NodeValue::new(TextShapeValue::new(document, shaped)))
         })())
     }
 }
@@ -271,6 +295,7 @@ mod tests {
     struct Executor<'a>(&'a SceneProgram);
     impl NodeExecutor for Executor<'_> {
         type Error = SceneProgramError;
+        fn dynamic_inputs(&mut self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<crate::frame_graph::DynamicInput>, Self::Error> { self.0.dynamic_inputs(node, inputs, context) }
         fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> { self.0.execute(node, &inputs, &context) }
     }
 

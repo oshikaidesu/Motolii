@@ -1,6 +1,6 @@
 use motolii_edit::{Document, Intent};
 use super::environment_tests::{SIZE, scene, sky_png};
-use super::reflection_tests::set;
+use super::surface_tests::set;
 use super::*;
 use crate::doc::store::{LayerId, LayerSource, Value, property};
 
@@ -145,8 +145,7 @@ fn antialiasing_cost_comparison() {
                     rows.push(
                         serde_json::json!({"scenario":scenario,"frame":frame-5,"aa":enabled,
                         "total_us":m.total_us,"prepare_us":m.prepare_us,"submit_us":m.submit_us,
-                        "wait_us":m.wait_us,"readback_us":m.readback_us,
-                        "captures":engine.surface_work().scene_captures-before.scene_captures}),
+                        "wait_us":m.wait_us,"readback_us":m.readback_us}),
                     );
                 }
             }
@@ -178,17 +177,15 @@ fn lightweight_antialiasing_comparison() {
         .unwrap()
         .id;
     let configs = [
-        ("persistent_high", SurfaceSampling::Sample, false),
-        ("transient_high", SurfaceSampling::Sample, true),
-        ("pixel", SurfaceSampling::Pixel, true),
-        ("filtered", SurfaceSampling::FilteredPixel, true),
+        ("high", SurfaceSampling::Sample),
+        ("pixel", SurfaceSampling::Pixel),
+        ("filtered", SurfaceSampling::FilteredPixel),
     ]
-    .map(|(name, surface_sampling, transient_attachments)| {
+    .map(|(name, surface_sampling)| {
         (
             name,
             RenderConfig {
                 surface_sampling,
-                transient_attachments,
                 ..Default::default()
             },
         )
@@ -223,15 +220,10 @@ fn lightweight_antialiasing_comparison() {
                     records.push(
                         serde_json::json!({"scenario":scenario,"frame":frame-5,"mode":configs[i].0,
                         "total_us":m.total_us,"prepare_us":m.prepare_us,"submit_us":m.submit_us,
-                        "wait_us":m.wait_us,"readback_us":m.readback_us,
-                        "captures":engine.surface_work().scene_captures-before.scene_captures}),
+                        "wait_us":m.wait_us,"readback_us":m.readback_us}),
                     );
                 }
             }
-            assert_eq!(
-                pixels[0], pixels[1],
-                "transient must not change any pixel: {scenario}/{frame}"
-            );
             if frame == 5 || frame == 34 {
                 for (i, pixels) in pixels.into_iter().enumerate() {
                     image::RgbaImage::from_raw(1600, 1000, pixels)
@@ -245,9 +237,9 @@ fn lightweight_antialiasing_comparison() {
     std::fs::write(
         out.join("measurements.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
-            "adapter":info.name,"transient_saves_memory":info.transient_saves_memory,
+            "adapter":info.name,
             "resolution":[1600,1000],"warmup":5,"samples":30,
-            "transient_pixel_equality":true,"records":records,
+            "records":records,
         }))
         .unwrap(),
     )
@@ -266,19 +258,19 @@ fn configured_engine(config: re_renderer::RenderConfig) -> Engine {
     engine
 }
 
-fn reflection_fixture(dir: &std::path::Path) -> Document {
+/// A metal mirror (filtered surface sampling) beside a red picture the edits change.
+fn mirror_fixture(dir: &std::path::Path) -> Document {
     use super::environment_tests::file_layer;
     use crate::doc::store::{EffectId, EffectInstance};
     let sky = sky_png(dir, "white-sky.png", 255, 255);
     let mut doc = scene(dir, &sky, true);
-    let red = dir.join("reflection-source.png");
+    let red = dir.join("red.png");
     image::RgbaImage::from_pixel(64, 64, image::Rgba([255, 0, 0, 255]))
         .save(&red)
         .unwrap();
     let sender = file_layer(&mut doc, 3, 0, &red);
-    set(&mut doc, sender, "position", Value::Vec2([-300.0, -300.0]));
-    set(&mut doc, sender, "scale", Value::Vec2([10.0, 10.0]));
-    set(&mut doc, sender, "position.z", Value::F64(-200.0));
+    set(&mut doc, sender, "position", Value::Vec2([12.0, 12.0]));
+    set(&mut doc, sender, "scale", Value::Vec2([0.2, 0.2]));
     doc.apply(Intent::SetEffects {
         layer: LayerId(2),
         effects: vec![EffectInstance {
@@ -287,51 +279,15 @@ fn reflection_fixture(dir: &std::path::Path) -> Document {
         }],
     })
     .unwrap();
-    super::reflection_tests::effect(&mut doc, LayerId(2), 0, "transmission", Value::F64(0.0));
-    super::reflection_tests::effect(&mut doc, LayerId(2), 0, "metallic", Value::F64(1.0));
+    super::surface_tests::effect(&mut doc, LayerId(2), 0, "transmission", Value::F64(0.0));
+    super::surface_tests::effect(&mut doc, LayerId(2), 0, "metallic", Value::F64(1.0));
     doc
-}
-
-#[test]
-fn transient_surface_targets_preserve_pixels_with_and_without_transmission() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut doc = reflection_fixture(dir.path());
-    super::reflection_tests::effect(&mut doc, LayerId(2), 0, "metallic", Value::F64(0.0));
-    let mut persistent = configured_engine(re_renderer::RenderConfig {
-        transient_attachments: false,
-        ..Default::default()
-    });
-    let mut transient = configured_engine(re_renderer::RenderConfig {
-        transient_attachments: true,
-        ..Default::default()
-    });
-    let mut previous = None;
-    for transmission in [0.0, 0.8, 0.0] {
-        super::reflection_tests::effect(
-            &mut doc,
-            LayerId(2),
-            0,
-            "transmission",
-            Value::F64(transmission),
-        );
-        let a = persistent
-            .render_frame(&doc.view(), RationalTime::ZERO)
-            .unwrap();
-        let b = transient
-            .render_frame(&doc.view(), RationalTime::ZERO)
-            .unwrap();
-        assert_eq!(a, b, "transient changes no sample values");
-        if let Some(previous) = previous.replace(a.clone()) {
-            assert_ne!(previous, a, "transmission must affect the fixture");
-        }
-        assert!(persistent.layer_failures().is_empty() && transient.layer_failures().is_empty());
-    }
 }
 
 #[test]
 fn filtered_surfaces_refresh_on_edit_undo_camera_and_cache_eviction() {
     let dir = tempfile::tempdir().unwrap();
-    let mut doc = reflection_fixture(dir.path());
+    let mut doc = mirror_fixture(dir.path());
     let mut engine = configured_engine(re_renderer::RenderConfig {
         surface_sampling: re_renderer::SurfaceSampling::FilteredPixel,
         ..Default::default()
@@ -354,7 +310,6 @@ fn filtered_surfaces_refresh_on_edit_undo_camera_and_cache_eviction() {
         .unwrap();
     assert_ne!(first, changed);
     assert!(doc.undo());
-    engine.clear_reflection_cache();
     assert_eq!(
         first,
         engine

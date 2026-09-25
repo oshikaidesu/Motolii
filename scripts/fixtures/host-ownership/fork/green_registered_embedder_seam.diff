@@ -1,0 +1,6 @@
+--- a/crates/viewer_support/re_renderer/src/context.rs
++++ b/crates/viewer_support/re_renderer/src/context.rs
+@@ -640,3 +640,7 @@ impl RenderContext {
++    pub fn queue_commands(&self, commands: impl IntoIterator<Item = wgpu::CommandBuffer>) {
++        self.active_frame.frame_commands.lock().extend(commands);
++    }

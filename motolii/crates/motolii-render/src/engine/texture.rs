@@ -46,66 +46,8 @@ fn still_key(path: &str) -> u64 {
     hasher.finish()
 }
 
-/// 文字の texture を憶える上限(枚)。
-const TEXT_CACHE_LIMIT: usize = 256;
-
-/// tiny-skia の乗算済み RGBA を非乗算へ(上げる直前に 1 回)。透明な texel は隣の色で埋める
-/// (edge bleed)— 非乗算は sampler の線形補間と効果の畳み込みが透明部の RGB を混ぜるので、
-/// 黒のままだと縁が灰・暈が黒になる(QA 再点検 Q2-1)。
-
-/// 透明(a=0)の texel に、色を持つ 4 近傍の平均を書く。2 回回して 2px ぶん広げる。
-fn bleed_edges(rgba: &mut [u8], width: usize) {
-    if width == 0 || rgba.len() < 4 {
-        return;
-    }
-    let height = rgba.len() / 4 / width;
-    let mut colored: Vec<bool> = rgba.chunks_exact(4).map(|p| p[3] != 0).collect();
-    for _ in 0..2 {
-        let snapshot = rgba.to_vec();
-        let mut next = colored.clone();
-        for y in 0..height {
-            for x in 0..width {
-                let i = y * width + x;
-                if colored[i] {
-                    continue;
-                }
-                let mut sum = [0u32; 3];
-                let mut n = 0u32;
-                let mut take = |j: usize| {
-                    if colored[j] {
-                        for c in 0..3 {
-                            sum[c] += snapshot[j * 4 + c] as u32;
-                        }
-                        n += 1;
-                    }
-                };
-                if x > 0 { take(i - 1); }
-                if x + 1 < width { take(i + 1); }
-                if y > 0 { take(i - width); }
-                if y + 1 < height { take(i + width); }
-                if n > 0 {
-                    for c in 0..3 {
-                        rgba[i * 4 + c] = (sum[c] / n) as u8;
-                    }
-                    next[i] = true;
-                }
-            }
-        }
-        colored = next;
-    }
-}
-
 /// 場が乗る形・文字の輪郭を刻む幅(px)。頂点段の場はこの間隔で曲がる。
 pub(super) const FIELD_STEP: f32 = 4.0;
-
-pub(super) struct TextTexture {
-    texture: LayerContent,
-    tolerance: f32,
-    /// 場のために輪郭を刻んだ幅(None = 刻んでいない)。
-    step: Option<f32>,
-    frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
-    bounds: Option<crate::render::media::SpatialBounds>,
-}
 
 impl Engine {
     pub(super) fn media_texture_for(
@@ -259,7 +201,6 @@ impl Engine {
             if !self.frame_cache.contains_key(&key) {
                 self.remember_video_frame(path, pts, texture);
             }
-            self.pending_frame_copies.retain(|(p, t, _)| (p, *t) != (&key.0, key.1));
             let tick = self.frame_cache_tick;
             if let Some(hit) = self.frame_cache.get_mut(&key) {
                 hit.last_use = tick;
@@ -269,14 +210,9 @@ impl Engine {
         Ok((texture.map(LayerContent::Texture), natural))
     }
 
-    /// 前の frame で揃ったコマを cache に写す。frame の頭、復号器が texture を書き換える前に呼ぶ。
-    pub(super) fn flush_pending_frame_copies(&mut self) {
-        for (path, pts, texture) in std::mem::take(&mut self.pending_frame_copies) {
-            self.remember_video_frame(&path, pts, &texture);
-        }
-    }
-
     /// 復号したコマを GPU texture のまま写して取っておく。上限を超えたら、使われてから一番古い物を捨てる。
+    /// 復号器の転送は frame 共通の encoder に積まれているので、写しは host の frame の後ろに積む
+    /// (`queue_commands`、先に打つと冷えた復号器の空の texture を写す)。
     fn remember_video_frame(&mut self, path: &str, pts: i64, source: &crate::render::compositor::GpuTexture2D) {
         let [width, height] = source.width_height();
         let bytes = u64::from(width) * u64::from(height) * 4;
@@ -306,9 +242,10 @@ impl Engine {
                     usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
                 },
             );
+            // After the upload the decoder recorded into the frame-global encoder: queued behind it.
             let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Motolii video frame cache copy") });
             encoder.copy_texture_to_texture(source.texture.as_image_copy(), copy.texture.as_image_copy(), size);
-            ctx.queue.submit([encoder.finish()]);
+            ctx.queue_commands([encoder.finish()]);
             re_renderer::resource_managers::GpuTexture2D::new(copy, re_renderer::resource_managers::AlphaChannelUsage::Opaque)
         };
         let Some(texture) = texture else { return };
@@ -317,18 +254,6 @@ impl Engine {
         self.frame_cache_bytes += bytes;
     }
 
-    pub(crate) fn texture_for(
-        &mut self,
-        source: &LayerSource,
-        _source_frame: i64,
-    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        match source {
-            LayerSource::Text | LayerSource::Shape | LayerSource::File { .. } => {
-                Ok((None, [0.0, 0.0]))
-            }
-            LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group | LayerSource::Particles => Ok((None, [0.0, 0.0])),
-        }
-    }
 }
 
 /// 静止画を**非乗算 sRGB** の RGBA8 に揃える。乗算は shader(decode の後)。
@@ -402,74 +327,22 @@ fn icc_to_srgb_rgba8(icc: &[u8]) -> Option<std::sync::Arc<moxcms::Transform8BitE
         .ok()
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub(crate) struct TextCacheKey {
-    layer: LayerId,
-    canvas_width: u32,
-    canvas_height: u32,
-    content_snapshot: String,
-}
-
-impl TextCacheKey {
-    fn new(
-        layer: LayerId,
-        document: &TextDocument,
-        morph: Option<(&TextDocument, f64)>,
-        t: RationalTime,
-        canvas_width: u32,
-        canvas_height: u32,
-    ) -> Self {
-        let snapshot = |document: &TextDocument| serde_json::to_string(&(
-            document.content.eval(t),
-            document.justify,
-            document.alignment,
-            document.wrap_size,
-            &document.styles,
-            &document.runs,
-        ))
-        .unwrap_or_default();
-        // 相手の文字と量も鍵: 相手が変われば組み直す。
-        let content_snapshot = format!("{}|{}", snapshot(document), morph.map(|(d, amount)| format!("{amount}|{}", snapshot(d))).unwrap_or_default());
-        Self {
-            layer,
-            canvas_width,
-            canvas_height,
-            content_snapshot,
-        }
-    }
-
-    /// 字ごとのずれと避ける物も鍵: 折り返しの移り方の途中や物が動く間は、コマごとに組み直す。
-    fn moving(mut self, flow: text::Flow<'_>) -> Self {
-        if let Some(offsets) = flow.offsets {
-            self.content_snapshot.push_str(&format!("|{offsets:?}"));
-        }
-        // 避ける物が動けば組み直す。
-        if !flow.around.is_empty() {
-            self.content_snapshot.push_str(&format!("|{:?}", flow.around));
-        }
-        self
-    }
-}
-
-/// 輪郭の点だけを原点から伸ばす(1 枚だけの Repeater の変換は、線を引く前の点に掛かる)。
-#[derive(Clone, PartialEq, Eq, Hash)]
+/// One vector picture per layer and canvas. It is reused while the layer's outline is the same
+/// evaluated value (the same shared allocation), so an unchanged shape costs nothing per frame.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ShapeCacheKey {
-    layer: LayerId,
-    canvas_width: u32,
-    canvas_height: u32,
-    content_snapshot: String,
+    pub(crate) layer: LayerId,
+    /// Drawn on the composition canvas (text) rather than the outline's own.
+    pub(crate) on_comp: bool,
 }
 
-impl ShapeCacheKey {
-    fn new(layer: LayerId, shapes: &[ShapeNode], canvas_width: u32, canvas_height: u32) -> Self {
-        let content_snapshot = serde_json::to_string(shapes).unwrap_or_default();
-        Self {
-            layer,
-            canvas_width,
-            canvas_height,
-            content_snapshot,
-        }
-    }
+pub(crate) struct ShapeTexture {
+    pub(crate) shapes: std::sync::Arc<Vec<ShapeNode>>,
+    pub(crate) texture: LayerContent,
+    pub(crate) natural: [f32; 2],
+    pub(crate) vector: bool,
+    pub(crate) tolerance: f32,
+    pub(crate) step: Option<f32>,
 }
 
 /// 形が占める範囲だけの canvas。層の箱が中身に吸い付く。
@@ -491,24 +364,6 @@ const DEFAULT_POINT_SIZE: f32 = 2.0;
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod rich_text_cache_tests {
-    use super::*;
-    use crate::doc::store::*;
-    #[test]
-    fn moving_a_style_boundary_invalidates_the_texture() {
-        let style=|id,size|TextDocumentStyle{id:TextStyleId(id),font:FontRef::default(),size,fill:[1.0;4],line_height:None,tracking:0.0,axes:vec![],features:vec![]};
-        let mut content=ContentTrack::new();content.insert(ContentKeyframe{t:RationalTime::ZERO,content:"AB".into()});
-        let mut text=TextDocument{content,justify:TextJustify::Left,wrap_size:None,styles:vec![style(0,20.0),style(1,40.0)],slot_id:None,ranges:vec![],alignment:Default::default(),runs:vec![TextRun{len:1,style:TextStyleId(0)},TextRun{len:1,style:TextStyleId(1)}]};
-        let before=TextCacheKey::new(LayerId(1),&text,None,RationalTime::ZERO,400,200);
-        text.runs.reverse();
-        assert!(before!=TextCacheKey::new(LayerId(1),&text,None,RationalTime::ZERO,400,200));
-        // morph の相手と量も鍵。
-        let partner=text.clone();
-        assert!(TextCacheKey::new(LayerId(1),&text,Some((&partner,0.5)),RationalTime::ZERO,400,200)!=TextCacheKey::new(LayerId(1),&text,Some((&partner,0.6)),RationalTime::ZERO,400,200));
-    }
-}
 
 /// 動画の時刻はコンポの時計で決まる。素材の fps がコンポと違っても、絵の速さは変わらない。
 #[cfg(test)]

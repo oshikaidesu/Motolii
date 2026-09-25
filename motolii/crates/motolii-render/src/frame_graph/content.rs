@@ -32,7 +32,8 @@ pub struct ContentBinding {
 #[derive(Clone)]
 enum Recipe {
     Text(TextDocument),
-    Shape(Vec<ShapeNode>),
+    /// The document's shapes and the layer's `shape.*` / `fill.*` properties that override them (name, input).
+    Shape(Vec<ShapeNode>, Vec<(String, usize)>),
     MediaExtent(MediaSourceValue),
     Mesh(MediaSourceValue),
     MediaFrame {
@@ -74,8 +75,17 @@ impl ContentProgram {
                 },
                 LayerSource::Shape => {
                     let shapes = view.shapes(layer)?;
-                    let parameters = serde_json::to_vec(&shapes)?;
-                    binding.content = Some(program.intern(NodeKind::ShapeGeometry, vec![], parameters, false, Recipe::Shape(shapes)));
+                    let (mut inputs, mut overrides) = (Vec::new(), Vec::new());
+                    for id in view.properties(layer) {
+                        let name = id.name();
+                        if !(name.starts_with(property::SHAPE_PREFIX) || name.starts_with("fill.")) { continue; }
+                        let Some(key) = properties.node_for(layer, &id) else { continue };
+                        overrides.push((name.to_owned(), inputs.len()));
+                        inputs.push(key);
+                    }
+                    let timed = properties.nodes().any(|node| node.identity().time_dependency == TimeDependency::Exact && inputs.contains(&node.key()));
+                    let parameters = serde_json::to_vec(&(&shapes, overrides.iter().map(|(name, _)| name).collect::<Vec<_>>()))?;
+                    binding.content = Some(program.intern(NodeKind::ShapeGeometry, inputs, parameters, timed, Recipe::Shape(shapes, overrides)));
                 }
                 LayerSource::File { path, fingerprint } => {
                     let version = resource_version(&path, fingerprint.as_deref());
@@ -146,7 +156,12 @@ impl ContentProgram {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
             Recipe::Text(value) => Ok(NodeValue::new(value.clone())),
-            Recipe::Shape(value) => Ok(NodeValue::new(value.clone())),
+            Recipe::Shape(shapes, overrides) if overrides.is_empty() => Ok(NodeValue::new(shapes.clone())),
+            Recipe::Shape(shapes, overrides) => {
+                let get = |name: &str| overrides.iter().find(|(own, _)| own == name)
+                    .and_then(|(_, index)| inputs.at(*index)).and_then(|value| value.downcast_ref::<Value>()).cloned();
+                Ok(NodeValue::new(crate::picture::shape_props::apply(shapes, &get)))
+            }
             Recipe::MediaExtent(value) => Ok(NodeValue::new(MediaExtentValue { source: value.clone(), size: [0.0; 3] })),
             Recipe::Mesh(value) => Ok(NodeValue::new(value.clone())),
             Recipe::MediaFrame { source, timing, fps, speed_track, remap } => {

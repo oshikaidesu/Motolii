@@ -13,7 +13,7 @@ fn render(pixels: Vec<u8>, effect: &str, params: &[(&str, f64)]) -> Vec<u8> {
     let path = dir.path().join("in.png");
     image::save_buffer(&path, &pixels, SIZE, SIZE, image::ColorType::Rgba8).unwrap();
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
-    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+    doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
     let layer = LayerId(1);
     doc.apply_all([
         Intent::AddLayer(layer),

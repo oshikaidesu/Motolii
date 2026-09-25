@@ -1,10 +1,10 @@
 /*{
   "ID": "motolii.gain",
-  "DESCRIPTION": "Linear RGB gain, preserving premultiplied alpha",
+  "DESCRIPTION": "Linear RGB gain, preserving premultiplied alpha. Above 1 the layer emits light: the composition Look (bloom, halation, star) picks up what exceeds 1",
   "OUTPUT_FLOAT": true,
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
-    { "NAME": "gain", "LABEL": "Gain", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 4.0 }
+    { "NAME": "gain", "LABEL": "Gain", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 16.0 }
   ]
 }*/
 

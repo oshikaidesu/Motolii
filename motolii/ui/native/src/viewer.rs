@@ -30,7 +30,6 @@ impl View {
 pub(crate) struct ViewerState {
     pub selected_ids: Vec<LayerId>,
     pub selected_keys: Vec<KeySel>,
-    pub selection_bounds: HashMap<View, HashMap<LayerId, [f32; 4]>>,
     pub color_target: Option<ColorSlot>,
     pub clock: Clock,
     pub clock_revision: Revision,
@@ -42,6 +41,9 @@ pub(crate) struct ViewerState {
     pub stage_view_scale: f64,
     pub stage_held: Option<String>,
     pub stage_window: Option<Window>,
+    /// The Camera tab's window: the composition at the density the tab shows it (After Effects'
+    /// Auto resolution). `None` = the output's own pixels.
+    pub camera_window: Option<Window>,
     pub stage_view: View,
     pub user_camera: ResolvedCamera,
     pub animate: Animate,
@@ -54,7 +56,6 @@ impl ViewerState {
         Self {
             selected_ids: view.layers().first().copied().into_iter().collect(),
             selected_keys: Vec::new(),
-            selection_bounds: HashMap::new(),
             color_target: None,
             clock,
             clock_revision: revision,
@@ -66,6 +67,7 @@ impl ViewerState {
             stage_view_scale: 1.0,
             stage_held: None,
             stage_window: None,
+            camera_window: None,
             stage_view: View::User,
             user_camera: Default::default(),
             animate: Animate::Off,

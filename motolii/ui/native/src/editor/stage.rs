@@ -571,7 +571,7 @@ pub(crate) enum DragSession {
     Spatial(crate::editor::gizmo3d::SpatialDrag),
 }
 impl DragSession {
-    /// `projection_camera` は 2D・2.5D を置くカメラ: Stage は既定、Camera は作中(描いた絵と同じ写像で掴む)。
+    /// `projection_camera` は 2D・2.5D を置くカメラ = 作中カメラ(描いた絵と同じ写像で掴む)。
     pub(crate) fn begin(doc:&Document,engine:&mut Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,projection_camera:crate::doc::core::ResolvedCamera,view_scale:f64,held:Option<&str>)->Result<Self,String>{
         if mode=="spatial" {
             return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,engine,ids,start,at,observer,view_scale,held)?));

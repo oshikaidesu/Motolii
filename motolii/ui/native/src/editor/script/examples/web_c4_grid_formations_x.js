@@ -8,7 +8,7 @@ comp({ width: 1920, height: 1080, fps: 30, seconds: 7, background: "#0f0f12" });
 const EXPO = "expo", P3IN = "power3.in";
 const COLS = 9, ROWS = 4, GAP = 12, W = 1840, H = 1000, C = ["#E4572E", "#F3B61F", "#2E5EAA", "#7FA37A", "#534AB7", "#F2EDE4", "#D9553A"];
 const cw = (W - 2 * GAP - (COLS - 1) * GAP) / COLS, ch = (H - 2 * GAP - (ROWS - 1) * GAP) / ROWS, mid = (COLS * ROWS - 1) / 2;
-const MAT = "/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/cb607ba7-2ce9-4b35-8d8e-46a99d824596/scratchpad/mat/", cells = [];
+const MAT = "mat/", cells = [];
 for (let i = 0; i < COLS * ROWS; i++) {
   const cell = i % 7 === 3 ? media(MAT + `clip${(i % 3) + 1}.mp4`, { name: `Clip ${i}` }) : rectangle({ name: `Pic ${i}` }).fill(C[(i * 5) % C.length]);
   // calculateInitialTransform: the cell's centre against the screen centre.

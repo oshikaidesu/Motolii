@@ -1,0 +1,10 @@
+--- /dev/null
++++ b/crates/viewer_support/re_renderer/src/renderer/fast_surface.rs
+@@ -0,0 +1,8 @@
++pub struct FastSurfaceRenderer {
++    pipeline: GpuRenderPipelineHandle,
++}
++
++impl Renderer for FastSurfaceRenderer {
++    type RendererDrawData = FastSurfaceDrawData;
++}

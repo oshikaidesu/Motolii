@@ -14,7 +14,7 @@ fn document_with_effects(path: &std::path::Path, plugins: &[&str]) -> Document {
             height: 24,
             fps: Fps::try_new(30, 1).unwrap(),
             duration_frames: 1,
-            background: [0.0; 4],
+            background: [0.0; 4], look: Default::default()
         }),
         Intent::AddLayer(LayerId(1)),
         Intent::SetMeta {
@@ -65,7 +65,7 @@ fn radiance_lights_the_air_around_emitters_and_occluders_cast_shadows() {
         height: size,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 1,
-        background: [0.0, 0.0, 0.0, 1.0],
+        background: [0.0, 0.0, 0.0, 1.0], look: Default::default()
     }))
     .unwrap();
     for (name, value) in [("air", 1.0), ("intensity", 4.0), ("radius", 16.0)] {
@@ -117,7 +117,7 @@ fn radiance_preaverage_preserves_reference_pixels() {
         doc
     } else {
         let mut doc = document_with_effects(&source, &["motolii.radiance"]);
-        doc.apply(Intent::SetComposition(Composition { width:size, height:size, fps:Fps::try_new(30,1).unwrap(), duration_frames:150, background:[0.0,0.0,0.0,1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width:size, height:size, fps:Fps::try_new(30,1).unwrap(), duration_frames:150, background:[0.0,0.0,0.0,1.0], look: Default::default() })).unwrap();
         doc
     };
     let fps = doc.view().composition().unwrap().unwrap().fps;

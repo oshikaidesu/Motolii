@@ -78,6 +78,7 @@ fn copied_entrypoint_rebinds_the_watcher_runtime_and_last_good_snapshot() {
         descriptors: descriptors(std::slice::from_ref(&good)),
         definitions: vec![good].into(),
         errors: vec!["invalid replacement retained the valid program".into()],
+        modules: Vec::new().into(),
     });
     runtime.0.owner.lock().unwrap().snapshot = Some(snapshot.clone());
     runtime.0.generation.store(7, Ordering::Release);
@@ -104,35 +105,23 @@ fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
     let building = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let program = super::super::EffectProgram::compile_for(&compositor.ctx, &definition, wgpu::TextureFormat::Rgba8Unorm);
     // pipeline は次の frame の頭で組まれる。組ませてから記録し、転送を流してから submit。
-    compositor.ctx.before_submit();
-    compositor.ctx.begin_frame();
+    compositor.next_frame();
     let error = pollster::block_on(building.pop());
     assert!(error.is_none(), "pipeline が組めない: {error:?}");
     let ctx = &compositor.ctx;
-    let texture = |usage| ctx.device.create_texture(&wgpu::TextureDescriptor {
-        label: None, size: wgpu::Extent3d { width: 2, height: 2, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1,
-        dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm, usage, view_formats: &[],
-    });
-    let src = texture(wgpu::TextureUsages::TEXTURE_BINDING);
-    let dst = texture(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC);
-    let mut scratch = super::super::EffectScratch::default();
+    let src = crate::render::compositor::effects::vism::pass_texture(ctx, 2, 2, wgpu::TextureFormat::Rgba8Unorm);
+    let dst = crate::render::compositor::effects::vism::pass_texture(ctx, 2, 2, wgpu::TextureFormat::Rgba8Unorm);
     let params: Vec<(String, f32)> = params.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect();
     let scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let mut encoder = ctx.device.create_command_encoder(&Default::default());
-    program.record(ctx, &mut encoder, &mut scratch, &[&src.create_view(&Default::default())], &dst.create_view(&Default::default()), &params, [2.0, 2.0]);
-    let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: 256 * 2, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    encoder.copy_texture_to_buffer(dst.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(2) } }, wgpu::Extent3d { width: 2, height: 2, depth_or_array_layers: 1 });
-    let commands = encoder.finish();
-    drop(ctx);
-    compositor.ctx.before_submit();
-    let ctx = &compositor.ctx;
-    ctx.queue.submit([commands]);
+    program.record(ctx, &mut encoder, &[&src], &dst.default_view, &params, [2.0, 2.0]);
+    ctx.queue_commands([encoder.finish()]);
+    let id = crate::render::compositor::readback::ask_texture(ctx, &dst.texture).unwrap();
+    compositor.next_frame();
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "GPU の検証に落ちた: {error:?}");
-    let slice = buffer.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |_| {});
-    crate::compositor::device::wait_for_gpu(&ctx.device, "catalog-test-readback").unwrap();
-    let data = slice.get_mapped_range();
+    compositor.wait_offline().unwrap();
+    let data = crate::render::compositor::readback::take_texture(&compositor.ctx, id).expect("readback").data;
     [data[0], data[1], data[2], data[3]]
 }
 
@@ -158,20 +147,20 @@ fn the_clock_reaches_the_shader() {
 #[test]
 fn catalog_refresh_keeps_the_open_renderer_frame_and_device() {
     let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
-    compositor.ctx.before_submit();
-    compositor.ctx.begin_frame();
+    compositor.next_frame();
     let current = catalog_snapshot();
     compositor.catalog = Arc::new(CatalogSnapshot {
         generation: current.generation.wrapping_sub(1),
         definitions: current.definitions.clone(),
         descriptors: current.descriptors.clone(),
         errors: Vec::new(),
+        modules: current.modules.clone(),
     });
-    let frame = compositor.ctx.active_frame_idx();
+    let frame = compositor.ctx.active_frame.frame_index;
     let device = compositor.ctx.device.clone();
     let shaders = compositor.ctx.gpu_resources.shader_modules.num_resources();
     compositor.refresh_catalog_programs();
-    assert_eq!(compositor.ctx.active_frame_idx(), frame);
+    assert_eq!(compositor.ctx.active_frame.frame_index, frame);
     assert_eq!(compositor.ctx.device, device);
     assert_eq!(compositor.ctx.gpu_resources.shader_modules.num_resources(), shaders);
 }

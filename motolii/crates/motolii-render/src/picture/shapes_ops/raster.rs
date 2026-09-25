@@ -66,11 +66,9 @@ fn emit_contour(b: &mut PathBuilder, c: &Contour, origin: Point) {
     }
 }
 
-/// tiny-skia に測らせる(自前の bbox は持たない)。
+/// 形の幾何の外接矩形(線は含めない)。測り方は書類の 1 つだけ。
 pub(crate) fn path_bounds(path: &Path) -> Option<[f64; 4]> {
-    let built = to_tiny_skia(path, Point { x: 0.0, y: 0.0 })?;
-    let b = built.compute_tight_bounds()?;
-    Some([b.left() as f64, b.top() as f64, b.right() as f64, b.bottom() as f64])
+    crate::doc::vector::geometry_bounds(path.iter())
 }
 
 fn color_of(c: crate::doc::vector::Rgb, alpha: f64) -> tiny_skia::Color {
@@ -83,10 +81,10 @@ fn color_of(c: crate::doc::vector::Rgb, alpha: f64) -> tiny_skia::Color {
     .unwrap_or(tiny_skia::Color::TRANSPARENT)
 }
 
-fn paint_for(brush: &Brush, origin: Point, alpha: f64) -> Paint<'static> {
+fn paint_for(brush: &Brush, origin: Point, bounds: [f64; 4], alpha: f64) -> Paint<'static> {
     let shader = match brush {
         Brush::Solid(c) => Shader::SolidColor(color_of(*c, alpha)),
-        Brush::Gradient(g) => gradient_shader(g, origin, alpha)
+        Brush::Gradient(g) => gradient_shader(g, origin, bounds, alpha)
             .unwrap_or(Shader::SolidColor(tiny_skia::Color::TRANSPARENT)),
     };
     Paint {
@@ -96,8 +94,10 @@ fn paint_for(brush: &Brush, origin: Point, alpha: f64) -> Paint<'static> {
     }
 }
 
-fn gradient_shader(g: &Gradient, origin: Point, alpha: f64) -> Option<Shader<'static>> {
-    let at = |p: Point| tiny_skia::Point::from_xy((p.x + origin.x) as f32, (p.y + origin.y) as f32);
+fn gradient_shader(g: &Gradient, origin: Point, bounds: [f64; 4], alpha: f64) -> Option<Shader<'static>> {
+    let g = &g.in_user_space(bounds);
+    let at = |p: Point| tiny_skia::Point::from_xy(p.x as f32, p.y as f32);
+    let space = Transform::from_translate(origin.x as f32, origin.y as f32);
     let stops: Vec<TsStop> = g.baked_stops()
         .iter()
         .map(|s| TsStop::new(clamp01(s.offset) as f32, color_of(s.color, alpha)))
@@ -108,7 +108,7 @@ fn gradient_shader(g: &Gradient, origin: Point, alpha: f64) -> Option<Shader<'st
             at(g.end),
             stops,
             SpreadMode::Pad,
-            Transform::identity(),
+            space,
         ),
         // The fill path paints these through a mask; a stroke in them has no tiny-skia form.
         GradientType::Angular | GradientType::Diamond => return None,
@@ -120,7 +120,7 @@ fn gradient_shader(g: &Gradient, origin: Point, alpha: f64) -> Option<Shader<'st
                 radius,
                 stops,
                 SpreadMode::Pad,
-                Transform::identity(),
+                space,
             )
         }
     }
@@ -168,6 +168,7 @@ pub(crate) fn draw(
     pixmap: &mut Pixmap,
     path: &Path,
     origin: Point,
+    bounds: [f64; 4],
     fill: Option<&Fill>,
     stroke: Option<&Stroke>,
     weight: f64,
@@ -180,16 +181,16 @@ pub(crate) fn draw(
             // tiny-skia has no sweep or diamond shader: cover the path with a mask and
             // colour each pixel from the same parameter the GPU path uses.
             Brush::Gradient(g) if matches!(g.kind, GradientType::Angular | GradientType::Diamond) => {
-                fill_by_parameter(pixmap, &ts_path, to_tsfillrule(f.rule), g, origin, f.opacity * weight);
+                fill_by_parameter(pixmap, &ts_path, to_tsfillrule(f.rule), g, origin, bounds, f.opacity * weight);
             }
             _ => {
-                let paint = paint_for(&f.brush, origin, f.opacity * weight);
+                let paint = paint_for(&f.brush, origin, bounds, f.opacity * weight);
                 pixmap.fill_path(&ts_path, &paint, to_tsfillrule(f.rule), Transform::identity(), None);
             }
         }
     }
     if let Some(s) = stroke.filter(|s| !s.hidden && s.width > 0.0) {
-        let paint = paint_for(&s.brush, origin, s.opacity * weight);
+        let paint = paint_for(&s.brush, origin, bounds, s.opacity * weight);
         let ts_stroke = TsStroke {
             width: s.width as f32,
             miter_limit: s.miter_limit as f32,
@@ -206,7 +207,8 @@ pub(crate) fn draw(
     }
 }
 
-fn fill_by_parameter(pixmap: &mut Pixmap, path: &tiny_skia::Path, rule: TsFillRule, g: &Gradient, origin: Point, alpha: f64) {
+fn fill_by_parameter(pixmap: &mut Pixmap, path: &tiny_skia::Path, rule: TsFillRule, g: &Gradient, origin: Point, bounds: [f64; 4], alpha: f64) {
+    let g = &g.in_user_space(bounds);
     let (w, h) = (pixmap.width(), pixmap.height());
     let Some(mut mask) = tiny_skia::Mask::new(w, h) else { return };
     mask.fill_path(path, rule, true, Transform::identity());

@@ -4,13 +4,22 @@ fn gpu() -> crate::render::engine::Engine {
     crate::render::engine::Engine::new().unwrap()
 }
 
+/// 描く側の motion の代わり(pool から、読み戻せる)。
+fn test_motion(ctx: &re_renderer::RenderContext, size: u64) -> re_renderer::GpuBuffer {
+    ctx.gpu_resources.buffers.alloc(&ctx.device, &re_renderer::BufferDesc { label: "test-motion".into(), size, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false })
+}
+
+fn floats(bytes: &[u8]) -> Vec<f32> {
+    bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect()
+}
+
 /// Bounce を GPU のブロックに移しても、doc の CPU の折り返し(`layout::bounced`)と同じずれになる。
 #[test]
 fn the_bounce_block_folds_boxes_like_the_cpu_law() {
-    let engine = gpu();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+    let mut engine = gpu();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let program = program_for(device, "bounce");
+    let program = program_for(ctx, "bounce");
     let m = 1.0; // doc の CANVAS_MARGIN(箱の素材座標の原点)
     let mut items = Vec::new();
     let mut rng = 7u32;
@@ -22,12 +31,12 @@ fn the_bounce_block_folds_boxes_like_the_cpu_law() {
         let y = m - 800.0 + next() * 2400.0;
         items.push(BlockItem { lo: [x, y], hi: [x + w, y + w], room_lo: [m, m], room_size: size, radius, group: 0, margin: 0.0, weight: 1.0, ..Default::default() });
     }
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
     let members: Vec<u32> = (0..items.len() as u32).collect();
-    program.record(device, queue, &mut encoder, &mut world, 0.0, &members, &[1.0]);
-    let gpu = read_state(device, queue, &world, encoder);
+    program.record(ctx, &mut encoder, &mut world, 0.0, &members, &[1.0]);
+    let gpu = read_state(&mut engine.compositor, &world, encoder);
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "the block pipeline and its buffers validate: {error:?}");
     for (k, (item, offset)) in items.iter().zip(&gpu).enumerate() {
@@ -41,22 +50,22 @@ fn the_bounce_block_folds_boxes_like_the_cpu_law() {
 /// 位置と回転は足す、大きさと色は掛ける — 同じブロックを 2 回掛けると 2 倍でなく 2 乗になる(棚の札は要らない、test の中の式)。
 #[test]
 fn a_block_writes_scale_and_tint_and_they_compose_by_multiplying() {
-    let engine = gpu();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+    let mut engine = gpu();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let source = "/*{ \"ID\": \"test.dim\", \"STAGE\": \"block\", \"INPUTS\": [ {\"NAME\":\"opacity\",\"TYPE\":\"float\",\"DEFAULT\":0.5} ] }*/\n\
         fn block(k: u32, p: BlockParams) -> Offset { return Offset(vec2f(1.0, 0.0), 10.0, 0.5, vec4f(1.0, 0.5, 0.25, p.opacity)); }";
     let (manifest, body) = super::super::isf::parse_isf_source(source).unwrap();
     let full = module_source(&manifest, &body, &[]).unwrap();
     validate(&full).unwrap();
-    let program = BlockProgram::new(device, "block-test-dim", &full, 1);
+    let program = BlockProgram::new(ctx, "block-test-dim", &full, 1);
     let items = [BlockItem { lo: [0.0, 0.0], hi: [10.0, 10.0], room_lo: [0.0, 0.0], room_size: [100.0, 100.0], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }];
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    program.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.5]);
-    program.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.5]);
-    let state = read_state(device, queue, &world, encoder);
+    program.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[0.5]);
+    program.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[0.5]);
+    let state = read_state(&mut engine.compositor, &world, encoder);
     assert!(pollster::block_on(scope.pop()).is_none());
     let o = state[0];
     assert_eq!(o.translate, [2.0, 0.0], "position adds");
@@ -69,14 +78,14 @@ fn a_block_writes_scale_and_tint_and_they_compose_by_multiplying() {
 /// (同じコマで先に走った block の結果込み)、相手が居なければ `NO_OFFSET`。同じ stage でも読まれる側が先に走る。
 #[test]
 fn a_block_reads_its_parents_and_anchors_current_offset_and_none_without_one() {
-    let engine = gpu();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+    let mut engine = gpu();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let build = |name: &str, source: &str| {
         let (manifest, body) = wgsl_manifest(name, source).unwrap();
         let full = module_source(&manifest, &body, &[]).unwrap();
         validate(&full).unwrap();
-        BlockProgram::new(device, name, &full, 1)
+        BlockProgram::new(ctx, name, &full, 1)
     };
     let mover = build("mover", "fn block(k: u32) -> Offset { return Offset(vec2f(5.0, -3.0), 12.0, 2.0, vec4f(0.5, 1.0, 1.0, 1.0)); }");
     let child = build("child", "fn block(k: u32) -> Offset { let p = parent(k); return Offset(p.translate, p.rotate, 1.0, vec4f(1.0)); }");
@@ -88,13 +97,13 @@ fn a_block_reads_its_parents_and_anchors_current_offset_and_none_without_one() {
         BlockItem { lo: [60.0, 0.0], hi: [70.0, 10.0], ..Default::default() },
     ];
     assert_eq!(item_bytes(&items).len(), items.len() * ITEM_BYTES as usize, "the host packs what the WGSL Item declares");
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    mover.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[]);
-    child.record(device, queue, &mut encoder, &mut world, 0.0, &[1, 3], &[]);
-    anchored.record(device, queue, &mut encoder, &mut world, 0.0, &[2], &[]);
-    let state = read_state(device, queue, &world, encoder);
+    mover.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[]);
+    child.record(ctx, &mut encoder, &mut world, 0.0, &[1, 3], &[]);
+    anchored.record(ctx, &mut encoder, &mut world, 0.0, &[2], &[]);
+    let state = read_state(&mut engine.compositor, &world, encoder);
     assert!(pollster::block_on(scope.pop()).is_none());
     assert_eq!((state[1].translate, state[1].rotate), ([5.0, -3.0], 12.0), "the child moves and turns with its parent");
     assert_eq!((state[2].translate, state[2].scale, state[2].tint), ([5.0, -3.0], 2.0, [0.5, 1.0, 1.0, 1.0]), "the anchored thing reads the hub's whole offset");
@@ -138,17 +147,17 @@ fn an_override_block_declares_its_inputs_in_wgsl() {
     assert!(!body.contains('@'), "no Motolii attribute survives into the WESL text: {body}");
     let full = module_source(&manifest, &body, &[]).unwrap();
     validate(&full).unwrap();
-    let engine = gpu();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+    let mut engine = gpu();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let program = BlockProgram::new(device, "block-test-override", &full, 1);
+    let program = BlockProgram::new(ctx, "block-test-override", &full, 1);
     let items = [BlockItem { lo: [0.0, 0.0], hi: [10.0, 10.0], room_lo: [0.0, 0.0], room_size: [100.0, 100.0], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }];
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    program.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.5, 1.0, 0.0, 1.0]);
-    program.record(device, queue, &mut encoder, &mut world, 0.0, &[0], &[0.5, 1.0, 0.0, 1.0]);
-    let state = read_state(device, queue, &world, encoder);
+    program.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[0.5, 1.0, 0.0, 1.0]);
+    program.record(ctx, &mut encoder, &mut world, 0.0, &[0], &[0.5, 1.0, 0.0, 1.0]);
+    let state = read_state(&mut engine.compositor, &world, encoder);
     assert!(pollster::block_on(scope.pop()).is_none());
     let o = state[0];
     assert_eq!((o.translate, o.rotate, o.scale, o.tint), ([2.0, 0.0], 20.0, 0.25, [1.0, 0.25, 0.0625, 0.25]), "same as the JSON-head block");
@@ -159,21 +168,15 @@ fn an_override_block_declares_its_inputs_in_wgsl() {
 /// 描く側へ渡す motion は物ごと vec4 × 4: (位置, 回り)・(真ん中, 大きさ)・(軸, _)・(色, 不透明)。大きさと色が落ちずに届く。
 #[test]
 fn the_world_pass_hands_scale_and_tint_to_the_drawing_side() {
-    let engine = gpu();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+    let mut engine = gpu();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
     let items = [BlockItem { lo: [0.0, 0.0], hi: [10.0, 10.0], room_lo: [0.0, 0.0], room_size: [100.0, 100.0], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() }];
-    let mut world = BlockWorld::new(device);
-    world.begin_from(device, queue, &items, 0.0, &[BlockOffset { translate: [3.0, 0.0], rotate: 0.0, scale: 0.5, tint: [1.0, 0.5, 0.25, 0.5] }]);
-    let motion = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-motion"), size: 64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
+    let mut world = BlockWorld::new(ctx);
+    world.begin_from(ctx, &items, 0.0, &[BlockOffset { translate: [3.0, 0.0], rotate: 0.0, scale: 0.5, tint: [1.0, 0.5, 0.25, 0.5] }]);
+    let motion = test_motion(ctx, 64);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    WorldPass::new(device).record(device, queue, &mut encoder, &mut world, &[([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [5.0, 5.0, 0.0])], &[], &motion);
-    let staging = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-read"), size: 64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-    encoder.copy_buffer_to_buffer(&motion, 0, &staging, 0, 64);
-    queue.submit([encoder.finish()]);
-    staging.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-    crate::compositor::device::wait_for_gpu(device, "block-program-test").unwrap();
-    let words: Vec<f32> = staging.slice(..).get_mapped_range().chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
-    staging.unmap();
+    WorldPass::new(ctx).record(ctx, &mut encoder, &mut world, &[([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [5.0, 5.0, 0.0])], &[], &motion);
+    let words = floats(&read_back(&mut engine.compositor, &motion, 64, encoder));
     assert_eq!(&words[0..3], &[3.0, 0.0, 0.0], "offset in world");
     assert_eq!(&words[4..8], &[5.0, 5.0, 0.0, 0.5], "centre, then scale");
     assert_eq!(&words[12..16], &[1.0, 0.5, 0.25, 0.5], "tint, then opacity");
@@ -183,26 +186,20 @@ fn the_world_pass_hands_scale_and_tint_to_the_drawing_side() {
 /// 端が動いていなければ今の腹は描いた腹と同じ(静止から始める)。
 #[test]
 fn the_rope_pass_writes_the_bellies_of_a_cubic_behind_the_things() {
-    let engine = gpu();
-    let (device, queue) = (&engine.compositor.ctx.device, &engine.compositor.ctx.queue);
+    let mut engine = gpu();
+    let (ctx, device) = (&engine.compositor.ctx, &engine.compositor.ctx.device);
     let items = [
         BlockItem { lo: [0.0, 0.0], hi: [10.0, 10.0], room_lo: [0.0, 0.0], room_size: [100.0, 100.0], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() },
         BlockItem { lo: [30.0, 0.0], hi: [40.0, 10.0], room_lo: [0.0, 0.0], room_size: [100.0, 100.0], radius: 0.0, group: 0, margin: 0.0, weight: 1.0, ..Default::default() },
     ];
-    let mut world = BlockWorld::new(device);
-    world.begin(device, queue, &items, 0.0);
+    let mut world = BlockWorld::new(ctx);
+    world.begin(ctx, &items, 0.0);
     let bases = [([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]), ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [30.0, 0.0, 0.0])];
-    let motion = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-motion"), size: 4 * 64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
+    let motion = test_motion(ctx, 4 * 64);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("test") });
-    WorldPass::new(device).record(device, queue, &mut encoder, &mut world, &bases, &[(0, 1)], &motion);
-    RopePass::new(device).record(device, queue, &mut encoder, &mut world, &[(0, 20.0, 60.0, 6.0)], &motion, 0, 30.0);
-    let staging = device.create_buffer(&wgpu::BufferDescriptor { label: Some("test-read"), size: 4 * 64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-    encoder.copy_buffer_to_buffer(&motion, 0, &staging, 0, 4 * 64);
-    queue.submit([encoder.finish()]);
-    staging.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-    crate::compositor::device::wait_for_gpu(device, "block-program-test").unwrap();
-    let w: Vec<f32> = staging.slice(..).get_mapped_range().chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
-    staging.unmap();
+    WorldPass::new(ctx).record(ctx, &mut encoder, &mut world, &bases, &[(0, 1)], &motion);
+    RopePass::new(ctx).record(ctx, &mut encoder, &mut world, &[(0, 20.0, 60.0, 6.0)], &motion, 0, 30.0);
+    let w = floats(&read_back(&mut engine.compositor, &motion, 4 * 64, encoder));
     let v = |i: usize| [w[i * 4], w[i * 4 + 1], w[i * 4 + 2], w[i * 4 + 3]];
     assert_eq!(v(9), [0.0, 0.0, 0.0, 1.0], "A, then the connector's own flag");
     assert_eq!(v(10), [30.0, 0.0, 0.0, 2.0], "B − A, kind 2 = rope");

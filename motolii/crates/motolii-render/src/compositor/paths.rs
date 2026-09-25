@@ -56,14 +56,14 @@ fn byte(v: f64) -> u8 {
 }
 
 /// 筆の色。単色は定数、gradient は点ごとに評価する(直線 2 色なら三角形の補間で厳密)。
-fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> Rgba32Unmul> {
+fn paint(brush: &Brush, alpha: f64, origin: Point, bounds: [f64; 4]) -> Box<dyn Fn(glam::Vec2) -> Rgba32Unmul> {
     match brush {
         Brush::Solid(c) => {
             let color = Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)]);
             Box::new(move |_| color)
         }
         Brush::Gradient(g) => {
-            let g: Gradient = g.clone();
+            let g: Gradient = g.in_user_space(bounds);
             Box::new(move |p| {
                 let c = g.color_at(g.parameter(Point { x: p.x as f64 - origin.x, y: p.y as f64 - origin.y }));
                 Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])
@@ -74,14 +74,58 @@ fn paint(brush: &Brush, alpha: f64, origin: Point) -> Box<dyn Fn(glam::Vec2) -> 
 
 /// 形の木を描き手へ積む。群は平らにし、演算(trim・角丸…)は解決済みの輪郭で渡す。
 fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<PathDrawDataBuilder, CompositorError> {
+    build_paths(shapes, canvas, tolerance, step, false)
+}
+
+/// Samples of the gradient's colour over t = 0..=1. The colour model (stops, blend space) stays
+/// here; the renderer only locates t per fragment.
+const RAMP: usize = 1024;
+
+fn exact_gradient(g: &Gradient, alpha: f64, origin: Point, bounds: [f64; 4]) -> re_renderer::mesh::CurveGradient {
+    use re_renderer::mesh::CurveGradientKind as Kind;
+    let at = |p: Point| glam::vec2(p.x as f32, p.y as f32);
+    let g = &g.in_user_space(bounds);
+    re_renderer::mesh::CurveGradient {
+        space_origin: glam::vec2(origin.x as f32, origin.y as f32),
+        space_scale: glam::Vec2::ONE,
+        kind: match g.kind {
+            crate::doc::vector::GradientType::Linear => Kind::Linear,
+            crate::doc::vector::GradientType::Radial => Kind::Radial,
+            crate::doc::vector::GradientType::Angular => Kind::Angular,
+            crate::doc::vector::GradientType::Diamond => Kind::Diamond,
+        },
+        start: at(g.start),
+        end: at(g.end),
+        ramp: (0..RAMP).map(|i| {
+            let c = g.color_at(i as f64 / (RAMP - 1) as f64);
+            Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])
+        }).collect(),
+    }
+}
+
+fn build_paths(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>, exact: bool) -> Result<PathDrawDataBuilder, CompositorError> {
     let origin = Point { x: canvas.origin_x as f64, y: canvas.origin_y as f64 };
     let mut b = PathDrawDataBuilder::default().with_tolerance(tolerance);
-    for shape in crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))? {
-        for instance in crate::picture::shapes_ops::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))? {
+    let leaves = crate::picture::shapes_ops::flatten(shapes).map_err(|e| CompositorError::Draw(e.to_string()))?;
+    let mut resolved = Vec::with_capacity(leaves.len());
+    for shape in leaves {
+        let instances = crate::picture::shapes_ops::resolve(&shape).map_err(|e| CompositorError::Draw(e.to_string()))?;
+        resolved.push((shape, instances));
+    }
+    // The object whose bounds an object-bounding-box gradient spans: every shape of the layer.
+    let bounds = crate::doc::vector::geometry_bounds(resolved.iter().flat_map(|(_, instances)| instances.iter().flat_map(|instance| instance.path.iter())))
+        .unwrap_or([0.0, 0.0, 1.0, 1.0]);
+    for (shape, instances) in resolved {
+        for instance in instances {
             let outline = contours(&instance.path, origin, step);
             if let Some(fill) = shape.fill.as_ref().filter(|f| !f.hidden) {
                 let rule = match fill.rule { crate::doc::vector::FillRule::NonZero => PathFillRule::NonZero, crate::doc::vector::FillRule::EvenOdd => PathFillRule::EvenOdd };
-                b.fill(&outline, rule, &*paint(&fill.brush, fill.opacity * instance.opacity, origin));
+                let alpha = fill.opacity * instance.opacity;
+                match (&fill.brush, exact) {
+                    (Brush::Solid(c), true) => b.fill_exact(&outline, rule, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])),
+                    (Brush::Gradient(g), true) => b.fill_exact_gradient(&outline, rule, exact_gradient(g, alpha, origin, bounds)),
+                    _ => b.fill(&outline, rule, &*paint(&fill.brush, alpha, origin, bounds)),
+                }
             }
             if let Some(stroke) = shape.stroke.as_ref().filter(|s| !s.hidden) {
                 let s = PathStroke {
@@ -91,7 +135,12 @@ fn build_at_tolerance(shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, ste
                     miter_limit: stroke.miter_limit as f32,
                     dash: stroke.dash.as_ref().map(|d| (d.pattern.iter().map(|v| *v as f32).collect(), d.offset as f32)),
                 };
-                b.stroke(&outline, &s, &*paint(&stroke.brush, stroke.opacity * instance.opacity, origin));
+                let alpha = stroke.opacity * instance.opacity;
+                match (&stroke.brush, exact) {
+                    (Brush::Solid(c), true) => b.stroke_exact(&outline, &s, Rgba32Unmul([byte(c.r), byte(c.g), byte(c.b), byte(alpha)])),
+                    (Brush::Gradient(g), true) => b.stroke_exact_gradient(&outline, &s, exact_gradient(g, alpha, origin, bounds)),
+                    _ => b.stroke(&outline, &s, &*paint(&stroke.brush, alpha, origin, bounds)),
+                }
             }
         }
     }
@@ -117,11 +166,18 @@ pub(crate) fn outlines(shapes: &[ShapeNode], canvas: &Canvas) -> Result<Vec<(Vec
 impl Compositor {
     /// `step`: 場が乗る時、輪郭を ≤ step px の直線に刻む(頂点段の場が滑らかに効くように)。
     pub(crate) fn path_model(&mut self, shapes: &[ShapeNode], canvas: &Canvas, tolerance: f32, step: Option<f32>) -> Result<Option<super::GpuModelData>, CompositorError> {
-        let builder = build_at_tolerance(shapes, canvas, tolerance, step)?;
+        // The GPU paints the curves exactly unless a field bends the outline: that needs
+        // tessellated vertices to move.
+        let builder = build_paths(shapes, canvas, tolerance, step, step.is_none())?;
         if builder.is_empty() { return Ok(None); }
         let mut mesh = builder.into_mesh(&self.ctx, "vector layer");
         // 場は線の中心線の点(錨)で評価する: 線の両側が同じ量だけ動き、線幅が保たれる。
-        for material in &mut mesh.materials { material.field_anchor = step.is_some(); }
+        // Its texcoords are those points, in canvas px: the surface's uv is 0..1 across the canvas,
+        // as an image's is across its picture.
+        for material in &mut mesh.materials {
+            material.field_at_texcoord = step.is_some();
+            material.texcoord_frame = Some((glam::Vec2::ZERO, glam::vec2(canvas.width as f32, canvas.height as f32)));
+        }
         let vertices = mesh.vertex_positions.clone();
         let mut instances = re_renderer::CpuModel::from_single_mesh(mesh).into_gpu_meshes(&self.ctx)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
@@ -133,10 +189,9 @@ impl Compositor {
             }
         }
         Ok(Some(super::GpuModelData {
-            revision: super::mesh::next_model_revision(),
             planar_size: Some([canvas.width as f32, canvas.height as f32]),
             bounds: crate::render::media::SpatialBounds { min: [0.0; 3], max: [canvas.width as f32, canvas.height as f32, 0.0] },
-            instances: std::sync::Arc::new(instances), vertices: std::sync::Arc::new(vertices),
+            instances: std::sync::Arc::new(instances), vertices: std::sync::Arc::new(vertices), faceted: false, flat_parts: std::sync::Arc::from([]),
         }))
     }
 
@@ -156,7 +211,7 @@ impl Compositor {
             return Ok(None);
         }
         let draw_data = builder.build(&self.ctx, label);
-        let texture = self.create_blend_scratch_texture(width, height);
+        let texture = self.picture_texture(width, height);
         let mut view_builder = ViewBuilder::new_with_external_resolved(
             &self.ctx,
             TargetConfiguration {
@@ -174,20 +229,14 @@ impl Compositor {
                 ..Default::default()
             },
             ViewBuilderId::new(self.next_readback),
-            &texture,
+            &texture.texture,
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
-        view_builder.queue_draw(&self.ctx, draw_data);
+        view_builder.queue_draw(&self.ctx, draw_data).map_err(|e| CompositorError::Draw(e.to_string()))?;
         let command_buffer = view_builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?;
-        self.pending.push(command_buffer);
-        self.next_effect_key += 1;
-        let imported = self
-            .ctx
-            .texture_manager_2d
-            .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &texture)
-            .map_err(|e| CompositorError::Effect(e.to_string()))?;
-        Ok(Some(imported))
+        self.ctx.queue_commands([command_buffer]);
+        Ok(Some(self.import_premultiplied(&texture)?))
     }
 }
 
@@ -208,7 +257,7 @@ mod tests {
         let (w, h) = (64u32, 64u32);
         let fps = Fps::try_new(30, 1).unwrap();
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         let red = Rgb { r: 1.0, g: 0.0, b: 0.0 };
         doc.apply_all([

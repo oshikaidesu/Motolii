@@ -1,50 +1,120 @@
-use crate::doc::store::{BlendMode, LayerId, LayerProjection};
-use crate::frame_graph::TransformValue;
+use std::sync::Arc;
 
-/// Opaque resource identity inside one lowered render graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ResourceId(pub u64);
+use crate::doc::core::{LayerPlacement, RationalTime};
+use crate::doc::store::{LayerId, LayerProjection, ShapeNode};
+use crate::picture::resolved::ResolvedMask;
 
-/// Backend-neutral source recipe. It describes the class of resource required by
-/// rendering without carrying wgpu handles or re-encoding Motolii semantic nodes.
-#[derive(Clone, Debug, PartialEq)]
-pub enum ResourceSource {
-    Text,
-    Shape,
-    Material { path: String },
-    Media { path: String },
-    Particles,
-    Plate,
+use crate::render::compositor::effects::surface_program::SurfaceRecipe;
+use crate::render::compositor::extrude::Solid;
+
+use crate::render::compositor::{BlendMode, ClipSpec, CloudLinks, EffectPass, MatteMode, PointDisplace};
+use crate::render::media::SpatialBounds;
+
+/// What a contribution rasterizes before placement.
+#[derive(Clone)]
+pub enum RasterSource {
+    None,
+    /// Outlines on their own canvas. `vector` keeps them resolution-independent;
+    /// `field_step` subdivides them so a field can bend the outline.
+    Vector { shapes: Arc<Vec<ShapeNode>>, vector: bool, remember: bool, field_step: bool },
+    /// Text: laid out on the composition's canvas, the frame its anchor is measured in.
+    CanvasVector { shapes: Arc<Vec<ShapeNode>>, vector: bool, remember: bool },
+    Mesh { path: String },
+    Image { path: String, time: RationalTime },
+    EnvironmentMap { path: String },
+    Points {
+        positions: Arc<Vec<[f32; 3]>>,
+        colors: Arc<Vec<[u8; 4]>>,
+        sizes: Arc<Vec<f32>>,
+        bounds: SpatialBounds,
+        links: Option<Arc<CloudLinks>>,
+    },
+    /// A nested graph flattened into one picture; `average` divides by its members.
+    Isolate { graph: Arc<RenderGraph>, average: bool },
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct CompositeItem {
-    pub layer: LayerId,
-    pub resource: Option<ResourceId>,
-    pub transform: TransformValue,
-    pub opacity: f32,
+/// A second picture an effect reads.
+#[derive(Clone)]
+pub enum ImageInput {
+    Absent,
+    /// A named layer that cannot be read; reported, never substituted.
+    Refused { layer: LayerId },
+    Raster { id: LayerId, source: RasterSource, time: RationalTime, namespace: u64 },
+    Graph { graph: Arc<RenderGraph>, background: [f32; 4], absent_when_empty: bool, time: RationalTime, namespace: u64 },
+}
+
+/// Depth given to a flat picture. `outline: None` extrudes the picture's rectangle.
+#[derive(Clone)]
+pub struct Extrusion {
+    pub solid: Solid,
+    pub outline: Option<Arc<Vec<ShapeNode>>>,
+    /// The outline is laid out on the picture's whole canvas (text), not around its own bounds.
+    pub on_canvas: bool,
+    pub stretch: [f32; 2],
+}
+
+/// Planar warps and whether a spatial field deforms the material.
+#[derive(Clone, Debug, Default)]
+pub struct MaterialRecipe {
+    pub warps: Vec<EffectPass>,
+    pub spatial: bool,
+}
+
+/// One contribution: its picture and how it is drawn.
+#[derive(Clone)]
+pub struct LayerWork {
+    /// Resource namespace for caches and feedback history.
+    pub id: LayerId,
+    pub instance: u32,
+    pub content_key: LayerId,
+    pub content: RasterSource,
+    /// A host-supplied picture replaces `content`.
+    pub host_picture: bool,
+    /// Reuse a stored picture for this frame when one exists; value is the in point.
+    pub freeze: Option<i64>,
+    pub extrude: Option<Extrusion>,
+    pub placement: LayerPlacement,
     pub projection: LayerProjection,
     pub blend: BlendMode,
-    pub order: i16,
+    pub surface: SurfaceRecipe,
+    pub displace: PointDisplace,
+    pub clip: Option<ClipSpec>,
+    pub shadow: f32,
+    /// Light the layer gives (its Glow's intensity), read by the scratch Lighting Pack.
+    pub emission: f32,
+    pub passes: Vec<EffectPass>,
+    pub after_passes: Vec<EffectPass>,
+    pub image_inputs: Vec<Vec<ImageInput>>,
+    pub masks: Vec<ResolvedMask>,
+    pub material: MaterialRecipe,
+    pub source_is_file: bool,
+    pub source_tick: i64,
+    pub isolate: bool,
 }
 
-/// Small backend-neutral execution vocabulary.
+impl LayerWork {
+    /// Whether an effect reads another picture (see `SceneLayerValue::reads_other_pictures`).
+    pub fn reads_other_pictures(&self) -> bool {
+        self.image_inputs.iter().any(|row| !row.is_empty())
+    }
+}
+
+/// A picture built from contributions: a base, pictures drawn source-atop onto
+/// it, and optionally masked by the union of other composed pictures.
 #[derive(Clone, Debug, PartialEq)]
-pub enum RenderWork {
-    Raster { source: ResourceSource, output: ResourceId },
-    Compute { output: ResourceId },
-    Filter { input: ResourceId, output: ResourceId },
-    Composite { items: Vec<CompositeItem>, output: ResourceId },
-    Transfer { source: ResourceSource, output: ResourceId },
+pub struct Composed {
+    pub base: usize,
+    pub atop: Vec<usize>,
+    pub mask: Option<(Vec<Composed>, MatteMode)>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default)]
 pub struct RenderGraph {
-    work: Vec<RenderWork>,
+    pub layers: Vec<LayerWork>,
+    pub output: Vec<Composed>,
 }
 
 impl RenderGraph {
-    pub fn new(work: Vec<RenderWork>) -> Self { Self { work } }
-    pub fn work(&self) -> &[RenderWork] { &self.work }
-    pub fn is_empty(&self) -> bool { self.work.is_empty() }
+    pub fn is_empty(&self) -> bool { self.output.is_empty() }
+
 }

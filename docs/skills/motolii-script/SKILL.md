@@ -60,6 +60,9 @@ line({ name: "Ring" }).fill("#7FE7D8").set("Connect From", box).set("Trace", "Ci
 
 - Text size for layout is `Size` (font px), not `Scale`. `Scale` on a text scales the picture, the Flex slot keeps the font size.
 - Children of a Flex/Grid group need `.set("Position", [0, 0])` — their authored Position is added to the slot.
+- Playback runs on past the end until a person stops it. To watch a stretch repeat, ask for it:
+  `comp({ ..., loop: [2, 6] })` (seconds) or `loop: true` for the whole comp. Each run states its loop
+  afresh, so removing `loop` and saving turns it off.
 - `comp()` before creating anything: a layer's timing is `comp.duration_frames` at creation (`port.rs:96`, `create.rs:246`). A comp
   shorter than the frames you render (`MOTOLII_LAST`) gives blank frames past the end; growing the comp later does not stretch old layers.
 - Rings / strokes: there is no stroke API on filled shapes — a ring is `line()` + `Connect From` + `Trace: Circle` (connect.rs:132-143).
