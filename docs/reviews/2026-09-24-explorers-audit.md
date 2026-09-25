@@ -486,6 +486,30 @@ crates.io 逆依存を全頁: `wgpu` 1,637 / `naga` 224 / `wesl` 14 / `wgpu-core
 - 影 MOD からの逆引き: Photon / Rethinking Voxels / IterationRP の手法は Minecraft の block 世界に寄りかかっている。同じ考えを一般 engine で出しているのは Godot の VoxelGI / SDFGI、Wicked の DDGI、kajiya の radiance cache(既知)か、閉じたゲーム(Teardown、Tiny Glade)だけで、新しい engine は出てこなかった。
 - 場所: `explore/U73/`(pics/、yt/、cap.mjs)。
 
+### U72 three.js WebGPU で Glass Garden fixture を実走(2026-09-25、three 0.186.1、Chrome 154 headless WebGPU → Metal、M4、1080p)
+
+画: `docs/reviews/2026-09-25-three-glass-garden/contact_sheet.png`(S1〜S4、S4 Neutral、今の Motolii の frame 120)、`motion_sheet.png`(各段の静止 + 移動中 2 コマ)。fixture は `index.html`。
+
+- 場面: dispersion 付きの透明な外側の花弁 24 枚、暗い色付きの内側 16 枚、透明な円盤、曇りガラスの板、クロム球、volume attenuation のピンクの結び目、軌道上のガラス球 5 個、同じ 3D 場面に CanvasTexture の文字と PNG。HDRI は Poly Haven studio_small_09(2k)に虹の帯 7 本と softbox 2 枚を足した。camera はコマ番号で駆動。
+- 時間は GPU-bound の値(60 コマを続けて描いて GPU を 1 回待ち、60 で割る。5 回で ±0.1ms)を信じる。rAF は全段 60Hz に張り付く。
+
+| 段 | 見た目 | GPU-bound | 破綻 |
+|---|---|---|---|
+| S1 physical 材質 + HDR env、AgX、MSAA | ガラスの縁が綺麗、虹の帯がクロムと花弁の縁に映る、円盤が PNG を屈折、曇り板が後ろの文字をぼかす | 5.5ms | 花弁越しの花弁が平板な灰色 |
+| S2 + three 公式の caustics(transmitted shadow) | 花弁形の影に虹の縁、結び目の下にピンクの色付き影 | 5.7ms | 光が集まった線ではなく色付きの影に見える |
+| S3 + VXGI(builtinGIContext 経由)+ TRAA | 床の接触と跳ね返りがわずかに柔らかい | 16.1ms(VXGI が約 11ms、内部解像度半分で全体 4.8ms) | ガラスに TRAA の残像・二重の縁 |
+| S3 別案 SSGI + TRAA | 粒が荒い | 17.5ms | ガラスに強いまだら、結び目が乳白に |
+| S4 + bloom、露出 1.15 | 文字と明部に glow、Neutral は紫がより鮮やか | 16.5ms | クロムが乳白で低コントラストに、TRAA の残像は S3 と同じ |
+
+**production CG に届かない所(three のコードで確認)**: ① ガラスからガラスが見えない。屈折は不透明物だけの複製を読む(`viewportOpaqueMipTexture`、PhysicalLightingModel.js:70–82)。多重屈折無し。② 粗い屈折は画面空間の mip ぼかし。③ caustics は shadow map 経由で投影した texture で、集光も明るさの持ち上がりも無い。④ dispersion は同じ画面 texture を 3 回ずらして読むだけ。⑤ GI は透明材質を素通しする(ContextNode.js:280–310)。VXGI は HDRI の光を取らない。⑥ ガラスは不透明の先行 pass に depth も velocity も書かないので、TRAA が透明面で残像を出す。⑦ AgX の肩は綺麗だが、bloom が黒を持ち上げてクロムが平板になる。
+
+**組み込みの落とし穴(コードで確認)**: host が frame を駆動すると three の frame 番号が進まず(Renderer.js:842、Animation.js:83)、pass・影・TRAA の履歴を黙って前のコマから使い回す。private API の `renderer._nodes.nodeFrame.update()` が要る。不透明の先行 pass を主 camera でやると、影がガラス抜きで焼かれる(ShadowNode.js ~804)。
+
+**Motolii との境界(browser で検証、`verify.html`)**: 外で作った GPUDevice を `new WebGPURenderer({ device })` がそのまま使う(WebGPUBackend.js:72, 213–256)。HalfFloat の RenderTarget → `rgba16float` の GPUTexture を `backend.get(rt.texture).texture` で取り出せ、1 を超える値も残る(8.0 を読み戻した)。`outputColorTransform = false` で線形 HDR のまま書ける。host の texture を `ExternalTexture` として包める。`mrt()` で output / depth / normal / velocity / diffuseColor。外からの光は `builtinGIContext`(`renderer.contextNode`)で tone map の前に入る。2D の文字・画像は普通の mesh として光・影・屈折を受ける。R3F の refraction helper の bug は素の three には無い(ViewportTextureNode.js が自分で framebuffer を写す)。
+**未検証**: Rust からの native 経路(three は runtime に canvas を要求する。Backend.js:716–725、WebGPUBackend.js:347。U29 の deno_webgpu の所見は再確認できていない、Dawn / wgpu-native は未試行)。
+
+**分類**: RENDER-TO-TEXTURE(browser でのみ検証)。画は強い実時間の土台だが production CG ではなく、S3/S4 の構成は 16ms 台で余裕が無い。MIT。場所: `explore/U72/`。
+
 ### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
 
 1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
