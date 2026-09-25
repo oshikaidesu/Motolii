@@ -464,3 +464,27 @@ fn a_mix_blend_reads_the_picture_below_across_runs() {
         assert!(centre.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2), "{mode:?} over {below_projection:?}: got {centre:?}, expected {expected:?}");
     }
 }
+
+/// Glass with nothing but the composition's background below it reads that background as its
+/// backdrop: the background is the bottom of the non-glass picture whether or not a non-glass layer
+/// comes first. (The standard material shows it once an environment lights it; a material with its
+/// own studio shows it without one.)
+#[test]
+fn glass_alone_over_the_background_reads_the_background() {
+    let dir = tempfile::tempdir().unwrap();
+    let obj = dir.path().join("quad.obj");
+    std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
+    let mut doc = Document::new().with_programs(crate::extensions::bundled());
+    doc.apply(Intent::SetComposition(crate::doc::store::Composition {
+        width: SIZE, height: SIZE, fps: crate::doc::store::Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.9, 0.2, 0.1, 1.0],
+    })).unwrap();
+    let mesh = file_layer(&mut doc, 1, 0, &obj);
+    set(&mut doc, mesh, property::SCALE, Value::Vec2([12.0, 12.0]));
+    doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
+    effect(&mut doc, mesh, 0, "transmission", Value::F64(1.0));
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+    assert_eq!(engine.surface_work().backdrop_copies, 1, "the glass reads the background as its backdrop");
+    assert!(pixels[0] > 200 && pixels[1] < 80, "and the background is still drawn around it: {:?}", &pixels[..4]);
+}

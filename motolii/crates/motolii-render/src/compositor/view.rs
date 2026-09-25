@@ -453,6 +453,11 @@ impl Compositor {
                 super::light::bind_views(&mut config, views);
             }
             if glass_run {
+                // Glass first in the view: the non-glass picture below it is the background alone.
+                if !glazed && stack.is_none() && below.is_none() && background_color[3] > 0.0 {
+                    unglazed = Some(self.background_canvas(window, background_color, encoder));
+                    glazed = true;
+                }
                 if transmission.is_none() {
                     let beneath = self.non_glass_below(window, below, if glazed { unglazed.as_ref() } else { stack.as_ref() }, encoder);
                     if let Some(beneath) = beneath {
@@ -571,6 +576,21 @@ impl Compositor {
             blend_vism.get(ctx).record_over(ctx, encoder, &[&canvas, &current], &out.default_view, &[("mode".to_owned(), COPY as f32)], window.size_f32());
         }
         Ok(out)
+    }
+
+    /// A canvas of the view's size filled with the composition's background.
+    fn background_canvas(&mut self, window: Window, background_color: [f32; 4], encoder: &mut wgpu::CommandEncoder) -> re_renderer::GpuTexture {
+        let canvas = self.view_canvas(window);
+        let c = clear_color(background_color);
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("motolii-view-background"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &canvas.default_view, depth_slice: None, resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r: c.r() as f64, g: c.g() as f64, b: c.b() as f64, a: c.a() as f64 }), store: wgpu::StoreOp::Store },
+            })],
+            depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None, multiview_mask: None,
+        });
+        canvas
     }
 
     /// The non-glass picture glass refracts: this stack's own (`local`) over the view's picture
