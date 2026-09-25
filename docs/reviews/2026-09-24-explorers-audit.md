@@ -471,6 +471,21 @@ crates.io 逆依存を全頁: `wgpu` 1,637 / `naga` 224 / `wesl` 14 / `wgpu-core
 - Bevy plugin(Lighting Pack の証拠としてのみ): 新しい 3D 実時間 GI plugin 無し(bevy-hikari は 2022 で停止)。
 - 場所: `explore/U68/`(frames/speedball_*、rdeps/、gh/、pw/)。
 
+### U73 名前に renderer と無い完成品の探索(2026-09-25、約 26 件、実画で選別、**既知の組を超える物は無し**)
+
+選別の方法: repo のスクリーンショット、YouTube から抜いたフレーム(yt-dlp + ffmpeg)、自前の headless Chrome WebGPU(adapter = apple metal-3)。headless では rAF が 16.7ms で頭打ちなので、自前の frame time は「60Hz を保つ」の意味しかない。ページ自身のカウンタがある物はそれを引用。
+
+- **決定的な穴はガラス**。借りられる新規候補に、rough / frosted transmission を実時間で出す物は無い。production 級のガラスを実時間で出していたのは閉じた Windows + RT 専用の製品だけ(D5 Render、Notch の NURA / Smart Tracer、Chaos Vantage、VRED、Omniverse)で、借りられない。
+- 残った物:
+  - **Atlas Engine**(C++、MIT、library build と headless 有り): 新規 OSS で最良の画(RT GI・AO・反射の Sponza が Spartan に近い)。ガラス無し、device は自前 Vulkan(macOS は MoltenVK)、2024-09 から止まっている。未実行(Vulkan SDK と vcpkg の導入が要る)。
+  - **Adria**(C++、MIT): 新規で唯一 native Metal backend を持ち、DDGI・RT 反射・体積雲・MetalFX がある。debug view で depth / normal / material / GI / motion を出せる。transmission が全く無い。macOS の build が repo 同梱の prebuilt dylib を使うので build していない。
+  - **threepipe + webgi-plugins**(three の fork r163、WebGL2、Apache-2.0 / GPL-3.0 + 追加条項): 製品写真の look、SSGI / SSR は動いても保つ、M4 で 60Hz。ただし WebGL2 で wgpu の device を共有できず、three WebGPU より強くはない。一番良い宣伝画は progressive。
+  - Blade(Rust、MIT): Metal backend が HW acceleration structure を持つ(wgpu を経ない)。画は plain で、技術の参照のみ。
+  - Tellusim(商用、Metal / WebGPU 有り、Rust binding 有り): RT の chrome と car paint は良いが、商用 SDK。
+- 落選: SATORI(中身は three WebGPU、自前カウンタで GPU 4.3ms / 約 45FPS、画は柔らかくぼける)、Web-RTRT(720p upscale で 24–35FPS、斑)、zephyr3d、SomniumEngine(画無し、3★)、awsm-renderer、EEVEE Next(溜めてから綺麗になる = 本線外)、他 13 件。
+- 影 MOD からの逆引き: Photon / Rethinking Voxels / IterationRP の手法は Minecraft の block 世界に寄りかかっている。同じ考えを一般 engine で出しているのは Godot の VoxelGI / SDFGI、Wicked の DDGI、kajiya の radiance cache(既知)か、閉じたゲーム(Teardown、Tiny Glade)だけで、新しい engine は出てこなかった。
+- 場所: `explore/U73/`(pics/、yt/、cap.mjs)。
+
 ### 検証待ちの仮説(利用者 2026-09-25、**未確定**。U70 SceneVM / U64 の反例を待つ)
 
 1. **Lighting Pack は GI plugin より大きい**: Renderable semantics → Surface realization → Lighting Pack{diffuse radiance, specular radiance, volumetric radiance, optional light field} → Motolii composition / image formation。「世界に回る光」(Webgiya)と「空気」(Kappa/Bliss/PathMax)は同じ pack が所有しても別 pack に分けてもよい。
