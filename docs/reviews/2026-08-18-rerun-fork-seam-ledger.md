@@ -143,3 +143,26 @@ reset_view(): 既定カメラの PNG と sha256 まで一致(Rerun の画作り�
 - oracle: `next/engine/motolii-compositor/tests/with_device.rs::with_device_matches_headless` — **adapter を明示 drop してから**組んだ Compositor が `headless()` とフレームバイト一致(常設)
 - 消費者: `motolii-compositor::Compositor::with_device`(M4 で stage presenter の Pipeline が使う)
 - pin rev: **反映済み**(fork commit `7cca401e`、branch `motolii/m3-device-caps` GitHub push 済み・`next/Cargo.toml` 全 entry bump・検証用 [patch] は除去済み)
+
+## Seam: the view's main target is scene-linear half float(締めの裁定、2026-09-25)
+
+- 上流 file: `crates/viewer_support/re_renderer/src/view_builder.rs`
+- 実質差分: +10/-9(`MAIN_TARGET_COLOR_FORMAT` を `Rgba8UnormSrgb` から `Rgba16Float` へ。doc を「面は 1 を超える放射輝度を書ける。embedder か composite が表示へ写す」へ)
+- 理由: HDR は Look の一部ではなく**レンダリング基盤**(利用者裁定)。ハイライト・発光・Look の bright-pass が 1 を超える値を要る。読み書きは sRGB 版と同じく linear。MSAA は linear で resolve するので明るい sample が縁で勝つ(doc に MRP / AMD の資料と代案を残した)
+- oracle: fork 側 `tests/main_target_accessor.rs`(format を `MAIN_TARGET_COLOR_FORMAT` と比べる形へ)。Motolii 側は `engine::material::tests::a_flat_shape_with_gain_above_one_glows_through_the_looks_bloom`(1 を超える値が積みを通って Look に届く)
+- 消費者: `motolii-render` の view canvas・Look pass(`compositor/look.rs`)
+- pin rev: **反映済み**(fork commit `1e479e1f9`、branch `motolii/render-wrapup`、GitHub push 済み・root `Cargo.toml` の re_* 全 entry を bump、ローカル path の [patch] は無い)
+
+## Seam: SurfaceProgramDesc::pixel_rate(締めの裁定、2026-09-25)
+
+- 上流 file: `crates/viewer_support/re_renderer/src/renderer/mesh_program.rs`(+8/-3)
+- 内容: 面の色が画素内で変わらない program(平坦な無照明の絵・解析的な曲線 coverage・小さな石・平らな蓋)が、文脈が per-sample で陰影する所でも画素に 1 回だけ陰影する。幾何の縁は MSAA の coverage が解く(既存の `surface_sampling_replacements` が Limited / MSAA Off で使う centroid 置換へ 1 条件足しただけ)
+- 裁定: 2026-09-09 の「主描画と反射は sample 補間」の範囲を、小さい石と flat cap と平坦 2D の LOD としてここで狭める。silhouette / facet edge は MSAA、hero は per-sample のまま
+- oracle: Motolii 側の平坦 2D の画素一致(U79)、`engine::surface_tests`
+- pin rev: 上と同じ(`1e479e1f9`)
+
+## Seam: CpuModel::is_faceted(締めの裁定、2026-09-25)
+
+- 上流 file: `crates/viewer_support/re_renderer/src/importer/cpu_model.rs`(+11、追加メソッド 1 本のみ)
+- 内容: 全三角形が flat(3 頂点の法線が一致)か。切り石(面ごと)と滑らかな体を host が見分ける。面の内側の陰影は法線でなく視線だけで変わるので、per-pixel が LOD として成り立つ
+- pin rev: 上と同じ(`1e479e1f9`)

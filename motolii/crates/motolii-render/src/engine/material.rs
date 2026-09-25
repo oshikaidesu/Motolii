@@ -28,7 +28,7 @@ fn image_layer(texture: GpuTexture2D, size: [f32; 2]) -> Layer {
 
 impl Compositor {
     fn normalized_material(&mut self, texture: &GpuTexture2D) -> Result<GpuTexture2D, CompositorError> {
-        if texture.format().is_srgb() { return Ok(texture.clone()); }
+        if crate::render::compositor::linear_premultiplied(texture.format()) { return Ok(texture.clone()); }
         let source = self.ctx.gpu_resources.textures.get_from_handle(texture.handle()).map_err(|e| CompositorError::Effect(e.to_string()))?;
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("material normalization") });
         let srgb = source.texture.format().is_srgb();
@@ -48,7 +48,7 @@ impl Compositor {
         Ok(Arc::new(GpuModelData {
             planar_size: Some(natural),
             bounds: crate::render::media::SpatialBounds { min: [min.x,min.y,0.0], max: [max.x,max.y,0.0] },
-            instances: Arc::new(instances), vertices,
+            instances: Arc::new(instances), vertices, faceted: false, flat_parts: std::sync::Arc::from([]),
         }))
     }
 }
@@ -147,6 +147,47 @@ mod domain_contract {
     }
 
     fn differing(a:&[u8],b:&[u8]) -> usize { a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a,b)| a.iter().zip(b.iter()).any(|(a,b)| a.abs_diff(*b)>3)).count() }
+
+    /// 2D Emissive (decision 2026-09-25): a flat shape is emissive by a Gain above 1 — the composition
+    /// is scene-linear half float, so the value survives the stack and the view's Look (bloom /
+    /// halation / star) takes it up. No glow path of its own: the same Look as a 3D highlight.
+    #[test]
+    fn a_flat_shape_with_gain_above_one_glows_through_the_looks_bloom() {
+        let mut engine=Engine::new().unwrap();
+        let mut halo_of=|gain: f64| -> u32 {
+            let mut doc=document(LayerSource::Shape,128,[40.0,40.0]); shape(&mut doc);
+            effect(&mut doc,0,"motolii.gain",&[("gain",gain)]);
+            let px=engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(),"{:?}",engine.layer_failures());
+            // Pixels just outside the shape's left edge (the shape covers x 40..72).
+            (28..38u32).map(|x| { let i=((56*128+x)*4) as usize; px[i..i+3].iter().map(|v|*v as u32).sum::<u32>() }).sum()
+        };
+        let plain=halo_of(1.0);
+        let emissive=halo_of(12.0);
+        assert!(emissive > plain + 30, "an emissive shape halates past its edge: plain {plain}, emissive {emissive}");
+    }
+
+    /// The Look is the composition's (Studio unless chosen): changing it changes the picture of the
+    /// same emissive shape, and setting it back gives the same picture again.
+    #[test]
+    fn the_compositions_look_decides_how_an_emissive_shape_glows() {
+        use crate::doc::store::Look;
+        let mut engine=Engine::new().unwrap();
+        let mut doc=document(LayerSource::Shape,128,[40.0,40.0]); shape(&mut doc);
+        effect(&mut doc,0,"motolii.gain",&[("gain",12.0)]);
+        let mut comp=doc.view().composition().unwrap().unwrap();
+        assert_eq!(comp.look,Look::Studio,"a composition is Studio unless another Look is chosen");
+        let mut render=|look: Look| {
+            comp.look=look; doc.apply(Intent::SetComposition(comp.clone())).unwrap();
+            engine.render_frame(&doc.view(),RationalTime::ZERO).unwrap()
+        };
+        let studio=render(Look::Studio);
+        let poster=render(Look::Poster);
+        let jewel=render(Look::Jewel);
+        assert!(differing(&studio,&poster)>20,"Poster is not Studio");
+        assert!(differing(&studio,&jewel)>20,"Jewel is not Studio");
+        assert_eq!(render(Look::Studio),studio,"the same Look draws the same picture");
+    }
 
     #[test]
     fn the_same_material_displaces_the_same_as_pixels_or_paths_and_survives_spatial_placement() {

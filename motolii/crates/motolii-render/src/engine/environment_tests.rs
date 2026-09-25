@@ -45,6 +45,11 @@ pub(super) fn sky_png(dir: &std::path::Path, name: &str, top: u8, bottom: u8) ->
 }
 
 pub(super) fn scene(dir: &std::path::Path, sky: &std::path::Path, environment: bool) -> Document {
+    scene_over(dir, sky, environment, [0.0, 0.0, 0.0, 1.0])
+}
+
+/// The same scene over a composition background: the camera sees that, whatever the environment is.
+pub(super) fn scene_over(dir: &std::path::Path, sky: &std::path::Path, environment: bool, background: [f32; 4]) -> Document {
     let obj = dir.join("quad.obj");
     // 法線はカメラ向き(世界の -z)。法線の無い obj は陰影が付かないので照明の test にならない。
     std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
@@ -54,7 +59,7 @@ pub(super) fn scene(dir: &std::path::Path, sky: &std::path::Path, environment: b
         height: SIZE,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: 1,
-        background: [0.0, 0.0, 0.0, 1.0],
+        background, look: Default::default()
     }))
     .unwrap();
     let sky_layer = file_layer(&mut doc, 1, 0, sky);
@@ -85,10 +90,10 @@ fn ascii(pixels: &[u8]) -> String {
         .join("\n")
 }
 
-/// 環境層は板にならず、空として背景に敷かれ、網をその空で照らす。
-/// 上が白・下が黒の空: 画面の上は白、下は黒、正面を向いた網は照度 1/2 の灰。
+/// 環境層は板にならず、網をその空で照らす。camera が見る背景は Composition の背景で、空ではない
+/// (2026-09-25 裁定: Environment ≠ Background)。上が白・下が黒の空: 網は照度 1/2 の灰。
 #[test]
-fn an_environment_layer_lights_the_mesh_and_fills_the_background() {
+fn an_environment_layer_lights_the_mesh_and_the_camera_still_sees_the_background() {
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "sky.png", 255, 0);
     let mut engine = Engine::new().unwrap();
@@ -97,15 +102,15 @@ fn an_environment_layer_lights_the_mesh_and_fills_the_background() {
     let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
     assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
     let art = ascii(&pixels);
-    assert!(luma(&pixels, 2, 2) >= 250, "上端は空の白\n{art}");
-    assert!(luma(&pixels, 2, SIZE - 3) <= 5, "下端は空の黒\n{art}");
+    assert!(luma(&pixels, 2, 2) <= 5, "上端は空の白ではなく Composition の背景(黒)\n{art}");
+    assert!(luma(&pixels, 2, SIZE - 3) <= 5, "下端も背景の黒\n{art}");
     let center = luma(&pixels, MESH_X, MESH_Y);
     assert!((150..=215).contains(&center), "正面の網は照度 1/2 (sRGB ≈ 188)、got {center}\n{art}");
 
     let plain = scene(dir.path(), &sky, false);
     let pixels = engine.render_frame(&plain.view(), RationalTime::ZERO).unwrap();
     let art = ascii(&pixels);
-    assert!(luma(&pixels, 2, SIZE - 3) <= 5 && luma(&pixels, 2, 2) <= 5, "属性を外せば空は敷かれない\n{art}");
+    assert!(luma(&pixels, 2, SIZE - 3) <= 5 && luma(&pixels, 2, 2) <= 5, "属性を外しても背景は同じ\n{art}");
     let unlit = luma(&pixels, MESH_X, MESH_Y);
     assert!(unlit > 5 && unlit != center, "属性を外せば固定の灯に戻る、got {unlit}\n{art}");
 }
@@ -123,7 +128,7 @@ fn glass_and_mirror_answer_the_environment_differently_from_matte() {
     std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 -0.7071 -0.7071\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
     let mut engine = Engine::new().unwrap();
     let render = |engine: &mut Engine, surface: &[(&str, f64)]| -> u8 {
-        let mut doc = scene(dir.path(), &sky, true);
+        let mut doc = scene_over(dir.path(), &sky, true, [1.0; 4]);
         std::fs::copy(&obj, dir.path().join("quad.obj")).unwrap();
         let mesh = LayerId(2);
         if !surface.is_empty() {
@@ -205,7 +210,8 @@ fn dispersion_splits_the_backdrop_edge_into_colors() {
         doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
         let mesh = LayerId(2);
         doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
-        for (name, value) in [("ior", 3.0), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0), ("dispersion", dispersion)] {
+        for (name, value) in [// ior 2: at 3 a 45° sheet sends the light round inside (total internal reflection) and shows no backdrop to split.
+        ("ior", 2.0), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0), ("dispersion", dispersion)] {
             doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(value) }).unwrap();
         }
         engine.models.clear();
@@ -216,7 +222,8 @@ fn dispersion_splits_the_backdrop_edge_into_colors() {
     let none = spread(0.0);
     let glass = spread(2.0);
     let exaggerated = spread(20.0);
-    assert!(none <= 1, "灰色の場面は分散 0 で灰のまま、got {none}");
+    // The view's Look splits a hard edge a little on its own (Studio lateral aberration); glass dispersion is what grows above it.
+    assert!(none <= 16, "灰色の場面は分散 0 では Look の色ズレ以外で割れない、got {none}");
     // 64 px の場面では屈折角の差が画素の何分の一かにしかならない。割れが出て、値に比例して伸びることを見る。
     assert!(glass >= 3, "分散 2 で境目の赤と青が割れ始める、got {glass}");
     assert!(exaggerated > 40 && exaggerated > glass * 4, "分散を強めると割れが伸びる、got {glass} → {exaggerated}");

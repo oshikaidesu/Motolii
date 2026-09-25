@@ -1,5 +1,5 @@
 use motolii_edit::{Document, Intent};
-use super::environment_tests::{file_layer, scene, sky_png, MESH_X, MESH_Y, SIZE};
+use super::environment_tests::{file_layer, scene, scene_over, sky_png, MESH_X, MESH_Y, SIZE};
 use super::*;
 use crate::doc::store::{
     property, EffectId, EffectInstance, LayerId, LayerSource,
@@ -102,7 +102,7 @@ fn repeated_mirrors_batch_and_do_not_copy_the_backdrop() {
 fn overlapping_glass_copies_read_one_shared_backdrop() {
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "white.png", 255, 255);
-    let mut doc = scene(dir.path(), &sky, true);
+    let mut doc = scene_over(dir.path(), &sky, true, [1.0; 4]);
     let mesh = LayerId(2);
     doc.apply(Intent::SetEffects {
         layer: mesh,
@@ -392,7 +392,7 @@ fn a_surfaces_uv_is_the_same_on_an_image_a_shape_and_a_solid() {
     image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 255, 255, 255])).save(&white).unwrap();
     let corners = |kind: &str| -> [bool; 4] {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: 64, height: 64, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         let source = if kind == "image" { LayerSource::File { path: white.to_string_lossy().into_owned(), fingerprint: None } } else { LayerSource::Shape };
         doc.apply_all([Intent::AddLayer(layer), Intent::SetMeta { layer, meta: LayerMeta { source, order: 0, timing: LayerTiming::place(0, None, 1) } }]).unwrap();
@@ -451,7 +451,7 @@ fn a_mix_blend_reads_the_picture_below_across_runs() {
     let expected = [srgb(0.5), 0, 255];
     for (mode, below_projection) in [(BlendMode::Screen, LayerProjection::TwoD), (BlendMode::Screen, LayerProjection::ThreeD), (BlendMode::Add, LayerProjection::ThreeD)] {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let below = file_layer(&mut doc, 1, 0, &blue);
         let above = file_layer(&mut doc, 2, 1, &red);
         doc.apply(Intent::SetAttrs { layer: below, patch: LayerAttrsPatch { projection: Some(below_projection), ..Default::default() } }).unwrap();
@@ -476,7 +476,7 @@ fn glass_alone_over_the_background_reads_the_background() {
     std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
     let mut doc = Document::new().with_programs(crate::extensions::bundled());
     doc.apply(Intent::SetComposition(crate::doc::store::Composition {
-        width: SIZE, height: SIZE, fps: crate::doc::store::Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.9, 0.2, 0.1, 1.0],
+        width: SIZE, height: SIZE, fps: crate::doc::store::Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.9, 0.2, 0.1, 1.0], look: Default::default()
     })).unwrap();
     let mesh = file_layer(&mut doc, 1, 0, &obj);
     set(&mut doc, mesh, property::SCALE, Value::Vec2([12.0, 12.0]));
