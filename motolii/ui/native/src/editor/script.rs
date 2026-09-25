@@ -551,3 +551,7 @@ mod watch {
 #[cfg(test)]
 #[path = "script/sweep.rs"]
 mod sweep;
+
+#[cfg(test)]
+#[path = "script/gates.rs"]
+mod gates;

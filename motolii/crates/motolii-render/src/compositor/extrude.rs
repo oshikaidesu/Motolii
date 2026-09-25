@@ -387,6 +387,51 @@ mod tests {
         }
     }
 
+    /// A solid inside a plate is prepared again each frame (a plate has no contribution cache). When the
+    /// group's growing scale asks its picture for a finer density, the solid is built again around the new
+    /// picture, and it keeps the silhouette it measured: measuring a bevelled outline's every vertex is the
+    /// cost of the whole rebuild (7 ms twice a frame in Glass Garden).
+    #[test]
+    fn a_solid_redrawn_at_a_new_density_keeps_its_silhouette() {
+        use crate::doc::eval::Keyframe;
+        use crate::doc::store::{EffectId, EffectInstance, Interp, KeyframeTrack};
+        let fps = Fps::try_new(30, 1).unwrap();
+        let at = |frame| RationalTime::try_from_frame(frame, fps).unwrap();
+        let mut doc = rectangle_document(0.0, 35.0);
+        let (layer, group) = (LayerId(1), LayerId(10));
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe { t: at(0), value: Value::Vec2([1.0, 1.0]), interp: Interp::Linear, spatial: None });
+        track.insert(Keyframe { t: at(90), value: Value::Vec2([1.6, 1.6]), interp: Interp::Linear, spatial: None });
+        doc.apply_all([
+            Intent::SetComposition(Composition { width: 96, height: 96, fps, duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() }),
+            Intent::SetTiming { layer, timing: LayerTiming::place(0, None, 90) },
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 1, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } },
+            Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.gain".to_owned() }] },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(crate::doc::store::EffectScope::Whole.enum_value()) },
+            Intent::SetTrack { layer: group, property: PropertyId::new(property::SCALE).unwrap(), track },
+            Intent::SetEffects { layer, effects: vec![
+                EffectInstance { id: EffectId(0), plugin_id: crate::extensions::solid::EXTRUDE.into() },
+                EffectInstance { id: EffectId(1), plugin_id: crate::extensions::solid::BEVEL.into() },
+            ] },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), "depth").unwrap(), value: Value::F64(24.0) },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(1), "radius").unwrap(), value: Value::F64(6.0) },
+        ]).unwrap();
+        let mut engine = crate::render::engine::Engine::new().unwrap();
+        engine.render_frame(&doc.view(), at(0)).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let first = engine.extrusions[&layer].1.clone();
+        let mut rebuilt = 0;
+        for frame in 1..=90 {
+            engine.render_frame(&doc.view(), at(frame)).unwrap();
+            let now = engine.extrusions[&layer].1.clone();
+            if !std::sync::Arc::ptr_eq(&first, &now) { rebuilt += 1; }
+            assert!(std::sync::Arc::ptr_eq(&first.vertices, &now.vertices), "frame {frame}: the silhouette is measured again for the same shape");
+        }
+        assert!(rebuilt > 0, "the growing scale never asked for a finer picture, so nothing was rebuilt to keep the silhouette");
+    }
+
     /// Text is laid out on the composition's canvas and its anchor is measured there. Drawn as a
     /// picture (a Blur reads neighbours) or as a solid (Extrude), it lands where the flat outline does.
     #[test]
