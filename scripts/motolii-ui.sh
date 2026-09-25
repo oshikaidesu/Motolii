@@ -63,9 +63,9 @@ case "${1:-dev}" in
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/release/libmotolii_ui.dylib"
     cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_DOCUMENT=$2"
+      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}" --dart-define="MOTOLII_DOCUMENT=$2"
     fi
-    exec "$flutter_bin" run --profile -d macos
+    exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
     ;;
   dev)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
@@ -73,9 +73,9 @@ case "${1:-dev}" in
     [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then dev.'; exit 1; }
     cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$2"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}" --dart-define="MOTOLII_DOCUMENT=$2"
     fi
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
     ;;
   *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
 esac

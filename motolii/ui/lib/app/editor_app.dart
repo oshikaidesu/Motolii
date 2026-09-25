@@ -5,6 +5,11 @@ import '../foundation/leaves.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import 'editor_window.dart';
+import 'new_shell.dart';
+
+/// Which projection of the session the window opens: `classic` (default) or
+/// `new`. One shell is mounted per launch; both drive the same Document.
+const shell = String.fromEnvironment('MOTOLII_SHELL', defaultValue: 'classic');
 
 class EditorApp extends StatefulWidget {
   const EditorApp({super.key});
@@ -62,7 +67,7 @@ class _EditorAppState extends State<EditorApp> {
                   ),
                 ),
               ),
-              home: const EditorWindow(),
+              home: shell == 'new' ? const NewShell() : const EditorWindow(),
             ),
           ),
         ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'editor_actions.dart';
 import 'theme_settings.dart';
 
 import 'package:flutter/widgets.dart';
@@ -97,7 +98,7 @@ class _EditorWindowState extends State<EditorWindow> {
         .addListener(_syncAnimationAppearance);
     c.deskDefault.addListener(persist);
     c.deskWork.addListener(_syncAppearance);
-    c.confirmClose = confirmReplacement;
+    c.confirmClose = () => confirmReplacement(context, c);
     c.panelPlacementRequested = _placePanel;
     c.windowClosed = (info) {
       final panes = (info['panels'] as List? ?? []).whereType<String>();
@@ -344,62 +345,9 @@ class _EditorWindowState extends State<EditorWindow> {
     }
   }
 
-  Future<bool> confirmReplacement() async {
-    c.stopPlayback();
-    if (c.state['dirty'] != true) return true;
-    if (!mounted) return false;
-    final result = await showEditorDialog<String>(
-      context: context,
-      builder: (context) => EditorDialog(
-        title: const Text('Save changes?'),
-        content: const Text('Save the current document before closing it.'),
-        actions: [
-          EditorTextButton(
-            onPressed: () => Navigator.pop(context, 'cancel'),
-            child: const Text('Cancel'),
-          ),
-          EditorTextButton(
-            onPressed: () => Navigator.pop(context, 'discard'),
-            child: const Text("Don't Save"),
-          ),
-          EditorTextButton(
-            onPressed: () => Navigator.pop(context, 'save'),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result == 'save') {
-      await c.save();
-      return c.state['dirty'] != true;
-    }
-    return result == 'discard';
-  }
-
   Future<void> menu(String action) async {
     setState(() => sheet = null);
     switch (action) {
-      case 'New':
-        if (await confirmReplacement()) await c.command('new');
-        break;
-      case 'Open':
-        if (await confirmReplacement()) await c.chooseOpen();
-        break;
-      case 'Save':
-        await c.save();
-        break;
-      case 'Save as':
-        await c.save(as: true);
-        break;
-      case 'Import':
-        await c.importFiles();
-        break;
-      case 'Run Script…':
-        await c.runScript();
-        break;
-      case 'Rerun Script':
-        await c.rerunScript();
-        break;
       case 'Reset layout':
         setState(() {
           dock = initialDock();
@@ -414,19 +362,7 @@ class _EditorWindowState extends State<EditorWindow> {
         if (paneNames.contains(action)) {
           await c.placePanel(action, 'show');
         } else {
-          final commands = {
-            'Undo': 'undo',
-            'Redo': 'redo',
-            'Cut': 'cut',
-            'Copy': 'copy',
-            'Paste': 'paste',
-            'Duplicate': 'duplicate',
-            'Delete': 'delete',
-            'Group': 'group',
-            'Ungroup': 'ungroup',
-            'Split': 'split',
-          };
-          if (commands.containsKey(action)) await c.command(commands[action]!);
+          await documentAction(context, c, action);
         }
     }
   }
@@ -475,27 +411,8 @@ class _EditorWindowState extends State<EditorWindow> {
                     color: EditorTheme.of(context).app,
                     child: Row(
                       children: [
-                        topMenu('File', [
-                          'New',
-                          'Open',
-                          'Save',
-                          'Save as',
-                          'Import',
-                          'Run Script…',
-                          'Rerun Script',
-                        ]),
-                        topMenu('Edit', [
-                          'Undo',
-                          'Redo',
-                          'Cut',
-                          'Copy',
-                          'Paste',
-                          'Duplicate',
-                          'Split',
-                          'Delete',
-                          'Group',
-                          'Ungroup',
-                        ]),
+                        topMenu('File', fileActions),
+                        topMenu('Edit', editActions.keys.toList()),
                         topMenu('View', [...paneNames, 'Reset layout']),
                         for (final name in [
                           'Composition',
