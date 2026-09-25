@@ -287,6 +287,49 @@ mod tests {
         assert!(matches!(&engine.extrusions[&LayerId(1)].1.bounds.max, [_, _, z] if (*z - 24.0).abs() < 1e-3), "全長は奥行き");
     }
 
+    /// Extruded type is built from its glyphs once: a frame where another layer moves, or where the
+    /// type itself only turns, neither shapes nor extrudes it again.
+    #[test]
+    fn a_still_extruded_text_is_not_prepared_again_when_another_layer_moves() {
+        use crate::doc::eval::Keyframe;
+        use crate::doc::store::{ContentKeyframe, ContentTrack, EffectId, EffectInstance, FontRef, Interp, KeyframeTrack, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId};
+        let fps = Fps::try_new(30, 1).unwrap();
+        let at = |frame| RationalTime::try_from_frame(frame, fps).unwrap();
+        let mut doc = rectangle_document(0.0, 0.0);
+        let (shape, word) = (LayerId(1), LayerId(2));
+        let mut content = ContentTrack::new();
+        content.insert(ContentKeyframe { t: RationalTime::ZERO, content: "PO".into() });
+        let document = TextDocument { content, justify: TextJustify::Left, wrap_size: None, styles: vec![TextDocumentStyle { id: TextStyleId(0), font: FontRef { path: String::new(), fingerprint: None, family: "Helvetica Neue".into(), style: String::new() }, size: 40.0, fill: [1.0; 4], line_height: None, tracking: 0.0, axes: vec![], features: vec![] }], slot_id: None, ranges: vec![], alignment: TextAlignmentOptions::default(), runs: vec![] };
+        let track = |a: Value, b: Value| {
+            let mut track = KeyframeTrack::new();
+            track.insert(Keyframe { t: at(0), value: a, interp: Interp::Linear, spatial: None });
+            track.insert(Keyframe { t: at(10), value: b, interp: Interp::Linear, spatial: None });
+            track
+        };
+        doc.apply_all([
+            Intent::AddLayer(word),
+            Intent::SetMeta { layer: word, meta: LayerMeta { source: LayerSource::Text, order: 1, timing: LayerTiming::place(0, None, 30) } },
+            Intent::SetAttrs { layer: word, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoPointFiveD), ..Default::default() } },
+            Intent::SetTextDocument { layer: word, document },
+            Intent::SetEffects { layer: word, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::extensions::solid::EXTRUDE.into() }] },
+            Intent::SetConstant { layer: word, property: PropertyId::effect_param(EffectId(0), "depth").unwrap(), value: Value::F64(12.0) },
+            Intent::SetTrack { layer: shape, property: PropertyId::new(property::POSITION).unwrap(), track: track(Value::Vec2([30.0, 48.0]), Value::Vec2([60.0, 48.0])) },
+            Intent::SetTrack { layer: word, property: PropertyId::new(property::ROTATION_Y).unwrap(), track: track(Value::F64(-20.0), Value::F64(20.0)) },
+        ]).unwrap();
+        let mut engine = crate::render::engine::Engine::new().unwrap();
+        engine.render_frame(&doc.view(), at(0)).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let first = engine.extrusions[&word].1.clone();
+        for frame in 1..4 {
+            let moved = engine.render_frame(&doc.view(), at(frame)).unwrap();
+            let prepared: Vec<_> = engine.frame_claims().iter().filter(|c| c.stage == "prepare").map(|c| (c.who.clone(), c.why.clone())).collect();
+            assert!(prepared.is_empty(), "frame {frame}: only placements changed, yet {prepared:?}");
+            assert!(std::sync::Arc::ptr_eq(&first, &engine.extrusions[&word].1), "frame {frame}: the solid is not built again");
+            let fresh = crate::render::engine::Engine::new().unwrap().render_frame(&doc.view(), at(frame)).unwrap();
+            assert_eq!(moved, fresh, "frame {frame}: the reused solid draws what a fresh engine draws");
+        }
+    }
+
     fn rectangle_document(depth: f64, tilt_y: f64) -> Document {
         let fps = Fps::try_new(30, 1).unwrap();
         let mut doc = Document::new().with_programs(crate::extensions::bundled());

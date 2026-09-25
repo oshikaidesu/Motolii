@@ -431,10 +431,29 @@ mod frames {
             let start = frames.first().copied().unwrap_or(0);
             engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start, comp.fps).unwrap()).unwrap();
             let began = std::time::Instant::now();
+            // MOTOLII_TIMING_WINDOW=1: draw into a window-sized target as the window does (no readback)
+            // and wait for the GPU, so each sample is the frame's whole CPU + GPU time.
+            let window = std::env::var("MOTOLII_TIMING_WINDOW").is_ok().then(|| engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("timing window"), size: wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1,
+                dimension: wgpu::TextureDimension::D2, format: crate::render::compositor::PRESENTABLE_FORMAT, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
+            }));
+            let mut each = Vec::with_capacity(count as usize);
             for frame in start + 1..=start + count {
-                engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap()).unwrap();
+                let one = std::time::Instant::now();
+                let time = crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap();
+                match &window {
+                    Some(target) => {
+                        engine.render_frame_into(&view, time, target).unwrap();
+                        engine.gpu_device().poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).unwrap();
+                    }
+                    None => { engine.render_frame(&view, time).unwrap(); }
+                }
+                each.push(one.elapsed().as_secs_f64() * 1e3);
             }
             eprintln!("TIMING {:.2} ms/frame over {count} frames", began.elapsed().as_secs_f64() * 1e3 / count as f64);
+            each.sort_by(f64::total_cmp);
+            let at = |q: f64| each[((each.len() - 1) as f64 * q).round() as usize];
+            eprintln!("  p50 {:.2} ms  p95 {:.2} ms  worst {:.2} ms", at(0.5), at(0.95), at(1.0));
             let before = engine.surface_work();
             engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start + count + 1, comp.fps).unwrap()).unwrap();
             let after = engine.surface_work();
