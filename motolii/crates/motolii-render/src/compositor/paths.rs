@@ -191,7 +191,7 @@ impl Compositor {
         Ok(Some(super::GpuModelData {
             planar_size: Some([canvas.width as f32, canvas.height as f32]),
             bounds: crate::render::media::SpatialBounds { min: [0.0; 3], max: [canvas.width as f32, canvas.height as f32, 0.0] },
-            instances: std::sync::Arc::new(instances), vertices: std::sync::Arc::new(vertices),
+            instances: std::sync::Arc::new(instances), vertices: std::sync::Arc::new(vertices), faceted: false, flat_parts: std::sync::Arc::from([]),
         }))
     }
 
@@ -257,7 +257,7 @@ mod tests {
         let (w, h) = (64u32, 64u32);
         let fps = Fps::try_new(30, 1).unwrap();
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: w, height: h, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         let red = Rgb { r: 1.0, g: 0.0, b: 0.0 };
         doc.apply_all([

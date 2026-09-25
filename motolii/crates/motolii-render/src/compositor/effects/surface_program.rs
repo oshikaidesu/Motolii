@@ -16,6 +16,14 @@ use crate::picture::resolved::ResolvedEffect;
 /// 最後の 1 個は箱のブロックの motion の番号(fork が頂点の段で読む)なので、hook の欄は `HOOK_SLOTS` まで。
 pub(crate) const PARAM_SLOTS: usize = 24;
 pub(crate) const HOOK_SLOTS: usize = PARAM_SLOTS - 1;
+/// The first of the slots the host fills with a solid's frame (`in.params[3..6]`: centre and radius,
+/// rotation, kind / half depth / seed) when the Vism's own inputs leave them free (`material.wgsl`
+/// `surface_extras`).
+pub(crate) const SOLID_FRAME_SLOT: usize = 12;
+/// The solid's kind (1 = extruded slab, 2 = any other solid); `in.params[5].x`.
+pub(crate) const SOLID_SLOT: usize = 20;
+/// A copy's seed (its place in the frame's layer list); `in.params[5].z`.
+pub(crate) const SEED_SLOT: usize = 22;
 
 /// 場が板を動かす時の格子の細かさ(一辺の升の数)。板は四角 1 枚では 4 隅しか動かせないので、
 /// mesh の頂点と同じ密さで動けるよう割る。場を持たない層は割らない(既定の 1 = 三角形 2 枚)。
@@ -25,6 +33,10 @@ pub(crate) const FIELD_GRID: u32 = 128;
 #[derive(Clone, Default)]
 pub struct SurfaceShading {
     pub program: Option<Arc<SurfaceProgram>>,
+    /// The same program shaded once per pixel: a level of detail for flat faces (an extruded solid's
+    /// caps) and cut stones smaller on screen than a hero. MSAA still resolves their silhouettes and
+    /// facet edges.
+    pub program_small: Option<Arc<SurfaceProgram>>,
     pub params: [f32; PARAM_SLOTS],
     pub reads_backdrop: bool,
     /// backdrop の mip を何段まで読むかを決める粗さ(manifest の `BACKDROP_BLUR`、無ければ 1 = 全段)。
@@ -88,6 +100,9 @@ pub struct SurfaceRecipe {
     pub view_roughness: Option<f32>,
     /// The layer the Views are for (`LayerId`); set where the layer is prepared.
     pub owner: u64,
+    /// Slots the field and surface Vism take (field first); the host's solid frame goes after them
+    /// only when they leave `SOLID_FRAME_SLOT..` free.
+    pub inputs: usize,
 }
 
 impl SurfaceRecipe {
@@ -119,6 +134,7 @@ impl SurfaceRecipe {
             view_size: surface.map_or(0, |d| d.manifest.view_size),
             view_roughness,
             owner: 0,
+            inputs: offset + surface.map_or(0, |d| d.manifest.param_inputs().count()),
         }
     }
 }
@@ -194,6 +210,7 @@ pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&Vism
         motion: Some(MOTION_HOOKS.to_owned()),
         surface: Some(format!("{material}\n{}", surface_hook.as_deref().unwrap_or(STANDARD_MESH))),
         rectangle_surface: Some(format!("{material}\n{picture}")),
+        pixel_rate: false,
     })
 }
 
@@ -256,6 +273,12 @@ mod tests {
     }
 }
 
+/// Motolii's standard material: the frame side (`material`) and Filament's lit model (`material_filament`,
+/// with its naga-translated library and baked tables), shelf modules joined in that order.
+fn standard_material(catalog: &super::catalog::CatalogSnapshot) -> String {
+    ["material", "material_filament_naga", "material_filament_baked", "material_filament"].map(|name| catalog.module(name)).join("\n")
+}
+
 impl crate::render::compositor::Compositor {
 
     pub(crate) fn surface_shading_from(&mut self, recipe: &SurfaceRecipe) -> Result<SurfaceShading, String> {
@@ -267,21 +290,40 @@ impl crate::render::compositor::Compositor {
             return Ok(SurfaceShading::default());
         }
         let key = format!("{}|{}|{}|{}", recipe.unlit, field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
+        // A surface effect also gets its pixel-rate twin (flat caps, small stones).
+        let program_small = if surface.is_some() {
+            let key = format!("{key}|pixel");
+            match self.surface_programs.get(&key) {
+                Some(program) => Some(program.clone()),
+                None => {
+                    let mut desc = program_desc(field, surface, &standard_material(&catalog))?;
+                    desc.pixel_rate = true;
+                    let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
+                    self.surface_programs.insert(key, program.clone());
+                    Some(program)
+                }
+            }
+        } else {
+            None
+        };
         let program = match self.surface_programs.get(&key) {
             Some(program) => program.clone(),
             None => {
-                let material = catalog.module("material");
+                let material = &standard_material(&catalog);
                 let mut desc = program_desc(field, surface, material)?;
                 if recipe.unlit && surface.is_none() {
                     desc.surface = Some(format!("{material}\n{UNLIT}"));
                     desc.rectangle_surface = desc.surface.clone();
+                    // An unlit picture's colour is one value across a pixel (its texture and curve
+                    // coverage are read at the pixel's centre): shade it once, MSAA keeps its edges.
+                    desc.pixel_rate = true;
                 }
                 let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
                 self.surface_programs.insert(key, program.clone());
                 program
             }
         };
-        Ok(SurfaceShading { program: Some(program), params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(),
+        Ok(SurfaceShading { program: Some(program), program_small, params: recipe.params, reads_backdrop: recipe.reads_backdrop, backdrop_roughness: recipe.backdrop_roughness, grid_hint: 0, field_effect: field.is_some(),
             views: (!recipe.views.is_empty()).then(|| Arc::new(ViewNeeds { owner: recipe.owner, views: recipe.views.clone(), size: recipe.view_size, roughness: recipe.view_roughness })) })
     }
 
@@ -293,7 +335,7 @@ impl crate::render::compositor::Compositor {
         if let Some(program) = self.surface_programs.get(&key) {
             return Some(program.clone());
         }
-        let program = Arc::new(SurfaceProgram::new(&self.ctx, program_desc(None, None, catalog.module("material")).ok()?).ok()?);
+        let program = Arc::new(SurfaceProgram::new(&self.ctx, program_desc(None, None, &standard_material(&catalog)).ok()?).ok()?);
         self.surface_programs.insert(key, program.clone());
         Some(program)
     }
@@ -340,7 +382,8 @@ mod program_contract {
         let a = surface_shading(&mut compositor, &[turbulence.clone(), glass.clone()]).program.unwrap();
         let b = surface_shading(&mut compositor, &[glass, turbulence]).program.unwrap();
         assert!(std::sync::Arc::ptr_eq(&a, &b));
-        assert_eq!(compositor.surface_programs.len(), 3);
+        // Each surface-effect program also has its pixel-rate twin (flat faces, small stones).
+        assert_eq!(compositor.surface_programs.len(), 5);
     }
 }
 
@@ -359,7 +402,7 @@ mod field_leaves_the_rectangle {
 
     fn document(path: &std::path::Path, amount: f64) -> Document {
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         doc.apply_all([
             Intent::AddLayer(layer),

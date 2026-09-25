@@ -113,6 +113,15 @@ impl Compositor {
     }
 }
 
+/// U79 spike: a solid's copies each carry a stable seed (their place in the layer list), which the
+/// jewel shading turns into facet and sparkle variation — no work of their own per copy.
+fn seed_copies(instances: &mut [GpuMeshInstance], index: usize) {
+    use super::effects::surface_program::{SEED_SLOT, SOLID_SLOT};
+    for instance in instances.iter_mut().filter(|i| i.params[SOLID_SLOT] > 0.0) {
+        instance.params[SEED_SLOT] = index as f32;
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct SharedMeshScene {
     draw: MeshDrawData,
@@ -262,6 +271,8 @@ impl Compositor {
                     &input.shading,
                     input.clip,
                 );
+                let mut made = made;
+                seed_copies(&mut made, index);
                 layers.extend(std::iter::repeat_n(draw_order(input), made.len()));
                 source_layers.extend(std::iter::repeat_n(index, made.len()));
                 instances.extend(made);
@@ -348,6 +359,7 @@ impl Compositor {
                         &shading,
                         input.clip,
                     );
+                    seed_copies(&mut instances, index);
                     for instance in &mut instances {
                         if input.projection == crate::doc::store::LayerProjection::TwoD && !capture {
                             // 輪郭のままの文字・図形(planar な網)も同じ法: 面の法線に沿ってカメラ側へ積み順ぶん。

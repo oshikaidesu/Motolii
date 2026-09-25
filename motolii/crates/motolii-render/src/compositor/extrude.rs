@@ -195,14 +195,19 @@ impl Compositor {
         let max = g.positions.iter().fold(glam::Vec3::splat(f32::MIN), |m, p| m.max(*p));
         let bbox = macaw::BoundingBox::from_points(g.positions.iter().copied());
         let count = g.positions.len();
-        let index_count = g.indices.len() as u32 * 3;
-        let mesh = CpuMesh {
-            label: "extruded layer".into(),
-            triangle_indices: g.indices,
+        // U79 spike: the caps (flat, normal along z) and the walls and bevels, as two meshes: a cap is
+        // shaded once per pixel, a curved rim per sample.
+        let is_cap = |t: &glam::UVec3| [t.x, t.y, t.z].iter().all(|&i| g.normals[i as usize].z.abs() > 0.999);
+        let (caps, sides): (Vec<glam::UVec3>, Vec<glam::UVec3>) = g.indices.iter().partition(|t| is_cap(t));
+        let mesh_of = |indices: Vec<glam::UVec3>, label: &str| {
+        let index_count = indices.len() as u32 * 3;
+        CpuMesh {
+            label: label.into(),
+            triangle_indices: indices,
             vertex_positions: g.positions.clone(),
             vertex_colors: vec![Rgba32Unmul::WHITE; count],
-            vertex_normals: g.normals,
-            vertex_texcoords: g.texcoords,
+            vertex_normals: g.normals.clone(),
+            vertex_texcoords: g.texcoords.clone(),
             materials: smallvec::smallvec![Material {
                 albedo_is_premultiplied: true,
                 // A solid is a volume: it occludes by depth like any geometry, unlike a painted plane.
@@ -212,12 +217,21 @@ impl Compositor {
                 curves: None,
                 label: "layer picture".into(),
                 index_range: re_renderer::Span::from_start_len(0, index_count),
-                albedo: texture,
+                albedo: texture.clone(),
                 albedo_factor: re_renderer::Rgba::WHITE,
             }],
             bbox,
+        }
         };
-        let instances = CpuModel::from_single_mesh(mesh)
+        let mut model = CpuModel::default();
+        let mut flat_parts = Vec::new();
+        for (indices, flat, label) in [(caps, true, "extruded layer caps"), (sides, false, "extruded layer")] {
+            if indices.is_empty() { continue; }
+            let key = model.add_mesh(mesh_of(indices, label));
+            model.add_instance(key, glam::Affine3A::IDENTITY);
+            flat_parts.push(flat);
+        }
+        let instances = model
             .into_gpu_meshes(&self.ctx)
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
         Ok(Some(GpuModelData {
@@ -225,6 +239,8 @@ impl Compositor {
             instances: std::sync::Arc::new(instances),
             bounds: SpatialBounds { min: [0.0, 0.0, -depth], max: [max.x, max.y, depth] },
             vertices: std::sync::Arc::new(crate::render::media::silhouette_points(g.positions)),
+            faceted: false,
+            flat_parts: std::sync::Arc::from(flat_parts),
         }))
     }
 }
@@ -379,7 +395,7 @@ mod tests {
         let (width, height) = (240u32, 160u32);
         let centre = |effect: Option<(&str, &str, f64)>| {
             let mut doc = Document::new().with_programs(crate::extensions::bundled());
-            doc.apply(Intent::SetComposition(Composition { width, height, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+            doc.apply(Intent::SetComposition(Composition { width, height, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
             let layer = LayerId(1);
             let mut content = ContentTrack::new();
             content.insert(ContentKeyframe { t: RationalTime::ZERO, content: "HI".into() });
@@ -417,7 +433,7 @@ mod tests {
     fn rectangle_document(depth: f64, tilt_y: f64) -> Document {
         let fps = Fps::try_new(30, 1).unwrap();
         let mut doc = Document::new().with_programs(crate::extensions::bundled());
-        doc.apply(Intent::SetComposition(Composition { width: 96, height: 96, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        doc.apply(Intent::SetComposition(Composition { width: 96, height: 96, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0], look: Default::default() })).unwrap();
         let layer = LayerId(1);
         let put = |name: &str, value: Value| Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value };
         doc.apply_all([

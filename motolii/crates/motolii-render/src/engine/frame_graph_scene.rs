@@ -464,7 +464,13 @@ impl Engine {
         let layer = self.apply_masks_to_layer(layer, &work.masks, natural, frozen_frame)?;
         let mut layer = self.apply_material_recipe(layer, work.id, &work.material, work.source_is_file, work.source_tick, natural, frozen_frame)?;
         if matches!(layer.content, LayerContent::Model(_) | LayerContent::Texture(_) | LayerContent::LinearTexture(_)) {
-            let recipe = SurfaceRecipe { unlit: matches!(&layer.content, LayerContent::Model(model) if model.planar_size.is_some()), owner: work.id.0, ..work.surface.clone() };
+            let mut recipe = SurfaceRecipe { unlit: matches!(&layer.content, LayerContent::Model(model) if model.planar_size.is_some()), owner: work.id.0, ..work.surface.clone() };
+            // A solid tells its surface what it is (an extruded slab's far side is parallel to its face),
+            // in the slots after the Vism's own when those are free.
+            use crate::render::compositor::effects::surface_program::{SOLID_FRAME_SLOT, SOLID_SLOT};
+            if recipe.inputs <= SOLID_FRAME_SLOT {
+                recipe.params[SOLID_SLOT] = if work.extrude.is_some() { 1.0 } else { 2.0 };
+            }
             layer.shading = self.compositor.surface_shading_from(&recipe).map_err(EngineError::Store)?;
         }
         let layer = self.flatten_if_asked(prep, layer, work.isolate)?;

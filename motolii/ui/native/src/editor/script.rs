@@ -438,22 +438,35 @@ mod frames {
                 dimension: wgpu::TextureDimension::D2, format: crate::render::compositor::PRESENTABLE_FORMAT, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
             }));
             let mut each = Vec::with_capacity(count as usize);
+            // Window path: the CPU's share (record + submit) and the GPU wait after it, apart.
+            let (mut cpu, mut gpu) = (Vec::with_capacity(count as usize), Vec::with_capacity(count as usize));
             for frame in start + 1..=start + count {
                 let one = std::time::Instant::now();
                 let time = crate::render::doc::core::RationalTime::try_from_frame(frame, comp.fps).unwrap();
                 match &window {
                     Some(target) => {
                         engine.render_frame_into(&view, time, target).unwrap();
+                        let recorded = one.elapsed().as_secs_f64() * 1e3;
                         engine.gpu_device().poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).unwrap();
+                        if std::env::var("MOTOLII_TIMING_SPIKES").is_ok() && recorded > 8.0 {
+                            let mut claims = engine.frame_claims().to_vec();
+                            claims.sort_by(|a, b| b.us.cmp(&a.us));
+                            eprintln!("  spike frame {frame}: cpu {recorded:.2} ms; {}", claims.iter().take(4).map(|c| format!("{} {} {:.2}ms ({})", c.stage, c.who, c.us as f64 / 1e3, c.why)).collect::<Vec<_>>().join(" | "));
+                        }
+                        cpu.push(recorded);
+                        gpu.push(one.elapsed().as_secs_f64() * 1e3 - recorded);
                     }
                     None => { engine.render_frame(&view, time).unwrap(); }
                 }
                 each.push(one.elapsed().as_secs_f64() * 1e3);
             }
             eprintln!("TIMING {:.2} ms/frame over {count} frames", began.elapsed().as_secs_f64() * 1e3 / count as f64);
-            each.sort_by(f64::total_cmp);
-            let at = |q: f64| each[((each.len() - 1) as f64 * q).round() as usize];
-            eprintln!("  p50 {:.2} ms  p95 {:.2} ms  worst {:.2} ms", at(0.5), at(0.95), at(1.0));
+            for (name, v) in [("total", &mut each), ("cpu", &mut cpu), ("gpu wait", &mut gpu)] {
+                if v.is_empty() { continue; }
+                v.sort_by(f64::total_cmp);
+                let at = |q: f64| v[((v.len() - 1) as f64 * q).round() as usize];
+                eprintln!("  {name:>8}: p50 {:.2} ms  p95 {:.2} ms  worst {:.2} ms", at(0.5), at(0.95), at(1.0));
+            }
             let before = engine.surface_work();
             engine.render_frame(&view, crate::render::doc::core::RationalTime::try_from_frame(start + count + 1, comp.fps).unwrap()).unwrap();
             let after = engine.surface_work();

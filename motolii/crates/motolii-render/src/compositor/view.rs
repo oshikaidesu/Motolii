@@ -231,11 +231,14 @@ impl Compositor {
         camera: ResolvedCamera,
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
+        look: crate::doc::store::Look,
         world: &ViewWorld<'_>,
         view: u32,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<ViewBuilder, CompositorError> {
         let stack = self.record_stack(comp, window, Observer::camera(comp, camera), inputs, background_color, world, view, None, None, encoder)?;
+        // U79: the view's Look (glare and colour split from its HDR picture), once per view.
+        let stack = stack.map(|stack| self.look_pass(look, window, stack, encoder));
         // The view shows the stack (or, with nothing drawn, the background).
         let mut shown = ViewBuilder::new(&self.ctx, screen_target_config("motolii-view", window), ViewBuilderId::new(self.next_readback))
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -398,8 +401,10 @@ impl Compositor {
             let mode = planned.mode;
             let run = &inputs[planned.range.clone()];
 
-            // The sky is the ground: the run holding the top environment lays it under the stack.
-            if run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e)))) {
+            // The sky is the ground: the run holding the top environment lays it under the stack —
+            // only when that environment is visible to the camera (U78 spike: an environment lights,
+            // reflects and refracts; what the camera sees behind is the composition's background).
+            if run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e)) && environment_visible_to_camera(input))) {
                 let sky = self.view_canvas(window);
                 let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, sequential_target_config(if observer.requested { "layer-view-sky" } else { "motolii-view-sky" }, comp, window, view_from_world, projection, environment), ViewBuilderId::new(self.next_readback), &sky.texture)
                     .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -681,4 +686,11 @@ impl Compositor {
         surface_work.run_mix_us += started.elapsed().as_micros() as u64;
         out
     }
+}
+
+/// Whether an environment layer is drawn as the camera's background (decision 2026-09-25: no —
+/// an environment lights, reflects and refracts; the camera sees the composition's background).
+/// The place for a future explicit "Visible to Camera" setting on the environment layer.
+fn environment_visible_to_camera(_input: &SequentialInput<'_>) -> bool {
+    false
 }

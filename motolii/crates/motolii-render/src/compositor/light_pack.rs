@@ -248,7 +248,7 @@ impl Compositor {
             }
             let (texture, decode, local_min) = match input.content {
                 SequentialContent::Rect(t) | SequentialContent::LinearRect(t) => {
-                    let decode = if matches!(input.content, SequentialContent::LinearRect(_)) { 2.0 } else if t.format().is_srgb() { 0.0 } else { 1.0 };
+                    let decode = if matches!(input.content, SequentialContent::LinearRect(_)) { 2.0 } else if crate::render::compositor::linear_premultiplied(t.format()) { 0.0 } else { 1.0 };
                     let Ok(texture) = self.ctx.gpu_resources.textures.get_from_handle(t.handle()) else { continue };
                     (texture, decode, input.local_min)
                 }

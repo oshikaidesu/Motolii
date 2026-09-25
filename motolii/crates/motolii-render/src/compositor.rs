@@ -29,6 +29,7 @@ mod render_effects;
 pub(crate) mod paths;
 mod sequential;
 mod light_pack;
+mod look;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BlendMode {
@@ -81,7 +82,7 @@ fn vello_blend_mode(mode: BlendMode) -> Option<u32> {
 }
 
 /// 合成の中間テクスチャの形式(累算器・blend/matte の出力)。
-pub(crate) const BLEND_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+pub(crate) const BLEND_TARGET_FORMAT: wgpu::TextureFormat = re_renderer::ViewBuilder::MAIN_TARGET_COLOR_FORMAT;
 
 
 pub(crate) fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
@@ -208,8 +209,13 @@ pub fn projected_placement_corners(
 /// 上げた画素の扱い。sRGB 形式(blend の scratch)は乗算済みで、decode は hardware。
 /// それ以外(文字・図形・静止画・動画)は**非乗算の sRGB** で上げ、shader が decode → 乗算の順で扱う。
 /// 乗算済みを非乗算として decode すると α の中間(文字の縁)が暗く沈む(色の再点検 CV2)。
+/// U79 spike: a view canvas is scene-linear HDR (Rgba16Float), premultiplied like the sRGB canvases were.
+pub(crate) fn linear_premultiplied(format: wgpu::TextureFormat) -> bool {
+    format.is_srgb() || format == BLEND_TARGET_FORMAT
+}
+
 pub(crate) fn premultiplied_texture(texture: GpuTexture2D) -> ColormappedTexture {
-    let srgb = texture.format().is_srgb();
+    let srgb = linear_premultiplied(texture.format());
     ColormappedTexture {
         decode_srgb: !srgb,
         texture,
@@ -421,6 +427,7 @@ pub struct Compositor {
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
     /// The scratch Lighting Pack's resources, made on its first run.
     pub(crate) light_pack: Option<light_pack::LightPack>,
+    pub(crate) look: Option<look::LookPipelines>,
 }
 
 #[derive(Clone)]
@@ -430,6 +437,11 @@ pub struct GpuModelData {
     pub(crate) bounds: crate::render::media::SpatialBounds,
     /// Every drawn vertex in model space. The Stage fits its frame to these, not to `bounds`.
     pub(crate) vertices: std::sync::Arc<Vec<glam::Vec3>>,
+    /// U79 spike: every triangle flat-shaded (a cut stone): its interior needs no per-sample shading.
+    pub(crate) faceted: bool,
+    /// U79 spike: which of `instances` are flat faces (an extruded solid's caps): shaded once per pixel
+    /// at any size, since a plane's normal does not vary inside a pixel. Empty = none.
+    pub(crate) flat_parts: std::sync::Arc<[bool]>,
 }
 
 impl GpuModelData {

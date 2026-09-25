@@ -66,7 +66,7 @@ impl Engine {
         let Some(texture) = textures.first().and_then(|content| content.texture()).cloned() else { return Ok(None) };
         let raw = self.compositor.ctx.gpu_resources.textures.get_from_handle(texture.handle())
             .map_err(|error| EngineError::Store(error.to_string()))?;
-        let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || raw.texture.format().is_srgb();
+        let linear = matches!(&textures[0], LayerContent::LinearTexture(_)) || crate::render::compositor::linear_premultiplied(raw.texture.format());
         let half = if raw.texture.format() == wgpu::TextureFormat::Rgba16Float {
             raw
         } else {
@@ -372,7 +372,7 @@ impl Engine {
                 &mut encoder,
                 &texture,
                 true,
-                !texture.texture.format().is_srgb(),
+                !crate::render::compositor::linear_premultiplied(texture.texture.format()),
                 true,
             );
             engine.compositor.ctx.queue_commands([encoder.finish()]);

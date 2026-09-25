@@ -152,7 +152,7 @@ impl Compositor {
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
             let mut current = src.clone();
             // 素材の素性: 線形テクスチャと sRGB 形式は乗算済み線形、それ以外は非乗算 sRGB(層の法)。
-            let mut current_linear = matches!(lwp.layer.content, LayerContent::LinearTexture(_)) || layer_texture.format().is_srgb();
+            let mut current_linear = matches!(lwp.layer.content, LayerContent::LinearTexture(_)) || crate::render::compositor::linear_premultiplied(layer_texture.format());
             let mut current_premultiplied = current_linear;
             let encoder = copy_encoder.get_or_insert_with(|| {
                 self.ctx

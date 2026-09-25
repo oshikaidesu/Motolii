@@ -1,0 +1,137 @@
+# Bakes what Filament precomputes (cmgen / libs/ibl) for the standard material (vism/material_filament.wgsl):
+#  - the multiscatter DFG LUT (CubemapIBL::DFG with DFV_Multiscatter), 32x32, as a WGSL const array
+#  - SH9 irradiance of the built-in studio environment (CubemapSH, Lambert-convolved, 1/pi baked,
+#    folded into the polynomial form Filament's Irradiance_SphericalHarmonics() evaluates)
+# The studio environment below mirrors studio_radiance() in material_filament.wgsl (keep in sync).
+import numpy as np, math, sys
+
+N = 32
+SAMPLES = 1024
+
+def hammersley(n):
+    i = np.arange(n, dtype=np.uint32)
+    b = i.copy()
+    b = (b << 16) | (b >> 16)
+    b = ((b & 0x55555555) << 1) | ((b & 0xAAAAAAAA) >> 1)
+    b = ((b & 0x33333333) << 2) | ((b & 0xCCCCCCCC) >> 2)
+    b = ((b & 0x0F0F0F0F) << 4) | ((b & 0xF0F0F0F0) >> 4)
+    b = ((b & 0x00FF00FF) << 8) | ((b & 0xFF00FF00) >> 8)
+    return i / n, b.astype(np.float64) / 2.0**32
+
+def dfv_multiscatter(nov, a, u1, u2):
+    V = np.array([math.sqrt(1 - nov * nov), 0.0, nov])
+    phi = 2 * math.pi * u1
+    cos2 = (1 - u2) / (1 + (a + 1) * ((a - 1) * u2))
+    ct = np.sqrt(cos2); st = np.sqrt(1 - cos2)
+    H = np.stack([st * np.cos(phi), st * np.sin(phi), ct], -1)
+    VoH_raw = H @ V
+    L = 2 * VoH_raw[:, None] * H - V
+    VoH = np.clip(VoH_raw, 0, 1); NoL = np.clip(L[:, 2], 0, 1); NoH = np.clip(H[:, 2], 0, 1)
+    a2 = a * a
+    GGXL = nov * np.sqrt((NoL - NoL * a2) * NoL + a2)
+    GGXV = NoL * np.sqrt((nov - nov * a2) * nov + a2)
+    vis = 0.5 / np.maximum(GGXV + GGXL, 1e-12)
+    m = NoL > 0
+    v = vis * NoL * (VoH / np.maximum(NoH, 1e-12))
+    Fc = (1 - VoH) ** 5
+    return (np.sum((v * Fc)[m]) * 4 / len(u1), np.sum(v[m]) * 4 / len(u1))
+
+u1, u2 = hammersley(SAMPLES)
+lut = np.zeros((N, N, 2))
+for y in range(N):          # row = perceptual roughness (coord), 0 -> smooth
+    coord = (y + 0.5) / N
+    a = coord * coord       # linear roughness (alpha)
+    for x in range(N):
+        nov = (x + 0.5) / N
+        lut[y, x] = dfv_multiscatter(nov, a, u1, u2)
+
+# ---- studio environment (view space: +x right, +y up, +z toward the camera) ----
+def erf(x):
+    a = 0.147
+    x2 = x * x
+    return np.sign(x) * np.sqrt(1 - np.exp(-x2 * (4 / math.pi + a * x2) / (1 + a * x2)))
+
+def box1(x, h, s):
+    k = 1 / (s * math.sqrt(2))
+    return 0.5 * (erf((h - x) * k) + erf((h + x) * k))
+
+def norm(v):
+    v = np.array(v, dtype=np.float64); return v / np.linalg.norm(v)
+
+LIGHTS = [  # centre, half extents (tangent plane), rgb radiance
+    (norm([-0.55, 0.55, 0.63]), (0.42, 0.55), np.array([3.4, 3.3, 3.1])),   # key softbox, upper left front
+    (norm([0.0, 1.0, 0.1]),     (1.1, 0.35),  np.array([1.3, 1.3, 1.3])),   # overhead strip
+    (norm([-0.9, 0.12, -0.42]), (0.1, 1.3),   np.array([2.6, 2.7, 2.9])),   # rim strip left, behind
+    (norm([0.9, 0.2, -0.4]),    (0.1, 1.3),   np.array([2.6, 2.7, 2.9])),   # rim strip right, behind
+    (norm([0.85, 0.05, 0.55]),  (0.5, 0.7),   np.array([0.55, 0.57, 0.6])), # fill card right front
+    (norm([0.15, 0.3, 1.0]),    (0.6, 0.45),  np.array([1.0, 1.0, 1.0])),   # beauty fill behind the camera
+]
+
+def frame(c):
+    r = norm(np.cross([0.0, 1.0, 0.0], c)) if abs(c[1]) < 0.999 else np.array([1.0, 0, 0])
+    return r, np.cross(c, r)
+
+def studio(d, sigma=0.0):
+    # d: (n,3) unit
+    y = d[:, 1]
+    w = 0.08 + sigma
+    t = np.clip((y + w) / (2 * w), 0, 1); t = t * t * (3 - 2 * t)
+    sky = 0.10 + 0.10 * np.clip(y, 0, 1)
+    floor = 0.11 - 0.05 * np.clip(-y, 0, 1)
+    base = (floor * (1 - t) + sky * t)[:, None] * np.ones(3)
+    out = base
+    for c, (hx, hy), rgb in LIGHTS:
+        r, u = frame(c)
+        z = d @ c
+        zz = np.maximum(z, 1e-4)
+        px = (d @ r) / zz; py = (d @ u) / zz
+        s = 0.03 + sigma
+        m = box1(px, hx, s) * box1(py, hy, s) * (z > 0)
+        out = out + m[:, None] * rgb
+    return out
+
+# SH9 projection by stratified sampling of the sphere
+M = 800
+th = (np.arange(M) + 0.5) / M * math.pi
+ph = (np.arange(2 * M) + 0.5) / (2 * M) * 2 * math.pi
+T, P = np.meshgrid(th, ph, indexing="ij")
+dA = (math.pi / M) * (2 * math.pi / (2 * M)) * np.sin(T)
+x = (np.sin(T) * np.cos(P)).ravel(); z = (np.sin(T) * np.sin(P)).ravel(); yy = np.cos(T).ravel()
+d = np.stack([x, yy, z], -1); dA = dA.ravel()
+L = studio(d)
+basis = [
+    (0.282095 * np.ones_like(x), 1.0, 0.282095),
+    (0.488603 * yy, 2 / 3, 0.488603), (0.488603 * z, 2 / 3, 0.488603), (0.488603 * x, 2 / 3, 0.488603),
+    (1.092548 * yy * x, 1 / 4, 1.092548), (1.092548 * yy * z, 1 / 4, 1.092548),
+    (0.315392 * (3 * z * z - 1), 1 / 4, 0.315392), (1.092548 * z * x, 1 / 4, 1.092548),
+    (0.546274 * (x * x - yy * yy), 1 / 4, 0.546274),
+]
+# irradiance/pi = sum_l (A_l/pi) L_lm Y_lm ; A_0 = pi, A_1 = 2pi/3, A_2 = pi/4
+sh = []
+for Y, a_over_pi, K in basis:
+    Llm = (L * (Y * dA)[:, None]).sum(0)
+    sh.append(Llm * a_over_pi * K)
+sh = np.array(sh)
+
+def f(v): return f"{v:.6f}"
+out = ["// Generated by motolii/reference/filament/bake.py — do not edit by hand.",
+       f"// Filament CubemapIBL::DFG (DFV_Multiscatter, {SAMPLES} samples), {N}x{N}: row = perceptual roughness, column = NoV.",
+       f"const DFG_SIZE: u32 = {N}u;",
+       f"const DFG_LUT = array<vec2f, {N*N}>("]
+rows = []
+for yv in range(N):
+    rows.append("    " + ", ".join(f"vec2f({f(lut[yv,xv,0])}, {f(lut[yv,xv,1])})" for xv in range(N)) + ",")
+out += rows
+out.append(");")
+out.append("// SH9 irradiance/pi of studio_radiance(), in the polynomial form of Filament's Irradiance_SphericalHarmonics.")
+out.append("const STUDIO_SH = array<vec3f, 9>(")
+out += [f"    vec3f({f(c[0])}, {f(c[1])}, {f(c[2])})," for c in sh]
+out.append(");")
+open(sys.argv[1], "w").write("\n".join(out) + "\n")
+# quick sanity print
+def irr(n):
+    n = norm(n); x_, y_, z_ = n[0], n[1], n[2]
+    return sh[0] + sh[1]*y_ + sh[2]*z_ + sh[3]*x_ + sh[4]*y_*x_ + sh[5]*y_*z_ + sh[6]*(3*z_*z_-1) + sh[7]*z_*x_ + sh[8]*(x_*x_-y_*y_)
+for n in ([0,0,1],[-1,1,1],[1,0,0],[0,-1,0],[0,1,0]):
+    print(n, irr(n))
+print("dfg smooth nov1", lut[0, -1], "rough nov .5", lut[-1, N//2])

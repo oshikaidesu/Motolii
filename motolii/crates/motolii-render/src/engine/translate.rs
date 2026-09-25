@@ -46,7 +46,28 @@ pub(crate) fn translate_matte_mode(
 pub(crate) fn translate_effect_passes(
     effects: &[crate::picture::resolved::ResolvedEffect],
 ) -> Vec<crate::render::compositor::EffectPass> {
-    translate_image_effects(effects, crate::render::compositor::EffectStage::Pass)
+    let mut passes = translate_image_effects(effects, crate::render::compositor::EffectStage::Pass);
+    // U78 spike: a pass's `light_through` left on auto (< 0) is how much light the layer's own surface
+    // lets through — its surface Vism's backdrop input (Glass: transmission) × (1 − metallic).
+    for pass in &mut passes {
+        let Some(at) = pass.params.iter().position(|(name, _)| name == "light_through") else { continue };
+        if pass.params[at].1 >= 0.0 { continue; }
+        pass.params[at].1 = surface_light_through(effects);
+    }
+    passes
+}
+
+fn surface_light_through(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
+    let catalog = crate::render::compositor::catalog_snapshot();
+    let value = |effect: &crate::picture::resolved::ResolvedEffect, def: &crate::render::compositor::effects::VismDefinition, name: &str| {
+        effect.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v { crate::doc::store::Value::F64(v) => Some(*v as f32), _ => None })
+            .or_else(|| def.manifest.param_inputs().find(|p| p.name == name).map(|p| p.default[0]))
+    };
+    effects.iter().rev().find_map(|effect| {
+        let def = catalog.definitions.iter().find(|d| d.plugin_id() == effect.plugin_id && d.manifest.stage == crate::render::compositor::effects::isf::IsfStage::Surface)?;
+        let through = value(effect, def, def.manifest.backdrop_input.as_deref()?)?;
+        Some(through.clamp(0.0, 1.0) * (1.0 - value(effect, def, "metallic").unwrap_or(0.0).clamp(0.0, 1.0)))
+    }).unwrap_or(0.0)
 }
 
 /// feedback を持つ pass に、状態の持ち主の鍵(層 × 複製 × 列 × 番)を刻む。
