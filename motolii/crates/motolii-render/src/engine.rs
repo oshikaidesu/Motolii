@@ -171,6 +171,9 @@ pub struct Engine {
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
     pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
+    /// What each solid's shape was built from (outline, size, depth): a new picture on the same shape
+    /// keeps the shape's silhouette instead of measuring the mesh again.
+    extrusion_shapes: HashMap<LayerId, (u64, Option<std::sync::Arc<Vec<crate::doc::store::ShapeNode>>>)>,
     failed_meshes: HashMap<String, String>,
     environments: HashMap<String, std::sync::Arc<crate::render::compositor::GpuEnvironmentData>>,
     containers: HashMap<String, ContainerInfo>,
@@ -254,6 +257,7 @@ impl Engine {
             view_readbacks: Vec::new(),
             models: HashMap::new(),
             extrusions: HashMap::new(),
+            extrusion_shapes: HashMap::new(),
             failed_meshes: HashMap::new(),
             environments: HashMap::new(),
             containers: HashMap::new(),

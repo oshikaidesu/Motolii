@@ -186,6 +186,7 @@ impl Compositor {
         texture: GpuTexture2D,
         size: [f32; 2],
         solid: Solid,
+        silhouette: Option<std::sync::Arc<Vec<glam::Vec3>>>,
     ) -> Result<Option<GpuModelData>, CompositorError> {
         let depth = solid.extent();
         let g = geometry(outlines, size, solid);
@@ -238,7 +239,7 @@ impl Compositor {
             planar_size: None,
             instances: std::sync::Arc::new(instances),
             bounds: SpatialBounds { min: [0.0, 0.0, -depth], max: [max.x, max.y, depth] },
-            vertices: std::sync::Arc::new(crate::render::media::silhouette_points(g.positions)),
+            vertices: silhouette.unwrap_or_else(|| std::sync::Arc::new(crate::render::media::silhouette_points(g.positions))),
             faceted: false,
             flat_parts: std::sync::Arc::from(flat_parts),
         }))

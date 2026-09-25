@@ -578,10 +578,29 @@ impl Engine {
             None => rectangle(natural),
         };
 
-        let Some(model) = self.compositor.extrude_model(&outlines, texture.clone(), natural, solid)? else {
+        // The picture alone changed (a raster redrawn at a new density): the solid's shape is the
+        // same, so its silhouette is too.
+        let mut shape = std::collections::hash_map::DefaultHasher::new();
+        solid.hash_key(&mut shape);
+        extrusion.stretch[0].to_bits().hash(&mut shape);
+        extrusion.stretch[1].to_bits().hash(&mut shape);
+        natural[0].to_bits().hash(&mut shape);
+        natural[1].to_bits().hash(&mut shape);
+        extrusion.on_canvas.hash(&mut shape);
+        let shape = shape.finish();
+        let silhouette = match (self.extrusion_shapes.get(&work.id), self.extrusions.get(&work.id)) {
+            (Some((kept, outline)), Some((_, model))) if *kept == shape && match (outline, &extrusion.outline) {
+                (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+                (None, None) => true,
+                _ => false,
+            } => Some(model.vertices.clone()),
+            _ => None,
+        };
+        let Some(model) = self.compositor.extrude_model(&outlines, texture.clone(), natural, solid, silhouette)? else {
             return Ok(crate::render::compositor::LayerContent::Texture(texture));
         };
         let model = std::sync::Arc::new(model);
+        self.extrusion_shapes.insert(work.id, (shape, extrusion.outline.clone()));
         self.extrusions.insert(work.id, (key, model.clone()));
         Ok(crate::render::compositor::LayerContent::Model(model))
     }
