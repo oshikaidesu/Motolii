@@ -144,6 +144,7 @@ impl Compositor {
             displace: Default::default(),
             clip: None,
             shadow: layer.shadow,
+            emission: layer.emission,
             frame: None,
         })
     }

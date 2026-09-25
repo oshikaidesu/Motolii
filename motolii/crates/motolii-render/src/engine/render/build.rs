@@ -55,6 +55,7 @@ impl Engine {
             displace: Default::default(),
             clip: None,
             shadow: layer.shadow,
+            emission: layer.emission,
             frame: None,
         })
     }
@@ -228,6 +229,7 @@ impl Engine {
             displace: Default::default(),
             clip: None,
             shadow: sources.iter().map(|s| s.layer.shadow).fold(0.0, f32::max),
+            emission: sources.iter().map(|s| s.layer.emission).fold(0.0, f32::max),
             frame: None,
         }
     }

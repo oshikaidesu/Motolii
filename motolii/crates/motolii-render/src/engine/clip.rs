@@ -42,6 +42,7 @@ impl Engine {
             displace: Default::default(),
             clip: None,
             shadow: base.layer.shadow,
+            emission: base.layer.emission,
             frame: None,
         };
         let bake = |engine: &mut Self, layer: Layer, passes: &[EffectPass]| {

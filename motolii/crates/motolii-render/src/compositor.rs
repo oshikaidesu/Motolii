@@ -28,6 +28,7 @@ mod presentable;
 mod render_effects;
 pub(crate) mod paths;
 mod sequential;
+mod light_pack;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BlendMode {
@@ -295,6 +296,8 @@ pub struct Layer {
     pub clip: Option<clip::ClipSpec>,
     /// 影の濃さ(0 なら落とさない): 太陽から見た型紙に描かれ、表面を持つ全ての層へ影(透過なら色)を落とす。
     pub shadow: f32,
+    /// Light the layer gives (its Glow), read by the scratch Lighting Pack.
+    pub emission: f32,
     /// 絵の論理の枠(素材座標の大きさ・原点・画素数)。効果はこの枠の論理 px で評価し、
     /// 描画密度を上げても reach・radius が変わらない。無ければ 1 px = 1 論理 px。
     pub frame: Option<effects::vism::ImageFrame>,
@@ -416,6 +419,8 @@ pub struct Compositor {
     pub(crate) motion: Option<re_renderer::DataTexture>,
     /// 最後に queue へ出した束の番号。描き終わりを待つ側(窓)はこれを待つ。
     pub(crate) last_submission: Option<wgpu::SubmissionIndex>,
+    /// The scratch Lighting Pack's resources, made on its first run.
+    pub(crate) light_pack: Option<light_pack::LightPack>,
 }
 
 #[derive(Clone)]
@@ -550,6 +555,8 @@ pub(crate) struct SequentialInput<'a> {
     displace: point_cloud::PointDisplace,
     clip: Option<clip::ClipSpec>,
     shadow: f32,
+    /// Light the layer gives (its Glow's intensity; 0 = none). Read only by the scratch Lighting Pack.
+    emission: f32,
     /// 層の絵へ焼けなかった効果列(網・点群・環境には焼く先の絵が無い)。
     /// 画面へ描いた後で、その窓の絵に対して流す。AE のプリコンポと同じ位置。
     screen_passes: &'a [EffectPass],

@@ -213,6 +213,7 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, picture: bool, catalog:
         displace: translate::translate_point_displace(&layer.effects),
         clip: translate::translate_clip(&layer.effects),
         shadow: translate::translate_cast_shadow(&layer.effects),
+        emission: translate::translate_emission(&layer.effects).max(translate::translate_emission(&layer.after_effects)),
         passes,
         after_passes: translate::translate_plate_passes(&layer.after_effects),
         image_inputs: layer.image_sources.iter()

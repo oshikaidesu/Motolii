@@ -358,7 +358,10 @@ impl Compositor {
         // Backdrops a recorded draw still reads; kept until the view is recorded.
         let mut backdrops = Vec::new();
         let planned_runs = plan_runs(inputs);
+        // Runs the scratch Lighting Pack drew with an earlier one.
+        let mut skip_until = 0;
         for (at, planned) in planned_runs.iter().enumerate() {
+            if at < skip_until { continue; }
             self.surface_work.run_breaks[planned.ended_by as usize] += 1;
             let start = planned.range.start;
             // Whether a later run reads the non-glass picture below it (glass, or a plate).
@@ -420,6 +423,28 @@ impl Compositor {
                 continue;
             }
             let glass_run = run[0].shading.reads_backdrop;
+            // The scratch Lighting Pack draws a plain 3D run of pictures itself (MOTOLII_LIGHT_PACK).
+            let packable = |r: &PlannedRun| r.mode == SRC_OVER && inputs[r.range.clone()].iter().all(|i| i.projection != crate::doc::store::LayerProjection::TwoD && !i.shading.reads_backdrop && i.screen_passes.is_empty()
+                && matches!(i.content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_) | SequentialContent::Environment(_) | SequentialContent::Model(GpuModelData { planar_size: Some(_), .. })));
+            if let Some(pack) = super::light_pack::PackMode::from_env().filter(|_| packable(planned)) {
+                // Runs split only for re_renderer's sake (a mesh after a picture) are one run to the pack.
+                let mut end = planned.range.end;
+                let mut last = planned;
+                for (k, later) in planned_runs[at + 1..].iter().enumerate() {
+                    if last.ended_by != RunBreak::MeshAfterRect || !packable(later) { break; }
+                    end = later.range.end;
+                    skip_until = at + 2 + k;
+                    last = later;
+                }
+                let background = stack.is_none().then_some(background_color);
+                let canvas = self.light_pack_run(pack, comp, window, projection, inputs, planned.range.start..end, environment, background, encoder)?;
+                self.surface_work.main_runs += 1;
+                stack = Some(match stack.take() {
+                    None => canvas,
+                    Some(below) => self.mix_onto(window, &below, &canvas, mode, encoder),
+                });
+                continue;
+            }
 
             let mut config = sequential_target_config(if observer.requested { "layer-view-run" } else { "motolii-view-run" }, comp, window, view_from_world, projection, environment);
             config.motion = world.motion.cloned();
@@ -601,6 +626,10 @@ impl Compositor {
         }).or(environment);
         // The meshes' instances, placed as the output places them, uploaded once for the frame.
         let shared = self.shared_mesh_scene(comp, inputs)?;
+        // The scratch Lighting Pack owns the light: no host cookie then.
+        if super::light_pack::PackMode::from_env().is_some() {
+            return Ok((None, shared));
+        }
         let light = self.capture_light_cookie(comp, inputs, environment, shared.as_ref())?;
         Ok((light, shared))
     }

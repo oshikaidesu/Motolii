@@ -575,6 +575,7 @@ pub(crate) fn sequential_inputs<'a>(
                 displace: layer.displace,
                 clip: layer.clip,
                 shadow: layer.shadow,
+                emission: layer.emission,
                 // 焼く先の絵が無かった層(網・点群・環境)は、効果列をここから画面へ持って行く。
                 // 焼く先の絵が無い層(網・点群・環境)と、下の合成を読む効果列は、画面へ持って行く。
                 screen_passes: if layer.content.texture().is_none() || lwp.passes.iter().any(|p| p.reads_backdrop || p.reads_composite()) { lwp.passes.as_slice() } else { &[] },
@@ -583,7 +584,7 @@ pub(crate) fn sequential_inputs<'a>(
             // 溢れ: 同じ置き場に、coverage 外の絵だけを宣言された混ぜ方で重ねる(層の Blend と独立)。
             let spilled = spill.as_ref().and_then(|(content, mode)| {
                 let texture = match content { LayerContent::Texture(t) => SequentialContent::Rect(t), LayerContent::LinearTexture(t) => SequentialContent::LinearRect(t), _ => return None };
-                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), shadow: 0.0, screen_passes: &[], screen_sources: &[], ..body })
+                Some(SequentialInput { content: texture, blend_mode: *mode, shading: Default::default(), displace: Default::default(), shadow: 0.0, emission: 0.0, screen_passes: &[], screen_sources: &[], ..body })
             });
             std::iter::once(body).chain(spilled)
         })

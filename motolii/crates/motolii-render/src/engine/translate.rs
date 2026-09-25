@@ -206,6 +206,14 @@ pub(crate) fn translate_cast_shadow(effects: &[crate::picture::resolved::Resolve
     }).unwrap_or(default).clamp(0.0, 1.0)
 }
 
+/// Light a layer gives: its Glow's intensity (0 = none). Only the scratch Lighting Pack reads it.
+pub(crate) fn translate_emission(effects: &[crate::picture::resolved::ResolvedEffect]) -> f32 {
+    effects.iter().filter(|e| e.plugin_id == "motolii.glow").map(|e| e.params.iter().find(|(n, _)| n == "intensity").and_then(|(_, v)| match v {
+        crate::doc::store::Value::F64(v) => Some(*v as f32),
+        _ => None,
+    }).unwrap_or(1.5)).fold(0.0, f32::max)
+}
+
 pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
     crate::render::compositor::catalog_snapshot().descriptors.clone()
 }

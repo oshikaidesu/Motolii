@@ -78,6 +78,8 @@ pub struct LayerWork {
     pub displace: PointDisplace,
     pub clip: Option<ClipSpec>,
     pub shadow: f32,
+    /// Light the layer gives (its Glow's intensity), read by the scratch Lighting Pack.
+    pub emission: f32,
     pub passes: Vec<EffectPass>,
     pub after_passes: Vec<EffectPass>,
     pub image_inputs: Vec<Vec<ImageInput>>,

@@ -458,6 +458,7 @@ impl Engine {
             displace: work.displace,
             clip: work.clip,
             shadow: work.shadow,
+            emission: work.emission,
             frame: frozen_frame,
         };
         let layer = self.apply_masks_to_layer(layer, &work.masks, natural, frozen_frame)?;
