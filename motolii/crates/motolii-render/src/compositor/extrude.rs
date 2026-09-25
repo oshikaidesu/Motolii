@@ -56,6 +56,22 @@ fn dedup_closed(line: &[glam::Vec2]) -> Vec<glam::Vec2> {
     out
 }
 
+/// The side of a closed line the solid lies away from: its own winding for an outline, the opposite
+/// for a hole (a line inside an odd number of the others), whichever way the font winds them.
+fn solid_outward(line: &[glam::Vec2], others: &[&[glam::Vec2]]) -> f32 {
+    let area: f32 = line.iter().zip(line.iter().cycle().skip(1)).map(|(a, c)| a.x * c.y - c.x * a.y).sum::<f32>() * 0.5;
+    let inside = |p: glam::Vec2, poly: &[glam::Vec2]| {
+        let mut crossings = false;
+        for (a, b) in poly.iter().zip(poly.iter().cycle().skip(1)) {
+            if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y) { crossings = !crossings; }
+        }
+        crossings
+    };
+    let depth = line.first().map_or(0, |p| others.iter().filter(|poly| !std::ptr::eq(poly.as_ptr(), line.as_ptr()) && inside(*p, poly)).count());
+    let own = if area < 0.0 { -1.0 } else { 1.0 };
+    if depth % 2 == 1 { -own } else { own }
+}
+
 /// 閉じた折れ線の各頂点の外向きの寄せ(隣り合う辺の法線の平均 × miter 長)。距離 r を掛けると、
 /// 隣り合う辺を r ずつ内側へ平行移動した時の角に一致する(鋭角は 3 倍で止める)。`outward` は輪郭の巻きの向き。
 fn vertex_normals(line: &[glam::Vec2], outward: f32) -> Vec<glam::Vec2> {
@@ -88,12 +104,12 @@ pub(crate) fn geometry(outlines: &[(Vec<PathContour>, PathFillRule)], size: [f32
     for (contours, rule) in outlines {
         let flattened: Vec<(Vec<glam::Vec2>, bool)> = re_renderer::renderer::flattened_contours(contours)
             .into_iter().map(|(line, closes)| (if closes { dedup_closed(&line) } else { line }, closes)).filter(|(line, _)| line.len() >= 2).collect();
+        let rings: Vec<&[glam::Vec2]> = flattened.iter().filter(|(_, closes)| *closes).map(|(line, _)| line.as_slice()).collect();
         // 前の蓋: Bevel があれば折れ線を法線方向へ半径ぶん寄せた輪郭、無ければ元の輪郭。
         let front: Vec<PathContour> = match bevel {
             None => contours.iter().filter(|c| c.closed).cloned().collect(),
             Some(b) => flattened.iter().filter(|(_, closes)| *closes).map(|(line, _)| {
-                let area: f32 = line.iter().zip(line.iter().cycle().skip(1)).map(|(a, c)| a.x * c.y - c.x * a.y).sum::<f32>() * 0.5;
-                let outward = if area < 0.0 { -1.0 } else { 1.0 };
+                let outward = solid_outward(line, &rings);
                 let normals = vertex_normals(line, outward);
                 PathContour { closed: true, vertices: line.iter().zip(&normals).map(|(p, n)| vertex(*p - *n * b.radius)).collect() }
             }).collect(),
@@ -110,8 +126,7 @@ pub(crate) fn geometry(outlines: &[(Vec<PathContour>, PathFillRule)], size: [f32
             }));
         }
         for (line, closes) in &flattened {
-            let area: f32 = line.iter().zip(line.iter().cycle().skip(1)).map(|(a, b)| a.x * b.y - b.x * a.y).sum::<f32>() * 0.5;
-            let outward = if *closes && area < 0.0 { -1.0 } else { 1.0 };
+            let outward = if *closes { solid_outward(line, &rings) } else { 1.0 };
             let edges = if *closes { line.len() } else { line.len() - 1 };
             // 側面の始まる深さ。丸みがあれば四分円の終わり(z = radius)から。
             let wall_from = match bevel { Some(b) if *closes => b.radius.min(extent), _ => 0.0 };
@@ -245,6 +260,31 @@ mod tests {
         assert!(geometry(&[], [10.0, 10.0], Solid { depth: 4.0, bevel: None }).indices.is_empty());
     }
 
+    /// A letter's hole (the counter of O, P, R) is a wall facing into the hole, whichever way the
+    /// font winds its contours; a bevel rounds the hole's rim away from the hole, as it does the outline's.
+    #[test]
+    fn a_hole_faces_into_itself_and_its_rim_rounds_away_from_it() {
+        let v = |x: f32, y: f32| re_renderer::renderer::PathVertex { point: glam::vec2(x, y), in_tangent: glam::Vec2::ZERO, out_tangent: glam::Vec2::ZERO };
+        let ring = |pts: &[(f32, f32)]| PathContour { closed: true, vertices: pts.iter().map(|(x, y)| v(*x, *y)).collect() };
+        let outer = [(0.0, 0.0), (30.0, 0.0), (30.0, 30.0), (0.0, 30.0)];
+        let hole = [(10.0, 10.0), (10.0, 20.0), (20.0, 20.0), (20.0, 10.0)];
+        let reversed = |pts: &[(f32, f32)]| pts.iter().rev().copied().collect::<Vec<_>>();
+        for (outer, hole) in [(outer.to_vec(), hole.to_vec()), (reversed(&outer), reversed(&hole))] {
+            let outline = (vec![ring(&outer), ring(&hole)], PathFillRule::NonZero);
+            let g = geometry(std::slice::from_ref(&outline), [30.0, 30.0], Solid { depth: 6.0, bevel: None });
+            let centre = glam::vec2(15.0, 15.0);
+            for (p, n) in g.positions.iter().zip(&g.normals).filter(|(_, n)| n.z == 0.0) {
+                let inner = (p.x - 15.0).abs() <= 5.0 + 1e-3 && (p.y - 15.0).abs() <= 5.0 + 1e-3;
+                let away = (p.truncate() - centre).dot(n.truncate());
+                if inner { assert!(away < 0.0, "a hole wall at {p:?} faces into the hole, not {n:?}"); }
+                else { assert!(away > 0.0, "an outline wall at {p:?} faces out, not {n:?}"); }
+            }
+            let rounded = geometry(std::slice::from_ref(&outline), [30.0, 30.0], Solid { depth: 6.0, bevel: Some(Bevel { radius: 2.0, segments: 2, chamfer: false }) });
+            let front: Vec<_> = rounded.positions.iter().zip(&rounded.normals).filter(|(p, n)| p.z == 0.0 && **n == -glam::Vec3::Z).map(|(p, _)| p.truncate()).collect();
+            assert!(front.iter().all(|p| (p.x - 15.0).abs() >= 7.0 - 1e-3 || (p.y - 15.0).abs() >= 7.0 - 1e-3), "the front cap stays 2 px off the hole: {front:?}");
+        }
+    }
+
     /// 丸みを付けると、前の蓋は半径ぶん内側へ寄り、縁は段数ぶんの帯になり、法線が蓋(−z)から側面へ連続して回る。
     #[test]
     fn a_bevel_rounds_the_front_rim_with_continuous_normals() {
@@ -327,6 +367,50 @@ mod tests {
             assert!(std::sync::Arc::ptr_eq(&first, &engine.extrusions[&word].1), "frame {frame}: the solid is not built again");
             let fresh = crate::render::engine::Engine::new().unwrap().render_frame(&doc.view(), at(frame)).unwrap();
             assert_eq!(moved, fresh, "frame {frame}: the reused solid draws what a fresh engine draws");
+        }
+    }
+
+    /// Text is laid out on the composition's canvas and its anchor is measured there. Drawn as a
+    /// picture (a Blur reads neighbours) or as a solid (Extrude), it lands where the flat outline does.
+    #[test]
+    fn text_as_a_picture_or_a_solid_lands_where_its_outline_does() {
+        use crate::doc::store::{ContentKeyframe, ContentTrack, EffectId, EffectInstance, FontRef, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId};
+        let fps = Fps::try_new(30, 1).unwrap();
+        let (width, height) = (240u32, 160u32);
+        let centre = |effect: Option<(&str, &str, f64)>| {
+            let mut doc = Document::new().with_programs(crate::extensions::bundled());
+            doc.apply(Intent::SetComposition(Composition { width, height, fps, duration_frames: 1, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+            let layer = LayerId(1);
+            let mut content = ContentTrack::new();
+            content.insert(ContentKeyframe { t: RationalTime::ZERO, content: "HI".into() });
+            let document = TextDocument { content, justify: TextJustify::Center, wrap_size: None, styles: vec![TextDocumentStyle { id: TextStyleId(0), font: FontRef { path: String::new(), fingerprint: None, family: "Helvetica Neue".into(), style: String::new() }, size: 48.0, fill: [1.0; 4], line_height: None, tracking: 0.0, axes: vec![], features: vec![] }], slot_id: None, ranges: vec![], alignment: TextAlignmentOptions::default(), runs: vec![] };
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Text, order: 0, timing: LayerTiming::place(0, None, 1) } },
+                Intent::SetAttrs { layer, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoPointFiveD), ..Default::default() } },
+                Intent::SetTextDocument { layer, document },
+                Intent::SetConstant { layer, property: PropertyId::new(property::ANCHOR).unwrap(), value: Value::Vec2([width as f64 / 2.0, height as f64 / 2.0]) },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([160.0, 110.0]) },
+            ]).unwrap();
+            if let Some((plugin, param, value)) = effect {
+                doc.apply_all([
+                    Intent::SetEffects { layer, effects: vec![EffectInstance { id: EffectId(0), plugin_id: plugin.into() }] },
+                    Intent::SetConstant { layer, property: PropertyId::effect_param(EffectId(0), param).unwrap(), value: Value::F64(value) },
+                ]).unwrap();
+            }
+            let mut engine = crate::render::engine::Engine::new().unwrap();
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            let lit: Vec<_> = pixels.chunks_exact(4).enumerate().filter(|(_, p)| p[0].max(p[1]).max(p[2]) > 60).map(|(i, _)| ((i as u32 % width) as f32, (i as u32 / width) as f32)).collect();
+            assert!(lit.len() > 40, "{effect:?}: the text is on screen");
+            let (x0, x1) = lit.iter().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.0), b.max(p.0)));
+            let (y0, y1) = lit.iter().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.1), b.max(p.1)));
+            [(x0 + x1) / 2.0, (y0 + y1) / 2.0]
+        };
+        let flat = centre(None);
+        for effect in [("motolii.blur", "radius", 1.0), (crate::extensions::solid::EXTRUDE, "depth", 8.0)] {
+            let seen = centre(Some(effect));
+            assert!((seen[0] - flat[0]).abs() < 4.0 && (seen[1] - flat[1]).abs() < 4.0, "{}: {seen:?} vs the flat text at {flat:?}", effect.0);
         }
     }
 

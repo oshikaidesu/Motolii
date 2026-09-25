@@ -340,7 +340,7 @@ impl Engine {
                 };
                 self.shape_texture_from_shapes(shapes, key, *vector, tolerance, comp, step, *remember)?
             }
-            RasterSource::CanvasVector { shapes } => self.text_texture_from_shapes(shapes, key, comp)?,
+            RasterSource::CanvasVector { shapes, vector, remember } => self.text_texture_from_shapes(shapes, key, comp, *vector, *remember)?,
             RasterSource::Mesh { path } => self.mesh_content_for(path, comp)?,
             RasterSource::EnvironmentMap { path } => self.environment_content_for(path)?,
             RasterSource::Image { path, time } => self.file_content_for(path, *time, id, comp)?,
@@ -409,7 +409,7 @@ impl Engine {
             let (content, natural) = self.execute_raster(work.id, work.content_key, &work.content, Some(work), prep)?;
             // A picture drawn above one pixel per unit carries its logical frame.
             // A plate baked at the views' density carries it too, so its effects keep their size.
-            let frame = matches!(work.content, RasterSource::Vector { .. } | RasterSource::Isolate { .. })
+            let frame = matches!(work.content, RasterSource::Vector { .. } | RasterSource::CanvasVector { vector: false, .. } | RasterSource::Isolate { .. })
                 .then(|| content.as_ref().and_then(|content| content.texture()))
                 .flatten()
                 .map(|texture| crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0; 2], pixels: texture.width_height() });
@@ -561,6 +561,10 @@ impl Engine {
         };
 
         let outlines = match &extrusion.outline {
+            Some(shapes) if extrusion.on_canvas => {
+                let canvas = crate::picture::shapes_ops::Canvas { width: natural[0].round() as u32, height: natural[1].round() as u32, origin_x: 0, origin_y: 0 };
+                crate::render::compositor::paths::outlines(shapes, &canvas)?
+            }
             Some(shapes) => match crate::picture::shapes_ops::content_canvas(shapes)? {
                 Some(canvas) => crate::render::compositor::paths::outlines(shapes, &canvas)?,
                 None => Vec::new(),

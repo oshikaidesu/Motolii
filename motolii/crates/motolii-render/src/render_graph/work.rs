@@ -17,8 +17,8 @@ pub enum RasterSource {
     /// Outlines on their own canvas. `vector` keeps them resolution-independent;
     /// `field_step` subdivides them so a field can bend the outline.
     Vector { shapes: Arc<Vec<ShapeNode>>, vector: bool, remember: bool, field_step: bool },
-    /// Outlines on the output canvas.
-    CanvasVector { shapes: Arc<Vec<ShapeNode>> },
+    /// Text: laid out on the composition's canvas, the frame its anchor is measured in.
+    CanvasVector { shapes: Arc<Vec<ShapeNode>>, vector: bool, remember: bool },
     Mesh { path: String },
     Image { path: String, time: RationalTime },
     EnvironmentMap { path: String },
@@ -48,6 +48,8 @@ pub enum ImageInput {
 pub struct Extrusion {
     pub solid: Solid,
     pub outline: Option<Arc<Vec<ShapeNode>>>,
+    /// The outline is laid out on the picture's whole canvas (text), not around its own bounds.
+    pub on_canvas: bool,
     pub stretch: [f32; 2],
 }
 

@@ -104,8 +104,7 @@ fn stretched(layer: &SceneLayerValue, shapes: &Arc<Vec<crate::doc::store::ShapeN
 fn raster(layer: &SceneLayerValue, vector: bool, field_step: bool, catalog: &CatalogSnapshot) -> Result<RasterSource, RenderLoweringError> {
     Ok(match &layer.content {
         SceneContentValue::None => RasterSource::None,
-        SceneContentValue::Text(text) if !vector => RasterSource::Vector { shapes: text.shapes(), vector: false, remember: true, field_step: false },
-        SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: text.shapes() },
+        SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: text.shapes(), vector, remember: true },
         SceneContentValue::Shape(shapes) => RasterSource::Vector {
             shapes: stretched(layer, shapes),
             vector,
@@ -137,7 +136,7 @@ fn image_input(source: &SceneImageSourceValue, catalog: &CatalogSnapshot) -> Res
         SceneImageSourceValue::Content { layer, content, time, namespace } => {
             let source = match content {
                 SceneContentValue::None | SceneContentValue::Material(_) | SceneContentValue::Particles(_) => return Ok(ImageInput::Absent),
-                SceneContentValue::Text(text) => RasterSource::Vector { shapes: text.shapes(), vector: false, remember: false, field_step: false },
+                SceneContentValue::Text(text) => RasterSource::CanvasVector { shapes: text.shapes(), vector: false, remember: false },
                 SceneContentValue::Shape(shapes) => RasterSource::Vector { shapes: shapes.clone(), vector: false, remember: false, field_step: false },
                 SceneContentValue::Media { source, time } => RasterSource::Image { path: source.path.clone(), time: *time },
                 SceneContentValue::Plate(plate) => return Ok(ImageInput::Graph {
@@ -173,6 +172,7 @@ fn lower_layer(layer: &SceneLayerValue, clip_base: bool, picture: bool, catalog:
             SceneContentValue::Shape(shapes) => Some(stretched(layer, shapes)),
             _ => None,
         },
+        on_canvas: matches!(layer.content, SceneContentValue::Text(_)),
         stretch: layer.shape_stretch,
     });
     let has_stage = |stage: crate::render::compositor::EffectStage| catalog.descriptors.iter()

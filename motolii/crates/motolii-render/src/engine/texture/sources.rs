@@ -38,8 +38,10 @@ impl Engine {
         shapes: &std::sync::Arc<Vec<ShapeNode>>,
         layer_id: LayerId,
         comp: CompSpec,
+        vector: bool,
+        remember: bool,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        if let Some(hit) = self.cached_shape(layer_id, true, shapes, true, None, None) {
+        if let Some(hit) = self.cached_shape(layer_id, true, shapes, vector, None, None) {
             return Ok((Some(hit.texture.clone()), hit.natural));
         }
         if shapes.is_empty() {
@@ -51,7 +53,7 @@ impl Engine {
             origin_x: 0,
             origin_y: 0,
         };
-        self.shape_texture_on_canvas(shapes, layer_id, true, true, 0.05, comp, None, true, canvas)
+        self.shape_texture_on_canvas(shapes, layer_id, true, vector, 0.05, comp, None, remember, canvas)
     }
 
     #[allow(clippy::too_many_arguments)]
