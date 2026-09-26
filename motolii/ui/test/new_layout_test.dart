@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new/inspector/session_layout.dart';
 import '../lib/hf/insp/layout.dart';
+import '../lib/hf/insp/layout_diagram.dart' show LayoutGeom;
 import 'support/new_inspector_host.dart';
 import 'support/window_fixture.dart';
 
@@ -139,5 +140,24 @@ void main() {
     expect(s.gd('layout.gap'), 55, reason: 'the pointer is in charge until it lets go');
     s.commit('layout.gap');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Esc during a diagram drag puts the layout back and the document hears cancelPreview, never a commit', (tester) async {
+    final c = await mount(tester, state([groupLayer()], [1]), height: 1400);
+    final s = storeOf(tester);
+    final diagram = find.byKey(const ValueKey('layout-diagram'));
+    final before = s.padX;
+    final handle = LayoutGeom(tester.getSize(diagram), s).padL;
+    final drag = await tester.startGesture(tester.getTopLeft(diagram) + handle);
+    await drag.moveBy(const Offset(20, 0));
+    await tester.pump();
+    expect(c.ops, contains('previewProperties'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(s.padX, before);
+    await drag.up();
+    await tester.pump();
+    expect(c.ops, isNot(contains('commitPreview')));
+    expect(c.ops.last, 'cancelPreview');
   });
 }

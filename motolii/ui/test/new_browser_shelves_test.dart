@@ -1,5 +1,6 @@
 // The finished Browser bodies over the production shelves: what each shelf lists, what a tile does, and the user's own
 // views kept in the desk settings both Browsers share.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -187,6 +188,35 @@ void main() {
     await tester.pumpAndSettle();
     final after = tester.getSize(find.byType(ThingFace).first).width;
     expect(after, greaterThan(before));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('user tags: Tag… from the item menu is kept in the desk tags, found by tag:, and removed again', (tester) async {
+    final (c, _) = await mount(tester, 'Fonts', {'fontFamilies': ['Arial', 'Georgia', 'Menlo']});
+    await tester.tapAt(tester.getCenter(find.byType(ThingFace).at(1)), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tag…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('browser:prompt')).last, 'Serif Pick');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    final tags = c.deskWork.value['tags'] as Map;
+    expect(tags.values.single, ['Serif Pick']);
+    expect(tags.keys.single, startsWith('Fonts/'));
+
+    await tester.tap(find.byType(HeaderKey).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText).first, 'tag:serif-pick');
+    await tester.pumpAndSettle();
+    expect(find.byType(ThingFace), findsOneWidget, reason: 'the structured search finds what the user tagged');
+
+    await tester.enterText(find.byType(EditableText).first, '');
+    await tester.pumpAndSettle();
+    await tester.tapAt(tester.getCenter(find.byType(ThingFace).at(1)), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove tag "Serif Pick"'));
+    await tester.pumpAndSettle();
+    expect(c.deskWork.value['tags'], isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
 }

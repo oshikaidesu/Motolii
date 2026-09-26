@@ -159,16 +159,26 @@ class _TransformGizmoState extends State<TransformGizmo> {
     }
   }
 
+  String? get _grabId => switch (grab) {
+        _Grab.body || _Grab.axisX || _Grab.axisY => 'position',
+        _Grab.axisZ => 'position.z',
+        _Grab.corner || _Grab.edgeX || _Grab.edgeY => 'scale',
+        _Grab.ring => _rotId,
+        _Grab.none => null,
+      };
+
   void _commit() {
-    final id = switch (grab) {
-      _Grab.body || _Grab.axisX || _Grab.axisY => 'position',
-      _Grab.axisZ => 'position.z',
-      _Grab.corner || _Grab.edgeX || _Grab.edgeY => 'scale',
-      _Grab.ring => _rotId,
-      _Grab.none => null,
-    };
+    final id = _grabId;
     if (id != null && _moved) s.commit(id);
     grab = _Grab.none;
+  }
+
+  /// Esc during a drag: the layer is where the gesture found it, and the rest of the drag does nothing.
+  void _abort() {
+    final id = _grabId;
+    if (id == null) return;
+    s.cancel(id);
+    setState(() => grab = _Grab.none);
   }
 
   int? _cellAt(Offset p) {
@@ -201,6 +211,7 @@ class _TransformGizmoState extends State<TransformGizmo> {
             focusNode: focus,
             onKeyEvent: (_, e) {
               if (e is! KeyDownEvent) return KeyEventResult.ignored;
+              if (e.logicalKey == LogicalKeyboardKey.escape && grab != _Grab.none) { _abort(); return KeyEventResult.handled; }
               final i = {LogicalKeyboardKey.digit1: 0, LogicalKeyboardKey.digit2: 1, LogicalKeyboardKey.digit3: 2, LogicalKeyboardKey.digit4: 3}[e.logicalKey];
               if (i != null) { widget.onMode(TMode.values[i]); return KeyEventResult.handled; }
               if (e.logicalKey == LogicalKeyboardKey.tab) { widget.onMode(TMode.values[(widget.mode.index + 1) % 4]); return KeyEventResult.handled; }

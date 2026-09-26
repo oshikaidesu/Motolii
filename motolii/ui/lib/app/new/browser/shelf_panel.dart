@@ -56,7 +56,7 @@ class _ShelfPanelState extends State<ShelfPanel> {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: host,
         builder: (context, _) {
-          final catalog = ShelfCatalog(host, _panelId, faceOf: _face);
+          final catalog = ShelfCatalog(host, _panelId, faceOf: _face, own: mine);
           seat.catalog = catalog;
           final key = ValueKey('${widget.name}:${catalog.signature}');
           return DockedPanel(

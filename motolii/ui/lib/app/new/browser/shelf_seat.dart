@@ -12,6 +12,7 @@ import '../../../panels/browser.dart' show BrowserSize;
 import '../../../panels/browser/files_shelf.dart' show FilesShelf;
 import '../../../panels/browser/parts.dart' show shelfAction;
 import 'shelf_host.dart';
+import 'tag_prompt.dart';
 import 'shelf_user.dart';
 import 'shelf_things.dart';
 
@@ -33,6 +34,7 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
   ShelfCatalog? catalog;
   var _ordered = const <Thing>[];
   var _columns = 3;
+  Offset _menuAt = Offset.zero;
 
   @override
   Listenable get changes => this;
@@ -125,7 +127,10 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
           behavior: HitTestBehavior.opaque,
           onTap: bare && supported && !twice ? () => _apply(thing, item) : null,
           onDoubleTap: !bare || (twice && supported) ? () => _apply(thing, item) : null,
-          onSecondaryTapDown: (e) => host.menu(item, e.globalPosition),
+          onSecondaryTapDown: (e) {
+            _menuAt = e.globalPosition;
+            host.menu(item, e.globalPosition);
+          },
           child: shelf.draggable(host, item, framed),
         ),
       ),
@@ -161,13 +166,25 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
       for (var i = 2; i <= BrowserLibrary.collectionCount; i++)
         if (i != now) EditorMenuItem<String>(value: 'view:$i', child: Text('Add to ${mine.library.collectionName(i)}')),
       if (now != null && now != 1) const EditorMenuItem<String>(value: 'view:0', child: Text('Remove from collection')),
+      const EditorMenuDivider(),
+      const EditorMenuItem<String>(value: 'view:tag', child: Text('Tag…')),
+      for (final t in mine.library.tagsOf(host.shelf.name, host.id(item))) EditorMenuItem<String>(value: 'view:untag:$t', child: Text('Remove tag "$t"')),
     ];
   }
 
-  Future<void> _viewAct(String action, Map<String, dynamic> item) {
+  Future<void> _viewAct(String action, Map<String, dynamic> item) async {
+    if (action == 'tag') {
+      final tag = await promptText(host.context, _menuAt, 'Tag ${_targets(item).length > 1 ? '${_targets(item).length} items' : '${item['name'] ?? host.id(item)}'}');
+      if (tag != null) await mine.library.tag(host.shelf.name, _targets(item), tag);
+      return;
+    }
+    if (action.startsWith('untag:')) {
+      await mine.library.untag(host.shelf.name, _targets(item), action.substring(6));
+      return;
+    }
     final which = int.parse(action);
     final now = mine.collectionOf(host.id(item));
-    return mine.collect(_targets(item), which == now ? 0 : which);
+    await mine.collect(_targets(item), which == now ? 0 : which);
   }
 
   /// The header's overflow: keep this search, drop a kept one, forget what was used.

@@ -176,17 +176,50 @@ class _LayoutDiagramState extends State<LayoutDiagram> {
     grab = _G.none;
   }
 
+  final _focus = FocusNode(debugLabel: 'layout diagram');
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Esc during a drag: every property the gesture touched goes back and the rest of the drag does nothing.
+  void _abort() {
+    final ids = switch (grab) {
+      _G.gap => ['layout.gap'],
+      _G.cols => ['layout.grid_columns'],
+      _G.rows => ['layout.grid_rows'],
+      _G.padL || _G.padR || _G.padT || _G.padB || _G.padBoth => ['layout.padding'],
+      _G.sizeW => ['layout.width'],
+      _G.sizeH => ['layout.height'],
+      _G.align => ['layout.justify_content', 'layout.align_items'],
+      _G.none => <String>[],
+    };
+    for (final id in ids) { s.cancel(id); }
+    setState(() => grab = _G.none);
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: s,
-        builder: (context, _) => Listener(
+        builder: (context, _) => Focus(
+          focusNode: _focus,
+          onKeyEvent: (_, e) {
+            if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape && grab != _G.none) {
+              _abort();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Listener(
           key: const ValueKey('layout-diagram'),
-          onPointerDown: (e) { _down = e.localPosition; _moved = false; if (!s.frozen) _pick(e.localPosition); },
+          onPointerDown: (e) { _focus.requestFocus(); _down = e.localPosition; _moved = false; if (!s.frozen) _pick(e.localPosition); },
           onPointerMove: (e) { if (grab == _G.none) return; if ((e.localPosition - _down).distance > 2) _moved = true; _drag(e.localPosition); },
           onPointerUp: (_) { _commit(); setState(() {}); },
           onPointerCancel: (_) => grab = _G.none,
           child: CustomPaint(size: widget.size, painter: _Painter(g, s, grab)),
-        ),
+        )),
       );
 }
 

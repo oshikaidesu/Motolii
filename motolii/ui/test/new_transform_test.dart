@@ -153,4 +153,24 @@ void main() {
     expect(c.ops, isNot(contains('commitPreview')));
     expect(s.active.position.take(2), [100, 50]);
   });
+
+  testWidgets('Esc during a gizmo drag puts the layer back and the document hears cancelPreview, never a commit', (tester) async {
+    final c = await mount(tester, state([layerRow(1, 'A', position: [100, 50])], [1]));
+    final s = storeOf(tester);
+    final gizmo = find.byKey(const ValueKey('gizmo'));
+    expect(gizmo, findsOneWidget);
+    final drag = await tester.startGesture(tester.getCenter(gizmo));
+    await drag.moveBy(const Offset(30, 10));
+    await tester.pump();
+    expect(s.active.position[0], isNot(100), reason: 'the body followed the pointer');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(s.active.position.take(2), [100, 50]);
+    await drag.moveBy(const Offset(30, 10));
+    await drag.up();
+    await tester.pump();
+    expect(c.ops.last, 'cancelPreview');
+    expect(c.ops, isNot(contains('commitPreview')));
+    expect(s.active.position.take(2), [100, 50]);
+  });
 }

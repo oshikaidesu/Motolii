@@ -25,11 +25,13 @@ Sources: the Phase A inventory in `inventory/`, `routing.md`, and the code. Evid
 | Inspector | Layout card | A / C | promoted: Layout Instrument on a layer's `layout.*` rows; `new_layout_test` |
 | Inspector | effect parameters | A / C | promoted: generic Toys with keys, routes, relative drag; `new_effect_test`. Effects that lay out copies (grid of Each / Random) keep the Inspector body until an Instrument owns that grid |
 | Inspector | Camera card | A | Classic card kept. The Camera Instrument in `lib/hf` is finished but not connected (C) |
-| Inspector | Esc during a drag restores the value (IN-023) | A | Toys of the Transform, Layout and effect sheets; the gizmo and Rotation dial gestures do not cancel yet; `new_transform_test`, `new_effect_test` |
+| Inspector | Esc during a drag restores the value (IN-023) | A | Toys, the Transform gizmo and the Layout diagram; `new_transform_test`, `new_layout_test`, `new_effect_test` |
 | Browser | six shelves as dock tabs on the finished hf bodies (Create, Effects, Media, Colors, Fonts, Files) over the production shelves: items, apply, menu, drag, preview, tools, path header, editor slot (colour wheel, font scope), tooltip, tile size from Settings, reveal after import | A | `ShelfPanel` (`app/new/browser/`), `new_browser_shelves_test` |
 | Browser | keyboard: find, clear, arrows, Enter, Delete, digits file the pick in a collection (BR-005/006/044/045/048) | A | through the seat; workflow and shelf tests |
 | Browser | favorites, collections 2 to 7, recent, saved searches | A | same desk settings rows as Classic (`collections`, `collectionNames`); `recent` and `searches` are new rows beside them; menu, digits, header overflow |
 | Browser | class column, structured search over the shelf's tags, multi-select and range select, count label | A | hf chassis over `tagsOf`/`classification` |
-| Browser | Filter View groups with values and ranges, the user's own tags and quick tags, per-shelf view modes (list, thumbnails) | D | not in the hf body yet. Structured search covers combining shelf tags. Needs a decision only if the finished design has no place for them |
-| Desk | Ease, Depth, Blend, History, Notes, Web | A | same production panels. The hf desks are finished on fixtures (C) |
+| Browser | the user's own tags: Tag… and Remove tag in the item menu, found by `tag:` and by plain words; the shelf's value groups become searchable tags | A | `tags` desk rows shared with Classic; `new_browser_shelves_test` |
+| Browser | Filter View chips with counts, range cuts on continuous facts (duration), per-shelf list and thumbnail view modes | D | superseded by structured search and the class column in the finished design; the range cut has no equivalent yet |
+| Desk | History, Blend, Depth on the finished desks over the session | A | Desk face hook (`app/new/desk`); History goes to a head, Blend previews on Stage and applies as one step, Depth is the top floor plan (no front or side view: the document has no height plan); `new_desk_test` |
+| Desk | Ease, Notes, Web | A | same production panels. The hf Ease and Notes are finished on fixtures (C) |
 | Document | create, edit, key, scrub, undo, redo, save, reopen, export | A | Flutter: `new_shell_workflow_test`; real engine: `editor::workflow` (run with `--ignored`, about five minutes in a debug build) |
