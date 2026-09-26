@@ -9,14 +9,15 @@ impl StoreView<'_> {
     /// End / Edges、移り方の遅れと同じ語)に応じて最大 Stagger 秒ずれる。From End なら進む(早い子が先に着く)、
     /// でなければ遅れる(後の子が後から始まる)。入れ子は親のずれの上に積む。法は層の時計(`LayerClock`)が持つ。
     pub fn layer_time(&self, layer: LayerId, t: RationalTime) -> Result<RationalTime, StoreError> {
-        self.layer_clock(layer)?.ordered(t)
+        let clock = self.layer_clock(layer)?;
+        if clock.linked { self.layer_time_by_view(layer, t) } else { clock.ordered(t) }
     }
 
     /// 繰り返しで畳んだ時刻(CSS の animation-direction: normal は t mod D、reverse は D − (t mod D)、alternate は
     /// 奇数回目を逆向きに、alternate-reverse はその逆)。Loop Duration が 0 ならそのまま。`t` は順番でずれた後の時刻。
     pub fn looped_time(&self, layer: LayerId, t: RationalTime) -> Result<RationalTime, StoreError> {
         let clock = self.layer_clock(layer)?;
-        clock.local_from_ordered(t)
+        if clock.linked { self.looped_time_by_view(layer, t) } else { clock.local_from_ordered(t) }
     }
 
     /// 箱 `holder` の順番の札で、n 個のうち i 番目の時刻。箱の子の層にも、文字の Split の単位にも同じ法。
@@ -108,9 +109,9 @@ mod law {
     }
 }
 
-#[cfg(any(test, feature = "time-oracle"))]
 pub mod oracle {
-    //! The mapping as it was written before the clock, kept to prove the clock reads the same times.
+    //! The mapping read through `value_at` (links on the order and Loop rows included): used when a clock is linked, and
+    //! by tests to prove the clock reads the same times.
     use super::*;
     impl StoreView<'_> {
     /// その層の時刻(順番の札でずれた後)。親の箱に Stagger があれば、層の順の位置(Stagger From: Start / Center /

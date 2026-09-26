@@ -28,9 +28,5 @@ unicode-segmentation = "=1.13.3"
 unicode-script = "=0.5.8"
 re_log = { workspace = true }
 
-[features]
-# The time mapping as written before the layer clock, for tests that prove the clock reads the same times.
-time-oracle = []
-
 [lints]
 workspace = true

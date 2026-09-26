@@ -446,7 +446,15 @@ impl<'a> StoreView<'a> {
         };
         // 順番の札: 層の時刻は親の箱の Stagger でずれる(鍵も効果もこの時刻で読む)。その後、繰り返し(Loop)で畳む。
         let t = match layer_id_of(path) {
-            Some(layer) if !super::layout::is_schedule_row(property.name()) => self.layer_clock(layer)?.for_row(property.name(), t)?,
+            Some(layer) if !super::layout::is_schedule_row(property.name()) => {
+                let clock = self.layer_clock(layer)?;
+                if clock.linked {
+                    let shifted = self.layer_time_by_view(layer, t)?;
+                    if super::layout::is_loop_row(property.name()) { shifted } else { self.looped_time_by_view(layer, shifted)? }
+                } else {
+                    clock.for_row(property.name(), t)?
+                }
+            }
             _ => t,
         };
 

@@ -72,12 +72,15 @@ pub struct LayerClock {
     pub steps: Vec<OrderStep>,
     pub loop_duration: RowValue,
     pub loop_direction: RowValue,
+    /// A row here is driven by a link to another value. The document then maps time by reading the rows through `value_at`
+    /// (links included); the clock's own reading of the rows leaves links out.
+    pub linked: bool,
 }
 
 impl LayerClock {
     /// Nothing moves time: no order step can shift and no Loop is written.
     pub fn is_identity(&self) -> bool {
-        self.steps.iter().all(|s| s.stagger == RowValue::Missing) && self.loop_duration == RowValue::Missing
+        !self.linked && self.steps.iter().all(|s| s.stagger == RowValue::Missing) && self.loop_duration == RowValue::Missing
     }
 
     /// The layer's time after its ancestors' order shifts (what `layer_time` means).
@@ -128,7 +131,7 @@ impl LayerClock {
 }
 
 impl StoreView<'_> {
-    fn row_value(&self, layer: LayerId, name: &str) -> Result<RowValue, StoreError> {
+    fn row_value(&self, layer: LayerId, name: &str, linked: &mut bool) -> Result<RowValue, StoreError> {
         let property = PropertyId::new(name)?;
         let path = layer.entity_path();
         if !self.ignore_transients_flag() {
@@ -137,6 +140,7 @@ impl StoreView<'_> {
             }
         }
         let Some(source) = self.property_source(layer, &property)? else { return Ok(RowValue::Missing) };
+        *linked |= !source.modulators.is_empty();
         Ok(match source.base {
             Some(PropertyBase::Constant(v)) => RowValue::Constant(v),
             Some(PropertyBase::Track(track)) => RowValue::Track(track),
@@ -162,6 +166,7 @@ impl StoreView<'_> {
 
     fn build_clock(&self, layer: LayerId) -> Result<LayerClock, StoreError> {
         let mut steps = Vec::new();
+        let mut linked = false;
         let mut at = layer;
         while let Some(parent) = self.attrs(at)?.unwrap_or_default().parent {
             let siblings = self.schedule_children(parent)?;
@@ -169,14 +174,16 @@ impl StoreView<'_> {
                 steps.push(OrderStep {
                     index,
                     count: siblings.len(),
-                    stagger: self.row_value(parent, STAGGER)?,
-                    from: self.row_value(parent, STAGGER_FROM)?,
-                    from_end: self.row_value(parent, FROM_END)?,
+                    stagger: self.row_value(parent, STAGGER, &mut linked)?,
+                    from: self.row_value(parent, STAGGER_FROM, &mut linked)?,
+                    from_end: self.row_value(parent, FROM_END, &mut linked)?,
                 });
             }
             at = parent;
         }
         steps.reverse();
-        Ok(LayerClock { steps, loop_duration: self.row_value(layer, LOOP_DURATION)?, loop_direction: self.row_value(layer, LOOP_DIRECTION)? })
+        let loop_duration = self.row_value(layer, LOOP_DURATION, &mut linked)?;
+        let loop_direction = self.row_value(layer, LOOP_DIRECTION, &mut linked)?;
+        Ok(LayerClock { steps, loop_duration, loop_direction, linked })
     }
 }

@@ -58,7 +58,6 @@ re_build_tools = { workspace = true }
 
 [dev-dependencies]
 motolii-edit = { path = "../../ui/extensions/edit" }
-motolii-doc = { path = "../motolii-doc", default-features = false, features = ["time-oracle"] }
 tempfile = { workspace = true }
 rtsan-standalone = { workspace = true }
 

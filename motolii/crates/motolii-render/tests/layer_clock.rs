@@ -74,3 +74,29 @@ fn the_clock_reads_the_times_the_document_always_read() {
     put(&mut doc, outer, LOOP_DURATION, Value::F64(1.0));
     same_times(&doc, "a group's own loop");
 }
+
+/// A Stagger driven by a link (a document that carried one; links are only pasted, never made): the document reads the
+/// rows through `value_at`, links included, as it always did. The clock says it is linked.
+#[test]
+fn a_linked_order_row_keeps_the_documents_reading() {
+    let mut doc = blank_project();
+    let group = add(&mut doc, 1, LayerSource::Group, None);
+    for id in 2..5 {
+        add(&mut doc, id, LayerSource::Shape, Some(group));
+    }
+    let driver = add(&mut doc, 9, LayerSource::Shape, None);
+    keyed(&mut doc, driver, property::OPACITY, &[(0, 0.0), (60, 1.0)]);
+    put(&mut doc, group, STAGGER, Value::F64(0.1));
+    doc.apply(Intent::SetPropertyLink {
+        layer: group,
+        property: PropertyId::new(STAGGER).unwrap(),
+        link: PropertyLink { source_layer: driver, source_property: PropertyId::new(property::OPACITY).unwrap(), time_offset: RationalTime::ZERO, plugin_id: String::new(), params: vec![] },
+    }).unwrap();
+    let view = doc.view();
+    assert!(view.layer_clock(LayerId(3)).unwrap().linked);
+    let fps = view.composition().unwrap().unwrap().fps;
+    for f in [0, 20, 45] {
+        let t = RationalTime::try_from_frame(f, fps).unwrap();
+        assert_eq!(view.layer_time(LayerId(4), t).unwrap(), view.layer_time_by_view(LayerId(4), t).unwrap());
+    }
+}
