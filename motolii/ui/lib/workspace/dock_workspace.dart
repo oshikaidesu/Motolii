@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/glyphs.dart';
+
 /// One panel the workspace can show: an id that stays the same, the words on its tab, and how to build its body.
 class PanelDef {
   const PanelDef(this.id, this.title, this.build, {this.minSize = 160});
@@ -14,9 +16,12 @@ class PanelDef {
 /// The New shell's workspace: the off-the-shelf `docking` layout plus what only Motolii knows around it,
 /// which is the panel registry, showing a panel by id, and where a panel is on screen.
 class DockWorkspace {
-  DockWorkspace(this.defs, this._preset) {
+  DockWorkspace(this.defs, this._preset, {this.onDetach}) {
     layout = DockingLayout(root: _preset(item));
   }
+
+  /// Given, every tab gets a small menu with Detach (a panel of its own window) and Close.
+  final void Function(String id)? onDetach;
 
   /// The default workspace: the arrangement the design started from.
   final DockingArea Function(DockingItem Function(String id, {double? weight}) item) _preset;
@@ -57,6 +62,17 @@ class DockWorkspace {
       weight: weight,
       minimalSize: def.minSize,
       keepAlive: true,
+      buttons: [
+        if (onDetach != null)
+          TabButton(
+            icon: IconProvider.data(Glyph.more_horiz),
+            toolTip: 'Panel',
+            menuBuilder: (context) => [
+              TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
+              TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
+            ],
+          ),
+      ],
     );
   }
 

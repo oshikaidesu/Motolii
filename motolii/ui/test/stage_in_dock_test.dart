@@ -7,6 +7,7 @@ import '../lib/app/new/dock_theme.dart';
 import '../lib/panels/stage.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/workspace/dock_workspace.dart';
+import 'support/dock_test_utils.dart';
 import 'support/editor_test_theme.dart';
 import 'support/painters.dart';
 
@@ -68,16 +69,6 @@ Future<void> drag(WidgetTester tester, Offset from, Offset to) async {
   }
   await g.up();
   await tester.pumpAndSettle();
-}
-
-void ignoreSqueezedTabChips() {
-  final report = FlutterError.onError;
-  FlutterError.onError = (details) {
-    final text = details.toString(minLevel: DiagnosticLevel.debug);
-    final chip = text.contains('RenderFlex overflowed') &&
-        RegExp(r'constraints: BoxConstraints\(w=(\d+\.\d+), h=\d+\.\d+\)').allMatches(text).any((m) => double.parse(m.group(1)!) < 40);
-    if (!chip) report?.call(details);
-  };
 }
 
 void main() {

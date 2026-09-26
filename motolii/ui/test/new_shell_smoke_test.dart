@@ -8,6 +8,7 @@ import '../lib/panels/inspector.dart';
 import '../lib/panels/stage.dart';
 import '../lib/panels/timeline.dart';
 import '../lib/session/editor_session.dart';
+import 'support/dock_test_utils.dart';
 import 'support/editor_test_theme.dart';
 
 void main() {
@@ -46,6 +47,7 @@ void main() {
           return <String, dynamic>{};
       }
     });
+    ignoreSqueezedTabChips();
     await tester.pumpWidget(
       MaterialApp(theme: editorTestTheme, home: const NewShell()),
     );

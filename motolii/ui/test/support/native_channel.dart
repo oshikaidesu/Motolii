@@ -8,6 +8,10 @@ import '../../lib/session/editor_session.dart';
 class Native {
   Map<String, dynamic> settings = {};
 
+  /// Which window this session is: the main one, or a window that holds only the panels it was given.
+  Map<String, dynamic> windowInfo = {'id': 'main', 'main': true};
+  int windows = 0;
+
   /// What the runtime says it can do; a test that needs an operation adds it.
   List<String> capabilities = ['stageWindow', 'create', 'undo', 'redo', 'save', 'export', 'seek', 'previewProperties', 'commitPreview'];
   final calls = <(String, Map)>[];
@@ -25,7 +29,9 @@ class Native {
       calls.add((call.method, args));
       switch (call.method) {
         case 'windowInfo':
-          return {'id': 'main', 'main': true};
+          return windowInfo;
+        case 'openPanelWindow':
+          return {'id': 'w${++windows}', 'panels': args['panels']};
         case 'readSettings':
           return settings;
         case 'writeSettings':

@@ -5,11 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
 import '../lib/foundation/panel_controls.dart' show EditorScale;
-import '../lib/session/editor_session.dart';
 import 'support/editor_test_theme.dart';
+import 'support/dock_test_utils.dart';
 import 'support/native_channel.dart';
 
 Future<dynamic> open(WidgetTester tester) async {
+  ignoreSqueezedTabChips();
   await tester.pumpWidget(MaterialApp(theme: editorTestTheme, home: const NewShell()));
   await tester.pumpAndSettle();
   return tester.state(find.byType(NewShell));
@@ -86,6 +87,7 @@ void main() {
     size(tester);
     final native = Native()..settings = {'scale': 1.25, 'dock': {'classic': 'layout'}};
     native.install();
+    ignoreSqueezedTabChips();
     final scale = ValueNotifier(1.0);
     await tester.pumpWidget(EditorScale(
       notifier: scale,

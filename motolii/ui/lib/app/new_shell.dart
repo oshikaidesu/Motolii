@@ -79,6 +79,7 @@ class _NewShellState extends State<NewShell> {
     console; // start listening now, so a message before the panel is opened is kept
     c.confirmClose = () => confirmReplacement(context, c);
     c.panelPlacementRequested = _place;
+    c.windowClosed = _windowClosed;
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);
     };
@@ -92,6 +93,16 @@ class _NewShellState extends State<NewShell> {
   Future<void> _initialize() async {
     await c.initialize();
     if (!mounted) return;
+    if (_panelWindow) {
+      // A window that holds only the panels handed to it: no workspace of its own, nothing saved from here.
+      try {
+        final data = EditorSession.map(await c.native('readSettings'));
+        c.restoreDeskWork(EditorSession.map(data['deskWork']));
+        uiScale.value = (data['scale'] as num? ?? 1).toDouble().clamp(.5, 2.0);
+      } catch (_) {}
+      setState(() => ready = true);
+      return;
+    }
     try {
       final data = EditorSession.map(await c.native('readSettings'));
       c.restoreDeskWork(EditorSession.map(data['deskWork']));
@@ -101,6 +112,7 @@ class _NewShellState extends State<NewShell> {
     } catch (_) {}
     _savedWorkspace = jsonEncode(dock.snapshot());
     dock.layout.addListener(_workspaceChanged);
+    _listening = true;
     setState(() => ready = true);
   }
 
@@ -111,7 +123,7 @@ class _NewShellState extends State<NewShell> {
         .removeListener(_syncAnimation);
     c.browserTab.removeListener(_followBrowserTab);
     console.dispose();
-    if (ready) dock.layout.removeListener(_workspaceChanged);
+    if (_listening) dock.layout.removeListener(_workspaceChanged);
     final pending = _workspaceTimer != null;
     _workspaceTimer?.cancel();
     if (pending) _writeWorkspace();
@@ -126,15 +138,19 @@ class _NewShellState extends State<NewShell> {
   }
 
   /// A panel asked to be shown: choose its tab, or reopen it if it was closed.
-  /// Detaching into a window is not routed.
   Future<void> _place(String name, String placement) async {
-    if (placement == 'hidden' || placement == 'window') return;
+    if (placement == 'hidden') return;
+    if (placement == 'window') {
+      await _detach(name);
+      return;
+    }
     dock.activate(name);
     if (panelSpec(name)?.drawer == true) c.deskDrawer.value = name;
   }
 
   /// The workspace as last written (or as read at start): a layout change or a pointer release writes only
   /// when the saved form differs, after a short pause so a drag is one write.
+  bool _listening = false;
   String _savedWorkspace = '';
   Timer? _workspaceTimer;
 
@@ -152,6 +168,31 @@ class _NewShellState extends State<NewShell> {
     if (text == _savedWorkspace) return;
     _savedWorkspace = text;
     c.storeSetting('newWorkspace', now);
+  }
+
+  /// Panels that live in a window of their own, by the window's id. The window belongs to native, as in Classic.
+  final detached = <String, List<String>>{};
+  bool get _panelWindow => c.windowInfo['main'] == false;
+
+  Future<void> _detach(String name) async {
+    if (_panelWindow || !dock.defs.containsKey(name) || !dock.isOpen(name)) return;
+    try {
+      final info = EditorSession.map(await c.native('openPanelWindow', {'panels': [name]}));
+      if (!mounted) return;
+      detached['${info['id']}'] = [name];
+      dock.close(name);
+    } catch (e) {
+      c.error.value = '$e';
+    }
+  }
+
+  /// A panel window was closed: its panels come back to the workspace.
+  void _windowClosed(Map<String, dynamic> info) {
+    if (!mounted || _panelWindow) return;
+    final names = detached.remove('${info['id']}') ?? (info['panels'] as List? ?? []).whereType<String>().toList();
+    for (final name in names) {
+      dock.activate(name);
+    }
   }
 
   Future<void> menu(String action) async {
@@ -219,11 +260,22 @@ class _NewShellState extends State<NewShell> {
         ], weight: .3),
       ], weight: .81),
     ]),
+    onDetach: _detach,
   );
 
   @override
   Widget build(BuildContext context) {
     final t = EditorTheme.of(context);
+    if (ready && _panelWindow) {
+      final names = (c.windowInfo['panels'] as List? ?? const []).whereType<String>().toList();
+      return ColoredBox(
+        color: ShellTokens.surface,
+        child: DefaultTextStyle(
+          style: t.text,
+          child: names.isEmpty ? const SizedBox.shrink() : (dock.defs[names.first]?.build() ?? pane(names.first)),
+        ),
+      );
+    }
     return Focus(
       autofocus: true,
       onKeyEvent: shortcuts.handle,

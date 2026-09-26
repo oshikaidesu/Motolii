@@ -7,9 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/app/new_shell.dart';
 import '../lib/session/editor_session.dart';
 import 'support/editor_test_theme.dart';
+import 'support/dock_test_utils.dart';
 import 'support/native_channel.dart';
 
 Future<dynamic> open(WidgetTester tester) async {
+  ignoreSqueezedTabChips();
   await tester.pumpWidget(MaterialApp(theme: editorTestTheme, home: const NewShell()));
   await tester.pumpAndSettle();
   return tester.state(find.byType(NewShell));
@@ -30,17 +32,6 @@ Future<void> drag(WidgetTester tester, Offset from, Offset to) async {
   }
   await g.up();
   await tester.pumpAndSettle();
-}
-
-/// `tabbed_view` gives a tab that does not fit a minimal, off-screen slot (about 17 px wide) and its label row
-/// reports an overflow in debug. Nothing is drawn there; every other error is still reported.
-void ignoreSqueezedTabChips() {
-  final report = FlutterError.onError;
-  FlutterError.onError = (details) {
-    final text = details.toString(minLevel: DiagnosticLevel.debug);
-    final chip = text.contains('RenderFlex overflowed') && RegExp(r'constraints: BoxConstraints\(w=(\d+\.\d+), h=\d+\.\d+\)').allMatches(text).any((m) => double.parse(m.group(1)!) < 40);
-    if (!chip) report?.call(details);
-  };
 }
 
 void main() {
@@ -193,6 +184,41 @@ void main() {
     await tester.pumpAndSettle();
     expect((shell.console.entries as List), isEmpty);
     expect(find.text('No messages'), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('a panel can be detached into its own window and comes back when that window closes', (tester) async {
+    size(tester);
+    final native = Native();
+    native.install();
+    ignoreSqueezedTabChips();
+    final shell = await open(tester);
+    final c = shell.c as EditorSession;
+    expect(shell.dock.isOpen('Inspector'), isTrue);
+    await c.panelPlacementRequested!('Inspector', 'window');
+    await tester.pumpAndSettle();
+    final opened = native.calls.where((v) => v.$1 == 'openPanelWindow').toList();
+    expect(opened.single.$2['panels'], ['Inspector']);
+    expect(shell.dock.isOpen('Inspector'), isFalse, reason: 'it left the workspace');
+    // A panel that is not in the workspace cannot be detached twice.
+    await c.panelPlacementRequested!('Inspector', 'window');
+    expect(native.calls.where((v) => v.$1 == 'openPanelWindow').length, 1);
+    // Native tells the main window the panel window is gone.
+    c.windowClosed!({'id': 'w1', 'panels': ['Inspector']});
+    await tester.pumpAndSettle();
+    expect(shell.dock.isShown('Inspector'), isTrue, reason: 'back in the workspace');
+    await close(tester);
+  });
+
+  testWidgets('a window opened for a panel shows that panel alone and saves nothing', (tester) async {
+    size(tester);
+    final native = Native()..windowInfo = {'id': 'w1', 'main': false, 'panels': ['Console']};
+    native.install();
+    await open(tester);
+    expect(find.text('No messages'), findsOneWidget);
+    expect(find.text('FILE'), findsNothing, reason: 'no menu bar in a panel window');
+    await tester.pump(const Duration(seconds: 1));
+    expect(native.writes, isEmpty);
     await close(tester);
   });
 
