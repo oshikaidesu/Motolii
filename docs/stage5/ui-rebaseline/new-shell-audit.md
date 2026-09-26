@@ -11,7 +11,7 @@ Sources: the Phase A inventory in `inventory/`, `routing.md`, and the code. Evid
 | Workspace | save and restore layout, selected tab, sizes (WS-14) | A | settings key `newWorkspace` v1; workspace test |
 | Workspace | old dock JSON shape, migration, panel placement table (ST8-04) | E | dock replaces the placement table; reset instead of migration |
 | Workspace | Desk drawer as a dock placement | E | not ported; the Desk panel keeps its own tool drawer |
-| Workspace | detach a panel into its own OS window (SH-29/30, WS-13) | D | native `openPanelWindow` exists; no New route yet |
+| Workspace | detach a panel into its own OS window (SH-29/30, WS-13) | A | tab menu Detach; a panel-only window; panels return when it closes; test |
 | Shell | File, Edit, shortcuts, confirm-close, file drop, doc name, status line (SH-01..17, 23..27, 36, KB-*) | A | shared functions; `new_shell_workflow_test` |
 | Shell | Composition, Export, Settings sheets (SH-20/21, ST8-01..03) | A | workflow test |
 | Shell | UI scale (ST8-07) | A | read, applied, set in Settings, saved beside Classic's keys; workflow test |
@@ -26,8 +26,10 @@ Sources: the Phase A inventory in `inventory/`, `routing.md`, and the code. Evid
 | Inspector | effect parameters | A / C | promoted: generic Toys with keys, routes, relative drag; `new_effect_test`. Effects that lay out copies (grid of Each / Random) keep the Inspector body until an Instrument owns that grid |
 | Inspector | Camera card | A | Classic card kept. The Camera Instrument in `lib/hf` is finished but not connected (C) |
 | Inspector | Esc during a drag restores the value (IN-023) | A | Toys of the Transform, Layout and effect sheets; the gizmo and Rotation dial gestures do not cancel yet; `new_transform_test`, `new_effect_test` |
-| Browser | shelves as their own panels, search per shelf, shelf tools, apply, context menu, tooltip, tile size, reveal after import, Fonts/Colors routes | A | `NewBrowser` over the shared shelves |
-| Browser | keyboard: find, clear, arrows, Enter, Delete (BR-005/006/044/045/048) | A | workflow test |
-| Browser | category rail, collections, saved filters, tags, filter groups, view modes, multi-select and range select, quick tags, count label (BR-007/008/020..039/041..043/049..050/060..066) | D / E | The finished hf Browser (class column, structured search, favorites, saved views) is the design that replaces them, and it is still on fixtures (C). Until it is on the real shelves these are missing in New |
+| Browser | six shelves as dock tabs on the finished hf bodies (Create, Effects, Media, Colors, Fonts, Files) over the production shelves: items, apply, menu, drag, preview, tools, path header, editor slot (colour wheel, font scope), tooltip, tile size from Settings, reveal after import | A | `ShelfPanel` (`app/new/browser/`), `new_browser_shelves_test` |
+| Browser | keyboard: find, clear, arrows, Enter, Delete, digits file the pick in a collection (BR-005/006/044/045/048) | A | through the seat; workflow and shelf tests |
+| Browser | favorites, collections 2 to 7, recent, saved searches | A | same desk settings rows as Classic (`collections`, `collectionNames`); `recent` and `searches` are new rows beside them; menu, digits, header overflow |
+| Browser | class column, structured search over the shelf's tags, multi-select and range select, count label | A | hf chassis over `tagsOf`/`classification` |
+| Browser | Filter View groups with values and ranges, the user's own tags and quick tags, per-shelf view modes (list, thumbnails) | D | not in the hf body yet. Structured search covers combining shelf tags. Needs a decision only if the finished design has no place for them |
 | Desk | Ease, Depth, Blend, History, Notes, Web | A | same production panels. The hf desks are finished on fixtures (C) |
 | Document | create, edit, key, scrub, undo, redo, save, reopen, export | A | Flutter: `new_shell_workflow_test`; real engine: `editor::workflow` (run with `--ignored`, about five minutes in a debug build) |

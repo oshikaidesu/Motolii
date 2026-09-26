@@ -27,6 +27,7 @@ BrowserShelf shelfNamed(String name) => switch (name) {
 /// finished Browser bodies) reads and calls this. A change here tells its listeners.
 class ShelfHost extends ChangeNotifier implements BrowserHost {
   ShelfHost(this.controller, this.shelf, this._context, this._mounted, {this.tileScaleOf = _one}) {
+    controller.deskWork.addListener(_document);
     _slice = controller.slice(
       'newBrowser:${shelf.name}',
       browserDocumentKeys,
@@ -36,6 +37,10 @@ class ShelfHost extends ChangeNotifier implements BrowserHost {
   }
 
   static double _one() => 1;
+
+  /// Menu rows the finished Browser adds after the shelf's own (favorites, collections), and what they do.
+  List<Widget> Function(Map<String, dynamic> item)? extraMenu;
+  Future<void> Function(String action, Map<String, dynamic> item)? extraAct;
 
   @override
   final EditorSession controller;
@@ -126,9 +131,16 @@ class ShelfHost extends ChangeNotifier implements BrowserHost {
       const EditorMenuDivider(),
       EditorMenuItem<String>(value: 'apply', child: Text(shelf.applyLabel(this, item))),
       ...shelf.menu(this, item),
+      ...?extraMenu?.call(item),
     ]).then((action) {
       if (!_mounted() || action == null) return;
-      action == 'apply' ? apply(item) : shelf.act(this, action, item);
+      if (action == 'apply') {
+        apply(item);
+      } else if (action.startsWith('view:')) {
+        extraAct?.call(action.substring(5), item);
+      } else {
+        shelf.act(this, action, item);
+      }
     });
   }
 
@@ -151,6 +163,7 @@ class ShelfHost extends ChangeNotifier implements BrowserHost {
 
   @override
   void dispose() {
+    controller.deskWork.removeListener(_document);
     _slice.removeListener(_document);
     shelf.dispose();
     super.dispose();

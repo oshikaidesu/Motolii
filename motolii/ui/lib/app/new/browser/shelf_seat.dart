@@ -7,20 +7,29 @@ import '../../../hf/desk/common.dart' show kInk;
 import '../../../hf/bp/search.dart';
 import '../../../hf/bp/seat.dart';
 import '../../../hf/bp/things.dart';
+import '../../../panels/browser/filter_library.dart';
+import '../../../panels/browser.dart' show BrowserSize;
+import '../../../panels/browser/files_shelf.dart' show FilesShelf;
+import '../../../panels/browser/parts.dart' show shelfAction;
 import 'shelf_host.dart';
+import 'shelf_user.dart';
 import 'shelf_things.dart';
 
 /// The finished Browser's seat over one production shelf: a tile is picked, applied, menued and dragged the way the
 /// shelf says, a picture is the shelf's own when the design has none, and the keys act on what the shelf lists.
 class ShelfSeat extends ChangeNotifier implements BrowserSeat {
-  ShelfSeat(this.host, this.search, {required this.user}) {
+  ShelfSeat(this.host, this.search, {required this.mine}) {
     host.addListener(notifyListeners);
+    mine.addListener(notifyListeners);
+    host.extraMenu = _viewMenu;
+    host.extraAct = _viewAct;
   }
 
   final ShelfHost host;
   final SearchCapability search;
+  final ShelfUser mine;
   @override
-  final UserViews user;
+  UserViews get user => mine.views;
   ShelfCatalog? catalog;
   var _ordered = const <Thing>[];
   var _columns = 3;
@@ -50,8 +59,25 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
   }
 
   @override
+  ({double column, double extent, double gap, double padding})? tiling(BuildContext context, double width) {
+    final l = host.shelf.layout(host, width, BrowserSize.base * host.tileScale);
+    return l == null ? null : (column: l.column, extent: l.extent, gap: l.gap, padding: l.padding);
+  }
+
+  @override
   Widget? tools(BuildContext context) {
-    final tools = host.shelf.tools(host);
+    final tools = [
+      ...host.shelf.tools(host),
+      // The places a folder listing starts from are a walk, so they sit beside the path, not among the classes.
+      if (host.shelf is FilesShelf)
+        Builder(builder: (context) => shelfAction('Places', () {
+              final box = context.findRenderObject() as RenderBox;
+              final at = box.localToGlobal(Offset(0, box.size.height));
+              final rails = host.shelf.rails(host);
+              showEditorMenu<String>(context, at, [for (final r in rails) EditorMenuItem<String>(value: r, child: Text(r))])
+                  .then((r) => r == null ? null : host.shelf.rail(host, r));
+            })),
+    ];
     return tools.isEmpty ? null : Row(mainAxisSize: MainAxisSize.min, children: tools);
   }
 
@@ -107,10 +133,7 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
   }
 
   Future<void> _apply(Thing thing, Map<String, dynamic> item) async {
-    user.recent
-      ..remove(thing.id)
-      ..insert(0, thing.id);
-    if (user.recent.length > 12) user.recent.removeRange(12, user.recent.length);
+    mine.used(thing.id);
     // Several picked on a shelf that lets that be: the shelf applies each.
     final picked = host.selectedIds;
     if (host.shelf.multiSelect && picked.length > 1 && picked.contains(thing.id)) {
@@ -124,6 +147,46 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
     notifyListeners();
   }
 
+  Iterable<String> _targets(Map<String, dynamic> item) {
+    final id = host.id(item);
+    final picked = host.selectedIds;
+    return host.shelf.multiSelect && picked.length > 1 && picked.contains(id) ? picked : [id];
+  }
+
+  List<Widget> _viewMenu(Map<String, dynamic> item) {
+    final now = mine.collectionOf(host.id(item));
+    return [
+      const EditorMenuDivider(),
+      EditorMenuItem<String>(value: 'view:1', child: Text(now == 1 ? 'Remove from Favorites' : 'Add to Favorites')),
+      for (var i = 2; i <= BrowserLibrary.collectionCount; i++)
+        if (i != now) EditorMenuItem<String>(value: 'view:$i', child: Text('Add to ${mine.library.collectionName(i)}')),
+      if (now != null && now != 1) const EditorMenuItem<String>(value: 'view:0', child: Text('Remove from collection')),
+    ];
+  }
+
+  Future<void> _viewAct(String action, Map<String, dynamic> item) {
+    final which = int.parse(action);
+    final now = mine.collectionOf(host.id(item));
+    return mine.collect(_targets(item), which == now ? 0 : which);
+  }
+
+  /// The header's overflow: keep this search, drop a kept one, forget what was used.
+  @override
+  void more(BuildContext context, Offset at) {
+    final query = search.query.trim();
+    showEditorMenu<String>(context, at, [
+      EditorMenuItem<String>(value: 'save', enabled: query.isNotEmpty, child: Text(query.isEmpty ? 'Save search (type one first)' : 'Save search "$query"')),
+      for (final name in user.saved.keys) EditorMenuItem<String>(value: 'drop:$name', child: Text('Remove saved "$name"')),
+      const EditorMenuDivider(),
+      EditorMenuItem<String>(value: 'recent', enabled: user.recent.isNotEmpty, child: const Text('Clear recent')),
+    ]).then((a) {
+      if (a == null) return;
+      if (a == 'save') mine.saveSearch(query, query);
+      if (a == 'recent') mine.clearRecent();
+      if (a.startsWith('drop:')) mine.dropSearch(a.substring(5));
+    });
+  }
+
   @override
   KeyEventResult key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null) {
@@ -132,6 +195,12 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
     final k = event.logicalKey;
     if (k == LogicalKeyboardKey.escape && !search.active) {
       host.clearSelection();
+      return KeyEventResult.handled;
+    }
+    // A digit files the picked rows in a collection (1 is Favorites), 0 takes them out.
+    final digit = k.keyLabel.length == 1 ? int.tryParse(k.keyLabel) : null;
+    if (digit != null && digit <= BrowserLibrary.collectionCount && host.selectedIds.isNotEmpty) {
+      mine.collect(host.selectedIds, digit);
       return KeyEventResult.handled;
     }
     if (_ordered.isEmpty) return KeyEventResult.ignored;
@@ -171,6 +240,7 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
   @override
   void dispose() {
     host.removeListener(notifyListeners);
+    mine.removeListener(notifyListeners);
     super.dispose();
   }
 }

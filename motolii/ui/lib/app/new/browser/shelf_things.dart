@@ -1,4 +1,5 @@
 import '../../../hf/bp/things.dart';
+import '../../../panels/browser/files_shelf.dart' show FilesShelf;
 import 'shelf_host.dart';
 
 /// The shelf's items as the finished Browser's Things. The shelf stays the owner: an item is a row it lists; a Thing is
@@ -6,7 +7,8 @@ import 'shelf_host.dart';
 class ShelfCatalog {
   ShelfCatalog(this.host, this.panelId, {this.faceOf}) {
     final shelf = host.shelf;
-    final rails = shelf.rails(host);
+    // Files' rail is places to walk to, not classes of what is listed.
+    final rails = shelf is FilesShelf ? const <String>[] : shelf.rails(host);
     final families = <String, Map<String, dynamic>>{};
     String family(String label) {
       final slug = label.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');

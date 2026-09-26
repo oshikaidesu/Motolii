@@ -37,7 +37,6 @@ abstract final class ShellTokens {
 
   // The Browser's cells: a square mark tile, a picture tile, the gap
   // between cells, the head of a group, the mark inside a tile.
-  static const double tile = 62, pictureTile = 92, cellGap = 3;
   static const double groupHead = 28, mark = 22, field = 26;
   static const double browserWidth = 300, inspectorWidth = 320;
   static const double deskWidth = 320, bottomHeight = 300;

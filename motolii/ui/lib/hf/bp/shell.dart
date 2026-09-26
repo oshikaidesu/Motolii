@@ -87,6 +87,11 @@ class _PanelHeaderState extends State<PanelHeader> {
           child: searching
               ? Row(children: [
                   Expanded(child: SearchField(widget.search, widget.hint, height: 28, trailing: widget.count == null || !widget.search.active ? null : Text(widget.count!, style: mono(10)))),
+                  if (BrowserSeatScope.of(context) != null) Builder(builder: (context) => HeaderKey(HG.kebab, onTap: () {
+                    final seat = BrowserSeatScope.of(context);
+                    final box = context.findRenderObject() as RenderBox?;
+                    if (seat != null && box != null) seat.more(context, box.localToGlobal(Offset(box.size.width, box.size.height)));
+                  })),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
@@ -111,8 +116,12 @@ class _PanelHeaderState extends State<PanelHeader> {
                     setState(() => open = true);
                     WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
                   }),
-                  if (widget.mode != HeadMode.compact) const HeaderKey(HG.grid4),
-                  const HeaderKey(HG.kebab),
+                  if (widget.mode != HeadMode.compact && BrowserSeatScope.of(context) == null) const HeaderKey(HG.grid4),
+                  Builder(builder: (context) => HeaderKey(HG.kebab, onTap: () {
+                    final seat = BrowserSeatScope.of(context);
+                    final box = context.findRenderObject() as RenderBox?;
+                    if (seat != null && box != null) seat.more(context, box.localToGlobal(Offset(box.size.width, box.size.height)));
+                  })),
                 ]),
         );
       },

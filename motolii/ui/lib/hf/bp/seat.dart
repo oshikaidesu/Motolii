@@ -12,6 +12,9 @@ abstract class BrowserSeat {
   /// The host's own picture for a thing (a native snapshot), or null to draw the declared face.
   Widget? face(BuildContext context, Thing thing) => null;
 
+  /// The host's own idea of the tiling (Colors' small swatches, Fonts' one row per family), or null for the default.
+  ({double column, double extent, double gap, double padding})? tiling(BuildContext context, double width) => null;
+
   /// Tile size against the default: marks and type follow it.
   double get tileScale => 1;
 
@@ -29,6 +32,9 @@ abstract class BrowserSeat {
 
   /// A body reports what it shows, in order, and how many columns it lays them in, so the arrows can move.
   void shows(List<Thing> things, int columns) {}
+
+  /// The header's overflow key: what the host keeps for the user (saved searches, recent).
+  void more(BuildContext context, Offset at) {}
 
   /// The user's own views (favorites, recent, saved searches, collections) the class column lists.
   UserViews? get user => null;

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
-import '../lib/app/new/browser.dart';
 import '../lib/app/new/browser/shelf_panel.dart';import '../lib/panels/desk.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/panels/stage.dart';
