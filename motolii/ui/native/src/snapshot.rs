@@ -407,6 +407,12 @@ impl EditorRuntime{
             if meta.source == LayerSource::Camera {
                 for row in layout::SPACE_ROWS.iter().filter(|r| matches!(r.0, layout::TRANSITION_DURATION | layout::TRANSITION_EASING)) { push(&mut properties, id, row)?; }
             }
+            // Copies of a Repeater are members in order: their layer is offered the same three order rows as a text's
+            // units and a container's children (a group already has them, a text below).
+            let copies=!matches!(meta.source,LayerSource::Group|LayerSource::Text)&&view.effects(id).map_err(e)?.iter().any(|fx|view.placement_program(&fx.plugin_id).is_some());
+            if copies {
+                for row in layout::GROUP_ROWS.iter().filter(|r| layout::is_schedule_row(r.0)) { push(&mut properties, id, row)?; }
+            }
             if meta.source == LayerSource::Text {
                 for row in layout::READOUT_ROWS { push(&mut properties, id, row)?; }
                 // Split の単位の順番の札(箱の子と同じ 3 欄)。

@@ -72,8 +72,15 @@ pub fn push_placements(
     } else {
         None
     };
+    let members = placements.len();
     for (ordinal, result) in placements.into_iter().enumerate() {
-        let (placement, outline) = (result.placement, result.outline_stretch);
+        let (mut placement, outline) = (result.placement, result.outline_stretch);
+        // Copies are members in order, like a text's split units and a container's children, and take the same order to
+        // time law (Stagger, Stagger From, From End) from the layer they copy. A group keeps its Stagger for its own
+        // children, as before; the copies' Delay Each and Random stay the Repeater's own and add to it.
+        if !is_group {
+            placement.time_offset = with_delay(placement.time_offset, view.schedule_delay(layer, ordinal, members, t)?);
+        }
         let Ok(at) = t.try_sub(placement.time_offset) else { continue };
         let shifted = at != t;
         let subjects: Vec<LayerId> = if whole {
@@ -202,6 +209,14 @@ pub fn push_motion_blur(
         out.push(copy);
     }
     Ok(())
+}
+
+/// A copy's time offset with the order delay added (seconds; negative is earlier).
+pub fn with_delay(offset: RationalTime, delay: f64) -> RationalTime {
+    if delay == 0.0 {
+        return offset;
+    }
+    RationalTime::try_new((offset.as_seconds_f64() + delay).mul_add(1_000_000.0, 0.0).round() as i64, 1_000_000).unwrap_or(offset)
 }
 
 /// 文字の Split(GSAP SplitText / CSS `sibling-index()`): 字・語・行の単位を、その文字の層の Stagger でずれた時刻に解いた

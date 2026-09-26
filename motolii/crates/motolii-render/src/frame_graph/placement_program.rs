@@ -40,6 +40,8 @@ struct Recipe {
     position_z: Option<usize>,
     stretch_outline: bool,
     analysis: Option<usize>,
+    /// The layer's order rows (Stagger, Stagger From, From End): copies are members in order and take the shared law.
+    schedule: [Option<usize>; 3],
 }
 
 #[derive(Debug)]
@@ -118,6 +120,13 @@ impl PlacementProgram {
                 inputs.push(binding.result);
                 index
             });
+            let schedule = [crate::doc::store::layout::STAGGER, crate::doc::store::layout::STAGGER_FROM, crate::doc::store::layout::FROM_END].map(|name| {
+                properties.node_for(layer, &prop(name)).map(|key| {
+                    let index = inputs.len();
+                    inputs.push(key);
+                    index
+                })
+            });
 
             let mut identity = NodeIdentity::new(NodeKind::PlacementSet, inputs);
             identity.parameters.extend_from_slice(&layer.0.to_be_bytes());
@@ -138,6 +147,7 @@ impl PlacementProgram {
                 position_z,
                 stretch_outline: meta.source == LayerSource::Shape,
                 analysis,
+                schedule,
             });
             bindings.insert(layer, PlacementBinding { layer, node: key });
         }
@@ -170,6 +180,7 @@ impl PlacementProgram {
                 stretch_outline: recipe.stretch_outline,
                 analysis,
             });
+            let outputs = with_schedule(outputs, inputs, recipe);
             let sample_indices = sample_indices(recipe);
             let mut requests = Vec::new();
             for output in outputs {
@@ -208,6 +219,7 @@ impl PlacementProgram {
                 stretch_outline: recipe.stretch_outline,
                 analysis,
             });
+            let outputs = with_schedule(outputs, inputs, recipe);
 
             let sample_indices = sample_indices(recipe);
             let static_len = node.identity().inputs.len();
@@ -252,6 +264,29 @@ impl PlacementProgram {
             Ok(NodeValue::new(PlacementSetValue { selected_effect: Some(selected_effect), copies }))
         })())
     }
+}
+
+/// Copies are members in order: each one's time offset takes the order delay the layer's order rows give it, by the one
+/// law children and split units read (`schedule_delay`), with the rows read at the current time.
+fn with_schedule(mut outputs: Vec<crate::doc::store::kind::PlacementOutput>, inputs: &NodeInputs, recipe: &Recipe) -> Vec<crate::doc::store::kind::PlacementOutput> {
+    let read = |index: Option<usize>| -> f64 {
+        match index.and_then(|i| inputs.at(i)).and_then(|v| v.downcast_ref::<Value>()) {
+            Some(Value::F64(v)) if v.is_finite() => *v,
+            Some(Value::Enum(v)) => *v as f64,
+            Some(Value::Bool(v)) => f64::from(u8::from(*v)),
+            _ => 0.0,
+        }
+    };
+    let stagger = read(recipe.schedule[0]);
+    if stagger <= 1e-9 {
+        return outputs;
+    }
+    let (from, from_end, n) = (read(recipe.schedule[1]).round() as i64, read(recipe.schedule[2]).round() as i64 == 1, outputs.len());
+    for (i, output) in outputs.iter_mut().enumerate() {
+        let delay = crate::doc::store::layout::schedule_delay(stagger, from, from_end, i, n);
+        output.placement.time_offset = crate::picture::resolve::copies::with_delay(output.placement.time_offset, delay);
+    }
+    outputs
 }
 
 fn selected_effect<'a>(recipe: &Recipe, inputs: &'a NodeInputs) -> Option<(usize, PlacementEvaluator, &'a crate::picture::resolved::ResolvedEffect)> {

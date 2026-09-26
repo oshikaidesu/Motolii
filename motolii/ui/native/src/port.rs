@@ -403,6 +403,8 @@ mod sequence_preview;
 mod spread;
 mod blend_targets;
 mod ease_intervals;
+#[cfg(test)]
+mod members;
 
 
 #[cfg(test)]

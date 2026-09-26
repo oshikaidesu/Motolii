@@ -38,23 +38,26 @@ impl StoreView<'_> {
 
     /// 箱 `holder` の順番の札で、n 個のうち i 番目の時刻。箱の子の層にも、文字の Split の単位にも同じ法。
     pub fn schedule_shift(&self, holder: LayerId, i: usize, n: usize, base: RationalTime) -> Result<RationalTime, StoreError> {
-        let stagger = match self.value_at(holder, &PropertyId::new(STAGGER)?, base)? {
-            Some(Value::F64(v)) if v > 1e-9 => v,
-            _ => return Ok(base),
-        };
-        let along = if n > 1 { i as f64 / (n - 1) as f64 } else { 0.0 };
-        let from_centre = (along - 0.5).abs() * 2.0;
-        let reach = match self.choice(holder, STAGGER_FROM, base)? {
-            1 => from_centre,
-            2 => 1.0 - along,
-            3 => 1.0 - from_centre,
-            _ => along,
-        };
-        let off = RationalTime::try_new((reach * stagger * 1_000_000.0).round() as i64, 1_000_000)
+        let delay = self.schedule_delay(holder, i, n, base)?;
+        if delay == 0.0 {
+            return Ok(base);
+        }
+        let off = RationalTime::try_new((delay.abs() * 1_000_000.0).round() as i64, 1_000_000)
             .map_err(|e| StoreError::Property(format!("stagger: {e}")))?;
-        let shifted = if self.choice(holder, FROM_END, base)? == 1 { base.try_add(off) } else { base.try_sub(off) }
+        let shifted = if delay < 0.0 { base.try_add(off) } else { base.try_sub(off) }
             .map_err(|e| StoreError::Property(format!("stagger: {e}")))?;
         Ok(if shifted.as_seconds_f64() < 0.0 { RationalTime::ZERO } else { shifted })
+    }
+
+    /// The delay of member i of n under `holder`'s order rows (Stagger, Stagger From, From End) read at `at`, in seconds:
+    /// positive is later, negative is earlier (From End). Members are a container's children, a text's split units and a
+    /// layer's copies; they all read this one law.
+    pub fn schedule_delay(&self, holder: LayerId, i: usize, n: usize, at: RationalTime) -> Result<f64, StoreError> {
+        let stagger = match self.value_at(holder, &PropertyId::new(STAGGER)?, at)? {
+            Some(Value::F64(v)) if v > 1e-9 => v,
+            _ => return Ok(0.0),
+        };
+        Ok(schedule_delay(stagger, self.choice(holder, STAGGER_FROM, at)?, self.choice(holder, FROM_END, at)? == 1, i, n))
     }
 
     /// 箱の子を層の順に(順番の札が読む)。書類の版ごとに覚える。
@@ -80,4 +83,22 @@ impl StoreView<'_> {
         scratch.kids.insert(key, out.clone());
         Ok(out)
     }
+}
+
+/// The order to time law itself (GSAP `stagger: {amount, from}`): member i of n waits `stagger` times its reach from the
+/// start (Start), the centre (Center), the end (End) or the edges (Edges). From End runs it the other way: earlier, not later.
+pub fn schedule_delay(stagger: f64, from: i64, from_end: bool, i: usize, n: usize) -> f64 {
+    if stagger <= 1e-9 {
+        return 0.0;
+    }
+    let along = if n > 1 { i as f64 / (n - 1) as f64 } else { 0.0 };
+    let from_centre = (along - 0.5).abs() * 2.0;
+    let reach = match from {
+        1 => from_centre,
+        2 => 1.0 - along,
+        3 => 1.0 - from_centre,
+        _ => along,
+    };
+    let delay = reach * stagger;
+    if from_end { -delay } else { delay }
 }
