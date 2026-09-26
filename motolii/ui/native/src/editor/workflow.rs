@@ -74,14 +74,17 @@ fn make_move_key_scrub_undo_redo_save_reopen_and_export() {
     let out = dir.join("out.mp4");
     request(&mut rt, json!({"op": "export", "path": out.to_string_lossy(), "start": 0, "end": 6}));
     let started = std::time::Instant::now();
+    let mut last_note = u64::MAX;
     let status = loop {
         let status = rt.exporter.status();
         if !matches!(status["phase"].as_str(), Some("running" | "cancelling" | "starting")) {
             break status;
         }
-        assert!(started.elapsed().as_secs() < 1500, "the export never finished: {status}");
-        if started.elapsed().as_secs() % 30 == 0 {
-            eprintln!("WORKFLOW export {}s: {status}", started.elapsed().as_secs());
+        assert!(started.elapsed().as_secs() < 300, "the export never finished: {status}");
+        let seconds = started.elapsed().as_secs();
+        if seconds % 30 == 0 && seconds != last_note {
+            last_note = seconds;
+            eprintln!("WORKFLOW export {seconds}s: {status}");
         }
         std::thread::sleep(std::time::Duration::from_millis(200));
     };
