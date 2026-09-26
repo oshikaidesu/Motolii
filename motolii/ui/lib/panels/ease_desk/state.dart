@@ -156,26 +156,13 @@ mixin _EaseDeskLogic
             !_segments.any((s) => s['locked'] == true) &&
             c.supports('ease');
 
-  /// 選んだ順に i / N を曲線に通し、最後の層の遅れ(既定 6 f × N、既に在ればその最大)を全体として配る。
-  /// 最初の層は遅れ 0 = ゴースト無し。
+  /// 選んだ順の層と曲線だけを送る。遅れの配り方(i / N を曲線に通す・全体の大きさ)は host が決める。
   Map<String, dynamic>? _sequencePayload(Map<String, dynamic> shape) {
     final layers = _sequence;
     if (layers.length < 2) return null;
-    final n = layers.length - 1;
-    final existing = [
-      for (final l in layers)
-        if (l['ghost'] case final num d) d.toInt(),
-    ];
-    final total = existing.isEmpty ? 6 * n : existing.reduce(math.max);
     return {
       'layers': [for (final l in layers) l['id']],
-      'ghosts': [
-        for (var i = 0; i < layers.length; i++)
-          (total * easeValueAt(shape, i / n)).round().clamp(
-            -(1 << 20),
-            1 << 20,
-          ),
-      ],
+      'shape': _payload(shape),
     };
   }
 

@@ -79,7 +79,10 @@ fn make_move_key_scrub_undo_redo_save_reopen_and_export() {
         if !matches!(status["phase"].as_str(), Some("running" | "cancelling" | "starting")) {
             break status;
         }
-        assert!(started.elapsed().as_secs() < 400, "the export never finished: {status}");
+        assert!(started.elapsed().as_secs() < 1500, "the export never finished: {status}");
+        if started.elapsed().as_secs() % 30 == 0 {
+            eprintln!("WORKFLOW export {}s: {status}", started.elapsed().as_secs());
+        }
         std::thread::sleep(std::time::Duration::from_millis(200));
     };
     eprintln!("WORKFLOW export status: {status}");

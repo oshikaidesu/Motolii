@@ -319,7 +319,8 @@ void main() {
     await tester.pumpAndSettle();
     final sequence = commands.where((e) => e['op'] == 'sequence').single;
     expect(sequence['layers'], [1, 2]);
-    expect((sequence['ghosts'] as List).first, 0, reason: 'the first layer has no delay');
+    expect(sequence['shape']['kind'], 'Linear', reason: 'the desk sends the curve; the host decides the delays');
+    expect(sequence.containsKey('ghosts'), isFalse);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });
