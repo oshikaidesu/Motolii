@@ -4,7 +4,7 @@
 
 状態: **設計原則決定／公開schema・拡張子・runtime未決**。`Core / Vism / Kit / Project`の責任分離、Vism同士を直接参照させず型付き入出力をKitが接続する原則、v1のKitをmaterialize型とする方向を定める。2026-07-23に独立artifactとしての旧仮称`Plugin Set`をKitへ統合し、Rack型の作者成果へ一本化した。`BeatMap`、`TimeGuide`、`KitDefinition`等の型名は説明用の仮名であり、M2 Document、plugin公開API、package形式の実装許可ではない。
 
-関連正本: [Vismコンセプト](vism-package-concept.md)、[Kit / Plugin Set統合決定](reviews/2026-07-23-vism-kit-rack-unification-decision.md)、[小さなコアと探索可能な拡張](extensible-core-model.md)、[プラグイン作者向け規約](plugin-authoring.md)、[Vism実装計画](reviews/2026-07-17-vism-implementation-plan.md)
+関連正本: [Vismコンセプト](vism-package-concept.md)、[Vism Cassette調査](vism-cassette.md)、[Kit / Plugin Set統合決定](reviews/2026-07-23-vism-kit-rack-unification-decision.md)、[小さなコアと探索可能な拡張](extensible-core-model.md)、[プラグイン作者向け規約](plugin-authoring.md)、[Vism実装計画](reviews/2026-07-17-vism-implementation-plan.md)
 
 ## 1. 結論
 
