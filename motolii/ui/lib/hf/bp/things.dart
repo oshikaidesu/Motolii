@@ -15,8 +15,12 @@ class Thing {
         capabilities = [for (final t in (j['capabilities'] as List? ?? const [])) '$t'],
         source = j['source'] as String,
         searchTerms = [for (final t in (j['searchTerms'] as List? ?? const [])) '$t'],
+        numbers = {for (final e in (j['numbers'] as Map? ?? const {}).entries) '${e.key}': (e.value as num).toDouble()},
         face = Map<String, dynamic>.from(j['face'] as Map);
   final String id, name, kind, family, source;
+
+  /// Continuous facts (a duration in seconds), by the name a range filter uses.
+  final Map<String, double> numbers;
   final List<String> tags, capabilities, searchTerms;
   final Map<String, dynamic> face;
   String get topFamily => family.split('/').first;
@@ -202,13 +206,19 @@ class ThingQuery {
   final Map<String, Set<String>> filters;
   static const keys = {'kind', 'family', 'tag', 'cap', 'source'};
 
+  /// A range on a continuous fact: `duration:5-30`, `duration:-5` (up to 5), `duration:30-` (from 30). min <= value < max.
+  static final _range = RegExp(r'^([a-z][a-z_]*):(\d+(?:\.\d+)?)?-(\d+(?:\.\d+)?)?$');
+
   factory ThingQuery.parse(String text) {
     final words = <String>[];
     final filters = <String, Set<String>>{};
     for (final t in text.toLowerCase().split(RegExp(r'\s+'))) {
       if (t.isEmpty) continue;
       final i = t.indexOf(':');
-      if (i > 0 && i < t.length - 1 && keys.contains(t.substring(0, i))) {
+      final range = _range.firstMatch(t);
+      if (range != null && (range.group(2) != null || range.group(3) != null) && !keys.contains(range.group(1))) {
+        (filters[range.group(1)!] ??= {}).add(t.substring(i + 1));
+      } else if (i > 0 && i < t.length - 1 && keys.contains(t.substring(0, i))) {
         (filters[t.substring(0, i)] ??= {}).add(t.substring(i + 1));
       } else {
         words.add(t);
@@ -219,6 +229,13 @@ class ThingQuery {
 
   bool get isEmpty => words.isEmpty && filters.isEmpty;
 
+  static bool _inRange(double? value, String range) {
+    if (value == null) return false;
+    final dash = range.indexOf('-');
+    final lo = double.tryParse(range.substring(0, dash)), hi = double.tryParse(range.substring(dash + 1));
+    return (lo == null || value >= lo) && (hi == null || value < hi);
+  }
+
   bool matches(Thing t, Registry r) {
     for (final e in filters.entries) {
       final any = e.value.any((v) => switch (e.key) {
@@ -227,7 +244,7 @@ class ThingQuery {
             'tag' => t.tags.contains(v),
             'cap' => t.capabilities.contains(v),
             'source' => t.source == v || t.source.startsWith('$v:'),
-            _ => false,
+            _ => _inRange(t.numbers[e.key], v),
           });
       if (!any) return false;
     }

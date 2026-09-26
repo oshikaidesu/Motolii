@@ -219,4 +219,34 @@ void main() {
     expect(c.deskWork.value['tags'], isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('range cuts: a duration range from the header menu is a word of the search, and the user can cut their own', (tester) async {
+    final (c, _) = await mount(tester, 'Media', {
+      'assets': [
+        {'id': 'a', 'name': 'short.mp4', 'mime': 'video/mp4', 'seconds': 3},
+        {'id': 'b', 'name': 'middle.mp4', 'mime': 'video/mp4', 'seconds': 10},
+        {'id': 'c', 'name': 'long.mp4', 'mime': 'video/mp4', 'seconds': 60},
+      ],
+    });
+    expect(find.byType(ThingFace), findsNWidgets(3));
+    await tester.tap(find.byType(HeaderKey).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Duration -5 s +'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ThingFace), findsOneWidget);
+    expect(find.text('short.mp4'), findsOneWidget);
+    await tester.tap(find.byType(HeaderKey).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add duration range…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('browser:prompt')).last, '8-12');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect((c.deskWork.value['ranges'] as Map)['Media/Duration'], contains('8-12'));
+    await tester.enterText(find.byType(EditableText).first, 'duration:8-12');
+    await tester.pumpAndSettle();
+    expect(find.text('middle.mp4'), findsOneWidget);
+    expect(find.byType(ThingFace), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

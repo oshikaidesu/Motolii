@@ -8,6 +8,7 @@ import '../../../hf/bp/search.dart';
 import '../../../hf/bp/seat.dart';
 import '../../../hf/bp/things.dart';
 import '../../../panels/browser/filter_library.dart';
+import '../../../panels/browser/shelf.dart' show FilterGroup, FilterKind;
 import '../../../panels/browser.dart' show BrowserSize;
 import '../../../panels/browser/files_shelf.dart' show FilesShelf;
 import '../../../panels/browser/parts.dart' show shelfAction;
@@ -187,20 +188,49 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
     await mine.collect(_targets(item), which == now ? 0 : which);
   }
 
-  /// The header's overflow: keep this search, drop a kept one, forget what was used.
+  /// The ranges a range group offers: the user's own cuts, or the shelf's seeds until they cut their own.
+  List<String> _ranges(FilterGroup g) => mine.library.rangesOn(host.shelf.name, g.name) ?? g.tags;
+  static String _key(FilterGroup g) => g.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+
+  /// Put a range in the search text or take it out: a range filter is a word of the structured search.
+  void _toggleRange(FilterGroup g, String range) {
+    final word = '${_key(g)}:$range';
+    final words = search.query.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    words.contains(word) ? words.remove(word) : words.add(word);
+    search.controller.text = words.join(' ');
+  }
+
+  /// The header's overflow: keep this search, drop a kept one, cut a range on a continuous fact, forget what was used.
   @override
   void more(BuildContext context, Offset at) {
     final query = search.query.trim();
+    final ranges = [for (final g in host.shelf.groups(host)) if (g.kind == FilterKind.range) g];
     showEditorMenu<String>(context, at, [
       EditorMenuItem<String>(value: 'save', enabled: query.isNotEmpty, child: Text(query.isEmpty ? 'Save search (type one first)' : 'Save search "$query"')),
       for (final name in user.saved.keys) EditorMenuItem<String>(value: 'drop:$name', child: Text('Remove saved "$name"')),
+      if (ranges.isNotEmpty) const EditorMenuDivider(),
+      for (final g in ranges) ...[
+        for (final r in _ranges(g)) EditorMenuItem<String>(value: 'range:${g.name}:$r', child: Text('${g.name} ${rangeLabel(r, g.unit)}')),
+        EditorMenuItem<String>(value: 'cut:${g.name}', child: Text('Add ${g.name.toLowerCase()} range…')),
+        if (mine.library.rangesOn(host.shelf.name, g.name) != null) EditorMenuItem<String>(value: 'uncut:${g.name}', child: Text('Reset ${g.name.toLowerCase()} ranges')),
+      ],
       const EditorMenuDivider(),
       EditorMenuItem<String>(value: 'recent', enabled: user.recent.isNotEmpty, child: const Text('Clear recent')),
-    ]).then((a) {
+    ]).then((a) async {
       if (a == null) return;
       if (a == 'save') mine.saveSearch(query, query);
       if (a == 'recent') mine.clearRecent();
       if (a.startsWith('drop:')) mine.dropSearch(a.substring(5));
+      final group = a.contains(':') ? ranges.where((g) => a.split(':')[1] == g.name).firstOrNull : null;
+      if (group == null) return;
+      if (a.startsWith('range:')) _toggleRange(group, a.substring('range:'.length + group.name.length + 1));
+      if (a.startsWith('uncut:')) await mine.library.setRanges(host.shelf.name, group.name, group.tags);
+      if (a.startsWith('cut:') && context.mounted) {
+        final entered = await promptText(context, at, 'Range in ${group.unit.isEmpty ? 'units' : group.unit}: 5-30, -5 or 30-');
+        if (entered != null && RegExp(r'^\d*\.?\d*-\d*\.?\d*$').hasMatch(entered) && entered != '-') {
+          await mine.library.setRanges(host.shelf.name, group.name, [..._ranges(group).where((r) => r != entered), entered]);
+        }
+      }
     });
   }
 

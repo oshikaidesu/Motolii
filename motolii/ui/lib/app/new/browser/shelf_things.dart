@@ -47,6 +47,11 @@ class ShelfCatalog {
           'family': family(shelf.classification(host, item)),
           'tags': itemTags,
           'capabilities': <String>[],
+          'numbers': {
+            for (final g in groups)
+              if (g.kind == FilterKind.range)
+                if (shelf.numberOf(host, item, g.name) case final n?) _slug(g.name).replaceAll('-', '_'): n,
+          },
           'source': 'builtin',
           'searchTerms': [
             if (item['detail'] != null) ...'${item['detail']}'.toLowerCase().split(RegExp(r'\s+')).where((w) => w.length > 1),
