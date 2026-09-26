@@ -85,20 +85,42 @@ impl StoreView<'_> {
     }
 }
 
-/// The order to time law itself (GSAP `stagger: {amount, from}`): member i of n waits `stagger` times its reach from the
-/// start (Start), the centre (Center), the end (End) or the edges (Edges). From End runs it the other way: earlier, not later.
-pub fn schedule_delay(stagger: f64, from: i64, from_end: bool, i: usize, n: usize) -> f64 {
-    if stagger <= 1e-9 {
-        return 0.0;
-    }
+/// Select: how strongly member i of n is chosen by its place in the order, 0 to 1 (AE's Range Selector over index, GSAP's
+/// `stagger.from`): from the start (Start), from the centre (Center), from the end (End), or towards the edges (Edges).
+pub fn order_weight(from: i64, i: usize, n: usize) -> f64 {
     let along = if n > 1 { i as f64 / (n - 1) as f64 } else { 0.0 };
     let from_centre = (along - 0.5).abs() * 2.0;
-    let reach = match from {
+    match from {
         1 => from_centre,
         2 => 1.0 - along,
         3 => 1.0 - from_centre,
         _ => along,
-    };
-    let delay = reach * stagger;
+    }
+}
+
+/// Time: the order to time law (GSAP `stagger: {amount, from}`): member i of n waits `stagger` times its order weight.
+/// From End runs it the other way: earlier, not later.
+pub fn schedule_delay(stagger: f64, from: i64, from_end: bool, i: usize, n: usize) -> f64 {
+    if stagger <= 1e-9 {
+        return 0.0;
+    }
+    let delay = order_weight(from, i, n) * stagger;
     if from_end { -delay } else { delay }
+}
+
+#[cfg(test)]
+mod law {
+    use super::*;
+
+    /// Select gives a weight per member; Time scales it. The numbers are the ones the text, container and copy tests read.
+    #[test]
+    fn select_weighs_members_and_time_scales_the_weight() {
+        let w: Vec<f64> = (0..3).map(|i| order_weight(0, i, 3)).collect();
+        assert_eq!(w, vec![0.0, 0.5, 1.0]);
+        assert_eq!((0..3).map(|i| order_weight(1, i, 3)).collect::<Vec<_>>(), vec![1.0, 0.0, 1.0], "Center: the middle first");
+        assert_eq!((0..3).map(|i| order_weight(3, i, 3)).collect::<Vec<_>>(), vec![0.0, 1.0, 0.0], "Edges: the ends first");
+        assert_eq!(schedule_delay(0.2, 0, false, 2, 3), 0.2);
+        assert_eq!(schedule_delay(0.2, 0, true, 2, 3), -0.2, "From End runs earlier");
+        assert_eq!(schedule_delay(0.0, 0, false, 2, 3), 0.0);
+    }
 }

@@ -389,6 +389,11 @@ impl EditorRuntime{
                     let grid = matches!(row.0, layout::GRID_COLUMNS | layout::GRID_ROWS);
                     if row.0 == layout::DISPLAY || (display == 1 && !grid) || (display == 2 && !flex) { push(&mut properties, id, row)?; }
                 }
+                // A group's children are members in order whatever its Display: the order law (`layer_time`) shifts them
+                // either way, so the three order rows are offered either way.
+                if display == 0 {
+                    for row in layout::GROUP_ROWS.iter().filter(|r| layout::is_schedule_row(r.0)) { push(&mut properties, id, row)?; }
+                }
                 if display == 2 {
                     for (count, prefix, default) in [(layout::GRID_COLUMNS, layout::COLUMN_PREFIX, 2.0), (layout::GRID_ROWS, layout::ROW_PREFIX, 0.0)] {
                         let n = match view.value_at(id, &PropertyId::new(count).map_err(e)?, at).map_err(e)? { Some(Value::F64(v)) => v, _ => default }.round().clamp(0.0, 64.0) as u32;
@@ -515,6 +520,7 @@ impl EditorRuntime{
         let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
         let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"effects":effects?,"contentKeys":content_keys});
         if let Some(slot)=&fill_slot{row["fill"]=editor::gradient::model(&self.doc,slot,at).unwrap_or(Json::Null);}
+        row["members"]=editor::members::members(view,id,at).map_err(e)?.unwrap_or(Json::Null);
         Ok(Some(row))
     }
 }

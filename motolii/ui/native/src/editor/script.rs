@@ -113,6 +113,29 @@ mod tests {
         assert!(view.track(child, &PropertyId::new(property::ROTATION).unwrap()).unwrap().is_some());
     }
 
+    /// Members from a script: the same fact and the same law the window uses. Copies of a shape, the words of a text and
+    /// the children of a group each say what they are, and one `stagger` call writes the same rows on all three.
+    #[test]
+    fn a_script_reads_members_and_staggers_them_by_one_law() {
+        let (rt, outcome) = run(r#"
+            const box = rectangle().effect("Repeater", { Count: 4 }).layer;
+            const m = box.members();
+            if (m.kind !== "copies" || m.count !== 4 || m.by !== "Repeater") throw new Error("copies " + JSON.stringify(box.members()));
+            box.stagger(0.3, "Center");
+            const words = text("ONE TWO THREE").set("Split", "Words");
+            if (words.members().kind !== "words" || words.members().count !== 3) throw new Error("words " + JSON.stringify(words.members()));
+            words.stagger(0.3);
+            const g = group(ellipse(), ellipse());
+            if (g.members().kind !== "children" || g.members().count !== 2) throw new Error("children " + JSON.stringify(g.members()));
+            g.stagger(0.3, "End");
+        "#);
+        outcome.unwrap();
+        let view = rt.doc.view();
+        let stagger = PropertyId::new(crate::doc::store::layout::STAGGER).unwrap();
+        let staggered = view.layers().iter().filter(|&&l| matches!(view.value_at(l, &stagger, RationalTime::ZERO), Ok(Some(Value::F64(v))) if (v - 0.3).abs() < 1e-9)).count();
+        assert_eq!(staggered, 3, "copies, words and children took the same row");
+    }
+
     /// 選択肢は名前で、対の片方(Repeater の Position X)は片方だけ書ける。窓で見える値と同じになる。
     #[test]
     fn choices_are_written_by_name_and_a_pair_by_its_half() {

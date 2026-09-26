@@ -11,7 +11,7 @@ use std::rc::Rc;
 pub use crate::doc::store::scratch::{Frame, LayoutCache, Memo, Scratch, Slot};
 
 mod time;
-pub use time::schedule_delay;
+pub use time::{order_weight, schedule_delay};
 
 
 use crate::doc::core::RationalTime;

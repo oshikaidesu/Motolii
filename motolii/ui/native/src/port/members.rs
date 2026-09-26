@@ -47,3 +47,83 @@ fn copies_are_members_in_order_on_the_live_scene() {
     assert!(undone.iter().all(|o| (o - 0.5).abs() < 0.03), "{undone:?}");
     let _: Json = json!(null);
 }
+
+fn staggered_children() -> (crate::EditorRuntime, Vec<LayerId>, RationalTime) {
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    let mut kids = Vec::new();
+    for _ in 0..3 {
+        rt.request(json!({"op": "create", "kind": "rectangle"})).unwrap();
+        kids.push(rt.viewer.selected().unwrap());
+    }
+    rt.request(json!({"op": "animate", "enabled": true})).unwrap();
+    for (frame, v) in [(0, 0.0), (30, 1.0)] {
+        rt.request(json!({"op": "seek", "frame": frame})).unwrap();
+        for k in &kids {
+            rt.request(json!({"op": "setProperty", "layer": k.0, "property": "opacity", "value": v})).unwrap();
+        }
+    }
+    rt.request(json!({"op": "animate", "enabled": false})).unwrap();
+    rt.request(json!({"op": "select", "ids": kids.iter().map(|k| k.0).collect::<Vec<_>>()})).unwrap();
+    rt.request(json!({"op": "group"})).unwrap();
+    let group = rt.viewer.selected().unwrap();
+    rt.request(json!({"op": "setProperty", "layer": group.0, "property": "layout.stagger", "value": 0.2})).unwrap();
+    let fps = rt.doc.view().composition().unwrap().unwrap().fps;
+    let at = RationalTime::try_from_frame(15, fps).unwrap();
+    let view = rt.doc.view();
+    let mut order: Vec<(i16, LayerId)> = kids.iter().map(|&k| (view.meta(k).unwrap().unwrap().order, k)).collect();
+    order.sort();
+    drop(view);
+    (rt, order.into_iter().map(|(_, k)| k).collect(), at)
+}
+
+fn sorted(mut v: Vec<f32>) -> Vec<f32> {
+    v.sort_by(|a, b| b.total_cmp(a));
+    v
+}
+
+/// The second member source through the same operations: the children of a plain group, keyed alike, under the group's
+/// Stagger read their keys by the same law as the copies above (0.5 / 0.4 / 0.3), in the document.
+#[test]
+fn children_are_members_in_order_by_the_same_law() {
+    let (rt, kids, at) = staggered_children();
+    let view = rt.doc.view();
+    let read: Vec<f32> = kids.iter().map(|k| match view.value_at(*k, &PropertyId::new(property::OPACITY).unwrap(), at).unwrap() {
+        Some(Value::F64(v)) => v as f32,
+        other => panic!("{other:?}"),
+    }).collect();
+    let s = sorted(read.clone());
+    assert!((s[0] - 0.5).abs() < 0.03 && (s[1] - 0.4).abs() < 0.03 && (s[2] - 0.3).abs() < 0.03, "{read:?}");
+}
+
+/// Known gap (2026-09-27, docs/stage5/members.md): the live frame graph evaluates every track at the frame time, so it does
+/// not give children their member time (and it does not cut a split text into units). Copies work there because the copy
+/// path samples at each copy's time. This test states the parity the renderer owes the document.
+#[test]
+#[ignore = "known gap: the frame graph has no member time for children or split units"]
+fn the_live_scene_gives_children_their_member_time() {
+    let (mut rt, kids, at) = staggered_children();
+    let view = rt.doc.view();
+    let scene = rt.engine.frame_graph_editor_scene(&view, at).unwrap();
+    let read: Vec<f32> = kids.iter().map(|k| scene.layer(*k).map_or(f32::NAN, |l| l.opacity)).collect();
+    let s = sorted(read.clone());
+    assert!((s[0] - 0.5).abs() < 0.03 && (s[2] - 0.3).abs() < 0.03, "live scene: {read:?}");
+}
+
+/// Probe: does the live scene cut a split text into its units (the resolve path does, `push_split`)?
+#[test]
+#[ignore = "known gap: the live scene does not cut a split text into units; see docs/stage5/members.md"]
+fn the_live_scene_cuts_a_split_text_into_units() {
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    rt.request(json!({"op": "create", "kind": "text"})).unwrap();
+    let text = rt.viewer.selected().unwrap();
+    rt.request(json!({"op": "setText", "layer": text.0, "content": "ONE TWO THREE"})).unwrap();
+    rt.request(json!({"op": "setProperty", "layer": text.0, "property": "text_split", "value": 2})).unwrap();
+    rt.request(json!({"op": "setProperty", "layer": text.0, "property": "layout.stagger", "value": 0.2})).unwrap();
+    let fps = rt.doc.view().composition().unwrap().unwrap().fps;
+    let at = RationalTime::try_from_frame(15, fps).unwrap();
+    let view = rt.doc.view();
+    let resolved = crate::render::picture::resolve::resolved_layers(&view, at).unwrap().iter().filter(|l| l.id == text).count();
+    let scene = rt.engine.frame_graph_editor_scene(&view, at).unwrap();
+    let live = scene.layers.iter().filter(|l| l.layer == text && !l.ghost).count();
+    assert_eq!(live, resolved, "live scene units vs the document's");
+}
