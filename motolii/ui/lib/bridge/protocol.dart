@@ -66,6 +66,7 @@ enum DocumentOperation {
   setFillMode('setFillMode'),
   setGradient('setGradient'),
   previewBlend('previewBlend'),
+  applyBlend('applyBlend'),
   setTimings('setTimings'),
   previewTimings('previewTimings'),
   stageGesture('stageGesture'),

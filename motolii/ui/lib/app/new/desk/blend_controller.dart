@@ -12,7 +12,7 @@ import '../../../session/read_model.dart';
 /// What the Blend desk does with the document, apart from how it looks: the layers a mode applies to, the mode they
 /// wear, the specimens the runtime draws for it, the hover that previews on Stage without touching history, and the
 /// one click that is one undo step. The operations are the ones the Classic desk sends (`previewBlend`,
-/// `cancelPreview`, `setAttrs`).
+/// `cancelPreview`, `applyBlend`).
 class BlendController extends ChangeNotifier implements BlendHost {
   BlendController(this.c) {
     _selection = _mark;
@@ -86,7 +86,7 @@ class BlendController extends ChangeNotifier implements BlendHost {
           await c.command('cancelPreview');
         } else {
           _previewing = mode;
-          await c.command('previewBlend', {'layer': targets.last['id'], 'mode': mode});
+          await c.command('previewBlend', {'mode': mode});
         }
       }
     } finally {
@@ -118,11 +118,11 @@ class BlendController extends ChangeNotifier implements BlendHost {
 
   bool get previewing => _previewing != null;
 
-  /// One click, one undo step: `setAttrs` folds the running preview away before it applies.
+  /// One click, one undo step: `applyBlend` folds the running preview away before it applies.
   @override
   Future<void> apply(String mode) async {
     _hoverTimer?.cancel();
-    if (applying || !(c.state['capabilities'] as List? ?? const []).contains('setAttrs')) return;
+    if (applying || !(c.state['capabilities'] as List? ?? const []).contains('applyBlend')) return;
     final mark = _mark;
     final ids = [for (final l in targets) if ('${l['blendMode'] ?? 'Normal'}' != mode) l['id']];
     applying = true;
@@ -136,7 +136,7 @@ class BlendController extends ChangeNotifier implements BlendHost {
         _wanted = null;
         _previewing = null;
         await _flight;
-        if (!_gone && mark == _mark) await c.command('setAttrs', {'layers': ids, 'patch': {'blendMode': mode}});
+        if (!_gone && mark == _mark) await c.command('applyBlend', {'mode': mode});
       }
     } finally {
       if (!_gone) {

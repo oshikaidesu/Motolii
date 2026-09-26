@@ -62,7 +62,8 @@ void main() {
         {'id': 1, 'name': 'Shape', 'kind': 'Shape', 'blendMode': mode},
       ],
       'selectedIds': const [1],
-      'capabilities': const ['setAttrs', 'previewBlend', 'cancelPreview'],
+      'blendTargets': const [1],
+      'capabilities': const ['applyBlend', 'previewBlend', 'cancelPreview'],
     };
     c.document.value = snapshot('Normal');
     await _mount(tester, 'Blend', c, const Size(300, 400));

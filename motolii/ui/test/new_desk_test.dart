@@ -67,7 +67,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final c = Recording();
-    c.document.value = {'layers': layers, 'selectedIds': selected, 'selectedId': selected.isEmpty ? null : selected.last, 'capabilities': ['previewBlend', 'setAttrs'], 'path': 'p'};
+    c.document.value = {'layers': layers, 'selectedIds': selected, 'selectedId': selected.isEmpty ? null : selected.last, 'blendTargets': selected, 'capabilities': ['previewBlend', 'applyBlend'], 'path': 'p'};
     await tester.pumpWidget(MaterialApp(theme: editorTestTheme, home: Scaffold(body: NewBlend(controller: c))));
     await tester.pumpAndSettle();
     return c;
@@ -81,9 +81,7 @@ void main() {
     expect(find.text('Targets differ'), findsOneWidget, reason: 'two layers wear two modes');
     await tester.tap(find.byKey(const ValueKey('blend-mark-2')));
     await tester.pumpAndSettle();
-    final set = c.commands.where((e) => e.$1 == 'setAttrs').single.$2;
-    expect(set['layers'], [1, 2]);
-    expect((set['patch'] as Map)['blendMode'], 'Multiply');
+    expect(c.commands.where((e) => e.$1 == 'applyBlend').single.$2, {'mode': 'Multiply'}, reason: 'the host chooses the layers');
     expect(c.ops, isNot(contains('cancelPreview')), reason: 'the port folds the preview away, the desk sends no cancel of its own');
     await tester.pumpWidget(const SizedBox());
   });
@@ -96,7 +94,7 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.byKey(const ValueKey('blend-mark-2'))));
     await tester.pump(const Duration(milliseconds: 200));
     final preview = c.commands.where((e) => e.$1 == 'previewBlend').last.$2;
-    expect(preview, {'layer': 1, 'mode': 'Multiply'});
+    expect(preview, {'mode': 'Multiply'});
     expect(find.byKey(const ValueKey('blend-beds')), findsOneWidget, reason: 'the runtime\'s own specimen of that mode');
     await mouse.moveTo(const Offset(390, 890));
     await tester.pump(const Duration(milliseconds: 200));
@@ -108,7 +106,7 @@ void main() {
     final c = await mountBlend(tester, [layer(1, 'Normal')], []);
     await tester.tap(find.byKey(const ValueKey('blend-mark-2')));
     await tester.pumpAndSettle();
-    expect(c.ops, isNot(contains('setAttrs')));
+    expect(c.ops, isNot(contains('applyBlend')));
     expect(find.text('No layer'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
