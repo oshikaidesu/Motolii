@@ -249,4 +249,38 @@ void main() {
     expect(find.byType(ThingFace), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('Repeater is a Create capability: Create lists it under Copies and applies it as before; Effects no longer lists it', (tester) async {
+    final repeater = {'id': 'motolii.repeat', 'name': 'Repeater', 'stage': 'Placement', 'owner': 'host'};
+    final blur = {'id': 'motolii.blur', 'name': 'Blur', 'stage': 'Pass', 'owner': 'effect'};
+    final doc = {
+      'layers': [textLayer('Arial')],
+      'selectedIds': [1],
+      'selectedId': 1,
+      'catalog': [repeater, blur],
+      'createKinds': [
+        {'id': 'rectangle', 'name': 'Rectangle', 'detail': 'Adds a shape layer', 'rail': 'Shapes'},
+      ],
+      'hostCapabilities': [
+        {'id': 'motolii.repeat', 'name': 'Repeater', 'detail': 'Copies of the layer', 'rail': 'Copies', 'apply': 'applyEffect'},
+      ],
+      'capabilities': ['create', 'applyEffect'],
+    };
+    final (c, _) = await mount(tester, 'Create', doc);
+    expect(find.text('Repeater'), findsOneWidget);
+    expect(find.text('Copies'), findsWidgets, reason: 'the class column files it under Copies');
+    final tile = find.text('Repeater');
+    await tester.tap(tile);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(c.commands.where((e) => e.$1 == 'applyEffect').single.$2, {'pluginIds': ['motolii.repeat']}, reason: 'the same operation and id as from Effects');
+    expect(c.ops, isNot(contains('create')), reason: 'a capability is added to a layer, it makes no layer');
+    await tester.pumpWidget(const SizedBox());
+
+    await mount(tester, 'Effects', doc);
+    expect(find.text('Blur'), findsWidgets);
+    expect(find.text('Repeater'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

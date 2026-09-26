@@ -103,6 +103,8 @@ const createMarks = <String, (String, String)>{
   'Light': ('light', '#FFCB3D'),
   'Particles': ('particles', '#B7B9BD'),
   'Stage': ('stage', '#B7B9BD'),
+  'Repeater': ('particles', '#6C7CFF'),
+  'Mirror': ('polygon', '#9A7BEA'),
   'Cube': ('cube', '#7A66F0'),
   'Sphere': ('sphere', '#6C7CFF'),
   'Torus': ('torus', '#7A66F0'),

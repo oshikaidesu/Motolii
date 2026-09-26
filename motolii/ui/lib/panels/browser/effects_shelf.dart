@@ -32,8 +32,12 @@ class EffectsShelf extends BrowserShelf {
   ];
 
   @override
-  List<Map<String, dynamic>> items(BrowserHost host) =>
-      EditorSession.maps(host.controller.state['catalog']);
+  /// The effects are what turns a picture into another. What the host has to understand (Repeater, Mirror: members and
+  /// their order) is a Create capability and lives on that shelf; the host says which (`owner`).
+  List<Map<String, dynamic>> items(BrowserHost host) => [
+    for (final e in EditorSession.maps(host.controller.state['catalog']))
+      if (e['owner'] != 'host') e,
+  ];
 
   /// 棚の頭の理由は世代を動かさずに変わる(壊れた保存)。理由が変われば描き直す。
   @override

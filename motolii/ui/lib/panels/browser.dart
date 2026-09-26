@@ -34,6 +34,7 @@ const browserDocumentKeys = [
   'backgrounds',
   'primitives',
   'createKinds',
+  'hostCapabilities',
   'catalog',
   'palette',
   'colorTarget',

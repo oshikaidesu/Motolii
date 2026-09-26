@@ -21,6 +21,7 @@ class CreateShelf extends BrowserShelf {
     'Paths',
     '3D',
     'Helpers',
+    'Copies',
   ];
 
   /// What can be created is the host's table (status `createKinds`); this only adds the mark a kind is drawn with.
@@ -42,15 +43,21 @@ class CreateShelf extends BrowserShelf {
   List<Map<String, dynamic>> items(BrowserHost host) => [
     for (final kind in EditorSession.maps(host.controller.state['createKinds']))
       {...kind, if (_glyphs['${kind['id']}'] != null) 'glyph': _glyphs['${kind['id']}']},
+    // What the host adds to a layer rather than makes: applied the way it always was, stored where it always was.
+    for (final capability in EditorSession.maps(host.controller.state['hostCapabilities']))
+      {...capability, 'glyph': capability['id'] == 'motolii.mirror' ? '⧓' : '⁙'},
   ];
+
+  bool _applied(Map<String, dynamic> item) => item['apply'] == 'applyEffect';
 
   @override
   String classification(BrowserHost host, Map<String, dynamic> item) =>
       '${item['rail'] ?? 'Other'}';
 
   @override
-  bool supported(BrowserHost host, Map<String, dynamic> item) =>
-      host.has('create');
+  bool supported(BrowserHost host, Map<String, dynamic> item) => _applied(item)
+      ? host.has('applyEffect') && host.controller.selectedIds.isNotEmpty
+      : host.has('create');
 
   @override
   Widget preview(BrowserHost host, Map<String, dynamic> item, Color identity) {
@@ -82,6 +89,10 @@ class CreateShelf extends BrowserShelf {
 
   @override
   Future<void> apply(BrowserHost host, Map<String, dynamic> item) async {
+    if (_applied(item)) {
+      if (host.has('applyEffect')) await host.controller.command('applyEffect', {'pluginIds': [item['id']]});
+      return;
+    }
     if (host.has('create'))
       await host.controller.command('create', {'kind': host.id(item)});
   }
