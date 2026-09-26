@@ -18,7 +18,7 @@ import 'history_records.dart';
 import 'web_panel.dart';
 
 /// A face that draws one of the Desk's panels its own way (the New shell's), or null to leave the panel as it is.
-typedef PanelFace = Widget? Function(String name, EditorSession c, Key? key);
+typedef PanelFace = Widget? Function(String name, EditorSession c, Key? key, {Widget? leading});
 
 Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading, PanelFace? face}) {
   final spec = name == 'Desk' ? deskHostSpec : panelSpec(name);
@@ -42,7 +42,7 @@ Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading, Pane
 }
 
 Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading, PanelFace? face}) {
-  final own = face?.call(name, c, key);
+  final own = face?.call(name, c, key, leading: leading);
   if (own != null) return own;
   if (['Create', 'Media', 'Effects', 'Fonts', 'Colors', 'Files'].contains(name))
     return BrowserPanel(

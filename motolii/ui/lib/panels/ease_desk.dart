@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
+import '../foundation/ease_view.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
@@ -19,9 +20,12 @@ part 'ease_desk/parts.dart';
 part 'ease_desk/painters.dart';
 
 class EaseDesk extends StatefulWidget {
-  const EaseDesk({super.key, required this.controller, this.leading});
+  const EaseDesk({super.key, required this.controller, this.leading, this.skin});
   final EditorSession controller;
   final Widget? leading;
+
+  /// Another skin on the same desk: it is given what the desk knows and can do, and draws it. The logic stays here.
+  final Widget Function(BuildContext context, EaseView view)? skin;
   @override
   State<EaseDesk> createState() => _EaseDeskState();
 }
@@ -65,6 +69,127 @@ class _EaseDeskState extends State<EaseDesk>
                 s['property'] == first['property'] &&
                 s['frame'] == first['frame'],
           );
+    if (widget.skin != null) {
+      final shown = _audition ?? _shape;
+      final expanded = _free || _shape['overshoots'] == true;
+      final kind = '${_shape['kind']}';
+      final params = _shape.entries.where((e) => e.value is num).toList()
+        ..sort((a, b) {
+          if (kind == 'Bezier') {
+            const order = ['x1', 'y1', 'x2', 'y2'];
+            return order.indexOf(a.key).compareTo(order.indexOf(b.key));
+          }
+          return a.key.compareTo(b.key);
+        });
+      final view = EaseView(
+        target: target,
+        title: first == null
+            ? (sequence.isNotEmpty ? 'Sequence · ${sequence.length} layers' : 'Workspace · no key interval')
+            : '${first['name']} · ${first['property']}  ${first['frame']}–${first['end']} f',
+        hasInterval: first != null,
+        canApply: _canApply,
+        sequence: sequence.length,
+        mixed: mixed,
+        free: _free,
+        keysSelected: EditorSession.maps(c.state['selectedKeys']).length,
+        segments: [
+          for (final (i, s) in segments.indexed) EaseSegment((s['frame'] as num).toInt(), (s['end'] as num).toInt(), active: i == railActive),
+        ],
+        frame: c.frame,
+        playhead: playhead(),
+        shape: _shape,
+        shown: shown,
+        presets: [for (var i = 0; i < presets.length; i++) EasePreset('${presets[i]['kind']}', presets[i], selected: presetKeys[i] == shapeKey)],
+        hovered: _hover,
+        params: [
+          for (final param in params)
+            EaseParam(
+              param.key,
+              (param.value as num).toDouble(),
+              preview: (v) async {
+                _original ??= Map.of(_shape);
+                _pending = _model({..._shape, param.key: v});
+                await _pending;
+              },
+              commit: (v) async {
+                _pending = _model({..._shape, param.key: v});
+                await _commit();
+              },
+              finish: () async {
+                if (_original != null) await _commit();
+              },
+              cancel: () async => _cancel(),
+            ),
+        ],
+        handles: _points(_shape['handles']),
+        lo: expanded ? -.5 : 0,
+        hi: expanded ? 2.2 : 1,
+        notice: _notice,
+        newKeyKind: _curveName('${c.newKeyShape['kind']}'),
+        hasSaved: saved.isNotEmpty,
+        leading: widget.leading,
+        motion: _motion,
+        peek: (i) => _peek(presets[i], i),
+        endPeek: _endPeek,
+        choose: (i) {
+          _focused = i;
+          _choose(presets[i]);
+        },
+        grab: (handle) {
+          if (_pointer != null) return;
+          _endPeek();
+          _focus.requestFocus();
+          _pointer = -1;
+          _handle = handle;
+          _original = Map.of(_shape);
+        },
+        drag: (handle, point) {
+          if (_pointer == null || _handle != handle) return;
+          _handles.add((handle, point));
+          _pending = _handles.drained;
+        },
+        release: () {
+          if (_pointer == null) return;
+          _pointer = null;
+          _handle = null;
+          _commit();
+        },
+        cancel: _cancel,
+        setFree: (on) => setState(() => _free = on),
+        apply: () {
+          if (_canApply) _commit();
+        },
+        copy: () async {
+          await c.storeDesk('curveClip', Map.of(_shape));
+          if (mounted) setState(() => _notice = 'Curve copied');
+        },
+        save: () async {
+          await c.storeDesk('easePresets', [...saved, Map.of(_shape)]);
+          if (mounted) setState(() => _notice = 'Preset saved');
+        },
+        useForNew: () async {
+          await c.storeDesk('newKeyShape', _payload(_shape));
+          if (c.animating) await c.setAnimate(true);
+          if (mounted) setState(() => _notice = 'New keys: ${_curveName('${_shape['kind']}')}');
+        },
+        clearSaved: () async {
+          await c.storeDesk('easePresets', []);
+          if (mounted) setState(() => _notice = 'Saved presets cleared');
+        },
+        play: _runMotion,
+      );
+      return Focus(
+        focusNode: _focus,
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape && _original != null) {
+            _cancel();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: widget.skin!(context, view),
+      );
+    }
     return Focus(
       focusNode: _focus,
       onKeyEvent: (_, event) {

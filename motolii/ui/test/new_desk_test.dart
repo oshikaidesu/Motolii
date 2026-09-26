@@ -2,11 +2,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'dart:convert';
+
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 
 import '../lib/app/new/desk/new_blend.dart';
 import '../lib/app/new/desk/new_depth.dart';
 import '../lib/hf/desk/depth.dart';
+import '../lib/hf/desk/ease_skin.dart';
+import '../lib/panels/ease_desk.dart';
+import '../lib/session/editor_session.dart';
 import '../lib/app/new/desk/new_history.dart';
 import 'support/editor_test_theme.dart';
 import 'support/new_inspector_host.dart' show Recording;
@@ -178,5 +184,140 @@ void main() {
     await tester.pumpAndSettle();
     expect(locked.ops, isNot(contains('previewProperties')));
     await tester.pumpWidget(const SizedBox());
+  });
+
+  Map<String, dynamic> bounce(double dip) => {
+        'kind': 'Bounce',
+        'dip': dip,
+        'samples': [[0.0, 0.0], [.27, dip], [1.0, 1.0]],
+        'handles': [[.27, dip]],
+        'overshoots': false,
+      };
+
+  Future<(EditorSession, List<Map<String, dynamic>>)> mountEase(WidgetTester tester, Map<String, dynamic> Function() snapshot) async {
+    final c = EditorSession();
+    final commands = <Map<String, dynamic>>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
+      final args = Map<String, dynamic>.from(call.arguments as Map? ?? {});
+      if (call.method == 'easeModel') {
+        final source = Map<String, dynamic>.from(args['shape']);
+        return bounce(args['point'] == null ? (source['dip'] as num).toDouble() : (args['point'][1] as num).toDouble());
+      }
+      if (call.method == 'request') {
+        commands.add(Map<String, dynamic>.from(jsonDecode(args['command'])));
+        return snapshot();
+      }
+      if (call.method == 'render') return snapshot();
+      if (call.method == 'readSettings') return {};
+      if (call.method == 'writeSettings') return true;
+      return {};
+    });
+    c.document.value = snapshot();
+    tester.view.physicalSize = const Size(340, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      theme: editorTestTheme,
+      home: Scaffold(body: EaseDesk(controller: c, skin: (context, view) => EaseSkin(view))),
+    ));
+    await tester.pumpAndSettle();
+    return (c, commands);
+  }
+
+  Map<String, dynamic> keyedSnapshot(Map<String, dynamic> current) => {
+        'selectedIds': [1],
+        'selectedKeys': [
+          {'layer': 1, 'property': 'opacity', 'frame': 0},
+          {'layer': 1, 'property': 'opacity', 'frame': 30},
+        ],
+        'capabilities': ['ease'],
+        'layers': [
+          {
+            'id': 1,
+            'name': 'Rectangle',
+            'properties': [
+              {'id': 'opacity', 'keys': [{'frame': 0, 'interp': current}, {'frame': 30, 'interp': {'kind': 'Linear'}}]},
+            ],
+          },
+        ],
+        'easeKinds': [bounce(.2), bounce(.4)],
+      };
+
+  testWidgets('Ease: the curve, its intervals and the shelf come from the desk; a handle drag is one commit, Esc puts it back', (tester) async {
+    var current = bounce(.2);
+    final (c, commands) = await mountEase(tester, () => keyedSnapshot(current));
+    expect(find.text('Rectangle · opacity  0–30 f'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ease-seg-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ease-preset-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ease-param-dip')), findsOneWidget, reason: 'the runtime\'s own parameter of this curve');
+
+    final plot = find.byKey(const ValueKey('ease-plot'));
+    Offset handle() {
+      final r = (Offset.zero & tester.getSize(plot)).deflate(18);
+      return tester.getTopLeft(plot) + Offset(r.left + .27 * r.width, r.top + (1 - (current['dip'] as num).toDouble()) * r.height);
+    }
+
+    final drag = await tester.startGesture(handle(), pointer: 1);
+    await drag.moveBy(const Offset(0, -30));
+    await tester.pumpAndSettle();
+    expect(commands, isEmpty, reason: 'a drag only previews');
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(commands.single['op'], 'ease');
+    expect(commands.single['dip'], greaterThan(.2));
+
+    final cancel = await tester.startGesture(handle(), pointer: 2);
+    await cancel.moveBy(const Offset(0, -20));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await cancel.up();
+    await tester.pumpAndSettle();
+    expect(commands.length, 1, reason: 'Esc lets go without committing');
+
+    await tester.tap(find.byKey(const ValueKey('ease-preset-1')));
+    await tester.pumpAndSettle();
+    expect(commands.length, 2);
+    expect(commands.last['dip'], .4);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
+  testWidgets('Ease: keeping a curve and the new-key curve write the same desk rows Classic writes', (tester) async {
+    final (c, _) = await mountEase(tester, () => keyedSnapshot(bounce(.2)));
+    await tester.tap(find.byKey(const ValueKey('ease-copy')));
+    await tester.pumpAndSettle();
+    expect((c.deskWork.value['curveClip'] as Map)['kind'], 'Bounce');
+    await tester.tap(find.byKey(const ValueKey('ease-save')));
+    await tester.pumpAndSettle();
+    expect((c.deskWork.value['easePresets'] as List).length, 1);
+    expect(find.byKey(const ValueKey('ease-clear')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ease-clear')));
+    await tester.pumpAndSettle();
+    expect(c.deskWork.value['easePresets'], isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
+  testWidgets('Ease: two layers and no keys is a Sequence: ghost marks on the curve, one sequence command on Apply', (tester) async {
+    Map<String, dynamic> snap() => {
+          'selectedIds': [1, 2],
+          'selectedKeys': [],
+          'capabilities': ['ease', 'sequence', 'previewSequence'],
+          'layers': [
+            {'id': 1, 'name': 'A', 'ghostable': true, 'properties': []},
+            {'id': 2, 'name': 'B', 'ghostable': true, 'properties': []},
+          ],
+          'easeKinds': [bounce(.2)],
+        };
+    final (c, commands) = await mountEase(tester, snap);
+    expect(find.text('Sequence · 2 layers'), findsOneWidget);
+    expect(find.text('ghosts'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ease-apply')));
+    await tester.pumpAndSettle();
+    final sequence = commands.where((e) => e['op'] == 'sequence').single;
+    expect(sequence['layers'], [1, 2]);
+    expect((sequence['ghosts'] as List).first, 0, reason: 'the first layer has no delay');
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
   });
 }
