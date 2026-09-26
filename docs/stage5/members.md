@@ -34,18 +34,39 @@ None of these makes a layer. Members are found, never stored.
 | Vary | copies only. Each / Random are pure index and seed functions and could serve units and children; no second source uses them yet |
 | Time | yes in the document: one law for three sources |
 
-## The gap that stops the grammar (stop condition B)
+## Time (2026-09-28): evaluation time is an input to value evaluation
 
-The live renderer (frame graph, which also makes the pixels) evaluates every track at the frame time. It gives copies their member time because the copy path samples a layer's properties at each copy's time. It has no member time for children or split units:
-- a plain group's keyed children under Stagger read 0.5 / 0.4 / 0.3 in the document and 0.5 / 0.5 / 0.5 on the live scene;
-- a text with Split Words is 3 units in the document's resolve path and 1 layer on the live scene.
-Tests: `the_live_scene_gives_children_their_member_time`, `the_live_scene_cuts_a_split_text_into_units` (ignored, failing).
+The gap found on 09-27 is closed without teaching the renderer about Stagger.
 
-Missing host primitive: member time in the frame graph, i.e. sampling a layer (or a unit cut of it) at the time its order gives it. The property program is designed not to read the document at evaluation, so this is an architecture decision, not a patch: either the graph samples children like copies (dynamic inputs at a member time) or a layer clock becomes a graph node.
+Time paths found:
+| Path | Global time read | Mapped to local | Sampled |
+|---|---|---|---|
+| `value_at` (document, resolve path) | caller's t | `layer_time` (ancestors' order shifts) then `looped_time` (Loop) | the base track, then modulators at mapped time + offset (source layer maps its own) |
+| copies (`push_placements`, graph placement set) | frame t | t − copy offset (Delay Each, Random, order delay) | the layer at that time, through `value_at` / the graph |
+| text units (`push_split`) | frame t | `schedule_shift` of the text's own order rows | the whole text at the unit time, cut to the unit box |
+| frame graph property nodes | frame t | none (before) | `track.eval(context.time)` |
+| physics blocks | frame t | `layer_time` | own solver |
+
+Boundary: `LayerClock` (document, `layout/clock.rs`) is a layer's time mapping as data: the ancestors' order steps (outermost first) and the layer's Loop rows, each row a constant or a track. `value_at`, `layer_time` and `looped_time` read it; the graph's `PropertyClock` node samples a property's value node at `clock.for_row(row, t)` through the graph's existing dynamic-input path. Proof: the clock reads the old mapping's times frame by frame (`tests/layer_clock.rs`).
+
+Composition order, as the code defines it:
+1. global frame time
+2. less the member's own delay (a copy's offset, a text unit's order delay, clamped at 0)
+3. each ancestor's order shift, outermost first (each clamped at 0)
+4. the layer's Loop fold (Loop rows are read at the ordered time shifted once more, as `looped_time` read them)
+5. the value, and any modulator at that time plus its offset (the source layer maps its own)
+
+A group's own Loop does not fold its children (existing: `layer_time` walks order shifts only).
+
+Live parity (runtime tests on the live semantic scene, the one the pixels are drawn from): copies, children of a plain group, words of a split text, Loop, and a nested case (a staggered group holding a split staggered text and a shape with a staggered Repeater and Delay Each), member by member, with Undo.
+
+One difference left: a Stagger or Loop row driven by a link. The document keeps reading such rows through `value_at` (links included); the graph's clock leaves links out. Links on these rows are only reachable by pasting a layer that already has one.
+
+Performance: a layer with no order rows above it and no Loop gets no new node. A clocked property adds one node, sampled once more when its time differs. Units are sampled like copies, O(units). Clocks are built once per view and revision.
 
 ## Fragments
 
-Split units already are the mechanism a Fragment needs: resolve the whole layer at a member time, cut it by a region, turn it about the region's centre. What is missing is only a region source for non-text layers (grid cells, Voronoi cells, masks), and the same frame-graph member time as above. No production change was made.
+Split units now exist in both render paths as "the whole layer at a member time, cut to a region, turned about the region's centre". A Fragment needs only a region source for non-text layers (grid cells, Voronoi cells, masks) feeding the same member set; the member time is in place. No production change was made.
 
 ## Cassette / Vism reuse
 
