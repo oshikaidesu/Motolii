@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../foundation/leaves.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_catalog.dart';
+import '../foundation/panel_controls.dart' show EditorScale;
 import '../foundation/shell_tokens.dart';
 import '../foundation/theme.dart';
 import '../input/editor_shortcuts.dart';
@@ -65,6 +66,7 @@ class _NewShellState extends State<NewShell> {
     notice,
     (doc) => freezeNotice(doc) ?? effectsNotice(doc),
   );
+  late final uiScale = EditorScale.of(context) ?? ValueNotifier(1.0);
   String? sheet;
   bool ready = false;
 
@@ -94,6 +96,7 @@ class _NewShellState extends State<NewShell> {
       final data = EditorSession.map(await c.native('readSettings'));
       c.restoreDeskWork(EditorSession.map(data['deskWork']));
       c.deskDefault.value = data['deskDefault'] as String? ?? 'Tools';
+      uiScale.value = (data['scale'] as num? ?? 1).toDouble().clamp(.5, 2.0);
       dock.restore(data['newWorkspace']);
     } catch (_) {}
     _savedWorkspace = jsonEncode(dock.snapshot());
@@ -300,7 +303,7 @@ class _NewShellState extends State<NewShell> {
         child: switch (sheet) {
           'Composition' => CompositionControls(controller: c),
           'Export' => ExportControls(controller: c),
-          _ => NewSettings(c: c),
+          _ => NewSettings(c: c, scale: uiScale),
         },
       ),
     ),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
+import '../lib/foundation/panel_controls.dart' show EditorScale;
 import '../lib/session/editor_session.dart';
 import 'support/editor_test_theme.dart';
 import 'support/native_channel.dart';
@@ -79,5 +80,26 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the UI scale is read at start, applied, changed from Settings and saved beside the other keys', (tester) async {
+    size(tester);
+    final native = Native()..settings = {'scale': 1.25, 'dock': {'classic': 'layout'}};
+    native.install();
+    final scale = ValueNotifier(1.0);
+    await tester.pumpWidget(EditorScale(
+      notifier: scale,
+      child: MaterialApp(theme: editorTestTheme, home: const NewShell()),
+    ));
+    await tester.pumpAndSettle();
+    expect(scale.value, 1.25, reason: 'the saved scale is applied');
+    await tester.tap(find.text('SETTINGS'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('+').last); // the sheet is above the face
+    await tester.pumpAndSettle();
+    expect(scale.value, closeTo(1.26, 1e-9));
+    expect(native.settings['scale'], closeTo(1.26, 1e-9));
+    expect(native.settings['dock'], {'classic': 'layout'}, reason: "Classic's keys are kept");
+    await tester.pumpWidget(const SizedBox());
   });
 }

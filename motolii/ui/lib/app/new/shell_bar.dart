@@ -362,8 +362,11 @@ class NewStatusBar extends StatelessWidget {
 /// The preferences the New face can already reach; the panel placement table
 /// and the Classic theme file belong to Classic's dock and are not routed.
 class NewSettings extends StatelessWidget {
-  const NewSettings({required this.c});
+  const NewSettings({required this.c, required this.scale});
   final EditorSession c;
+
+  /// The editor's one scale (50 to 200 percent), kept in the saved settings under `scale`, as Classic keeps it.
+  final ValueNotifier<double> scale;
   Widget _row(String label, Widget control) => SizedBox(
     height: EditorMetrics.control,
     child: Row(
@@ -373,6 +376,11 @@ class NewSettings extends StatelessWidget {
       ],
     ),
   );
+  void _scale(double next) {
+    scale.value = next.clamp(.5, 2.0).toDouble();
+    c.storeSetting('scale', scale.value);
+  }
+
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
     valueListenable: c.deskWork,
@@ -406,6 +414,19 @@ class NewSettings extends StatelessWidget {
                   'When Animate is turned on, remember the frame; the first '
                   'touch at another frame keys both that frame and this one',
               onChanged: (on) => c.storeDesk('animateFrom', on),
+            ),
+          ),
+          _row(
+            'Scale',
+            ValueListenableBuilder<double>(
+              valueListenable: scale,
+              builder: (context, value, _) => Row(
+                children: [
+                  EditorButton('−', () => _scale(((value * 100).round() - 1) / 100), tooltip: 'Smaller'),
+                  EditorPercentField(value: value * 100, min: 50, max: 200, onChanged: (v) => _scale(v / 100)),
+                  EditorButton('+', () => _scale(((value * 100).round() + 1) / 100), tooltip: 'Larger'),
+                ],
+              ),
             ),
           ),
           _row(
