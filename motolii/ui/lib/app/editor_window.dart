@@ -19,24 +19,8 @@ import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/leaves.dart';
+import 'status_notice.dart';
 
-/// Freeze の裏仕事の進み。走っていなければ null。失敗はその理由。
-String? freezeNotice(Map<String, dynamic> status) {
-  final job = status['freeze'];
-  if (job is! Map) return null;
-  final phase = '${job['phase']}';
-  if (phase != 'running' && phase != 'cancelling' && phase != 'failed')
-    return null;
-  final layers = (status['layers'] as List? ?? const []).whereType<Map>();
-  final name =
-      layers
-          .where((l) => l['id'] == job['layer'])
-          .map((l) => '${l['name']}')
-          .firstOrNull ??
-      'layer';
-  if (phase == 'failed') return 'Freeze failed: ${job['error']}';
-  return 'Freezing $name ${job['done']}/${job['total']}';
-}
 
 /// 窓の下の 1 行。文だけを受け取るので、文が同じ間は建て直らない。
 class _StatusLine extends StatelessWidget {

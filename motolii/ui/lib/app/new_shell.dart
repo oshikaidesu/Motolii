@@ -26,7 +26,7 @@ import 'new/inspector/new_effect.dart';
 import 'new/inspector/new_layout.dart';
 import 'new/inspector/new_transform.dart';
 import 'new/shell_bar.dart';
-import 'editor_window.dart' show freezeNotice;
+import 'status_notice.dart' show freezeNotice;
 
 /// The New projection of the same session: one face whose panels sit in an
 /// off-the-shelf dock (Browser, Stage, Inspector, Timeline, Desk), and the
