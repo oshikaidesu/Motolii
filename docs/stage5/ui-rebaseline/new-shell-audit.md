@@ -37,3 +37,20 @@ Sources: the Phase A inventory in `inventory/`, `routing.md`, and the code. Evid
 | Desk | Web | A | same production panel |
 | Document | create, edit, key, scrub, undo, redo, save, reopen, export | A | Flutter: `new_shell_workflow_test`; real engine: `editor::workflow` (run with `--ignored`, about five minutes in a debug build) |
 | Document | real-engine workflow with export | A | passes end to end (make, move, key, scrub, undo, redo, save, reopen, export; 375 s on 2026-09-26). The export worker waits minutes in `re_renderer` file server `watch`, in `notify` `FSEventStreamStart`, on fseventsd registration (the known dev shader watcher cold start); the test's deadline is 900 s for that. A 400 s deadline failed twice before the wait cleared |
+
+
+## What the New shell still takes from Classic production code (2026-09-27, Camera excluded)
+
+| Classic file or family | Used for | Removable with Classic |
+|---|---|---|
+| `panels/stage.dart`, `panels/timeline.dart` and their folders | the Stage and the Timeline panels, drawn through `registry.dart` | no: they are the panels; New only wraps and skins them |
+| `panels/inspector.dart`, `inspector/*` | the Inspector cards; the Transform, Layout and effect Instruments plug into it | no for the cards. The Camera card, the Repeater grid body and the text and fill cards stay |
+| `panels/browser/*_shelf.dart`, `shelf.dart`, `parts.dart`, `filter_library.dart` | the six shelves: items, apply, menu, drag, preview, editor slot | no: they are the production shelves |
+| `panels/browser.dart` (the frame: rail, grid, keys, views) | only `BrowserSize` and the document keys; the frame itself is unused by New | yes: the frame and its rail, filter view and tile files go with Classic |
+| `panels/ease_desk*`, `notes_desk*`, `blend_panel.dart` | the desk logic that the finished desks skin | the Classic bodies inside them go; the logic stays |
+| `panels/depth_desk.dart`, `history_records.dart`, `web_panel.dart` | Depth and History have New bodies; Web is the Classic body | Depth and History bodies yes; Web stays |
+| `panels/registry.dart`, `desk.dart` | building panels by name and the Desk drawer host | stays |
+| `app/editor_window.dart` and the Classic dock | nothing any more (`freezeNotice` moved to `status_notice.dart`) | yes, whole |
+| `input/editor_shortcuts.dart`, `app/editor_actions.dart` | shortcuts and File, Edit actions, shared | stays |
+
+Interim adapters removed so far: `NewBrowser`, `NewTile`, the tile tokens. Nothing else interim is unused today.
