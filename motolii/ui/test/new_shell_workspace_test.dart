@@ -7,35 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../lib/app/new_shell.dart';
 import '../lib/session/editor_session.dart';
 import 'support/editor_test_theme.dart';
-
-class Native {
-  Map<String, dynamic> settings = {};
-  final calls = <(String, Map)>[];
-  List<Map> get writes => [for (final c in calls) if (c.$1 == 'writeSettings') c.$2];
-  List<Map> get windows => [for (final c in calls) if (c.$1 == 'command' && c.$2['op'] == 'stageWindow') Map.from(c.$2['args'] as Map? ?? c.$2)];
-
-  void install() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
-      final args = Map<String, dynamic>.from((call.arguments as Map?) ?? {});
-      calls.add((call.method, args));
-      switch (call.method) {
-        case 'windowInfo':
-          return {'id': 'main', 'main': true};
-        case 'readSettings':
-          return settings;
-        case 'writeSettings':
-          settings = args;
-          return true;
-        case 'attach':
-        case 'render':
-        case 'command':
-          return {'layers': [], 'selectedIds': [], 'selectedKeys': [], 'capabilities': ['stageWindow'], 'width': 1920, 'height': 1080, 'durationFrames': 300, 'fps': 30};
-        default:
-          return <String, dynamic>{};
-      }
-    });
-  }
-}
+import 'support/native_channel.dart';
 
 Future<dynamic> open(WidgetTester tester) async {
   await tester.pumpWidget(MaterialApp(theme: editorTestTheme, home: const NewShell()));
