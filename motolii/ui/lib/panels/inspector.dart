@@ -36,13 +36,17 @@ part 'inspector/effects_card.dart';
 /// Cards a host may draw itself. The Inspector keeps everything else: the header, the World, Layout, Text,
 /// Fill and Matte cards and the effects, and the way every edit reaches the document.
 class InspectorInstruments {
-  const InspectorInstruments({this.transform, this.layout});
+  const InspectorInstruments({this.transform, this.layout, this.effectParams});
 
   /// The body of the Transform card (Position, Scale, Rotation, Anchor, Space, Parent, Opacity).
   final Widget Function(BuildContext context, EditorSession controller)? transform;
 
   /// The body of the Layout card for one layer: a Group's grid and sizing, or a child's own lines.
   final Widget Function(BuildContext context, EditorSession controller, Map<String, dynamic> layer)? layout;
+
+  /// The parameters of one effect (its card keeps the head: the grip, the eye and the menu). An effect that lays out
+  /// copies with a grid of Each / Random columns keeps the Inspector's own body until an Instrument owns that grid.
+  final Widget Function(BuildContext context, EditorSession controller, int layerId, Map<String, dynamic> effect)? effectParams;
 }
 
 class InspectorPanel extends StatefulWidget {

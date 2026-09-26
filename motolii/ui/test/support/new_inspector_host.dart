@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../lib/app/new/inspector/new_effect.dart';
 import '../../lib/app/new/inspector/new_layout.dart';
 import '../../lib/app/new/inspector/new_transform.dart';
 import '../../lib/panels/inspector.dart';
@@ -21,7 +22,7 @@ class Recording extends EditorSession {
   }
 }
 
-const capabilities = ['previewProperties', 'commitPreview', 'toggleKey', 'anchor', 'setAttrs', 'animate'];
+const capabilities = ['previewProperties', 'commitPreview', 'toggleKey', 'anchor', 'setAttrs', 'animate', 'focusColor', 'enableEffect', 'moveEffect', 'removeEffect'];
 
 Map<String, dynamic> layerRow(int id, String name, {List<double>? position, bool locked = false, String projection = '2D', int? parent, List<Map<String, dynamic>>? extra, bool keyed = false}) {
   final l = windowLayer(id, 'Shape', 0);
@@ -70,6 +71,12 @@ Future<Recording> mount(WidgetTester tester, Map<String, dynamic> doc, {double h
           instruments: InspectorInstruments(
             transform: (context, controller) => NewTransform(controller: controller),
             layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
+            effectParams: (context, controller, layerId, effect) => NewEffectParams(
+              key: ValueKey('new-effect:$layerId:${effect['id']}'),
+              controller: controller,
+              layerId: layerId,
+              effectId: effect['id'] as Object,
+            ),
           ),
         ),
       ),

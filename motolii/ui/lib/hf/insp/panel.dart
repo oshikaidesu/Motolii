@@ -119,24 +119,53 @@ class _InspectorBodyState extends State<InspectorBody> {
         }),
       );
 
-  Widget _entry(PEntry e) => switch (e) {
+  Widget _entry(PEntry e) => paramEntry(e, widget.store, tones, () => setState(() => advancedOpen = !advancedOpen));
+}
+
+Widget paramEntry(PEntry e, ParamStore store, Tones tones, VoidCallback toggleAdvanced) => switch (e) {
         PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 12, bottom: 5), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3))])),
         PFold(:final count, :final open) => GestureDetector(
             key: const ValueKey('advanced-fold'),
             behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => advancedOpen = !advancedOpen),
+            onTap: () => toggleAdvanced(),
             child: Padding(padding: const EdgeInsets.only(top: 12, bottom: 5), child: Row(children: [Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('$count', style: mono(9.5, c: const Color(0xFF6E6F76)))])),
           ),
         PCells(:final rows, :final hero) => Padding(
             padding: const EdgeInsets.only(bottom: 7),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               for (final (i, r) in rows.indexed) ...[
-                Expanded(child: ParamCell(widget.store, r, hero: hero, tone: tones.of(r))),
+                Expanded(child: ParamCell(store, r, hero: hero, tone: tones.of(r))),
                 if (i < rows.length - 1) const SizedBox(width: 6),
               ],
             ]),
           ),
       };
+
+/// The rows of one ParamStore laid out as the Inspector body lays them (heroes, sections, the advanced fold, routes),
+/// without the header or a scroll of its own: for a card inside a longer panel, such as one effect's parameters.
+class ParamSheet extends StatefulWidget {
+  const ParamSheet(this.store, {super.key, required this.thingId, this.advancedOpen = false});
+  final ParamStore store;
+  final String thingId; // what the colours are dealt from
+  final bool advancedOpen;
+  @override
+  State<ParamSheet> createState() => _ParamSheetState();
+}
+
+class _ParamSheetState extends State<ParamSheet> {
+  late bool advancedOpen = widget.advancedOpen;
+  late Tones tones = Tones(widget.thingId, foldPairs(widget.store.rows));
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: widget.store,
+        builder: (context, _) => LayoutBuilder(builder: (context, box) {
+          final entries = layoutOf(widget.store.rows, advancedOpen: advancedOpen, narrow: box.maxWidth < 250);
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final e in entries) paramEntry(e, widget.store, tones, () => setState(() => advancedOpen = !advancedOpen)),
+          ]);
+        }),
+      );
 }
 
 /// One declared parameter: its word, its marks, its Toy. Marks: a dot when it is not at its default,
@@ -177,7 +206,17 @@ class ParamCell extends StatelessWidget {
       SizedBox(
         height: 15,
         child: Row(children: [
-          if (row['animated'] == true) Padding(padding: const EdgeInsets.only(right: 4), child: SizedBox(key: ValueKey('anim-$id'), width: 7, height: 7, child: CustomPaint(painter: _Diamond(row['keyedNow'] == true, tone)))),
+          // a diamond when the value is animated; where the store can key, an unkeyed value shows a faint one and any of them keys this frame
+          if (row['animated'] == true || store.keyable)
+            GestureDetector(
+              key: ValueKey('key-$id'),
+              behavior: HitTestBehavior.opaque,
+              onTap: store.keyable && !store.frozen ? () => store.toggleKey(id) : null,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: SizedBox(key: ValueKey('anim-$id'), width: 7, height: 7, child: CustomPaint(painter: _Diamond(row['keyedNow'] == true, row['animated'] == true ? tone : dimTone(tone)))),
+              ),
+            ),
           Expanded(child: Row(children: [
             Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(hero ? 11.5 : 11, c: hero ? kInk : const Color(0xFFB4B6BB), w: hero ? FontWeight.w600 : FontWeight.w500))),
             if (mod) Padding(padding: const EdgeInsets.only(left: 5), child: Container(key: ValueKey('mod-$id'), width: 4, height: 4, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),

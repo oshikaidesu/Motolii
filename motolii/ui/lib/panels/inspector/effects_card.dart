@@ -192,7 +192,11 @@ mixin _InspectorEffectsCard on _InspectorControls, _InspectorFolds {
           ),
         ],
       ),
-      children: [
+      children: widget.instruments?.effectParams != null &&
+              effect['placement'] != true &&
+              panelMap(effect['layout']).isEmpty
+          ? [widget.instruments!.effectParams!(context, c, layer['id'] as int, effect)]
+          : [
         if (heroes.isNotEmpty) ...[
           _cells(heroes),
           if (controls.isNotEmpty) ...[

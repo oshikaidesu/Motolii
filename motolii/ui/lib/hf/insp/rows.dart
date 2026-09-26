@@ -52,6 +52,10 @@ class ParamStore extends ChangeNotifier {
   bool typing = false; // a typed number is absolute for every target; a scrub is relative
   int commits = 0, previews = 0;
   bool mixed(String id, int? axis) => false; // does another selected target disagree on this number?
+  /// A store over a document can key a value at the current frame; the in-memory store cannot.
+  bool get keyable => false;
+  void toggleKey(String id) {}
+
   final routes = <String>[];
   final routeFrom = <String>[]; // which property each hand-over came from, so the specialist can return to it
   final actions = <String>[];
