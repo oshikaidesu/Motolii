@@ -5,6 +5,16 @@
 
 起動: `MOTOLII_SHELL=new scripts/motolii-ui.sh dev [document]`。1 回の起動で shell は 1 つ。同じ Document・session・Rust runtime。
 
+## Workspace(2026-09-26)
+
+New の面は固定 layout をやめ、既製の dock(`docking`)に載せた。各 panel は dock の tab で、`c.panelPlacementRequested` は tab を前へ出す(閉じていれば開き直す)。
+下の表の「左の面の tab」「中央の面の tab」「右下の Desk」は、既定の並びがそうなっているという意味で、利用者が動かせる。
+
+- 配置は `settings` の `newWorkspace`(version 1: `docking` の木と大きさ、各 strip で前に出ている tab)に、他の key を保ったまま書く。読めない state は既定の並びに戻す。Classic の `persist` は `layout.json` を丸ごと書き換えるので、Classic を起動すると `newWorkspace` は消える。
+- Stage は dock の tab で「前にいるか」を `Visibility` で判断する。dock がそれを渡す(`DockWorkspace.view()`)。隠れた Stage は window を 0x0 に戻し、resize と移動では見せる範囲を出し直す。
+- 閉じた panel は名前で呼べば開き直す(SH-18・WS-21)。Desk の引き出し(`deskDrawer`)は今までどおり。
+- Graph・Console はまだ panel として存在しない。
+
 ## Phase B(scaffold, 2026-09-25)
 
 New Shell は Classic の panel を四面に固定して載せただけ(写真: [new/phase-b-scaffold.png](new/phase-b-scaffold.png))。

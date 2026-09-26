@@ -7,6 +7,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  docking: ^1.16.2 # dock probe (proto_hf/main_dock.dart); not used by production code yet
 flutter:
   uses-material-design: true
   fonts:

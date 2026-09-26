@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:docking/docking.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -15,11 +19,15 @@ import '../panels/export_controls.dart';
 import '../panels/registry.dart';
 import '../session/editor_session.dart';
 import 'editor_actions.dart';
+import '../workspace/dock_workspace.dart';
+import 'new/browser.dart';
+import 'new/dock_theme.dart';
 import 'editor_window.dart' show freezeNotice;
 
-/// The New projection of the same session: one face with the four regions
-/// fixed in place (Browser, Stage, Inspector over Desk, Timeline), and the
-/// panels Classic docks hosted as they are. Capabilities it cannot reach yet
+/// The New projection of the same session: one face whose panels sit in an
+/// off-the-shelf dock (Browser, Stage, Inspector, Timeline, Desk), and the
+/// panels Classic docks hosted as they are. The default preset is the layout
+/// the design started from; the user can resize, tab, split and move it. Capabilities it cannot reach yet
 /// are listed as NOT YET ROUTED in docs/stage5/ui-rebaseline/routing.md.
 class NewShell extends StatefulWidget {
   const NewShell({super.key});
@@ -29,6 +37,7 @@ class NewShell extends StatefulWidget {
 
 const _browserTabs = ['Create', 'Effects', 'Media', 'Colors', 'Fonts', 'Files'];
 const _centerTabs = ['Stage', 'Camera', 'Notes', 'Web'];
+const _browserLabels = {'Create': 'Objects'};
 
 class _NewShellState extends State<NewShell> {
   final c = EditorSession();
@@ -48,12 +57,6 @@ class _NewShellState extends State<NewShell> {
     const [],
     derived: () => freezeNotice(c.state) ?? effectsNotice(c.state),
   );
-  String browserTab = 'Create';
-  String centerTab = 'Stage';
-
-  /// Tabs opened once stay mounted, as Classic's dock keeps them, so a
-  /// shelf's search or a Stage's view survives a trip to another tab.
-  final opened = <String>{'Create', 'Stage'};
   String? sheet;
   bool ready = false;
 
@@ -82,7 +85,10 @@ class _NewShellState extends State<NewShell> {
       final data = EditorSession.map(await c.native('readSettings'));
       c.restoreDeskWork(EditorSession.map(data['deskWork']));
       c.deskDefault.value = data['deskDefault'] as String? ?? 'Tools';
+      dock.restore(data['newWorkspace']);
     } catch (_) {}
+    _savedWorkspace = jsonEncode(dock.snapshot());
+    dock.layout.addListener(_workspaceChanged);
     setState(() => ready = true);
   }
 
@@ -92,6 +98,10 @@ class _NewShellState extends State<NewShell> {
         .slice('animationAppearance', const ['animate'])
         .removeListener(_syncAnimation);
     c.browserTab.removeListener(_followBrowserTab);
+    if (ready) dock.layout.removeListener(_workspaceChanged);
+    final pending = _workspaceTimer != null;
+    _workspaceTimer?.cancel();
+    if (pending) _writeWorkspace();
     c.dispose();
     super.dispose();
   }
@@ -102,16 +112,33 @@ class _NewShellState extends State<NewShell> {
       _place(c.browserTab.value, 'show');
   }
 
-  /// A panel asked to be shown. Every region is always on the face, so
-  /// showing one is choosing its tab; detaching into a window is not routed.
+  /// A panel asked to be shown: choose its tab, or reopen it if it was closed.
+  /// Detaching into a window is not routed.
   Future<void> _place(String name, String placement) async {
     if (placement == 'hidden' || placement == 'window') return;
-    setState(() {
-      if (_browserTabs.contains(name)) browserTab = name;
-      if (_centerTabs.contains(name)) centerTab = name;
-      opened.add(name);
-    });
+    dock.activate(name);
     if (panelSpec(name)?.drawer == true) c.deskDrawer.value = name;
+  }
+
+  /// The workspace as last written (or as read at start): a layout change or a pointer release writes only
+  /// when the saved form differs, after a short pause so a drag is one write.
+  String _savedWorkspace = '';
+  Timer? _workspaceTimer;
+
+  void _workspaceChanged() {
+    final now = dock.snapshot();
+    if (jsonEncode(now) == _savedWorkspace) return;
+    _workspaceTimer?.cancel();
+    _workspaceTimer = Timer(const Duration(milliseconds: 400), _writeWorkspace);
+  }
+
+  void _writeWorkspace() {
+    _workspaceTimer = null;
+    final now = dock.snapshot();
+    final text = jsonEncode(now);
+    if (text == _savedWorkspace) return;
+    _savedWorkspace = text;
+    c.storeSetting('newWorkspace', now);
   }
 
   Future<void> menu(String action) async {
@@ -126,15 +153,34 @@ class _NewShellState extends State<NewShell> {
   Widget pane(String name) =>
       buildPanel(name, c, keys.putIfAbsent(name, () => GlobalKey()));
 
-  /// The opened tabs of a region, the active one in front.
-  Widget stack(List<String> tabs, String active) {
-    final shown = tabs.where(opened.contains).toList();
-    return IndexedStack(
-      index: shown.indexOf(active),
-      sizing: StackFit.expand,
-      children: [for (final name in shown) pane(name)],
-    );
-  }
+  /// Every panel the workspace can hold, by the id the routes use. The tab
+  /// shows the panel's name; the panel keeps its own controls, not its name.
+  late final dock = DockWorkspace(
+    {
+      for (final name in _browserTabs)
+        name: PanelDef(
+          name,
+          (_browserLabels[name] ?? name).toUpperCase(),
+          () => NewBrowser(controller: c, tab: name),
+          minSize: 220,
+        ),
+      for (final name in _centerTabs)
+        name: PanelDef(name, name.toUpperCase(), () => pane(name), minSize: 300),
+      'Inspector': PanelDef('Inspector', 'INSPECTOR', () => pane('Inspector'), minSize: 240),
+      'Timeline': PanelDef('Timeline', 'TIMELINE', () => pane('Timeline'), minSize: 120),
+      'Desk': PanelDef('Desk', 'DESK', () => pane('Desk'), minSize: 200),
+    },
+    (item) => DockingRow([
+      DockingTabs([for (final name in _browserTabs) item(name)], weight: .19),
+      DockingColumn([
+        DockingRow([
+          DockingTabs([for (final name in _centerTabs) item(name)], weight: .78),
+          item('Inspector', weight: .22),
+        ], weight: .7),
+        DockingRow([item('Timeline', weight: .78), item('Desk', weight: .22)], weight: .3),
+      ], weight: .81),
+    ]),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -172,77 +218,18 @@ class _NewShellState extends State<NewShell> {
     );
   }
 
-  Widget _face() => Row(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      SizedBox(
-        width: ShellTokens.browserWidth,
-        child: _Region(
-          tabs: _browserTabs,
-          labels: const {'Create': 'Objects'},
-          active: browserTab,
-          onPick: (name) => _place(name, 'show'),
-          child: stack(_browserTabs, browserTab),
-        ),
-      ),
-      const SizedBox(width: ShellTokens.ruleWidth),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _Region(
-                      tabs: _centerTabs,
-                      active: centerTab,
-                      onPick: (name) => _place(name, 'show'),
-                      child: stack(_centerTabs, centerTab),
-                    ),
-                  ),
-                  const SizedBox(width: ShellTokens.ruleWidth),
-                  SizedBox(
-                    width: ShellTokens.inspectorWidth,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: _Region(
-                            tabs: const ['Inspector'],
-                            active: 'Inspector',
-                            child: pane('Inspector'),
-                          ),
-                        ),
-                        const SizedBox(height: ShellTokens.ruleWidth),
-                        SizedBox(
-                          height: deskHostSpec.height.px,
-                          child: _Region(
-                            tabs: const ['Desk'],
-                            active: 'Desk',
-                            child: pane('Desk'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: ShellTokens.ruleWidth),
-            SizedBox(
-              height: ShellTokens.bottomHeight,
-              child: _Region(
-                tabs: const ['Timeline'],
-                active: 'Timeline',
-                child: pane('Timeline'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ],
+  Widget _face() => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerUp: (_) => _workspaceChanged(),
+    child: _dockView(),
+  );
+
+  Widget _dockView() => TabbedViewTheme(
+    data: shellTabs(),
+    child: MultiSplitViewTheme(
+      data: shellSplit(),
+      child: dock.view(),
+    ),
   );
 
   List<Widget> _sheet(EditorTheme t) => [
@@ -253,7 +240,7 @@ class _NewShellState extends State<NewShell> {
       ),
     ),
     Positioned(
-      left: ShellTokens.browserWidth,
+      left: dock.rectOf('Create')?.right ?? ShellTokens.browserWidth,
       top: ShellTokens.topBar,
       child: Container(
         width: sheet == 'Settings'
@@ -273,8 +260,9 @@ class _NewShellState extends State<NewShell> {
   ];
 }
 
-/// The strip across the top: the name, the document menus, the three sheets,
-/// and the document's own name on the right.
+/// The strip across the top, read left to right as an instrument: the name,
+/// the document menus, the transport and its readouts, the three sheets,
+/// and the document's own name.
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.shell});
   final _NewShellState shell;
@@ -310,7 +298,7 @@ class _TopBar extends StatelessWidget {
           'Motolii',
           style: TextStyle(
             fontSize: ShellTokens.wordmark,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             letterSpacing: ShellTokens.wordmarkTracking,
             color: ShellTokens.ink,
           ),
@@ -325,17 +313,18 @@ class _TopBar extends StatelessWidget {
             if (spec.drawer) spec.name,
         ]),
         const SizedBox(width: ShellTokens.tabGap),
-        for (final name in ['Composition', 'Export', 'Settings'])
-          _Label(
-            name,
-            active: shell.sheet == name,
-            onTap: () => shell.toggleSheet(name),
-          ),
+        _Transport(c: c),
         const Spacer(),
+        _Segment(
+          names: const ['Composition', 'Export', 'Settings'],
+          active: shell.sheet,
+          onPick: shell.toggleSheet,
+        ),
+        const SizedBox(width: ShellTokens.tabGap),
         ValueListenableBuilder<Map<String, dynamic>>(
           valueListenable: c.slice('title', const ['dirty', 'path']),
           builder: (_, state, __) => Text(
-            '${state['dirty'] == true ? '• ' : ''}'
+            '${state['dirty'] == true ? '● ' : ''}'
             '${(state['path'] as String? ?? 'Untitled').split('/').last}',
             style: ShellTokens.kickerStyle(ShellTokens.inkMuted),
           ),
@@ -345,38 +334,166 @@ class _TopBar extends StatelessWidget {
   );
 }
 
-/// An uppercase label that is pressed: a menu title or a tab.
-class _Label extends StatelessWidget {
-  const _Label(this.text, {this.onTap, this.active = false});
-  final String text;
-  final VoidCallback? onTap;
-  final bool active;
+/// Play, back to the start, and Animate, then where the playhead is. Only
+/// the frame readout follows playback, and it is one line of text.
+class _Transport extends StatelessWidget {
+  const _Transport({required this.c});
+  final EditorSession c;
+
+  static String _clock(int frame, num fps) {
+    final rate = fps <= 0 ? 1 : fps;
+    final seconds = frame / rate;
+    final m = seconds ~/ 60;
+    final sec = (seconds % 60).floor();
+    final ff = (frame % rate.round().clamp(1, 1000)).toString().padLeft(2, '0');
+    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}:$ff';
+  }
+
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    selected: active,
-    label: text,
-    child: MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: active ? ShellTokens.sky : EditorTheme.clear,
-                width: ShellTokens.activeRule,
+  Widget build(BuildContext context) {
+    final timing = c.slice('transport', const ['fps', 'durationFrames']);
+    final animate = c.slice('transportAnimate', const ['animate']);
+    return Row(
+      children: [
+        ValueListenableBuilder<bool>(
+          valueListenable: c.playing,
+          builder: (_, playing, __) => _Key(
+            tip: playing ? 'Pause (Space)' : 'Play (Space)',
+            lit: playing ? ShellTokens.mint : null,
+            onTap: c.togglePlayback,
+            child: playing
+                ? const _Bars()
+                : const Icon(
+                    Glyph.play_arrow_outlined,
+                    size: ShellTokens.readout + EditorMetrics.s4,
+                    color: ShellTokens.ink,
+                  ),
+          ),
+        ),
+        _Key(
+          tip: 'Stop and go to the start (Home)',
+          onTap: () {
+            c.stopPlayback();
+            c.seek(0);
+          },
+          child: Container(
+            width: ShellTokens.keyGlyph - EditorMetrics.s2,
+            height: ShellTokens.keyGlyph - EditorMetrics.s2,
+            color: ShellTokens.ink,
+          ),
+        ),
+        ValueListenableBuilder(
+          valueListenable: animate,
+          builder: (_, __, ___) => _Key(
+            tip: 'Animate (A): values you touch become keys',
+            lit: c.animating ? ShellTokens.pink : null,
+            onTap: c.supports('animate')
+                ? () => c.setAnimate(!c.animating)
+                : null,
+            child: Container(
+              width: ShellTokens.keyGlyph,
+              height: ShellTokens.keyGlyph,
+              decoration: BoxDecoration(
+                color: c.animating ? ShellTokens.inkOnAccent : ShellTokens.pink,
+                shape: BoxShape.circle,
               ),
             ),
           ),
-          child: Text(
-            text.toUpperCase(),
-            style: ShellTokens.kickerStyle(
-              active ? ShellTokens.ink : ShellTokens.inkMuted,
+        ),
+        const SizedBox(width: ShellTokens.readoutGap),
+        ValueListenableBuilder(
+          valueListenable: timing,
+          builder: (_, __, ___) {
+            final fps = (c.state['fps'] as num?) ?? 30;
+            final duration = (c.state['durationFrames'] as num?)?.toInt() ?? 0;
+            return Row(
+              children: [
+                Text(
+                  fps.toStringAsFixed(2),
+                  style: ShellTokens.readoutStyle(ShellTokens.ink),
+                ),
+                Text(
+                  ' FPS',
+                  style: ShellTokens.kickerStyle(ShellTokens.inkFaint),
+                ),
+                const _Tick(),
+                ValueListenableBuilder<int>(
+                  valueListenable: c.frame,
+                  builder: (_, frame, __) => Text(
+                    '${_clock(frame, fps)}  '
+                    '${frame.toString().padLeft(4, '0')}'
+                    '/${duration.toString().padLeft(4, '0')}',
+                    style: ShellTokens.readoutStyle(ShellTokens.ink),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _Tick extends StatelessWidget {
+  const _Tick();
+  @override
+  Widget build(BuildContext context) => Container(
+    width: ShellTokens.ruleWidth,
+    height: ShellTokens.readout,
+    margin: const EdgeInsets.symmetric(horizontal: ShellTokens.gutter),
+    color: ShellTokens.ruleStrong,
+  );
+}
+
+class _Bars extends StatelessWidget {
+  const _Bars();
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (var i = 0; i < 2; i++) ...[
+        if (i == 1) const SizedBox(width: EditorMetrics.s3),
+        Container(
+          width: EditorMetrics.s3,
+          height: ShellTokens.keyGlyph,
+          color: ShellTokens.inkOnAccent,
+        ),
+      ],
+    ],
+  );
+}
+
+/// A square key of the transport: flat, ruled, lit in its colour when on.
+class _Key extends StatelessWidget {
+  const _Key({required this.tip, required this.child, this.onTap, this.lit});
+  final String tip;
+  final Widget child;
+  final VoidCallback? onTap;
+  final Color? lit;
+  @override
+  Widget build(BuildContext context) => EditorTooltip(
+    message: tip,
+    child: Semantics(
+      button: true,
+      label: tip,
+      child: MouseRegion(
+        cursor: onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            width: ShellTokens.key,
+            height: ShellTokens.key,
+            margin: const EdgeInsets.only(right: EditorMetrics.s2),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: lit ?? ShellTokens.raised,
+              border: Border.all(color: lit ?? ShellTokens.ruleStrong),
             ),
+            child: child,
           ),
         ),
       ),
@@ -384,51 +501,77 @@ class _Label extends StatelessWidget {
   );
 }
 
-/// One region of the face: a strip of tabs over the panel it shows.
-class _Region extends StatelessWidget {
-  const _Region({
-    required this.tabs,
-    required this.active,
-    required this.child,
-    this.labels = const {},
-    this.onPick,
-  });
-  final List<String> tabs;
-  final Map<String, String> labels;
-  final String active;
-  final ValueChanged<String>? onPick;
-  final Widget child;
+/// Neighbouring choices in one ruled box, the chosen one lit.
+class _Segment extends StatelessWidget {
+  const _Segment({required this.names, required this.onPick, this.active});
+  final List<String> names;
+  final String? active;
+  final ValueChanged<String> onPick;
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: ShellTokens.surface,
-    child: Column(
+  Widget build(BuildContext context) => Container(
+    height: ShellTokens.key,
+    decoration: BoxDecoration(
+      border: Border.all(color: ShellTokens.ruleStrong),
+    ),
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          height: ShellTokens.header,
-          color: ShellTokens.ground,
-          child: SingleChildScrollView(
-            primary: false,
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final name in tabs)
-                  _Label(
-                    labels[name] ?? name,
-                    active: name == active,
-                    onTap: onPick == null ? null : () => onPick!(name),
+        for (final name in names)
+          Semantics(
+            button: true,
+            selected: name == active,
+            label: name,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onPick(name),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: ShellTokens.gutter + EditorMetrics.s4,
                   ),
-              ],
+                  alignment: Alignment.center,
+                  color: name == active ? ShellTokens.sky : EditorTheme.clear,
+                  child: Text(
+                    name.toUpperCase(),
+                    style: ShellTokens.kickerStyle(
+                      name == active
+                          ? ShellTokens.inkOnAccent
+                          : ShellTokens.ink,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(
-          height: ShellTokens.ruleWidth,
-          child: ColoredBox(color: ShellTokens.rule),
-        ),
-        Expanded(child: child),
       ],
+    ),
+  );
+}
+
+/// An uppercase menu title that is pressed.
+class _Label extends StatelessWidget {
+  const _Label(this.text, {this.onTap});
+  final String text;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: text,
+    child: MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: ShellTokens.gutter),
+          alignment: Alignment.center,
+          child: Text(
+            text.toUpperCase(),
+            style: ShellTokens.kickerStyle(ShellTokens.ink),
+          ),
+        ),
+      ),
     ),
   );
 }

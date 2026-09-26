@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
-import '../lib/panels/browser.dart';
+import '../lib/app/new/browser.dart';
 import '../lib/panels/desk.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/panels/stage.dart';
@@ -51,13 +51,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(BrowserPanel), findsOneWidget);
+    expect(find.byType(NewBrowser), findsOneWidget);
     expect(find.byType(StagePanel), findsOneWidget);
     expect(find.byType(InspectorPanel), findsOneWidget);
     expect(find.byType(DeskPanel), findsOneWidget);
     expect(find.byType(TimelinePanel), findsOneWidget);
-    for (final tab in ['OBJECTS', 'EFFECTS', 'STAGE', 'CAMERA', 'TIMELINE'])
-      expect(find.text(tab), findsOneWidget, reason: tab);
+    // Each panel is a dock tab named after it; a strip too narrow for all its
+    // tabs keeps the rest off the face, so only the ones in view are asserted.
+    for (final tab in ['OBJECTS', 'STAGE', 'CAMERA', 'INSPECTOR', 'TIMELINE', 'DESK'])
+      expect(find.text(tab), findsWidgets, reason: tab);
 
     final dynamic shell = tester.state(find.byType(NewShell));
     final c = shell.c as EditorSession;
@@ -69,13 +71,21 @@ void main() {
     await c.panelPlacementRequested!('Fonts', 'show');
     await c.panelPlacementRequested!('Ease', 'show');
     await tester.pumpAndSettle();
-    expect(shell.browserTab, 'Fonts');
+    expect(shell.dock.isShown('Fonts'), isTrue);
     expect(c.deskDrawer.value, 'Ease');
 
     await tester.tap(find.text('CAMERA'));
     await tester.pumpAndSettle();
-    expect(shell.centerTab, 'Camera');
+    expect(shell.dock.isShown('Camera'), isTrue);
     expect(find.byType(StagePanel), findsOneWidget);
+
+    // Closing a panel and asking for it by name brings it back.
+    shell.dock.close('Notes');
+    await tester.pumpAndSettle();
+    expect(shell.dock.isOpen('Notes'), isFalse);
+    await c.panelPlacementRequested!('Notes', 'show');
+    await tester.pumpAndSettle();
+    expect(shell.dock.isShown('Notes'), isTrue);
 
     // Closing a clean document does not ask.
     expect(await c.confirmClose!(), isTrue);
