@@ -7,15 +7,22 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
+import '../foundation/notes_view.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/glyphs.dart';
 import '../foundation/leaves.dart';
 
+part 'notes_desk/card.dart';
+
 class NotesPanel extends StatefulWidget {
-  const NotesPanel({super.key, required this.controller});
+  const NotesPanel({super.key, required this.controller, this.skin, this.look});
   final EditorSession controller;
+
+  /// Another skin on the same desk: it is given the pages, the canvas and the actions, and places them.
+  final Widget Function(BuildContext context, NotesView view)? skin;
+  final NoteLook? look;
   @override
   State<NotesPanel> createState() => _NotesPanelState();
 }
@@ -147,6 +154,14 @@ class _NotesPanelState extends State<NotesPanel> {
     return true;
   }
 
+  Future<void> _pickImages() async {
+    final paths = await c.native('pickImport');
+    if (paths is List)
+      for (var i = 0; i < paths.length; i++) {
+        await _image(_insertion + Offset(i * 24, i * 24), path: '${paths[i]}');
+      }
+  }
+
   Future<void> _reference() async {
     final layer = c.activeLayer;
     final keys = EditorSession.maps(c.state['selectedKeys']);
@@ -211,9 +226,67 @@ class _NotesPanelState extends State<NotesPanel> {
           (b['y'] as num).toDouble() + (b['height'] as num).toDouble() + 300,
         ),
       );
-      return Focus(
-        focusNode: _focus,
-        onKeyEvent: (_, event) {
+      final canvas = Stack(
+        children: [
+          if (widget.look != null) Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _NoteDots(_transform, widget.look!)))),
+          Listener(
+                key: _viewport,
+                behavior: HitTestBehavior.opaque,
+                child: InteractiveViewer(
+                  transformationController: _transform,
+                  constrained: false,
+                  minScale: .25,
+                  maxScale: 2.0,
+                  boundaryMargin: const EdgeInsets.all(EditorMetrics.s200),
+                  child: SizedBox(
+                    width: width,
+                    height: height,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTapUp: (e) {
+                              _focus.requestFocus();
+                              _insertion = e.localPosition;
+                              _text(_insertion);
+                            },
+                            child: ColoredBox(
+                              color: widget.look != null ? const Color(0x00000000) : EditorTheme.of(context).panel,
+                            ),
+                          ),
+                        ),
+                        for (final (i, b) in blocks.indexed)
+                          Positioned(
+                            left: (b['x'] as num).toDouble(),
+                            top: (b['y'] as num).toDouble(),
+                            width: (b['width'] as num).toDouble(),
+                            height: (b['height'] as num).toDouble(),
+                            child: Picked<String?>(
+                              key: ValueKey('${page!['id']}:${b['id']}'),
+                              of: _selection,
+                              test: (chosen) => chosen == b['id'],
+                              builder: (selected) => _NoteCard(
+                                controller: c,
+                                page: '${page['id']}',
+                                block: b,
+                                selected: selected,
+                                autoFocus: _autoFocus == b['id'],
+                                index: i,
+                                look: widget.look,
+                                onSelect: () => _selection.value = b['id'],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      );
+      KeyEventResult keys(FocusNode _, KeyEvent event) {
+        {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
           final typing =
               FocusManager.instance.primaryFocus?.context
@@ -235,7 +308,63 @@ class _NotesPanelState extends State<NotesPanel> {
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
-        },
+        }
+      }
+
+      if (widget.skin != null) {
+        return Focus(
+          focusNode: _focus,
+          onKeyEvent: keys,
+          child: widget.skin!(
+            context,
+            NotesView(
+              pages: [for (final p in _pages) NotesPage('${p['id']}', '${p['title']}', active: p['id'] == page?['id'])],
+              pageTitle: page == null ? null : '${page['title']}',
+              blocks: blocks.length,
+              canvas: canvas,
+              legacy: _pages.isEmpty &&
+                  (c.deskWork.value['note'] != null ||
+                      c.deskWork.value['notes'] != null ||
+                      EditorSession.maps(c.state['assets']).any((a) => a['role'] == 'reference')),
+              transform: _transform,
+              selectPage: (id) async {
+                await c.flushEditors();
+                if (mounted)
+                  setState(() {
+                    _pageId = id;
+                    _autoFocus = null;
+                    _selection.value = null;
+                    _transform.value = Matrix4.identity();
+                  });
+              },
+              newPage: _newPage,
+              renamePage: (title) => _action('renamePage', {'title': title}, page: page == null ? null : '${page['id']}'),
+              deletePage: () async {
+                if (page == null) return;
+                await c.flushEditors();
+                await _action('deletePage', {}, page: '${page['id']}');
+              },
+              paste: _paste,
+              insertImage: _pickImages,
+              linkSelection: _reference,
+              resetView: () => setState(() => _transform.value = Matrix4.identity()),
+              importLegacy: _legacy,
+              setZoom: (z) {
+                final t = _transform.value.clone();
+                final k = z / t.getMaxScaleOnAxis();
+                _transform.value = Matrix4.identity()
+                  ..translate(t.getTranslation().x, t.getTranslation().y)
+                  ..scale(z.clamp(.25, 2.0));
+                // keeping the view where it is: only the scale changes
+                if (k.isNaN) _transform.value = Matrix4.identity();
+              },
+            ),
+          ),
+        );
+      }
+      return Focus(
+        focusNode: _focus,
+        onKeyEvent: keys,
         child: Column(
           children: [
             SizedBox(
@@ -312,16 +441,7 @@ class _NotesPanelState extends State<NotesPanel> {
                     message: 'Insert image',
                     child: EditorIconButton(
                       iconSize: EditorMetrics.s16,
-                      onPressed: () async {
-                        final paths = await c.native('pickImport');
-                        if (paths is List)
-                          for (var i = 0; i < paths.length; i++) {
-                            await _image(
-                              _insertion + Offset(i * 24, i * 24),
-                              path: '${paths[i]}',
-                            );
-                          }
-                      },
+                      onPressed: _pickImages,
                       icon: const Icon(Glyph.image_outlined),
                     ),
                   ),
@@ -384,330 +504,10 @@ class _NotesPanelState extends State<NotesPanel> {
                   ],
                 ),
               ),
-            Expanded(
-              child: Listener(
-                key: _viewport,
-                behavior: HitTestBehavior.opaque,
-                child: InteractiveViewer(
-                  transformationController: _transform,
-                  constrained: false,
-                  minScale: .25,
-                  maxScale: 2.0,
-                  boundaryMargin: const EdgeInsets.all(EditorMetrics.s200),
-                  child: SizedBox(
-                    width: width,
-                    height: height,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTapUp: (e) {
-                              _focus.requestFocus();
-                              _insertion = e.localPosition;
-                              _text(_insertion);
-                            },
-                            child: ColoredBox(
-                              color: EditorTheme.of(context).panel,
-                            ),
-                          ),
-                        ),
-                        for (final b in blocks)
-                          Positioned(
-                            left: (b['x'] as num).toDouble(),
-                            top: (b['y'] as num).toDouble(),
-                            width: (b['width'] as num).toDouble(),
-                            height: (b['height'] as num).toDouble(),
-                            child: Picked<String?>(
-                              key: ValueKey('${page!['id']}:${b['id']}'),
-                              of: _selection,
-                              test: (chosen) => chosen == b['id'],
-                              builder: (selected) => _NoteCard(
-                                controller: c,
-                                page: '${page['id']}',
-                                block: b,
-                                selected: selected,
-                                autoFocus: _autoFocus == b['id'],
-                                onSelect: () => _selection.value = b['id'],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            Expanded(child: canvas),
           ],
         ),
       );
     },
   );
-}
-
-class _NoteCard extends StatefulWidget {
-  const _NoteCard({
-    required this.controller,
-    required this.page,
-    required this.block,
-    required this.selected,
-    required this.autoFocus,
-    required this.onSelect,
-  });
-  final EditorSession controller;
-  final String page;
-  final Map<String, dynamic> block;
-  final bool selected, autoFocus;
-  final VoidCallback onSelect;
-  @override
-  State<_NoteCard> createState() => _NoteCardState();
-}
-
-class _NoteCardState extends State<_NoteCard> {
-  late final TextEditingController _text;
-  final _focus = FocusNode();
-  Timer? _timer;
-  bool _dirty = false;
-  Uint8List? _imageBytes;
-  void _decodeImage() {
-    try {
-      _imageBytes = b['kind'] == 'image' ? base64Decode('${b['png']}') : null;
-    } catch (_) {
-      _imageBytes = null;
-    }
-  }
-
-  Offset? _delta;
-  bool _resizing = false;
-  Map<String, dynamic> get b => widget.block;
-  @override
-  void initState() {
-    super.initState();
-    _text = TextEditingController(text: '${b['text'] ?? ''}');
-    _decodeImage();
-    _focus.addListener(_blur);
-    widget.controller.pendingEditors.add(_flush);
-    if (widget.autoFocus)
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focus.requestFocus();
-      });
-  }
-
-  @override
-  void didUpdateWidget(covariant _NoteCard old) {
-    super.didUpdateWidget(old);
-    if (old.block['png'] != b['png']) _decodeImage();
-    if (!_dirty && '${b['text'] ?? ''}' != _text.text)
-      _text.text = '${b['text'] ?? ''}';
-  }
-
-  void _blur() {
-    if (!_focus.hasFocus) _flush();
-  }
-
-  Future<void> _patch(Map<String, dynamic> patch) =>
-      widget.controller.command('notes', {
-        'action': 'patchBlock',
-        'page': widget.page,
-        'id': b['id'],
-        'patch': patch,
-      });
-  Future<void> _flush() async {
-    _timer?.cancel();
-    if (!_dirty) return;
-    _dirty = false;
-    await _patch({'text': _text.text});
-  }
-
-  @override
-  void dispose() {
-    _flush();
-    widget.controller.pendingEditors.remove(_flush);
-    _timer?.cancel();
-    _focus.removeListener(_blur);
-    _focus.dispose();
-    _text.dispose();
-    super.dispose();
-  }
-
-  void _start(bool resize) {
-    widget.onSelect();
-    _flush();
-    setState(() {
-      _resizing = resize;
-      _delta = Offset.zero;
-    });
-  }
-
-  void _move(DragUpdateDetails d) {
-    setState(() => _delta = (_delta ?? Offset.zero) + d.delta);
-  }
-
-  void _end() {
-    final delta = _delta;
-    if (delta == null) return;
-    setState(() => _delta = null);
-    _patch(
-      _resizing
-          ? {
-              'width': ((b['width'] as num) + delta.dx).clamp(80, 5000),
-              'height': ((b['height'] as num) + delta.dy).clamp(60, 5000),
-            }
-          : {
-              'x': ((b['x'] as num) + delta.dx).clamp(0, 100000),
-              'y': ((b['y'] as num) + delta.dy).clamp(0, 100000),
-            },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final delta = _delta ?? Offset.zero;
-    return Transform.translate(
-      offset: _resizing ? Offset.zero : delta,
-      child: OverflowBox(
-        alignment: Alignment.topLeft,
-        minWidth: 0,
-        minHeight: 0,
-        maxWidth: EditorMetrics.canvas,
-        maxHeight: EditorMetrics.canvas,
-        child: SizedBox(
-          width: ((b['width'] as num) + (_resizing ? delta.dx : 0))
-              .clamp(80, 5000)
-              .toDouble(),
-          height: ((b['height'] as num) + (_resizing ? delta.dy : 0))
-              .clamp(60, 5000)
-              .toDouble(),
-          child: ColoredBox(
-            color: EditorTheme.of(context).raised,
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: widget.selected
-                      ? EditorTheme.of(context).accent
-                      : EditorTheme.of(context).line,
-                ),
-              ),
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: EditorMetrics.row,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            dragStartBehavior: DragStartBehavior.down,
-                            onPanStart: (_) => _start(false),
-                            onPanUpdate: _move,
-                            onPanEnd: (_) => _end(),
-                            onPanCancel: () => setState(() => _delta = null),
-                            onTap: widget.onSelect,
-                            child: Center(
-                              child: Icon(
-                                Glyph.drag_handle,
-                                size: EditorMetrics.s14,
-                                color: EditorTheme.of(context).muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                        EditorTooltip(
-                          message: 'Delete note',
-                          child: EditorIconButton(
-                            iconSize: EditorMetrics.s12,
-                            onPressed: () async {
-                              await _flush();
-                              await widget.controller.command('notes', {
-                                'action': 'deleteBlock',
-                                'page': widget.page,
-                                'id': b['id'],
-                              });
-                            },
-                            icon: const Icon(Glyph.close),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: EditorMetrics.s6,
-                      ),
-                      child: switch (b['kind']) {
-                        'image' =>
-                          _imageBytes == null
-                              ? const Text('Image unavailable')
-                              : Image.memory(
-                                  _imageBytes!,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) =>
-                                      const Text('Image unavailable'),
-                                ),
-                        'reference' => EditorTextButton(
-                          onPressed: () async {
-                            if (b['layer'] != null)
-                              await widget.controller.command('select', {
-                                'ids': [b['layer']],
-                              });
-                            widget.controller.seek((b['start'] as num).toInt());
-                          },
-                          child: Text(
-                            '${b['label']}',
-                            style: const TextStyle(
-                              fontSize: EditorMetrics.font,
-                            ),
-                          ),
-                        ),
-                        _ => EditorTextField(
-                          controller: _text,
-                          focusNode: _focus,
-                          maxLines: null,
-                          expands: true,
-                          style: TextStyle(
-                            fontSize: EditorMetrics.title,
-                            color: EditorTheme.of(context).ink,
-                          ),
-                          hint: 'Write a note',
-                          onTap: widget.onSelect,
-                          onChanged: (_) {
-                            _dirty = true;
-                            _timer?.cancel();
-                            _timer = Timer(
-                              const Duration(milliseconds: 400),
-                              _flush,
-                            );
-                          },
-                        ),
-                      },
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: GestureDetector(
-                      dragStartBehavior: DragStartBehavior.down,
-                      onPanStart: (_) => _start(true),
-                      onPanUpdate: _move,
-                      onPanEnd: (_) => _end(),
-                      onPanCancel: () => setState(() => _delta = null),
-                      child: SizedBox(
-                        width: EditorMetrics.s18,
-                        height: EditorMetrics.s16,
-                        child: Icon(
-                          Glyph.south_east,
-                          size: EditorMetrics.s12,
-                          color: EditorTheme.of(context).muted,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

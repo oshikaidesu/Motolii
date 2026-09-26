@@ -10,8 +10,11 @@ import 'package:flutter/services.dart';
 import '../lib/app/new/desk/new_blend.dart';
 import '../lib/app/new/desk/new_depth.dart';
 import '../lib/hf/desk/depth.dart';
+import '../lib/foundation/leaves.dart' show EditorTextField;
 import '../lib/hf/desk/ease_skin.dart';
+import '../lib/hf/desk/notes_skin.dart';
 import '../lib/panels/ease_desk.dart';
+import '../lib/panels/notes_desk.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/app/new/desk/new_history.dart';
 import 'support/editor_test_theme.dart';
@@ -317,6 +320,100 @@ void main() {
     final sequence = commands.where((e) => e['op'] == 'sequence').single;
     expect(sequence['layers'], [1, 2]);
     expect((sequence['ghosts'] as List).first, 0, reason: 'the first layer has no delay');
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
+  testWidgets('Notes: the pages, cards and actions are the desk\'s own; a card is written, moved, resized and removed by the same notes commands', (tester) async {
+    final c = EditorSession();
+    final pages = <Map<String, dynamic>>[];
+    final calls = <Map<String, dynamic>>[];
+    Map<String, dynamic> snapshot() => {
+          'notebook': {'pages': jsonDecode(jsonEncode(pages))},
+          'selectedIds': [1],
+          'selectedKeys': [
+            {'layer': 1, 'property': 'scale', 'frame': 12},
+            {'layer': 1, 'property': 'scale', 'frame': 30},
+          ],
+          'layers': [{'id': 1, 'name': 'Cube', 'kind': 'Mesh'}],
+          'capabilities': ['notes'],
+        };
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
+      if (call.method == 'request') {
+        final command = Map<String, dynamic>.from(jsonDecode((call.arguments as Map)['command']));
+        calls.add(command);
+        if (command['op'] == 'notes') {
+          if (command['action'] == 'addPage') {
+            pages.add({'id': command['page'], 'title': command['title'], 'blocks': <Map<String, dynamic>>[]});
+          } else {
+            final page = pages.firstWhere((p) => p['id'] == command['page']);
+            final blocks = page['blocks'] as List;
+            switch (command['action']) {
+              case 'putBlock':
+                blocks.add(Map<String, dynamic>.from(command['block']));
+              case 'patchBlock':
+                (blocks.firstWhere((b) => b['id'] == command['id']) as Map).addAll(command['patch']);
+              case 'renamePage':
+                page['title'] = command['title'];
+              case 'deleteBlock':
+                blocks.removeWhere((b) => b['id'] == command['id']);
+              case 'deletePage':
+                pages.remove(page);
+            }
+          }
+        }
+      }
+      return snapshot();
+    });
+    c.document.value = snapshot();
+    tester.view.physicalSize = const Size(700, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      theme: editorTestTheme,
+      home: Scaffold(body: NotesPanel(controller: c, look: hfNoteLook, skin: (context, view) => NotesSkin(view))),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Click anywhere to write'), findsOneWidget);
+    await tester.tapAt(tester.getTopLeft(find.byType(InteractiveViewer)) + const Offset(40, 40));
+    await tester.pumpAndSettle();
+    expect(pages.length, 1);
+    final input = find.byWidgetPredicate((w) => w is EditorTextField && w.hint == 'Write a note');
+    await tester.enterText(input, 'Lighting and texture');
+    await tester.tap(find.byKey(const ValueKey('notes-new-page')));
+    await tester.pumpAndSettle();
+    expect(pages.length, 2);
+    expect(pages.first['blocks'][0]['text'], 'Lighting and texture');
+    await tester.tap(find.byKey(const ValueKey('notes-page-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Lighting and texture'), findsOneWidget);
+
+    final x0 = pages.first['blocks'][0]['x'] as num;
+    await tester.drag(find.byKey(ValueKey('note-text:${pages.first['blocks'][0]['id']}')), const Offset(70, 90), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(pages.first['blocks'][0]['x'], closeTo(x0 + 70, 1), reason: 'any part of the card moves it');
+    await tester.drag(find.byKey(const ValueKey('note-resize')), const Offset(40, 30));
+    await tester.pumpAndSettle();
+    expect(pages.first['blocks'][0]['width'], closeTo(260, 1));
+    await tester.tap(find.byKey(const ValueKey('notes-link')));
+    await tester.pumpAndSettle();
+    final ref = pages.first['blocks'][1] as Map;
+    expect(ref['kind'], 'reference');
+    expect((ref['start'], ref['end']), (12, 30));
+    expect(find.text('Cube · 12–30'), findsOneWidget);
+
+    expect(find.byKey(const ValueKey('zoom-label')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('zoom-in')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const ValueKey('zoom-label'))).data, '125%');
+    await tester.tap(find.byKey(const ValueKey('zoom-fit')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const ValueKey('zoom-label'))).data, '100%');
+
+    await tester.tap(find.byKey(const ValueKey('note-delete')));
+    await tester.pumpAndSettle();
+    expect((pages.first['blocks'] as List).length, 1, reason: 'the chosen card is removed');
+    expect(calls.every((call) => call['op'] == 'notes'), isTrue);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
   });

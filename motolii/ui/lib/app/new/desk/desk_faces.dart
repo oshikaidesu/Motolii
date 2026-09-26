@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../../../hf/bp/common.dart' show DockedPanel;
 import '../../../session/editor_session.dart';
 import '../../../hf/desk/ease_skin.dart';
+import '../../../hf/desk/notes_skin.dart';
+import '../../../panels/notes_desk.dart';
 import '../../../panels/ease_desk.dart';
 import 'new_blend.dart';
 import 'new_depth.dart';
@@ -15,5 +17,6 @@ Widget? newDeskFace(String name, EditorSession c, Key? key, {Widget? leading}) =
       'Blend' => DockedPanel(child: NewBlend(key: key, controller: c)),
       'Depth' => DockedPanel(child: NewDepth(key: key, controller: c)),
       'Ease' => DockedPanel(child: EaseDesk(key: key, controller: c, leading: leading, skin: (context, view) => EaseSkin(view))),
+      'Notes' => DockedPanel(child: NotesPanel(key: key, controller: c, look: hfNoteLook, skin: (context, view) => NotesSkin(view))),
       _ => null,
     };
