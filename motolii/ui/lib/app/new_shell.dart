@@ -11,6 +11,7 @@ import '../foundation/shell_tokens.dart';
 import '../foundation/theme.dart';
 import '../input/editor_shortcuts.dart';
 import '../panels/composition_controls.dart';
+import '../panels/inspector.dart' show InspectorInstruments, InspectorPanel;
 import '../panels/export_controls.dart';
 import '../panels/registry.dart';
 import '../session/editor_session.dart';
@@ -19,6 +20,7 @@ import '../workspace/dock_workspace.dart';
 import 'new/browser.dart';
 import 'new/console.dart';
 import 'new/dock_theme.dart';
+import 'new/inspector/new_transform.dart';
 import 'new/shell_bar.dart';
 import 'editor_window.dart' show freezeNotice;
 
@@ -176,7 +178,18 @@ class _NewShellState extends State<NewShell> {
         ),
       for (final name in _centerTabs)
         name: PanelDef(name, name.toUpperCase(), () => pane(name), minSize: 300),
-      'Inspector': PanelDef('Inspector', 'INSPECTOR', () => pane('Inspector'), minSize: 240),
+      'Inspector': PanelDef(
+        'Inspector',
+        'INSPECTOR',
+        () => InspectorPanel(
+          key: keys.putIfAbsent('Inspector', () => GlobalKey()),
+          controller: c,
+          instruments: InspectorInstruments(
+            transform: (context, controller) => NewTransform(controller: controller),
+          ),
+        ),
+        minSize: 240,
+      ),
       'Timeline': PanelDef('Timeline', 'TIMELINE', () => pane('Timeline'), minSize: 120),
       'Desk': PanelDef('Desk', 'DESK', () => pane('Desk'), minSize: 200),
       'Console': PanelDef('Console', 'CONSOLE', () => NewConsole(log: console), minSize: 120),

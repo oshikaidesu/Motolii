@@ -40,6 +40,20 @@ class TransformStore extends ParamStore {
   Map<int, Object?>? _bases; // each target's value where the gesture began
   String? _gestureId;
 
+  /// Hooks for a store that writes somewhere: each target's new value after a preview (layer id to value), and the
+  /// end of a gesture. The default store keeps its values in memory and has nothing to send.
+  void previewed(String id, Map<int, Object?> values) {}
+  void committed(String id) {}
+
+  /// Read the layers again (a store that mirrors a document changed them) and refresh the rows.
+  void resync() {
+    _sync();
+    notifyListeners();
+  }
+
+  /// A target's value for a property id, as the rows show it.
+  Object? valueOf(TLayer l, String id) => _get(l, id);
+
   TLayer get active => layers.firstWhere((l) => l.id == activeId);
   bool get multiple => selection.length > 1;
   bool get _outside2D => active.projection != '2D';
@@ -139,6 +153,7 @@ class TransformStore extends ParamStore {
     }
     _touched.add(id);
     previews++;
+    previewed(id, {for (final l in targets) l.id: _get(l, id)});
     _sync();
     notifyListeners();
   }
@@ -149,6 +164,7 @@ class TransformStore extends ParamStore {
     if (animating) {
       for (final l in targets) { l.animated.add(id); l.keyedNow.add(id); }
     }
+    committed(id);
     commits++;
     _bases = null;
     _gestureId = null;

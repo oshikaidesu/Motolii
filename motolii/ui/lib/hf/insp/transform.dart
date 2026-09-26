@@ -10,8 +10,11 @@ import 'transform_gizmo.dart';
 import 'transform_model.dart';
 
 class TransformInstrument extends StatefulWidget {
-  const TransformInstrument(this.store, {super.key, this.initialMode = TMode.move});
+  const TransformInstrument(this.store, {super.key, this.initialMode = TMode.move, this.showHeader = true});
   final TransformStore store;
+
+  /// The layer's name and Animate. A host that already shows them (the Inspector's own header) hides this one.
+  final bool showHeader;
   final TMode initialMode;
   @override
   State<TransformInstrument> createState() => _TransformInstrumentState();
@@ -66,8 +69,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
           ]);
           final strip = _modeStrip(narrow);
           final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _header(),
-            const SizedBox(height: 8),
+            if (widget.showHeader) ...[_header(), const SizedBox(height: 8)],
             if (narrow) ...[strip, const SizedBox(height: 6), gizmo, const SizedBox(height: 6), _spaceRow(), const SizedBox(height: 6), _parent(narrow)]
             else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [strip, const SizedBox(width: 6), gizmo, const SizedBox(width: 6), SizedBox(width: 78, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_spaceCol(), const SizedBox(height: 8), _parent(narrow)]))]),
             const SizedBox(height: 10),

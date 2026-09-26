@@ -33,9 +33,19 @@ part 'inspector/effects_card.dart';
 /// Routes are the Inspector's own: previewProperties / commitPreview for
 /// values, setAttrs / anchor / ghost / clip for the layer, focusEditing for
 /// Blend (the Desk owns the picker). Nothing is re-implemented.
+/// Cards a host may draw itself. The Inspector keeps everything else: the header, the World, Layout, Text,
+/// Fill and Matte cards and the effects, and the way every edit reaches the document.
+class InspectorInstruments {
+  const InspectorInstruments({this.transform});
+
+  /// The body of the Transform card (Position, Scale, Rotation, Anchor, Space, Parent, Opacity).
+  final Widget Function(BuildContext context, EditorSession controller)? transform;
+}
+
 class InspectorPanel extends StatefulWidget {
-  const InspectorPanel({super.key, required this.controller});
+  const InspectorPanel({super.key, required this.controller, this.instruments});
   final EditorSession controller;
+  final InspectorInstruments? instruments;
   @override
   State<InspectorPanel> createState() => _InspectorPanelState();
 }
@@ -320,7 +330,9 @@ class _InspectorPanelState extends State<InspectorPanel>
                         else
                           _card(
                             title: 'Transform',
-                            children: _transform(layer),
+                            children: widget.instruments?.transform == null
+                                ? _transform(layer)
+                                : [widget.instruments!.transform!(context, c)],
                           ),
                         if (layer['kind'] != 'Camera')
                           _card(title: 'World', children: _world(layer)),
