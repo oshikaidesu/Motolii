@@ -25,7 +25,7 @@ Sources: the Phase A inventory in `inventory/`, `routing.md`, and the code. Evid
 | Inspector | Layout card | A / C | promoted: Layout Instrument on a layer's `layout.*` rows; `new_layout_test` |
 | Inspector | effect parameters | A / C | promoted: generic Toys with keys, routes, relative drag; `new_effect_test`. Effects that lay out copies (grid of Each / Random) keep the Inspector body until an Instrument owns that grid |
 | Inspector | Camera card | A | Classic card kept. The Camera Instrument in `lib/hf` is finished but not connected (C) |
-| Inspector | Esc during a drag restores the value (IN-023) | D | the Toys cancel typing but not a running drag |
+| Inspector | Esc during a drag restores the value (IN-023) | A | Toys of the Transform, Layout and effect sheets; the gizmo and Rotation dial gestures do not cancel yet; `new_transform_test`, `new_effect_test` |
 | Browser | shelves as their own panels, search per shelf, shelf tools, apply, context menu, tooltip, tile size, reveal after import, Fonts/Colors routes | A | `NewBrowser` over the shared shelves |
 | Browser | keyboard: find, clear, arrows, Enter, Delete (BR-005/006/044/045/048) | A | workflow test |
 | Browser | category rail, collections, saved filters, tags, filter groups, view modes, multi-select and range select, quick tags, count label (BR-007/008/020..039/041..043/049..050/060..066) | D / E | The finished hf Browser (class column, structured search, favorites, saved views) is the design that replaces them, and it is still on fixtures (C). Until it is on the real shelves these are missing in New |

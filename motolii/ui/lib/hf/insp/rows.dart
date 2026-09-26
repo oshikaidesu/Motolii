@@ -52,6 +52,8 @@ class ParamStore extends ChangeNotifier {
   bool typing = false; // a typed number is absolute for every target; a scrub is relative
   int commits = 0, previews = 0;
   bool mixed(String id, int? axis) => false; // does another selected target disagree on this number?
+  final _start = <String, Object?>{};
+
   /// A store over a document can key a value at the current frame; the in-memory store cannot.
   bool get keyable => false;
   void toggleKey(String id) {}
@@ -83,6 +85,7 @@ class ParamStore extends ChangeNotifier {
   void preview(String id, Object? v) {
     if (frozen) return;
     final r = row(id);
+    _start.putIfAbsent(id, () => r['value'] is List ? List<Object?>.of(r['value'] as List) : r['value']);
     r['value'] = v is List ? [for (final e in v) _fit(r, e)] : _fit(r, v);
     previews++;
     notifyListeners();
@@ -90,9 +93,21 @@ class ParamStore extends ChangeNotifier {
 
   void commit(String id) {
     if (frozen) return;
+    _start.remove(id);
     commits++;
     notifyListeners();
   }
+
+  /// A drag that is let go of (Esc): the value is where the gesture found it, and nothing was committed.
+  void cancel(String id) {
+    if (!_start.containsKey(id)) return;
+    row(id)['value'] = _start.remove(id);
+    cancelled(id);
+    notifyListeners();
+  }
+
+  /// A store that writes somewhere tells it the gesture is over.
+  void cancelled(String id) {}
 
   void set(String id, Object? v) {
     preview(id, v);

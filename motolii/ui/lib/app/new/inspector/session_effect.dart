@@ -118,6 +118,13 @@ class SessionEffectStore extends ParamStore {
   }
 
   @override
+  void cancelled(String id) {
+    _bases.remove(id);
+    _gesture = false;
+    c.command('cancelPreview');
+  }
+
+  @override
   void set(String id, Object? v) {
     typing = true;
     try {

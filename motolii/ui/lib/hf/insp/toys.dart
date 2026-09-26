@@ -76,6 +76,7 @@ class Slot {
   }
 
   void commit() => store.commit(id);
+  void cancel() => store.cancel(id);
   void reset() {
     final d = def;
     if (d == null) return;
@@ -133,7 +134,7 @@ class ValueToy extends StatefulWidget {
 }
 
 class _ValueToyState extends State<ValueToy> {
-  bool dragging = false, editing = false, _cancel = false, _moved = false, hover = false, _scrubbed = false;
+  bool dragging = false, editing = false, _cancel = false, _moved = false, hover = false, _scrubbed = false, _aborted = false;
   double _v = 0;
   Offset _down = Offset.zero;
   DateTime? _last;
@@ -204,6 +205,8 @@ class _ValueToyState extends State<ValueToy> {
       onKeyEvent: (_, e) {
         if (e is! KeyDownEvent) return KeyEventResult.ignored;
         final k = e.logicalKey;
+        // Esc during a drag puts the value back; the rest of the drag does nothing
+        if (dragging && k == LogicalKeyboardKey.escape) { _aborted = true; s.cancel(); return KeyEventResult.handled; }
         // Esc leaves exact input without applying it
         if (editing && k == LogicalKeyboardKey.escape) { _cancel = true; setState(() => editing = false); focus.requestFocus(); return KeyEventResult.handled; }
         if (editing || frozen) return KeyEventResult.ignored;
@@ -236,13 +239,14 @@ class _ValueToyState extends State<ValueToy> {
         child: GestureDetector(
           key: ValueKey(widget.keyName ?? 'toy-${s.id}${s.axis == null ? '' : '-${s.axis}'}'),
           dragStartBehavior: DragStartBehavior.down,
-          onHorizontalDragStart: frozen ? null : (d) { _v = s.value; _scrubbed = false; setState(() { dragging = true; editing = false; }); },
+          onHorizontalDragStart: frozen ? null : (d) { _v = s.value; _scrubbed = false; _aborted = false; setState(() { dragging = true; editing = false; }); },
           onHorizontalDragUpdate: frozen ? null : (d) {
+            if (_aborted) return;
             _scrubbed = true;
             _v += d.delta.dx * s.rate * (_shift ? .1 : 1);
             s.preview(s.quantize(_v, fine: _shift));
           },
-          onHorizontalDragEnd: frozen ? null : (_) { if (_scrubbed) s.commit(); setState(() => dragging = false); },
+          onHorizontalDragEnd: frozen ? null : (_) { if (_scrubbed && !_aborted) s.commit(); _aborted = false; setState(() => dragging = false); },
           child: Container(
             height: h,
             decoration: BoxDecoration(

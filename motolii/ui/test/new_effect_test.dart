@@ -138,4 +138,21 @@ void main() {
     expect(s.row('effect.0.param.size')['value'], 70, reason: 'the pointer is in charge until it lets go');
     s.commit('effect.0.param.size');
   });
+
+  testWidgets('Esc during a drag of an effect value puts it back; the document hears cancelPreview, not a commit', (tester) async {
+    final c = await mount(tester, state([withEffect(layerRow(1, 'A'))], [1]), height: 1600);
+    final toy = key('toy-effect.0.param.size');
+    await tester.ensureVisible(toy);
+    final drag = await tester.startGesture(tester.getCenter(toy));
+    await drag.moveBy(const Offset(60, 0));
+    await tester.pump();
+    expect(storeOf(tester).row('effect.0.param.size')['value'], isNot(40.0));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(storeOf(tester).row('effect.0.param.size')['value'], 40.0);
+    await drag.up();
+    await tester.pump();
+    expect(c.ops.last, 'cancelPreview');
+    expect(c.ops, isNot(contains('commitPreview')));
+  });
 }

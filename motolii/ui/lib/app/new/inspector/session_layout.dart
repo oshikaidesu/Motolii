@@ -85,6 +85,12 @@ class SessionLayoutStore extends LayoutStore {
   }
 
   @override
+  void cancelled(String id) {
+    _gesture = false;
+    c.command('cancelPreview');
+  }
+
+  @override
   void commit(String id) {
     if (frozen) return;
     super.commit(id);

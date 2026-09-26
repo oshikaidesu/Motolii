@@ -91,6 +91,12 @@ class SessionTransformStore extends TransformStore {
   }
 
   @override
+  void cancelledGesture(String id) {
+    _gesture = false;
+    c.command('cancelPreview');
+  }
+
+  @override
   void toggleKey(String id) {
     if (!canEdit || !c.supports('toggleKey')) return;
     c.command('toggleKey', {'layer': activeId, 'property': id});

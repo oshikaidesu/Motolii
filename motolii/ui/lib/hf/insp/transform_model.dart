@@ -44,6 +44,7 @@ class TransformStore extends ParamStore {
   /// end of a gesture. The default store keeps its values in memory and has nothing to send.
   void previewed(String id, Map<int, Object?> values) {}
   void committed(String id) {}
+  void cancelledGesture(String id) {}
 
   /// Read the layers again (a store that mirrors a document changed them) and refresh the rows.
   void resync() {
@@ -169,6 +170,22 @@ class TransformStore extends ParamStore {
     _bases = null;
     _gestureId = null;
     _touched.clear();
+    _sync();
+    notifyListeners();
+  }
+
+  /// A gesture let go of: every target is back where it began, and nothing was committed.
+  @override
+  void cancel(String id) {
+    final bases = _bases;
+    if (bases == null || _gestureId != id) return;
+    for (final l in layers) {
+      if (bases.containsKey(l.id)) _put(l, id, _copy(bases[l.id]));
+    }
+    _bases = null;
+    _gestureId = null;
+    _touched.clear();
+    cancelledGesture(id);
     _sync();
     notifyListeners();
   }

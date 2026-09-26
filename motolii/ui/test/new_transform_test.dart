@@ -1,5 +1,6 @@
 // The Transform Instrument on the real session, inside the production Inspector's Transform card.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new/inspector/session_transform.dart';
@@ -131,5 +132,25 @@ void main() {
     expect(a.animated, contains('position'));
     expect(a.keyedNow, contains('position'));
     expect(a.animated, isNot(contains('rotation')));
+  });
+
+  testWidgets('Esc during a drag puts the value back and the document hears cancelPreview, never a commit', (tester) async {
+    final c = await mount(tester, state([layerRow(1, 'A', position: [100, 50])], [1]));
+    final s = storeOf(tester);
+    final toy = key('toy-position-0');
+    final drag = await tester.startGesture(tester.getCenter(toy));
+    await drag.moveBy(const Offset(40, 0));
+    await tester.pump();
+    expect(s.active.position[0], isNot(100), reason: 'the drag moved it');
+    expect(c.ops, contains('previewProperties'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(s.active.position.take(2), [100, 50], reason: 'back where it began');
+    await drag.moveBy(const Offset(40, 0)); // the pointer is still down: nothing more happens
+    await drag.up();
+    await tester.pump();
+    expect(c.ops.last, 'cancelPreview');
+    expect(c.ops, isNot(contains('commitPreview')));
+    expect(s.active.position.take(2), [100, 50]);
   });
 }
