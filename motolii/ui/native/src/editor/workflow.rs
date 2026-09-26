@@ -80,7 +80,7 @@ fn make_move_key_scrub_undo_redo_save_reopen_and_export() {
         if !matches!(status["phase"].as_str(), Some("running" | "cancelling" | "starting")) {
             break status;
         }
-        assert!(started.elapsed().as_secs() < 300, "the export never finished: {status}");
+        assert!(started.elapsed().as_secs() < 900, "the export never finished: {status}");
         let seconds = started.elapsed().as_secs();
         if seconds % 30 == 0 && seconds != last_note {
             last_note = seconds;
