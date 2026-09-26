@@ -54,6 +54,44 @@ pub(crate) fn primitives() -> &'static [Primitive] {
     })
 }
 
+/// What can be created, once: the id a frontend sends, the name and the line it shows, the shelf it is filed on, and what
+/// it makes. The Browser, a script and the `create` operation all read this table; a kind added here exists everywhere.
+/// The bundled 3D bodies and backgrounds join it from their own tables.
+pub(crate) fn kinds() -> Vec<(&'static str, &'static str, &'static str, &'static str, NewKind)> {
+    vec![
+        ("text", "Text", "Adds a text layer", "Text", NewKind::Text),
+        ("rectangle", "Rectangle", "Adds a shape layer", "Shapes", NewKind::Rectangle),
+        ("roundedRectangle", "Rounded Rectangle", "Adds a shape layer", "Shapes", NewKind::RoundedRectangle),
+        ("ellipse", "Ellipse", "Adds a shape layer", "Shapes", NewKind::Ellipse),
+        ("star", "Star", "Adds a shape layer", "Shapes", NewKind::Star),
+        ("polygon", "Polygon", "Adds a shape layer", "Shapes", NewKind::Polygon),
+        ("null", "Null", "Adds an empty layer to parent others to", "Helpers", NewKind::Null),
+        ("camera", "Camera", "Adds a camera layer", "3D", NewKind::Camera),
+        ("particles", "Particles", "Adds a particle emitter", "Other", NewKind::Particles),
+        ("stage", "Stage", "Widens the working area around the frame", "3D", NewKind::Stage),
+        ("line", "Line", "Adds a straight stroked path", "Paths", NewKind::Line),
+        ("bezier", "Bezier", "Adds a path layer", "Paths", NewKind::Bezier),
+    ]
+}
+
+/// The kind a `create` names: a plain kind, a bundled background (`background:<id>`) or a bundled 3D body.
+pub(crate) fn kind_named(id: &str) -> Result<NewKind, String> {
+    if let Some((_, _, _, _, kind)) = kinds().into_iter().find(|k| k.0 == id) {
+        return Ok(kind);
+    }
+    match id.strip_prefix("background:") {
+        Some(background_id) => background(background_id),
+        None => primitive(id),
+    }
+}
+
+/// The table as a frontend reads it (status `createKinds`), bundled 3D bodies included.
+pub(crate) fn kinds_json() -> serde_json::Value {
+    let mut out: Vec<serde_json::Value> = kinds().into_iter().map(|(id, name, detail, rail, _)| serde_json::json!({"id": id, "name": name, "detail": detail, "rail": rail})).collect();
+    out.extend(primitives().iter().map(|p| serde_json::json!({"id": p.id, "name": p.name, "detail": format!("Adds a 3D {}", p.name.to_lowercase()), "rail": "3D"})));
+    serde_json::Value::Array(out)
+}
+
 pub(crate) fn primitive(id: &str) -> Result<NewKind, String> {
     let p = primitives().iter().find(|p| p.id == id).ok_or("Unsupported create kind")?;
     Ok(NewKind::Primitive { path: p.path.clone(), name: p.name.into() })
@@ -600,5 +638,20 @@ mod english_names {
             }
         }
         assert!(missing.is_empty(), "英語の名前が無い属性: {missing:?}");
+    }
+}
+
+#[cfg(test)]
+mod catalog {
+    /// Every kind the table lists is one `create` accepts, and the table is what the status publishes.
+    #[test]
+    fn every_listed_kind_can_be_created_and_is_published() {
+        for (id, ..) in super::kinds() {
+            assert!(super::kind_named(id).is_ok(), "{id}");
+        }
+        let published = super::kinds_json();
+        assert!(published.as_array().unwrap().iter().any(|k| k["id"] == "rectangle" && k["rail"] == "Shapes"));
+        assert!(published.as_array().unwrap().iter().any(|k| k["id"] == "cube" && k["rail"] == "3D"));
+        assert!(super::kind_named("nonsense").is_err());
     }
 }

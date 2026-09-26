@@ -5,6 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../lib/session/editor_session.dart';
 
+/// The host's table of what can be created (Rust: editor::create::kinds_json), a few of it for the doubles.
+const createKinds = [
+  {'id': 'text', 'name': 'Text', 'detail': 'Adds a text layer', 'rail': 'Text'},
+  {'id': 'rectangle', 'name': 'Rectangle', 'detail': 'Adds a shape layer', 'rail': 'Shapes'},
+  {'id': 'ellipse', 'name': 'Ellipse', 'detail': 'Adds a shape layer', 'rail': 'Shapes'},
+  {'id': 'null', 'name': 'Null', 'detail': 'Adds an empty layer to parent others to', 'rail': 'Helpers'},
+  {'id': 'camera', 'name': 'Camera', 'detail': 'Adds a camera layer', 'rail': '3D'},
+  {'id': 'cube', 'name': 'Cube', 'detail': 'Adds a 3D cube', 'rail': '3D'},
+];
+
 class Native {
   Map<String, dynamic> settings = {};
 
@@ -46,7 +56,7 @@ class Native {
         case 'render':
         case 'open':
         case 'command':
-          return {'layers': [], 'selectedIds': [], 'selectedKeys': [], 'capabilities': capabilities, 'width': 1920, 'height': 1080, 'durationFrames': 300, 'fps': 30};
+          return {'createKinds': createKinds, 'layers': [], 'selectedIds': [], 'selectedKeys': [], 'capabilities': capabilities, 'width': 1920, 'height': 1080, 'durationFrames': 300, 'fps': 30};
         default:
           return <String, dynamic>{};
       }

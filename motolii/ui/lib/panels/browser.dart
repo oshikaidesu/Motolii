@@ -33,6 +33,7 @@ const browserDocumentKeys = [
   'assets',
   'backgrounds',
   'primitives',
+  'createKinds',
   'catalog',
   'palette',
   'colorTarget',

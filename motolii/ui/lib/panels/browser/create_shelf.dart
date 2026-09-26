@@ -23,68 +23,30 @@ class CreateShelf extends BrowserShelf {
     'Helpers',
   ];
 
+  /// What can be created is the host's table (status `createKinds`); this only adds the mark a kind is drawn with.
+  static const _glyphs = {
+    'text': 'T',
+    'rectangle': '■',
+    'roundedRectangle': '▢',
+    'ellipse': '●',
+    'star': '★',
+    'polygon': '⬟',
+    'null': '✛',
+    'particles': '⁘',
+    'stage': '⬚',
+    'line': '─',
+    'bezier': '〜',
+  };
+
   @override
   List<Map<String, dynamic>> items(BrowserHost host) => [
-    {'id': 'text', 'name': 'Text', 'detail': 'Adds a text layer', 'glyph': 'T'},
-    // 形は AE の shape ツールの並び。矩形だけ角丸を効果として最初から積む。
-    for (final (id, name, glyph) in [
-      ('rectangle', 'Rectangle', '■'),
-      ('roundedRectangle', 'Rounded Rectangle', '▢'),
-      ('ellipse', 'Ellipse', '●'),
-      ('star', 'Star', '★'),
-      ('polygon', 'Polygon', '⬟'),
-    ])
-      {'id': id, 'name': name, 'detail': 'Adds a shape layer', 'glyph': glyph},
-    {
-      'id': 'null',
-      'name': 'Null',
-      'detail': 'Adds an empty layer to parent others to',
-      'glyph': '✛',
-    },
-    {'id': 'camera', 'name': 'Camera', 'detail': 'Adds a camera layer'},
-    {
-      'id': 'particles',
-      'name': 'Particles',
-      'detail': 'Adds a particle emitter',
-      'glyph': '⁘',
-    },
-    {
-      'id': 'stage',
-      'name': 'Stage',
-      'detail': 'Widens the working area around the frame',
-      'glyph': '⬚',
-    },
-    {
-      'id': 'line',
-      'name': 'Line',
-      'detail': 'Adds a straight stroked path',
-      'glyph': '─',
-    },
-    {
-      'id': 'bezier',
-      'name': 'Bezier',
-      'detail': 'Adds a path layer',
-      'glyph': '〜',
-    },
-    // 同梱の基本形は Rust の表そのまま。名前が線画を選ぶ(cube ⇒ 箱)。
-    for (final p in EditorSession.maps(host.controller.state['primitives']))
-      {...p, 'detail': 'Adds a 3D ${'${p['name']}'.toLowerCase()}'},
+    for (final kind in EditorSession.maps(host.controller.state['createKinds']))
+      {...kind, if (_glyphs['${kind['id']}'] != null) 'glyph': _glyphs['${kind['id']}']},
   ];
 
   @override
   String classification(BrowserHost host, Map<String, dynamic> item) =>
-      switch (host.id(item)) {
-        'text' => 'Text',
-        'rectangle' ||
-        'roundedRectangle' ||
-        'ellipse' ||
-        'star' ||
-        'polygon' => 'Shapes',
-        'bezier' || 'line' => 'Paths',
-        'null' => 'Helpers',
-        'camera' || 'stage' => '3D',
-        _ => shapeOf(host.id(item)) != null ? '3D' : 'Other',
-      };
+      '${item['rail'] ?? 'Other'}';
 
   @override
   bool supported(BrowserHost host, Map<String, dynamic> item) =>
