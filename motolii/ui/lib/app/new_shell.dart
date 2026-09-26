@@ -21,6 +21,7 @@ import '../session/editor_session.dart';
 import 'editor_actions.dart';
 import '../workspace/dock_workspace.dart';
 import 'new/browser.dart';
+import 'new/console.dart';
 import 'new/dock_theme.dart';
 import 'editor_window.dart' show freezeNotice;
 
@@ -58,6 +59,11 @@ class _NewShellState extends State<NewShell> {
     const [],
     derived: () => freezeNotice(c.state) ?? effectsNotice(c.state),
   );
+  late final console = ConsoleLog(
+    c,
+    notice,
+    (doc) => freezeNotice(doc) ?? effectsNotice(doc),
+  );
   String? sheet;
   bool ready = false;
 
@@ -67,6 +73,7 @@ class _NewShellState extends State<NewShell> {
     c
         .slice('animationAppearance', const ['animate'])
         .addListener(_syncAnimation);
+    console; // start listening now, so a message before the panel is opened is kept
     c.confirmClose = () => confirmReplacement(context, c);
     c.panelPlacementRequested = _place;
     c.filesDropped = (paths) {
@@ -99,6 +106,7 @@ class _NewShellState extends State<NewShell> {
         .slice('animationAppearance', const ['animate'])
         .removeListener(_syncAnimation);
     c.browserTab.removeListener(_followBrowserTab);
+    console.dispose();
     if (ready) dock.layout.removeListener(_workspaceChanged);
     final pending = _workspaceTimer != null;
     _workspaceTimer?.cancel();
@@ -174,6 +182,7 @@ class _NewShellState extends State<NewShell> {
       'Inspector': PanelDef('Inspector', 'INSPECTOR', () => pane('Inspector'), minSize: 240),
       'Timeline': PanelDef('Timeline', 'TIMELINE', () => pane('Timeline'), minSize: 120),
       'Desk': PanelDef('Desk', 'DESK', () => pane('Desk'), minSize: 200),
+      'Console': PanelDef('Console', 'CONSOLE', () => NewConsole(log: console), minSize: 120),
     },
     (item) => DockingRow([
       DockingTabs([for (final name in _browserTabs) item(name)], weight: .19),
@@ -182,7 +191,10 @@ class _NewShellState extends State<NewShell> {
           DockingTabs([for (final name in _centerTabs) item(name)], weight: .78),
           item('Inspector', weight: .22),
         ], weight: .7),
-        DockingRow([item('Timeline', weight: .78), item('Desk', weight: .22)], weight: .3),
+        DockingRow([
+          item('Timeline', weight: .78),
+          DockingTabs([item('Desk'), item('Console')], weight: .22),
+        ], weight: .3),
       ], weight: .81),
     ]),
   );

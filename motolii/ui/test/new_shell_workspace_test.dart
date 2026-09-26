@@ -185,6 +185,45 @@ void main() {
     await close(tester);
   });
 
+  testWidgets('the Console keeps what the status line said, and survives closing the panel', (tester) async {
+    size(tester);
+    Native().install();
+    ignoreSqueezedTabChips();
+    final shell = await open(tester);
+    final c = shell.c as EditorSession;
+    c.error.value = 'Import failed: nothing there';
+    await tester.pump();
+    c.error.value = null;
+    c.error.value = 'Second problem';
+    await tester.pump();
+    expect((shell.console.entries as List).map((e) => e.text), ['Import failed: nothing there', 'Second problem']);
+
+    // Not in front yet (it is a tab behind Desk): name it, and both are there, newest first.
+    await c.panelPlacementRequested!('Console', 'show');
+    await tester.pumpAndSettle();
+    expect(find.text('Second problem'), findsOneWidget);
+    expect(find.text('Import failed: nothing there'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Second problem')).dy, lessThan(tester.getTopLeft(find.text('Import failed: nothing there')).dy));
+
+    await tester.enterText(find.byType(EditableText).last, 'second');
+    await tester.pump();
+    expect(find.text('Import failed: nothing there'), findsNothing);
+
+    // Closing the panel keeps the log; reopening shows it; Clear empties it.
+    shell.dock.close('Console');
+    await tester.pumpAndSettle();
+    c.error.value = null;
+    c.error.value = 'While it was closed';
+    await c.panelPlacementRequested!('Console', 'show');
+    await tester.pumpAndSettle();
+    expect((shell.console.entries as List).length, 3);
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect((shell.console.entries as List), isEmpty);
+    expect(find.text('No messages'), findsOneWidget);
+    await close(tester);
+  });
+
   testWidgets('the Stage asks native for the surface it is showing, and only that one', (tester) async {
     size(tester);
     final native = Native();
