@@ -1,3 +1,4 @@
+import 'support/ease_intervals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,13 +70,13 @@ void main() {
         },
       ];
       void select(List<int> ids, [List<Map<String, dynamic>> keys = const []]) {
-        c.document.value = {
+        c.document.value = withEaseIntervals({
           'layers': layers,
           'selectedIds': ids,
           'selectedKeys': keys,
           'capabilities': [],
           'easeKinds': [],
-        };
+        });
       }
 
       select([1]);

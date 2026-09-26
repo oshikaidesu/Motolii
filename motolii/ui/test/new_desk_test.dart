@@ -1,4 +1,5 @@
 // The Desk's panels drawn by the finished instruments over the session (promoted one at a time).
+import 'support/ease_intervals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -225,7 +226,7 @@ void main() {
     return (c, commands);
   }
 
-  Map<String, dynamic> keyedSnapshot(Map<String, dynamic> current) => {
+  Map<String, dynamic> keyedSnapshot(Map<String, dynamic> current) => withEaseIntervals({
         'selectedIds': [1],
         'selectedKeys': [
           {'layer': 1, 'property': 'opacity', 'frame': 0},
@@ -242,7 +243,7 @@ void main() {
           },
         ],
         'easeKinds': [bounce(.2), bounce(.4)],
-      };
+      });
 
   testWidgets('Ease: the curve, its intervals and the shelf come from the desk; a handle drag is one commit, Esc puts it back', (tester) async {
     var current = bounce(.2);

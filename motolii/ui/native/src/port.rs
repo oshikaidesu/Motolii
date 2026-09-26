@@ -402,6 +402,7 @@ mod freeze_op {
 mod sequence_preview;
 mod spread;
 mod blend_targets;
+mod ease_intervals;
 
 
 #[cfg(test)]

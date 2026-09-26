@@ -1,3 +1,4 @@
+import 'support/ease_intervals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,7 +84,7 @@ void main() {
   ) async {
     final c = EditorSession();
     addTearDown(c.dispose);
-    Map<String, dynamic> snapshot(List<Map<String, dynamic>> keys) => {
+    Map<String, dynamic> snapshot(List<Map<String, dynamic>> keys) => withEaseIntervals({
       'layers': [
         {
           'id': 1,
@@ -120,7 +121,7 @@ void main() {
       'frame': 0,
       'fps': 30.0,
       'durationFrames': 60,
-    };
+    });
     c.document.value = snapshot(const []);
     await _mount(tester, 'Desk', c, const Size(300, 260));
     await tester.pumpAndSettle();
@@ -138,7 +139,7 @@ void main() {
   ) async {
     final c = EditorSession();
     addTearDown(c.dispose);
-    Map<String, dynamic> snapshot(String kind) => {
+    Map<String, dynamic> snapshot(String kind) => withEaseIntervals({
       'layers': [
         {
           'id': 1,
@@ -177,7 +178,7 @@ void main() {
       'frame': 0,
       'fps': 30.0,
       'durationFrames': 60,
-    };
+    });
     c.document.value = snapshot('Linear');
     await _mount(tester, 'Ease', c, const Size(300, 320));
     await tester.pumpAndSettle();
@@ -215,7 +216,7 @@ void main() {
   testWidgets('the Timeline lanes follow the selection', (tester) async {
     final c = EditorSession();
     addTearDown(c.dispose);
-    Map<String, dynamic> snapshot(List<int> selected) => {
+    Map<String, dynamic> snapshot(List<int> selected) => withEaseIntervals({
       'layers': [
         for (var i = 1; i <= 2; i++)
           {
@@ -240,7 +241,7 @@ void main() {
       'frame': 0,
       'fps': 30.0,
       'durationFrames': 60,
-    };
+    });
     c.document.value = snapshot(const [1]);
     await _mount(tester, 'Timeline', c, const Size(900, 260));
     await tester.pumpAndSettle();

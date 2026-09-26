@@ -173,6 +173,7 @@ impl EditorRuntime {
         let (undo, redo) = self.doc.history_depth();
         reply["selectedId"] = json!(self.viewer.selected().map(|id|id.0));
         reply["selectedIds"] = json!(self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>());
+        reply["easeIntervals"] = json!(self.ease_intervals());
         reply["blendTargets"] = json!(self.blend_targets().iter().map(|id|id.0).collect::<Vec<_>>());
         let fps = self.doc.view().composition().map_err(|e|e.to_string())?.ok_or("No composition")?.fps.as_f64();
         reply["selectedKeys"] = json!(self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*fps).round()as i64})).collect::<Vec<_>>());

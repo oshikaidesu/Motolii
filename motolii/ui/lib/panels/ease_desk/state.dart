@@ -13,6 +13,7 @@ mixin _EaseDeskLogic
     'selectedId',
     'selectedIds',
     'selectedKeys',
+    'easeIntervals',
     'easeKinds',
     'capabilities',
   ]);
@@ -64,7 +65,7 @@ mixin _EaseDeskLogic
   List<Map<String, dynamic>> _segmentsCache = const [];
   bool _mixedCache = false;
   List<Map<String, dynamic>> get _segments {
-    final from = (c.state['selectedKeys'], c.state['layers']);
+    final from = (c.state['easeIntervals'], c.state['layers']);
     if (!identical(from.$1, _segmentsFrom?.$1) ||
         !identical(from.$2, _segmentsFrom?.$2)) {
       _segmentsFrom = from;
@@ -92,45 +93,9 @@ mixin _EaseDeskLogic
   String _keyOf(Map<String, dynamic> shape) =>
       _presetKeys[shape] ??= jsonEncode(_payload(shape));
 
-  List<Map<String, dynamic>> _deriveSegments() {
-    final selected = EditorSession.maps(c.state['selectedKeys']);
-    final result = <Map<String, dynamic>>[];
-    for (final layer in c.layers) {
-      for (final row in [
-        ...EditorSession.maps(layer['properties']),
-        for (final fx in EditorSession.maps(layer['effects']))
-          ...EditorSession.maps(fx['params']),
-      ]) {
-        final chosen = selected
-            .where(
-              (k) =>
-                  k['layer'] == layer['id'] &&
-                  (k['property'] == null || k['property'] == row['id']),
-            )
-            .toList();
-        if (chosen.isEmpty) continue;
-        final frames = chosen.map((k) => (k['frame'] as num).toInt()).toSet();
-        final last = frames.reduce(math.max);
-        final keys = EditorSession.maps(row['keys']).toList()
-          ..sort((a, b) => (a['frame'] as num).compareTo(b['frame'] as num));
-        for (var i = 0; i + 1 < keys.length; i++) {
-          final frame = (keys[i]['frame'] as num).toInt();
-          if (!frames.contains(frame) || (frames.length > 1 && frame == last))
-            continue;
-          result.add({
-            'layer': layer['id'],
-            'name': layer['name'],
-            'property': row['id'],
-            'frame': frame,
-            'end': keys[i + 1]['frame'],
-            'shape': keys[i]['interp'],
-            'locked': layer['locked'] == true,
-          });
-        }
-      }
-    }
-    return result;
-  }
+  /// 選んだキーが指す区間はホストが決める(status の easeIntervals)。机は見せるだけ。
+  List<Map<String, dynamic>> _deriveSegments() =>
+      EditorSession.maps(c.state['easeIntervals']);
 
   /// ゴーストモード(Sequence / Stagger): 複数の層を選んだ時、選んだ順に各層のゴースト 1 枚の遅れを
   /// 曲線で配る。AE の Sequence Layers・Motion Tools Pro の Sequence を、in 点を動かさず(壊さず)やる。

@@ -300,7 +300,7 @@ impl EditorRuntime{
             let live_layers=layers;
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
             return Ok(json!({"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
-                "selectedId":self.viewer.selected().map(|s|s.0),"selectedIds":self.viewer.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"blendTargets":self.blend_targets().iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
+                "selectedId":self.viewer.selected().map(|s|s.0),"selectedIds":self.viewer.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"easeIntervals":self.ease_intervals(),"blendTargets":self.blend_targets().iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
                 "animate":self.viewer.animate!=Animate::Off,"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"pickedColor":self.viewer.picked_color,"pickSerial":self.viewer.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
         }
         *self.full_status_revision.borrow_mut()=Some(revision);
