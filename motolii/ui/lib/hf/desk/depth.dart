@@ -72,6 +72,9 @@ class DepthGeom {
   Offset camPx() => px(cam.x, cam.y, cam.z);
   Offset layerPx(int i) => px(layers[i].x, layers[i].y, layers[i].z);
 
+  /// The world point under a screen point, in the top view: x across, depth up.
+  (double, double) world(Offset p) => ((p.dx - size.width / 2) / ku + _b.center.dx, -(p.dy - size.height / 2) / kv + _b.center.dy);
+
   /// Screen delta to world delta for dragging this view.
   (double, double, double) deltaWorld(Offset d) => switch (view) {
         DView.top => (d.dx / k, 0, -d.dy / k),
@@ -81,29 +84,72 @@ class DepthGeom {
       };
 }
 
+/// A layer as the host knows it in the top view: where it sits on the floor plan, whose it is, whether it can move.
+class DepthItem {
+  const DepthItem(this.name, this.x, this.z, {this.locked = false, this.selected = false});
+  final String name;
+  final double x, z;
+  final bool locked, selected;
+}
+
+/// What a host gives the desk: the floor plan of the scene around its target, the camera on it, and how a press, a
+/// drag and a release reach the document. The plan is the top view only; a host that has no height for the layers
+/// cannot draw a front or a side view. With no host the desk plays with fixture layers in all three.
+abstract class DepthHost implements Listenable {
+  List<DepthItem> get items;
+  ({double x, double z})? get camera;
+  double get fovDegrees;
+  bool get cameraSelectable;
+  String? get targetName;
+
+  /// Press on a layer ([hit] its index), on the camera (-1) or on nothing (-2).
+  void press(int hit);
+
+  /// A layer is dragged by [wx], [wz] from where it was pressed; the camera is dragged to the world point [wx], [wz].
+  void drag(int hit, double wx, double wz);
+  void release({bool cancel = false});
+}
+
 /// Depth is a view of the Stage, not an editor of its camera. Positions can be dragged here the way they are
 /// dragged on the Stage; precise camera values (distance, FOV, focus) belong to the Inspector and only show as readouts.
 class DepthDesk extends StatefulWidget {
-  const DepthDesk({super.key});
+  const DepthDesk({super.key, this.host});
+  final DepthHost? host;
   @override
   State<DepthDesk> createState() => _DepthDeskState();
 }
 
 class _DepthDeskState extends State<DepthDesk> {
-  final cam = depthDefaultCam();
-  final layers = depthDefaultLayers();
-  final double fov = 46; // read from the camera; edited in the Inspector
-  int selected = 1;
+  final _cam = depthDefaultCam();
+  final _layers = depthDefaultLayers();
+  final double _fov = 46; // read from the camera; edited in the Inspector
+  int _selected = 1;
+  Offset? _from;
+
+  DepthHost? get host => widget.host;
+  DCam get cam => host == null ? _cam : (host!.camera == null ? DCam(0, 0, -600) : DCam(host!.camera!.x, 0, host!.camera!.z));
+  List<DLayer> get layers => host == null ? _layers : [for (final i in host!.items) DLayer(i.x, 0, i.z, 0, 0)];
+  double get fov => host == null ? _fov : host!.fovDegrees;
+  int get selected => host == null ? _selected : math.max(0, host!.items.lastIndexWhere((i) => i.selected));
+  set selected(int v) => _selected = v;
   DView view = DView.top;
   int? drag; // -1 camera, >=0 layer
 
-  double get selDist => (layers[selected].z - cam.z).abs();
+  double get selDist {
+    final l = layers;
+    if (l.isEmpty) return 0;
+    final a = l[selected], c = cam;
+    return host == null ? (a.z - c.z).abs() : math.sqrt((a.x - c.x) * (a.x - c.x) + (a.z - c.z) * (a.z - c.z));
+  }
+
+  double get camDist => host == null ? -cam.z : math.sqrt(cam.x * cam.x + cam.z * cam.z);
+  String get selName => host == null || host!.items.isEmpty ? 'Layer ${selected + 1}' : host!.items[selected].name;
 
   int _hit(DepthGeom g, Offset p) {
     var best = -2;
     var bd = 28.0;
     final cd = (g.camPx() - p).distance;
-    if (cd < bd) { bd = cd; best = -1; }
+    if (cd < bd && (host == null || host!.cameraSelectable)) { bd = cd; best = -1; }
     for (var i = 0; i < layers.length; i++) {
       final dd = (g.layerPx(i) - p).distance;
       if (dd < bd) { bd = dd; best = i; }
@@ -112,11 +158,13 @@ class _DepthDeskState extends State<DepthDesk> {
   }
 
   @override
-  Widget build(BuildContext context) => DeskShell(
+  Widget build(BuildContext context) => host == null ? _shell() : ListenableBuilder(listenable: host!, builder: (_, __) => _shell());
+
+  Widget _shell() => DeskShell(
         kind: DeskKind.depth,
         title: 'Depth',
         subtitle: 'STAGE VIEW',
-        trailing: SizedBox(
+        trailing: host != null ? null : SizedBox(
           width: 112,
           child: Segmented(const ['Top', 'Front', 'Side'], view == DView.top ? 0 : (view == DView.front ? 1 : 2), height: 24, onChanged: (i) => setState(() => view = [DView.top, DView.front, DView.side][i])),
         ),
@@ -126,16 +174,16 @@ class _DepthDeskState extends State<DepthDesk> {
             Expanded(child: _diagram(view, true)),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: NumBox('Camera', '${(-cam.z).round()}', compact: true)),
+              Expanded(child: NumBox('Camera', '${camDist.round()}', compact: true)),
               const SizedBox(width: 6),
               Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true)),
               const SizedBox(width: 6),
-              Expanded(child: NumBox('Layer ${selected + 1}', '${selDist.round()}', compact: true)),
+              Expanded(child: NumBox(selName, '${selDist.round()}', compact: true)),
             ]),
             const SizedBox(height: 12),
             Row(children: [_key(kInk, 'Camera'), const SizedBox(width: 14), _key(kYellow, 'Selected'), const SizedBox(width: 14), _key(kBlue, 'Other layers')]),
             const SizedBox(height: 10),
-            Text('Drag layers or the camera to move them. Camera settings live in Inspector.', style: sans(10, c: kMuted)),
+            Text(host?.targetName == null ? 'Drag layers or the camera to move them. Camera settings live in Inspector.' : 'Looking at ${host!.targetName}. Drag layers or the camera to move them. Camera settings live in Inspector.', style: sans(10, c: kMuted)),
           ]),
         ),
         strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(8, 2, 8, 8), child: _diagram(DView.topWide, false)),
@@ -144,7 +192,7 @@ class _DepthDeskState extends State<DepthDesk> {
           child: Column(children: [
             Expanded(child: _diagram(DView.top, false)),
             const SizedBox(height: 6),
-            Row(children: [Expanded(child: NumBox('Dist', '${(-cam.z).round()}', compact: true)), const SizedBox(width: 5), Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true))]),
+            Row(children: [Expanded(child: NumBox('Dist', '${camDist.round()}', compact: true)), const SizedBox(width: 5), Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true))]),
           ]),
         ),
       );
@@ -154,6 +202,42 @@ class _DepthDeskState extends State<DepthDesk> {
   Widget _diagram(DView v, bool detail) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
         final g = DepthGeom(size, v, cam, layers, pad: v == DView.topWide ? 8 : 26);
+        final h0 = host;
+        if (h0 != null) {
+          // The host's document decides who is selected, so a press only tells it and the plan follows.
+          return GestureDetector(
+            key: const ValueKey('depth-diagram'),
+            dragStartBehavior: DragStartBehavior.down,
+            onTapDown: (d) => h0.press(_hit(g, d.localPosition)),
+            onTapUp: (_) => h0.release(),
+            onPanStart: (d) {
+              final h = _hit(g, d.localPosition);
+              drag = h == -2 ? null : h;
+              _from = d.localPosition;
+              h0.press(h);
+            },
+            onPanUpdate: (d) {
+              final h = drag;
+              if (h == null || _from == null) return;
+              if (h == -1) {
+                final w = g.world(d.localPosition);
+                h0.drag(-1, w.$1, w.$2);
+              } else {
+                final w = g.deltaWorld(d.localPosition - _from!);
+                h0.drag(h, w.$1, w.$3);
+              }
+            },
+            onPanEnd: (_) {
+              drag = null;
+              h0.release();
+            },
+            onPanCancel: () {
+              if (drag != null) h0.release(cancel: true);
+              drag = null;
+            },
+            child: CustomPaint(size: size, painter: DepthPainter(g, fov, selected, detail)),
+          );
+        }
         return GestureDetector(
           key: const ValueKey('depth-diagram'),
           dragStartBehavior: DragStartBehavior.down,
@@ -206,7 +290,7 @@ class DepthPainter extends CustomPainter {
     final cp = g.camPx();
     final half = fov * math.pi / 360;
     final vhalf = math.atan(math.tan(half) * .5625);
-    final sel = g.layers[selected];
+    final sel = g.layers.isEmpty ? DLayer(0, 0, 0, 0, 0) : g.layers[selected];
     final fd = sel.z - g.cam.z;
     final sp = g.px(sel.x, sel.y, sel.z);
     // a single ground line through the target keeps the drawing anchored; nothing else is a ruler

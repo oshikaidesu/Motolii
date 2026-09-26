@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/gestures.dart';
 
 import '../lib/app/new/desk/new_blend.dart';
+import '../lib/app/new/desk/new_depth.dart';
+import '../lib/hf/desk/depth.dart';
 import '../lib/app/new/desk/new_history.dart';
 import 'support/editor_test_theme.dart';
 import 'support/new_inspector_host.dart' show Recording;
@@ -99,6 +101,82 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.ops, isNot(contains('setAttrs')));
     expect(find.text('No layer'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  Future<Recording> mountDepth(WidgetTester tester, {bool locked = false}) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = Recording();
+    c.document.value = {
+      'layers': [layer(1, 'Normal'), layer(9, 'Normal', kind: 'Camera')],
+      'selectedIds': [1],
+      'selectedId': 1,
+      'capabilities': ['previewProperties', 'commitPreview', 'select'],
+      'depthLayout': {
+        'halfFov': .5,
+        'items': [
+          {'id': 1, 'name': 'Layer 1', 'point': [100.0, 50.0], 'locked': locked, 'inverseX': [1.0, 0.0, 0.0], 'inverseZ': [0.0, 0.0, 1.0], 'local': [100.0, 0.0, 50.0]},
+        ],
+        'camera': {'point': [0.0, -600.0], 'layer': 9, 'target': 1, 'orbit': [10.0, 0.0], 'baseDistance': 600.0},
+      },
+    };
+    await tester.pumpWidget(MaterialApp(theme: editorTestTheme, home: Scaffold(body: NewDepth(controller: c))));
+    await tester.pumpAndSettle();
+    return c;
+  }
+
+  Offset planPoint(WidgetTester tester, {required bool camera}) {
+    final box = find.byKey(const ValueKey('depth-diagram'));
+    final g = DepthGeom(tester.getSize(box), DView.top, DCam(0, 0, -600), [DLayer(100, 0, 50, 0, 0)], pad: 26);
+    return tester.getTopLeft(box) + (camera ? g.camPx() : g.layerPx(0));
+  }
+
+  testWidgets('Depth: the floor plan comes from the document, a drag on a layer previews its position and a release commits', (tester) async {
+    final c = await mountDepth(tester);
+    expect(find.text('Looking at Layer 1. Drag layers or the camera to move them. Camera settings live in Inspector.'), findsOneWidget);
+    final from = planPoint(tester, camera: false);
+    final gesture = await tester.startGesture(from);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(c.commands.first.$1, 'select');
+    expect(c.commands.first.$2['ids'], [1]);
+    await gesture.moveBy(const Offset(30, -20));
+    await tester.pump();
+    await tester.pump();
+    final edit = c.commands.where((e) => e.$1 == 'previewProperties').last.$2['edits'] as List;
+    final position = edit.firstWhere((e) => e['property'] == 'position')['value'] as List;
+    expect(position[0], greaterThan(100), reason: 'dragged to the right on the plan');
+    final z = edit.firstWhere((e) => e['property'] == 'position.z')['value'] as double;
+    expect(z, greaterThan(50), reason: 'dragged up the plan is further away');
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(c.ops.last, 'commitPreview');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Depth: the camera drags round its target as an orbit and a distance, a locked layer only selects', (tester) async {
+    final c = await mountDepth(tester);
+    final gesture = await tester.startGesture(planPoint(tester, camera: true));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(c.commands.first.$2['ids'], [9], reason: 'the camera\'s own layer');
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+    await tester.pump();
+    final edit = c.commands.where((e) => e.$1 == 'previewProperties').last.$2['edits'] as List;
+    expect(edit.map((e) => e['property']), ['camera.orbit', 'camera.distance']);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(c.ops.last, 'commitPreview');
+    await tester.pumpWidget(const SizedBox());
+
+    final locked = await mountDepth(tester, locked: true);
+    final g2 = await tester.startGesture(planPoint(tester, camera: false));
+    await tester.pump(const Duration(milliseconds: 150));
+    await g2.moveBy(const Offset(30, 0));
+    await g2.up();
+    await tester.pumpAndSettle();
+    expect(locked.ops, isNot(contains('previewProperties')));
     await tester.pumpWidget(const SizedBox());
   });
 }
