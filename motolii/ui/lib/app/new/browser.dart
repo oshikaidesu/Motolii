@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart' show kPrimaryButton;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
@@ -37,6 +38,8 @@ class _NewBrowserState extends State<NewBrowser> implements BrowserHost {
     FilesShelf(),
   ];
   final search = TextEditingController();
+  final searchFocus = FocusNode();
+  final panelFocus = FocusNode();
   final queries = <String, String>{};
   final picked = <String, Set<String>>{};
   late DocumentSlice _slice;
@@ -78,7 +81,8 @@ class _NewBrowserState extends State<NewBrowser> implements BrowserHost {
   DocumentSlice _sliceFor(String name) => controller.slice(
     'newBrowser:$name',
     browserDocumentKeys,
-    derived: () => shelves.firstWhere((s) => s.name == name).derived(controller),
+    derived: () =>
+        shelves.firstWhere((s) => s.name == name).derived(controller),
   );
 
   @override
@@ -107,6 +111,8 @@ class _NewBrowserState extends State<NewBrowser> implements BrowserHost {
     _slice.removeListener(_onDocument);
     for (final s in shelves) s.dispose();
     search.dispose();
+    searchFocus.dispose();
+    panelFocus.dispose();
     super.dispose();
   }
 
@@ -204,14 +210,68 @@ class _NewBrowserState extends State<NewBrowser> implements BrowserHost {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: bare && supported && !twice ? () => apply(item) : null,
-          onDoubleTap: !bare || (twice && supported)
-              ? () => apply(item)
-              : null,
+          onDoubleTap: !bare || (twice && supported) ? () => apply(item) : null,
           onSecondaryTapDown: (e) => menu(item, e.globalPosition),
           child: shelf.draggable(this, item, tile),
         ),
       ),
     );
+  }
+
+  /// The panel's keyboard, as Classic's shelf had it: find, clear, the grid's arrows, Enter to apply, Delete on the shelf.
+  /// A key typed into a field of the shelf (search, a hex, a path) stays that field's.
+  KeyEventResult _key(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        searchFocus.hasFocus ||
+        FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<EditableText>() !=
+            null) {
+      return KeyEventResult.ignored;
+    }
+    final k = event.logicalKey;
+    final primary =
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed;
+    if (primary && k == LogicalKeyboardKey.keyF) {
+      searchFocus.requestFocus();
+      search.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: search.text.length,
+      );
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.escape) {
+      if (search.text.isNotEmpty) {
+        search.clear();
+        relist();
+      } else {
+        clearSelection();
+      }
+      return KeyEventResult.handled;
+    }
+    if (visible.isEmpty) return KeyEventResult.ignored;
+    final at = visible.indexWhere((e) => selectedIds.contains(id(e)));
+    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+      apply(visible[at < 0 ? 0 : at]);
+      return KeyEventResult.handled;
+    }
+    final columns = _columns[tab] ?? 3;
+    int? next;
+    if (k == LogicalKeyboardKey.arrowLeft) next = at - 1;
+    if (k == LogicalKeyboardKey.arrowRight) next = at + 1;
+    if (k == LogicalKeyboardKey.arrowUp) next = at - columns;
+    if (k == LogicalKeyboardKey.arrowDown) next = at + columns;
+    if (k == LogicalKeyboardKey.home) next = 0;
+    if (k == LogicalKeyboardKey.end) next = visible.length - 1;
+    if (next != null) {
+      select(visible[(at < 0 ? 0 : next).clamp(0, visible.length - 1)]);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) {
+      shelf.delete(this, visible[at < 0 ? 0 : at]);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -222,70 +282,78 @@ class _NewBrowserState extends State<NewBrowser> implements BrowserHost {
     final tall = tab == 'Create' || tab == 'Colors'
         ? ShellTokens.tile
         : ShellTokens.pictureTile;
-    return ColoredBox(
-      color: ShellTokens.surface,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: ShellTokens.gutter),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    return Focus(
+      focusNode: panelFocus,
+      onKeyEvent: _key,
+      child: Listener(
+        onPointerDown: (_) => panelFocus.requestFocus(),
+        child: ColoredBox(
+          color: ShellTokens.surface,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: ShellTokens.gutter),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: NewSearch(
+                        controller: search,
+                        focusNode: searchFocus,
+                        hint: 'Search ${tab.toLowerCase()}',
+                        onChanged: (_) => relist(),
+                      ),
+                    ),
+                    ...shelf.tools(this),
+                  ],
+                ),
+                if (header != null) header,
+                if (editor != null) editor,
                 Expanded(
-                  child: NewSearch(
-                    controller: search,
-                    hint: 'Search ${tab.toLowerCase()}',
-                    onChanged: (_) => relist(),
+                  child: LayoutBuilder(
+                    builder: (context, box) {
+                      _tileWidth =
+                          (box.maxWidth - ShellTokens.cellGap * (columns - 1)) /
+                          columns;
+                      return ListView(
+                        primary: false,
+                        padding: const EdgeInsets.only(
+                          bottom: ShellTokens.gutter,
+                        ),
+                        children: [
+                          for (final (name, items) in _groups()) ...[
+                            NewGroupHead(name, count: items.length),
+                            Wrap(
+                              spacing: ShellTokens.cellGap,
+                              runSpacing: ShellTokens.cellGap,
+                              children: [
+                                for (final item in items)
+                                  SizedBox(
+                                    width: _tileWidth,
+                                    height: tall,
+                                    child: _tile(item),
+                                  ),
+                              ],
+                            ),
+                          ],
+                          if (visible.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(ShellTokens.gutter),
+                              child: Text(
+                                'No matches',
+                                style: ShellTokens.kickerStyle(
+                                  ShellTokens.inkFaint,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                ...shelf.tools(this),
               ],
             ),
-            if (header != null) header,
-            if (editor != null) editor,
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  _tileWidth =
-                      (box.maxWidth - ShellTokens.cellGap * (columns - 1)) /
-                      columns;
-                  return ListView(
-                    primary: false,
-                    padding: const EdgeInsets.only(
-                      bottom: ShellTokens.gutter,
-                    ),
-                    children: [
-                      for (final (name, items) in _groups()) ...[
-                        NewGroupHead(name, count: items.length),
-                        Wrap(
-                          spacing: ShellTokens.cellGap,
-                          runSpacing: ShellTokens.cellGap,
-                          children: [
-                            for (final item in items)
-                              SizedBox(
-                                width: _tileWidth,
-                                height: tall,
-                                child: _tile(item),
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (visible.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(ShellTokens.gutter),
-                          child: Text(
-                            'No matches',
-                            style: ShellTokens.kickerStyle(
-                              ShellTokens.inkFaint,
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

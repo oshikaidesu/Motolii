@@ -102,4 +102,43 @@ void main() {
     expect(native.settings['dock'], {'classic': 'layout'}, reason: "Classic's keys are kept");
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('the Browser answers the keyboard: arrows move the pick, Enter applies it, Cmd+F finds, Esc lets go', (tester) async {
+    size(tester);
+    final native = Native();
+    native.install();
+    await open(tester);
+
+    // Pick the first shape by clicking it (a click on a thing that makes a layer only picks).
+    await tester.tap(find.text('Rectangle').first);
+    await tester.pumpAndSettle();
+    expect(native.ops, isNot(contains('create')), reason: 'a click only picks');
+
+    // Enter applies the picked one.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(native.operations.where((o) => o['op'] == 'create').last['kind'], 'rectangle');
+
+    // Arrow right moves the pick to the next thing; Enter makes that one.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final made = native.operations.where((o) => o['op'] == 'create').map((o) => o['kind']).toList();
+    expect(made.length, 2);
+    expect(made.last, isNot('rectangle'), reason: 'the pick moved on');
+
+    // Cmd+F puts the caret in the search field; typing narrows; Escape from the grid lets the pick go.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText).first, 'ellip');
+    await tester.pumpAndSettle();
+    expect(find.text('Ellipse'), findsWidgets);
+    expect(find.text('Rectangle'), findsNothing, reason: 'the search narrowed the list');
+    await tester.enterText(find.byType(EditableText).first, '');
+    await tester.pumpAndSettle();
+    expect(find.text('Rectangle'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }

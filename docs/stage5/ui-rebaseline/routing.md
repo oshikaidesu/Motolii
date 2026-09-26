@@ -13,7 +13,8 @@ New の面は固定 layout をやめ、既製の dock(`docking`)に載せた。�
 - 配置は `settings` の `newWorkspace`(version 1: `docking` の木と大きさ、各 strip で前に出ている tab)に、他の key を保ったまま書く。読めない state は既定の並びに戻す。Classic の `persist` は `layout.json` を丸ごと書き換えるので、Classic を起動すると `newWorkspace` は消える。
 - Stage は dock の tab で「前にいるか」を `Visibility` で判断する。dock がそれを渡す(`DockWorkspace.view()`)。隠れた Stage は window を 0x0 に戻し、resize と移動では見せる範囲を出し直す。
 - 閉じた panel は名前で呼べば開き直す(SH-18・WS-21)。Desk の引き出し(`deskDrawer`)は今までどおり。
-- Graph・Console はまだ panel として存在しない。
+- Console は独立の panel(`NewConsole`)。Graph はまだ存在しないので席も作らない。
+- capability の突き合わせ結果は [new-shell-audit.md](new-shell-audit.md)。
 
 ## Phase B(scaffold, 2026-09-25)
 
