@@ -14,7 +14,6 @@ class SessionEffectStore extends ParamStore {
   final int layerId;
   final Object effectId;
   bool _gesture = false;
-  final _bases = <String, Object?>{};
 
   Map<String, dynamic>? _layer() => c.liveLayers().where((l) => l['id'] == layerId).firstOrNull;
 
@@ -53,73 +52,29 @@ class SessionEffectStore extends ParamStore {
     c.command('toggleKey', {'layer': layerId, 'property': id});
   }
 
-  /// The shown layer and every other selected, unlocked layer that has the same row.
-  List<Map<String, dynamic>> _targets(String id) {
-    final live = c.liveLayers();
-    final ids = c.selectedIds;
-    return [
-      for (final l in live)
-        if ((l['id'] == layerId || ids.contains(l['id'])) && l['locked'] != true && _has(l, id)) l,
-    ];
-  }
-
-  static bool _has(Map<String, dynamic> layer, String id) {
-    for (final e in panelRows(layer['effects'])) {
-      if (panelRows(e['params']).any((r) => r['id'] == id)) return true;
-    }
-    return false;
-  }
-
-  static Object? _valueOf(Map<String, dynamic> layer, String id) {
-    for (final e in panelRows(layer['effects'])) {
-      for (final r in panelRows(e['params'])) {
-        if (r['id'] == id) return r['value'];
-      }
-    }
-    return null;
-  }
-
   @override
   void preview(String id, Object? v) {
     if (frozen) return;
-    final before = row(id)['value'];
-    _bases.putIfAbsent(id, () => before);
     super.preview(id, v);
-    final next = row(id)['value'];
-    final base = _bases[id];
-    final edits = <Map<String, dynamic>>[];
-    for (final target in _targets(id)) {
-      Object? value = next;
-      if (target['id'] != layerId && !typing) {
-        final mine = _valueOf(target, id);
-        if (next is num && base is num && mine is num) {
-          value = mine + (next - base);
-        } else if (next is List && base is List && mine is List) {
-          value = [
-            for (var i = 0; i < next.length; i++)
-              i < base.length && i < mine.length && next[i] is num ? (mine[i] as num) + (next[i] as num) - (base[i] as num) : next[i],
-          ];
-        }
-      }
-      edits.add({'layer': target['id'], 'property': id, 'value': value});
-    }
-    if (edits.isEmpty) return;
     _gesture = true;
-    c.command('previewProperties', {'edits': edits});
+    // One edit; the host spreads it over the selection (a drag by offset, a typed number as it is).
+    c.command('previewProperties', {
+      'edits': [
+        {'layer': layerId, 'property': id, 'value': row(id)['value'], 'spread': typing ? 'absolute' : 'offset'},
+      ],
+    });
   }
 
   @override
   void commit(String id) {
     if (frozen) return;
     super.commit(id);
-    _bases.remove(id);
     _gesture = false;
     c.command('commitPreview');
   }
 
   @override
   void cancelled(String id) {
-    _bases.remove(id);
     _gesture = false;
     c.command('cancelPreview');
   }

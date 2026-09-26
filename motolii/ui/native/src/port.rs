@@ -168,7 +168,7 @@ impl EditorRuntime{
                 }
             }
             "setProperty"=>{let edits=self.property_edits(&j)?;self.apply(edits)?;}
-            "previewProperties"=>{let mut edits=Vec::new();for p in j["edits"].as_array().ok_or("Expected edits")?{edits.extend(self.property_edits(p)?);}self.set_preview(edits)?;}
+            "previewProperties"=>{let mut edits=Vec::new();for p in j["edits"].as_array().ok_or("Expected edits")?{if p["spread"].is_string(){edits.extend(self.spread_edits(p)?);}else{edits.extend(self.property_edits(p)?);}}self.set_preview(edits)?;}
             "commitPreview"|"commitX"=>{if let Some((owner,edits))=self.preview.take(){self.doc.clear_preview_edits(owner);self.apply(edits)?;}}
             "cancelPreview"=>{}
             "setX"=>{let edits=self.x_edit(num(&j,"value")?)?;self.apply(edits)?;}
@@ -399,6 +399,7 @@ mod freeze_op {
 
 #[cfg(test)]
 mod sequence_preview;
+mod spread;
 
 
 #[cfg(test)]

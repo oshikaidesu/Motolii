@@ -32,12 +32,12 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     final preview = c.commands.where((v) => v.$1 == 'previewProperties').toList();
     expect(preview, isNotEmpty);
-    expect((preview.last.$2['edits'] as List).single, {'layer': 1, 'property': 'position', 'value': [250.0, 180.0]});
+    expect((preview.last.$2['edits'] as List).single, {'layer': 1, 'property': 'position', 'value': [250.0, 180.0], 'spread': 'typed'});
     expect(c.ops.last, 'commitPreview');
     expect(c.ops.where((o) => o == 'commitPreview').length, 1);
   });
 
-  testWidgets('a drag is relative across the selection, a locked layer is left alone, one commit ends it', (tester) async {
+  testWidgets('a drag is one edit with its spread; the host, not the Instrument, decides who follows; one commit ends it', (tester) async {
     final c = await mount(tester, state([
       layerRow(1, 'A', position: [100, 100]),
       layerRow(2, 'B', position: [300, 50]),
@@ -45,10 +45,10 @@ void main() {
     ], [1, 3, 2])); // the shown layer is the last selected: B
     final s = storeOf(tester);
     expect(s.activeId, 2);
-    s.preview('position', [330.0, 50.0]); // B moves +30 in x
+    s.preview('position', [330.0, 50.0]);
     final edits = (c.commands.last.$2['edits'] as List).cast<Map>();
-    expect(edits.map((e) => e['layer']), [1, 2], reason: 'the locked layer is not a target');
-    expect(edits.firstWhere((e) => e['layer'] == 1)['value'], [130.0, 100.0], reason: 'A keeps its own offset');
+    expect(edits.single, {'layer': 2, 'property': 'position', 'value': [330.0, 50.0], 'spread': 'offset'},
+        reason: 'one edit: the host puts the change to the other selected, unlocked layers (Rust: a_selection_is_edited_by_the_host_in_the_way_the_edit_says)');
     s.commit('position');
     expect(c.ops, ['previewProperties', 'commitPreview']);
   });

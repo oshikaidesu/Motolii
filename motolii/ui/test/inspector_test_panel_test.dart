@@ -303,7 +303,7 @@ void main() {
       ),
     );
     expect(find.text('2 layers'), findsOneWidget);
-    // Type 30 into layer 2's X: both layers get an edit, absolute.
+    // Type 30 into layer 2's X: one edit, absolute; the host puts it to both selected layers.
     await tester.tap(find.byType(EditorNumericField).first);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(find.byType(EditorNumericField).first);
@@ -312,8 +312,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     final edit = commands.firstWhere((m) => m.contains('previewProperties'));
-    expect(edit, contains('"layer":1'));
-    expect(edit, contains('"layer":2'));
+    expect(edit, contains('"spread":"absolute"'));
 
     // A camera layer gets its own card; a text layer its content; a shape
     // its colours.

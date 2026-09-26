@@ -70,28 +70,21 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump(const Duration(seconds: 1));
     final preview = c.commands.where((v) => v.$1 == 'previewProperties').last;
-    expect((preview.$2['edits'] as List).single, {'layer': 1, 'property': 'effect.0.param.size', 'value': 80.0});
+    expect((preview.$2['edits'] as List).single, {'layer': 1, 'property': 'effect.0.param.size', 'value': 80.0, 'spread': 'absolute'});
     expect(c.ops.where((o) => o == 'commitPreview').length, 1);
   });
 
-  testWidgets('a drag is relative across the selection; a typed number is absolute; a locked layer is skipped', (tester) async {
+  testWidgets('a drag spreads by offset and a typed number as it is: one edit each, the host chooses the targets', (tester) async {
     final a = withEffect(layerRow(1, 'A'));
-    final b = withEffect(layerRow(2, 'B'));
-    ((b['effects'] as List).single['params'] as List)[1] = param('effect.0.param.size', 'Size', 100.0);
-    final locked = withEffect(layerRow(3, 'Locked'), locked: true);
-    // The Inspector shows one effect sheet only for a single layer, so the store is built the way the sheet builds it.
-    final c = await mount(tester, state([a, b, locked], [3, 2, 1]), height: 1600);
+    final c = await mount(tester, state([a, withEffect(layerRow(2, 'B'))], [2, 1]), height: 1600);
     final s = SessionEffectStore(c, 1, 'motolii.blur');
     addTearDown(s.dispose);
-    s.preview('effect.0.param.size', 50.0); // A: 40 -> 50 (+10)
-    var edits = (c.commands.last.$2['edits'] as List).cast<Map>();
-    expect(edits.map((e) => e['layer']), [1, 2], reason: 'the locked layer is not a target');
-    expect(edits.firstWhere((e) => e['layer'] == 2)['value'], 110.0, reason: 'B keeps its own offset');
+    s.preview('effect.0.param.size', 50.0);
+    expect((c.commands.last.$2['edits'] as List).single, {'layer': 1, 'property': 'effect.0.param.size', 'value': 50.0, 'spread': 'offset'});
     s.commit('effect.0.param.size');
     c.commands.clear();
     s.set('effect.0.param.size', 25.0);
-    edits = (c.commands.first.$2['edits'] as List).cast<Map>();
-    expect(edits.firstWhere((e) => e['layer'] == 2)['value'], 25.0, reason: 'a typed number is absolute for every target');
+    expect((c.commands.first.$2['edits'] as List).single, {'layer': 1, 'property': 'effect.0.param.size', 'value': 25.0, 'spread': 'absolute'});
   });
 
   testWidgets('a locked layer refuses every edit', (tester) async {

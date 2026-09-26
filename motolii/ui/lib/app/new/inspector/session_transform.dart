@@ -77,9 +77,11 @@ class SessionTransformStore extends TransformStore {
   @override
   void previewed(String id, Map<int, Object?> values) {
     _gesture = true;
+    // One edit and how it spreads: the host puts it to the rest of the selection (a drag keeps each layer's own
+    // offset, a typed number sets the axes that changed) and leaves locked layers alone.
     c.command('previewProperties', {
       'edits': [
-        for (final e in values.entries) {'layer': e.key, 'property': id, 'value': e.value},
+        {'layer': activeId, 'property': id, 'value': values[activeId] ?? values.values.first, 'spread': typing ? 'typed' : 'offset'},
       ],
     });
   }
