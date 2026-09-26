@@ -1,0 +1,310 @@
+{
+ "kinds": {
+  "primitive": {
+   "label": "Primitive"
+  },
+  "path": {
+   "label": "Path"
+  },
+  "tool": {
+   "label": "Tool"
+  },
+  "body": {
+   "label": "3D body"
+  },
+  "helper": {
+   "label": "Helper"
+  },
+  "relation": {
+   "label": "Relation"
+  },
+  "effect": {
+   "label": "Effect"
+  }
+ },
+ "panels": {
+  "create": {
+   "title": "Create",
+   "kinds": [
+    "primitive",
+    "path",
+    "tool",
+    "body",
+    "helper",
+    "relation"
+   ]
+  },
+  "effects": {
+   "title": "Effects",
+   "kinds": [
+    "effect"
+   ]
+  }
+ },
+ "families": {
+  "text": {
+   "label": "Text",
+   "section": "Primitives",
+   "kinds": [
+    "primitive"
+   ]
+  },
+  "shapes": {
+   "label": "Shapes",
+   "section": "Primitives",
+   "kinds": [
+    "primitive"
+   ]
+  },
+  "paths": {
+   "label": "Paths",
+   "section": "Primitives",
+   "kinds": [
+    "path"
+   ]
+  },
+  "tools": {
+   "label": "Tools",
+   "kinds": [
+    "tool"
+   ]
+  },
+  "3d": {
+   "label": "3D",
+   "kinds": [
+    "body"
+   ]
+  },
+  "helpers": {
+   "label": "Helpers",
+   "kinds": [
+    "helper"
+   ]
+  },
+  "physics": {
+   "label": "Physics",
+   "kinds": [
+    "relation"
+   ]
+  },
+  "physics/rigid": {
+   "label": "Rigid",
+   "kinds": [
+    "relation"
+   ]
+  },
+  "physics/soft": {
+   "label": "Soft",
+   "kinds": [
+    "relation"
+   ]
+  },
+  "physics/fluid": {
+   "label": "Fluid",
+   "kinds": [
+    "relation"
+   ]
+  },
+  "blur": {
+   "label": "Blur",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "light": {
+   "label": "Light",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "color": {
+   "label": "Color",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "distort": {
+   "label": "Distort",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "stylize": {
+   "label": "Stylize",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "noise": {
+   "label": "Noise",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "lens": {
+   "label": "Lens",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "glitch": {
+   "label": "Glitch",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "film": {
+   "label": "Film",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "time": {
+   "label": "Time",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "feedback": {
+   "label": "Feedback",
+   "kinds": [
+    "effect"
+   ]
+  },
+  "depth": {
+   "label": "Depth",
+   "kinds": [
+    "effect"
+   ]
+  }
+ },
+ "tags": [
+  "basic",
+  "glyph",
+  "vector",
+  "brush",
+  "solid",
+  "camera",
+  "light",
+  "particles",
+  "simulation",
+  "force",
+  "spring",
+  "gravity",
+  "collision",
+  "turbulence",
+  "fluid",
+  "cloth",
+  "softbody",
+  "rigid",
+  "constraint",
+  "motion",
+  "blur",
+  "glow",
+  "bloom",
+  "color",
+  "grade",
+  "tint",
+  "invert",
+  "distort",
+  "warp",
+  "glitch",
+  "retro",
+  "film",
+  "grain",
+  "noise",
+  "lens",
+  "chromatic",
+  "pixel",
+  "halftone",
+  "stylize",
+  "threshold",
+  "sharpen",
+  "vignette",
+  "depth",
+  "time",
+  "feedback",
+  "echo",
+  "generative",
+  "procedural",
+  "gpu",
+  "mask",
+  "scan",
+  "vhs",
+  "crt",
+  "bokeh",
+  "duotone"
+ ],
+ "capabilities": {
+  "apply": "can be applied to a selection or placed",
+  "place": "places copies",
+  "reads-backdrop": "reads what is below",
+  "uses-time": "depends on the clock",
+  "feedback": "keeps a previous frame",
+  "takes-layer": "takes another layer as input"
+ },
+ "faces": {
+  "mark": {
+   "mark": [
+    "text",
+    "rect",
+    "rounded",
+    "ellipse",
+    "star",
+    "polygon",
+    "line",
+    "arrow",
+    "path",
+    "blob",
+    "pen",
+    "pencil",
+    "spray",
+    "eraser",
+    "nul",
+    "camera",
+    "light",
+    "particles",
+    "stage",
+    "cube",
+    "sphere",
+    "torus",
+    "cylinder",
+    "cone",
+    "pyramid",
+    "plane"
+   ],
+   "color": "hex"
+  },
+  "fx": {
+   "base": [
+    "Blur",
+    "Bokeh",
+    "Glow",
+    "Vignette",
+    "Color Shift",
+    "Duotone",
+    "Invert",
+    "Chromatic",
+    "Displace",
+    "Pixelate",
+    "Halftone",
+    "Threshold",
+    "Sharpen",
+    "Noise",
+    "Film Grain"
+   ],
+   "hue": "number"
+  },
+  "curve": {
+   "fn": [
+    "sine",
+    "spring",
+    "decay",
+    "noise",
+    "orbit",
+    "bounce"
+   ],
+   "hue": "number"
+  }
+ }
+}

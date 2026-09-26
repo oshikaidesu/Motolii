@@ -1,0 +1,723 @@
+{
+ "things": [
+  {
+   "id": "acme.lens_bloom",
+   "name": "Lens Bloom",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "bloom"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "lens bloom",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 0
+   }
+  },
+  {
+   "id": "acme.halation",
+   "name": "Halation",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "glow"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "halation",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 47
+   }
+  },
+  {
+   "id": "acme.anamorphic_streak",
+   "name": "Anamorphic Streak",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "chromatic"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "anamorphic streak",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Chromatic",
+    "hue": 94
+   }
+  },
+  {
+   "id": "acme.rolling_shutter",
+   "name": "Rolling Shutter",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "glitch",
+    "warp"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "rolling shutter",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 141
+   }
+  },
+  {
+   "id": "acme.scanlines",
+   "name": "Scanlines",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "crt",
+    "retro"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "scanlines",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Halftone",
+    "hue": 188
+   }
+  },
+  {
+   "id": "acme.vhs_wobble",
+   "name": "VHS Wobble",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "vhs",
+    "retro"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "vhs wobble",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 235
+   }
+  },
+  {
+   "id": "acme.datamosh",
+   "name": "Datamosh",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "glitch",
+    "pixel"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "datamosh",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 282
+   }
+  },
+  {
+   "id": "acme.bit_crush",
+   "name": "Bit Crush",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "pixel",
+    "glitch"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "bit crush",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 329
+   }
+  },
+  {
+   "id": "acme.bokeh_pro",
+   "name": "Bokeh Pro",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "bokeh",
+    "lens"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "bokeh pro",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Bokeh",
+    "hue": 16
+   }
+  },
+  {
+   "id": "acme.tilt_shift",
+   "name": "Tilt Shift",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "blur"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "tilt shift",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 63
+   }
+  },
+  {
+   "id": "acme.depth_fog",
+   "name": "Depth Fog",
+   "kind": "effect",
+   "family": "depth",
+   "tags": [
+    "depth"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "depth fog",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Vignette",
+    "hue": 110
+   }
+  },
+  {
+   "id": "acme.depth_blur",
+   "name": "Depth Blur",
+   "kind": "effect",
+   "family": "depth",
+   "tags": [
+    "depth",
+    "blur"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "depth blur",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 157
+   }
+  },
+  {
+   "id": "acme.focus_pull",
+   "name": "Focus Pull",
+   "kind": "effect",
+   "family": "depth",
+   "tags": [
+    "depth",
+    "lens"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "focus pull",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 204
+   }
+  },
+  {
+   "id": "acme.lens_dirt",
+   "name": "Lens Dirt",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "grain"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "lens dirt",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Noise",
+    "hue": 251
+   }
+  },
+  {
+   "id": "acme.chromatic_split",
+   "name": "Chromatic Split",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "chromatic",
+    "glitch"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "chromatic split",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Chromatic",
+    "hue": 298
+   }
+  },
+  {
+   "id": "acme.fisheye",
+   "name": "Fisheye",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "warp"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "fisheye",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 345
+   }
+  },
+  {
+   "id": "acme.barrel",
+   "name": "Barrel",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "warp"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "barrel",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 32
+   }
+  },
+  {
+   "id": "acme.pincushion",
+   "name": "Pincushion",
+   "kind": "effect",
+   "family": "lens",
+   "tags": [
+    "lens",
+    "warp"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "pincushion",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 79
+   }
+  },
+  {
+   "id": "acme.grain_35mm",
+   "name": "Grain 35mm",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "grain"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "grain 35mm",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Film Grain",
+    "hue": 126
+   }
+  },
+  {
+   "id": "acme.grain_16mm",
+   "name": "Grain 16mm",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "grain"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "grain 16mm",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Film Grain",
+    "hue": 173
+   }
+  },
+  {
+   "id": "acme.bleach_bypass",
+   "name": "Bleach Bypass",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "grade"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "bleach bypass",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Threshold",
+    "hue": 220
+   }
+  },
+  {
+   "id": "acme.cross_process",
+   "name": "Cross Process",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "color"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "cross process",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Color Shift",
+    "hue": 267
+   }
+  },
+  {
+   "id": "acme.sepia_toner",
+   "name": "Sepia Toner",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "tint"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "sepia toner",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Duotone",
+    "hue": 314
+   }
+  },
+  {
+   "id": "acme.cyan_teal",
+   "name": "Cyan Teal",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "grade",
+    "tint"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "cyan teal",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Duotone",
+    "hue": 1
+   }
+  },
+  {
+   "id": "acme.gate_weave",
+   "name": "Gate Weave",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "retro"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "gate weave",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 48
+   }
+  },
+  {
+   "id": "acme.light_leak",
+   "name": "Light Leak",
+   "kind": "effect",
+   "family": "film",
+   "tags": [
+    "film",
+    "light"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "light leak",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 95
+   }
+  },
+  {
+   "id": "acme.crt_curve",
+   "name": "CRT Curve",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "crt",
+    "retro"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "crt curve",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 142
+   }
+  },
+  {
+   "id": "acme.rgb_shift",
+   "name": "RGB Shift",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "glitch",
+    "chromatic"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "rgb shift",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Chromatic",
+    "hue": 189
+   }
+  },
+  {
+   "id": "acme.pixel_sort",
+   "name": "Pixel Sort",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "glitch",
+    "pixel"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "pixel sort",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 236
+   }
+  },
+  {
+   "id": "acme.signal_loss",
+   "name": "Signal Loss",
+   "kind": "effect",
+   "family": "glitch",
+   "tags": [
+    "glitch",
+    "noise"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "plugin:acme.lens",
+   "searchTerms": [
+    "signal loss",
+    "acme"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Noise",
+    "hue": 283
+   }
+  }
+ ]
+}
