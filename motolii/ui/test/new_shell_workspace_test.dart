@@ -60,6 +60,17 @@ Future<void> drag(WidgetTester tester, Offset from, Offset to) async {
   await tester.pumpAndSettle();
 }
 
+/// `tabbed_view` gives a tab that does not fit a minimal, off-screen slot (about 17 px wide) and its label row
+/// reports an overflow in debug. Nothing is drawn there; every other error is still reported.
+void ignoreSqueezedTabChips() {
+  final report = FlutterError.onError;
+  FlutterError.onError = (details) {
+    final text = details.toString(minLevel: DiagnosticLevel.debug);
+    final chip = text.contains('RenderFlex overflowed') && RegExp(r'constraints: BoxConstraints\(w=(\d+\.\d+), h=\d+\.\d+\)').allMatches(text).any((m) => double.parse(m.group(1)!) < 40);
+    if (!chip) report?.call(details);
+  };
+}
+
 void main() {
   void size(WidgetTester tester, [Size s = const Size(1600, 1000)]) {
     tester.view.physicalSize = s;
@@ -120,6 +131,58 @@ void main() {
       }
       await close(tester);
     }
+  });
+
+  testWidgets('every panel can be named back onto the face, and showing one never rearranges the others', (tester) async {
+    size(tester);
+    Native().install();
+    ignoreSqueezedTabChips();
+    final shell = await open(tester);
+    final ids = (shell.dock.defs as Map<String, dynamic>).keys.toList();
+    String structure() => (shell.dock.snapshot() as Map)['layout'] as String;
+    // Showing a docked panel picks its tab and changes no split, size or membership.
+    final before = structure();
+    for (final id in ids) {
+      await (shell.c as EditorSession).panelPlacementRequested!(id, 'show');
+      await tester.pumpAndSettle();
+      expect(shell.dock.isShown(id), isTrue, reason: id);
+      expect(structure(), before, reason: 'showing $id rearranged the workspace');
+    }
+    // A closed one comes back, and the panels that stayed are where they were.
+    for (final id in ['Inspector', 'Timeline', 'Desk', 'Fonts', 'Web']) {
+      shell.dock.close(id);
+      await tester.pumpAndSettle();
+      expect(shell.dock.isOpen(id), isFalse, reason: id);
+      await (shell.c as EditorSession).panelPlacementRequested!(id, 'show');
+      await tester.pumpAndSettle();
+      expect(shell.dock.isShown(id), isTrue, reason: '$id reopened in front');
+    }
+    expect(tester.takeException(), isNull);
+    await close(tester);
+  });
+
+  testWidgets('Reset layout brings the default arrangement back, and the View menu names every panel', (tester) async {
+    size(tester);
+    final native = Native()..settings = {};
+    native.install();
+    final shell = await open(tester);
+    String structure() => (shell.dock.snapshot() as Map)['layout'] as String;
+    final fresh = structure();
+    shell.dock.close('Timeline');
+    shell.dock.close('Desk');
+    await tester.pumpAndSettle();
+    final browser = shell.dock.rectOf('Create')!;
+    await drag(tester, Offset(browser.right + 2, 400), Offset(browser.right + 122, 400));
+    expect(structure(), isNot(fresh));
+    await shell.menu('Reset layout');
+    await tester.pumpAndSettle();
+    expect(structure(), fresh, reason: 'the default arrangement, sizes included');
+    for (final id in ['Create', 'Stage', 'Inspector', 'Timeline', 'Desk']) {
+      expect(shell.dock.isOpen(id), isTrue, reason: id);
+    }
+    await tester.pump(const Duration(seconds: 1));
+    expect((native.settings['newWorkspace'] as Map)['layout'], fresh, reason: 'and it is what is saved');
+    await close(tester);
   });
 
   testWidgets('the Stage asks native for the surface it is showing, and only that one', (tester) async {

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
@@ -12,12 +14,12 @@ class PanelDef {
 /// The New shell's workspace: the off-the-shelf `docking` layout plus what only Motolii knows around it,
 /// which is the panel registry, showing a panel by id, and where a panel is on screen.
 class DockWorkspace {
-  DockWorkspace(
-    this.defs,
-    DockingArea Function(DockingItem Function(String id, {double? weight}) item) preset,
-  ) {
-    layout = DockingLayout(root: preset(item));
+  DockWorkspace(this.defs, this._preset) {
+    layout = DockingLayout(root: _preset(item));
   }
+
+  /// The default workspace: the arrangement the design started from.
+  final DockingArea Function(DockingItem Function(String id, {double? weight}) item) _preset;
 
   final Map<String, PanelDef> defs;
   late final DockingLayout layout;
@@ -60,11 +62,15 @@ class DockWorkspace {
 
   bool isOpen(String id) => layout.findDockingItem(id) != null;
 
+  /// The tab in front. Closing the last tab of a strip leaves the stored index past the end, and the dock
+  /// clamps it only when it draws, so every reader here does the same.
+  DockingItem _front(DockingTabs tabs) => tabs.childAt(math.min(tabs.selectedIndex, tabs.childrenCount - 1));
+
   /// In front: alone in its area, or the selected tab of its strip.
   bool isShown(String id) {
     final tabs = layout.findDockingTabsWithItem(id);
     if (tabs == null) return isOpen(id);
-    return tabs.childAt(tabs.selectedIndex).id == id;
+    return _front(tabs).id == id;
   }
 
   /// Show a panel: select its tab if it is docked, otherwise reopen it beside [near].
@@ -92,6 +98,11 @@ class DockWorkspace {
 
   void close(String id) => layout.removeItemByIds([id]);
 
+  /// Back to the default arrangement. Panels keep their state: their keys are the same.
+  void reset() {
+    layout.root = _preset(item);
+  }
+
   /// Where a panel is on screen now, in global coordinates.
   Rect? rectOf(String id) {
     final box = _keys[id]?.currentContext?.findRenderObject() as RenderBox?;
@@ -108,7 +119,7 @@ class DockWorkspace {
     final shown = <String>[];
     void walk(DockingArea? area) {
       if (area is DockingTabs) {
-        shown.add(area.childAt(area.selectedIndex).id as String);
+        shown.add(_front(area).id as String);
       } else if (area is DockingParentArea) {
         area.forEach(walk);
       }

@@ -38,6 +38,7 @@ class NewShell extends StatefulWidget {
 const _browserTabs = ['Create', 'Effects', 'Media', 'Colors', 'Fonts', 'Files'];
 const _centerTabs = ['Stage', 'Camera', 'Notes', 'Web'];
 const _browserLabels = {'Create': 'Objects'};
+const _resetLayout = 'Reset layout';
 
 class _NewShellState extends State<NewShell> {
   final c = EditorSession();
@@ -143,6 +144,10 @@ class _NewShellState extends State<NewShell> {
 
   Future<void> menu(String action) async {
     setState(() => sheet = null);
+    if (action == _resetLayout) {
+      dock.reset();
+      return;
+    }
     if (await documentAction(context, c, action)) return;
     await _place(action, 'show');
   }
@@ -307,10 +312,10 @@ class _TopBar extends StatelessWidget {
         _menu(context, 'File', fileActions),
         _menu(context, 'Edit', editActions.keys.toList()),
         _menu(context, 'View', [
-          ..._browserTabs,
-          ..._centerTabs,
+          ...shell.dock.defs.keys,
           for (final spec in panelCatalog)
             if (spec.drawer) spec.name,
+          _resetLayout,
         ]),
         const SizedBox(width: ShellTokens.tabGap),
         _Transport(c: c),
