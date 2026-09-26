@@ -320,3 +320,5 @@ mod watch {
 #[cfg(test)]
 #[path = "script/sweep.rs"]
 mod sweep;
+#[cfg(test)]
+mod probes;
