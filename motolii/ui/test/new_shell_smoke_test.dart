@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
 import '../lib/app/new/browser.dart';
-import '../lib/panels/desk.dart';
+import '../lib/app/new/browser/shelf_panel.dart';import '../lib/panels/desk.dart';
 import '../lib/panels/inspector.dart';
 import '../lib/panels/stage.dart';
 import '../lib/panels/timeline.dart';
@@ -53,7 +53,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(NewBrowser), findsOneWidget);
+    expect(find.byType(ShelfPanel), findsOneWidget);
     expect(find.byType(StagePanel), findsOneWidget);
     expect(find.byType(InspectorPanel), findsOneWidget);
     expect(find.byType(DeskPanel), findsOneWidget);

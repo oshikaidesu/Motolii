@@ -7,6 +7,7 @@ import 'classify.dart';
 import 'common.dart';
 import 'faces.dart';
 import 'search.dart';
+import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
 
@@ -179,7 +180,7 @@ class FxPainter extends CustomPainter {
 
 class EffectsPanel extends StatefulWidget {
   const EffectsPanel(this.scene, {super.key, required this.catalog, this.user, this.search, this.classify});
-  final EffectScene scene;
+  final EffectScene? scene;
   final Catalog catalog;
   final UserViews? user;
   final SearchCapability? search;
@@ -227,16 +228,17 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
   Widget _grid(List<Thing> shown, double w, int cols) {
     const pad = 12.0, gap = 6.0;
     final tileW = (w - pad * 2 - gap * (cols - 1)) / cols;
+    BrowserSeatScope.of(context)?.shows(shown, cols);
     final showCaption = tileW >= 60;
     return GridView.builder(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(pad, 14, pad, 12),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: 9, crossAxisSpacing: gap, childAspectRatio: tileW / (tileW * .84 + (showCaption ? 18 : 0))),
       itemCount: shown.length,
-      itemBuilder: (_, i) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
         if (showCaption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(shown[i].name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: const Color(0xFFC4C5C8)))),
-      ]),
+      ])),
     );
   }
 }

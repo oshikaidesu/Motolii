@@ -19,6 +19,8 @@ import '../session/editor_session.dart';
 import 'editor_actions.dart';
 import '../workspace/dock_workspace.dart';
 import 'new/browser.dart';
+import 'new/browser/shelf_panel.dart';
+import '../hf/bp/things.dart' show UserViews;
 import 'new/console.dart';
 import 'new/dock_theme.dart';
 import 'new/inspector/new_effect.dart';
@@ -67,6 +69,7 @@ class _NewShellState extends State<NewShell> {
     (doc) => freezeNotice(doc) ?? effectsNotice(doc),
   );
   late final uiScale = EditorScale.of(context) ?? ValueNotifier(1.0);
+  final browserViews = UserViews();
   String? sheet;
   bool ready = false;
 
@@ -219,7 +222,9 @@ class _NewShellState extends State<NewShell> {
         name: PanelDef(
           name,
           (_browserLabels[name] ?? name).toUpperCase(),
-          () => NewBrowser(controller: c, tab: name),
+          () => const {'Create', 'Effects'}.contains(name)
+              ? ShelfPanel(controller: c, name: name, user: browserViews)
+              : NewBrowser(controller: c, tab: name),
           minSize: 220,
         ),
       for (final name in _centerTabs)

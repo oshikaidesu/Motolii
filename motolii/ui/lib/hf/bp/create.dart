@@ -6,6 +6,7 @@ import 'common.dart';
 import 'effects.dart';
 import 'faces.dart';
 import 'search.dart';
+import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
 
@@ -59,7 +60,9 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
 
   Widget _grid(Map<String, List<Thing>> sections, double w, {required bool captions, required double tileH, required double minTile}) {
     const pad = 12.0, gap = 5.0;
-    final cols = math.max(1, ((w - pad * 2 + gap) / (minTile + gap)).floor());
+    final scale = BrowserSeatScope.of(context)?.tileScale ?? 1;
+    final cols = math.max(1, ((w - pad * 2 + gap) / (minTile * scale + gap)).floor());
+    BrowserSeatScope.of(context)?.shows([for (final e in sections.values) ...e], cols);
     final tileW = (w - pad * 2 - gap * (cols - 1)) / cols;
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
@@ -70,7 +73,7 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
             padding: const EdgeInsets.symmetric(horizontal: pad),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: tileW / tileH),
-              delegate: SliverChildBuilderDelegate((c, i) => _Tile(e.value[i], widget.scene, captions), childCount: e.value.length),
+              delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], _Tile(e.value[i], widget.scene, captions)), childCount: e.value.length),
             ),
           ),
         ],
@@ -84,7 +87,7 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
         physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         itemCount: shown.length,
-        itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(right: 5), child: SizedBox(width: math.min(h - 20, 54), child: _Tile(shown[i], widget.scene, false))),
+        itemBuilder: (c, i) => Padding(padding: const EdgeInsets.only(right: 5), child: SizedBox(width: math.min(h - 20, 54), child: seated(c, shown[i], _Tile(shown[i], widget.scene, false)))),
       );
 }
 

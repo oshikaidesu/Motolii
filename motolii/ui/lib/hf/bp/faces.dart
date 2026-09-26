@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'create.dart';
 import 'effects.dart';
+import 'seat.dart';
 import 'things.dart';
 
 Color hexColor(String h) => Color(0xFF000000 | int.parse(h.substring(1), radix: 16));
@@ -14,6 +15,8 @@ class ThingFace extends StatelessWidget {
   final EffectScene? scene;
   @override
   Widget build(BuildContext context) {
+    final own = BrowserSeatScope.of(context)?.face(context, thing);
+    if (own != null) return own;
     final f = thing.face;
     switch (f['type']) {
       case 'mark':

@@ -5,6 +5,7 @@ import '../glyphs.dart';
 import 'classify.dart';
 import 'common.dart';
 import 'search.dart';
+import 'seat.dart';
 
 const kTile = Color(0xFF212124);
 const kLabel = Color(0xFF7481C4);
@@ -152,11 +153,18 @@ class PanelShell extends StatelessWidget {
       final isStrip = h < 170;
       final isWide = !isStrip && w >= columnMinWidth;
       final mode = stacked ? HeadMode.stacked : (isWide ? HeadMode.full : HeadMode.compact);
-      final header = PanelHeader(title: title, icon: icon, search: search, hint: hint, mode: mode, count: count, extra: isWide ? null : ClassChip(classify));
+      final seat = BrowserSeatScope.of(context);
+      final tools = seat?.tools(context);
+      final header = PanelHeader(
+        title: title, icon: icon, search: search, hint: hint, mode: mode, count: count,
+        extra: tools == null && isWide ? null : Row(mainAxisSize: MainAxisSize.min, children: [if (tools != null) tools, if (!isWide) ClassChip(classify)]),
+      );
+      final under = seat?.header(context);
       final hh = switch (mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
       final bodySize = Size(isWide ? w - columnWidth : w, h - hh);
-      return search.keys(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      final shell = search.keys(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
+        if (under != null) under,
         Expanded(
           child: isStrip
               ? strip(context, bodySize)
@@ -165,6 +173,15 @@ class PanelShell extends StatelessWidget {
                   : narrow(context, bodySize),
         ),
       ]));
+      if (seat == null) return shell;
+      // The panel's keyboard, when a host gives one; a key typed into a field stays that field's.
+      return Focus(
+        onKeyEvent: (n, e) {
+          final r = seat.key(n, e);
+          return r == KeyEventResult.ignored ? search.onKey(n, e) : r;
+        },
+        child: Builder(builder: (context) => Listener(onPointerDown: (_) => Focus.of(context).requestFocus(), child: shell)),
+      );
     });
   }
 }
