@@ -10,8 +10,11 @@ import 'panel.dart' show ParamCell;
 import 'toys.dart';
 
 class LayoutInstrument extends StatefulWidget {
-  const LayoutInstrument(this.store, {super.key, this.title = 'Group', this.advancedOpen = false});
+  const LayoutInstrument(this.store, {super.key, this.title = 'Group', this.advancedOpen = false, this.embedded = false});
   final LayoutStore store;
+
+  /// Inside a card of a longer scrolling panel: take the height the content needs instead of scrolling by itself.
+  final bool embedded;
   final String title;
   final bool advancedOpen;
   @override
@@ -35,6 +38,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
             const SizedBox(height: 8),
             if (s.child) ..._childBody(narrow) else ..._groupBody(w, narrow),
           ]);
+          if (widget.embedded) return Padding(padding: EdgeInsets.fromLTRB(pad, 10, pad, 16), child: body);
           return narrow
               ? SingleChildScrollView(key: const ValueKey('layout-scroll'), padding: EdgeInsets.fromLTRB(pad, 10, pad, 16), child: body)
               : SingleChildScrollView(key: const ValueKey('layout-scroll'), padding: EdgeInsets.fromLTRB(pad, 10, pad, 16), child: body);

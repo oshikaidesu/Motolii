@@ -20,6 +20,7 @@ import '../workspace/dock_workspace.dart';
 import 'new/browser.dart';
 import 'new/console.dart';
 import 'new/dock_theme.dart';
+import 'new/inspector/new_layout.dart';
 import 'new/inspector/new_transform.dart';
 import 'new/shell_bar.dart';
 import 'editor_window.dart' show freezeNotice;
@@ -186,6 +187,7 @@ class _NewShellState extends State<NewShell> {
           controller: c,
           instruments: InspectorInstruments(
             transform: (context, controller) => NewTransform(controller: controller),
+            layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
           ),
         ),
         minSize: 240,
