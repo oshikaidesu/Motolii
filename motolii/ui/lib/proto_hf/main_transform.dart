@@ -3,10 +3,10 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'bp/common.dart';
-import 'insp/transform.dart';
-import 'insp/transform_gizmo.dart';
-import 'insp/transform_model.dart';
+import '../hf/bp/common.dart';
+import '../hf/insp/transform.dart';
+import '../hf/insp/transform_gizmo.dart';
+import '../hf/insp/transform_model.dart';
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 final _root = GlobalKey();

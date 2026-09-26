@@ -4,9 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/insp/camera.dart';
-import 'package:motolii_stage5/proto_hf/insp/camera_face.dart';
-import 'package:motolii_stage5/proto_hf/insp/camera_model.dart';
+import 'package:motolii_stage5/hf/insp/camera.dart';
+import 'package:motolii_stage5/hf/insp/camera_face.dart';
+import 'package:motolii_stage5/hf/insp/camera_model.dart';
 
 Widget host(Widget child, double w, double h) => WidgetsApp(
       color: const Color(0xFF000000),

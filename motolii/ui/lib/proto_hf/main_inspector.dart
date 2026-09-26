@@ -4,11 +4,11 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'bp/common.dart';
-import 'bp/search.dart';
-import 'insp/fixtures.dart';
-import 'insp/panel.dart';
-import 'insp/rows.dart';
+import '../hf/bp/common.dart';
+import '../hf/bp/search.dart';
+import '../hf/insp/fixtures.dart';
+import '../hf/insp/panel.dart';
+import '../hf/insp/rows.dart';
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _phase = String.fromEnvironment('PROTO_PHASE', defaultValue: '1');

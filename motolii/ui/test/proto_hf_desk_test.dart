@@ -5,11 +5,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/desk/blend.dart';
-import 'package:motolii_stage5/proto_hf/desk/depth.dart';
-import 'package:motolii_stage5/proto_hf/desk/ease.dart';
-import 'package:motolii_stage5/proto_hf/desk/history.dart';
-import 'package:motolii_stage5/proto_hf/desk/notes.dart';
+import 'package:motolii_stage5/hf/desk/blend.dart';
+import 'package:motolii_stage5/hf/desk/depth.dart';
+import 'package:motolii_stage5/hf/desk/ease.dart';
+import 'package:motolii_stage5/hf/desk/history.dart';
+import 'package:motolii_stage5/hf/desk/notes.dart';
 
 Widget host(Widget child, double w, double h) => WidgetsApp(
       color: const Color(0xFF000000),

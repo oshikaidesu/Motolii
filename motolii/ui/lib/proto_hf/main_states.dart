@@ -4,7 +4,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'glyphs.dart';
+import '../hf/glyphs.dart';
+import 'hg_item.dart';
 import 'ref.dart';
 
 const _shot = String.fromEnvironment('PROTO_SHOT');

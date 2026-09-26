@@ -5,12 +5,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/bp/catalog_io.dart';
-import 'package:motolii_stage5/proto_hf/bp/create.dart';
-import 'package:motolii_stage5/proto_hf/bp/effects.dart';
-import 'package:motolii_stage5/proto_hf/bp/faces.dart';
-import 'package:motolii_stage5/proto_hf/bp/shell.dart';
-import 'package:motolii_stage5/proto_hf/bp/things.dart';
+import 'package:motolii_stage5/hf/bp/catalog_io.dart';
+import 'package:motolii_stage5/hf/bp/create.dart';
+import 'package:motolii_stage5/hf/bp/effects.dart';
+import 'package:motolii_stage5/hf/bp/faces.dart';
+import 'package:motolii_stage5/hf/bp/shell.dart';
+import 'package:motolii_stage5/hf/bp/things.dart';
 
 const dir = 'lib/proto_hf/data/things';
 

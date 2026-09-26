@@ -4,11 +4,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/bp/search.dart';
-import 'package:motolii_stage5/proto_hf/insp/fixtures.dart';
-import 'package:motolii_stage5/proto_hf/insp/panel.dart';
-import 'package:motolii_stage5/proto_hf/insp/rows.dart';
-import 'package:motolii_stage5/proto_hf/insp/tones.dart';
+import 'package:motolii_stage5/hf/bp/search.dart';
+import 'package:motolii_stage5/hf/insp/fixtures.dart';
+import 'package:motolii_stage5/hf/insp/panel.dart';
+import 'package:motolii_stage5/hf/insp/rows.dart';
+import 'package:motolii_stage5/hf/insp/tones.dart';
 
 Widget host(Widget child, double w, double h) => WidgetsApp(
       color: const Color(0xFF000000),

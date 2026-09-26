@@ -2,7 +2,7 @@
 //   dart run tool/validate_things.dart [dir] [set ...]
 // Default: lib/proto_hf/data/things with the sets builtin and stress.
 import 'dart:io';
-import '../lib/proto_hf/bp/catalog_io.dart';
+import '../lib/hf/bp/catalog_io.dart';
 
 void main(List<String> args) {
   final dir = args.isNotEmpty ? args.first : 'lib/proto_hf/data/things';

@@ -4,12 +4,12 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'bp/common.dart';
-import 'desk/blend.dart';
-import 'desk/depth.dart';
-import 'desk/ease.dart';
-import 'desk/history.dart';
-import 'desk/notes.dart';
+import '../hf/bp/common.dart';
+import '../hf/desk/blend.dart';
+import '../hf/desk/depth.dart';
+import '../hf/desk/ease.dart';
+import '../hf/desk/history.dart';
+import '../hf/desk/notes.dart';
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _rows = String.fromEnvironment('PROTO_ROWS', defaultValue: 'all');

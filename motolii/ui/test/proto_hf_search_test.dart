@@ -4,15 +4,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/bp/catalog_io.dart';
-import 'package:motolii_stage5/proto_hf/bp/classify.dart';
-import 'package:motolii_stage5/proto_hf/bp/colors.dart';
-import 'package:motolii_stage5/proto_hf/bp/create.dart';
-import 'package:motolii_stage5/proto_hf/bp/effects.dart';
-import 'package:motolii_stage5/proto_hf/bp/fonts.dart';
-import 'package:motolii_stage5/proto_hf/bp/search.dart';
-import 'package:motolii_stage5/proto_hf/bp/shell.dart';
-import 'package:motolii_stage5/proto_hf/bp/things.dart';
+import 'package:motolii_stage5/hf/bp/catalog_io.dart';
+import 'package:motolii_stage5/hf/bp/classify.dart';
+import 'package:motolii_stage5/hf/bp/colors.dart';
+import 'package:motolii_stage5/hf/bp/create.dart';
+import 'package:motolii_stage5/hf/bp/effects.dart';
+import 'package:motolii_stage5/hf/bp/fonts.dart';
+import 'package:motolii_stage5/hf/bp/search.dart';
+import 'package:motolii_stage5/hf/bp/shell.dart';
+import 'package:motolii_stage5/hf/bp/things.dart';
 
 Widget host(Widget child, double w, double h) => WidgetsApp(
       color: const Color(0xFF000000),

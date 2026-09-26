@@ -3,9 +3,9 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'bp/common.dart';
-import 'insp/layout.dart';
-import 'insp/layout_model.dart';
+import '../hf/bp/common.dart';
+import '../hf/insp/layout.dart';
+import '../hf/insp/layout_model.dart';
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 final _root = GlobalKey();

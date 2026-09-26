@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import 'glyphs.dart';
+import '../hf/glyphs.dart';
+import 'hg_item.dart';
 import 'ref.dart';
 
 class Wd extends RI {

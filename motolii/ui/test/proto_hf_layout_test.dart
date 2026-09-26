@@ -3,9 +3,9 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/insp/layout.dart';
-import 'package:motolii_stage5/proto_hf/insp/layout_diagram.dart';
-import 'package:motolii_stage5/proto_hf/insp/layout_model.dart';
+import 'package:motolii_stage5/hf/insp/layout.dart';
+import 'package:motolii_stage5/hf/insp/layout_diagram.dart';
+import 'package:motolii_stage5/hf/insp/layout_model.dart';
 
 Widget host(Widget child, double w, double h) => WidgetsApp(
       color: const Color(0xFF000000),

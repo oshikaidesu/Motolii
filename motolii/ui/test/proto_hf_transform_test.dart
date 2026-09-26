@@ -6,10 +6,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/proto_hf/desk/common.dart' show kBlue, kMint, kPink, kViolet;
-import 'package:motolii_stage5/proto_hf/insp/transform.dart';
-import 'package:motolii_stage5/proto_hf/insp/transform_gizmo.dart';
-import 'package:motolii_stage5/proto_hf/insp/transform_model.dart';
+import 'package:motolii_stage5/hf/desk/common.dart' show kBlue, kMint, kPink, kViolet;
+import 'package:motolii_stage5/hf/insp/transform.dart';
+import 'package:motolii_stage5/hf/insp/transform_gizmo.dart';
+import 'package:motolii_stage5/hf/insp/transform_model.dart';
 
 Widget host(Widget child, double w, double h) => WidgetsApp(
       color: const Color(0xFF000000),
