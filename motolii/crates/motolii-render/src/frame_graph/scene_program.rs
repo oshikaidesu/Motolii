@@ -365,6 +365,7 @@ impl SceneNodeProgram {
                         layer.freeze_eligible = false;
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
+                        if let Some(cut) = copy.cut { layer.masks.push(unit_cut(cut)); }
                         members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
                         continue;
                     }
@@ -406,7 +407,8 @@ impl SceneNodeProgram {
                     )?;
                     layer.effects = sampled_direct;
 
-                    if sampled_selected.is_some() {
+                    // A split text's units have no placement effect to be switched off: the unit's transform is always in force.
+                    if sampled_selected.is_some() || set.selected_effect == Some(super::placement_program::TEXT_UNITS) {
                         layer.transform = copy_transform;
                         layer.opacity = (layer.opacity * copy.opacity).clamp(0.0, 1.0);
                     } else {
@@ -418,6 +420,7 @@ impl SceneNodeProgram {
                             .copied()
                             .ok_or(SceneNodeError::InvalidInput(node.identity().kind))?;
                     }
+                    if let Some(cut) = copy.cut { layer.masks.push(unit_cut(cut)); }
                     members.push(SceneContributionValue { solo: visible.solo, layer: Some(layer) });
                 }
 
@@ -694,3 +697,15 @@ fn normalize_plate_orders(layer: &mut SceneLayerValue) {
 }
 
 fn projection_tag(value: LayerProjection) -> u8 { match value { LayerProjection::TwoD => 0, LayerProjection::TwoPointFiveD => 1, LayerProjection::ThreeD => 2 } }
+
+/// A split text's unit as the resolve path cuts it (`push_split`): the whole layer, intersected with the unit's box.
+fn unit_cut(b: [f32; 4]) -> crate::picture::resolved::ResolvedMask {
+    crate::picture::resolved::ResolvedMask {
+        mode: crate::doc::store::MaskMode::Intersect,
+        inverted: false,
+        opacity: 1.0,
+        expansion: 0.0,
+        shape: crate::picture::path::rounded_rect_path(b, 0.0, glam::Affine2::IDENTITY),
+        frame: crate::doc::store::MaskFrame::Layer,
+    }
+}

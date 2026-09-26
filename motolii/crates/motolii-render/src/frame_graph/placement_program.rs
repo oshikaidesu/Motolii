@@ -13,10 +13,17 @@ pub struct PlacementCopyValue {
     pub opacity: f32,
     pub time_offset: RationalTime,
     pub outline_stretch: [f32; 2],
+    /// A text unit's box (material coordinates): the member is the whole layer cut to it.
+    pub cut: Option<[f32; 4]>,
 }
+
+/// The selected effect of a set whose members are a split text's units.
+pub const TEXT_UNITS: usize = usize::MAX;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacementSetValue {
+    /// The placement effect in force, or `TEXT_UNITS` when the members are a split text's units (every effect stays on
+    /// each unit, none is after).
     pub selected_effect: Option<usize>,
     pub copies: Vec<PlacementCopyValue>,
 }
@@ -42,6 +49,16 @@ struct Recipe {
     analysis: Option<usize>,
     /// The layer's order rows (Stagger, Stagger From, From End): copies are members in order and take the shared law.
     schedule: [Option<usize>; 3],
+    /// A text's split: its shaped document, its Split row, its Anchor, and the canvas (the members are its units).
+    units: Option<Units>,
+}
+
+#[derive(Clone, Copy)]
+struct Units {
+    shape: usize,
+    split: Option<usize>,
+    anchor: Option<usize>,
+    canvas: (u32, u32),
 }
 
 #[derive(Debug)]
@@ -74,6 +91,7 @@ impl PlacementProgram {
         effects: &EffectProgram,
         transforms: &TransformProgram,
         analysis: &AnalysisProgram,
+        text: &super::TextFlowProgram,
     ) -> Result<Self, PlacementProgramError> {
         let mut nodes = BTreeMap::new();
         let mut recipes = BTreeMap::new();
@@ -82,13 +100,15 @@ impl PlacementProgram {
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else { continue };
             if meta.source == LayerSource::Group { continue; }
-            let Some(effect_binding) = effects.binding(layer) else { continue };
-
-            let programs: Vec<_> = effect_binding.effects.iter().map(|key| effects.placement_program(*key)).collect();
-            if programs.iter().all(Option::is_none) { continue; }
+            let layer_effects = effects.binding(layer).map(|binding| binding.effects.clone()).unwrap_or_default();
+            let programs: Vec<_> = layer_effects.iter().map(|key| effects.placement_program(*key)).collect();
+            // A split text's units are members too (`push_split`); its set is built even with no placement effect. The
+            // shape is the one the scene draws (the text after flowing).
+            let text_shape = (meta.source == LayerSource::Text).then(|| text.binding(layer)).flatten();
+            if programs.iter().all(Option::is_none) && text_shape.is_none() { continue; }
 
             let Some(transform) = transforms.binding(layer) else { continue };
-            let mut inputs = effect_binding.effects.clone();
+            let mut inputs = layer_effects;
             let effect_count = inputs.len();
 
             let world = inputs.len();
@@ -120,6 +140,14 @@ impl PlacementProgram {
                 inputs.push(binding.result);
                 index
             });
+            let comp = view.composition()?.map_or((0, 0), |c| (c.width, c.height));
+            let units = text_shape.map(|binding| {
+                let shape = inputs.len();
+                inputs.push(binding.shape);
+                let split = properties.node_for(layer, &prop(crate::doc::store::names::TEXT_SPLIT)).map(|key| { let i = inputs.len(); inputs.push(key); i });
+                let anchor = properties.node_for(layer, &prop(property::ANCHOR)).map(|key| { let i = inputs.len(); inputs.push(key); i });
+                Units { shape, split, anchor, canvas: comp }
+            });
             let schedule = [crate::doc::store::layout::STAGGER, crate::doc::store::layout::STAGGER_FROM, crate::doc::store::layout::FROM_END].map(|name| {
                 properties.node_for(layer, &prop(name)).map(|key| {
                     let index = inputs.len();
@@ -148,6 +176,7 @@ impl PlacementProgram {
                 stretch_outline: meta.source == LayerSource::Shape,
                 analysis,
                 schedule,
+                units,
             });
             bindings.insert(layer, PlacementBinding { layer, node: key });
         }
@@ -166,6 +195,18 @@ impl PlacementProgram {
     ) -> Option<Result<Vec<DynamicInput>, PlacementProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
+            if let Some(cuts) = unit_cuts(recipe, inputs, context.time) {
+                let sample_indices = sample_indices(recipe);
+                let mut requests = Vec::new();
+                for (_, offset) in cuts {
+                    if offset == RationalTime::ZERO { continue; }
+                    let Ok(at) = context.time.try_sub(offset) else { continue };
+                    for index in &sample_indices {
+                        requests.push(DynamicInput { node: node.identity().inputs[*index], time: at });
+                    }
+                }
+                return Ok(requests);
+            }
             let Some((_, program, effect)) = selected_effect(recipe, inputs) else { return Ok(Vec::new()); };
             let position = read_position(node, inputs, recipe, None)?;
             let analysis = recipe.analysis
@@ -202,6 +243,9 @@ impl PlacementProgram {
     ) -> Option<Result<NodeValue, PlacementProgramError>> {
         let recipe = self.recipes.get(&node.key())?;
         Some((|| {
+            if let Some(cuts) = unit_cuts(recipe, inputs, context.time) {
+                return unit_set(node, inputs, recipe, cuts).map(NodeValue::new);
+            }
             let Some((selected_effect, program, effect)) = selected_effect(recipe, inputs) else {
                 return Ok(NodeValue::new(PlacementSetValue { selected_effect: None, copies: Vec::new() }));
             };
@@ -258,12 +302,88 @@ impl PlacementProgram {
                     opacity: placement.opacity,
                     time_offset: placement.time_offset,
                     outline_stretch: output.outline_stretch,
+                    cut: None,
                 });
             }
 
             Ok(NodeValue::new(PlacementSetValue { selected_effect: Some(selected_effect), copies }))
         })())
     }
+}
+
+/// A split text's units now, each with its time offset, when they are members: the text's Stagger is above zero and there
+/// are at least two units (`push_split`). The boxes are read at the frame time, the time offsets by the shared order law.
+fn unit_cuts(recipe: &Recipe, inputs: &NodeInputs, time: RationalTime) -> Option<Vec<([f32; 4], RationalTime)>> {
+    let units = recipe.units?;
+    let number = |index: Option<usize>| -> f64 {
+        match index.and_then(|i| inputs.at(i)).and_then(|v| v.downcast_ref::<Value>()) {
+            Some(Value::F64(v)) if v.is_finite() => *v,
+            Some(Value::Enum(v)) => *v as f64,
+            _ => 0.0,
+        }
+    };
+    let stagger = number(recipe.schedule[0]);
+    let split = number(units.split).round() as i64;
+    if stagger <= 0.0 || split == 0 {
+        return None;
+    }
+    let text = inputs.at(units.shape)?.downcast_ref::<super::TextShapeValue>()?;
+    let canvas = crate::picture::shapes_ops::Canvas { width: units.canvas.0, height: units.canvas.1, origin_x: 0, origin_y: 0 };
+    let content = text.document.content.eval(time);
+    let boxes = crate::picture::text_frame::split_boxes(&text.document, &text.shaped, &canvas, &content, split);
+    if boxes.len() < 2 {
+        return None;
+    }
+    let (from, from_end, n) = (number(recipe.schedule[1]).round() as i64, number(recipe.schedule[2]).round() as i64 == 1, boxes.len());
+    Some(boxes.into_iter().enumerate().map(|(k, b)| {
+        let delay = crate::doc::store::layout::schedule_delay(stagger, from, from_end, k, n);
+        // The document never reads before zero: the unit's time stops at 0 (`schedule_shift`).
+        let at = crate::doc::store::layout::shift_by(time, delay).unwrap_or(time);
+        (b, time.try_sub(at).unwrap_or(RationalTime::ZERO))
+    }).collect())
+}
+
+/// The units as members: each one the whole layer at its time, turned about its box's centre, cut to its box.
+fn unit_set(node: &GraphNode, inputs: &NodeInputs, recipe: &Recipe, cuts: Vec<([f32; 4], RationalTime)>) -> Result<PlacementSetValue, PlacementProgramError> {
+    let units = recipe.units.expect("unit cuts come from units");
+    let sample_indices = sample_indices(recipe);
+    let mut dynamic_start = node.identity().inputs.len();
+    let mut copies = Vec::with_capacity(cuts.len());
+    for (index, (b, offset)) in cuts.into_iter().enumerate() {
+        let sampled = if offset == RationalTime::ZERO {
+            None
+        } else {
+            let start = dynamic_start;
+            dynamic_start += sample_indices.len();
+            Some(start)
+        };
+        let world = read_transform_sampled(node, inputs, recipe.world, &sample_indices, sampled)?;
+        let parent = recipe.parent_world
+            .map(|i| read_transform_sampled(node, inputs, i, &sample_indices, sampled))
+            .transpose()?
+            .unwrap_or(TransformValue { affine: glam::Affine2::IDENTITY, spatial: glam::Affine3A::IDENTITY });
+        let anchor = units.anchor
+            .and_then(|original| actual_index(original, &sample_indices, sampled))
+            .and_then(|i| inputs.at(i))
+            .and_then(|v| v.downcast_ref::<Value>())
+            .and_then(|v| match v { Value::Vec2(a) => Some(glam::vec2(a[0] as f32, a[1] as f32)), _ => None })
+            .unwrap_or(glam::Vec2::ZERO);
+        let shift = glam::vec2((b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5) - anchor;
+        let s2 = glam::Affine2::from_translation(shift);
+        let s3 = glam::Affine3A::from_translation(shift.extend(0.0));
+        copies.push(PlacementCopyValue {
+            index: index as u32,
+            transform: Some(TransformValue {
+                affine: parent.affine * s2 * parent.affine.inverse() * world.affine * s2.inverse(),
+                spatial: parent.spatial * s3 * parent.spatial.inverse() * world.spatial * s3.inverse(),
+            }),
+            opacity: 1.0,
+            time_offset: offset,
+            outline_stretch: [1.0, 1.0],
+            cut: Some(b),
+        });
+    }
+    Ok(PlacementSetValue { selected_effect: Some(TEXT_UNITS), copies })
 }
 
 /// Copies are members in order: each one's time offset takes the order delay the layer's order rows give it, by the one
@@ -299,7 +419,7 @@ fn selected_effect<'a>(recipe: &Recipe, inputs: &'a NodeInputs) -> Option<(usize
 
 fn sample_indices(recipe: &Recipe) -> Vec<usize> {
     let mut indices = vec![recipe.world];
-    for index in [recipe.parent_world, recipe.position, recipe.position_x, recipe.position_y, recipe.position_z].into_iter().flatten() {
+    for index in [recipe.parent_world, recipe.position, recipe.position_x, recipe.position_y, recipe.position_z, recipe.units.and_then(|u| u.anchor)].into_iter().flatten() {
         if !indices.contains(&index) { indices.push(index); }
     }
     indices

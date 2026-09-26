@@ -4,7 +4,7 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::{KeyframeTrack, Value};
 use crate::doc::store::{slot::translate_link, LayerId, PropertyBase, PropertyId, PropertyLink, PropertySource, SlotId, StoreError, StoreView};
 
-use super::{EvaluationContext, GraphNode, InputTime, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, TimeDependency};
+use super::{DynamicInput, EvaluationContext, GraphNode, InputTime, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, TimeDependency};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PropertyBinding {
@@ -19,6 +19,8 @@ enum Recipe {
     Track(KeyframeTrack),
     Link(PropertyLink),
     Sum,
+    /// The layer's clock and the row: the value node (the only static input) is sampled at the clock's time for the row.
+    Clock(std::sync::Arc<crate::doc::store::layout::LayerClock>, String),
 }
 
 #[derive(Debug)]
@@ -76,12 +78,26 @@ impl PropertyProgram {
                 let source = inputs.at(0).and_then(|value| value.downcast_ref::<Value>()).cloned().ok_or(PropertyProgramError::InvalidInput(node.identity().kind));
                 source.and_then(|value| translate_link(&link.plugin_id, &link.params, value).ok_or(PropertyProgramError::InvalidInput(node.identity().kind))).map(NodeValue::new)
             }
+            Recipe::Clock(..) => {
+                // The value at the layer's time is the dynamic input after the static one; with no shift it is the static one.
+                let value = inputs.at(1).or_else(|| inputs.at(0)).and_then(|value| value.downcast_ref::<Value>()).cloned();
+                value.map(NodeValue::new).ok_or(PropertyProgramError::InvalidInput(node.identity().kind))
+            }
             Recipe::Sum => {
                 let mut values = inputs.iter().filter_map(|(_, value)| value.downcast_ref::<Value>().cloned());
                 let Some(first) = values.next() else { return Some(Err(PropertyProgramError::InvalidInput(node.identity().kind))); };
                 Ok(NodeValue::new(values.fold(first, |current, next| current.add(&next).unwrap_or(current))))
             }
         })
+    }
+
+    /// A clocked value asks for its value node at the layer's own time, when that differs from the frame's.
+    pub fn dynamic_inputs(&self, node: &GraphNode, _inputs: &NodeInputs, context: &EvaluationContext) -> Option<Result<Vec<DynamicInput>, PropertyProgramError>> {
+        let Recipe::Clock(clock, row) = self.recipes.get(&node.key())? else { return None };
+        Some((|| {
+            let at = clock.for_row(row, context.time)?;
+            Ok(if at == context.time { Vec::new() } else { vec![DynamicInput { node: node.identity().inputs[0], time: at }] })
+        })())
     }
 
     fn compile_property(&mut self, view: &StoreView<'_>, layer: LayerId, property: PropertyId, visiting: &mut BTreeSet<(LayerId, PropertyId)>) -> Result<Option<NodeKey>, PropertyProgramError> {
@@ -92,6 +108,19 @@ impl PropertyProgram {
         let key = match source {
             Some(source) => self.compile_source(view, source, visiting)?,
             None => None,
+        };
+        // The document reads a layer's values at the layer's own time (`value_at`: order shifts, then Loop); so does the graph.
+        let key = match key {
+            Some(value) if !crate::doc::store::layout::is_schedule_row(property.name()) => {
+                let clock = view.layer_clock(layer)?;
+                if clock.is_identity() {
+                    Some(value)
+                } else {
+                    let parameters = format!("{:?}{}", clock, property.name()).into_bytes();
+                    Some(self.intern(NodeKind::PropertyClock, vec![value], vec![InputTime::Same], parameters, true, Recipe::Clock(clock, property.name().to_owned())))
+                }
+            }
+            other => other,
         };
         visiting.remove(&binding);
         if let Some(key) = key { self.bindings.insert(binding, key); }

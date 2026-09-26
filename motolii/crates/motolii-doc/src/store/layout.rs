@@ -10,7 +10,9 @@ use std::rc::Rc;
 
 pub use crate::doc::store::scratch::{Frame, LayoutCache, Memo, Scratch, Slot};
 
+mod clock;
 mod time;
+pub use clock::{shift_by, LayerClock, OrderStep, RowValue};
 pub use time::{order_weight, schedule_delay};
 
 

@@ -411,7 +411,7 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
-    fn slot_track(&self, id: &SlotId) -> Result<Option<KeyframeTrack>, StoreError> {
+    pub(crate) fn slot_track(&self, id: &SlotId) -> Result<Option<KeyframeTrack>, StoreError> {
         Ok(self
             .slots()?
             .into_iter()
@@ -446,10 +446,7 @@ impl<'a> StoreView<'a> {
         };
         // 順番の札: 層の時刻は親の箱の Stagger でずれる(鍵も効果もこの時刻で読む)。その後、繰り返し(Loop)で畳む。
         let t = match layer_id_of(path) {
-            Some(layer) if !super::layout::is_schedule_row(property.name()) => {
-                let shifted = self.layer_time(layer, t)?;
-                if super::layout::is_loop_row(property.name()) { shifted } else { self.looped_time(layer, shifted)? }
-            }
+            Some(layer) if !super::layout::is_schedule_row(property.name()) => self.layer_clock(layer)?.for_row(property.name(), t)?,
             _ => t,
         };
 
@@ -497,7 +494,11 @@ impl<'a> StoreView<'a> {
         Ok(acc)
     }
 
-    fn transient_value_at(&self, path: &EntityPath, property: &PropertyId) -> Option<Value> {
+    pub(crate) fn ignore_transients_flag(&self) -> bool {
+        self.ignore_transients
+    }
+
+    pub(crate) fn transient_value_at(&self, path: &EntityPath, property: &PropertyId) -> Option<Value> {
         let key = if *path == composition_path() {
             TransientKey::Camera(property.clone())
         } else {

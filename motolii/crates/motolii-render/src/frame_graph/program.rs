@@ -95,7 +95,7 @@ impl SceneProgram {
             view, &properties, &content, &transforms, &visibility, &effects, &masks, &text, &groups, &particles,
         )?;
         let text_flow = TextFlowProgram::compile(view, &properties, &content, &flow, &transforms, &text, &analysis)?;
-        let placements = PlacementProgram::compile(view, &properties, &effects, &transforms, &analysis)?;
+        let placements = PlacementProgram::compile(view, &properties, &effects, &transforms, &analysis, &text_flow)?;
         let relations = RelationProgram::compile(view, &properties)?;
         let solver = SolverProgram::compile(view, &properties, &relations, &flow)?;
         let scene = SceneNodeProgram::compile(view, &properties, &content, &transforms, &flow, &text_flow, &groups, &effects, &masks, &visibility, &placements, &motion, &particles)?;
@@ -129,6 +129,9 @@ impl SceneProgram {
     pub fn solver(&self) -> &SolverProgram { &self.solver }
 
     pub fn dynamic_inputs(&self, node: &GraphNode, inputs: &NodeInputs, context: &EvaluationContext) -> Result<Vec<DynamicInput>, SceneProgramError> {
+        if let Some(requests) = self.properties.dynamic_inputs(node, inputs, context) {
+            return requests.map_err(Into::into);
+        }
         if let Some(requests) = self.analysis.dynamic_inputs(node, inputs, context) {
             return requests.map_err(Into::into);
         }

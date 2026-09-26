@@ -53,6 +53,8 @@ pub enum NodeKind {
     PropertyTrack,
     PropertyLink,
     PropertySum,
+    /// A layer's value read at the layer's own time (its ancestors' order shifts, its Loop): the value node sampled there.
+    PropertyClock,
     /// Coarse F2 world evaluation, before per-content node lowering.
     ResolvedWorld,
     /// Text documents collected from one resolved world.
