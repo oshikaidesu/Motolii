@@ -126,7 +126,23 @@ class _EditorLampState extends State<EditorLamp> {
                     width: EditorMetrics.s8,
                     height: EditorMetrics.s8,
                     alignment: Alignment.center,
-                    child: shown
+                    child: shown && EditorTheme.of(context).skin.newFace
+                        ? Transform.rotate(
+                            angle: .785398,
+                            child: Container(
+                              width: EditorMetrics.s5,
+                              height: EditorMetrics.s5,
+                              decoration: BoxDecoration(
+                                color: color,
+                                border: color == null
+                                    ? Border.all(
+                                        color: EditorTheme.of(context).muted,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          )
+                        : shown
                         ? Container(
                             width: EditorMetrics.s5,
                             height: EditorMetrics.s5,

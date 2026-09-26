@@ -30,6 +30,7 @@ class _SectionLabel extends StatelessWidget {
       text.toUpperCase(),
       style: TextStyle(
         fontSize: EditorMetrics.micro,
+        fontFamily: EditorTheme.of(context).skin.labelFamily,
         letterSpacing: 1,
         color: EditorTheme.of(context).muted,
       ),
@@ -83,11 +84,13 @@ class _CellLabel extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
     child: Text(
-      label,
+      EditorTheme.of(context).skin.label(label),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: EditorMetrics.micro,
+        fontFamily: EditorTheme.of(context).skin.labelFamily,
+        letterSpacing: EditorTheme.of(context).skin.uppercaseLabels ? .6 : null,
         color: hero
             ? EditorTheme.of(context).ink
             : EditorTheme.of(context).muted,

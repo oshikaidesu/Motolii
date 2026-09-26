@@ -246,3 +246,32 @@ Classic UIの保持については自走してよい。不明点があっても�
 最終的に欲しいのは「新しい絵を描いた」という報告ではない。
 **現行Motoliiの全能力を保持したまま、同じ製品を新しいUI projectionから操作できる状態**
 を作るためのrebaseline。
+
+---
+
+## 補正(2026-09-25、Phase C の前)
+
+> **意味は全部守れ。実装は信用するな。見た目と配置は自由。**
+> Classic is evidence of what Motolii must be able to do, not evidence of how Motolii should do it.
+
+- **維持するもの**: Capability Inventory のユーザー能力、Document の意味、Undo/Redo、selection、editing semantics、save/open/import/export の workflow、Timeline/Stage で成立している操作の意味。
+- **維持する義務がないもの**: Classic の Widget tree・panel 内部構造・control の種類・property row という表現・panel placement・Desk という投影・Browser の Finder 的表現・現 theme/component・Flutter 側の購読方法と I/O 方法・Classic 固有の自動 open/focus 規則・歴史的 workaround。再利用してよいが、再利用に価値は無い。新 component を作ることにも価値は無い。
+- **判断基準は一つ**: 現在の Motolii の意味を、最も単純で直接的な UI として投影できているか。
+- Inventory を 1 項目ずつ写さない。ユーザーの目的で再編する。到達性は 100%、構造の 1:1 は不要。
+- Flutter は control plane。New で Classic 実装を再利用する時、広い document 購読・毎コマ rebuild・bridge 往復・file/settings I/O・重い派生計算を持ち込まない。
+- 性能の単発計測を gate にしない。hot-path 監査は別レーン・別 commit。visual commit に Rust/render/bridge/runtime 最適化を混ぜない。
+- **最初の milestone**: 既存 fixture を New で開いた時、capability を失わず、Classic と明確に違う visual hierarchy を持ち、Concept Art の方向が実窓で成立している。
+- **止まる条件**: (1) capability 維持に意味論の変更が要る (2) Document/Intent の変更が要る (3) 既存 capability 同士が意味的に矛盾 (4) 投影を決めるのに新しい製品上の意味が要る。それ以外は小さい方を選んで進む。
+
+## Phase C の期待値(2026-09-25)
+
+> **Meaning continuity, visual discontinuity.**
+> Classic is a specification source, not a design reference.
+
+- 「Classic を少し現代的にしたもの」「テーマ変更」は失敗。見た瞬間に「製品が一世代進んだ」と分かる変化量を求める。Phase B の New Shell の見た目は scaffold で、保存する義務は無い。
+- 積極的に再設計する: visual hierarchy・情報のまとめ方・panel 内 layout・toolbar/chrome・Browser/Inspector/Timeline の表現・typography・spacing rhythm・iconography・control geometry・selection/focus 表現・semantic color・density の整理・contextual controls。面積配分や補助領域の位置も変えてよい。
+- **Modern = Dense / flat / sharp / graphical / instrument-like.** 余白を増やす・角を丸くする・カードを浮かせるのは逆。避ける: generic Material・SaaS dashboard・mobile settings・rounded cards・glass・巨大な余白・装飾 gradient・Classic を塗り替えただけの UI。
+- Classic の panel header・tab・property table・Browser tile・Desk container・Timeline styling・toolbar・spacing・color hierarchy・control appearance を visual reference にしない。Classic を見るのは capability の確認の時だけ。
+- dark concept art は visual direction の基準画像(第一印象・density・contrast・sharp geometry・typography・color behavior・Stage dominance・instrument-like controls を同じ family へ)。架空機能だけは実装しない。
+- 第一成果物から窓全体(window chrome + Browser + Stage 周り + Inspector + Timeline)を同じ visual language にする。粗くてよい。既存 fixture を開き、Classic と同じ窓サイズで並べて撮る。
+- **合否**: 縮小して並べても Classic/New を一瞬で区別できなければ FAIL。モノクロでも typography・geometry・hierarchy・spacing だけで区別できることを目標にする。capability は失わない。

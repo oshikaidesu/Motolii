@@ -27,17 +27,34 @@ abstract final class ShellTokens {
   static const inkFaint = Color(0xff5e6066);
   static const inkOnAccent = Color(0xff0b0c0e);
 
+  /// The instrument face: labels and readouts.
+  static const mono = 'Menlo';
+
   // Geometry of the machine face.
   static const double ruleWidth = 1, activeRule = 2;
-  static const double topBar = 32, header = 26, statusBar = 20;
+  static const double topBar = 44, header = 26, statusBar = 20;
+  static const double key = 28, keyGlyph = 12, readoutGap = 14;
+
+  // The Browser's cells: a square mark tile, a picture tile, the gap
+  // between cells, the head of a group, the mark inside a tile.
+  static const double tile = 62, pictureTile = 92, cellGap = 3;
+  static const double groupHead = 28, mark = 22, field = 26;
   static const double browserWidth = 300, inspectorWidth = 320;
   static const double deskWidth = 320, bottomHeight = 300;
   static const double tabGap = 18, gutter = 10;
-  static const double kicker = 10, wordmark = 15, tagline = 9;
-  static const double tracking = .8, wordmarkTracking = -.2;
+  static const double kicker = 10, wordmark = 20, readout = 12;
+  static const double tracking = 1, wordmarkTracking = -.4;
+
+  static TextStyle readoutStyle(Color color) => TextStyle(
+    fontFamily: mono,
+    fontSize: readout,
+    fontWeight: FontWeight.w500,
+    color: color,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
 
   static TextStyle kickerStyle(Color color) => TextStyle(
-    fontFamily: EditorTheme.fontFamily,
+    fontFamily: mono,
     fontSize: kicker,
     fontWeight: FontWeight.w600,
     letterSpacing: tracking,
@@ -76,6 +93,18 @@ abstract final class ShellTokens {
       'timelineWash': Color(0x26000000),
     },
     identityColors: const [pink, sky, mint, lemon, peach, lavender],
+    skin: const EditorSkin(
+      radius: 2,
+      tileRadius: 0,
+      labelFamily: mono,
+      uppercaseLabels: true,
+      identityChip: true,
+      clipInset: 4,
+      tabular: true,
+      outlinedTiles: true,
+      flatWells: true,
+      newFace: true,
+    ),
     drawing: EditorInk.dark.copyWith(
       laneGround: Color(0xff121316),
       lane: Color(0xff15161a),

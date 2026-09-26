@@ -28,6 +28,18 @@ part 'browser/frame_filters.dart';
 part 'browser/frame_grid.dart';
 part 'browser/frame_keys.dart';
 
+/// The document keys a Browser lists from; any other change leaves it still.
+const browserDocumentKeys = [
+  'assets',
+  'backgrounds',
+  'primitives',
+  'catalog',
+  'palette',
+  'colorTarget',
+  'importExtensions',
+  'capabilities',
+];
+
 /// The Browser is one frame — tabs, search, rail, grid, selection, keys —
 /// and a row of shelves. Each shelf is one file under `browser/`; the frame
 /// never names a tab, it asks the shelf in front.
@@ -165,16 +177,7 @@ class _BrowserPanelState extends State<BrowserPanel> implements BrowserHost {
     _enter();
   }
 
-  static const _frameKeys = [
-    'assets',
-    'backgrounds',
-    'primitives',
-    'catalog',
-    'palette',
-    'colorTarget',
-    'importExtensions',
-    'capabilities',
-  ];
+  static const _frameKeys = browserDocumentKeys;
 
   /// One slice per tab, not one for the Browser: the frame reads the
   /// selection once (whether there is anything to apply to) and then only

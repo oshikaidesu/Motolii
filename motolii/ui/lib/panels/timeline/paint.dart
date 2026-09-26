@@ -77,6 +77,7 @@ class TimelinePainter extends CustomPainter {
     centered: centered,
     weight: weight,
     rowAligned: !ruler,
+    family: ruler ? colors.skin.labelFamily : null,
   );
 
   bool selectedKey(
@@ -216,7 +217,13 @@ class TimelinePainter extends CustomPainter {
               (timing['start'] as num? ?? 0).toDouble() * scale -
               offset;
           final width = (timing['duration'] as num? ?? 1).toDouble() * scale;
-          final rect = Rect.fromLTWH(x, y + 2, math.max(1, width), h - 4);
+          final inset = colors.skin.clipInset;
+          final rect = Rect.fromLTWH(
+            x,
+            y + inset,
+            math.max(1, width),
+            h - 2 * inset,
+          );
           final own = colors.timelineColor(row.id);
           // ゴースト: 同じ行に、遅れの分だけずれた帯が 1 つ。掴めない。
           // 実物と重なる区間は実物の帯がそのまま語る(両方が鳴る)。描くのは
@@ -266,9 +273,16 @@ class TimelinePainter extends CustomPainter {
                   ? colors.raised
                   : chosen
                   ? Color.lerp(own, EditorTheme.white, EditorTheme.lift)!
+                  : colors.skin.newFace
+                  ? own.withValues(alpha: .62)
                   : own,
             ),
           );
+          if (colors.skin.newFace && row.layer['hidden'] != true)
+            canvas.drawRect(
+              Rect.fromLTWH(rect.left, rect.top, rect.width, 1),
+              fillPaint(own),
+            );
           if (!row.lanesOpen)
             for (final f in row.summaryFrames) {
               bool at(List<Map<String, dynamic>> sel) =>
@@ -415,10 +429,20 @@ class TimelinePainter extends CustomPainter {
       canvas.clipRect(Rect.fromLTWH(0, 0, label - 82, size.height));
       void surface(LaneContainer node) {
         final row = node.row;
-        final background = row.property == null
+        final background = row.property == null && !colors.skin.identityChip
             ? colors.timelineColor(row.id)
             : (laneSelected(row) ? colors.raised : colors.panel);
         canvas.drawRect(node.bounds, fillPaint(background));
+        if (row.property == null && colors.skin.identityChip)
+          canvas.drawRect(
+            Rect.fromLTWH(
+              node.bounds.left,
+              row.bounds.top,
+              EditorMetrics.s3,
+              timelineRowHeight,
+            ),
+            fillPaint(colors.timelineColor(row.id)),
+          );
         for (final child in node.children) surface(child);
         canvas.drawRect(node.bounds.deflate(.5), strokePaint(colors.line, 1));
       }
@@ -470,12 +494,12 @@ class TimelinePainter extends CustomPainter {
             Offset(row.bounds.left + 5, y + 3),
             width: EditorMetrics.s12,
             centered: true,
-            color: ink.headerInk,
+            color: colors.skin.identityChip ? colors.muted : ink.headerInk,
           );
           text(
             canvas,
             '${row.layer['name']}',
-            color: ink.headerInk,
+            color: colors.skin.identityChip ? colors.ink : ink.headerInk,
             Offset(row.bounds.left + 23, y + 3),
             width: math.max(0.0, row.bounds.width - 29),
             weight: FontWeight.w500,
@@ -483,7 +507,13 @@ class TimelinePainter extends CustomPainter {
           final keysOpen = row.lanesOpen;
           canvas.drawRect(
             Rect.fromLTWH(label - 81, y + 2, 14, h - 4),
-            fillPaint(keysOpen ? colors.accent : colors.line),
+            fillPaint(
+              keysOpen
+                  ? colors.accent
+                  : colors.skin.identityChip
+                  ? colors.raised
+                  : colors.line,
+            ),
           );
           text(
             canvas,
@@ -506,7 +536,13 @@ class TimelinePainter extends CustomPainter {
             final on = states[column];
             canvas.drawRect(
               Rect.fromLTWH(x, y + 2, 14, h - 4),
-              fillPaint(on ? colors.accent : colors.line),
+              fillPaint(
+                on
+                    ? colors.accent
+                    : colors.skin.identityChip
+                    ? colors.raised
+                    : colors.line,
+              ),
             );
             text(
               canvas,

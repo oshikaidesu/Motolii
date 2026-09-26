@@ -171,80 +171,98 @@ class _InspectorPanelState extends State<InspectorPanel>
 
   // ---- Identity ----------------------------------------------------------
 
-  Widget _identity(Map<String, dynamic> layer) => Container(
-    height: EditorMetrics.bar,
-    padding: const EdgeInsets.only(right: EditorMetrics.s6),
-    // The layer's own colour as a flat block, as its bar wears it in the
-    // Timeline: what the panel edits is told by the panel's head.
-    decoration: BoxDecoration(
-      color: EditorTheme.of(context).layerColor(layer['id']),
-      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
-    ),
-    child: Row(
-      children: [
-        const SizedBox(width: EditorMetrics.s6),
-        Icon(
-          switch ('${layer['kind']}') {
-            'Text' => Glyph.text_fields,
-            'Shape' => Glyph.pentagon_outlined,
-            'Camera' => Glyph.videocam_outlined,
-            'Video' => Glyph.movie_outlined,
-            'Audio' => Glyph.graphic_eq,
-            'Group' => Glyph.folder_outlined,
-            _ => Glyph.image_outlined,
-          },
-          size: EditorMetrics.s14,
-          color: EditorTheme.of(context).tabInk,
-        ),
-        const SizedBox(width: EditorMetrics.s6),
-        Expanded(
-          child: EditorTooltip(
-            message: '${layer['name']}',
-            child: Text(
-              _multiple ? '${c.selectedIds.length} layers' : '${layer['name']}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: EditorMetrics.title,
-                fontWeight: FontWeight.w600,
-                color: EditorTheme.of(context).tabInk,
+  Widget _identity(Map<String, dynamic> layer) {
+    final chip = EditorTheme.of(context).skin.identityChip;
+    final ink = chip
+        ? EditorTheme.of(context).ink
+        : EditorTheme.of(context).tabInk;
+    return Container(
+      height: chip ? EditorMetrics.s36 : EditorMetrics.bar,
+      padding: const EdgeInsets.only(right: EditorMetrics.s6),
+      // The layer's own colour as a flat block, as its bar wears it in the
+      // Timeline: what the panel edits is told by the panel's head.
+      decoration: BoxDecoration(
+        color: chip
+            ? EditorTheme.of(context).panel
+            : EditorTheme.of(context).layerColor(layer['id']),
+        border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: EditorMetrics.s6),
+          if (chip) ...[
+            Container(
+              width: EditorMetrics.s18,
+              height: EditorMetrics.s18,
+              color: EditorTheme.of(context).layerColor(layer['id']),
+            ),
+            const SizedBox(width: EditorMetrics.s8),
+          ],
+          Icon(
+            switch ('${layer['kind']}') {
+              'Text' => Glyph.text_fields,
+              'Shape' => Glyph.pentagon_outlined,
+              'Camera' => Glyph.videocam_outlined,
+              'Video' => Glyph.movie_outlined,
+              'Audio' => Glyph.graphic_eq,
+              'Group' => Glyph.folder_outlined,
+              _ => Glyph.image_outlined,
+            },
+            size: EditorMetrics.s14,
+            color: ink,
+          ),
+          const SizedBox(width: EditorMetrics.s6),
+          Expanded(
+            child: EditorTooltip(
+              message: '${layer['name']}',
+              child: Text(
+                _multiple
+                    ? '${c.selectedIds.length} layers'
+                    : '${layer['name']}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: EditorMetrics.title,
+                  fontWeight: FontWeight.w600,
+                  color: ink,
+                ),
               ),
             ),
           ),
-        ),
-        if (!_multiple && panelRows(layer['effects']).isNotEmpty)
-          _headGlyph(
-            _effectsClosed(layer) ? Glyph.unfold_more : Glyph.unfold_less,
-            _effectsClosed(layer) ? 'Expand effects' : 'Collapse effects',
-            () {
-              final closed = _effectsClosed(layer);
-              setState(() {
-                for (final effect in panelRows(layer['effects'])) {
-                  final id = _effectSection(layer, effect['id']);
-                  if (closed) {
-                    _closed.remove(id);
-                  } else {
-                    _closed.add(id);
+          if (!_multiple && panelRows(layer['effects']).isNotEmpty)
+            _headGlyph(
+              _effectsClosed(layer) ? Glyph.unfold_more : Glyph.unfold_less,
+              _effectsClosed(layer) ? 'Expand effects' : 'Collapse effects',
+              () {
+                final closed = _effectsClosed(layer);
+                setState(() {
+                  for (final effect in panelRows(layer['effects'])) {
+                    final id = _effectSection(layer, effect['id']);
+                    if (closed) {
+                      _closed.remove(id);
+                    } else {
+                      _closed.add(id);
+                    }
                   }
-                }
-              });
-            },
-            ink: EditorTheme.of(context).tabInk,
+                });
+              },
+              ink: ink,
+            ),
+          EditorSwitch(
+            on: c.animating,
+            glyph: Glyph.diamond_outlined,
+            tint: EditorTheme.of(context).keyAccent,
+            ink: chip ? null : EditorTheme.of(context).tabInk,
+            label: c.animateFrom
+                ? 'Animate (A): values you touch become keys at this frame, '
+                      'and at the frame Animate was turned on'
+                : 'Animate (A): values you touch become keys at this frame',
+            onChanged: panelCan(c, 'animate') ? c.setAnimate : null,
           ),
-        EditorSwitch(
-          on: c.animating,
-          glyph: Glyph.diamond_outlined,
-          tint: EditorTheme.of(context).keyAccent,
-          ink: EditorTheme.of(context).tabInk,
-          label: c.animateFrom
-              ? 'Animate (A): values you touch become keys at this frame, '
-                    'and at the frame Animate was turned on'
-              : 'Animate (A): values you touch become keys at this frame',
-          onChanged: panelCan(c, 'animate') ? c.setAnimate : null,
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
