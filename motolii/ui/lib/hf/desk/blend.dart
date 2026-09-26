@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
@@ -6,8 +7,11 @@ import 'common.dart';
 /// A blend mode is shown as what it does to one fixed pair of flat shapes: A (base, yellow) and B (top, blue).
 /// Every symbol is the same two shapes through a different operator, so what differs is the overlap, nothing else.
 class BlendMode {
-  const BlendMode(this.name, this.op, {this.alpha = false, this.group = 0});
+  const BlendMode(this.name, this.op, {this.alpha = false, this.group = 0, String? key}) : key = key ?? name;
   final String name;
+
+  /// What the document calls the mode.
+  final String key;
   final ui.BlendMode op;
   final bool alpha; // uses the top's alpha shape, not its colour
   final int group;
@@ -17,22 +21,22 @@ const blendModes = <BlendMode>[
   BlendMode('Normal', ui.BlendMode.srcOver),
   BlendMode('Darken', ui.BlendMode.darken, group: 1),
   BlendMode('Multiply', ui.BlendMode.multiply, group: 1),
-  BlendMode('Color Burn', ui.BlendMode.colorBurn, group: 1),
+  BlendMode('Color Burn', ui.BlendMode.colorBurn, group: 1, key: 'ColorBurn'),
   BlendMode('Lighten', ui.BlendMode.lighten, group: 2),
   BlendMode('Screen', ui.BlendMode.screen, group: 2),
-  BlendMode('Color Dodge', ui.BlendMode.colorDodge, group: 2),
+  BlendMode('Color Dodge', ui.BlendMode.colorDodge, group: 2, key: 'ColorDodge'),
   BlendMode('Add', ui.BlendMode.plus, group: 2),
   BlendMode('Overlay', ui.BlendMode.overlay, group: 3),
-  BlendMode('Soft Light', ui.BlendMode.softLight, group: 3),
-  BlendMode('Hard Light', ui.BlendMode.hardLight, group: 3),
+  BlendMode('Soft Light', ui.BlendMode.softLight, group: 3, key: 'SoftLight'),
+  BlendMode('Hard Light', ui.BlendMode.hardLight, group: 3, key: 'HardLight'),
   BlendMode('Difference', ui.BlendMode.difference, group: 4),
   BlendMode('Exclusion', ui.BlendMode.exclusion, group: 4),
   BlendMode('Hue', ui.BlendMode.hue, group: 5),
   BlendMode('Saturation', ui.BlendMode.saturation, group: 5),
   BlendMode('Color', ui.BlendMode.color, group: 5),
   BlendMode('Luminosity', ui.BlendMode.luminosity, group: 5),
-  BlendMode('Stencil', ui.BlendMode.dstIn, alpha: true, group: 6),
-  BlendMode('Silhouette', ui.BlendMode.dstOut, alpha: true, group: 6),
+  BlendMode('Stencil', ui.BlendMode.dstIn, alpha: true, group: 6, key: 'StencilAlpha'),
+  BlendMode('Silhouette', ui.BlendMode.dstOut, alpha: true, group: 6, key: 'SilhouetteAlpha'),
 ];
 
 const _a = kYellow;
@@ -63,8 +67,22 @@ class ResultPainter extends CustomPainter {
   bool shouldRepaint(ResultPainter o) => o.m != m || o.opacity != opacity;
 }
 
+/// What a host gives the desk: the layers a mode applies to, the mode they wear, the specimens for a mode, and how the
+/// hover and the click reach the document. With no host the desk plays with two fixture layers.
+abstract class BlendHost implements Listenable {
+  /// The mode every target wears (null: they differ), the targets' names, and whether a click may act now.
+  String? get current;
+  List<String> get names;
+  bool get live;
+  List<Color> beds(String mode);
+  void aim(String? mode);
+  void leave();
+  Future<void> apply(String mode);
+}
+
 class BlendDesk extends StatefulWidget {
-  const BlendDesk({super.key});
+  const BlendDesk({super.key, this.host});
+  final BlendHost? host;
   @override
   State<BlendDesk> createState() => _BlendDeskState();
 }
@@ -76,17 +94,44 @@ class _BlendDeskState extends State<BlendDesk> {
   int? hover;
   bool previewOnStage = true;
 
+  BlendHost? get host => widget.host;
+
   int get sel {
+    final h = host;
+    if (h != null) return h.current == null ? -1 : blendModes.indexWhere((m) => m.key == h.current);
     final ms = targeted.map((i) => modes[i]).toSet();
     return ms.length == 1 ? ms.first : -1;
   }
 
   int? get shown => hover != null && previewOnStage ? hover : (sel < 0 ? null : sel);
 
-  void _pick(int i) => setState(() { for (final t in targeted) { modes[t] = i; } });
+  void _pick(int i) {
+    final h = host;
+    if (h != null) {
+      h.apply(blendModes[i].key);
+      return;
+    }
+    setState(() { for (final t in targeted) { modes[t] = i; } });
+  }
 
   @override
-  Widget build(BuildContext context) => DeskShell(
+  Widget build(BuildContext context) => host == null
+      ? _shell()
+      : Focus(
+          onKeyEvent: (_, e) {
+            if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape && host!.live) {
+              host!.leave();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          onFocusChange: (focused) {
+            if (!focused) host!.leave();
+          },
+          child: ListenableBuilder(listenable: host!, builder: (_, __) => Opacity(opacity: host!.names.isEmpty ? .45 : 1, child: _shell())),
+        );
+
+  Widget _shell() => DeskShell(
         kind: DeskKind.blend,
         title: 'Blend',
         subtitle: 'LAYER · COMPOSITE',
@@ -146,9 +191,15 @@ class _BlendDeskState extends State<BlendDesk> {
       SizedBox(width: 26, child: Center(child: Text('→', style: sans(22, c: kMuted)))),
       Expanded(
         child: Column(children: [
-          SizedBox(key: const ValueKey('blend-result'), height: 108, width: double.infinity, child: m == null ? Center(child: Text('Mixed', style: sans(18, c: kMuted))) : CustomPaint(painter: ResultPainter(m))),
+          SizedBox(key: const ValueKey('blend-result'), height: 108, width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(18, c: kMuted))) : CustomPaint(painter: ResultPainter(m))),
           const SizedBox(height: 8),
-          Text(m == null ? 'Targets differ' : blendModes[m].name, style: sans(17, c: kInk, w: FontWeight.w600)),
+          // The runtime's own specimen of this mode on the layer: its colour over the beds the runtime draws.
+          if (m != null && host != null && host!.beds(blendModes[m].key).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SizedBox(key: const ValueKey('blend-beds'), height: 10, child: Row(children: [for (final c in host!.beds(blendModes[m].key)) Expanded(child: ColoredBox(color: c))])),
+            ),
+          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(17, c: kInk, w: FontWeight.w600)),
         ]),
       ),
     ]);
@@ -157,6 +208,11 @@ class _BlendDeskState extends State<BlendDesk> {
   Widget _targets() => Row(children: [
         Text('TARGETS', style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.4)),
         const SizedBox(width: 12),
+        // With a host the selection decides the targets; the chips only say who they are.
+        if (host != null) ...[
+          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 6), child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(13)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: const Color(0xFF1B1B1D), w: FontWeight.w600)))),
+          if (host!.names.length > 2) Text('+${host!.names.length - 2}', style: sans(11, c: kMuted)),
+        ] else
         for (final i in [0, 1]) Padding(
           padding: const EdgeInsets.only(right: 6),
           child: GestureDetector(
@@ -168,8 +224,14 @@ class _BlendDeskState extends State<BlendDesk> {
       ]);
 
   Widget _mark(int i, double w, double h) => MouseRegion(
-        onEnter: (_) => setState(() => hover = i),
-        onExit: (_) => setState(() { if (hover == i) hover = null; }),
+        onEnter: (_) {
+          setState(() => hover = i);
+          if (previewOnStage) host?.aim(blendModes[i].key);
+        },
+        onExit: (_) {
+          setState(() { if (hover == i) hover = null; });
+          if (hover == null) host?.aim(null);
+        },
         child: GestureDetector(
           key: ValueKey('blend-mark-$i'),
           onTap: () => _pick(i),

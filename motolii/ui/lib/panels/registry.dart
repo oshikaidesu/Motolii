@@ -17,10 +17,13 @@ import 'blend_panel.dart';
 import 'history_records.dart';
 import 'web_panel.dart';
 
-Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
+/// A face that draws one of the Desk's panels its own way (the New shell's), or null to leave the panel as it is.
+typedef PanelFace = Widget? Function(String name, EditorSession c, Key? key);
+
+Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading, PanelFace? face}) {
   final spec = name == 'Desk' ? deskHostSpec : panelSpec(name);
   if (spec == null || name == 'Ease' || (name != 'Desk' && !spec.drawer))
-    return _buildPanel(name, c, key, leading: leading);
+    return _buildPanel(name, c, key, leading: leading, face: face);
   return LayoutBuilder(
     key: key,
     builder: (context, box) => SingleChildScrollView(
@@ -31,14 +34,16 @@ Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
         child: SizedBox(
           width: math.max(spec.minWidth, box.maxWidth),
           height: math.max(spec.minHeight, box.maxHeight),
-          child: _buildPanel(name, c, null, leading: leading),
+          child: _buildPanel(name, c, null, leading: leading, face: face),
         ),
       ),
     ),
   );
 }
 
-Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
+Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading, PanelFace? face}) {
+  final own = face?.call(name, c, key);
+  if (own != null) return own;
   if (['Create', 'Media', 'Effects', 'Fonts', 'Colors', 'Files'].contains(name))
     return BrowserPanel(
       key: key,
@@ -54,7 +59,7 @@ Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
       key: key,
       controller: c,
       panelBuilder: (name, {leading}) =>
-          buildPanel(name, c, ValueKey('drawer:$name'), leading: leading),
+          buildPanel(name, c, ValueKey('drawer:$name'), leading: leading, face: face),
     ),
     'Notes' => NotesPanel(key: key, controller: c),
     'Ease' => EaseDesk(key: key, controller: c, leading: leading),

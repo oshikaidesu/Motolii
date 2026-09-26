@@ -15,6 +15,7 @@ import '../panels/composition_controls.dart';
 import '../panels/inspector.dart' show InspectorInstruments, InspectorPanel;
 import '../panels/export_controls.dart';
 import '../panels/registry.dart';
+import 'new/desk/desk_faces.dart';
 import '../session/editor_session.dart';
 import 'editor_actions.dart';
 import '../workspace/dock_workspace.dart';
@@ -209,7 +210,7 @@ class _NewShellState extends State<NewShell> {
       setState(() => sheet = sheet == name ? null : name);
 
   Widget pane(String name) =>
-      buildPanel(name, c, keys.putIfAbsent(name, () => GlobalKey()));
+      buildPanel(name, c, keys.putIfAbsent(name, () => GlobalKey()), face: newDeskFace);
 
   /// Every panel the workspace can hold, by the id the routes use. The tab
   /// shows the panel's name; the panel keeps its own controls, not its name.

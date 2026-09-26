@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
+import '../bp/shell.dart' show emptyBody;
 import 'common.dart';
 
-enum Mark { none, save, open, warn, error }
+enum Mark { none, save, open, warn, error, end }
 
 class Entry {
   const Entry(this.label, this.time, [this.mark = Mark.none]);
@@ -31,18 +32,27 @@ const _redo = Color(0xFF3B3C42);
 const _amber = Color(0xFFF08A3C);
 const _red = Color(0xFFE2554F);
 
-Color _markColor(Mark m) => switch (m) { Mark.warn => _amber, Mark.error => _red, Mark.save => kMint, Mark.open => kViolet, _ => _bright };
+Color _markColor(Mark m) => switch (m) { Mark.warn => _amber, Mark.error => _red, Mark.save => kMint, Mark.open => kViolet, Mark.end => kBlue, _ => _bright };
 
 /// One rail is the structure. The current step is a large ring, reached steps are a solid line,
 /// the redo tail is dashed and dim. Marks are silhouettes on the rail; text is annotation.
+///
+/// With no [entries] it is the fixture (its own list, its own position). With a host's entries it draws them and asks the
+/// host to go to one: [at] is the current index and [onGo] is how a click, Undo or Redo moves it.
 class HistoryDesk extends StatefulWidget {
-  const HistoryDesk({super.key});
+  const HistoryDesk({super.key, this.entries, this.at = 0, this.onGo, this.canGo = true});
+  final List<Entry>? entries;
+  final int at;
+  final ValueChanged<int>? onGo;
+  final bool canGo;
   @override
   State<HistoryDesk> createState() => _HistoryDeskState();
 }
 
 class _HistoryDeskState extends State<HistoryDesk> {
-  int at = 8;
+  int _at = 8;
+  List<Entry> get entries => widget.entries ?? historyEntries;
+  int get at => widget.entries == null ? _at : widget.at;
   final _scroll = ScrollController();
   static const _rowH = 38.0;
 
@@ -66,8 +76,19 @@ class _HistoryDeskState extends State<HistoryDesk> {
     if (animate) { _scroll.animateTo(target, duration: const Duration(milliseconds: 160), curve: Curves.easeOut); } else { _scroll.jumpTo(target); }
   }
 
+  @override
+  void didUpdateWidget(HistoryDesk old) {
+    super.didUpdateWidget(old);
+    if (old.at != widget.at) WidgetsBinding.instance.addPostFrameCallback((_) => _follow());
+  }
+
   void go(int i) {
-    setState(() => at = i.clamp(0, historyEntries.length - 1));
+    final to = i.clamp(0, entries.length - 1);
+    if (widget.entries != null) {
+      if (widget.canGo && to != at) widget.onGo?.call(to);
+      return;
+    }
+    setState(() => _at = to);
     WidgetsBinding.instance.addPostFrameCallback((_) => _follow());
   }
 
@@ -76,13 +97,13 @@ class _HistoryDeskState extends State<HistoryDesk> {
         kind: DeskKind.history,
         title: 'History',
         subtitle: 'UNDO · REDO',
-        full: (c, s) => Column(children: [
+        full: (c, s) => entries.isEmpty ? emptyBody('No history') : Column(children: [
           Expanded(
             child: ListView.builder(
               controller: _scroll,
               itemExtent: _rowH,
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-              itemCount: historyEntries.length,
+              itemCount: entries.length,
               itemBuilder: (_, i) => GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, _rowH)),
             ),
           ),
@@ -92,20 +113,20 @@ class _HistoryDeskState extends State<HistoryDesk> {
             child: Row(children: [
               Expanded(child: _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
               const SizedBox(width: 8),
-              Expanded(child: _btn('redo', 'Redo', '⇧⌘Z', at < historyEntries.length - 1, () => go(at + 1))),
+              Expanded(child: _btn('redo', 'Redo', '⇧⌘Z', at < entries.length - 1, () => go(at + 1))),
             ]),
           ),
         ]),
         strip: (c, s) => LayoutBuilder(builder: (context, b) => GestureDetector(
               key: const ValueKey('history-strip'),
-              onTapDown: (d) => go(((d.localPosition.dx - 16) / (b.maxWidth - 32) * (historyEntries.length - 1)).round()),
-              child: CustomPaint(size: Size(b.maxWidth, b.maxHeight), painter: _HRail(at)),
+              onTapDown: (d) => go(((d.localPosition.dx - 16) / (b.maxWidth - 32) * (entries.length - 1).clamp(1, 1 << 30)).round()),
+              child: CustomPaint(size: Size(b.maxWidth, b.maxHeight), painter: _HRail(at, entries)),
             )),
         tall: (c, s) {
-          final h = ((s.height - 16) / historyEntries.length).clamp(14.0, 34.0);
+          final h = ((s.height - 16) / entries.length).clamp(14.0, 34.0);
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(children: [for (var i = 0; i < historyEntries.length; i++) GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, h, labels: false, w: s.width))]),
+            child: Column(children: [for (var i = 0; i < entries.length; i++) GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, h, labels: false, w: s.width))]),
           );
         },
       );
@@ -122,7 +143,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
       );
 
   Widget _row(int i, double h, {bool labels = true, double w = 310}) {
-    final e = historyEntries[i];
+    final e = entries[i];
     final cur = i == at, reached = i <= at;
     final marked = e.mark != Mark.none;
     // Text is annotation: quiet by default; the current step and marked records speak.
@@ -131,7 +152,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
       height: h,
       color: cur ? kYellow.withValues(alpha: .10) : null,
       child: Row(children: [
-        SizedBox(width: labels ? 58 : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == historyEntries.length - 1, cur, reached, i < at, e.mark))),
+        SizedBox(width: labels ? 58 : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
         if (labels) ...[
           Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? 13.5 : 12, c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
           Padding(padding: const EdgeInsets.only(right: 16), child: Text(e.time, style: mono(9.5, c: reached ? const Color(0xFF6C6D74) : const Color(0xFF3F4046)))),
@@ -158,6 +179,8 @@ void _drawMark(Canvas c, Offset o, Mark m, Color col) {
       c.drawCircle(o, 6.5, Paint()..color = col);
       c.drawLine(o + const Offset(-2.6, -2.6), o + const Offset(2.6, 2.6), Paint()..color = kWell..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
       c.drawLine(o + const Offset(2.6, -2.6), o + const Offset(-2.6, 2.6), Paint()..color = kWell..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
+    case Mark.end:
+      c.drawRect(Rect.fromCenter(center: o, width: 10, height: 10), p);
     case Mark.none:
       break;
   }
@@ -198,17 +221,18 @@ class _Node extends CustomPainter {
 }
 
 class _HRail extends CustomPainter {
-  _HRail(this.at);
+  _HRail(this.at, this.entries);
   final int at;
+  final List<Entry> entries;
   @override
   void paint(Canvas c, Size s) {
-    final n = historyEntries.length;
+    final n = entries.length;
     final y = s.height / 2;
-    Offset p(int i) => Offset(16 + (s.width - 32) * i / (n - 1), y);
+    Offset p(int i) => Offset(16 + (s.width - 32) * i / (n < 2 ? 1 : n - 1), y);
     c.drawLine(p(0), p(at), Paint()..color = kBlue..strokeWidth = 3.4);
     for (var x = p(at).dx; x < p(n - 1).dx; x += 6) { c.drawLine(Offset(x, y), Offset(math.min(x + 3, p(n - 1).dx), y), Paint()..color = _redo..strokeWidth = 1.6); }
-    for (var i = 0; i < n; i++) { _dot(c, p(i), historyEntries[i].mark, i == at, i <= at, 8); }
+    for (var i = 0; i < n; i++) { _dot(c, p(i), entries[i].mark, i == at, i <= at, 8); }
   }
   @override
-  bool shouldRepaint(_HRail o) => o.at != at;
+  bool shouldRepaint(_HRail o) => o.at != at || o.entries != entries;
 }
