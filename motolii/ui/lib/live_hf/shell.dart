@@ -13,11 +13,10 @@ import 'adapters/top.dart';
 import 'keys.dart';
 import 'workspace.dart';
 
-/// A path: once the document is open, the 1536x1024 face is written there as a PNG, the same capture proto_hf's
-/// `PROTO_SHOT` makes, so the two can be compared pixel for pixel.
+/// A path: once the document is open, the 1536x1024 default workspace is written there as a PNG for review.
 const _shot = String.fromEnvironment('MOTOLII_SHOT');
 
-/// The same [ShellFace] proto_hf builds, with Motolii Live in every seat.
+/// The hf client root: reference faces and preserved production tools inside the live dock workspace.
 class LiveShell extends StatefulWidget {
   const LiveShell({super.key});
   @override
