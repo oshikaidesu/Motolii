@@ -7,6 +7,11 @@ import '../panels/stage.dart' show StagePanel;
 import '../session/editor_session.dart';
 import '../workspace/dock_workspace.dart';
 import 'adapters/browser.dart';
+import 'adapters/blend.dart';
+import 'adapters/depth.dart';
+import 'adapters/ease.dart';
+import 'adapters/history.dart';
+import 'adapters/notes.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
 
@@ -16,12 +21,19 @@ class LiveWorkspace {
   LiveWorkspace({required this.c, required this.scene}) {
     dock = DockWorkspace(
       {
-        'Browser': PanelDef(
-          'Browser',
-          'BROWSER',
-          () => LiveBrowser(c: c, scene: scene),
-          minSize: 220,
-        ),
+        for (final entry in const [
+          ('Create', 0),
+          ('Effects', 1),
+          ('Colors', 2),
+          ('Fonts', 3),
+          ('Media', 4),
+        ])
+          entry.$1: PanelDef(
+            entry.$1,
+            entry.$1.toUpperCase(),
+            () => LiveBrowser(c: c, scene: scene, fixedTab: entry.$2),
+            minSize: 220,
+          ),
         'Stage': PanelDef(
           'Stage',
           'STAGE',
@@ -46,9 +58,20 @@ class LiveWorkspace {
           () => LiveTimeline(c: c),
           minSize: 180,
         ),
+        'Blend': PanelDef('Blend', 'BLEND', () => NewBlend(controller: c), minSize: 220),
+        'Depth': PanelDef('Depth', 'DEPTH', () => NewDepth(controller: c), minSize: 220),
+        'Ease': PanelDef('Ease', 'EASE', () => LiveEase(c: c), minSize: 240),
+        'History': PanelDef('History', 'HISTORY', () => NewHistory(controller: c), minSize: 220),
+        'Notes': PanelDef('Notes', 'NOTES', () => LiveNotes(c: c), minSize: 240),
       },
       (item) => DockingRow([
-        item('Browser', weight: .21),
+        DockingTabs([
+          item('Create'),
+          item('Effects'),
+          item('Colors'),
+          item('Fonts'),
+          item('Media'),
+        ], weight: .21),
         DockingColumn([
           DockingRow([
             DockingTabs([
@@ -57,7 +80,16 @@ class LiveWorkspace {
             ], weight: .76),
             item('Inspector', weight: .24),
           ], weight: .69),
-          item('Timeline', weight: .31),
+          DockingRow([
+            item('Timeline', weight: .78),
+            DockingTabs([
+              item('Blend'),
+              item('Depth'),
+              item('Ease'),
+              item('History'),
+              item('Notes'),
+            ], weight: .22),
+          ], weight: .31),
         ], weight: .79),
       ]),
     );
