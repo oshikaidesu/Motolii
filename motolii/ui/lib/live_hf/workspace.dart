@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../hf/bp/effects.dart' show EffectScene;
 import '../hf/dock/theme.dart';
+import '../hf/glyphs.dart' show HG;
 import '../panels/stage.dart' show StagePanel;
 import '../session/editor_session.dart';
 import '../workspace/dock_workspace.dart';
@@ -22,47 +23,52 @@ class LiveWorkspace {
     dock = DockWorkspace(
       {
         for (final entry in const [
-          ('Create', 0),
-          ('Effects', 1),
-          ('Colors', 2),
-          ('Fonts', 3),
-          ('Media', 4),
+          ('Create', 0, HG.plus),
+          ('Effects', 1, HG.glow),
+          ('Colors', 2, HG.color),
+          ('Fonts', 3, HG.text),
+          ('Media', 4, HG.image),
         ])
           entry.$1: PanelDef(
             entry.$1,
-            entry.$1.toUpperCase(),
+            entry.$1,
             () => LiveBrowser(c: c, scene: scene, fixedTab: entry.$2),
+            glyph: entry.$3,
             minSize: 220,
           ),
         'Stage': PanelDef(
           'Stage',
-          'STAGE',
+          'Stage',
           () => StagePanel(controller: c, view: 'User'),
+          glyph: HG.corners,
           minSize: 320,
         ),
         'Camera': PanelDef(
           'Camera',
-          'CAMERA',
+          'Camera',
           () => StagePanel(controller: c, view: 'Camera'),
+          glyph: HG.camera,
           minSize: 320,
         ),
         'Inspector': PanelDef(
           'Inspector',
-          'INSPECTOR',
+          'Inspector',
           () => RightSeat(c: c),
+          glyph: HG.list,
           minSize: 240,
         ),
         'Timeline': PanelDef(
           'Timeline',
-          'TIMELINE',
+          'Timeline',
           () => LiveTimeline(c: c),
+          glyph: HG.play,
           minSize: 180,
         ),
-        'Blend': PanelDef('Blend', 'BLEND', () => NewBlend(controller: c), minSize: 220),
-        'Depth': PanelDef('Depth', 'DEPTH', () => NewDepth(controller: c), minSize: 220),
-        'Ease': PanelDef('Ease', 'EASE', () => LiveEase(c: c), minSize: 240),
-        'History': PanelDef('History', 'HISTORY', () => NewHistory(controller: c), minSize: 220),
-        'Notes': PanelDef('Notes', 'NOTES', () => LiveNotes(c: c), minSize: 240),
+        'Blend': PanelDef('Blend', 'Blend', () => NewBlend(controller: c), glyph: HG.composite, minSize: 220),
+        'Depth': PanelDef('Depth', 'Depth', () => NewDepth(controller: c), glyph: HG.diamond, minSize: 220),
+        'Ease': PanelDef('Ease', 'Ease', () => LiveEase(c: c), glyph: HG.arrow, minSize: 240),
+        'History': PanelDef('History', 'History', () => NewHistory(controller: c), glyph: HG.power, minSize: 220),
+        'Notes': PanelDef('Notes', 'Notes', () => LiveNotes(c: c), glyph: HG.star, minSize: 240),
       },
       (item) => DockingRow([
         DockingTabs([
@@ -71,7 +77,7 @@ class LiveWorkspace {
           item('Colors'),
           item('Fonts'),
           item('Media'),
-        ], weight: .21),
+        ], weight: .27),
         DockingColumn([
           DockingRow([
             DockingTabs([

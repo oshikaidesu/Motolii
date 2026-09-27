@@ -3,12 +3,16 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/glyphs.dart';
+import '../foundation/glyphs.dart' as legacy;
+import '../hf/bp/common.dart' as tab;
+import '../hf/glyphs.dart' show HG;
 
-/// One panel the workspace can show: an id that stays the same, the words on its tab, and how to build its body.
+/// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
+/// (the same glyph a Browser tab would use), and how to build its body.
 class PanelDef {
-  const PanelDef(this.id, this.title, this.build, {this.minSize = 160});
+  const PanelDef(this.id, this.title, this.build, {this.glyph, this.minSize = 160});
   final String id, title;
+  final HG? glyph;
   final Widget Function() build;
   final double minSize;
 }
@@ -45,9 +49,28 @@ class DockWorkspace {
 
   DockingItem item(String id, {double? weight}) {
     final def = defs[id]!;
-    return DockingItem(
+    final it = DockingItem(
       id: id,
       name: def.title,
+      // `docking`'s own "×" is separate from our menu's Close item above and defaults to
+      // shown; a panel set that never closes (`allowClose: false`) also does not need it,
+      // and removing it frees the width a narrow tab strip needs for its own hidden-tabs
+      // button (with it present, five tabs in one seat had no room left for that button).
+      closable: allowClose,
+      // The Browser family's own tab glyph (hf's HG set), not a borrowed icon font: one tab
+      // language for every seat, Browser and Dock alike.
+      leading: def.glyph == null
+          ? null
+          : (context, status) => SizedBox(
+                width: 15,
+                height: 15,
+                child: CustomPaint(
+                  painter: tab.HfTabGlyph(
+                    def.glyph!,
+                    status == TabStatus.selected ? const Color(0xFFF0F0F0) : tab.kMuted,
+                  ),
+                ),
+              ),
       // A panel that decides whether it is on screen with Visibility.of (the Stage does, to hand a native surface back)
       // needs the dock to say so: a hidden tab is offstage but stays mounted.
       widget: KeyedSubtree(
@@ -55,7 +78,14 @@ class DockWorkspace {
         child: Builder(
           builder: (_) => ListenableBuilder(
             listenable: Listenable.merge([layout, _picked]),
-            builder: (context, child) => Visibility(visible: isShown(id), maintainState: true, child: child!),
+            builder: (context, child) => Visibility(
+              visible: isShown(id),
+              maintainState: true,
+              child: LayoutBuilder(builder: (context, c) {
+                _reportWidth(id, c.maxWidth);
+                return child!;
+              }),
+            ),
             child: def.build(),
           ),
         ),
@@ -66,7 +96,7 @@ class DockWorkspace {
       buttons: [
         if (onDetach != null)
           TabButton(
-            icon: IconProvider.data(Glyph.more_horiz),
+            icon: IconProvider.data(legacy.Glyph.more_horiz),
             toolTip: 'Panel',
             menuBuilder: (context) => [
               TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
@@ -75,6 +105,52 @@ class DockWorkspace {
           ),
       ],
     );
+    _fullTitle[id] = def.title;
+    return it;
+  }
+
+  /// The Browser Leaf's own rule (`hf/bp/common.dart`): identity travels, fold don't miniaturize. A tab strip
+  /// too narrow for every title keeps the front tab's word and lets the rest fall back to their icon — nothing
+  /// shrinks its type to fit. The strip's width is the same as its (visible) content's, so the content's own
+  /// layout tells us it, one seat at a time.
+  final Map<String, String> _fullTitle = {};
+  final Map<DockingTabs, double> _seatWidth = {};
+  final Set<DockingTabs> _relabelPending = {};
+  void _reportWidth(String id, double width) {
+    final tabs = layout.findDockingTabsWithItem(id);
+    if (tabs == null) return;
+    // Re-run on every build of the visible (front) tab: a width change needs it, but so does a bare tab switch
+    // at the same width — the newly-front tab must pick up its own name back from whichever tab folded to make
+    // room for it before.
+    _seatWidth[tabs] = width;
+    if (_relabelPending.add(tabs)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _relabelPending.remove(tabs);
+        _relabel(tabs);
+      });
+    }
+  }
+
+  void _relabel(DockingTabs tabs) {
+    final width = _seatWidth[tabs];
+    if (width == null) return;
+    final ids = [for (var i = 0; i < tabs.childrenCount; i++) tabs.childAt(i).id as String];
+    if (ids.isEmpty) return;
+    final selected = ids[tabs.selectedIndex.clamp(0, ids.length - 1)];
+    final need = ids.fold<double>(0, (a, id) => a + tab.Leaf.labelled(_fullTitle[id] ?? id));
+    final fits = need <= width - 30 && width >= 110;
+    var changed = false;
+    for (final id in ids) {
+      final it = layout.findDockingItem(id);
+      if (it == null) continue;
+      final compact = !fits && (id != selected || width < 110);
+      final wanted = compact ? '' : (_fullTitle[id] ?? id);
+      if (it.name != wanted) {
+        it.name = wanted;
+        changed = true;
+      }
+    }
+    if (changed) layout.rebuild();
   }
 
   bool isOpen(String id) => layout.findDockingItem(id) != null;

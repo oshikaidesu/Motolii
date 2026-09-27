@@ -144,7 +144,7 @@ class Leaf extends StatelessWidget {
                             width: 14,
                             height: 14,
                             child: CustomPaint(
-                              painter: _GlyphP(HG.cross, kMuted),
+                              painter: HfTabGlyph(HG.cross, kMuted),
                             ),
                           ),
                         ),
@@ -190,7 +190,7 @@ class _Tab extends StatelessWidget {
           width: 15,
           height: 15,
           child: CustomPaint(
-            painter: _GlyphP(
+            painter: HfTabGlyph(
               t.glyph,
               selected ? const Color(0xFFF0F0F0) : kMuted,
             ),
@@ -213,14 +213,14 @@ class _Tab extends StatelessWidget {
   );
 }
 
-class _GlyphP extends CustomPainter {
-  _GlyphP(this.g, this.c);
+class HfTabGlyph extends CustomPainter {
+  HfTabGlyph(this.g, this.c);
   final HG g;
   final Color c;
   @override
   void paint(Canvas canvas, Size s) => drawHg(canvas, s, g, c, kGround);
   @override
-  bool shouldRepaint(_GlyphP o) => o.g != g || o.c != c;
+  bool shouldRepaint(HfTabGlyph o) => o.g != g || o.c != c;
 }
 
 class SearchBox extends StatelessWidget {
@@ -240,7 +240,7 @@ class SearchBox extends StatelessWidget {
         SizedBox(
           width: 13,
           height: 13,
-          child: CustomPaint(painter: _GlyphP(HG.search, kMuted)),
+          child: CustomPaint(painter: HfTabGlyph(HG.search, kMuted)),
         ),
         const SizedBox(width: 7),
         Expanded(
@@ -271,7 +271,7 @@ class SearchKey extends StatelessWidget {
       child: SizedBox(
         width: 13,
         height: 13,
-        child: CustomPaint(painter: _GlyphP(HG.search, kMuted)),
+        child: CustomPaint(painter: HfTabGlyph(HG.search, kMuted)),
       ),
     ),
   );
