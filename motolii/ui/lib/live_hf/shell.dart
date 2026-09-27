@@ -14,6 +14,7 @@ import 'adapters/stage.dart';
 import 'adapters/timeline.dart';
 import 'adapters/top.dart';
 import 'adapters/transform.dart';
+import 'keys.dart';
 
 /// A path: once the document is open, the 1536x1024 face is written there as a PNG, the same capture proto_hf's
 /// `PROTO_SHOT` makes, so the two can be compared pixel for pixel.
@@ -31,6 +32,7 @@ class _LiveShellState extends State<LiveShell> {
   final _face = GlobalKey();
   bool ready = false;
   late EffectScene scene;
+  late final keys = LiveKeys(c, () => context);
 
   @override
   void initState() {
@@ -55,9 +57,13 @@ class _LiveShellState extends State<LiveShell> {
     for (var i = 0; i < 8; i++) {
       await WidgetsBinding.instance.endOfFrame;
     }
-    final b = _face.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final b =
+        _face.currentContext!.findRenderObject()! as RenderRepaintBoundary;
     final img = await b.toImage(pixelRatio: 1.0);
-    File(_shot).writeAsBytesSync((await img.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List());
+    File(_shot).writeAsBytesSync(
+      (await img.toByteData(format: ui.ImageByteFormat.png))!.buffer
+          .asUint8List(),
+    );
     stdout.writeln('MOTOLII_SHOT ${img.width}x${img.height} $_shot');
   }
 
@@ -68,24 +74,28 @@ class _LiveShellState extends State<LiveShell> {
   }
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-        color: H.window,
-        child: !ready
-            ? const SizedBox.expand()
-            : Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: RepaintBoundary(
-                    key: _face,
-                    child: ShellFace(
-                      top: SessionTop(c: c),
-                      browser: LiveBrowser(c: c, scene: scene),
-                      stage: LiveStage(c: c),
-                      right: NewTransform(controller: c),
-                      timeline: LiveTimeline(c: c),
-                    ),
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: keys.handle,
+    child: ColoredBox(
+      color: H.window,
+      child: !ready
+          ? const SizedBox.expand()
+          : Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: RepaintBoundary(
+                  key: _face,
+                  child: ShellFace(
+                    top: SessionTop(c: c),
+                    browser: LiveBrowser(c: c, scene: scene),
+                    stage: LiveStage(c: c),
+                    right: NewTransform(controller: c),
+                    timeline: LiveTimeline(c: c),
                   ),
                 ),
               ),
-      );
+            ),
+    ),
+  );
 }
