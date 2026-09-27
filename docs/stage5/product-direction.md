@@ -42,3 +42,18 @@ Not authoritative: fixture content, exact text/values, the artwork, whether a ca
 
 Stage PRESERVE: production Stage interaction. Timeline PRESERVE: its full production input vocabulary.
 "open" = not decided; do not decide it in code.
+
+## Decision boundary
+
+**Connecting an existing meaning is autonomous. Choosing, merging, splitting, promoting or demoting a meaning is a product decision: present it before implementing.**
+
+Stop when a change would:
+- pick between existing precedents that disagree (Browser Leaf tabs vs Timeline's own header vs Stage's Camera View mode)
+- change a concept's level (Camera mode → panel; Graph label → Dock panel)
+- merge separate things into one primitive, or split one owner into several / several into one
+- hide, remove or fold something that existed (a filter rail dropped by a responsive rule)
+- make something transient permanent, or the reverse (Desk → permanent Dock tab)
+- choose between Product Home and current production
+- rest on "this is more natural"
+
+Then bring, not "what should I do?", but: **observation → existing precedents → options (A/B/C) → consequence of each**, and say which layer the decision belongs to. Asking this is part of working autonomously, not a failure of it.
