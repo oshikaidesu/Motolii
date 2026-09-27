@@ -93,6 +93,7 @@ class LiveWorkspace {
         ], weight: .79),
       ]),
       onDetach: onDetach,
+      allowClose: false,
     );
   }
 
