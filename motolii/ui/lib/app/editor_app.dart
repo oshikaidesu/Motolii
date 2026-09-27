@@ -5,10 +5,13 @@ import '../foundation/leaves.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import 'editor_window.dart';
+import 'new_proto_shell.dart';
 import 'new_shell.dart';
 
-/// Which projection of the session the window opens: `classic` (default) or
-/// `new`. One shell is mounted per launch; both drive the same Document.
+/// Which projection of the session the window opens: `classic` (default),
+/// `new` (the docking-package shell), or `proto` (the proto_hf Shell face,
+/// production probe — see docs/stage5/ui-rebaseline/brief.md). One shell is
+/// mounted per launch; all three drive the same Document.
 const shell = String.fromEnvironment('MOTOLII_SHELL', defaultValue: 'classic');
 
 class EditorApp extends StatefulWidget {
@@ -67,7 +70,11 @@ class _EditorAppState extends State<EditorApp> {
                   ),
                 ),
               ),
-              home: shell == 'new' ? const NewShell() : const EditorWindow(),
+              home: switch (shell) {
+                'new' => const NewShell(),
+                'proto' => const ProductionProtoShell(),
+                _ => const EditorWindow(),
+              },
             ),
           ),
         ),
