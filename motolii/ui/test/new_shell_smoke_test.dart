@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
-import '../lib/app/new/browser/shelf_panel.dart';import '../lib/panels/desk.dart';
+import '../lib/app/new/browser/shelf_panel.dart';
+import '../lib/app/new/desk/new_desk_host.dart';
 import '../lib/app/new/inspector/new_inspector_panel.dart';
 import '../lib/panels/stage.dart';
 import '../lib/panels/timeline.dart';
@@ -55,7 +56,7 @@ void main() {
     expect(find.byType(ShelfPanel), findsOneWidget);
     expect(find.byType(StagePanel), findsOneWidget);
     expect(find.byType(NewInspectorPanel), findsOneWidget, reason: 'the New shell draws its own Inspector host now, not the Classic one');
-    expect(find.byType(DeskPanel), findsOneWidget);
+    expect(find.byType(NewDeskHost), findsOneWidget, reason: 'the New shell draws its own Desk host now, not the Classic one');
     expect(find.byType(TimelinePanel), findsOneWidget);
     // Each panel is a dock tab named after it; a strip too narrow for all its
     // tabs keeps the rest off the face, so only the ones in view are asserted.

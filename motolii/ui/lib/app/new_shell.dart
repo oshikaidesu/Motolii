@@ -15,6 +15,7 @@ import '../panels/composition_controls.dart';
 import '../panels/export_controls.dart';
 import '../panels/registry.dart';
 import 'new/desk/desk_faces.dart';
+import 'new/desk/new_desk_host.dart';
 import '../session/editor_session.dart';
 import 'editor_actions.dart';
 import '../workspace/dock_workspace.dart';
@@ -230,7 +231,7 @@ class _NewShellState extends State<NewShell> {
         minSize: 240,
       ),
       'Timeline': PanelDef('Timeline', 'TIMELINE', () => pane('Timeline'), minSize: 120),
-      'Desk': PanelDef('Desk', 'DESK', () => pane('Desk'), minSize: 200),
+      'Desk': PanelDef('Desk', 'DESK', () => NewDeskHost(controller: c), minSize: 200),
       'Console': PanelDef('Console', 'CONSOLE', () => NewConsole(log: console), minSize: 120),
       'Relations': PanelDef('Relations', 'RELATIONS', () => RelationsPanel(controller: c), minSize: 240),
     },
