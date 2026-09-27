@@ -2,19 +2,18 @@ import 'package:flutter/widgets.dart';
 
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
-import '../timeline.dart';
 import 'frame.dart';
 
 /// Timeline の献立(右クリック) — 行を選び直してから品書きを開き、
 /// 選ばれた一品を書類か行の開き方へ渡す。
-mixin TimelineMenu on State<TimelinePanel>, TimelineFrame {
+mixin TimelineMenu<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
   Future<void> menu(TapDownDetails details) async {
     final row = layout.rowAt(details.localPosition.dy);
     final target = row >= 0 && row < tracks.length ? tracks[row].id : null;
     if (row >= 0 &&
         row < tracks.length &&
-        !widget.controller.selectedIds.contains(tracks[row].id)) {
-      await widget.controller.command('select', {
+        !timelineSession.selectedIds.contains(tracks[row].id)) {
+      await timelineSession.command('select', {
         'ids': [tracks[row].id],
         'keys': [],
       });
@@ -98,11 +97,11 @@ mixin TimelineMenu on State<TimelinePanel>, TimelineFrame {
     } else if (chosen != null &&
         chosen.startsWith('freeze:') &&
         target != null) {
-      widget.controller.command('freeze', {
+      timelineSession.command('freeze', {
         'layer': target,
         'enabled': chosen == 'freeze:on',
       });
     } else if (chosen != null)
-      widget.controller.command(chosen);
+      timelineSession.command(chosen);
   }
 }

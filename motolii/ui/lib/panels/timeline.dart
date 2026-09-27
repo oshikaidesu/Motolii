@@ -32,20 +32,31 @@ abstract class TimelineToolbarApi {
 }
 
 class TimelinePanel extends StatefulWidget {
-  const TimelinePanel({super.key, required this.controller, this.topBarButtons});
+  const TimelinePanel({
+    super.key,
+    required this.controller,
+    this.topBarButtons,
+  });
   final EditorSession controller;
 
   /// A host's own play/zoom controls (New's, in hf presentation), left of the overview strip, which stays
   /// Classic's own. Null keeps Classic's own buttons there too.
-  final Widget Function(BuildContext context, TimelineToolbarApi api)? topBarButtons;
+  final Widget Function(BuildContext context, TimelineToolbarApi api)?
+  topBarButtons;
   @override
   State<TimelinePanel> createState() => _TimelinePanelState();
 }
 
 /// 板の組み立てと再生時刻。責任は四つの mixin が持ち、ここはそれを組むだけ。
 class _TimelinePanelState extends State<TimelinePanel>
-    with TimelineFrame, TimelineGrip, TimelineView, TimelineMenu
+    with
+        TimelineFrame<TimelinePanel>,
+        TimelineGrip<TimelinePanel>,
+        TimelineView<TimelinePanel>,
+        TimelineMenu<TimelinePanel>
     implements TimelineToolbarApi {
+  @override
+  EditorSession get timelineSession => widget.controller;
   // ---- TimelineToolbarApi: exactly what the bar's own buttons call, nothing about the ruler/tracks/keys ---------
   @override
   ValueListenable<bool> get playing => widget.controller.playing;
@@ -56,11 +67,22 @@ class _TimelinePanelState extends State<TimelinePanel>
   @override
   void setZoomPercent(double percent) => zoom(percent * .04 / pixelsPerFrame);
   @override
-  void zoomOut() => zoom(((pixelsPerFrame / 4 * 100).round() - 1).clamp(3, 1000) * .04 / pixelsPerFrame);
+  void zoomOut() => zoom(
+    ((pixelsPerFrame / 4 * 100).round() - 1).clamp(3, 1000) *
+        .04 /
+        pixelsPerFrame,
+  );
   @override
-  void zoomIn() => zoom(((pixelsPerFrame / 4 * 100).round() + 1) * .04 / pixelsPerFrame);
+  void zoomIn() =>
+      zoom(((pixelsPerFrame / 4 * 100).round() + 1) * .04 / pixelsPerFrame);
   @override
-  void fit() => setState(() => pixelsPerFrame = math.max(.1, (_lastBounds.maxWidth - labelWidth) / math.max(1, overviewExtentWithoutFrame)));
+  void fit() => setState(
+    () => pixelsPerFrame = math.max(
+      .1,
+      (_lastBounds.maxWidth - labelWidth) /
+          math.max(1, overviewExtentWithoutFrame),
+    ),
+  );
   BoxConstraints _lastBounds = BoxConstraints.tight(Size.zero);
 
   @override

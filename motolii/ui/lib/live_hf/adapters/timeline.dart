@@ -3,8 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../hf/shell/place.dart';
+import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/shell/timeline.dart';
 import '../../session/editor_session.dart';
+import '../../timeline_core/frame.dart';
+import '../../timeline_core/geometry.dart';
+import '../../timeline_core/grip.dart';
+import '../../timeline_core/view.dart';
 
 /// The Timeline face over the session: one row per layer (a group, a camera, an audio floor, or an item with its
 /// body from `start` to `start + duration` and a diamond at every key), the playhead at `frame`.
@@ -20,28 +25,51 @@ class LiveTimeline extends StatefulWidget {
 }
 
 /// Row identity colours, given out in layer order: presentation only, nothing is stored.
-final _families = [(H.neutralN, H.neutralT), (H.scatter.n, H.scatter.t), (H.stagger.n, H.stagger.t), (H.along.n, H.along.t), (H.face.n, H.face.t), (H.attach.n, H.attach.t)];
+final _families = [
+  (H.neutralN, H.neutralT),
+  (H.scatter.n, H.scatter.t),
+  (H.stagger.n, H.stagger.t),
+  (H.along.n, H.along.t),
+  (H.face.n, H.face.t),
+  (H.attach.n, H.attach.t),
+];
 
-/// Seconds one major tick spans.
-const _spans = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0];
-
-class _LiveTimelineState extends State<LiveTimeline> {
-  static const _watched = ['layers', 'fps', 'durationFrames', 'waveforms', 'selectedIds', 'selectedKeys'];
+class _LiveTimelineState extends State<LiveTimeline>
+    with
+        TimelineFrame<LiveTimeline>,
+        TimelineGrip<LiveTimeline>,
+        TimelineView<LiveTimeline> {
+  static const _watched = [
+    'layers',
+    'fps',
+    'durationFrames',
+    'waveforms',
+    'selectedIds',
+    'selectedKeys',
+  ];
   EditorSession get c => widget.c;
+  @override
+  EditorSession get timelineSession => c;
+  @override
+  double baseNameWidth = TimelineGeometry.hf.nameWidth;
+  @override
+  TimelineGeometry get timelineGeometry => TimelineGeometry.hf;
   double fps = 30;
-  int span = 2;
-  double start = 0;
+  double _viewportOffset = 0;
   int rowStart = 0;
 
-  /// The layers shown, in row order, with each key's frame and properties at that frame.
-  List<Map<String, dynamic>> _layers = const [];
-  List<int> _ids = const [];
+  @override
+  double get offset => _viewportOffset;
 
   List<TlRow> _shown = const [];
 
   @override
   void initState() {
     super.initState();
+    viewportWidth = tlRight - 344;
+    fps = (c.state['fps'] as num? ?? 30).toDouble();
+    pixelsPerFrame = tlUnit / fps;
+    relane();
     _shown = _rows();
     c.slice('liveTimeline', _watched).addListener(_changed);
   }
@@ -54,134 +82,280 @@ class _LiveTimelineState extends State<LiveTimeline> {
 
   void _changed() => setState(() => _shown = _rows());
 
-  double get _unit => _spans[span];
-  double _x(num frame) => tlX((frame / fps - start) / _unit);
-  double _frameAt(double x) => ((x - tlX0 - .5) / tlUnit * _unit + start) * fps;
-  int _frames(double dx) => (dx / tlUnit * _unit * fps).round();
+  double get _unit => tlUnit / (fps * pixelsPerFrame);
+  double _x(num frame) => tlX0 + .5 + frame * pixelsPerFrame - offset;
+  double _frameAt(double x) => (x - tlX0 - .5 + offset) / pixelsPerFrame;
 
-  /// Frame -> the properties keyed there, for one layer.
-  Map<int, List<String>> _keysOf(Map<String, dynamic> l) {
-    final out = <int, List<String>>{};
-    for (final p in EditorSession.maps(l['properties'])) {
-      for (final k in EditorSession.maps(p['keys'])) {
-        (out[(k['frame'] as num).round()] ??= []).add('${p['id']}');
-      }
-    }
-    return out;
+  @override
+  void navigateView(double scale, double x, double y) {
+    final nextScale = scale.clamp(.1, 40.0);
+    final visible = math.max(1.0, viewportWidth - labelWidth);
+    final maxOffset = math.max(0.0, overviewExtent * nextScale - visible);
+    setState(() {
+      pixelsPerFrame = nextScale;
+      _viewportOffset = x.clamp(0.0, maxOffset).toDouble();
+      _shown = _rows();
+    });
   }
 
   List<TlRow> _rows() {
-    fps = (c.state['fps'] as num? ?? 30).toDouble();
-    final selected = c.selectedIds.toSet();
-    final picked = <int, Set<int>>{};
-    for (final k in EditorSession.maps(c.state['selectedKeys'])) {
-      (picked[k['layer'] as int] ??= {}).add((k['frame'] as num).round());
+    final nextFps = (c.state['fps'] as num? ?? 30).toDouble();
+    if (fps != nextFps) {
+      final unit = _unit;
+      fps = nextFps;
+      pixelsPerFrame = tlUnit / (fps * unit);
     }
-    final waves = {for (final w in EditorSession.maps(c.state['waveforms'])) w['layer']: EditorSession.maps(w['columns'])};
-    final all = EditorSession.maps(c.state['layers']);
-    final audio = all.where((l) => l['kind'] == 'Audio').firstOrNull;
-    final listed = [for (final l in all) if (l['kind'] != 'Audio') l];
-    rowStart = rowStart.clamp(0, math.max(0, listed.length - 8));
-    final shown = listed.skip(rowStart).take(8).toList();
+    final selected = c.selectedIds.toSet();
+    final selectedKeys = EditorSession.maps(c.state['selectedKeys']);
+    final waves = {
+      for (final w in EditorSession.maps(c.state['waveforms']))
+        w['layer']: EditorSession.maps(w['columns']),
+    };
+    rowStart = rowStart.clamp(0, math.max(0, tracks.length - 8));
+    final shown = tracks.skip(rowStart).take(8).toList();
     final out = <TlRow>[];
-    _layers = [...shown, if (audio != null) audio];
-    _ids = [for (final l in _layers) l['id'] as int];
-    for (final (n, l) in listed.indexed) {
-      if (n < rowStart || n >= rowStart + 8) continue;
-      final id = l['id'] as int, name = '${l['name'] ?? l['kind']}';
-      final keys = _keysOf(l).keys.toList();
-      final xs = [for (final f in keys) _x(f)];
-      final pickedXs = [for (final f in keys) if (picked[id]?.contains(f) ?? false) _x(f)];
-      switch (l['kind']) {
-        case 'Group':
-          out.add(TlRow(name, TlKind.group, open: true, selected: selected.contains(id)));
-        case 'Camera':
-          out.add(TlRow(name, TlKind.camera, open: false, keys: xs, pickedKeys: pickedXs, selected: selected.contains(id)));
-        default:
-          final (chip, body) = _families[n % _families.length];
-          final s = (l['start'] as num? ?? 0), d = (l['duration'] as num? ?? 0);
-          out.add(TlRow(name, TlKind.item, chip: chip, body: (_x(s), _x(s + d), body), keys: xs, pickedKeys: pickedXs, selected: selected.contains(id)));
+    for (final (n, row) in shown.indexed) {
+      final layer = row.layer;
+      final id = row.id;
+      final name = row.property == null
+          ? '${layer['name'] ?? layer['kind']}'
+          : '${row.property!['label'] ?? row.property!['id']}';
+      final keyRows = row.property == null ? row.allKeys : row.keys;
+      final frames =
+          keyRows.map((key) => (key['frame'] as num).round()).toSet().toList()
+            ..sort();
+      final xs = [for (final frame in frames) _x(frame)];
+      final pickedFrames = {
+        for (final key in selectedKeys)
+          if (key['layer'] == id &&
+              (row.property == null || key['property'] == row.property!['id']))
+            (key['frame'] as num).round(),
+      };
+      final pickedXs = [
+        for (final frame in frames)
+          if (pickedFrames.contains(frame)) _x(frame),
+      ];
+      final selectedRow = selected.contains(id);
+      final indent = row.depth;
+      if (row.property == null && row.isGroup) {
+        out.add(
+          TlRow(
+            name,
+            TlKind.group,
+            indent: indent,
+            nameW: 100,
+            open: row.groupOpen,
+            propertiesOpen: row.lanesOpen,
+            selected: selectedRow,
+            hidden: layer['hidden'] == true,
+            solo: layer['solo'] == true,
+            locked: layer['locked'] == true,
+            clipToBelow: layer['clipToBelow'] == true,
+          ),
+        );
+      } else if (row.property == null && layer['kind'] == 'Camera') {
+        out.add(
+          TlRow(
+            name,
+            TlKind.camera,
+            indent: indent,
+            nameW: 80,
+            propertiesOpen: row.lanesOpen,
+            keys: xs,
+            pickedKeys: pickedXs,
+            selected: selectedRow,
+            hidden: layer['hidden'] == true,
+            solo: layer['solo'] == true,
+            locked: layer['locked'] == true,
+            clipToBelow: layer['clipToBelow'] == true,
+          ),
+        );
+      } else {
+        final (chip, bodyColor) = _families[(n + row.depth) % _families.length];
+        final body = row.property == null
+            ? (
+                _x(layer['start'] as num? ?? 0),
+                _x(
+                  (layer['start'] as num? ?? 0) +
+                      (layer['duration'] as num? ?? 0),
+                ),
+                bodyColor,
+              )
+            : null;
+        final wave = layer['kind'] == 'Audio'
+            ? _wave(waves[id] ?? const [])
+            : null;
+        out.add(
+          TlRow(
+            name,
+            TlKind.item,
+            indent: indent,
+            nameW: 80,
+            chip: chip,
+            body: body,
+            keys: xs,
+            pickedKeys: pickedXs,
+            propertiesOpen: row.property == null ? row.lanesOpen : null,
+            wave: wave,
+            selected: selectedRow,
+            hidden: layer['hidden'] == true,
+            solo: layer['solo'] == true,
+            locked: layer['locked'] == true,
+            clipToBelow: layer['clipToBelow'] == true,
+          ),
+        );
       }
     }
-    if (audio != null) out.add(TlRow('${audio['name'] ?? 'Audio'}', TlKind.audio, wave: _wave(waves[audio['id']] ?? const []), selected: selected.contains(audio['id'])));
     return out;
   }
 
   /// The floor's half-heights, one per 2 px from x 596, from the host's per-frame min/max columns.
   List<double> _wave(List<Map<String, dynamic>> columns) {
     if (columns.isEmpty) return const [];
-    final byFrame = {for (final col in columns) (col['frame'] as num).toInt(): ((col['max'] as num) - (col['min'] as num)).toDouble() / 2};
-    return [for (var x = 596.0; x < 1488; x += 2) (byFrame[_frameAt(x).round()] ?? 0) * 11];
+    final byFrame = {
+      for (final col in columns)
+        (col['frame'] as num).toInt():
+            ((col['max'] as num) - (col['min'] as num)).toDouble() / 2,
+    };
+    return [
+      for (var x = 596.0; x < 1488; x += 2)
+        (byFrame[_frameAt(x).round()] ?? 0) * 11,
+    ];
   }
 
   String _label(int i) {
-    final t = start + i * _unit;
-    final m = t ~/ 60, sec = (t % 60).floor(), ff = ((t - t.floorToDouble()) * fps).round();
-    return _unit < 1 ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    final t = (_frameAt(tlX0 + i * tlUnit) / fps).clamp(0, double.infinity);
+    final m = t ~/ 60,
+        sec = (t % 60).floor(),
+        ff = ((t - t.floorToDouble()) * fps).round();
+    return _unit < 1
+        ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}'
+        : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
-  void _pickKey(int row, double x, bool add) {
-    final l = _layers[row], id = l['id'] as int;
-    final keys = _keysOf(l);
-    final frame = keys.keys.reduce((a, b) => (_x(a) - x).abs() <= (_x(b) - x).abs() ? a : b);
-    final these = [for (final p in keys[frame]!) {'layer': id, 'property': p, 'frame': frame}];
-    final held = add ? EditorSession.maps(c.state['selectedKeys']) : const <Map<String, dynamic>>[];
-    c.command('select', {
-      'ids': add ? {...c.selectedIds, id}.toList() : [id],
-      'keys': [...held, ...these],
+  Offset _corePosition(Offset p) =>
+      Offset(p.dx + tlX0 - 344, p.dy + rowStart * timelineGeometry.rowHeight);
+
+  Offset _coreLabelPosition(int visibleIndex, Offset p) => Offset(
+    p.dx + 1,
+    p.dy + (rowStart + visibleIndex) * timelineGeometry.rowHeight,
+  );
+
+  void _foldRow(int visibleIndex) {
+    final index = rowStart + visibleIndex;
+    if (index < 0 || index >= tracks.length) return;
+    final row = tracks[index];
+    if (!row.isGroup) return;
+    setState(() {
+      row.groupOpen
+          ? collapsedGroups.add(row.id)
+          : collapsedGroups.remove(row.id);
+      relane();
+      _shown = _rows();
     });
   }
 
-  /// The layer's timing when the current drag began: every preview is measured from it, not from the last preview.
-  (int, int, int, int)? _base;
+  void _togglePropertyRows(int visibleIndex) {
+    final index = rowStart + visibleIndex;
+    if (index < 0 || index >= tracks.length) return;
+    final row = tracks[index];
+    if (row.property != null) return;
+    setState(() {
+      allProperties.remove(row.id);
+      expanded.contains(row.id)
+          ? expanded.remove(row.id)
+          : expanded.add(row.id);
+      relane();
+      _shown = _rows();
+    });
+  }
 
-  Map<String, dynamic> _retimed(int row, TlGrip grip, double dx) {
-    final l = _layers[row], d = _frames(dx);
-    final b = _base ??= (l['id'] as int, (l['start'] as num? ?? 0).round(), (l['duration'] as num? ?? 0).round(), (l['sourceIn'] as num? ?? 0).round());
-    final (_, s, len, src) = b;
-    return switch (grip) {
-      TlGrip.body => {'layer': b.$1, 'start': s + d, 'duration': len, 'sourceIn': src},
-      TlGrip.start => {'layer': b.$1, 'start': s + d.clamp(-s, len - 1), 'duration': len - d.clamp(-s, len - 1), 'sourceIn': src + d.clamp(-s, len - 1)},
-      TlGrip.end => {'layer': b.$1, 'start': s, 'duration': math.max(1, len + d), 'sourceIn': src},
-    };
+  Future<void> _markerContext(
+    String id,
+    Offset at,
+    BuildContext context,
+  ) async {
+    if (!c.supports('deleteMarker')) return;
+    final action = await showHfMenu<String>(
+      context,
+      Rect.fromLTWH(at.dx, at.dy, 180, 0),
+      const [('delete', 'Delete marker')],
+    );
+    if (action == 'delete') c.command('deleteMarker', {'id': id});
   }
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<int>(
-        valueListenable: c.frame,
-        builder: (context, frame, _) {
-          final duration = (c.state['durationFrames'] as num? ?? 1).toInt();
-          return RF(timeline(TimelineModel(
-            rows: _shown,
-            ruler: [for (var i = 0; i <= 10; i++) _label(i)],
-            playhead: _x(frame),
-            onSeek: (x) => c.seek(_frameAt(x).round().clamp(0, duration > 0 ? duration - 1 : 0)),
-            onRow: (i) => c.command('select', {'ids': [_ids[i]]}),
-            onKey: _pickKey,
-            onKeysDrag: (dx, done) {
-              if (done == true && _frames(dx) != 0) c.command('moveKeys', {'deltaFrames': _frames(dx)});
-            },
-            onGrip: (row, grip, dx, done) {
-              if (done == null) {
-                _base = null;
-                c.cancelPreview();
-                return;
-              }
-              final change = _retimed(row, grip, dx);
-              if (done) _base = null;
-              c.command(done ? 'setTimings' : 'previewTimings', {'changes': [change]});
-            },
-            onScroll: (dx, dy, zoom) => setState(() {
-              if (zoom) {
-                span = (span + (dy > 0 ? 1 : -1)).clamp(0, _spans.length - 1);
-              } else if (dy.abs() > dx.abs() && _layers.length >= 8) {
-                rowStart = math.max(0, rowStart + (dy > 0 ? 1 : -1));
-              } else {
-                start = math.max(0, start + (dx == 0 ? dy : dx) / tlUnit * _unit);
-              }
-              _shown = _rows();
-            }),
-          )), ox: 344, oy: 703);
-        },
+    valueListenable: c.frame,
+    builder: (context, frame, _) {
+      final duration = (c.state['durationFrames'] as num? ?? 1).toInt();
+      return Focus(
+        focusNode: focus,
+        onKeyEvent: key,
+        child: RF(
+          timeline(
+            TimelineModel(
+              rows: _shown,
+              ruler: [for (var i = 0; i <= 10; i++) _label(i)],
+              playhead: _x(frame),
+              markers: [
+                for (final marker in EditorSession.maps(c.state['markers']))
+                  (_x(marker['frame'] as num), '${marker['id']}'),
+              ],
+              onAddMarker: c.supports('addMarker')
+                  ? () => c.command('addMarker')
+                  : null,
+              onSplit: c.supports('split') ? () => c.command('split') : null,
+              onMarkerContext: (id, at) => _markerContext(id, at, context),
+              onSeek: (x) => c.seek(
+                _frameAt(x).round().clamp(0, duration > 0 ? duration - 1 : 0),
+              ),
+              onRow: (i) {
+                final index = rowStart + i;
+                if (index >= 0 && index < tracks.length)
+                  chooseLayer(tracks[index].id);
+              },
+              onFold: _foldRow,
+              onProperties: _togglePropertyRows,
+              onCoreDown: (event, p) => beginAt(event, _corePosition(p)),
+              onCoreMove: (event, p) => moveAt(event, _corePosition(p)),
+              onCoreUp: (event, p) => endAt(event, _corePosition(p)),
+              onCoreCancel: (_, __) => cancel(),
+              onCoreLabelDown: (event, index, p) =>
+                  beginAt(event, _coreLabelPosition(index, p)),
+              onCoreLabelMove: (event, index, p) =>
+                  moveAt(event, _coreLabelPosition(index, p)),
+              onCoreLabelUp: (event, index, p) =>
+                  endAt(event, _coreLabelPosition(index, p)),
+              onCoreLabelCancel: (_, __, ___) => cancel(),
+              onScroll: (dx, dy, zoom) {
+                if (zoom) {
+                  zoomAt(
+                    math.exp(-dy / 500),
+                    labelWidth + (viewportWidth - labelWidth) / 2,
+                  );
+                } else if (dy.abs() > dx.abs() && tracks.length > 8) {
+                  setState(() {
+                    rowStart = (rowStart + (dy > 0 ? 1 : -1)).clamp(
+                      0,
+                      math.max(0, tracks.length - 8),
+                    );
+                    _shown = _rows();
+                  });
+                } else {
+                  navigateView(
+                    pixelsPerFrame,
+                    math.max(0, offset + (dx == 0 ? dy : dx)),
+                    0,
+                  );
+                }
+              },
+            ),
+          ),
+          ox: 344,
+          oy: 703,
+        ),
       );
+    },
+  );
 }

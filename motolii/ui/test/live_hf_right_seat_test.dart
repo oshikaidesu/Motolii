@@ -10,17 +10,27 @@ void main() {
   final sent = <Map>[];
   setUp(() {
     sent.clear();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
-      final args = call.arguments;
-      if (args is Map && args['command'] is String) sent.add(jsonDecode(args['command'] as String) as Map);
-      return <String, dynamic>{};
-    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(EditorSession.channel, (call) async {
+          final args = call.arguments;
+          if (args is Map && args['command'] is String)
+            sent.add(jsonDecode(args['command'] as String) as Map);
+          return <String, dynamic>{};
+        });
   });
 
   Future<EditorSession> seat(WidgetTester t, Map<String, dynamic> layer) async {
     final c = EditorSession()
       ..document.value = {
-        'capabilities': ['setProperty', 'toggleKey', 'enableEffect', 'removeEffect', 'moveEffect', 'previewProperties', 'commitPreview'],
+        'capabilities': [
+          'setProperty',
+          'toggleKey',
+          'enableEffect',
+          'removeEffect',
+          'moveEffect',
+          'previewProperties',
+          'commitPreview',
+        ],
         'layers': [
           layer,
           {'id': 3, 'name': 'Child', 'kind': 'Shape', 'parent': 1},
@@ -28,10 +38,14 @@ void main() {
         'selectedId': layer['id'],
         'selectedIds': [layer['id']],
       };
-    await t.pumpWidget(Directionality(
-      textDirection: TextDirection.ltr,
-      child: Center(child: SizedBox(width: 320, height: 700, child: RightSeat(c: c))),
-    ));
+    await t.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: SizedBox(width: 320, height: 700, child: RightSeat(c: c)),
+        ),
+      ),
+    );
     await t.pump();
     return c;
   }
@@ -48,19 +62,27 @@ void main() {
     expect(find.byKey(const ValueKey('layout-title')), findsOneWidget);
   });
 
-  testWidgets('a layer\'s effects are its cards; the power toggles through enableEffect', (t) async {
-    await seat(t, {
-      'id': 1,
-      'name': 'Box',
-      'kind': 'Shape',
-      'effects': [
-        {'id': 'e1', 'name': 'Blur', 'enabled': true, 'params': []},
-      ],
-    });
-    expect(find.byKey(const ValueKey('effect-card:e1')), findsOneWidget);
-    await t.ensureVisible(find.byKey(const ValueKey('effect-toggle:e1')));
-    await t.tap(find.byKey(const ValueKey('effect-toggle:e1')));
-    await t.pump();
-    expect(sent.where((m) => m['op'] == 'enableEffect').single, {'op': 'enableEffect', 'layer': 1, 'id': 'e1', 'enabled': false});
-  });
+  testWidgets(
+    'a layer\'s effects are its cards; the power toggles through enableEffect',
+    (t) async {
+      await seat(t, {
+        'id': 1,
+        'name': 'Box',
+        'kind': 'Shape',
+        'effects': [
+          {'id': 'e1', 'name': 'Blur', 'enabled': true, 'params': []},
+        ],
+      });
+      expect(find.byKey(const ValueKey('effect-card:e1')), findsOneWidget);
+      await t.ensureVisible(find.byKey(const ValueKey('effect-toggle:e1')));
+      await t.tap(find.byKey(const ValueKey('effect-toggle:e1')));
+      await t.pump();
+      expect(sent.where((m) => m['op'] == 'enableEffect').single, {
+        'op': 'enableEffect',
+        'layer': 1,
+        'id': 'e1',
+        'enabled': false,
+      });
+    },
+  );
 }

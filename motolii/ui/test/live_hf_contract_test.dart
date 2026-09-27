@@ -3,12 +3,20 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The hf GUI is its own client of Motolii Live: everything it reaches is the hf faces, the session, the native bridge
-/// or itself. An import into the older shells' presentation (app/, panels/, foundation/, input/) fails here.
+/// or itself. Shared TimelineCore and viewport motion are explicit dependencies; imports into legacy panels, app
+/// shells, foundation UI or shortcuts remain forbidden.
 void main() {
   test('live_hf reaches only hf, session, bridge and itself', () {
-    final allowed = RegExp(r'^lib/(hf|session|bridge|live_hf)/');
-    final seen = <String>{}, stack = ['lib/live_hf/main.dart'], outside = <String>[];
-    final directive = RegExp(r"^(?:import|export|part) '([^']+)'", multiLine: true);
+    final allowed = RegExp(
+      r'^lib/(hf|session|bridge|live_hf|timeline_core|input)/',
+    );
+    final seen = <String>{},
+        stack = ['lib/live_hf/main.dart'],
+        outside = <String>[];
+    final directive = RegExp(
+      r"^(?:import|export|part) '([^']+)'",
+      multiLine: true,
+    );
     while (stack.isNotEmpty) {
       final f = stack.removeLast();
       if (!seen.add(f)) continue;
