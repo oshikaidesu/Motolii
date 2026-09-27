@@ -8,6 +8,8 @@ import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
+import '../session/effect_actions.dart' as shared_effects;
+import '../session/property_character.dart';
 import 'rich_text_editor.dart';
 import 'gradient_inspector.dart';
 import '../foundation/glyphs.dart';
@@ -36,10 +38,14 @@ part 'inspector/effects_card.dart';
 /// Cards a host may draw itself. The Inspector keeps everything else: the header, the World, Layout, Text,
 /// Fill and Matte cards and the effects, and the way every edit reaches the document.
 class InspectorInstruments {
-  const InspectorInstruments({this.transform, this.layout, this.effectParams});
+  const InspectorInstruments({this.transform, this.layout, this.effectParams, this.worldInTransform = false, this.effectCard});
 
   /// The body of the Transform card (Position, Scale, Rotation, Anchor, Space, Parent, Opacity).
   final Widget Function(BuildContext context, EditorSession controller)? transform;
+
+  /// [transform] already shows World (Blend, and an Image's flags) itself, so the Inspector's own World card is left
+  /// out rather than shown twice.
+  final bool worldInTransform;
 
   /// The body of the Layout card for one layer: a Group's grid and sizing, or a child's own lines.
   final Widget Function(BuildContext context, EditorSession controller, Map<String, dynamic> layer)? layout;
@@ -47,6 +53,10 @@ class InspectorInstruments {
   /// The parameters of one effect (its card keeps the head: the grip, the eye and the menu). An effect that lays out
   /// copies with a grid of Each / Random columns keeps the Inspector's own body until an Instrument owns that grid.
   final Widget Function(BuildContext context, EditorSession controller, int layerId, Map<String, dynamic> effect)? effectParams;
+
+  /// The whole card for one effect (head — grip, eye, menu — and body). Takes over from [effectParams] when an
+  /// effect has no grid layout; a placement's grid still falls back to the Inspector's own card.
+  final Widget Function(BuildContext context, EditorSession controller, Map<String, dynamic> layer, Map<String, dynamic> effect, int index, int count)? effectCard;
 }
 
 class InspectorPanel extends StatefulWidget {
@@ -341,7 +351,7 @@ class _InspectorPanelState extends State<InspectorPanel>
                                 ? _transform(layer)
                                 : [widget.instruments!.transform!(context, c)],
                           ),
-                        if (layer['kind'] != 'Camera')
+                        if (layer['kind'] != 'Camera' && !(widget.instruments?.worldInTransform ?? false))
                           _card(title: 'World', children: _world(layer)),
                         if (_hasLayout(layer))
                           _card(

@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'rows.dart';
 
 class TLayer {
-  TLayer(this.id, this.name, {List<double>? position, List<double>? scale, this.rotation = 0, this.rotX = 0, this.rotY = 0, this.depth = 0, this.opacity = 1, List<double>? anchor, this.projection = '2D', this.parent, this.locked = false})
+  TLayer(this.id, this.name, {List<double>? position, List<double>? scale, this.rotation = 0, this.rotX = 0, this.rotY = 0, this.depth = 0, this.opacity = 1, List<double>? anchor, this.projection = '2D', this.parent, this.locked = false, this.kind = '', this.blendMode = 'Normal', this.environment = false, this.ghostable = false, this.ghost, this.clipToBelow = false})
       : position = position ?? [0, 0, 0],
         scale = scale ?? [1, 1, 1],
         anchor = anchor ?? [.5, .5];
@@ -18,6 +18,14 @@ class TLayer {
   String projection;
   int? parent;
   bool locked;
+  /// What meets the scene below Transform: how it blends, and (an Image only) whether it lights the scene, is a
+  /// ghost of a numbered frame, or clips to the layer below. Exactly the fields Classic's World card shows.
+  final String kind;
+  String blendMode;
+  bool environment;
+  bool ghostable;
+  int? ghost;
+  bool clipToBelow;
   final animated = <String>{}, keyedNow = <String>{};
   /// The relation a row is driven by (its source, as the status says it), and how many rows elsewhere a row drives.
   final links = <String, Map<String, dynamic>>{};
@@ -266,6 +274,24 @@ class TransformStore extends ParamStore {
 
   /// Ask the Instrument to reveal a property: show the mode that owns it and focus its number.
   void focusProperty(String id) => focusRequest.value = id;
+
+  /// World: an Image's flags, the shown layer alone (Classic's `_world()` behaviour — `setAttrs` on one layer).
+  void setWorldFlag(String key, dynamic value) {
+    if (!canEdit) return;
+    switch (key) {
+      case 'environment': active.environment = value as bool;
+      case 'ghost': active.ghost = (value as bool) ? 0 : null;
+      case 'clipToBelow': active.clipToBelow = !active.clipToBelow;
+    }
+    commits++;
+    notifyListeners();
+  }
+
+  /// Blend mode lives on the Blend desk; opening it is a hand-over, not a value here.
+  void openBlend() {}
+
+  /// Whether the host still offers a World operation (Classic's `panelCan`); true by default for a plain store.
+  bool worldCan(String op) => true;
 
   // Scale hand-over: linked axes keep their ratio, exactly as typed or scrubbed numbers do.
   bool get scaleEven => (active.scale[0] - active.scale[1]).abs() < 1e-9;

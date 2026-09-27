@@ -24,6 +24,7 @@ import 'new/console.dart';
 import 'new/relations/relations_panel.dart';
 import 'new/dock_theme.dart';
 import 'new/inspector/new_effect.dart';
+import 'new/inspector/new_effects_card.dart';
 import 'new/inspector/new_layout.dart';
 import 'new/inspector/new_transform.dart';
 import 'new/shell_bar.dart';
@@ -234,12 +235,21 @@ class _NewShellState extends State<NewShell> {
           controller: c,
           instruments: InspectorInstruments(
             transform: (context, controller) => NewTransform(controller: controller),
+            worldInTransform: true,
             layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
             effectParams: (context, controller, layerId, effect) => NewEffectParams(
               key: ValueKey('new-effect:$layerId:${effect['id']}'),
               controller: controller,
               layerId: layerId,
               effectId: effect['id'] as Object,
+            ),
+            effectCard: (context, controller, layer, effect, index, count) => NewEffectCard(
+              key: ValueKey('new-effect-card:${layer['id']}:${effect['id']}'),
+              controller: controller,
+              layer: layer,
+              effect: effect,
+              index: index,
+              count: count,
             ),
           ),
         ),

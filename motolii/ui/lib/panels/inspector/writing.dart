@@ -81,50 +81,14 @@ mixin _InspectorWriting on _InspectorReading {
     }
   }
 
-  /// Every bounded number of an effect nudged by chance — within a fifth of
-  /// its reach around where it is, so a throw stays playable — seeds fully,
-  /// counts whole, as one edit (the Ableton dice).
-  Future<void> _roll(
-    Map<String, dynamic> layer,
-    Map<String, dynamic> effect,
-  ) async {
-    final rnd = math.Random();
-    final values = <String, double>{};
-    for (final row in panelRows(effect['params'])) {
-      final id = '${row['id']}';
-      if (row['value'] is! num || row['choices'] is List) continue;
-      final min = (row['min'] as num?)?.toDouble(),
-          max = (row['max'] as num?)?.toDouble();
-      if (id.endsWith('.seed')) {
-        values[id] = rnd.nextInt(10000).toDouble();
-      } else if (min != null && max != null) {
-        final reach = (max - min) * .2;
-        var next =
-            ((row['value'] as num).toDouble() +
-                    (rnd.nextDouble() * 2 - 1) * reach)
-                .clamp(min, max)
-                .toDouble();
-        if (_characterOf(row) == _Character.count) next = next.roundToDouble();
-        values[id] = next;
-      }
-    }
-    if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
-  }
+  /// Every bounded number of an effect nudged by chance, every number back to
+  /// where it rests: the same action a New effect card offers, in
+  /// [shared_effects.rollEffect] / [shared_effects.restEffect].
+  Future<void> _roll(Map<String, dynamic> layer, Map<String, dynamic> effect) =>
+      shared_effects.rollEffect(c, layer['id'] as int, effect);
 
-  /// Every number of an effect back to where it rests, as one edit.
-  Future<void> _rest(
-    Map<String, dynamic> layer,
-    Map<String, dynamic> effect,
-  ) async {
-    final values = <String, double>{};
-    for (final row in panelRows(effect['params'])) {
-      final d = row['default'];
-      if (row['value'] is num && d is num && row['choices'] is! List) {
-        values['${row['id']}'] = d.toDouble();
-      }
-    }
-    if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
-  }
+  Future<void> _rest(Map<String, dynamic> layer, Map<String, dynamic> effect) =>
+      shared_effects.restEffect(c, layer['id'] as int, effect);
 
   /// Choices into every target, absolute (a choice keeps no offset, unlike
   /// a number). The host decides who the targets are and which of them have the row.

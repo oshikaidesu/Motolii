@@ -81,6 +81,12 @@ mixin _InspectorEffectsCard on _InspectorControls, _InspectorFolds {
     int index = 0,
     int count = 1,
   }) {
+    // A grid effect (Each / Random columns) has no Instrument yet, so it keeps the Inspector's own card even when a
+    // host owns every other effect's presentation.
+    final hasGrid = effect['placement'] == true || panelMap(effect['layout']).isNotEmpty;
+    if (widget.instruments?.effectCard != null && !hasGrid) {
+      return widget.instruments!.effectCard!(context, c, layer, effect, index, count);
+    }
     final params = panelRows(effect['params']);
     // Advanced: declared on the row (ADVANCED in the manifest) or, for a
     // placement, on the grid rows the layout marks.

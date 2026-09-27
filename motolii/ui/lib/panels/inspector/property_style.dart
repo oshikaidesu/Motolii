@@ -3,6 +3,11 @@ part of '../inspector.dart';
 /// What a control is, decided from the declaration, never from the label.
 enum _Kind { bounded, scalar, angle, vec2, scale, color, choice, text, layer }
 
+typedef _Character = PropertyCharacter;
+final _characterOf = characterOf;
+final _span = spanOf;
+final _tight = tightRange;
+
 _Kind _kindOf(Map<String, dynamic> row) {
   final id = '${row['id']}';
   final kind = '${row['kind']}';
@@ -23,103 +28,6 @@ _Kind _kindOf(Map<String, dynamic> row) {
   return _Kind.scalar;
 }
 
-/// What a parameter is *for*, read off its declared name. One table, so a
-/// new Vism gets its glyph, unit and control the moment it is declared.
-enum _Character {
-  amount,
-  size,
-  ratio,
-  angle,
-  place,
-  seed,
-  time,
-  count,
-  color,
-  level,
-  soft,
-  opacity,
-  direction,
-  choice,
-  delay,
-  detail,
-  none,
-}
-
-const _characterWords = <_Character, List<String>>{
-  _Character.seed: ['seed'],
-  _Character.angle: ['angle', 'rotation', 'roll', 'tilt', 'spin'],
-  _Character.place: ['position', 'offset', 'center', 'centre', 'origin'],
-  _Character.size: [
-    'size',
-    'radius',
-    'width',
-    'height',
-    'thickness',
-    'scale',
-    'length',
-    'distance',
-  ],
-  _Character.opacity: ['opacity', 'alpha', 'transparency'],
-  _Character.soft: ['softness', 'blur', 'feather', 'spread', 'smooth'],
-  _Character.time: ['evolution', 'time', 'phase', 'speed', 'rate', 'frequency'],
-  _Character.delay: ['delay', 'lag'],
-  _Character.count: ['count', 'columns', 'rows', 'copies', 'number', 'steps'],
-  _Character.detail: [
-    'complexity',
-    'octaves',
-    'detail',
-    'iterations',
-    'quality',
-  ],
-  _Character.color: ['color', 'colour', 'tint', 'hue'],
-  _Character.level: ['threshold', 'level', 'gamma', 'contrast', 'brightness'],
-  _Character.direction: ['along', 'direction', 'axis', 'side'],
-  _Character.amount: [
-    'amount',
-    'strength',
-    'intensity',
-    'mix',
-    'gain',
-    'weight',
-    'density',
-    'power',
-  ],
-};
-
-/// The declared or analysed subtype (Blender vocabulary) wins over words.
-_Character? _declaredCharacter(Map<String, dynamic> row) =>
-    switch ('${row['subtype'] ?? ''}') {
-      'SEED' => _Character.seed,
-      'ANGLE' => _Character.angle,
-      'OPACITY' => _Character.opacity,
-      'DISTANCE' || 'PIXEL' => _Character.size,
-      'TRANSLATION' => _Character.place,
-      'TIME' => _Character.time,
-      'LEVEL' => _Character.level,
-      'FACTOR' || 'PERCENTAGE' => _Character.amount,
-      'COUNT' => _Character.count,
-      _ => null,
-    };
-
-/// Read once per row object: the kind, tint, track and unit all ask.
-final _characters = Expando<_Character>();
-_Character _characterOf(Map<String, dynamic> row) =>
-    _characters[row] ??= _deriveCharacter(row);
-
-_Character _deriveCharacter(Map<String, dynamic> row) {
-  final declared = _declaredCharacter(row);
-  if (declared != null) return declared;
-  final id = '${row['id']}'.split('.param.').last;
-  final words = <String>{
-    ...id.toLowerCase().split(RegExp('[^a-z]+')),
-    ...'${row['label'] ?? ''}'.toLowerCase().split(RegExp('[^a-z]+')),
-  }..remove('');
-  for (final entry in _characterWords.entries) {
-    if (entry.value.any(words.contains)) return entry.key;
-  }
-  if (row['choices'] is List) return _Character.choice;
-  return _Character.none;
-}
 
 /// One hue per family, so a glance sorts the numbers before a word is read.
 Color? _tintOf(Map<String, dynamic> row, EditorTheme colors) =>
@@ -148,17 +56,6 @@ TrackStyle _trackOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
   _ => TrackStyle.fill,
 };
 
-double _span(Map<String, dynamic> row) =>
-    ((row['max'] as num?)?.toDouble() ?? 0) -
-    ((row['min'] as num?)?.toDouble() ?? 0);
-
-/// A range that is a real reach (opacity 0..1, octaves 1..8), not a guard
-/// (amount 0..100000): only a real reach earns a track.
-bool _tight(Map<String, dynamic> row) {
-  final v = (row['value'] as num?)?.toDouble() ?? 0;
-  final d = (row['default'] as num?)?.toDouble() ?? v;
-  return _span(row) <= 20 * math.max(d.abs(), 1);
-}
 
 String? _unitOf(Map<String, dynamic> row) {
   final id = '${row['id']}';

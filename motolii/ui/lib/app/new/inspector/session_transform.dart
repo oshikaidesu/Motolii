@@ -53,6 +53,12 @@ class SessionTransformStore extends TransformStore {
       projection: '${l['projection'] ?? '2D'}',
       parent: l['parent'] as int?,
       locked: l['locked'] == true,
+      kind: '${l['kind'] ?? ''}',
+      blendMode: '${l['blendMode'] ?? 'Normal'}',
+      environment: l['environment'] == true,
+      ghostable: l['ghostable'] == true,
+      ghost: (l['ghost'] as num?)?.toInt(),
+      clipToBelow: l['clipToBelow'] == true,
     );
     for (final row in rows.values) {
       if ((row['keys'] as List?)?.isNotEmpty ?? false) layer.animated.add('${row['id']}');
@@ -152,6 +158,26 @@ class SessionTransformStore extends TransformStore {
     if (!canEdit) return;
     c.command('setAttrs', {'layers': [activeId], 'patch': {'parent': id}});
   }
+
+  /// World: the same three operations Classic's `_world()` sends, one layer, one edit each.
+  @override
+  void setWorldFlag(String key, dynamic value) {
+    if (!canEdit) return;
+    switch (key) {
+      case 'environment':
+        c.command('setAttrs', {'layers': [activeId], 'patch': {'environment': value}});
+      case 'ghost':
+        c.command('ghost', {'enabled': value});
+      case 'clipToBelow':
+        c.command('clip', {'layer': activeId});
+    }
+  }
+
+  @override
+  void openBlend() => c.focusEditing(activeId, 'blendMode');
+
+  @override
+  bool worldCan(String op) => c.supports(op);
 
   /// The row's menu: make a relation from this value (it becomes the source), or go to the one it is in.
   @override

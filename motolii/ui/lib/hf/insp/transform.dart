@@ -74,6 +74,8 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [strip, const SizedBox(width: 6), gizmo, const SizedBox(width: 6), SizedBox(width: 78, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_spaceCol(), const SizedBox(height: 8), _parent(narrow)]))]),
             const SizedBox(height: 10),
             _rows(narrow),
+            const SizedBox(height: 10),
+            _world(),
           ]);
           return narrow
               ? SingleChildScrollView(key: const ValueKey('tf-scroll'), padding: EdgeInsets.fromLTRB(pad, 10, pad, 16), child: body)
@@ -149,6 +151,42 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('PARENT', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
       Container(height: 26, decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(names[idx], key: const ValueKey('parent-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: s.canEdit ? const Color(0xFFD0D1D5) : const Color(0xFF55565C), w: FontWeight.w500)))), arrow('next', '›', 1)])),
+    ]);
+  }
+
+  // ---- what the layer meets the scene with: how it blends and (an Image only) its flags -------------------------
+  Widget _flag(String key, String label, bool on, VoidCallback? tap) => GestureDetector(
+        key: ValueKey('world-$key'),
+        behavior: HitTestBehavior.opaque,
+        onTap: tap,
+        child: Container(
+          height: 26,
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
+          child: Row(children: [
+            Container(width: 26, height: 15, padding: const EdgeInsets.all(2), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? kYellow : const Color(0xFF3A3B40), borderRadius: BorderRadius.circular(8)), child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+            const SizedBox(width: 7),
+            Expanded(child: Text(label, style: sans(11, c: tap == null ? const Color(0xFF55565C) : const Color(0xFFD0D1D5)))),
+          ]),
+        ),
+      );
+
+  Widget _world() {
+    final l = s.active;
+    if (l.kind == 'Camera') return const SizedBox.shrink();
+    final edit = s.canEdit;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WORLD', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
+      GestureDetector(
+        key: const ValueKey('world-blend'),
+        behavior: HitTestBehavior.opaque,
+        onTap: edit ? s.openBlend : null,
+        child: Container(height: 26, margin: const EdgeInsets.only(bottom: 4), alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Text(l.blendMode, key: const ValueKey('world-blend-name'), style: sans(11, c: edit ? const Color(0xFFD0D1D5) : const Color(0xFF55565C), w: FontWeight.w500))),
+      ),
+      if (l.kind == 'Image') _flag('environment', 'Environment: this image lights and surrounds the scene', l.environment, edit ? () => s.setWorldFlag('environment', !l.environment) : null),
+      if (l.ghostable) _flag('ghost', 'Ghost: the same layer seen later by a delay', l.ghost != null, edit && s.worldCan('ghost') ? () => s.setWorldFlag('ghost', l.ghost == null) : null),
+      _flag('clip', 'Clip to the layer below', l.clipToBelow, edit && s.worldCan('clip') ? () => s.setWorldFlag('clipToBelow', null) : null),
     ]);
   }
 
