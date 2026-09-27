@@ -5,10 +5,11 @@ import 'blend.dart';
 import 'depth.dart';
 import 'ease.dart';
 import 'history.dart';
+import 'notes.dart';
 import 'transform.dart';
 
 /// Desks the right seat can show over the session.
-const liveDesks = {'Blend', 'Depth', 'History', 'Ease'};
+const liveDesks = {'Blend', 'Depth', 'History', 'Ease', 'Notes'};
 
 /// The right seat: the desk the session has open (`deskDrawer`), else the Inspector. Editing a value that has a
 /// specialist opens it — keys open Ease, a camera layer's value Depth, a blend mode Blend.
@@ -51,6 +52,7 @@ class _RightSeatState extends State<RightSeat> {
         'Depth' => NewDepth(controller: c),
         'History' => NewHistory(controller: c),
         'Ease' => LiveEase(c: c),
+        'Notes' => LiveNotes(c: c),
         _ => NewTransform(controller: c, showHeader: true),
       };
 }

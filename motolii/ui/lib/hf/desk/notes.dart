@@ -6,24 +6,40 @@ import '../bp/common.dart';
 import 'common.dart';
 
 class NBlock {
-  NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0]);
+  NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0, this.id, this.png]);
   final String kind; // note | image | ref | hand
   Offset pos;
   Size size;
   String text;
   final int tint;
+
+  /// The host's id for this block, and an image block's picture.
+  final String? id;
+  final Uint8List? png;
+}
+
+/// A host that keeps the notebook: its pages and blocks, and where a changed block goes. [can] says which kinds of
+/// block it holds.
+abstract class NotesHost implements Listenable {
+  int get pageCount;
+  List<NBlock> blocks(int page);
+  bool can(String kind);
+  void put(int page, NBlock block);
+  void patch(int page, NBlock block, Map<String, dynamic> changed);
+  void remove(int page, NBlock block);
 }
 
 /// Notes is a free 2D workbench. Wide shows it at working scale; narrow shows the same canvas fitted small.
 /// Blocks are the same objects in both, and stay selectable and movable.
 class NotesDesk extends StatefulWidget {
-  const NotesDesk({super.key});
+  const NotesDesk({super.key, this.host});
+  final NotesHost? host;
   @override
   State<NotesDesk> createState() => _NotesDeskState();
 }
 
 class _NotesDeskState extends State<NotesDesk> {
-  final blocks = <NBlock>[
+  final _blocks = <NBlock>[
     NBlock('note', const Offset(20, 24), const Size(120, 88), 'Anticipation\nbefore the move,\nthen a soft settle', 0),
     NBlock('note', const Offset(160, 44), const Size(112, 76), 'Try a slower\nease here.', 1),
     NBlock('image', const Offset(30, 136), const Size(122, 90), ''),
@@ -39,12 +55,39 @@ class _NotesDeskState extends State<NotesDesk> {
   Rect? _fitFrom; // the narrow view keeps its frame while blocks move; it re-fits only when asked or a block is added
   int tool = 0;
   int page = 0;
+  List<NBlock> _held = const [];
+  List<NBlock> get blocks => widget.host == null ? _blocks : _held;
   final _ctl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.host?.addListener(_absorb);
+    _absorb();
+  }
+
+  void _absorb() {
+    final h = widget.host;
+    if (h == null) return;
+    setState(() {
+      if (page >= h.pageCount) page = 0;
+      _held = h.blocks(page);
+      if (selected != null && selected! >= _held.length) selected = null;
+      if (editing != null && editing! >= _held.length) editing = null;
+    });
+  }
+
+  /// Leaving a note being typed into: its text goes to the host.
+  void _endEdit() {
+    final e = editing;
+    if (e != null && e < blocks.length) widget.host?.patch(page, blocks[e], {'text': blocks[e].text});
+  }
   final _focus = FocusNode();
   final _canvasFocus = FocusNode();
 
   @override
   void dispose() {
+    widget.host?.removeListener(_absorb);
     _ctl.dispose();
     _focus.dispose();
     _canvasFocus.dispose();
@@ -52,6 +95,7 @@ class _NotesDeskState extends State<NotesDesk> {
   }
 
   Rect get _bounds {
+    if (blocks.isEmpty) return const Rect.fromLTWH(0, 0, 280, 280);
     var r = blocks.first.pos & blocks.first.size;
     for (final b in blocks) { r = r.expandToInclude(b.pos & b.size); }
     return r;
@@ -77,21 +121,34 @@ class _NotesDeskState extends State<NotesDesk> {
         child: Row(children: [
           for (var i = 0; i < 5; i++) Padding(padding: const EdgeInsets.only(right: 4), child: _tool(i)),
           const Spacer(),
-          for (final p in [0, 1, 2])
+          for (var p = 0; p < (widget.host?.pageCount ?? 3); p++)
             GestureDetector(
-              onTap: () => setState(() => page = p),
+              onTap: () {
+                _endEdit();
+                setState(() { page = p; selected = null; editing = null; });
+                _absorb();
+              },
               child: Container(width: 26, height: 26, margin: const EdgeInsets.only(left: 4), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : kRule2), borderRadius: BorderRadius.circular(3), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(11, c: p == page ? kInk : kMuted))),
             ),
         ]),
       );
 
-  void _add(String kind) => setState(() {
-        final c = (Offset(140, 160) - pan) / zoom - Offset(blocks.length * 3.0 % 24, blocks.length * 3.0 % 24);
-        final size = switch (kind) { 'note' => const Size(110, 74), 'image' => const Size(110, 80), _ => const Size(100, 28) };
-        blocks.add(NBlock(kind, c - Offset(size.width / 2, size.height / 2), size, kind == 'note' ? 'New note' : (kind == 'ref' ? 'Selection' : ''), blocks.length % 2));
-        selected = blocks.length - 1;
-        _fitFrom = null;
-      });
+  void _add(String kind) {
+    final h = widget.host;
+    if (h != null && !h.can(kind)) return;
+    setState(() {
+      final c = (Offset(140, 160) - pan) / zoom - Offset(blocks.length * 3.0 % 24, blocks.length * 3.0 % 24);
+      final size = switch (kind) { 'note' => const Size(110, 74), 'image' => const Size(110, 80), _ => const Size(100, 28) };
+      final b = NBlock(kind, c - Offset(size.width / 2, size.height / 2), size, kind == 'note' ? 'New note' : (kind == 'ref' ? 'Selection' : ''), blocks.length % 2);
+      if (h == null) {
+        _blocks.add(b);
+      } else {
+        h.put(page, b);
+      }
+      selected = blocks.length - (h == null ? 1 : 0);
+      _fitFrom = null;
+    });
+  }
 
   Widget _tool(int i) => GestureDetector(
         key: ValueKey('notes-tool-$i'),
@@ -142,7 +199,13 @@ class _NotesDeskState extends State<NotesDesk> {
       focusNode: _canvasFocus,
       onKeyEvent: (_, e) {
         if (e is KeyDownEvent && editing == null && selected != null && (e.logicalKey == LogicalKeyboardKey.delete || e.logicalKey == LogicalKeyboardKey.backspace)) {
-          setState(() { blocks.removeAt(selected!); selected = null; });
+          final gone = blocks[selected!];
+          if (widget.host == null) {
+            setState(() { _blocks.removeAt(selected!); selected = null; });
+          } else {
+            setState(() => selected = null);
+            widget.host!.remove(page, gone);
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -154,7 +217,7 @@ class _NotesDeskState extends State<NotesDesk> {
       child: GestureDetector(
         key: ValueKey(fit ? 'notes-canvas-fit' : 'notes-canvas'),
         dragStartBehavior: DragStartBehavior.down,
-        onTap: () { _canvasFocus.requestFocus(); setState(() { selected = null; editing = null; }); },
+        onTap: () { _endEdit(); _canvasFocus.requestFocus(); setState(() { selected = null; editing = null; }); },
         onPanUpdate: (d) => setState(() { if (fit) { npan += d.delta; } else { pan += d.delta; } }),
         child: ClipRect(
           child: CustomPaint(
@@ -183,7 +246,7 @@ class _NotesDeskState extends State<NotesDesk> {
         child: GestureDetector(
           key: ValueKey('blk-$i'),
           dragStartBehavior: DragStartBehavior.down,
-          onTap: () { if (editing != i) _canvasFocus.requestFocus(); setState(() { selected = i; if (editing != i) editing = null; }); },
+          onTap: () { if (editing != i) { _endEdit(); _canvasFocus.requestFocus(); } setState(() { selected = i; if (editing != i) editing = null; }); },
           onDoubleTap: b.kind == 'note' || b.kind == 'hand'
               ? () => setState(() { selected = i; editing = i; _ctl.text = b.text; _focus.requestFocus(); })
               : null,
@@ -192,6 +255,9 @@ class _NotesDeskState extends State<NotesDesk> {
           onPanUpdate: (d) {
             if (editing == i) return;
             setState(() => b.pos += d.delta);
+          },
+          onPanEnd: (_) {
+            if (editing != i) widget.host?.patch(page, b, {'x': b.pos.dx, 'y': b.pos.dy});
           },
           child: Stack(clipBehavior: Clip.none, children: [
             Positioned.fill(child: _body(b, i)),
@@ -206,6 +272,7 @@ class _NotesDeskState extends State<NotesDesk> {
                   key: const ValueKey('resize'),
                   dragStartBehavior: DragStartBehavior.down,
                   onPanUpdate: (d) => setState(() => b.size = Size(math.max(56, b.size.width + d.delta.dx), math.max(28, b.size.height + d.delta.dy))),
+                  onPanEnd: (_) => widget.host?.patch(page, b, {'width': b.size.width, 'height': b.size.height}),
                   child: DecoratedBox(decoration: BoxDecoration(color: kInk, border: Border.all(color: kAccent, width: 1.4 / z), borderRadius: BorderRadius.circular(2 / z))),
                 ),
               ),
@@ -227,7 +294,8 @@ class _NotesDeskState extends State<NotesDesk> {
               : Text(b.text, style: sans(12, c: ink, w: FontWeight.w600)),
         );
       case 'image':
-        return ClipRRect(borderRadius: BorderRadius.circular(3), child: CustomPaint(painter: _PicP()));
+        final png = b.png;
+        return ClipRRect(borderRadius: BorderRadius.circular(3), child: png == null ? CustomPaint(painter: _PicP()) : Image.memory(png, fit: BoxFit.cover, gaplessPlayback: true));
       case 'ref':
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10),
