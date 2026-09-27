@@ -4,6 +4,7 @@ import '../../hf/shell/menu.dart';
 import '../../hf/shell/place.dart';
 import '../../hf/shell/stage.dart';
 import '../../session/editor_session.dart';
+import 'stage_touch.dart';
 
 /// The Stage seat over the session: the document's name on the tab, and in the work area the host's frame of the
 /// chosen view (the host's own view ids, `Camera` and `User`), the composition's shape as large as the area holds.
@@ -105,7 +106,11 @@ class _PictureState extends State<_Picture> {
               valueListenable: c.textureIds,
               builder: (_, ids, __) {
                 final id = ids[widget.view];
-                return id == null ? const SizedBox.expand() : RepaintBoundary(child: Texture(textureId: id, filterQuality: FilterQuality.low));
+                return Stack(fit: StackFit.expand, children: [
+                  if (id != null) RepaintBoundary(child: Texture(textureId: id, filterQuality: FilterQuality.low)),
+                  // the hand works in the camera's picture, where screen and composition pixels differ by one scale
+                  if (widget.view == 'Camera') StageTouch(c: c, view: widget.view, scale: box.maxWidth / w),
+                ]);
               },
             );
           }),
