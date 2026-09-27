@@ -6,6 +6,8 @@ import '../../../hf/desk/ease_skin.dart';
 import '../../../hf/desk/notes_skin.dart';
 import '../../../panels/notes_desk.dart';
 import '../../../panels/ease_desk.dart';
+import '../../../panels/stage.dart';
+import '../stage/new_stage_chrome.dart';
 import 'new_blend.dart';
 import 'new_depth.dart';
 import 'new_history.dart';
@@ -20,5 +22,7 @@ Widget? newDeskFace(String name, EditorSession c, Key? key, {Widget? leading}) =
       'Ease' => DockedPanel(child: EaseDesk(key: key, controller: c, leading: leading, skin: (context, view) => EaseSkin(view))),
       'Notes' => DockedPanel(child: NotesPanel(key: key, controller: c, look: hfNoteLook, skin: (context, view) => NotesSkin(view))),
       'Web' => DockedPanel(child: NewWeb(key: key, controller: c)),
+      'Stage' => StagePanel(key: key, controller: c, view: 'User', topBar: newStageTopBar, bottomBar: newStageBottomBar),
+      'Camera' => StagePanel(key: key, controller: c, view: 'Camera', topBar: newStageTopBar, bottomBar: newStageBottomBar),
       _ => null,
     };

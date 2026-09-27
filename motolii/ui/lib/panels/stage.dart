@@ -23,12 +23,41 @@ part 'stage/camera.dart';
 part 'stage/touch.dart';
 part 'stage/chrome.dart';
 
+/// What a host's own toolbar needs from the Stage: the view/zoom operations the bars above and below the picture
+/// call (Classic's own `_button` row), and the values they show. Nothing about the picture itself, the gesture
+/// surface or the gizmos — those stay exactly as they are, whichever toolbar is shown over them.
+abstract class StageToolbarApi implements Listenable {
+  bool get userStage;
+  bool get canGoHome; // false: "Front" is already where it is, greyed
+  void goHome();
+  void fit();
+  void resetZoom();
+  void zoomOut();
+  void zoomIn();
+  double get zoomPercent;
+  void setZoomPercent(double percent);
+  double get width;
+  double get height;
+  bool get transparentGround;
+  bool get canToggleGround;
+  void toggleGround();
+  bool get extending;
+  void toggleExtend();
+  int get frame;
+  bool get gesturesAvailable;
+}
+
 /// One tab per view: `Stage` looks through the observer, `Camera` through the
 /// document camera. The tab that is showing tells native which one to draw.
 class StagePanel extends StatefulWidget {
-  const StagePanel({super.key, required this.controller, this.view = 'User'});
+  const StagePanel({super.key, required this.controller, this.view = 'User', this.topBar, this.bottomBar});
   final EditorSession controller;
   final String view;
+
+  /// A host's own bars over the picture (New's, in hf presentation): given the same [StageToolbarApi] Classic's
+  /// bars use. Null keeps Classic's own bars.
+  final Widget Function(BuildContext context, StageToolbarApi api)? topBar;
+  final Widget Function(BuildContext context, StageToolbarApi api)? bottomBar;
   @override
   State<StagePanel> createState() => _StagePanelState();
 }
