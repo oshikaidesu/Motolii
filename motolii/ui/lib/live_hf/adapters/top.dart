@@ -1,16 +1,14 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/shell/place.dart' show RF;
-import '../../../hf/shell/top.dart';
-import '../../../session/editor_session.dart';
+import '../../hf/shell/place.dart' show RF;
+import '../../hf/shell/top.dart';
+import '../../session/editor_session.dart';
 
 /// The top face over the real session. The face is the reference's, unchanged; this only hands it values
 /// (fps, the document's length in frames, the playhead's clock, which of EDIT·PLAY·EXPORT is on) and operations.
 class SessionTop extends StatefulWidget {
-  const SessionTop({super.key, required this.c, required this.sheet, required this.onSheet, required this.onMenu});
+  const SessionTop({super.key, required this.c});
   final EditorSession c;
-  final String? sheet;
-  final ValueChanged<String> onSheet, onMenu;
   @override
   State<SessionTop> createState() => _SessionTopState();
 }
@@ -56,10 +54,9 @@ class _SessionTopState extends State<SessionTop> {
         listenable: Listenable.merge([c.playing, c.slice('sessionTop', _watched)]),
         builder: (context, _) {
           final playing = c.playing.value;
-          final sheet = widget.sheet;
           return RF(top(TopModel(
             readouts: readouts,
-            mode: sheet == 'Export' ? 2 : (playing ? 1 : 0),
+            mode: playing ? 1 : 0,
             onPlay: c.togglePlayback,
             onStop: () {
               c.stopPlayback();
@@ -68,18 +65,7 @@ class _SessionTopState extends State<SessionTop> {
             onAnimate: c.supports('animate') ? () => c.setAnimate(!c.animating) : null,
             onMarker: c.supports('addMarker') ? () => c.command('addMarker') : null,
             onMode: (i) {
-              switch (i) {
-                case 0:
-                  if (playing) c.togglePlayback();
-                  if (sheet != null) widget.onSheet(sheet);
-                case 1:
-                  if (!playing) c.togglePlayback();
-                case _:
-                  widget.onSheet('Export');
-              }
-            },
-            onKey: (i) {
-              if (i == 2) widget.onMenu('Open');
+              if ((i == 0 && playing) || (i == 1 && !playing)) c.togglePlayback();
             },
           )));
         },

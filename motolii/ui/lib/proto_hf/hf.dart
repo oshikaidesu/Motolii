@@ -7,7 +7,9 @@ import 'ref.dart';
 import '../hf/shell/top.dart' as shell_top show top;
 import '../hf/shell/top.dart' show TopModel;
 import '../hf/shell/stage.dart' as shell_stage show stage;
-import '../hf/shell/stage.dart' show StageModel;
+import '../hf/shell/stage.dart' show StageModel, StageBodyModel, stageBody;
+import '../hf/shell/timeline.dart' as shell_timeline show timeline;
+import '../hf/shell/timeline.dart' show TimelineModel, TlRow, TlKind, tlX0;
 
 Color shade(Color c, double t) => Color.lerp(c, const Color(0xFF000000), t)!;
 const _stageArt = String.fromEnvironment('PROTO_STAGE', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto/stage_hf.png');
@@ -96,32 +98,7 @@ List<RI> browser() {
 
 // ---------------------------------------------------------------- STAGE
 // The seat is hf/shell/stage.dart; under the tab row is the reference's mock Stage.
-List<RI> stage() => shell_stage.stage(StageModel(body: _mockStage()));
-
-List<RI> _mockStage() {
-  const tools = [HG.arrow, HG.move, HG.rect, HG.ellipse, HG.pen, HG.type, HG.crop];
-  const dd = Color(0xFF1D1D1D);
-  const ddB = Color(0xFF3E3E3D);
-  return [
-    Wd(345, 101, 777, 537, Image.file(File(_stageArt), fit: BoxFit.fill, filterQuality: FilterQuality.medium)),
-    Ln(345, 637, 777, 1, H.rule2),
-    // tool column, over the work
-    Rc(354, 111, 42, 304, fill: H.raised, border: H.rule, r: 2),
-    Rc(355, 112, 40, 43, fill: H.selHi),
-    for (var i = 1; i < 7; i++) Ln(355, 111 + 43.4 * i, 40, 1, H.rule2),
-    for (var i = 0; i < 7; i++) Hg(375, 111 + 43.4 * i + 21.7, 23, tools[i], i == 0 ? const Color(0xFFEEEEF0) : const Color(0xFFD8D8DA), bg: const Color(0xFF222223)),
-    // bottom bar
-    Rc(354, 649, 117, 33, fill: dd, border: ddB, r: 3),
-    Tx(371, 670, '100%', H.s(13, color: H.text), w: 31),
-    Hg(453, 665, 15, HG.chevronDown, const Color(0xFFDDDDDD)),
-    Rc(489, 649, 38, 33, fill: dd, border: ddB, r: 3), Hg(508, 665, 20, HG.fit, const Color(0xFFD0D0D0)),
-    Rc(534, 649, 37, 33, fill: dd, border: ddB, r: 3), Hg(552, 665, 20, HG.fit, const Color(0xFFD0D0D0)),
-    Rc(894, 649, 144, 33, fill: dd, border: ddB, r: 3),
-    Tx(905, 670, 'Camera View', H.s(13, color: H.text), w: 80),
-    Hg(1020, 665, 15, HG.chevronDown, const Color(0xFFDDDDDD)),
-    Rc(1057, 649, 37, 33, fill: dd, border: ddB, r: 3), Hg(1075.5, 665, 20, HG.corners, const Color(0xFFD0D0D0)),
-  ];
-}
+List<RI> stage() => shell_stage.stage(StageModel(body: stageBody(StageBodyModel(picture: Image.file(File(_stageArt), fit: BoxFit.fill, filterQuality: FilterQuality.medium)))));
 
 // ------------------------------------------------------------ INSPECTOR
 List<RI> inspector() {
@@ -267,153 +244,28 @@ class _InspectorPaint extends CustomPainter {
 }
 
 // ------------------------------------------------------------- TIMELINE
-// Layers, bottom to top: panel ground, alternating row ground, hierarchy, ruler,
-// major/minor time grid, temporal bodies, keyframes, playhead, waveform (a floor, not a body).
-// Row height and bar height are separate tokens; the bar leaves a fixed negative space.
-const _tlTop = 775.0, _pitch = 23.0, _rowH = 22.0, _barH = 18.0;
-const _audioTop = 959.0, _audioH = 34.0;
-const _x0 = 559.0, _unit = 92.9;
-double rowTop(int i) => i < 8 ? _tlTop + _pitch * i : _audioTop;
-double rowH(int i) => i < 8 ? _rowH : _audioH;
-double rowCy(int i) => rowTop(i) + rowH(i) / 2;
-double tx(double t) => _x0 + 0.5 + _unit * t; // time unit -> x
-
+// The face is hf/shell/timeline.dart; the fixture is the reference's own rows.
 List<RI> timeline() {
-  final items = <RI>[
-    Ln(344, 703, 1178, 1, H.rule), Ln(344, 993, 1178, 1, H.rule), Ln(344, 703, 1, 291, H.rule), Ln(1521, 703, 1, 291, H.rule),
-    Rc(345, 704, 103, 38, fill: H.sel),
-    Tx(370, 727, 'Timeline', H.s(13, w: FontWeight.w500, color: H.text), w: 54),
-    Tx(469, 727, 'Graph', H.s(13, color: H.text2), w: 34),
-    Tx(546, 727, 'Console', H.s(13, color: H.text2), w: 46),
-    Ln(345, 742, 1176, 1, H.rule),
-    Pt(_TlPaint()),
-    Ln(558, 743, 1, 250, H.rule),
-  ];
-  // ruler numerals: the same technical-readout family as the other numeric text
-  for (var i = 0; i <= 10; i++) {
-    items.add(Tx(tx(i.toDouble()) + 3, 762, '00:${i.toString().padLeft(2, '0')}', H.m(11, color: const Color(0xFFB0B0B2)), w: 33));
+  final wave = <double>[];
+  var sd = 11;
+  for (var x = 596.0; x < 1488; x += 2) {
+    sd = (sd * 1103515245 + 12345) & 0x7fffffff;
+    final env = 0.45 + 0.55 * math.sin((x - 594) / 896 * math.pi);
+    wave.add(((sd % 100) / 100 * 7 + 1.2) * env);
   }
-  // hierarchy grid: c0 = disclosure / state, c1 = glyph, c2 = label.
-  // Rows 1-6 are parallel operations of the group: one vertical metric, no per-row offset.
-  const c0 = 363.0, c1 = 393.0, c2 = 412.0;
-  final ico = [null, H.neutralN, H.scatter.n, H.stagger.n, H.along.n, H.face.n, H.attach.n];
-  final names = ['Jewel Field', 'Transform', 'Scatter', 'Stagger', 'Along Path', 'Rotation', 'Scale Variation', 'Camera', 'Audio'];
-  final fit = {'Transform': 55.0, 'Scatter': 41.0, 'Camera': 43.0, 'Audio': 33.0};
-  for (var i = 0; i < 9; i++) {
-    final cy = rowCy(i);
-    final base = cy + 4.5;
-    if (i == 0) {
-      items.add(Tx(386, base, names[i], H.s(12.5, w: FontWeight.w600, color: H.text), w: 68));
-      continue;
-    }
-    if (i <= 6) {
-      items.add(Rc(c1 - 8, cy - 8, 16, 16, fill: ico[i]!, r: 3));
-      items.add(Hg(c1, cy, 10, HG.diamond, const Color(0xFFF2F2F2)));
-    } else if (i == 7) {
-      items.add(Hg(c1, cy, 15, HG.power, H.text2));
-    } else {
-      items.add(Hg(c0, cy + 0.5, 16, HG.headphones, H.text2));
-      items.add(Hg(c1, cy + 0.5, 16, HG.lock, H.text2, bg: H.raisedHi));
-    }
-    items.add(Tx(c2, base, names[i], H.s(12.5, color: H.text2), w: fit[names[i]]));
-  }
-  items.add(Pt(_TlMarks()));
-  return items;
-}
-
-class _TlMarks extends CustomPainter {
-  @override
-  void paint(Canvas cv, Size s) {
-    final p = Paint()..color = H.text;
-    // disclosure triangles sit on c0, optically centred on the row
-    final g = rowCy(0);
-    cv.drawPath(Path()..moveTo(358, g - 4)..lineTo(368.6, g - 4)..lineTo(363.3, g + 4)..close(), p);
-    final c = rowCy(7);
-    cv.drawPath(Path()..moveTo(359, c - 5.6)..lineTo(368, c + .1)..lineTo(359, c + 5.8)..close(), p);
-  }
-  @override
-  bool shouldRepaint(_TlMarks o) => false;
-}
-
-class _TlPaint extends CustomPainter {
-  @override
-  void paint(Canvas cv, Size s) {
-    // 1 panel ground is the window colour; 2 row ground alternates and runs continuously across both columns
-    cv.drawRect(const Rect.fromLTRB(345, 743, 1521, 993), Paint()..color = H.window);
-    cv.drawRect(const Rect.fromLTRB(_x0, 743, 1521, 774), Paint()..color = H.raised);
-    cv.drawRect(const Rect.fromLTRB(345, 743, 558, 774), Paint()..color = H.raised);
-    for (var i = 0; i < 9; i++) {
-      final c = (i == 8) ? H.raised : (i.isEven ? H.raisedHi : H.raised);
-      cv.drawRect(Rect.fromLTWH(345, rowTop(i), 1521 - 345, rowH(i)), Paint()..color = c);
-    }
-    cv.drawRect(const Rect.fromLTRB(345, 774, 1521, 775), Paint()..color = H.rule);
-    // 3 time grid: major > minor > row gap. Major runs through the ruler as a tick.
-    final major = Paint()..color = const Color(0x17FFFFFF)..strokeWidth = 1;
-    final minor = Paint()..color = const Color(0x0AFFFFFF)..strokeWidth = 1;
-    final tMaj = Paint()..color = const Color(0x47FFFFFF)..strokeWidth = 1;
-    final tMin = Paint()..color = const Color(0x29FFFFFF)..strokeWidth = 1;
-    for (var i = 0; i <= 10; i++) {
-      final x = tx(i.toDouble());
-      cv.drawLine(Offset(x, 766), Offset(x, 774), tMaj);
-      cv.drawLine(Offset(x, 775), Offset(x, 993), major);
-      for (var k = 1; k < 4; k++) {
-        final xm = x + _unit * k / 4;
-        cv.drawLine(Offset(xm, 770), Offset(xm, 774), tMin);
-        cv.drawLine(Offset(xm, 775), Offset(xm, 993), minor);
-      }
-    }
-    // 4 waveform: a quiet floor
-    final cy = rowCy(8);
-    cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(594, cy - 11, 1490, cy + 11), const Radius.circular(2)), Paint()..color = const Color(0xFF1E2622));
-    final wv = Paint()..color = const Color(0x803B6D5F)..strokeWidth = 1;
-    var sd = 11;
-    for (var x = 596.0; x < 1488; x += 2) {
-      sd = (sd * 1103515245 + 12345) & 0x7fffffff;
-      final env = 0.45 + 0.55 * math.sin((x - 594) / 896 * math.pi);
-      final a = ((sd % 100) / 100 * 7 + 1.2) * env;
-      cv.drawLine(Offset(x, cy - a), Offset(x, cy + a), wv);
-    }
-    // 5 temporal bodies: a flat body, one thin connector through the keys, small diamond keys on it.
-    // One rule for every relation; a body with a single key has no connector.
-    Color mixW(Color c, double t) => Color.lerp(c, const Color(0xFFFFFFFF), t)!;
-    void node(double x, int r, Color body) {
-      cv.save();
-      cv.translate(x, rowCy(r));
-      cv.rotate(math.pi / 4);
-      final rr = Rect.fromCenter(center: Offset.zero, width: 4.8, height: 4.8);
-      cv.drawRect(rr, Paint()..color = mixW(body, .32));
-      cv.drawRect(rr, Paint()..color = mixW(body, .58)..style = PaintingStyle.stroke..strokeWidth = 1);
-      cv.restore();
-    }
-    void bar(int r, double a, double b, Color c, {List<double> keys = const []}) {
-      final top = rowTop(r) + (rowH(r) - _barH) / 2;
-      final rc = Rect.fromLTRB(a, top, b, top + _barH);
-      final clipped = a <= _x0;
-      RRect rrect(Rect q, double rad) => RRect.fromRectAndCorners(q, topLeft: Radius.circular(clipped ? 0 : rad), bottomLeft: Radius.circular(clipped ? 0 : rad), topRight: Radius.circular(rad), bottomRight: Radius.circular(rad));
-      cv.drawRRect(rrect(rc, 4), Paint()..color = c);
-      cv.drawRRect(rrect(rc.deflate(.5), 3.6), Paint()..color = mixW(c, .13)..style = PaintingStyle.stroke..strokeWidth = 1);
-      final ks = [...keys]..sort();
-      if (ks.length > 1) cv.drawLine(Offset(ks.first, rowCy(r)), Offset(ks.last, rowCy(r)), Paint()..color = const Color(0x5C000000)..strokeWidth = 1);
-      for (final k in ks) { node(k, r, c); }
-    }
-    bar(1, 625, 856, H.neutralT, keys: [632, 738, 850]);
-    bar(2, 621, 1317, H.scatter.t, keys: [770, 988]);
-    bar(3, 607, 1201, H.stagger.t, keys: [617, 778, 867, 1195]);
-    bar(4, _x0, 1281, H.along.t, keys: [632, 816]);
-    bar(5, 608, 928, H.face.t, keys: [617, 781, 906]);
-    bar(6, 682, 1143, H.attach.t, keys: [690]);
-    // a key with no body (Camera): the same diamond on the neutral row
-    cv.save();
-    cv.translate(706, rowCy(7));
-    cv.rotate(math.pi / 4);
-    final kr = Rect.fromCenter(center: Offset.zero, width: 4.8, height: 4.8);
-    cv.drawRect(kr, Paint()..color = mixW(H.raisedHi, .25));
-    cv.drawRect(kr, Paint()..color = mixW(H.raisedHi, .5)..style = PaintingStyle.stroke..strokeWidth = 1);
-    cv.restore();
-    // 6 playhead: ruler marker + thin line, above bodies and keys
-    cv.drawRect(const Rect.fromLTWH(736.4, 748, 1.3, 245), Paint()..color = H.playhead);
-    cv.drawPath(Path()..moveTo(731, 748)..lineTo(744, 748)..lineTo(744, 755)..lineTo(737.5, 762)..lineTo(731, 755)..close(), Paint()..color = H.playhead);
-  }
-  @override
-  bool shouldRepaint(_TlPaint o) => false;
+  return shell_timeline.timeline(TimelineModel(
+    ruler: [for (var i = 0; i <= 10; i++) '00:${i.toString().padLeft(2, '0')}'],
+    playhead: 736.75,
+    rows: [
+      const TlRow('Jewel Field', TlKind.group, nameW: 68, open: true),
+      TlRow('Transform', TlKind.item, chip: H.neutralN, nameW: 55, body: (625, 856, H.neutralT), keys: const [632, 738, 850]),
+      TlRow('Scatter', TlKind.item, chip: H.scatter.n, nameW: 41, body: (621, 1317, H.scatter.t), keys: const [770, 988]),
+      TlRow('Stagger', TlKind.item, chip: H.stagger.n, body: (607, 1201, H.stagger.t), keys: const [617, 778, 867, 1195]),
+      TlRow('Along Path', TlKind.item, chip: H.along.n, body: (tlX0, 1281, H.along.t), keys: const [632, 816]),
+      TlRow('Rotation', TlKind.item, chip: H.face.n, body: (608, 928, H.face.t), keys: const [617, 781, 906]),
+      TlRow('Scale Variation', TlKind.item, chip: H.attach.n, body: (682, 1143, H.attach.t), keys: const [690]),
+      const TlRow('Camera', TlKind.camera, nameW: 43, open: false, keys: [706]),
+      TlRow('Audio', TlKind.audio, nameW: 33, wave: wave),
+    ],
+  ));
 }

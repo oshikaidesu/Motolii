@@ -1,14 +1,17 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/insp/transform.dart';
-import '../../../session/editor_session.dart';
-import 'session_transform.dart';
+import '../../hf/insp/transform.dart';
+import '../../session/editor_session.dart';
+import 'transform_store.dart';
 
 /// The Transform Instrument on the real session, for the Inspector's Transform card.
 /// It follows the session's layers and selection; while nothing is selected there is nothing to show.
 class NewTransform extends StatefulWidget {
-  const NewTransform({super.key, required this.controller});
+  const NewTransform({super.key, required this.controller, this.showHeader = true});
   final EditorSession controller;
+
+  /// The layer's name and Animate above the instrument; a host that shows them itself hides these.
+  final bool showHeader;
   @override
   State<NewTransform> createState() => _NewTransformState();
 }
@@ -59,7 +62,7 @@ class _NewTransformState extends State<NewTransform> {
     if (s == null) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, box) {
-        final instrument = TransformInstrument(s, showHeader: false);
+        final instrument = TransformInstrument(s, showHeader: widget.showHeader);
         // Narrower than the Instrument's wide layout it scrolls inside a fixed height.
         return box.maxWidth < 230 ? SizedBox(height: 460, child: instrument) : instrument;
       },

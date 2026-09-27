@@ -6,7 +6,7 @@ import '../../../session/editor_session.dart';
 import '../../../session/read_model.dart';
 import 'new_effects_card.dart';
 import 'new_layout.dart';
-import 'new_transform.dart';
+import '../../../live_hf/adapters/transform.dart';
 
 /// The Inspector's own host: identity header, and the card list (Transform — World inside it, Layout, Effects) —
 /// the New face for the header/scroll/card chrome Classic's `InspectorPanel` draws itself. Text, Fill and Matte
@@ -94,7 +94,7 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
             key: const ValueKey('new-inspector-scroll'),
             padding: const EdgeInsets.all(10),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              NewTransform(controller: c),
+              NewTransform(controller: c, showHeader: false),
               if (_hasLayout(layer)) ...[
                 const SizedBox(height: 10),
                 Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('LAYOUT', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),

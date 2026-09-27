@@ -3,12 +3,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/browser_face.dart';
-import '../../../hf/bp/catalog_io.dart';
-import '../../../hf/bp/effects.dart';
-import '../../../hf/bp/seat.dart';
-import '../../../hf/bp/things.dart';
-import '../../../session/editor_session.dart';
+import '../../hf/bp/browser_face.dart';
+import '../../hf/bp/catalog_io.dart';
+import '../../hf/bp/effects.dart';
+import '../../hf/bp/seat.dart';
+import '../../hf/bp/things.dart';
+import '../../session/editor_session.dart';
 
 /// The reference's own catalogue: every tile, its family, face and order. The Browser draws this; Live only says which
 /// tile does what.

@@ -1,10 +1,10 @@
 
 import 'package:flutter/widgets.dart';
 
-import '../../../foundation/theme.dart';
-import '../../../hf/insp/transform_model.dart';
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../hf/shell/menu.dart';
+import '../../hf/insp/transform_model.dart';
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 
 /// The Transform Instrument's store over the real session: it reads the layers' rows the way the Classic Inspector
 /// does and writes through the same operations (previewProperties, commitPreview, toggleKey, anchor, setAttrs).
@@ -184,11 +184,12 @@ class SessionTransformStore extends TransformStore {
   Future<void> menu(BuildContext context, String id, int? axis, Offset at) async {
     final row = this.row(id);
     final driven = row['link'] is Map;
-    final chosen = await showEditorMenu<String>(context, at, [
-      EditorMenuItem<String>(value: 'relate', enabled: c.supports('relate') && !frozen, child: const Text('Relation…')),
-      if (driven || (row['drives'] ?? 0) > 0) const EditorMenuItem<String>(value: 'focus', child: Text('Show relation')),
-      if (driven) EditorMenuItem<String>(value: 'unrelate', enabled: c.supports('unrelate') && !frozen, child: const Text('Remove relation')),
-    ]);
+    final canRelate = c.supports('relate') && !frozen, canUnrelate = c.supports('unrelate') && !frozen;
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 180, 0), [
+      ('relate', 'Relation…'),
+      if (driven || (row['drives'] ?? 0) > 0) ('focus', 'Show relation'),
+      if (driven) ('unrelate', 'Remove relation'),
+    ], disabled: {if (!canRelate) 'relate', if (!canUnrelate) 'unrelate'});
     if (chosen == 'relate') {
       final label = '${row['label'] ?? id}${axis == null ? '' : ' ${const ['X', 'Y', 'Z'][axis]}'}';
       c.relationDraft.value = {'layer': activeId, 'name': active.name, 'property': id, 'component': axis ?? 0, 'label': label};
