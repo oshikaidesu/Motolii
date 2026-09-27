@@ -30,6 +30,7 @@ class _LiveShellState extends State<LiveShell> {
   late EffectScene scene;
   LiveWorkspace? workspace;
   Timer? _dockSave;
+  final detached = <String, String>{};
   late final keys = LiveKeys(c, () => context);
 
   @override
@@ -43,6 +44,7 @@ class _LiveShellState extends State<LiveShell> {
         workspace?.dock.activate(name, near: 'Stage');
       }
     };
+    c.windowClosed = _windowClosed;
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);
     };
@@ -53,7 +55,7 @@ class _LiveShellState extends State<LiveShell> {
     scene = await EffectScene.build();
     await c.initialize();
     if (!mounted) return;
-    workspace = LiveWorkspace(c: c, scene: scene);
+    workspace = LiveWorkspace(c: c, scene: scene, onDetach: _detach);
     try {
       final settings = EditorSession.map(await c.native('readSettings'));
       workspace!.dock.restore(settings['hfWorkspace']);
@@ -78,6 +80,22 @@ class _LiveShellState extends State<LiveShell> {
     stdout.writeln('MOTOLII_SHOT ${img.width}x${img.height} $_shot');
   }
 
+  Future<void> _detach(String name) async {
+    if (c.windowInfo['main'] == false || workspace == null || !workspace!.dock.isOpen(name)) return;
+    try {
+      final info = EditorSession.map(await c.native('openPanelWindow', {'panels': [name]}));
+      detached['${info['id']}'] = name;
+      workspace!.dock.close(name);
+    } catch (e) {
+      c.error.value = '$e';
+    }
+  }
+
+  void _windowClosed(Map<String, dynamic> info) {
+    final name = detached.remove('${info['id']}');
+    if (name != null) workspace?.dock.activate(name);
+  }
+
   void _workspaceChanged() {
     _dockSave?.cancel();
     _dockSave = Timer(const Duration(milliseconds: 350), () {
@@ -94,7 +112,17 @@ class _LiveShellState extends State<LiveShell> {
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
+  Widget build(BuildContext context) {
+    if (ready && c.windowInfo['main'] == false) {
+      final names = (c.windowInfo['panels'] as List? ?? const []).whereType<String>();
+      final name = names.isEmpty ? null : names.first;
+      final panel = name == null ? null : workspace?.dock.defs[name];
+      return ColoredBox(
+        color: H.window,
+        child: panel?.build() ?? const SizedBox.expand(),
+      );
+    }
+    return Focus(
     autofocus: true,
     onKeyEvent: keys.handle,
     child: ColoredBox(
@@ -112,4 +140,5 @@ class _LiveShellState extends State<LiveShell> {
             ),
     ),
   );
+  }
 }
