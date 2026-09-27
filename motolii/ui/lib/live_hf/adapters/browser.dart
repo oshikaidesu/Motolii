@@ -51,9 +51,11 @@ typedef LiveBinding = (String op, Map<String, dynamic> args);
 /// it. Effects: the reference tiles bound by name, and every other effect the host has (placement copies included),
 /// drawn by the host's own snapshot. A tile with no binding keeps its face and does nothing.
 class LiveBrowser extends StatefulWidget {
-  const LiveBrowser({super.key, required this.c, required this.scene});
+  const LiveBrowser({super.key, required this.c, required this.scene, this.fixedTab});
   final EditorSession c;
   final EffectScene scene;
+  /// When set, this Browser surface is one real dock panel instead of an internal tab stack.
+  final int? fixedTab;
   @override
   State<LiveBrowser> createState() => _LiveBrowserState();
 }
@@ -73,7 +75,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
   ];
   static final Catalog _reference = loadCatalog(_thingsDir);
   EditorSession get c => widget.c;
-  int tab = 0;
+  late int tab = widget.fixedTab ?? 0;
   late final seat = _LiveSeat(c, widget.scene);
   final _users = <String, LiveBrowserUser>{};
   late Catalog catalog;
@@ -313,6 +315,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
         BrowserModel(
           catalog: catalog,
           tab: tab,
+          tabs: widget.fixedTab == null ? browserTabs : [browserTabs[tab]],
           user: user.views,
           scene: widget.scene,
           colors: _colors(),
@@ -340,7 +343,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
                   user: _user('Media'),
                 )
               : null,
-          onTab: (i) => setState(() => tab = i),
+          onTab: widget.fixedTab == null ? (i) => setState(() => tab = i) : null,
         ),
       ),
     );
