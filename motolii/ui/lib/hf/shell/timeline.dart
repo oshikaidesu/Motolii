@@ -3,6 +3,8 @@
 // body). Row height and bar height are separate tokens; the bar leaves a fixed negative space. What the rows say, where
 // bodies and keys sit and where the playhead is come from a [TimelineModel], in the reference's own x.
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
 import 'place.dart';
@@ -17,7 +19,7 @@ double tlX(double t) => tlX0 + 0.5 + tlUnit * t;
 enum TlKind { group, item, camera, audio }
 
 class TlRow {
-  const TlRow(this.name, this.kind, {this.chip, this.body, this.keys = const [], this.nameW, this.open, this.wave});
+  const TlRow(this.name, this.kind, {this.chip, this.body, this.keys = const [], this.nameW, this.open, this.wave, this.selected = false, this.pickedKeys = const []});
   final String name;
   final TlKind kind;
 
@@ -36,10 +38,17 @@ class TlRow {
 
   /// Audio: the waveform's half-heights, one per 2 px from x 596.
   final List<double>? wave;
+
+  /// The row is selected; these of its keys are.
+  final bool selected;
+  final List<double> pickedKeys;
 }
 
+/// What a drag on a body changes: where it sits, or one of its ends.
+enum TlGrip { body, start, end }
+
 class TimelineModel {
-  const TimelineModel({required this.rows, required this.ruler, required this.playhead, this.onSeek, this.onRow});
+  const TimelineModel({required this.rows, required this.ruler, required this.playhead, this.onSeek, this.onRow, this.onKey, this.onGrip, this.onKeysDrag, this.onScroll});
 
   /// Up to eight rows at the pitch, then audio rows in the floor band.
   final List<TlRow> rows;
@@ -53,6 +62,18 @@ class TimelineModel {
 
   /// A press on a row's name.
   final ValueChanged<int>? onRow;
+
+  /// A press on a key of row [row] at x (with Shift: add to the picked keys).
+  final void Function(int row, double x, bool add)? onKey;
+
+  /// A drag on a body or one of its ends: dx so far; [done] true when released, null when cancelled.
+  final void Function(int row, TlGrip grip, double dx, bool? done)? onGrip;
+
+  /// A drag starting on a picked key: dx so far; [done] as above.
+  final void Function(double dx, bool? done)? onKeysDrag;
+
+  /// A scroll over the tracks: dx/dy, and whether it zooms (Cmd/Ctrl held).
+  final void Function(double dx, double dy, bool zoom)? onScroll;
 }
 
 double _rowTop(int i, TlRow r) => r.kind == TlKind.audio ? tlAudioTop : tlTop + tlPitch * i;
@@ -96,13 +117,8 @@ List<RI> timeline(TimelineModel m) {
   }
   items.add(Pt(_TlMarks(m)));
   // hit areas over what is drawn above; with no operation they do nothing
-  final seek = m.onSeek, row = m.onRow;
-  items.add(Wd(tlX0, 743, tlRight - tlX0, 250, GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTapDown: seek == null ? null : (d) => seek(tlX0 + d.localPosition.dx),
-    onHorizontalDragUpdate: seek == null ? null : (d) => seek(tlX0 + d.localPosition.dx),
-    child: const SizedBox.expand(),
-  )));
+  items.add(Wd(tlX0, 743, tlRight - tlX0, 250, _Tracks(m)));
+  final row = m.onRow;
   for (final (i, r) in m.rows.indexed) {
     items.add(Wd(345, _rowTop(i, r), 213, _rowH(r), GestureDetector(behavior: HitTestBehavior.opaque, onTap: row == null ? null : () => row(i), child: const SizedBox.expand())));
   }
@@ -144,6 +160,9 @@ class _TlPaint extends CustomPainter {
       final c = (i == 8) ? H.raised : (i.isEven ? H.raisedHi : H.raised);
       final top = i < 8 ? tlTop + tlPitch * i : tlAudioTop;
       cv.drawRect(Rect.fromLTWH(345, top, 1521 - 345, i < 8 ? tlRowH : tlAudioH), Paint()..color = c);
+    }
+    for (final (i, r) in m.rows.indexed) {
+      if (r.selected) cv.drawRect(Rect.fromLTWH(345, _rowTop(i, r), 1521 - 345, _rowH(r)), Paint()..color = H.sel);
     }
     cv.drawRect(const Rect.fromLTRB(345, 774, 1521, 775), Paint()..color = H.rule);
     // 3 time grid: major > minor > row gap. Major runs through the ruler as a tick.
@@ -212,7 +231,7 @@ class _TlPaint extends CustomPainter {
       final ks = [...r.keys]..sort();
       if (ks.length > 1) cv.drawLine(Offset(ks.first, cy), Offset(ks.last, cy), Paint()..color = const Color(0x5C000000)..strokeWidth = 1);
       for (final k in ks) {
-        node(k, cy, c);
+        node(k, cy, r.pickedKeys.contains(k) ? mixW(c, .75) : c);
       }
     }
     // 6 playhead: ruler marker + thin line, above bodies and keys
@@ -223,4 +242,100 @@ class _TlPaint extends CustomPainter {
 
   @override
   bool shouldRepaint(_TlPaint o) => o.m != m;
+}
+
+/// The tracks' pointer: a press on a key picks it, a drag from a picked key moves the picked keys, a drag on a body
+/// or one of its ends retimes it, anything else scrubs; a scroll pans, with Cmd/Ctrl it zooms.
+class _Tracks extends StatefulWidget {
+  const _Tracks(this.m);
+  final TimelineModel m;
+  @override
+  State<_Tracks> createState() => _TracksState();
+}
+
+class _TracksState extends State<_Tracks> {
+  TimelineModel get m => widget.m;
+  (int, TlGrip)? _grip;
+  bool _keys = false;
+  double _from = 0;
+
+  int? _rowAt(double y) {
+    for (final (i, r) in m.rows.indexed) {
+      final t = _rowTop(i, r) - 743;
+      if (y >= t && y < t + _rowH(r)) return i;
+    }
+    return null;
+  }
+
+  double? _keyAt(int row, double x) {
+    for (final k in m.rows[row].keys) {
+      if ((k - x).abs() <= 5) return k;
+    }
+    return null;
+  }
+
+  void _down(Offset p) {
+    final x = tlX0 + p.dx, row = _rowAt(p.dy);
+    _grip = null;
+    _keys = false;
+    _from = x;
+    if (row != null) {
+      final k = _keyAt(row, x);
+      if (k != null) {
+        final shift = HardwareKeyboard.instance.isShiftPressed;
+        if (!m.rows[row].pickedKeys.contains(k)) m.onKey?.call(row, k, shift);
+        _keys = m.onKeysDrag != null;
+        return;
+      }
+      final b = m.rows[row].body;
+      if (b != null && x >= b.$1 - 4 && x <= b.$2 + 4 && m.onGrip != null) {
+        _grip = (row, (x - b.$1).abs() <= 5 ? TlGrip.start : ((x - b.$2).abs() <= 5 ? TlGrip.end : TlGrip.body));
+        m.onRow?.call(row);
+        return;
+      }
+    }
+    m.onSeek?.call(x);
+  }
+
+  void _move(Offset p) {
+    final x = tlX0 + p.dx;
+    if (_keys) {
+      m.onKeysDrag?.call(x - _from, false);
+    } else if (_grip != null) {
+      m.onGrip?.call(_grip!.$1, _grip!.$2, x - _from, false);
+    } else {
+      m.onSeek?.call(x);
+    }
+  }
+
+  void _up(double x, {bool cancel = false}) {
+    if (_keys) m.onKeysDrag?.call(x - _from, cancel ? null : true);
+    if (_grip != null) m.onGrip?.call(_grip!.$1, _grip!.$2, x - _from, cancel ? null : true);
+    _grip = null;
+    _keys = false;
+  }
+
+  double _last = 0;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          _last = tlX0 + e.localPosition.dx;
+          _down(e.localPosition);
+        },
+        onPointerMove: (e) {
+          _last = tlX0 + e.localPosition.dx;
+          _move(e.localPosition);
+        },
+        onPointerUp: (_) => _up(_last),
+        onPointerCancel: (_) => _up(_last, cancel: true),
+        onPointerSignal: (e) {
+          if (e is PointerScrollEvent && m.onScroll != null) {
+            final k = HardwareKeyboard.instance;
+            m.onScroll!(e.scrollDelta.dx, e.scrollDelta.dy, k.isMetaPressed || k.isControlPressed);
+          }
+        },
+        child: const SizedBox.expand(),
+      );
 }
