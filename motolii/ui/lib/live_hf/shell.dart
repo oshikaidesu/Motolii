@@ -9,6 +9,7 @@ import '../hf/shell/place.dart' show H;
 import '../hf/shell/shell_face.dart';
 import '../session/editor_session.dart';
 import 'adapters/browser.dart';
+import 'adapters/document.dart';
 import 'adapters/stage.dart';
 import 'adapters/timeline.dart';
 import 'adapters/top.dart';
@@ -34,6 +35,10 @@ class _LiveShellState extends State<LiveShell> {
   @override
   void initState() {
     super.initState();
+    c.confirmClose = () => mayReplace(context, c);
+    c.filesDropped = (paths) {
+      if (paths.isNotEmpty) c.importPaths(paths);
+    };
     _initialize();
   }
 
