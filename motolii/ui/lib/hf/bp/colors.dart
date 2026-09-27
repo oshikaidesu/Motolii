@@ -206,8 +206,8 @@ class _ColorsPanelState extends State<ColorsPanel>
   SearchCapability? get injectedSearch => widget.search;
   @override
   ClassifyCapability? get injectedClassify => widget.classify;
-  late final List<Sw> items = widget.items ?? colorsBase();
-  late final groups = colorGroups(items);
+  List<Sw> get items => widget.items ?? colorsBase();
+  List<List<String>> get groups => colorGroups(items);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
