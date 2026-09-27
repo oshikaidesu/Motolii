@@ -32,16 +32,23 @@ Not authoritative: fixture content, exact text/values, the artwork, whether a ca
 
 ## Seats
 
-| | Role | Seat holds | Not | Dock unit |
-|---|---|---|---|---|
-| **Browser** | discover · choose · place | surfaces: Create, Effects, Colors, Fonts, Media (Leaf tabs) | each surface as its own workspace concept | the seat |
-| **Stage** | direct manipulation · view | surfaces: composition(s); view mode: Camera / User (a mode, not a tab) | Camera as an independent tool | open |
-| **Inspector** | the selected thing's face | instruments chosen by selection: Transform, Layout, Camera, Text, Fill, Matte, effect cards (stacked, not tabbed) | a Desk; a tab group for desks | open |
-| **Desk** | focused relationship / operation workspace | tools: Blend, Depth, Ease, History, Notes; opened from the value being edited, then closed | Inspector instruments; a permanent seat (Home has none) | open |
-| **Timeline** | time structure · editing | surfaces: Timeline, Graph, Console (the seat's own header) | Graph/Console as independent Dock panels | open |
+| | Role | Default seat holds | Not |
+|---|---|---|---|
+| **Browser** | discover · choose · place | panels: Create, Effects, Colors, Fonts, Media | each surface as its own workspace concept |
+| **Stage** | direct manipulation · view | panel: Stage; composition(s); view **mode** Camera / User (a mode, not a panel) | Camera as an independent tool |
+| **Inspector** | the selected thing's face | panel: Inspector; **instruments** chosen by selection: Transform, Layout, Camera, Text, Fill, Matte, effect cards (stacked, not panels) | a Desk; a tab group for desks |
+| **Desk** | focused relationship / operation workspace | **contextual panels**: Blend, Depth, Ease, History, Notes — opened from the value being edited | Inspector instruments; part of the default grouping |
+| **Timeline** | time structure · editing | panels: Timeline, Graph, Console | — |
 
 Stage PRESERVE: production Stage interaction. Timeline PRESERVE: its full production input vocabulary.
-"open" = not decided; do not decide it in code.
+
+### Dock unit (decided 2026-09-28)
+
+**Default is composed. Freedom is available. Identity travels.** Panels may travel; seats are current groupings; Product Home is the default grouping.
+- Every **panel** can leave its seat, join another seat as a tab, split, or detach to its own window, and keeps its face, identity, controls and semantic state wherever it goes. A seat is only the housing that groups panels now; pulling a panel out may create one, dropping onto a seat adds a tab. Reset Layout returns to the Home grouping.
+- Not everything visible is a panel. Instruments (Inspector) and modes (Stage's Camera View) are not promoted to panels for Dock's sake — that is a Decision-boundary change.
+- Contextual panels: *where they open from* keeps its product meaning; *once open* they travel like any panel. They are never part of the default grouping.
+- The Dock owns placement and travel, once, for every panel (no per-surface mechanics). Each surface owns its meaning and content. The tab grammar's shared primitive covers only the visual mechanics that change for the same reason (Browser, Dock, Timeline, composition tabs), not their navigation.
 
 ## Decision boundary
 
