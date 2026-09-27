@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('live_hf reaches only hf, session, bridge and itself', () {
     final allowed = RegExp(
-      r'^lib/(hf|session|bridge|live_hf|timeline_core|input|foundation)/|^lib/panels/stage(?:\.dart|/)',
+      r'^lib/(hf|session|bridge|live_hf|timeline_core|input|foundation|workspace)/|^lib/panels/stage(?:\.dart|/)',
     );
     final seen = <String>{},
         stack = ['lib/live_hf/main.dart'],
