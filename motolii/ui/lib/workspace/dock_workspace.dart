@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/glyphs.dart' as legacy;
 import '../hf/bp/common.dart' as tab;
 import '../hf/glyphs.dart' show HG;
+import '../hf/shell/menu.dart' show showHfMenu;
 
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
 /// (the same glyph a Browser tab would use), and how to build its body.
@@ -39,38 +39,59 @@ class DockWorkspace {
   final ValueNotifier<int> _picked = ValueNotifier(0);
 
   /// The dock itself, wired so a panel can tell whether it is in front. Use this, not a bare `Docking`.
-  Widget view() => Docking(
-    layout: layout,
-    onItemSelection: (_) => _picked.value++,
-    maximizableItem: false,
-    maximizableTab: false,
-    maximizableTabsArea: false,
+  Widget view() => Stack(
+    key: _viewKey,
+    fit: StackFit.expand,
+    children: [
+      Positioned.fill(
+        child: Docking(
+          layout: layout,
+          onItemSelection: (_) => _picked.value++,
+          maximizableItem: false,
+          maximizableTab: false,
+          maximizableTabsArea: false,
+        ),
+      ),
+      // While a panel travels: every seat's strip is a place to join it as a tab. It lies above `docking`'s own edge
+      // zones (which cover the whole seat, strip included) and exists only during the drag.
+      ValueListenableBuilder<bool>(
+        valueListenable: _dragging,
+        builder: (context, dragging, _) => !dragging ? const SizedBox.shrink() : Positioned.fill(child: _stripTargets()),
+      ),
+    ],
   );
+
+  final _viewKey = GlobalKey();
+  final ValueNotifier<bool> _dragging = ValueNotifier(false);
+
+  Widget _stripTargets() {
+    final origin = (_viewKey.currentContext?.findRenderObject() as RenderBox?)?.localToGlobal(Offset.zero) ?? Offset.zero;
+    return Stack(children: [
+      for (final id in defs.keys)
+        if (isOpen(id) && isShown(id))
+          if (rectOf(id) case final r?)
+            Positioned(
+              left: r.left - origin.dx,
+              top: r.top - origin.dy,
+              width: r.width,
+              height: 30,
+              child: DragTarget<DraggableData>(
+                onWillAcceptWithDetails: (d) => d.data.tabData.value is DockingItem && (d.data.tabData.value as DockingItem).id != id,
+                onAcceptWithDetails: (d) => _join(d.data.tabData.value as DockingItem, id),
+                builder: (context, over, _) => DecoratedBox(
+                  decoration: BoxDecoration(color: over.isEmpty ? const Color(0x00000000) : const Color(0x33F0F0F0)),
+                ),
+              ),
+            ),
+    ]);
+  }
 
   DockingItem item(String id, {double? weight}) {
     final def = defs[id]!;
-    final it = DockingItem(
+    return DockingItem(
       id: id,
       name: def.title,
-      // `docking`'s own "×" is separate from our menu's Close item above and defaults to
-      // shown; a panel set that never closes (`allowClose: false`) also does not need it,
-      // and removing it frees the width a narrow tab strip needs for its own hidden-tabs
-      // button (with it present, five tabs in one seat had no room left for that button).
       closable: allowClose,
-      // The Browser family's own tab glyph (hf's HG set), not a borrowed icon font: one tab
-      // language for every seat, Browser and Dock alike.
-      leading: def.glyph == null
-          ? null
-          : (context, status) => SizedBox(
-                width: 15,
-                height: 15,
-                child: CustomPaint(
-                  painter: tab.HfTabGlyph(
-                    def.glyph!,
-                    status == TabStatus.selected ? const Color(0xFFF0F0F0) : tab.kMuted,
-                  ),
-                ),
-              ),
       // A panel that decides whether it is on screen with Visibility.of (the Stage does, to hand a native surface back)
       // needs the dock to say so: a hidden tab is offstage but stays mounted.
       widget: KeyedSubtree(
@@ -78,14 +99,7 @@ class DockWorkspace {
         child: Builder(
           builder: (_) => ListenableBuilder(
             listenable: Listenable.merge([layout, _picked]),
-            builder: (context, child) => Visibility(
-              visible: isShown(id),
-              maintainState: true,
-              child: LayoutBuilder(builder: (context, c) {
-                _reportWidth(id, c.maxWidth);
-                return child!;
-              }),
-            ),
+            builder: (context, child) => Visibility(visible: isShown(id), maintainState: true, child: _seat(id, child!)),
             child: def.build(),
           ),
         ),
@@ -93,65 +107,88 @@ class DockWorkspace {
       weight: weight,
       minimalSize: def.minSize,
       keepAlive: true,
-      buttons: [
-        if (onDetach != null)
-          TabButton(
-            icon: IconProvider.data(legacy.Glyph.more_horiz),
-            toolTip: 'Panel',
-            menuBuilder: (context) => [
-              TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
-              if (allowClose) TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
-              TabbedViewMenuItem(text: 'Reset Layout', onSelection: reset),
-            ],
-          ),
-      ],
     );
-    _fullTitle[id] = def.title;
-    return it;
   }
 
-  /// The Browser Leaf's own rule (`hf/bp/common.dart`): identity travels, fold don't miniaturize. A tab strip
-  /// too narrow for every title keeps the front tab's word and lets the rest fall back to their icon — nothing
-  /// shrinks its type to fit. The strip's width is the same as its (visible) content's, so the content's own
-  /// layout tells us it, one seat at a time.
-  final Map<String, String> _fullTitle = {};
-  final Map<DockingTabs, double> _seatWidth = {};
-  final Set<DockingTabs> _relabelPending = {};
-  void _reportWidth(String id, double width) {
+  /// The unit of the workspace is the seat, the Browser's own (`hf/bp/common.dart` Leaf): panels sharing a seat,
+  /// a strip only when there is more than one, the front tab keeps its word and the rest fold to their glyph, and
+  /// a stacked panel's header drops the name its tab already shows. `docking` keeps layout, split, resize and drop
+  /// only (its own tab strip is off in `hfDockTabs`). Every panel of a seat draws the seat's strip; only the front
+  /// one is on screen.
+  Widget _seat(String id, Widget body) {
     final tabs = layout.findDockingTabsWithItem(id);
-    if (tabs == null) return;
-    // Re-run on every build of the visible (front) tab: a width change needs it, but so does a bare tab switch
-    // at the same width — the newly-front tab must pick up its own name back from whichever tab folded to make
-    // room for it before.
-    _seatWidth[tabs] = width;
-    if (_relabelPending.add(tabs)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _relabelPending.remove(tabs);
-        _relabel(tabs);
-      });
-    }
+    final ids = tabs == null ? [id] : [for (var i = 0; i < tabs.childrenCount; i++) tabs.childAt(i).id as String];
+    return tab.Leaf(
+      tabs: [for (final p in ids) tab.TabSpec(defs[p]!.title, defs[p]!.glyph ?? HG.list)],
+      active: tabs == null ? 0 : math.min(tabs.selectedIndex, ids.length - 1),
+      onTab: tabs == null
+          ? null
+          : (i) {
+              tabs.selectedIndex = i;
+              layout.rebuild();
+              _picked.value++;
+            },
+      tabWrap: (i, t) => _handle(ids[i], t),
+      body: body,
+    );
   }
 
-  void _relabel(DockingTabs tabs) {
-    final width = _seatWidth[tabs];
-    if (width == null) return;
-    final ids = [for (var i = 0; i < tabs.childrenCount; i++) tabs.childAt(i).id as String];
-    if (ids.isEmpty) return;
-    final selected = ids[tabs.selectedIndex.clamp(0, ids.length - 1)];
-    final need = ids.fold<double>(0, (a, id) => a + tab.Leaf.labelled(_fullTitle[id] ?? id));
-    final fits = need <= width - 30 && width >= 110;
-    var changed = false;
-    for (final id in ids) {
-      final it = layout.findDockingItem(id);
-      if (it == null) continue;
-      final compact = !fits && (id != selected || width < 110);
-      final wanted = compact ? '' : (_fullTitle[id] ?? id);
-      if (it.name != wanted) {
-        it.name = wanted;
-        changed = true;
+  /// A tab is also the panel's handle: drag it to another seat or a seat's edge (`docking`'s own drop zones, fed the
+  /// same drag data its own tabs would give), right click for the panel menu.
+  /// A tab is also the panel's handle and a place to land: drag it to a seat's edge (`docking`'s own drop zones, fed
+  /// the drag data its own tabs would give) to split, onto a seat's strip to join that seat (`_stripTargets`); right
+  /// click for the panel menu. The same for every panel — travel is the Dock's, not a surface's.
+  Widget _handle(String id, Widget tabFace) {
+    final item = layout.findDockingItem(id);
+    if (item == null) return tabFace;
+    final data = TabData(value: item, text: defs[id]!.title);
+    return Draggable<DraggableData>(
+      data: DraggableData(TabbedViewController([data]), data),
+      feedback: Opacity(opacity: .85, child: tabFace),
+      childWhenDragging: Opacity(opacity: .4, child: tabFace),
+      onDragStarted: () => _dragging.value = true,
+      onDragEnd: (_) => _dragging.value = false,
+      child: Builder(
+        builder: (context) => GestureDetector(
+          onSecondaryTapDown: (e) => _menu(context, id, e.globalPosition),
+          child: tabFace,
+        ),
+      ),
+    );
+  }
+
+  /// [moving] joins the seat [onto] is in, just before it.
+  void _join(DockingItem moving, String onto) {
+    final tabs = layout.findDockingTabsWithItem(onto);
+    if (tabs != null && tabs == layout.findDockingTabsWithItem(moving.id)) return; // already in that seat
+    final DropArea target = tabs ?? layout.findDockingItem(onto)!;
+    layout.moveItem(draggedItem: moving, targetArea: target, dropIndex: tabs?.childrenCount ?? 1);
+    activate(moving.id as String);
+  }
+
+  /// Another panel of the seat [id] is in, else a panel beside it: where it goes back to after a detached window.
+  String? neighbour(String id) {
+    final tabs = layout.findDockingTabsWithItem(id);
+    if (tabs != null) {
+      for (var i = 0; i < tabs.childrenCount; i++) {
+        if (tabs.childAt(i).id != id) return tabs.childAt(i).id as String;
       }
     }
-    if (changed) layout.rebuild();
+    return null;
+  }
+
+  Future<void> _menu(BuildContext context, String id, Offset at) async {
+    final open = [for (final d in defs.keys) if (!isOpen(d)) d];
+    final pick = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 0, 0), [
+      if (onDetach != null) ('detach', 'Detach'),
+      if (allowClose) ('close', 'Close'),
+      for (final d in open) ('open:$d', 'Open ${defs[d]!.title}'),
+      ('reset', 'Reset Layout'),
+    ]);
+    if (pick == 'detach') onDetach?.call(id);
+    if (pick == 'close') close(id);
+    if (pick == 'reset') reset();
+    if (pick != null && pick.startsWith('open:')) activate(pick.substring(5), near: id);
   }
 
   bool isOpen(String id) => layout.findDockingItem(id) != null;
@@ -168,7 +205,7 @@ class DockWorkspace {
   }
 
   /// Show a panel: select its tab if it is docked, otherwise reopen it beside [near].
-  void activate(String id, {String near = 'Stage'}) {
+  void activate(String id, {String near = 'Stage', DropPosition side = DropPosition.right}) {
     if (!defs.containsKey(id)) return;
     final tabs = layout.findDockingTabsWithItem(id);
     if (tabs != null) {
@@ -183,11 +220,11 @@ class DockWorkspace {
     if (nearTabs != null) {
       // Beside a panel that is one tab of a strip: join that strip.
       layout.addItemOn(newItem: item(id), targetArea: nearTabs, dropIndex: nearTabs.childrenCount);
-      activate(id, near: near); // now docked: bring its tab to the front
+      activate(id, near: near, side: side); // now docked: bring its tab to the front
       return;
     }
     final anchor = layout.findDockingItem(near) ?? layout.findDockingItem(defs.keys.first)!;
-    layout.addItemOn(newItem: item(id), targetArea: anchor, dropPosition: DropPosition.right);
+    layout.addItemOn(newItem: item(id), targetArea: anchor, dropPosition: side);
   }
 
   void close(String id) => layout.removeItemByIds([id]);

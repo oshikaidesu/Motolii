@@ -64,6 +64,7 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
     final cols = math.max(1, ((w - pad * 2 + gap) / (minTile * scale + gap)).floor());
     BrowserSeatScope.of(context)?.shows([for (final e in sections.values) ...e], cols);
     final tileW = (w - pad * 2 - gap * (cols - 1)) / cols;
+    if (tileW <= 0) return const SizedBox.shrink(); // a seat squeezed to nothing (a Dock split) shows nothing, not an error
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [

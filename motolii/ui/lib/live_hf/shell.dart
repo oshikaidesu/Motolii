@@ -1,3 +1,4 @@
+import 'package:docking/docking.dart' show DropPosition;
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -30,7 +31,7 @@ class _LiveShellState extends State<LiveShell> {
   late EffectScene scene;
   LiveWorkspace? workspace;
   Timer? _dockSave;
-  final detached = <String, String>{};
+  final detached = <String, (String, String?)>{};
   late final keys = LiveKeys(c, () => context);
 
   @override
@@ -41,7 +42,8 @@ class _LiveShellState extends State<LiveShell> {
       if (placement == 'hide') {
         workspace?.dock.close(name);
       } else {
-        workspace?.dock.activate(name, near: 'Stage');
+        // Contextual panels open beside the Inspector, where the desk sat before the Dock, as their own seat.
+        workspace?.dock.activate(name, near: 'Inspector', side: DropPosition.bottom);
       }
     };
     c.windowClosed = _windowClosed;
@@ -84,7 +86,7 @@ class _LiveShellState extends State<LiveShell> {
     if (c.windowInfo['main'] == false || workspace == null || !workspace!.dock.isOpen(name)) return;
     try {
       final info = EditorSession.map(await c.native('openPanelWindow', {'panels': [name]}));
-      detached['${info['id']}'] = name;
+      detached['${info['id']}'] = (name, workspace!.dock.neighbour(name));
       workspace!.dock.close(name);
     } catch (e) {
       c.error.value = '$e';
@@ -92,8 +94,8 @@ class _LiveShellState extends State<LiveShell> {
   }
 
   void _windowClosed(Map<String, dynamic> info) {
-    final name = detached.remove('${info['id']}');
-    if (name != null) workspace?.dock.activate(name);
+    final back = detached.remove('${info['id']}');
+    if (back != null) workspace?.dock.activate(back.$1, near: back.$2 ?? 'Stage');
   }
 
   void _workspaceChanged() {

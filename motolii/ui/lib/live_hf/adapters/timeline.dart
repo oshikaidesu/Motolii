@@ -298,6 +298,7 @@ class _LiveTimelineState extends State<LiveTimeline>
         child: RF(
           timeline(
             TimelineModel(
+            tabs: false,
               rows: _shown,
               ruler: [for (var i = 0; i <= 10; i++) _label(i)],
               playhead: _x(frame),

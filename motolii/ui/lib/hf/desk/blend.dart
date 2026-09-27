@@ -236,8 +236,8 @@ class _BlendDeskState extends State<BlendDesk> {
           key: ValueKey('blend-mark-$i'),
           onTap: () => _pick(i),
           child: Container(
-            width: w,
-            height: h,
+            width: w < 0 ? 0 : w,
+            height: h < 0 ? 0 : h,
             decoration: BoxDecoration(color: i == sel ? kRaisedHi : null, border: i == sel ? Border.all(color: kYellow, width: 2) : null, borderRadius: BorderRadius.circular(6)),
             padding: const EdgeInsets.all(4),
             child: CustomPaint(painter: ResultPainter(i)),

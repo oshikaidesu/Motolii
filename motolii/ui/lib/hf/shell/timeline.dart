@@ -103,7 +103,12 @@ class TimelineModel {
     this.onCoreLabelMove,
     this.onCoreLabelUp,
     this.onCoreLabelCancel,
+    this.tabs = true,
   });
+
+  /// The seat's Timeline / Graph / Console labels, drawn here in proto_hf's fixed frame. Off in the Dock, where the
+  /// seat strip (the shared tab primitive) names them.
+  final bool tabs;
 
   /// Up to eight rows at the pitch, then audio rows in the floor band.
   final List<TlRow> rows;
@@ -159,10 +164,12 @@ List<RI> timeline(TimelineModel m) {
     Ln(344, 993, 1178, 1, H.rule),
     Ln(344, 703, 1, 291, H.rule),
     Ln(1521, 703, 1, 291, H.rule),
-    Rc(345, 704, 103, 38, fill: H.sel),
-    Tx(370, 727, 'Timeline', H.s(13, w: FontWeight.w500, color: H.text), w: 54),
-    Tx(469, 727, 'Graph', H.s(13, color: H.text2), w: 34),
-    Tx(546, 727, 'Console', H.s(13, color: H.text2), w: 46),
+    if (m.tabs) ...[
+      Rc(345, 704, 103, 38, fill: H.sel),
+      Tx(370, 727, 'Timeline', H.s(13, w: FontWeight.w500, color: H.text), w: 54),
+      Tx(469, 727, 'Graph', H.s(13, color: H.text2), w: 34),
+      Tx(546, 727, 'Console', H.s(13, color: H.text2), w: 46),
+    ],
     Ln(345, 742, 1176, 1, H.rule),
     Pt(_TlPaint(m)),
     Ln(558, 743, 1, 250, H.rule),

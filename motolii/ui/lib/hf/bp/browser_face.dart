@@ -56,11 +56,11 @@ class BrowserModel {
   final ValueChanged<int>? onTab;
 }
 
-Widget browserFace(BrowserModel m) => Leaf(
-  tabs: m.tabs,
-  active: m.tab,
-  onTab: m.onTab,
-  body: KeyedSubtree(
+/// All five tabs: the Browser's own seat (its Leaf strip). One tab: a panel sitting in a Dock seat, whose Leaf strip is
+/// the seat's — so the body comes without a strip of its own.
+Widget browserFace(BrowserModel m) => m.tabs.length == 1 ? _body(m) : Leaf(tabs: m.tabs, active: m.tab, onTab: m.onTab, body: _body(m));
+
+Widget _body(BrowserModel m) => KeyedSubtree(
     key: ValueKey('browser-tab-${m.tab}'),
     child: switch (m.tab) {
       0 => CreatePanel(catalog: m.catalog, user: m.user, scene: m.scene),
@@ -85,5 +85,4 @@ Widget browserFace(BrowserModel m) => Leaf(
       ),
       _ => m.media ?? const SizedBox.shrink(),
     },
-  ),
 );

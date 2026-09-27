@@ -76,6 +76,7 @@ class Leaf extends StatelessWidget {
     required this.active,
     required this.body,
     this.onTab,
+    this.tabWrap,
   });
   final List<TabSpec> tabs;
   final int active;
@@ -83,6 +84,10 @@ class Leaf extends StatelessWidget {
 
   /// A tap on a tab. Without it the strip is a picture.
   final ValueChanged<int>? onTab;
+
+  /// What a host adds around each tab (the Dock: drag to move/split, right click for the panel menu). The tab's look
+  /// is the Leaf's own either way.
+  final Widget Function(int index, Widget tab)? tabWrap;
   static double labelled(String n) => 46 + n.length * 6.6;
   @override
   Widget build(BuildContext context) {
@@ -118,7 +123,7 @@ class Leaf extends StatelessWidget {
                             child: Row(
                               children: [
                                 for (var i = 0; i < tabs.length; i++)
-                                  GestureDetector(
+                                  (tabWrap ?? (_, t) => t)(i, GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: onTab == null
                                         ? null
@@ -131,7 +136,7 @@ class Leaf extends StatelessWidget {
                                           !fits &&
                                           (i != active || c.maxWidth < 110),
                                     ),
-                                  ),
+                                  )),
                               ],
                             ),
                           ),

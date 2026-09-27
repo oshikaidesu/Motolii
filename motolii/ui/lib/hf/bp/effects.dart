@@ -228,6 +228,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
   Widget _grid(List<Thing> shown, double w, int cols) {
     const pad = 12.0, gap = 6.0;
     final tileW = (w - pad * 2 - gap * (cols - 1)) / cols;
+    if (tileW <= 0) return const SizedBox.shrink(); // a seat squeezed to nothing shows nothing, not an error
     BrowserSeatScope.of(context)?.shows(shown, cols);
     final showCaption = tileW >= 60;
     return GridView.builder(
