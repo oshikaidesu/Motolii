@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
@@ -16,16 +17,52 @@ import 'timeline/overview.dart';
 import 'timeline/paint.dart';
 import 'timeline/view.dart';
 
+/// What a host's own toolbar needs from the Timeline: play/pause and the zoom operations Classic's own bar's
+/// buttons call. Nothing about the ruler, the tracks, the keyframes or the overview strip below them — those,
+/// and the editing they carry (selection, scrub, key move, resize, group behaviour, undo/redo, preview/commit),
+/// stay exactly as they are, whichever buttons sit above them.
+abstract class TimelineToolbarApi {
+  ValueListenable<bool> get playing;
+  void togglePlayback();
+  double get zoomPercent;
+  void setZoomPercent(double percent);
+  void zoomOut();
+  void zoomIn();
+  void fit();
+}
+
 class TimelinePanel extends StatefulWidget {
-  const TimelinePanel({super.key, required this.controller});
+  const TimelinePanel({super.key, required this.controller, this.topBarButtons});
   final EditorSession controller;
+
+  /// A host's own play/zoom controls (New's, in hf presentation), left of the overview strip, which stays
+  /// Classic's own. Null keeps Classic's own buttons there too.
+  final Widget Function(BuildContext context, TimelineToolbarApi api)? topBarButtons;
   @override
   State<TimelinePanel> createState() => _TimelinePanelState();
 }
 
 /// 板の組み立てと再生時刻。責任は四つの mixin が持ち、ここはそれを組むだけ。
 class _TimelinePanelState extends State<TimelinePanel>
-    with TimelineFrame, TimelineGrip, TimelineView, TimelineMenu {
+    with TimelineFrame, TimelineGrip, TimelineView, TimelineMenu
+    implements TimelineToolbarApi {
+  // ---- TimelineToolbarApi: exactly what the bar's own buttons call, nothing about the ruler/tracks/keys ---------
+  @override
+  ValueListenable<bool> get playing => widget.controller.playing;
+  @override
+  void togglePlayback() => widget.controller.togglePlayback();
+  @override
+  double get zoomPercent => pixelsPerFrame / 4 * 100;
+  @override
+  void setZoomPercent(double percent) => zoom(percent * .04 / pixelsPerFrame);
+  @override
+  void zoomOut() => zoom(((pixelsPerFrame / 4 * 100).round() - 1).clamp(3, 1000) * .04 / pixelsPerFrame);
+  @override
+  void zoomIn() => zoom(((pixelsPerFrame / 4 * 100).round() + 1) * .04 / pixelsPerFrame);
+  @override
+  void fit() => setState(() => pixelsPerFrame = math.max(.1, (_lastBounds.maxWidth - labelWidth) / math.max(1, overviewExtentWithoutFrame)));
+  BoxConstraints _lastBounds = BoxConstraints.tight(Size.zero);
+
   @override
   Widget build(BuildContext context) => Focus(
     key: const ValueKey('timeline-bounded-layout'),
@@ -36,6 +73,7 @@ class _TimelinePanelState extends State<TimelinePanel>
       child: LayoutBuilder(
         builder: (context, bounds) {
           viewportWidth = bounds.maxWidth;
+          _lastBounds = bounds;
           reportVisible();
           return navigation(
             ListenableBuilder(
@@ -249,46 +287,50 @@ class _TimelinePanelState extends State<TimelinePanel>
     height: EditorMetrics.s22,
     child: Row(
       children: [
-        const SizedBox(width: EditorMetrics.s6),
-        ValueListenableBuilder<bool>(
-          valueListenable: widget.controller.playing,
-          builder: (_, playing, __) => EditorButton(
-            playing ? 'Ⅱ' : '▶',
-            widget.controller.togglePlayback,
-            selected: playing,
-            tooltip: 'Play / Pause · Space',
-          ),
-        ),
-        EditorButton(
-          '−',
-          () => zoom(
-            ((pixelsPerFrame / 4 * 100).round() - 1).clamp(3, 1000) *
-                .04 /
-                pixelsPerFrame,
-          ),
-        ),
-        EditorPercentField(
-          value: pixelsPerFrame / 4 * 100,
-          min: 3,
-          max: 1000,
-          label: 'Timeline zoom',
-          onChanged: (v) => zoom(v * .04 / pixelsPerFrame),
-        ),
-        EditorButton(
-          '+',
-          () => zoom(
-            ((pixelsPerFrame / 4 * 100).round() + 1) * .04 / pixelsPerFrame,
-          ),
-        ),
-        EditorButton('Fit', () {
-          setState(
-            () => pixelsPerFrame = math.max(
-              .1,
-              (bounds.maxWidth - labelWidth) /
-                  math.max(1, overviewExtentWithoutFrame),
+        if (widget.topBarButtons != null)
+          widget.topBarButtons!(context, this)
+        else ...[
+          const SizedBox(width: EditorMetrics.s6),
+          ValueListenableBuilder<bool>(
+            valueListenable: widget.controller.playing,
+            builder: (_, playing, __) => EditorButton(
+              playing ? 'Ⅱ' : '▶',
+              widget.controller.togglePlayback,
+              selected: playing,
+              tooltip: 'Play / Pause · Space',
             ),
-          );
-        }),
+          ),
+          EditorButton(
+            '−',
+            () => zoom(
+              ((pixelsPerFrame / 4 * 100).round() - 1).clamp(3, 1000) *
+                  .04 /
+                  pixelsPerFrame,
+            ),
+          ),
+          EditorPercentField(
+            value: pixelsPerFrame / 4 * 100,
+            min: 3,
+            max: 1000,
+            label: 'Timeline zoom',
+            onChanged: (v) => zoom(v * .04 / pixelsPerFrame),
+          ),
+          EditorButton(
+            '+',
+            () => zoom(
+              ((pixelsPerFrame / 4 * 100).round() + 1) * .04 / pixelsPerFrame,
+            ),
+          ),
+          EditorButton('Fit', () {
+            setState(
+              () => pixelsPerFrame = math.max(
+                .1,
+                (bounds.maxWidth - labelWidth) /
+                    math.max(1, overviewExtentWithoutFrame),
+              ),
+            );
+          }),
+        ],
         Expanded(
           child: SizedBox(
             height: EditorMetrics.s18,

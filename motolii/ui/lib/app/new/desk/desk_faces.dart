@@ -7,7 +7,9 @@ import '../../../hf/desk/notes_skin.dart';
 import '../../../panels/notes_desk.dart';
 import '../../../panels/ease_desk.dart';
 import '../../../panels/stage.dart';
+import '../../../panels/timeline.dart';
 import '../stage/new_stage_chrome.dart';
+import '../timeline/new_timeline_bar.dart';
 import 'new_blend.dart';
 import 'new_depth.dart';
 import 'new_history.dart';
@@ -24,5 +26,6 @@ Widget? newDeskFace(String name, EditorSession c, Key? key, {Widget? leading}) =
       'Web' => DockedPanel(child: NewWeb(key: key, controller: c)),
       'Stage' => StagePanel(key: key, controller: c, view: 'User', topBar: newStageTopBar, bottomBar: newStageBottomBar),
       'Camera' => StagePanel(key: key, controller: c, view: 'Camera', topBar: newStageTopBar, bottomBar: newStageBottomBar),
+      'Timeline' => TimelinePanel(key: key, controller: c, topBarButtons: newTimelineBarButtons),
       _ => null,
     };
