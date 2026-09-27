@@ -18,7 +18,7 @@ import 'adapters/timeline.dart';
 /// The product workspace for the hf client. Faces/tools own their content;
 /// this layer owns only placement, tabs, split/resize and reopening.
 class LiveWorkspace {
-  LiveWorkspace({required this.c, required this.scene}) {
+  LiveWorkspace({required this.c, required this.scene, this.onDetach}) {
     dock = DockWorkspace(
       {
         for (final entry in const [
@@ -92,11 +92,13 @@ class LiveWorkspace {
           ], weight: .31),
         ], weight: .79),
       ]),
+      onDetach: onDetach,
     );
   }
 
   final EditorSession c;
   final EffectScene scene;
+  final void Function(String id)? onDetach;
   late final DockWorkspace dock;
 
   Widget build() => TabbedViewTheme(
