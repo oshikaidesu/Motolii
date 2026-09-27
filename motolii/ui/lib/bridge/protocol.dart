@@ -67,6 +67,8 @@ enum DocumentOperation {
   setGradient('setGradient'),
   previewBlend('previewBlend'),
   applyBlend('applyBlend'),
+  relate('relate'),
+  unrelate('unrelate'),
   setTimings('setTimings'),
   previewTimings('previewTimings'),
   stageGesture('stageGesture'),

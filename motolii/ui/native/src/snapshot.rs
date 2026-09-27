@@ -42,7 +42,8 @@ fn prop(view:&StoreView<'_>,layer:LayerId,id:&str,label:&str,fallback:&Value,ran
     let mut keys=Vec::new();
     if let Some(track)=view.track(layer,&p).map_err(e)?{for key in track.keys(){keys.push(json!({"frame":key.t.try_to_frame_round(fps).map_err(e)?,"value":value(&key.value),"interp":interp(key.interp)}));}}
     let here=at.try_to_frame_round(fps).map_err(e)?;
-    Ok(json!({"id":id,"label":label,"kind":match current{Value::F64(_)=>"number",Value::Vec2(_)=>"vec2",Value::Color(_)=>"color",Value::Bool(_)|Value::Enum(_)|Value::LayerId(_)=>"enum",Value::Path(_)=>"text"},"value":value(&current),"min":range.map(|r|r.0),"max":range.map(|r|r.1),"keyedNow":keys.iter().any(|k|k["frame"]==here),"keys":keys}))
+    let link=view.property_source(layer,&p).map_err(e)?.and_then(|s|s.as_link_only().map(crate::port::relate::link_json));
+    Ok(json!({"id":id,"label":label,"link":link,"kind":match current{Value::F64(_)=>"number",Value::Vec2(_)=>"vec2",Value::Color(_)=>"color",Value::Bool(_)|Value::Enum(_)|Value::LayerId(_)=>"enum",Value::Path(_)=>"text"},"value":value(&current),"min":range.map(|r|r.0),"max":range.map(|r|r.1),"keyedNow":keys.iter().any(|k|k["frame"]==here),"keys":keys}))
 }
 fn source_kind(source:&LayerSource)->&'static str{match source{
     LayerSource::Camera=>"Camera",LayerSource::Stage=>"Stage",LayerSource::Text=>"Text",LayerSource::Shape=>"Shape",LayerSource::Group=>"Group",LayerSource::Null=>"Null",LayerSource::Particles=>"Particles",

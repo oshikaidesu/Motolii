@@ -5,7 +5,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use crate::viewer::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -156,7 +156,7 @@ impl EditorRuntime{
             if self.preview_tag.as_deref() != Some(tag) { self.cancel_preview(); }
             self.preview_tag = Some(tag.to_owned());
         }
-        if !matches!(op,"previewText"|"styleText"|"setGradient"|"previewProperties"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
+        if !matches!(op,"previewText"|"styleText"|"setGradient"|"previewProperties"|"relate"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
         match op{
             "notes"=>self.edit_notes(&j)?,
             "select"=>{
@@ -229,6 +229,8 @@ impl EditorRuntime{
             "sequence"|"previewSequence"=>{let layers=ids(&j["layers"])?;let delays:Vec<serde_json::Value>=if let Some(given)=j["ghosts"].as_array(){given.clone()}else{editor::sequence_delays::spread(&self.doc.view(),&layers,&j["shape"])?};if delays.len()!=layers.len(){return Err("layers and ghosts differ in length".into())}let intents:Vec<Intent>=layers.iter().zip(delays).filter(|(&layer,_)|editor::timeline_edit::ghostable(&self.doc.view(),layer)).map(|(&layer,d)|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(d.as_i64().filter(|d|*d!=0)),..Default::default()}}).collect();if op=="previewSequence"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
             "clip"=>{let id=layer(&j)?;let clipped=self.doc.view().attrs(id).map_err(e)?.unwrap_or_default().clip_to_below;self.apply([Intent::SetAttrs{layer:id,patch:LayerAttrsPatch{clip_to_below:Some(!clipped),..Default::default()}}])?;}
             "applyBlend"=>{self.apply_blend(&j)?;}
+            "relate"=>{self.relate(&j)?;}
+            "unrelate"=>{self.unrelate(&j)?;}
             "previewBlend"=>{let layers=if j["layers"].is_array(){ids(&j["layers"])?}else if j.get("layer").is_some(){vec![layer(&j)?]}else{self.blend_targets().into_iter().last().into_iter().collect()};let mode:BlendMode=serde_json::from_value(j["mode"].clone()).map_err(e)?;self.set_preview(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{blend_mode:Some(mode),..Default::default()}}).collect())?;}
             "addMarker"|"setMarker"|"deleteMarker"=>self.edit_marker(op,&j)?,
             "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
@@ -403,6 +405,7 @@ mod sequence_preview;
 mod spread;
 mod blend_targets;
 mod ease_intervals;
+pub(crate) mod relate;
 #[cfg(test)]
 mod members;
 
