@@ -30,6 +30,9 @@ void main() {
       }
     }
     expect(outside, isEmpty);
+    expect(seen, contains('lib/panels/stage.dart'));
+    expect(seen, contains('lib/workspace/dock_workspace.dart'));
+    expect(seen, isNot(contains('lib/live_hf/adapters/stage.dart')));
     expect(seen.length, greaterThan(10));
   });
 }
