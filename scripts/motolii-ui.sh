@@ -77,5 +77,18 @@ case "${1:-dev}" in
     fi
     exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
+  # The hf GUI, its own client of Motolii Live (lib/live_hf).
+  live)
+    [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
+    export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
+    [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then live.'; exit 1; }
+    if [[ $# -gt 1 ]]; then
+      document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+      cd "$ui"
+      exec "$flutter_bin" run -d macos -t lib/live_hf/main.dart --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
+    fi
+    cd "$ui"
+    exec "$flutter_bin" run -d macos -t lib/live_hf/main.dart --pid-file "$state/flutter.pid"
+    ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
 esac
