@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -28,6 +29,7 @@ class _LiveShellState extends State<LiveShell> {
   bool ready = false;
   late EffectScene scene;
   LiveWorkspace? workspace;
+  Timer? _dockSave;
   late final keys = LiveKeys(c, () => context);
 
   @override
@@ -52,6 +54,11 @@ class _LiveShellState extends State<LiveShell> {
     await c.initialize();
     if (!mounted) return;
     workspace = LiveWorkspace(c: c, scene: scene);
+    try {
+      final settings = EditorSession.map(await c.native('readSettings'));
+      workspace!.dock.restore(settings['hfWorkspace']);
+    } catch (_) {}
+    workspace!.dock.layout.addListener(_workspaceChanged);
     setState(() => ready = true);
     if (_shot.isNotEmpty) _capture();
   }
@@ -71,8 +78,17 @@ class _LiveShellState extends State<LiveShell> {
     stdout.writeln('MOTOLII_SHOT ${img.width}x${img.height} $_shot');
   }
 
+  void _workspaceChanged() {
+    _dockSave?.cancel();
+    _dockSave = Timer(const Duration(milliseconds: 350), () {
+      c.storeSetting('hfWorkspace', workspace!.dock.snapshot());
+    });
+  }
+
   @override
   void dispose() {
+    _dockSave?.cancel();
+    workspace?.dock.layout.removeListener(_workspaceChanged);
     c.dispose();
     super.dispose();
   }
