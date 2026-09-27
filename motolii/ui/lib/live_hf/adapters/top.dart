@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../../hf/shell/place.dart' show RF;
 import '../../hf/shell/top.dart';
 import '../../session/editor_session.dart';
+import 'document.dart';
+import 'sheets.dart';
 
 /// The top face over the real session. The face is the reference's, unchanged; this only hands it values
 /// (fps, the document's length in frames, the playhead's clock, which of EDIT·PLAY·EXPORT is on) and operations.
@@ -17,6 +19,7 @@ class _SessionTopState extends State<SessionTop> {
   static const _watched = ['fps', 'durationFrames', 'animate', 'capabilities'];
   EditorSession get c => widget.c;
   final readouts = ValueNotifier(const ['', '', '']);
+  bool exporting = false;
 
   static String clock(int frame, num fps) {
     final rate = fps <= 0 ? 1 : fps;
@@ -56,7 +59,7 @@ class _SessionTopState extends State<SessionTop> {
           final playing = c.playing.value;
           return RF(top(TopModel(
             readouts: readouts,
-            mode: playing ? 1 : 0,
+            mode: exporting ? 2 : (playing ? 1 : 0),
             onPlay: c.togglePlayback,
             onStop: () {
               c.stopPlayback();
@@ -64,8 +67,16 @@ class _SessionTopState extends State<SessionTop> {
             },
             onAnimate: c.supports('animate') ? () => c.setAnimate(!c.animating) : null,
             onMarker: c.supports('addMarker') ? () => c.command('addMarker') : null,
-            onMode: (i) {
+            onMode: (i) async {
               if ((i == 0 && playing) || (i == 1 && !playing)) c.togglePlayback();
+              if (i == 2) {
+                setState(() => exporting = true);
+                await showExportSheet(context, c);
+                if (mounted) setState(() => exporting = false);
+              }
+            },
+            onKey: (i) async {
+              if (i == 2 && await mayReplace(context, c)) await c.chooseOpen();
             },
           )));
         },

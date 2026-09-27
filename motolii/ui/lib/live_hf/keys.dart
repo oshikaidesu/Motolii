@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import 'adapters/document.dart';
+import 'adapters/sheets.dart';
 
 /// The window's keys, each one an existing host operation. A key typed into a text field is the field's.
 class LiveKeys {
@@ -75,6 +76,9 @@ class LiveKeys {
         c.save(as: shift);
       case LogicalKeyboardKey.keyK when cmd && !alt:
         op('split');
+      case LogicalKeyboardKey.keyK when cmd && alt:
+        final ctx = context();
+        if (ctx.mounted) showCompositionSheet(ctx, c);
       case LogicalKeyboardKey.keyN when cmd:
         _replace(() => c.command('new'));
       case LogicalKeyboardKey.keyO when cmd:

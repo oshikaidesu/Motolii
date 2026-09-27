@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'place.dart';
+import 'sheet.dart' show HfKey;
 
 Future<T?> showHfDialog<T>(BuildContext context, {required String title, required String body, required List<(T, String)> answers}) {
   final done = Completer<T?>();
@@ -13,21 +14,7 @@ Future<T?> showHfDialog<T>(BuildContext context, {required String title, require
     if (!done.isCompleted) done.complete(v);
   }
 
-  Widget key(T v, String label, bool main) => MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => close(v),
-          child: Container(
-            height: 30,
-            margin: const EdgeInsets.only(left: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: main ? H.mode : H.raised, border: Border.all(color: main ? H.mode : H.rule), borderRadius: BorderRadius.circular(3)),
-            child: Text(label, softWrap: false, style: H.s(12, w: FontWeight.w600, color: main ? const Color(0xFFFCFCFE) : H.text2)),
-          ),
-        ),
-      );
+  Widget key(T v, String label, bool main) => HfKey(label, onTap: () => close(v), main: main);
 
   entry = OverlayEntry(
     builder: (_) => Focus(
