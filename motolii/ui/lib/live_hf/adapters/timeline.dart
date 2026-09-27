@@ -88,13 +88,15 @@ class _LiveTimelineState extends State<LiveTimeline>
   double _frameAt(double x) => (x - tlX0 - .5 + offset) / pixelsPerFrame;
 
   @override
-  void navigateView(double scale, double x, double y) {
-    final nextScale = scale.clamp(.1, 40.0);
-    final visible = math.max(1.0, viewportWidth - labelWidth);
-    final maxOffset = math.max(0.0, overviewExtent * nextScale - visible);
+  double get verticalOffset => rowStart * timelineGeometry.rowHeight;
+
+  @override
+  void applyNavigation(double scale, double x, double y) {
+    final maxRow = math.max(0, tracks.length - 8);
     setState(() {
-      pixelsPerFrame = nextScale;
-      _viewportOffset = x.clamp(0.0, maxOffset).toDouble();
+      pixelsPerFrame = scale;
+      _viewportOffset = x;
+      rowStart = (y / timelineGeometry.rowHeight).floor().clamp(0, maxRow);
       _shown = _rows();
     });
   }
@@ -336,13 +338,11 @@ class _LiveTimelineState extends State<LiveTimeline>
                     labelWidth + (viewportWidth - labelWidth) / 2,
                   );
                 } else if (dy.abs() > dx.abs() && tracks.length > 8) {
-                  setState(() {
-                    rowStart = (rowStart + (dy > 0 ? 1 : -1)).clamp(
-                      0,
-                      math.max(0, tracks.length - 8),
-                    );
-                    _shown = _rows();
-                  });
+                  navigateView(
+                    pixelsPerFrame,
+                    offset,
+                    math.max(0, verticalOffset + dy),
+                  );
                 } else {
                   navigateView(
                     pixelsPerFrame,
