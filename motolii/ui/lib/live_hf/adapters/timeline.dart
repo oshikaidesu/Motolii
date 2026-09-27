@@ -46,6 +46,7 @@ class _LiveTimelineState extends State<LiveTimeline>
     'waveforms',
     'selectedIds',
     'selectedKeys',
+    'markers',
   ];
   EditorSession get c => widget.c;
   @override
