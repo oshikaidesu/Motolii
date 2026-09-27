@@ -70,6 +70,11 @@ class LiveWorkspace {
         'History': PanelDef('History', 'History', () => NewHistory(controller: c), glyph: HG.power, minSize: 220),
         'Notes': PanelDef('Notes', 'Notes', () => LiveNotes(c: c), glyph: HG.star, minSize: 240),
       },
+      // Weights are the REFERENCE frame's own rectangles (`hf/shell/shell_face.dart`'s 1536×1024 geometry),
+      // not tuned by eye: Browser 324, the Stage/Inspector row 779+387, that row 632 tall against
+      // Timeline's 291 — Dock adds move/resize/split/detach/persist over this shape, it does not redraw
+      // it. The desks (Blend/Depth/Ease/History/Notes) have no seat of their own in the reference: they
+      // are not part of the default topology, only PanelDefs `activate()` can still open on demand.
       (item) => DockingRow([
         DockingTabs([
           item('Create'),
@@ -77,25 +82,16 @@ class LiveWorkspace {
           item('Colors'),
           item('Fonts'),
           item('Media'),
-        ], weight: .27),
+        ], weight: .21),
         DockingColumn([
           DockingRow([
             DockingTabs([
               item('Stage'),
               item('Camera'),
-            ], weight: .76),
-            item('Inspector', weight: .24),
-          ], weight: .69),
-          DockingRow([
-            item('Timeline', weight: .78),
-            DockingTabs([
-              item('Blend'),
-              item('Depth'),
-              item('Ease'),
-              item('History'),
-              item('Notes'),
-            ], weight: .22),
-          ], weight: .31),
+            ], weight: .668),
+            item('Inspector', weight: .332),
+          ], weight: .685),
+          item('Timeline', weight: .315),
         ], weight: .79),
       ]),
       onDetach: onDetach,

@@ -101,6 +101,7 @@ class DockWorkspace {
             menuBuilder: (context) => [
               TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
               if (allowClose) TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
+              TabbedViewMenuItem(text: 'Reset Layout', onSelection: reset),
             ],
           ),
       ],

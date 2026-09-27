@@ -77,9 +77,13 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             const SizedBox(height: 10),
             _world(),
           ]);
-          return narrow
-              ? SingleChildScrollView(key: const ValueKey('tf-scroll'), padding: EdgeInsets.fromLTRB(pad, 10, pad, 16), child: body)
-              : Padding(padding: EdgeInsets.fromLTRB(pad, 10, pad, 0), child: body);
+          // A seat short enough (a resized Dock pane, a smaller window) that even the wide layout doesn't fit its
+          // own height scrolls instead of overflowing — the same rule the narrow layout already followed.
+          return SingleChildScrollView(
+            key: const ValueKey('tf-scroll'),
+            padding: EdgeInsets.fromLTRB(pad, 10, pad, narrow ? 16 : 10),
+            child: body,
+          );
         }),
       );
 
