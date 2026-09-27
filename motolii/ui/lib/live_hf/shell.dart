@@ -8,9 +8,9 @@ import '../hf/bp/effects.dart' show EffectScene;
 import '../hf/shell/place.dart' show H;
 import '../hf/shell/shell_face.dart';
 import '../session/editor_session.dart';
+import '../panels/stage.dart' show StagePanel;
 import 'adapters/browser.dart';
 import 'adapters/document.dart';
-import 'adapters/stage.dart';
 import 'adapters/timeline.dart';
 import 'adapters/top.dart';
 import 'adapters/right_seat.dart';
@@ -92,7 +92,7 @@ class _LiveShellState extends State<LiveShell> {
                   child: ShellFace(
                     top: SessionTop(c: c),
                     browser: LiveBrowser(c: c, scene: scene),
-                    stage: LiveStage(c: c),
+                    stage: StagePanel(controller: c),
                     right: RightSeat(c: c),
                     timeline: LiveTimeline(c: c),
                   ),
