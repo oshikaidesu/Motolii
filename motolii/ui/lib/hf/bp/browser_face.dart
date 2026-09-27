@@ -31,6 +31,7 @@ class BrowserModel {
     this.onFontFavorite,
     this.fontController,
     this.media,
+    this.tabs = browserTabs,
     this.onTab,
   });
   final Catalog catalog;
@@ -51,11 +52,12 @@ class BrowserModel {
   final ValueChanged<FontItem>? onFontFavorite;
   final EditorSession? fontController;
   final Widget? media;
+  final List<TabSpec> tabs;
   final ValueChanged<int>? onTab;
 }
 
 Widget browserFace(BrowserModel m) => Leaf(
-  tabs: browserTabs,
+  tabs: m.tabs,
   active: m.tab,
   onTab: m.onTab,
   body: KeyedSubtree(
