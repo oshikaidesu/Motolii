@@ -17,8 +17,9 @@ import '../hf/desk/depth.dart';
 import '../hf/desk/ease.dart';
 import '../hf/desk/history.dart';
 import '../hf/desk/notes.dart';
+import '../hf/shell/shell_face.dart';
 import 'hf.dart' as hf;
-import 'ref.dart' show H, RF, RI;
+import 'ref.dart' show RF;
 import '../hf/insp/camera.dart';
 import '../hf/insp/camera_model.dart';
 import '../hf/insp/fixtures.dart';
@@ -110,26 +111,12 @@ class _ShellState extends State<Shell> {
         _ => const NotesDesk(),
       };
 
-  /// A region of the reference canvas, drawn by the accepted harness lists at their own coordinates.
-  Widget _ref(double x, double y, double w, double h, List<RI> items) =>
-      Positioned(left: x, top: y, width: w, height: h, child: RF(items, ox: x, oy: y));
-
-  Widget _seatBox(double x, double y, double w, double h, Widget child) => Positioned(
-        left: x, top: y, width: w, height: h,
-        child: DecoratedBox(decoration: BoxDecoration(color: kGround, border: Border.all(color: kRule)), child: child),
-      );
-
-  Widget _canvas() => SizedBox(
-        width: 1536,
-        height: 1024,
-        child: Stack(children: [
-          const Positioned.fill(child: ColoredBox(color: H.window)),
-          _ref(0, 0, 1536, 62, hf.top()),
-          _seatBox(10, 62, 324, 953, br.leaf(browserTab, 324, double.infinity, widget.scene, stack: br.tabs, active: browserTab)),
-          _ref(344, 62, 779, 632, hf.stage()),
-          _seatBox(1135, 62, 387, 631, _rightSeat()),
-          _ref(344, 703, 1178, 291, hf.timeline()),
-        ]),
+  Widget _canvas() => ShellFace(
+        top: RF(hf.top(), ox: 0, oy: 0),
+        browser: br.leaf(browserTab, 324, double.infinity, widget.scene, stack: br.tabs, active: browserTab),
+        stage: RF(hf.stage(), ox: 344, oy: 62),
+        right: _rightSeat(),
+        timeline: RF(hf.timeline(), ox: 344, oy: 703),
       );
 
   @override
