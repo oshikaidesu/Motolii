@@ -2,15 +2,10 @@ import 'package:flutter/widgets.dart';
 
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
-import 'blend.dart';
 import 'camera.dart';
-import 'depth.dart';
-import 'ease.dart';
 import 'effects_card.dart';
-import 'history.dart';
 import 'layout.dart';
 import 'layout_store.dart';
-import 'notes.dart';
 import 'transform.dart';
 
 /// Desks the right seat can show over the session.
@@ -60,18 +55,11 @@ class _RightSeatState extends State<RightSeat> {
         : (layer?['kind'] == 'Camera'
               ? 'Depth'
               : (focus['property'] == 'blendMode' ? 'Blend' : null));
-    if (desk != null) c.deskDrawer.value = desk;
+    if (desk != null) c.placePanel(desk, 'show');
   }
 
   @override
-  Widget build(BuildContext context) => switch (c.deskDrawer.value) {
-    'Blend' => NewBlend(controller: c),
-    'Depth' => NewDepth(controller: c),
-    'History' => NewHistory(controller: c),
-    'Ease' => LiveEase(c: c),
-    'Notes' => LiveNotes(c: c),
-    _ => _inspector(),
-  };
+  Widget build(BuildContext context) => _inspector();
 
   /// The Inspector for what is selected: a camera layer's own instrument, else Transform, followed by the Layout
   /// card of a group or laid-out child and the layer's effect cards, as the Classic Inspector lists them.
