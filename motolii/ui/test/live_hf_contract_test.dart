@@ -33,6 +33,7 @@ void main() {
     expect(seen, contains('lib/panels/stage.dart'));
     expect(seen, contains('lib/workspace/dock_workspace.dart'));
     expect(seen, isNot(contains('lib/live_hf/adapters/stage.dart')));
+    expect(seen, isNot(contains('lib/hf/shell/shell_face.dart')));
     expect(seen.length, greaterThan(10));
   });
 }
