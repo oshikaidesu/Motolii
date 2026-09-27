@@ -64,6 +64,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
     'palette',
     'fontFamilies',
     'assets',
+    'backgrounds',
     'layers',
     'selectedId',
     'selectedIds',
