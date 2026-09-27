@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
 import '../lib/app/new/browser/shelf_panel.dart';import '../lib/panels/desk.dart';
-import '../lib/panels/inspector.dart';
+import '../lib/app/new/inspector/new_inspector_panel.dart';
 import '../lib/panels/stage.dart';
 import '../lib/panels/timeline.dart';
 import '../lib/session/editor_session.dart';
@@ -54,7 +54,7 @@ void main() {
 
     expect(find.byType(ShelfPanel), findsOneWidget);
     expect(find.byType(StagePanel), findsOneWidget);
-    expect(find.byType(InspectorPanel), findsOneWidget);
+    expect(find.byType(NewInspectorPanel), findsOneWidget, reason: 'the New shell draws its own Inspector host now, not the Classic one');
     expect(find.byType(DeskPanel), findsOneWidget);
     expect(find.byType(TimelinePanel), findsOneWidget);
     // Each panel is a dock tab named after it; a strip too narrow for all its

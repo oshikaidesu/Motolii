@@ -12,7 +12,6 @@ import '../foundation/shell_tokens.dart';
 import '../foundation/theme.dart';
 import '../input/editor_shortcuts.dart';
 import '../panels/composition_controls.dart';
-import '../panels/inspector.dart' show InspectorInstruments, InspectorPanel;
 import '../panels/export_controls.dart';
 import '../panels/registry.dart';
 import 'new/desk/desk_faces.dart';
@@ -23,10 +22,7 @@ import 'new/browser/shelf_panel.dart';
 import 'new/console.dart';
 import 'new/relations/relations_panel.dart';
 import 'new/dock_theme.dart';
-import 'new/inspector/new_effect.dart';
-import 'new/inspector/new_effects_card.dart';
-import 'new/inspector/new_layout.dart';
-import 'new/inspector/new_transform.dart';
+import 'new/inspector/new_inspector_panel.dart';
 import 'new/shell_bar.dart';
 import 'status_notice.dart' show freezeNotice;
 
@@ -230,29 +226,7 @@ class _NewShellState extends State<NewShell> {
       'Inspector': PanelDef(
         'Inspector',
         'INSPECTOR',
-        () => InspectorPanel(
-          key: keys.putIfAbsent('Inspector', () => GlobalKey()),
-          controller: c,
-          instruments: InspectorInstruments(
-            transform: (context, controller) => NewTransform(controller: controller),
-            worldInTransform: true,
-            layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
-            effectParams: (context, controller, layerId, effect) => NewEffectParams(
-              key: ValueKey('new-effect:$layerId:${effect['id']}'),
-              controller: controller,
-              layerId: layerId,
-              effectId: effect['id'] as Object,
-            ),
-            effectCard: (context, controller, layer, effect, index, count) => NewEffectCard(
-              key: ValueKey('new-effect-card:${layer['id']}:${effect['id']}'),
-              controller: controller,
-              layer: layer,
-              effect: effect,
-              index: index,
-              count: count,
-            ),
-          ),
-        ),
+        () => NewInspectorPanel(key: keys.putIfAbsent('Inspector', () => GlobalKey()), controller: c),
         minSize: 240,
       ),
       'Timeline': PanelDef('Timeline', 'TIMELINE', () => pane('Timeline'), minSize: 120),
