@@ -8,11 +8,8 @@ import 'layout.dart';
 import 'layout_store.dart';
 import 'transform.dart';
 
-/// Desks the right seat can show over the session.
-const liveDesks = {'Blend', 'Depth', 'History', 'Ease', 'Notes'};
-
-/// The right seat: the desk the session has open (`deskDrawer`), else the Inspector. Editing a value that has a
-/// specialist opens it — keys open Ease, a camera layer's value Depth, a blend mode Blend.
+/// The Inspector seat. Specialist editing requests open the corresponding real Dock panel; the Inspector itself
+/// stays an Inspector instead of turning into a drawer.
 class RightSeat extends StatefulWidget {
   const RightSeat({super.key, required this.c});
   final EditorSession c;
