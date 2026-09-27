@@ -15,7 +15,8 @@ import '../panels/stage.dart';
 import '../panels/timeline.dart';
 import '../session/editor_session.dart';
 import 'editor_actions.dart';
-import 'new/browser/shelf_panel.dart';
+import '../hf/bp/effects.dart' show EffectScene;
+import 'new/shell/live_browser.dart';
 import 'new/shell/session_top.dart';
 import 'new/inspector/new_transform.dart';
 import 'new/shell_bar.dart' show NewSettings;
@@ -35,6 +36,7 @@ class ProductionProtoShell extends StatefulWidget {
 class _ProductionProtoShellState extends State<ProductionProtoShell> {
   final c = EditorSession();
   bool ready = false;
+  late EffectScene scene;
   final _face = GlobalKey();
   String? sheet;
   late final uiScale = EditorScale.of(context) ?? ValueNotifier(1.0);
@@ -58,6 +60,7 @@ class _ProductionProtoShellState extends State<ProductionProtoShell> {
   }
 
   Future<void> _initialize() async {
+    scene = await EffectScene.build();
     await c.initialize();
     if (!mounted) return;
     setState(() => ready = true);
@@ -108,7 +111,7 @@ class _ProductionProtoShellState extends State<ProductionProtoShell> {
                       child: Stack(children: [
                         ShellFace(
                           top: SessionTop(c: c, sheet: sheet, onSheet: toggleSheet, onMenu: menu),
-                          browser: ShelfPanel(controller: c, name: 'Create'),
+                          browser: LiveBrowser(c: c, scene: scene),
                           stage: StagePanel(controller: c),
                           right: NewTransform(controller: c),
                           timeline: TimelinePanel(controller: c),

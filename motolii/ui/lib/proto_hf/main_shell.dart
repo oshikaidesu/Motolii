@@ -11,6 +11,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import '../hf/bp/catalog_io.dart';
 import '../hf/bp/common.dart';
+import '../hf/bp/browser_face.dart';
 import '../hf/bp/effects.dart';
 import '../hf/desk/blend.dart';
 import '../hf/desk/depth.dart';
@@ -113,7 +114,7 @@ class _ShellState extends State<Shell> {
 
   Widget _canvas() => ShellFace(
         top: RF(hf.top(), ox: 0, oy: 0),
-        browser: br.leaf(browserTab, 324, double.infinity, widget.scene, stack: br.tabs, active: browserTab),
+        browser: browserFace(BrowserModel(catalog: br.baseCatalog, tab: browserTab, user: br.user, scene: widget.scene)),
         stage: RF(hf.stage(), ox: 344, oy: 62),
         right: _rightSeat(),
         timeline: RF(hf.timeline(), ox: 344, oy: 703),

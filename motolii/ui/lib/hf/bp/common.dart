@@ -49,10 +49,13 @@ class PanelSeat extends InheritedWidget {
 /// A dock leaf as a fixture. Tabs are independent panels sharing a seat, not navigation: the strip only
 /// exists when there is more than one, and then only the active tab keeps its word when crowded.
 class Leaf extends StatelessWidget {
-  const Leaf({super.key, required this.tabs, required this.active, required this.body});
+  const Leaf({super.key, required this.tabs, required this.active, required this.body, this.onTab});
   final List<TabSpec> tabs;
   final int active;
   final Widget body;
+
+  /// A tap on a tab. Without it the strip is a picture.
+  final ValueChanged<int>? onTab;
   static double labelled(String n) => 46 + n.length * 6.6;
   @override
   Widget build(BuildContext context) {
@@ -74,7 +77,12 @@ class Leaf extends StatelessWidget {
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         physics: const NeverScrollableScrollPhysics(),
-                        child: Row(children: [for (var i = 0; i < tabs.length; i++) _Tab(tabs[i], selected: i == active, single: false, compact: !fits && (i != active || c.maxWidth < 110))]),
+                        child: Row(children: [for (var i = 0; i < tabs.length; i++)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: onTab == null ? null : () => onTab!(i),
+                            child: _Tab(tabs[i], selected: i == active, single: false, compact: !fits && (i != active || c.maxWidth < 110)),
+                          )]),
                       ),
                     ),
                   ),
