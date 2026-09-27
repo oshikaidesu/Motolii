@@ -144,7 +144,11 @@ class PanelShell extends StatelessWidget {
     required this.strip,
     this.count,
     this.columnWidth = 96,
-    this.columnMinWidth = 300,
+    // The rail is the Browser family's primary navigation, not spare room: it should survive at the
+    // Dock's own default seat width (the REFERENCE's 324px seat, a few px narrower once its own
+    // border/padding are taken out - measured ~260-290px live). Only drop to the narrow layout's bare
+    // filter chip below that, and only as that fallback already does.
+    this.columnMinWidth = 260,
   });
   final String title, hint;
   final Widget icon;

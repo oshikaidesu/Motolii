@@ -98,7 +98,9 @@ class SessionCameraStore extends CameraStore {
   @override
   void route(String to, [String? from]) {
     super.route(to, from);
-    c.deskDrawer.value = to;
+    // Opens the real Dock panel (Depth is no longer a fixed seat, so this is the only way there since the
+    // desks stopped defaulting into the workspace) - the same call transform_store.dart's own `route` makes.
+    c.placePanel(to, 'show');
   }
 }
 
