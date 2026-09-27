@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../session/editor_session.dart';
 import 'blend.dart';
+import 'camera.dart';
 import 'depth.dart';
 import 'ease.dart';
 import 'history.dart';
@@ -28,12 +29,14 @@ class _RightSeatState extends State<RightSeat> {
     super.initState();
     c.deskDrawer.addListener(_changed);
     c.editingFocus.addListener(_focus);
+    c.slice('rightSeat', const ['selectedId', 'selectedIds']).addListener(_changed);
   }
 
   @override
   void dispose() {
     c.deskDrawer.removeListener(_changed);
     c.editingFocus.removeListener(_focus);
+    c.slice('rightSeat', const ['selectedId', 'selectedIds']).removeListener(_changed);
     super.dispose();
   }
 
@@ -53,6 +56,13 @@ class _RightSeatState extends State<RightSeat> {
         'History' => NewHistory(controller: c),
         'Ease' => LiveEase(c: c),
         'Notes' => LiveNotes(c: c),
-        _ => NewTransform(controller: c, showHeader: true),
+        _ => _inspector(),
       };
+
+  /// The Inspector for what is selected: a camera layer's own instrument, else Transform.
+  Widget _inspector() {
+    final active = c.activeLayer;
+    if (active != null && active['kind'] == 'Camera' && c.selectedIds.length <= 1) return LiveCamera(key: ValueKey(active['id']), c: c, layer: active['id'] as int);
+    return NewTransform(controller: c, showHeader: true);
+  }
 }
