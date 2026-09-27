@@ -48,6 +48,10 @@ abstract class SessionCore {
   final textStyleTarget = ValueNotifier<Map<String, dynamic>?>(null);
   final focusProperty = ValueNotifier<String?>(null);
 
+  /// A relation being made from a property (its source), and a relation the Inspector points at.
+  final relationDraft = ValueNotifier<Map<String, dynamic>?>(null);
+  final relationFocus = ValueNotifier<Map<String, dynamic>?>(null);
+
   /// An anchor the pointer hovers in the Inspector, as a fraction of the
   /// layer's bounds; the Stage marks where the pivot would land.
   final anchorPreview = ValueNotifier<List<double>?>(null);

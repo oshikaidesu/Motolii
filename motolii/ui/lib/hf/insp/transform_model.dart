@@ -19,6 +19,9 @@ class TLayer {
   int? parent;
   bool locked;
   final animated = <String>{}, keyedNow = <String>{};
+  /// The relation a row is driven by (its source, as the status says it), and how many rows elsewhere a row drives.
+  final links = <String, Map<String, dynamic>>{};
+  final drives = <String, int>{};
 }
 
 class TransformStore extends ParamStore {
@@ -77,7 +80,7 @@ class TransformStore extends ParamStore {
   void _sync() {
     final l = active;
     frozen = l.locked;
-    Map<String, dynamic> k(String id, Map<String, dynamic> r) => {'id': id, ...r, if (l.animated.contains(id)) 'animated': true, if (l.keyedNow.contains(id)) 'keyedNow': true};
+    Map<String, dynamic> k(String id, Map<String, dynamic> r) => {'id': id, ...r, if (l.animated.contains(id)) 'animated': true, if (l.keyedNow.contains(id)) 'keyedNow': true, if (l.links[id] != null) 'link': l.links[id], if ((l.drives[id] ?? 0) > 0) 'drives': l.drives[id]};
     rows
       ..clear()
       ..addAll([

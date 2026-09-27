@@ -236,9 +236,32 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         ),
         Expanded(child: values),
         if (extra != null) extra,
+        ..._relationBadge(id, ids),
         if (!narrow) _marks(m, id, ids),
       ]),
     );
+  }
+
+  /// A relation on this line: driven by another value (◉ its source), or driving others (◉ how many). Tapping points at it.
+  List<Widget> _relationBadge(String id, List<String> ids) {
+    final rows = [for (final i in ids) if (s.rows.any((r) => r['id'] == i)) s.row(i)];
+    final driven = rows.where((r) => r['link'] is Map).firstOrNull;
+    final drives = rows.fold<int>(0, (n, r) => n + ((r['drives'] as int?) ?? 0));
+    if (driven == null && drives == 0) return const [];
+    final from = driven == null ? id : '${driven['id']}';
+    return [
+      GestureDetector(
+        key: ValueKey('relation-$id'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => s.focusRelation(from),
+        child: Container(
+          margin: const EdgeInsets.only(left: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(color: const Color(0xFFFF4D3D), borderRadius: BorderRadius.circular(6)),
+          child: Text(driven != null ? '◉ ${(driven['link'] as Map)['name'] ?? 'Relation'}' : '◉ $drives', style: sans(8.5, c: const Color(0xFF1B1B1D), w: FontWeight.w700)),
+        ),
+      ),
+    ];
   }
 
   static const _anchorNames = [['Top left', 'Top', 'Top right'], ['Left', 'Center', 'Right'], ['Bottom left', 'Bottom', 'Bottom right']];

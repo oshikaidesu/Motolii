@@ -1,6 +1,7 @@
 // Declaration rows and the kind decision, kept from the Classic Inspector:
 // what a control is comes from the declaration, never from the label; unknown means generic.
 import 'dart:convert';
+import 'package:flutter/widgets.dart';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
@@ -57,6 +58,12 @@ class ParamStore extends ChangeNotifier {
   /// A store over a document can key a value at the current frame; the in-memory store cannot.
   bool get keyable => false;
   void toggleKey(String id) {}
+
+  /// The row's own menu (a right click on its number): a host offers what it can do with the value there.
+  void menu(BuildContext context, String id, int? axis, Offset at) {}
+
+  /// A row that a relation drives, or that drives others, points at that relation.
+  void focusRelation(String id) {}
 
   final routes = <String>[];
   final routeFrom = <String>[]; // which property each hand-over came from, so the specialist can return to it

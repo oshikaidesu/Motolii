@@ -21,6 +21,7 @@ import 'editor_actions.dart';
 import '../workspace/dock_workspace.dart';
 import 'new/browser/shelf_panel.dart';
 import 'new/console.dart';
+import 'new/relations/relations_panel.dart';
 import 'new/dock_theme.dart';
 import 'new/inspector/new_effect.dart';
 import 'new/inspector/new_layout.dart';
@@ -247,12 +248,13 @@ class _NewShellState extends State<NewShell> {
       'Timeline': PanelDef('Timeline', 'TIMELINE', () => pane('Timeline'), minSize: 120),
       'Desk': PanelDef('Desk', 'DESK', () => pane('Desk'), minSize: 200),
       'Console': PanelDef('Console', 'CONSOLE', () => NewConsole(log: console), minSize: 120),
+      'Relations': PanelDef('Relations', 'RELATIONS', () => RelationsPanel(controller: c), minSize: 240),
     },
     (item) => DockingRow([
       DockingTabs([for (final name in _browserTabs) item(name)], weight: .19),
       DockingColumn([
         DockingRow([
-          DockingTabs([for (final name in _centerTabs) item(name)], weight: .78),
+          DockingTabs([for (final name in _centerTabs) item(name), item('Relations')], weight: .78),
           item('Inspector', weight: .22),
         ], weight: .7),
         DockingRow([

@@ -221,6 +221,19 @@ class ParamCell extends StatelessWidget {
             Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(hero ? 11.5 : 11, c: hero ? kInk : const Color(0xFFB4B6BB), w: hero ? FontWeight.w600 : FontWeight.w500))),
             if (mod) Padding(padding: const EdgeInsets.only(left: 5), child: Container(key: ValueKey('mod-$id'), width: 4, height: 4, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
           ])),
+          // a relation: this value is driven by another (◉ its source), or drives others (◉ how many)
+          if (row['link'] is Map || (row['drives'] is int && row['drives'] > 0))
+            GestureDetector(
+              key: ValueKey('relation-$id'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => store.focusRelation(id),
+              child: Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(color: const Color(0xFFFF4D3D), borderRadius: BorderRadius.circular(6)),
+                child: Text(row['link'] is Map ? '◉ ${(row['link'] as Map)['name'] ?? 'Relation'}' : '◉ ${row['drives']}', style: sans(8.5, c: const Color(0xFF1B1B1D), w: FontWeight.w700)),
+              ),
+            ),
           if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: const Color(0xFF45464C)), borderRadius: BorderRadius.circular(6)), child: Text('Link', style: sans(8.5, c: linked ? const Color(0xFF1B1B1D) : kMuted, w: FontWeight.w700)))),
           if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(6)), child: Text('$accessory →', style: sans(8.5, c: t, w: FontWeight.w700)))),
           if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { store.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: const Color(0xFF55565C))))),

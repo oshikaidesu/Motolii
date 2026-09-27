@@ -222,7 +222,7 @@ class _ValueToyState extends State<ValueToy> {
         onExit: (_) => setState(() => hover = false),
         child: Listener(
         // clicks are told from drags by distance, so a click acts at once and a quick second click is a double
-        onPointerDown: (e) { _down = e.position; _moved = false; if (!frozen && !editing) focus.requestFocus(); },
+        onPointerDown: (e) { if (e.buttons == kSecondaryButton) { s.store.menu(context, s.id, s.axis, e.position); return; } _down = e.position; _moved = false; if (!frozen && !editing) focus.requestFocus(); },
         onPointerMove: (e) { if ((e.position - _down).distance > 4) _moved = true; },
         onPointerUp: (e) {
           if (_moved || frozen) return;

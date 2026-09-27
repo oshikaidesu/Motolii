@@ -1,4 +1,7 @@
 
+import 'package:flutter/widgets.dart';
+
+import '../../../foundation/theme.dart';
 import '../../../hf/insp/transform_model.dart';
 import '../../../session/editor_session.dart';
 import '../../../session/read_model.dart';
@@ -16,7 +19,7 @@ class SessionTransformStore extends TransformStore {
 
   final EditorSession c;
 
-  static List<TLayer> _read(EditorSession c) => [for (final l in c.liveLayers()) layerOf(l)];
+  static List<TLayer> _read(EditorSession c) => _readAll(c);
   static List<int> _selection(EditorSession c) {
     final ids = c.selectedIds;
     return ids.isEmpty ? [_active(c)] : ids;
@@ -54,8 +57,31 @@ class SessionTransformStore extends TransformStore {
     for (final row in rows.values) {
       if ((row['keys'] as List?)?.isNotEmpty ?? false) layer.animated.add('${row['id']}');
       if (row['keyedNow'] == true) layer.keyedNow.add('${row['id']}');
+      if (row['link'] is Map) layer.links['${row['id']}'] = Map<String, dynamic>.from(row['link'] as Map);
     }
     return layer;
+  }
+
+  /// How many rows, over every layer, a row of [layer] drives: the links that point at it, by property.
+  static Map<String, int> drivesOf(EditorSession c, int layerId) {
+    final out = <String, int>{};
+    for (final l in c.layers) {
+      for (final r in panelRows(l['properties'])) {
+        final link = r['link'];
+        if (link is Map && link['layer'] == layerId) out['${link['property']}'] = (out['${link['property']}'] ?? 0) + 1;
+      }
+    }
+    return out;
+  }
+
+  static List<TLayer> _readAll(EditorSession c) {
+    final names = {for (final l in c.layers) l['id']: '${l['name']}'};
+    return [
+      for (final l in c.liveLayers())
+        layerOf(l)
+          ..drives.addAll(drivesOf(c, l['id'] as int))
+          ..links.forEach((_, link) => link['name'] = names[link['layer']] ?? 'Relation'),
+    ];
   }
 
   bool _gesture = false;
@@ -125,6 +151,36 @@ class SessionTransformStore extends TransformStore {
   void setParent(int? id) {
     if (!canEdit) return;
     c.command('setAttrs', {'layers': [activeId], 'patch': {'parent': id}});
+  }
+
+  /// The row's menu: make a relation from this value (it becomes the source), or go to the one it is in.
+  @override
+  Future<void> menu(BuildContext context, String id, int? axis, Offset at) async {
+    final row = this.row(id);
+    final driven = row['link'] is Map;
+    final chosen = await showEditorMenu<String>(context, at, [
+      EditorMenuItem<String>(value: 'relate', enabled: c.supports('relate') && !frozen, child: const Text('Relation…')),
+      if (driven || (row['drives'] ?? 0) > 0) const EditorMenuItem<String>(value: 'focus', child: Text('Show relation')),
+      if (driven) EditorMenuItem<String>(value: 'unrelate', enabled: c.supports('unrelate') && !frozen, child: const Text('Remove relation')),
+    ]);
+    if (chosen == 'relate') {
+      final label = '${row['label'] ?? id}${axis == null ? '' : ' ${const ['X', 'Y', 'Z'][axis]}'}';
+      c.relationDraft.value = {'layer': activeId, 'name': active.name, 'property': id, 'component': axis ?? 0, 'label': label};
+      c.relationFocus.value = null;
+      await c.placePanel('Relations', 'show');
+    } else if (chosen == 'focus') {
+      focusRelation(id);
+    } else if (chosen == 'unrelate') {
+      await c.command('unrelate', {'layers': [activeId], 'property': id});
+    }
+  }
+
+  @override
+  void focusRelation(String id) {
+    final link = row(id)['link'];
+    c.relationFocus.value = link is Map ? {'layer': link['layer'], 'property': link['property'], 'component': link['component'] ?? 0} : {'layer': activeId, 'property': id, 'component': 0};
+    c.relationDraft.value = null;
+    c.placePanel('Relations', 'show');
   }
 
   /// A hand-over to a specialist (Depth): the desk drawer or panel of that name comes to the front.

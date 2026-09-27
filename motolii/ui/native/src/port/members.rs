@@ -249,3 +249,95 @@ fn nested_members_keep_their_own_time_live_as_in_the_document() {
     rt.request(json!({"op": "undo"})).unwrap();
     assert_parity(&mut rt, &[5, 20], "after undo");
 }
+
+/// Relations v0 on the live renderer: Null.X drives four circles' Scale and Rotation through the document's links; the
+/// scene the pixels come from shows the same scale the document reads, follows a drag of the Null, and Undo takes it away.
+#[test]
+fn a_relation_drives_the_live_scene() {
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    rt.request(json!({"op": "create", "kind": "null"})).unwrap();
+    let origin = rt.viewer.selected().unwrap();
+    let mut circles = Vec::new();
+    for _ in 0..4 {
+        rt.request(json!({"op": "create", "kind": "ellipse"})).unwrap();
+        circles.push(rt.viewer.selected().unwrap());
+    }
+    rt.request(json!({"op": "setProperty", "layer": origin.0, "property": "position", "value": [500.0, 300.0]})).unwrap();
+    let members: Vec<u64> = circles.iter().map(|c| c.0).collect();
+    rt.request(json!({"op": "relate", "source": {"layer": origin.0, "property": "position", "component": 0}, "inMin": 200.0, "inMax": 800.0, "members": members, "property": "scale", "outMin": 0.5, "outMax": 1.5})).unwrap();
+    rt.request(json!({"op": "relate", "source": {"layer": origin.0, "property": "position", "component": 0}, "inMin": 200.0, "inMax": 800.0, "members": members, "property": "rotation", "outMin": -30.0, "outMax": 30.0})).unwrap();
+    let live = |rt: &mut EditorRuntime, l: LayerId| -> (f32, f32) {
+        let view = rt.doc.view();
+        let scene = rt.engine.frame_graph_editor_scene(&view, RationalTime::ZERO).unwrap();
+        let a = scene.layer(l).unwrap().transform.affine;
+        (a.matrix2.x_axis.length(), a.matrix2.x_axis.y.atan2(a.matrix2.x_axis.x).to_degrees())
+    };
+    let (s, r) = live(&mut rt, circles[0]);
+    assert!((s - 1.0).abs() < 1e-4 && r.abs() < 1e-3, "halfway: scale 1, rotation 0: {s} {r}");
+    // A drag of the Null: previews, then one commit.
+    rt.request(json!({"op": "previewProperties", "edits": [{"layer": origin.0, "property": "position", "value": [650.0, 300.0]}]})).unwrap();
+    let (s, r) = live(&mut rt, circles[3]);
+    assert!((s - 1.25).abs() < 1e-4 && (r - 15.0).abs() < 1e-3, "while dragging: {s} {r}");
+    rt.request(json!({"op": "commitPreview"})).unwrap();
+    let (s, _) = live(&mut rt, circles[1]);
+    assert!((s - 1.25).abs() < 1e-4);
+    rt.request(json!({"op": "undo"})).unwrap();
+    let (s, r) = live(&mut rt, circles[1]);
+    assert!((s - 1.0).abs() < 1e-4 && r.abs() < 1e-3, "the drag undone: {s} {r}");
+    rt.request(json!({"op": "undo"})).unwrap();
+    let (_, r) = live(&mut rt, circles[1]);
+    assert!(r.abs() < 1e-3, "the rotation mapping undone");
+    rt.request(json!({"op": "undo"})).unwrap();
+    let (s, _) = live(&mut rt, circles[1]);
+    assert!((s - 1.0).abs() < 1e-4, "no relation: the circle's own scale");
+    let _ = property::SCALE;
+}
+
+/// The acceptance fixture to the end: save, reopen, scrub, export. Slow (the shader watcher's cold start); on demand.
+#[test]
+#[ignore = "slow in debug builds; run with -- --ignored"]
+fn a_relation_survives_save_reopen_scrub_and_export() {
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    rt.request(json!({"op": "create", "kind": "null"})).unwrap();
+    let origin = rt.viewer.selected().unwrap();
+    let mut circles = Vec::new();
+    for _ in 0..4 {
+        rt.request(json!({"op": "create", "kind": "ellipse"})).unwrap();
+        circles.push(rt.viewer.selected().unwrap());
+    }
+    rt.request(json!({"op": "animate", "enabled": true})).unwrap();
+    for (frame, x) in [(0, 200.0), (60, 800.0)] {
+        rt.request(json!({"op": "seek", "frame": frame})).unwrap();
+        rt.request(json!({"op": "setProperty", "layer": origin.0, "property": "position", "value": [x, 300.0]})).unwrap();
+    }
+    rt.request(json!({"op": "animate", "enabled": false})).unwrap();
+    let members: Vec<u64> = circles.iter().map(|c| c.0).collect();
+    rt.request(json!({"op": "relate", "source": {"layer": origin.0, "property": "position", "component": 0}, "inMin": 200.0, "inMax": 800.0, "members": members, "property": "scale", "outMin": 0.5, "outMax": 1.5})).unwrap();
+    let dir = std::env::temp_dir().join(format!("motolii-relations-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("work.rrd");
+    rt.request(json!({"op": "save", "path": file.to_string_lossy()})).unwrap();
+    let mut again = EditorRuntime::open(&file.to_string_lossy()).unwrap();
+    let ids: Vec<LayerId> = again.doc.view().layers().to_vec();
+    let fps = again.doc.view().composition().unwrap().unwrap().fps;
+    for (frame, expect) in [(0, 0.5f32), (30, 1.0), (60, 1.5)] {
+        again.request(json!({"op": "seek", "frame": frame})).unwrap();
+        let at = RationalTime::try_from_frame(frame, fps).unwrap();
+        let view = again.doc.view();
+        let scene = again.engine.frame_graph_editor_scene(&view, at).unwrap();
+        let s = scene.layer(ids[1]).unwrap().transform.affine.matrix2.x_axis.length();
+        assert!((s - expect).abs() < 1e-3, "reopened, frame {frame}: {s}");
+    }
+    let out = dir.join("out.mp4");
+    again.request(json!({"op": "export", "path": out.to_string_lossy(), "start": 0, "end": 6})).unwrap();
+    let started = std::time::Instant::now();
+    let status = loop {
+        let status = again.exporter.status();
+        if !matches!(status["phase"].as_str(), Some("running" | "cancelling" | "starting")) { break status; }
+        assert!(started.elapsed().as_secs() < 900, "the export never finished: {status}");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    assert_eq!(status["phase"], "complete", "{status}");
+    assert!(std::fs::metadata(&out).map(|m| m.len() > 0).unwrap_or(false));
+    let _ = std::fs::remove_dir_all(&dir);
+}
