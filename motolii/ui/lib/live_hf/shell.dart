@@ -8,7 +8,6 @@ import '../hf/bp/effects.dart' show EffectScene;
 import '../hf/shell/place.dart' show H;
 import '../session/editor_session.dart';
 import 'adapters/document.dart';
-import 'adapters/right_seat.dart' show liveDesks;
 import 'adapters/top.dart';
 import 'keys.dart';
 import 'workspace.dart';
@@ -36,9 +35,9 @@ class _LiveShellState extends State<LiveShell> {
     super.initState();
     c.confirmClose = () => mayReplace(context, c);
     c.panelPlacementRequested = (name, placement) async {
-      if (liveDesks.contains(name)) {
-        c.deskDrawer.value = placement == 'hide' ? null : name;
-      } else if (placement != 'hide') {
+      if (placement == 'hide') {
+        workspace?.dock.close(name);
+      } else {
         workspace?.dock.activate(name, near: 'Stage');
       }
     };
