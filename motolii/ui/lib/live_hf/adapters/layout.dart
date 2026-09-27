@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/insp/layout.dart';
-import '../../../session/editor_session.dart';
-import 'session_layout.dart';
+import '../../hf/insp/layout.dart';
+import '../../session/editor_session.dart';
+import 'layout_store.dart';
 
 /// The Layout Instrument for the Inspector's Layout card: one layer's `layout.*` rows on the real session.
 class NewLayout extends StatefulWidget {

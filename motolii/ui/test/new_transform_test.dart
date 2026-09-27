@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/app/new/inspector/session_transform.dart';
+import '../lib/live_hf/adapters/transform_store.dart';
 import '../lib/hf/insp/transform.dart';
 import 'support/new_inspector_host.dart';
 import 'support/window_fixture.dart';

@@ -4,8 +4,8 @@ import '../../../hf/bp/common.dart';
 import '../../../panels/inspector.dart' show InspectorPanel, InspectorInstruments;
 import '../../../session/editor_session.dart';
 import '../../../session/read_model.dart';
-import 'new_effects_card.dart';
-import 'new_layout.dart';
+import '../../../live_hf/adapters/effects_card.dart';
+import '../../../live_hf/adapters/layout.dart';
 import '../../../live_hf/adapters/transform.dart';
 
 /// The Inspector's own host: identity header, and the card list (Transform — World inside it, Layout, Effects) —
@@ -25,7 +25,7 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
   EditorSession get c => widget.controller;
 
   InspectorInstruments get _instruments => InspectorInstruments(
-        transform: (context, controller) => NewTransform(controller: controller),
+        transform: (context, controller) => NewTransform(controller: controller, showHeader: false),
         worldInTransform: true,
         layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
         effectParams: null,

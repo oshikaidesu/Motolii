@@ -1,6 +1,6 @@
-import '../../../hf/insp/rows.dart';
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../hf/insp/rows.dart';
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 
 /// One effect's parameters, as rows of a ParamStore over the real session. The rows are the effect's declared params
 /// as the document sends them; an edit reaches every selected, unlocked layer that has the same row, a drag relative

@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/desk/history.dart';
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../hf/desk/history.dart';
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 
 /// The finished History desk over the document's history: what it lists, where the head is, and how it moves are the
 /// session's (`history` entries, `head`, and the `historyGoto` operation the Classic column uses).

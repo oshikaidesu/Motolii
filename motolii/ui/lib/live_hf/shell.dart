@@ -13,7 +13,7 @@ import 'adapters/document.dart';
 import 'adapters/stage.dart';
 import 'adapters/timeline.dart';
 import 'adapters/top.dart';
-import 'adapters/transform.dart';
+import 'adapters/right_seat.dart';
 import 'keys.dart';
 
 /// A path: once the document is open, the 1536x1024 face is written there as a PNG, the same capture proto_hf's
@@ -38,6 +38,9 @@ class _LiveShellState extends State<LiveShell> {
   void initState() {
     super.initState();
     c.confirmClose = () => mayReplace(context, c);
+    c.panelPlacementRequested = (name, placement) async {
+      if (liveDesks.contains(name)) c.deskDrawer.value = placement == 'hide' ? null : name;
+    };
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);
     };
@@ -90,7 +93,7 @@ class _LiveShellState extends State<LiveShell> {
                     top: SessionTop(c: c),
                     browser: LiveBrowser(c: c, scene: scene),
                     stage: LiveStage(c: c),
-                    right: NewTransform(controller: c),
+                    right: RightSeat(c: c),
                     timeline: LiveTimeline(c: c),
                   ),
                 ),

@@ -1,13 +1,13 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../foundation/theme.dart' show showEditorMenu, EditorMenuItem;
-import '../../../hf/bp/common.dart';
-import '../../../hf/desk/common.dart' show kAccent;
-import '../../../hf/glyphs.dart';
-import '../../../session/editor_session.dart';
-import '../../../session/effect_actions.dart';
-import '../../../session/read_model.dart';
-import 'new_effect.dart';
+import '../../hf/shell/menu.dart';
+import '../../hf/bp/common.dart';
+import '../../hf/desk/common.dart' show kAccent;
+import '../../hf/glyphs.dart';
+import '../../session/editor_session.dart';
+import '../../session/effect_actions.dart';
+import '../../session/read_model.dart';
+import 'effect.dart';
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;
@@ -22,14 +22,20 @@ class NewEffectCard extends StatelessWidget {
   EditorSession get c => controller;
 
   Future<void> _menu(BuildContext context, Offset at) async {
-    final chosen = await showEditorMenu<String>(context, at, [
-      EditorMenuItem<String>(value: 'earlier', enabled: c.supports('moveEffect') && index > 0, child: const Text('Apply earlier')),
-      EditorMenuItem<String>(value: 'later', enabled: c.supports('moveEffect') && index < count - 1, child: const Text('Apply later')),
-      const EditorMenuItem<String>(value: 'roll', child: Text('Throw every number within its reach')),
-      const EditorMenuItem<String>(value: 'rest', child: Text('Back to where the numbers rest')),
-      if (effect['placement'] == true) EditorMenuItem<String>(value: 'expand', enabled: c.supports('expandEffect'), child: const Text('Expand copies into layers')),
-      EditorMenuItem<String>(value: 'remove', enabled: c.supports('removeEffect'), child: const Text('Remove effect')),
-    ]);
+    final moves = c.supports('moveEffect');
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 240, 0), [
+      ('earlier', 'Apply earlier'),
+      ('later', 'Apply later'),
+      ('roll', 'Throw every number within its reach'),
+      ('rest', 'Back to where the numbers rest'),
+      if (effect['placement'] == true) ('expand', 'Expand copies into layers'),
+      ('remove', 'Remove effect'),
+    ], disabled: {
+      if (!moves || index == 0) 'earlier',
+      if (!moves || index >= count - 1) 'later',
+      if (!c.supports('expandEffect')) 'expand',
+      if (!c.supports('removeEffect')) 'remove',
+    });
     switch (chosen) {
       case 'earlier' || 'later':
         await c.command('moveEffect', {'layer': layer['id'], 'id': effect['id'], 'to': chosen == 'earlier' ? index - 1 : index + 1});

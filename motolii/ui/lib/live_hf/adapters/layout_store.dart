@@ -1,6 +1,6 @@
-import '../../../hf/insp/layout_model.dart';
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../hf/insp/layout_model.dart';
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 
 /// The Layout Instrument's store over one real layer: its `layout.*` rows are the layer's own, and an edit goes
 /// through previewProperties / commitPreview exactly as the Classic Layout card sends it. What the Instrument

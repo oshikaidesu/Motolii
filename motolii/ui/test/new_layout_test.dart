@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/app/new/inspector/session_layout.dart';
+import '../lib/live_hf/adapters/layout_store.dart';
 import '../lib/hf/insp/layout.dart';
 import '../lib/hf/insp/layout_diagram.dart' show LayoutGeom;
 import 'support/new_inspector_host.dart';

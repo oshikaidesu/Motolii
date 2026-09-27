@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/desk/depth.dart';
-import '../../../session/editor_session.dart';
-import 'depth_controller.dart';
+import '../../hf/desk/depth.dart';
+import '../../session/editor_session.dart';
+import 'depth_host.dart';
 
 /// The finished Depth desk over the scene's floor plan: layers and the camera drag as they do on Stage.
 class NewDepth extends StatefulWidget {

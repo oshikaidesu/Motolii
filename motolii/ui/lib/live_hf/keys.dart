@@ -40,7 +40,11 @@ class LiveKeys {
     switch (k) {
       case LogicalKeyboardKey.escape:
         c.cancelPreview();
-        op('select', {'ids': <int>[], 'keys': []});
+        if (c.deskDrawer.value != null) {
+          c.deskDrawer.value = null;
+        } else {
+          op('select', {'ids': <int>[], 'keys': []});
+        }
       case LogicalKeyboardKey.space:
         c.togglePlayback();
       case LogicalKeyboardKey.f9:

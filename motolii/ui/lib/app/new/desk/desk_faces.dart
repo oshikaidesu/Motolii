@@ -10,9 +10,9 @@ import '../../../panels/stage.dart';
 import '../../../panels/timeline.dart';
 import '../stage/new_stage_chrome.dart';
 import '../timeline/new_timeline_bar.dart';
-import 'new_blend.dart';
-import 'new_depth.dart';
-import 'new_history.dart';
+import '../../../live_hf/adapters/blend.dart';
+import '../../../live_hf/adapters/depth.dart';
+import '../../../live_hf/adapters/history.dart';
 import 'new_web.dart';
 
 /// The Desk's panels drawn by the finished Desk instruments over the session's own state. A name not here keeps the

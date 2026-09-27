@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/app/new/inspector/session_effect.dart';
+import '../lib/live_hf/adapters/effect_store.dart';
 import '../lib/hf/insp/panel.dart';
 import 'support/new_inspector_host.dart';
 import 'support/window_fixture.dart';

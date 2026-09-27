@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import '../../../hf/desk/depth.dart';
-import '../../../session/editor_session.dart';
+import '../../hf/desk/depth.dart';
+import '../../session/editor_session.dart';
 
 /// What the Depth desk does with the document: the floor plan is `depthLayout` (each layer's point around the camera's
 /// target, and the basis to turn a drag on the plan into a change of its position), a press selects, a drag is a preview

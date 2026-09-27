@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../lib/app/new/inspector/new_effect.dart';
-import '../../lib/app/new/inspector/new_layout.dart';
-import '../../lib/app/new/inspector/new_transform.dart';
+import '../../lib/live_hf/adapters/effect.dart';
+import '../../lib/live_hf/adapters/layout.dart';
+import '../../lib/live_hf/adapters/transform.dart';
 import '../../lib/panels/inspector.dart';
 import '../../lib/session/editor_session.dart';
 import 'editor_test_theme.dart';
@@ -69,7 +69,7 @@ Future<Recording> mount(WidgetTester tester, Map<String, dynamic> doc, {double h
         child: InspectorPanel(
           controller: c,
           instruments: InspectorInstruments(
-            transform: (context, controller) => NewTransform(controller: controller),
+            transform: (context, controller) => NewTransform(controller: controller, showHeader: false),
             layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
             effectParams: (context, controller, layerId, effect) => NewEffectParams(
               key: ValueKey('new-effect:$layerId:${effect['id']}'),

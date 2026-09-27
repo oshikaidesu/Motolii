@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/desk/blend.dart' show BlendHost;
-import '../../../panels/blend_panel.dart' show blendReading, blendTargets;
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../hf/desk/blend.dart' show BlendHost;
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 
 /// What the Blend desk does with the document, apart from how it looks: the layers a mode applies to, the mode they
 /// wear, the specimens the runtime draws for it, the hover that previews on Stage without touching history, and the

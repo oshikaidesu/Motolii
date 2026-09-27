@@ -8,8 +8,8 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
-import '../lib/app/new/desk/new_blend.dart';
-import '../lib/app/new/desk/new_depth.dart';
+import '../lib/live_hf/adapters/blend.dart';
+import '../lib/live_hf/adapters/depth.dart';
 import '../lib/hf/desk/depth.dart';
 import '../lib/foundation/leaves.dart' show EditorTextField;
 import '../lib/hf/desk/ease_skin.dart';
@@ -17,7 +17,7 @@ import '../lib/hf/desk/notes_skin.dart';
 import '../lib/panels/ease_desk.dart';
 import '../lib/panels/notes_desk.dart';
 import '../lib/session/editor_session.dart';
-import '../lib/app/new/desk/new_history.dart';
+import '../lib/live_hf/adapters/history.dart';
 import 'support/editor_test_theme.dart';
 import 'support/new_inspector_host.dart' show Recording;
 
