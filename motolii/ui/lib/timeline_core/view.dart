@@ -47,16 +47,21 @@ mixin TimelineView<T extends StatefulWidget>
       0.0,
       math.max(0.0, overviewExtent * nextScale - visible),
     );
+    applyNavigation(nextScale, targetX, y);
+  }
+
+  /// Presentation seam for navigation state. Classic uses its scroll controllers;
+  /// alternate faces can keep the same pan/zoom semantics without reimplementing them.
+  void applyNavigation(double scale, double x, double y) {
     final revision = ++navigationRevision;
-    if (nextScale != pixelsPerFrame) setState(() => pixelsPerFrame = nextScale);
+    if (scale != pixelsPerFrame) setState(() => pixelsPerFrame = scale);
     void apply() {
       if (!mounted || revision != navigationRevision) return;
       if (horizontal.hasClients) {
         final position = horizontal.positions.last;
         if (position.hasContentDimensions)
           position.jumpTo(
-            targetX
-                .clamp(position.minScrollExtent, position.maxScrollExtent)
+            x.clamp(position.minScrollExtent, position.maxScrollExtent)
                 .toDouble(),
           );
       }
