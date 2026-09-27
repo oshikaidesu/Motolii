@@ -69,7 +69,7 @@ Future<Recording> mount(WidgetTester tester, Map<String, dynamic> doc, {double h
         child: InspectorPanel(
           controller: c,
           instruments: InspectorInstruments(
-            transform: (context, controller) => NewTransform(controller: controller, showHeader: false),
+            transform: (context, controller) => NewTransform(controller: controller),
             layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
             effectParams: (context, controller, layerId, effect) => NewEffectParams(
               key: ValueKey('new-effect:$layerId:${effect['id']}'),

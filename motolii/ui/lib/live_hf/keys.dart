@@ -53,6 +53,8 @@ class LiveKeys {
               ? 'EasyEaseOut'
               : (shift ? 'EasyEaseIn' : 'EasyEase'),
         });
+        final active = c.activeLayer;
+        if (active != null) c.focusEditing(active['id'] as int, 'keyframes');
       case LogicalKeyboardKey.keyZ when cmd:
         op(shift ? 'redo' : 'undo');
       case LogicalKeyboardKey.keyC when cmd:

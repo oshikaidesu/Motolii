@@ -7,7 +7,7 @@ import 'transform_store.dart';
 /// The Transform Instrument on the real session, for the Inspector's Transform card.
 /// It follows the session's layers and selection; while nothing is selected there is nothing to show.
 class NewTransform extends StatefulWidget {
-  const NewTransform({super.key, required this.controller, this.showHeader = true});
+  const NewTransform({super.key, required this.controller, this.showHeader = false});
   final EditorSession controller;
 
   /// The layer's name and Animate above the instrument; a host that shows them itself hides these.

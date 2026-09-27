@@ -25,7 +25,7 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
   EditorSession get c => widget.controller;
 
   InspectorInstruments get _instruments => InspectorInstruments(
-        transform: (context, controller) => NewTransform(controller: controller, showHeader: false),
+        transform: (context, controller) => NewTransform(controller: controller),
         worldInTransform: true,
         layout: (context, controller, layer) => NewLayout(controller: controller, layer: layer),
         effectParams: null,
@@ -94,7 +94,7 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
             key: const ValueKey('new-inspector-scroll'),
             padding: const EdgeInsets.all(10),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              NewTransform(controller: c, showHeader: false),
+              NewTransform(controller: c),
               if (_hasLayout(layer)) ...[
                 const SizedBox(height: 10),
                 Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('LAYOUT', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),

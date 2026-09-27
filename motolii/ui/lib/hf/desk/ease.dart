@@ -43,22 +43,31 @@ final easePresets = <Preset>[
 ];
 
 class Seg {
-  Seg(this.p, this.frames) {
-    final b = easePresets[p].bez;
+  Seg(this.p, this.frames, [List<Preset>? kinds]) : kinds = kinds ?? easePresets {
+    final b = this.kinds[p].bez;
     if (b != null) { x1 = b[0]; y1 = b[1]; x2 = b[2]; y2 = b[3]; }
   }
   int p;
   final int frames;
+  final List<Preset> kinds;
   double x1 = .25, y1 = .1, x2 = .78, y2 = .92;
-  bool get bez => easePresets[p].bez != null;
-  Shape get shape => bez ? bezierShape(x1, y1, x2, y2) : easePresets[p].fn!;
+  bool get bez => kinds[p].bez != null;
+  Shape get shape => bez ? bezierShape(x1, y1, x2, y2) : kinds[p].fn!;
   List<double> get values => [x1, y1, x2, y2];
   void choose(int i) {
     p = i;
-    final b = easePresets[i].bez;
+    final b = kinds[i].bez;
     if (b != null) { x1 = b[0]; y1 = b[1]; x2 = b[2]; y2 = b[3]; }
   }
-  void setValues(List<double> v) { p = 2; x1 = v[0]; y1 = v[1]; x2 = v[2]; y2 = v[3]; }
+  void setValues(List<double> v) { p = kinds.indexWhere((k) => k.bez != null && k.name == 'Bezier').clamp(0, kinds.length - 1); x1 = v[0]; y1 = v[1]; x2 = v[2]; y2 = v[3]; }
+}
+
+/// A host that owns the curves: its kinds (the preset row), its intervals, and where a changed curve goes.
+/// [apply] is given the interval the curve belongs to, or null for every interval shown.
+abstract class EaseHost implements Listenable {
+  List<Preset> get kinds;
+  List<Seg> get intervals;
+  void apply(int? interval, Seg curve);
 }
 
 Rect easePlotBox(Size s) => Rect.fromLTRB(14, 34, s.width - 34, s.height - 22);
@@ -71,17 +80,40 @@ const _segColors = [kViolet, kMint, kPink];
 const _presetColors = [kBlue, kViolet, kPink, kMint, kYellow];
 
 class EaseDesk extends StatefulWidget {
-  const EaseDesk({super.key});
+  const EaseDesk({super.key, this.host});
+  final EaseHost? host;
   @override
   State<EaseDesk> createState() => _EaseDeskState();
 }
 
 class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin {
-  final segs = [Seg(2, 12), Seg(1, 8), Seg(3, 4)];
+  final _segs = [Seg(2, 12), Seg(1, 8), Seg(3, 4)];
+  List<Seg> _held = const [];
+  List<Seg> get segs => widget.host == null ? _segs : _held;
+  List<Preset> get presets => widget.host?.kinds ?? easePresets;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.host?.addListener(_absorb);
+    _absorb();
+  }
+
+  void _absorb() {
+    final h = widget.host;
+    if (h == null || drag != null) return;
+    setState(() {
+      _held = h.intervals;
+      if (sel >= _held.length) sel = _held.isEmpty ? 0 : _held.length - 1;
+    });
+  }
+
+  void _write() => widget.host?.apply(mixed ? null : sel, cur);
   final saved = <List<double>>[[.7, 0, .3, 1], [.2, .9, .6, 1.2]];
   int sel = 0; // -1 = all intervals (mixed)
   bool ghost = false;
   int? drag;
+  bool _moved = false;
   int? peek; // preset under the pointer or the keyboard: shown on the plot until it leaves
   int keyFocus = 2;
   final _presetFocus = FocusNode();
@@ -89,12 +121,13 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    widget.host?.removeListener(_absorb);
     _play.dispose();
     _presetFocus.dispose();
     super.dispose();
   }
 
-  Seg get cur => segs[sel < 0 ? 0 : sel];
+  Seg get cur => segs.isEmpty ? Seg(0, 1, presets) : segs[sel < 0 ? 0 : sel];
   bool get mixed => sel < 0;
   String _n(double v) => mixed ? '—' : v.toStringAsFixed(2);
 
@@ -211,7 +244,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         onKeyEvent: (_, e) {
           if (e is! KeyDownEvent) return KeyEventResult.ignored;
           final k = e.logicalKey;
-          final n = easePresets.length;
+          final n = presets.length;
           if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.arrowDown) { setState(() { keyFocus = (keyFocus + 1) % n; peek = keyFocus; }); }
           else if (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.arrowUp) { setState(() { keyFocus = (keyFocus + n - 1) % n; peek = keyFocus; }); }
           else if (k == LogicalKeyboardKey.home) { setState(() { keyFocus = 0; peek = 0; }); }
@@ -222,7 +255,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           return KeyEventResult.handled;
         },
         child: Row(children: [
-          for (final (i, p) in easePresets.indexed) ...[
+          for (final (i, p) in presets.indexed) ...[
             Expanded(
               child: MouseRegion(
                 onEnter: (_) => setState(() => peek = i),
@@ -232,9 +265,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                   onTap: () { _presetFocus.requestFocus(); setState(() { keyFocus = i; _apply(i); }); },
                   child: Container(
                     height: 42,
-                    margin: EdgeInsets.only(right: i == easePresets.length - 1 ? 0 : 5),
+                    margin: EdgeInsets.only(right: i == presets.length - 1 ? 0 : 5),
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: _presetColors[i], borderRadius: BorderRadius.circular(5), border: !mixed && cur.p == i ? Border.all(color: kInk, width: 2.4) : null),
+                    decoration: BoxDecoration(color: _presetColors[i % _presetColors.length], borderRadius: BorderRadius.circular(5), border: !mixed && cur.p == i ? Border.all(color: kInk, width: 2.4) : null),
                     child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape, const Color(0xFF1B1B1D), 2.4)),
                   ),
                 ),
@@ -246,13 +279,17 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
 
   void _apply(int i) {
     if (mixed) { for (final s in segs) { s.choose(i); } } else { cur.choose(i); }
+    _write();
   }
 
   Widget _savedRow() => Wrap(spacing: 5, runSpacing: 5, children: [
         for (final (i, v) in saved.indexed)
           GestureDetector(
             key: ValueKey('ease-saved-$i'),
-            onTap: () => setState(() { if (mixed) { for (final s in segs) { s.setValues(v); } } else { cur.setValues(v); } }),
+            onTap: () {
+              setState(() { if (mixed) { for (final s in segs) { s.setValues(v); } } else { cur.setValues(v); } });
+              _write();
+            },
             child: Container(width: 46, height: 34, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(4)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => setState(() => saved.add(List.of(cur.values)))),
@@ -302,7 +339,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                 height: 36,
                 margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : 4),
                 padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 5, vertical: 6),
-                decoration: BoxDecoration(color: _segColors[i], borderRadius: BorderRadius.circular(5), border: sel == i ? Border.all(color: kInk, width: 2.4) : null),
+                decoration: BoxDecoration(color: _segColors[i % _segColors.length], borderRadius: BorderRadius.circular(5), border: sel == i ? Border.all(color: kInk, width: 2.4) : null),
                 child: Row(children: [
                   if (!compact && sg.frames >= 8) Text('${sg.frames}f', style: sans(10, c: const Color(0xFF1B1B1D), w: FontWeight.w700)),
                   if (!compact && sg.frames >= 8) const SizedBox(width: 4),
@@ -316,10 +353,10 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget _plot({required bool labels}) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
         final startFrame = mixed ? 0 : segs.take(sel).fold<int>(0, (a, b) => a + b.frames);
-        final shown = peek == null ? cur.shape : easePresets[peek!].shape;
+        final shown = peek == null ? cur.shape : presets[peek!].shape;
         final painter = _PlotP(
           shown, mixed && peek == null ? segs.map((e) => e.shape).toList() : const [], cur.x1, cur.y1, cur.x2, cur.y2,
-          peek == null && !mixed && cur.bez, labels, peek == null ? easePresets[cur.p].name : '${easePresets[peek!].name}  ·  peek', mixed && peek == null, startFrame,
+          peek == null && !mixed && cur.bez, labels, peek == null ? presets[cur.p].name : '${presets[peek!].name}  ·  peek', mixed && peek == null, startFrame,
           mixed ? segs.fold<int>(0, (a, b) => a + b.frames) : cur.frames, ghost, _play.isAnimating || _play.value > 0 ? _play.value : .5,
         );
         void pick(Offset p) {
@@ -339,7 +376,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           final x = clampD((p.dx - r.left) / r.width, 0, 1);
           final y = clampD((r.bottom - p.dy) / r.height * 1.3 - .15, -.3, 1.3);
           setState(() {
-            cur.p = 2;
+            _moved = true;
+            cur.p = presets.indexWhere((k) => k.name == 'Bezier').clamp(0, presets.length - 1);
             if (drag == 0) { cur.x1 = x; cur.y1 = y; } else { cur.x2 = x; cur.y2 = y; }
           });
         }
@@ -348,7 +386,12 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           key: const ValueKey('ease-plot'),
           onPointerDown: (e) => pick(e.localPosition),
           onPointerMove: (e) => move(e.localPosition),
-          onPointerUp: (_) => setState(() => drag = null),
+          onPointerUp: (_) {
+            final wrote = drag != null && _moved;
+            _moved = false;
+            setState(() => drag = null);
+            if (wrote) _write();
+          },
           onPointerCancel: (_) => setState(() => drag = null),
           child: CustomPaint(size: size, painter: painter),
         );
