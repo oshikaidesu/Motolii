@@ -142,12 +142,16 @@ class _LiveBrowserState extends State<LiveBrowser> {
       final id = '${e['id']}', name = '${e['name'] ?? id}';
       final tile = byId[id] ?? byName[name.toLowerCase()];
       if (tile != null) {
-        bindings[tile] = ('applyEffect', {'pluginId': id});
+        bindings[tile] = ('applyEffect', {
+          'pluginIds': [id],
+        });
         seat.snapshots.add(id);
         seat.fixtureFallback.add(tile);
         continue;
       }
-      bindings[id] = ('applyEffect', {'pluginId': id});
+      bindings[id] = ('applyEffect', {
+        'pluginIds': [id],
+      });
       seat.snapshots.add(id);
       extra.add((
         'host',
@@ -165,7 +169,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
     seat._pictures.clear();
     catalog = extra.isEmpty
         ? _reference
-        : Catalog(_registryWithHostFamily(), [..._reference.files, ...extra]);
+        : Catalog(_registryWithHostFamily(), [...extra, ..._reference.files]);
     seat.refresh();
   }
 

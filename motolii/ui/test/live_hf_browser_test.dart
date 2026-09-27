@@ -109,7 +109,7 @@ void main() {
           'selectedId': 7,
           'selectedIds': [7],
         };
-      final scene = await EffectScene.build();
+      final scene = (await tester.runAsync(EffectScene.build))!;
       await tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
@@ -133,6 +133,7 @@ void main() {
       );
       await tester.tap(find.text('Effects').last);
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('browser-tab-1')), findsOneWidget);
       expect(find.text('Motion Blur'), findsWidgets);
       await tester.tap(find.text('Motion Blur').last);
       await tester.pumpAndSettle();
@@ -152,8 +153,10 @@ void main() {
 
       await tester.tap(find.text('Fonts').last);
       await tester.pumpAndSettle();
+      expect(c.activeLayer?['kind'], 'Text');
+      expect(c.supports('setFont'), isTrue);
       await tester.tap(find.byKey(const ValueKey('hf-font:Test Sans')));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(
         sent.any(
           (command) =>

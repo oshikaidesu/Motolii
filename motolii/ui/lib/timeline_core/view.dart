@@ -41,12 +41,12 @@ mixin TimelineView<T extends StatefulWidget>
   }
 
   void navigateView(double scale, double x, double y) {
-    final nextScale = scale.clamp(.1, 40.0);
+    final nextScale = scale.clamp(.1, 40.0).toDouble();
     final visible = math.max(1.0, viewportWidth - labelWidth);
     final targetX = x.clamp(
       0.0,
       math.max(0.0, overviewExtent * nextScale - visible),
-    );
+    ).toDouble();
     applyNavigation(nextScale, targetX, y);
   }
 
