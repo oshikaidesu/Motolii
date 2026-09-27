@@ -6,15 +6,11 @@ import 'package:flutter/widgets.dart';
 
 import '../hf/bp/effects.dart' show EffectScene;
 import '../hf/shell/place.dart' show H;
-import '../hf/shell/shell_face.dart';
 import '../session/editor_session.dart';
-import '../panels/stage.dart' show StagePanel;
-import 'adapters/browser.dart';
 import 'adapters/document.dart';
-import 'adapters/timeline.dart';
 import 'adapters/top.dart';
-import 'adapters/right_seat.dart';
 import 'keys.dart';
+import 'workspace.dart';
 
 /// A path: once the document is open, the 1536x1024 face is written there as a PNG, the same capture proto_hf's
 /// `PROTO_SHOT` makes, so the two can be compared pixel for pixel.
@@ -32,6 +28,7 @@ class _LiveShellState extends State<LiveShell> {
   final _face = GlobalKey();
   bool ready = false;
   late EffectScene scene;
+  LiveWorkspace? workspace;
   late final keys = LiveKeys(c, () => context);
 
   @override
@@ -39,7 +36,11 @@ class _LiveShellState extends State<LiveShell> {
     super.initState();
     c.confirmClose = () => mayReplace(context, c);
     c.panelPlacementRequested = (name, placement) async {
-      if (liveDesks.contains(name)) c.deskDrawer.value = placement == 'hide' ? null : name;
+      if (liveDesks.contains(name)) {
+        c.deskDrawer.value = placement == 'hide' ? null : name;
+      } else if (placement != 'hide') {
+        workspace?.dock.activate(name, near: 'Stage');
+      }
     };
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);
@@ -51,6 +52,7 @@ class _LiveShellState extends State<LiveShell> {
     scene = await EffectScene.build();
     await c.initialize();
     if (!mounted) return;
+    workspace = LiveWorkspace(c: c, scene: scene);
     setState(() => ready = true);
     if (_shot.isNotEmpty) _capture();
   }
@@ -89,12 +91,15 @@ class _LiveShellState extends State<LiveShell> {
                 fit: BoxFit.scaleDown,
                 child: RepaintBoundary(
                   key: _face,
-                  child: ShellFace(
-                    top: SessionTop(c: c),
-                    browser: LiveBrowser(c: c, scene: scene),
-                    stage: StagePanel(controller: c),
-                    right: RightSeat(c: c),
-                    timeline: LiveTimeline(c: c),
+                  child: SizedBox(
+                    width: 1536,
+                    height: 1024,
+                    child: Column(
+                      children: [
+                        SizedBox(height: 62, child: SessionTop(c: c)),
+                        Expanded(child: workspace!.build()),
+                      ],
+                    ),
                   ),
                 ),
               ),
