@@ -6,6 +6,8 @@ import 'hg_item.dart';
 import 'ref.dart';
 import '../hf/shell/top.dart' as shell_top show top;
 import '../hf/shell/top.dart' show TopModel;
+import '../hf/shell/stage.dart' as shell_stage show stage;
+import '../hf/shell/stage.dart' show StageModel;
 
 Color shade(Color c, double t) => Color.lerp(c, const Color(0xFF000000), t)!;
 const _stageArt = String.fromEnvironment('PROTO_STAGE', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto/stage_hf.png');
@@ -93,38 +95,8 @@ List<RI> browser() {
 }
 
 // ---------------------------------------------------------------- STAGE
-List<RI> stage() {
-  const tools = [HG.arrow, HG.move, HG.rect, HG.ellipse, HG.pen, HG.type, HG.crop];
-  const dd = Color(0xFF1D1D1D);
-  const ddB = Color(0xFF3E3E3D);
-  final items = <RI>[
-    Ln(344, 62, 1, 631, H.rule), Ln(1122, 62, 1, 631, H.rule), Ln(344, 62, 779, 1, H.rule), Ln(344, 692, 779, 1, H.rule),
-    Rc(345, 71, 140, 30, fill: H.sel, borders: const Border(top: BorderSide(color: H.rule), left: BorderSide(color: H.rule), right: BorderSide(color: H.rule))),
-    Tx(358, 90, 'Composition 1', H.s(13, w: FontWeight.w500, color: H.text), w: 91),
-    Tx(463, 90, '×', H.s(16, color: H.text2)),
-    Rc(486, 71, 40, 30, fill: H.raised, borders: const Border(top: BorderSide(color: H.rule), right: BorderSide(color: H.rule))),
-    Hg(506, 87, 17, HG.plus, const Color(0xFFB4B3B5)),
-    Ln(345, 100, 777, 1, H.rule2),
-    Wd(345, 101, 777, 537, Image.file(File(_stageArt), fit: BoxFit.fill, filterQuality: FilterQuality.medium)),
-    Ln(345, 637, 777, 1, H.rule2),
-    // tool column, over the work
-    Rc(354, 111, 42, 304, fill: H.raised, border: H.rule, r: 2),
-    Rc(355, 112, 40, 43, fill: H.selHi),
-    for (var i = 1; i < 7; i++) Ln(355, 111 + 43.4 * i, 40, 1, H.rule2),
-    for (var i = 0; i < 7; i++) Hg(375, 111 + 43.4 * i + 21.7, 23, tools[i], i == 0 ? const Color(0xFFEEEEF0) : const Color(0xFFD8D8DA), bg: const Color(0xFF222223)),
-    // bottom bar
-    Rc(354, 649, 117, 33, fill: dd, border: ddB, r: 3),
-    Tx(371, 670, '100%', H.s(13, color: H.text), w: 31),
-    Hg(453, 665, 15, HG.chevronDown, const Color(0xFFDDDDDD)),
-    Rc(489, 649, 38, 33, fill: dd, border: ddB, r: 3), Hg(508, 665, 20, HG.fit, const Color(0xFFD0D0D0)),
-    Rc(534, 649, 37, 33, fill: dd, border: ddB, r: 3), Hg(552, 665, 20, HG.fit, const Color(0xFFD0D0D0)),
-    Rc(894, 649, 144, 33, fill: dd, border: ddB, r: 3),
-    Tx(905, 670, 'Camera View', H.s(13, color: H.text), w: 80),
-    Hg(1020, 665, 15, HG.chevronDown, const Color(0xFFDDDDDD)),
-    Rc(1057, 649, 37, 33, fill: dd, border: ddB, r: 3), Hg(1075.5, 665, 20, HG.corners, const Color(0xFFD0D0D0)),
-  ];
-  return items;
-}
+// The face is hf/shell/stage.dart; the fixture is the reference's artwork.
+List<RI> stage() => shell_stage.stage(StageModel(picture: Image.file(File(_stageArt), fit: BoxFit.fill, filterQuality: FilterQuality.medium)));
 
 // ------------------------------------------------------------ INSPECTOR
 List<RI> inspector() {
