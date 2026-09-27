@@ -85,22 +85,13 @@ class _LiveShellState extends State<LiveShell> {
       color: H.window,
       child: !ready
           ? const SizedBox.expand()
-          : Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: RepaintBoundary(
-                  key: _face,
-                  child: SizedBox(
-                    width: 1536,
-                    height: 1024,
-                    child: Column(
-                      children: [
-                        SizedBox(height: 62, child: SessionTop(c: c)),
-                        Expanded(child: workspace!.build()),
-                      ],
-                    ),
-                  ),
-                ),
+          : RepaintBoundary(
+              key: _face,
+              child: Column(
+                children: [
+                  SizedBox(height: 62, child: SessionTop(c: c)),
+                  Expanded(child: workspace!.build()),
+                ],
               ),
             ),
     ),
