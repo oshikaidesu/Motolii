@@ -16,12 +16,13 @@ class PanelDef {
 /// The New shell's workspace: the off-the-shelf `docking` layout plus what only Motolii knows around it,
 /// which is the panel registry, showing a panel by id, and where a panel is on screen.
 class DockWorkspace {
-  DockWorkspace(this.defs, this._preset, {this.onDetach}) {
+  DockWorkspace(this.defs, this._preset, {this.onDetach, this.allowClose = true}) {
     layout = DockingLayout(root: _preset(item));
   }
 
   /// Given, every tab gets a small menu with Detach (a panel of its own window) and Close.
   final void Function(String id)? onDetach;
+  final bool allowClose;
 
   /// The default workspace: the arrangement the design started from.
   final DockingArea Function(DockingItem Function(String id, {double? weight}) item) _preset;
@@ -69,7 +70,7 @@ class DockWorkspace {
             toolTip: 'Panel',
             menuBuilder: (context) => [
               TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
-              TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
+              if (allowClose) TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
             ],
           ),
       ],
