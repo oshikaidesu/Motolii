@@ -4,14 +4,8 @@ import 'package:flutter/widgets.dart';
 import '../hf/glyphs.dart';
 import 'hg_item.dart';
 import 'ref.dart';
-
-class Wd extends RI {
-  Wd(this.x, this.y, this.w, this.h, this.child);
-  final double x, y, w, h;
-  final Widget child;
-  @override
-  Widget build(double ox, double oy) => Positioned(left: x - ox, top: y - oy, width: w, height: h, child: child);
-}
+import '../hf/shell/top.dart' as shell_top show top;
+import '../hf/shell/top.dart' show TopModel;
 
 Color shade(Color c, double t) => Color.lerp(c, const Color(0xFF000000), t)!;
 const _stageArt = String.fromEnvironment('PROTO_STAGE', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto/stage_hf.png');
@@ -19,47 +13,9 @@ const _stageArt = String.fromEnvironment('PROTO_STAGE', defaultValue: '/Users/me
 List<RI> all() => [Rc(0, 0, 1536, 1024, fill: H.window), ...top(), ...browser(), ...stage(), ...inspector(), ...timeline()];
 
 // ------------------------------------------------------------------ TOP
-List<RI> top() {
-  const keyBorder = Color(0xFF363636);
-  Rc key(double x, double w, Color fill, Color border) => Rc(x, 14, w, 37, fill: fill, border: border, r: 3);
-  return [
-    Ln(0, 61, 1536, 1, H.rule),
-    Tx(20, 43, 'Motolii', H.s(28, w: FontWeight.w600, ls: -0.4, color: H.text2), w: 97),
-    Tx(152, 30, 'Motion', H.s(12, color: const Color(0xFFBDBEC0))),
-    Tx(152, 44, 'for More Relations.', H.s(12, color: const Color(0xFFBDBEC0)), w: 102),
-    key(363, 41, H.play, H.play),
-    key(410, 40, const Color(0xFF1C1C1C), keyBorder),
-    key(456, 41, const Color(0xFF1F1F1F), const Color(0xFF3C3C3C)),
-    Pt(_TopGlyphs()),
-    Tx(533, 37, '120.00', H.m(12.5, color: const Color(0xFFD8D9D8)), w: 44),
-    Tx(616, 37, '4 / 4', H.m(12.5, color: const Color(0xFFD8D9D8)), w: 33),
-    Tx(687, 37, '00:02:13', H.m(12.5, color: const Color(0xFFD8D9D8)), w: 60),
-    Hg(770, 31, 15, HG.plus, const Color(0xFFCFCFCF)),
-    Rc(830, 14, 264, 37, fill: H.raised, border: H.rule, r: 3,
-        child: ClipRRect(borderRadius: BorderRadius.circular(2), child: Align(alignment: Alignment.centerLeft, child: SizedBox(width: 88, height: double.infinity, child: ColoredBox(color: H.mode))))),
-    Tx(860, 37, 'EDIT', H.s(12, w: FontWeight.w600, ls: 0.8, color: const Color(0xFFFCFCFE)), w: 29),
-    Tx(947, 37, 'PLAY', H.s(12, w: FontWeight.w600, ls: 0.8, color: H.text2), w: 29),
-    Tx(1026, 37, 'EXPORT', H.s(12, w: FontWeight.w600, ls: 0.8, color: H.text2), w: 46),
-    for (final x in [1148.0, 1201.0, 1252.0]) Rc(x, 14, 40, 37, fill: H.raised, border: H.rule, r: 3),
-    Hg(1168, 32, 24, HG.fit, const Color(0xFFD6D8D8), bg: const Color(0xFF1E1E1E)),
-    Hg(1221, 32, 24, HG.pin, const Color(0xFFD6D8D8)),
-    Hg(1272, 32, 24, HG.folder, const Color(0xFFD6D8D8)),
-    Tx(1506, 27, 'Less numbers.', H.m(12, color: H.text2), al: Al.right, w: 101),
-    Tx(1506, 45, 'More motion.', H.m(12, color: H.text2), al: Al.right, w: 92),
-  ];
-}
-
-class _TopGlyphs extends CustomPainter {
-  @override
-  void paint(Canvas cv, Size s) {
-    cv.drawPath(Path()..moveTo(377.4, 24.5)..lineTo(393.4, 32.5)..lineTo(377.4, 40.5)..close(), Paint()..color = const Color(0xFF040709));
-    cv.drawRect(const Rect.fromLTWH(424.5, 27, 11, 11), Paint()..color = const Color(0xFF969697));
-    cv.drawCircle(const Offset(475.5, 32), 6.5, Paint()..color = H.record);
-    cv.drawRect(const Rect.fromLTWH(596, 24, 1.2, 14), Paint()..color = const Color(0xFF6A6A6A));
-  }
-  @override
-  bool shouldRepaint(_TopGlyphs o) => false;
-}
+// The face is hf/shell/top.dart; the fixture is the reference's own values.
+final _fixtureReadouts = ValueNotifier(const ['120.00', '4 / 4', '00:02:13']);
+List<RI> top() => shell_top.top(TopModel(readouts: _fixtureReadouts));
 
 // -------------------------------------------------------------- BROWSER
 List<RI> browser() {

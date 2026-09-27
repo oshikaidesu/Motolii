@@ -1,24 +1,31 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-import '../hf/bp/common.dart' show kGround, kMuted, sans;
-import '../hf/desk/common.dart' show kInk;
+import '../foundation/metrics.dart';
+import '../foundation/panel_controls.dart' show EditorScale;
+import '../hf/shell/place.dart' show H;
 import '../hf/shell/shell_face.dart';
+import '../input/editor_shortcuts.dart';
+import '../panels/composition_controls.dart';
+import '../panels/export_controls.dart';
 import '../panels/stage.dart';
 import '../panels/timeline.dart';
 import '../session/editor_session.dart';
+import 'editor_actions.dart';
 import 'new/browser/shelf_panel.dart';
+import 'new/shell/session_top.dart';
 import 'new/inspector/new_transform.dart';
+import 'new/shell_bar.dart' show NewSettings;
 
-/// First production probe of the proto_hf visual authority: the same [ShellFace] proto_hf's own `Shell` builds,
-/// with Motolii Live in every slot instead of fixtures. Root is ShellFace itself, not `NewShell` — the docking
-/// package, its tab/header chrome and its persisted workspace are a later, separate step (ui-rebaseline brief
-/// STOP conditions do not include "Dock capability isn't wired yet").
-///
-/// Deliberately small: Browser and the right seat already have session-backed hf faces (`ShelfPanel`,
-/// `NewTransform`, following the pattern `SessionTransformStore` set), so they go in as-is. Stage and Timeline
-/// are the real Session-backed production widgets already, unstyled (Classic's own bars) — hf chrome for them
-/// is a later step, not a blocker for proving the shell itself. Top is the minimum real state (playback) rather
-/// than a fixture, so nothing here is fixture-backed.
+/// The proto_hf Shell face as the production window: the same [ShellFace] proto_hf's own `Shell` builds, with
+/// Motolii Live in every seat. No dock yet — docking comes back later behind this face, not in front of it.
+/// A path: once the document is open, the 1536x1024 face is written there as a PNG, the same capture
+/// proto_hf's `PROTO_SHOT` makes, so the two can be compared pixel for pixel.
+const _shot = String.fromEnvironment('MOTOLII_SHOT');
+
 class ProductionProtoShell extends StatefulWidget {
   const ProductionProtoShell({super.key});
   @override
@@ -28,10 +35,25 @@ class ProductionProtoShell extends StatefulWidget {
 class _ProductionProtoShellState extends State<ProductionProtoShell> {
   final c = EditorSession();
   bool ready = false;
+  final _face = GlobalKey();
+  String? sheet;
+  late final uiScale = EditorScale.of(context) ?? ValueNotifier(1.0);
+  late final shortcuts = EditorShortcuts(
+    c,
+    onMenu: menu,
+    hasSheet: () => sheet != null,
+    closeSheet: () => setState(() => sheet = null),
+    showComposition: () => setState(() => sheet = 'Composition'),
+    showInspector: () {},
+  );
 
   @override
   void initState() {
     super.initState();
+    c.confirmClose = () => confirmReplacement(context, c);
+    c.filesDropped = (paths) {
+      if (paths.isNotEmpty) c.importPaths(paths);
+    };
     _initialize();
   }
 
@@ -39,6 +61,18 @@ class _ProductionProtoShellState extends State<ProductionProtoShell> {
     await c.initialize();
     if (!mounted) return;
     setState(() => ready = true);
+    if (_shot.isNotEmpty) _capture();
+  }
+
+  Future<void> _capture() async {
+    await Future<void>.delayed(const Duration(seconds: 3));
+    for (var i = 0; i < 8; i++) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    final b = _face.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final img = await b.toImage(pixelRatio: 1.0);
+    File(_shot).writeAsBytesSync((await img.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List());
+    stdout.writeln('MOTOLII_SHOT ${img.width}x${img.height} $_shot');
   }
 
   @override
@@ -47,49 +81,61 @@ class _ProductionProtoShellState extends State<ProductionProtoShell> {
     super.dispose();
   }
 
+  Future<void> menu(String action) async {
+    setState(() => sheet = null);
+    if (await documentAction(context, c, action)) return;
+    await c.placePanel(action, 'show');
+  }
+
+  void toggleSheet(String name) => setState(() => sheet = sheet == name ? null : name);
+
   @override
-  Widget build(BuildContext context) => ColoredBox(
-        color: kGround,
-        child: !ready
-            ? const SizedBox.expand()
-            : Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: ShellFace(
-                    top: _ProtoTop(c: c),
-                    browser: ShelfPanel(controller: c, name: 'Create'),
-                    stage: StagePanel(controller: c),
-                    right: NewTransform(controller: c),
-                    timeline: TimelinePanel(controller: c),
+  Widget build(BuildContext context) => Focus(
+        autofocus: true,
+        onKeyEvent: shortcuts.handle,
+        child: ColoredBox(
+          color: H.window,
+          child: !ready
+              ? const SizedBox.expand()
+              : Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: RepaintBoundary(
+                      key: _face,
+                      child: SizedBox(
+                      width: ShellFace.width,
+                      height: ShellFace.height,
+                      child: Stack(children: [
+                        ShellFace(
+                          top: SessionTop(c: c, sheet: sheet, onSheet: toggleSheet, onMenu: menu),
+                          browser: ShelfPanel(controller: c, name: 'Create'),
+                          stage: StagePanel(controller: c),
+                          right: NewTransform(controller: c),
+                          timeline: TimelinePanel(controller: c),
+                        ),
+                        if (sheet != null) ..._sheet(),
+                      ]),
+                    ),
+                    ),
                   ),
                 ),
-              ),
-      );
-}
-
-/// The minimum real top: playback, nothing else yet. File/Edit/Composition/Export operations
-/// (`NewTopBar`'s job in the current production shell) are a later step, not proto_hf's own visual grammar
-/// to imitate — the top slot only needs to prove it is Motolii Live, not to be finished.
-class _ProtoTop extends StatelessWidget {
-  const _ProtoTop({required this.c});
-  final EditorSession c;
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: const BoxDecoration(color: kGround),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: [
-            Text('Motolii', style: sans(15, c: kInk, w: FontWeight.w600)),
-            const SizedBox(width: 16),
-            ListenableBuilder(
-              listenable: c.playing,
-              builder: (context, _) => GestureDetector(
-                onTap: c.togglePlayback,
-                child: Text(c.playing.value ? 'Pause' : 'Play', style: sans(12, c: kMuted, w: FontWeight.w600)),
-              ),
-            ),
-          ]),
         ),
       );
+
+  List<Widget> _sheet() => [
+        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => sheet = null))),
+        Positioned(
+          left: 344,
+          top: 62,
+          child: Container(
+            width: sheet == 'Settings' ? EditorMetrics.sheetWide : EditorMetrics.sheet,
+            decoration: BoxDecoration(color: H.raised, border: Border.all(color: H.rule)),
+            child: switch (sheet) {
+              'Composition' => CompositionControls(controller: c),
+              'Export' => ExportControls(controller: c),
+              _ => NewSettings(c: c, scale: uiScale),
+            },
+          ),
+        ),
+      ];
 }
