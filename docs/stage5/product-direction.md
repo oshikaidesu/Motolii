@@ -57,3 +57,13 @@ Stop when a change would:
 - rest on "this is more natural"
 
 Then bring, not "what should I do?", but: **observation → existing precedents → options (A/B/C) → consequence of each**, and say which layer the decision belongs to. Asking this is part of working autonomously, not a failure of it.
+
+## After a decision: decision → primitive → instances
+
+Once a decision is made, the rest is autonomous:
+1. **Inventory** every place the same decision governs (all seats, all tab strips, not the one in view).
+2. **Find the owner.** Things that will change together for the same product reason share one owner/primitive; things that change for different reasons stay separate owners even when they look alike (Camera View and the Camera Inspector share no owner). If none exists, PROMOTE the most finished instance (e.g. Browser Leaf → the tab primitive), minimally.
+3. **Connect every instance** to it; retire the per-instance copies.
+4. **Later fixes go to the owner**, never to one instance ("inactive fold looks wrong" is one edit that changes Browser, Timeline and Dock together).
+
+Asking happens once, when the meaning is decided; consolidation, migration and the full check that follow are not questions.
