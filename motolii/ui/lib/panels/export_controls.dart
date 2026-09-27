@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
+import '../session/export_actions.dart' as shared_export;
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 
@@ -29,21 +30,7 @@ class _ExportControlsState extends State<ExportControls> {
   ) => ValueListenableBuilder<Map<String, dynamic>>(
     valueListenable: c.slice('export', const ['export', 'capabilities']),
     builder: (_, s, __) {
-      final total = (s['durationFrames'] as num? ?? 1).toInt();
-      int start = 0, end = total;
-      if (markers) {
-        final list = EditorSession.maps(
-          s['markers'],
-        ).map((m) => (m['frame'] as num).toInt()).toList()..sort();
-        for (final f in list) {
-          if (f <= c.frame.value)
-            start = f;
-          else {
-            end = f;
-            break;
-          }
-        }
-      }
+      final (start, end) = shared_export.exportRange(c, s, markers: markers);
       final ex = EditorSession.map(s['export']);
       final running = ['running', 'cancelling'].contains(ex['phase']);
       return Padding(
@@ -82,21 +69,8 @@ class _ExportControlsState extends State<ExportControls> {
     },
   );
   Future<void> export(int start, int end) async {
-    if (end <= start) {
-      c.error.value = 'Choose a non-empty range';
-      return;
-    }
-    final path = await c.native('pickExport', {'name': 'Untitled.mp4'});
-    if (path is! String) return;
-    await c.command('export', {'path': path, 'start': start, 'end': end});
+    if (!await shared_export.startExport(c, start, end)) return;
     poll?.cancel();
-    poll = Timer.periodic(const Duration(milliseconds: 300), (_) async {
-      await c.command('exportStatus');
-      if (![
-        'running',
-        'cancelling',
-      ].contains(EditorSession.map(c.state['export'])['phase']))
-        poll?.cancel();
-    });
+    poll = shared_export.pollExport(c);
   }
 }
