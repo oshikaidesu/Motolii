@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import '../desk/common.dart' show kYellow, kBlue, kViolet, kPink, kInk;
 import 'rows.dart';
+import '../metrics.dart';
 import 'tones.dart';
 
 const kTile = Color(0xFF212123);
@@ -226,7 +227,7 @@ class _ValueToyState extends State<ValueToy> {
     final row = s.row;
     final track = s.axis == null && tight(row);
     final frac = track ? ((s.value - (row['min'] as num)) / span(row)).clamp(0.0, 1.0) : 0.0;
-    final h = widget.hero ? 34.0 : 30.0;
+    final h = widget.hero ? UiMetrics.controlHero : UiMetrics.control;
     final ink = frozen ? const Color(0xFF55565C) : _readout;
     final unit = widget.showUnit ? s.unit : null;
     // colour mass follows importance: an ordinary Value has a thin edge, a touched one a wider edge and a tint, a hero more
@@ -323,7 +324,7 @@ class _ValueToyState extends State<ValueToy> {
                     if (widget.tag != null) Padding(padding: const EdgeInsets.only(right: 7), child: Text(widget.tag!, style: sans(9.5, c: const Color(0xFF6E6F76), w: FontWeight.w600))),
                     Expanded(
                       child: editing
-                          ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 17 : 15, c: kInk, w: FontWeight.w600), cursorColor: kInk, backgroundCursorColor: kMuted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
+                          ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 14 : 13, c: kInk, w: FontWeight.w600), cursorColor: kInk, backgroundCursorColor: kMuted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
                           : Text(s.mixed ? '—' : s.format(s.value, decimals: widget.decimals), softWrap: false, overflow: TextOverflow.clip, style: sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500)),
                     ),
                     if (editing && _bad) Text('Number required', key: ValueKey('bad-${s.id}'), style: sans(10, c: kPink))
@@ -400,7 +401,7 @@ class ToggleToy extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: frozen ? null : () => store.set(id, !on),
       child: Container(
-        height: 30,
+        height: UiMetrics.control,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(color: on && hero ? tone.withValues(alpha: .26) : kTile, borderRadius: BorderRadius.circular(5)),
         child: Row(children: [
@@ -429,23 +430,29 @@ class ChoiceToy extends StatelessWidget {
     final frozen = store.frozen;
     void pick(int i) { if (!frozen) store.set(id, (i + choices.length) % choices.length); }
     if (choices.length <= 4) {
-      return Row(children: [
+      // one control: the options in a single track, the chosen one in the property's tone (a selection, not a chip)
+      return Container(
+        height: UiMetrics.control,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(color: const Color(0xFF151517), border: Border.all(color: const Color(0xFF2E2F33)), borderRadius: BorderRadius.circular(5)),
+        child: Row(children: [
         for (final (i, c) in choices.indexed) ...[
           Expanded(
             child: GestureDetector(
               key: ValueKey('choice-$id-$i'),
               behavior: HitTestBehavior.opaque,
               onTap: () => pick(i),
-              child: Container(height: 30, alignment: Alignment.center, decoration: BoxDecoration(color: i == cur ? (frozen ? dimTone(tone) : tone) : kTile, borderRadius: BorderRadius.circular(5)), child: Text(c, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: i == cur ? (frozen ? const Color(0xFF8A8B90) : _dark) : (frozen ? const Color(0xFF55565C) : const Color(0xFFB4B6BB)), w: i == cur ? FontWeight.w700 : FontWeight.w500))),
+              child: Container(alignment: Alignment.center, decoration: BoxDecoration(color: i == cur ? (frozen ? dimTone(tone) : tone) : null, borderRadius: BorderRadius.circular(3)), child: Text(c, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: i == cur ? (frozen ? const Color(0xFF8A8B90) : _dark) : (frozen ? const Color(0xFF55565C) : const Color(0xFFB4B6BB)), w: i == cur ? FontWeight.w700 : FontWeight.w500))),
             ),
           ),
-          if (i < choices.length - 1) const SizedBox(width: 3),
+          if (i < choices.length - 1) const SizedBox(width: 2),
         ],
-      ]);
+      ]),
+      );
     }
     // the stepper always names one choice: an out-of-range value reads as the nearest, as before
     final shown = raw.clamp(0, choices.length - 1);
-    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: 28, height: 30, child: Center(child: Text(t, style: sans(16, c: kMuted)))));
+    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: 24, height: UiMetrics.control, child: Center(child: Text(t, style: sans(15, c: kMuted)))));
     return Container(
       height: 30,
       decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
@@ -537,7 +544,7 @@ class ReferenceToy extends StatelessWidget {
         store.set(id, i + 1 >= refs.length ? null : refs[i + 1]);
       },
       child: Container(
-        height: 30,
+        height: UiMetrics.control,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
         child: Row(children: [
@@ -572,7 +579,7 @@ class RouteToy extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => store.route(to, id),
       child: Container(
-        height: 30,
+        height: UiMetrics.control,
         padding: const EdgeInsets.only(left: 9, right: 10),
         decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
         child: Row(children: [

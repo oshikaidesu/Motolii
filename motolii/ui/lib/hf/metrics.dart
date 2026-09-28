@@ -30,7 +30,7 @@ abstract final class UiMetrics {
   static const menuRow = 28.0;
 
   /// The Inspector's property cell: its label line, the gap under it, and the gap to the next cell.
-  static const labelRow = 12.0, labelGap = 2.0, cellGap = 5.0;
+  static const labelRow = 13.0, labelGap = 2.0, cellGap = 5.0;
 
   /// Space: inside a panel, between groups, between neighbours.
   static const pad = 12.0, gap = 8.0, tight = 4.0;

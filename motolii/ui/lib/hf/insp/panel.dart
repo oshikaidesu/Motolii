@@ -6,6 +6,7 @@ import '../bp/search.dart';
 import '../desk/common.dart' show kBlue, kInk;
 import 'rows.dart';
 import 'toys.dart';
+import '../metrics.dart';
 import 'tones.dart';
 
 /// Heroes: the declared ones, else the first four that are not advanced (four in front, the rest behind).
@@ -110,7 +111,7 @@ class _InspectorBodyState extends State<InspectorBody> {
                   : ListView.builder(
                       key: const ValueKey('insp-list'),
                       controller: scroll,
-                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 20),
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 16),
                       itemCount: entries.length,
                       itemBuilder: (_, i) => _entry(entries[i]),
                     ),
@@ -123,15 +124,15 @@ class _InspectorBodyState extends State<InspectorBody> {
 }
 
 Widget paramEntry(PEntry e, ParamStore store, Tones tones, VoidCallback toggleAdvanced) => switch (e) {
-        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 12, bottom: 5), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3))])),
+        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3))])),
         PFold(:final count, :final open) => GestureDetector(
             key: const ValueKey('advanced-fold'),
             behavior: HitTestBehavior.opaque,
             onTap: () => toggleAdvanced(),
-            child: Padding(padding: const EdgeInsets.only(top: 12, bottom: 5), child: Row(children: [Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('$count', style: mono(9.5, c: const Color(0xFF6E6F76)))])),
+            child: Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('$count', style: mono(9.5, c: const Color(0xFF6E6F76)))])),
           ),
         PCells(:final rows, :final hero) => Padding(
-            padding: const EdgeInsets.only(bottom: 7),
+            padding: const EdgeInsets.only(bottom: UiMetrics.cellGap),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               for (final (i, r) in rows.indexed) ...[
                 Expanded(child: ParamCell(store, r, hero: hero, tone: tones.of(r))),
@@ -204,7 +205,7 @@ class ParamCell extends StatelessWidget {
     final t = store.frozen ? dimTone(tone) : tone;
     return Column(key: ValueKey('cell-$id'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SizedBox(
-        height: 15,
+        height: UiMetrics.labelRow,
         child: Row(children: [
           // a diamond when the value is animated; where the store can key, an unkeyed value shows a faint one and any of them keys this frame
           if (row['animated'] == true || store.keyable)
@@ -239,7 +240,7 @@ class ParamCell extends StatelessWidget {
           if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { store.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: const Color(0xFF55565C))))),
         ]),
       ),
-      const SizedBox(height: 3),
+      const SizedBox(height: UiMetrics.labelGap),
       toy,
       if (actions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Wrap(spacing: 5, children: [for (final a in actions) ActionChip(store, id, a, tone: tone)])),
     ]);
