@@ -16,7 +16,6 @@ import '../../session/editor_session.dart';
 import '../../timeline_core/layout.dart' show TrackRow;
 import '../../timeline_core/semantics.dart';
 import '../../timeline_core/session.dart';
-import 'timeline_alt.dart' show altTimelineSkin;
 
 /// The Timeline's tools at its seat strip's right end (the Dock asks the front panel for them): Split and Marker.
 class LiveTimelineTools extends StatelessWidget {
@@ -28,8 +27,6 @@ class LiveTimelineTools extends StatelessWidget {
         builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
           HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
           HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
-          // TEMPORARY: the Skin Swap Proof's switch
-          HfAction('A/B', onTap: () => altTimelineSkin.value = !altTimelineSkin.value),
         ]),
       );
 }
