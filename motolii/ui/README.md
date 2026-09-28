@@ -8,4 +8,4 @@ Rust編集層は`native/src/editor`。旧実装は[Git履歴](../../docs/stage5/
 
 寸法・余白・文字サイズは`lib/foundation/metrics.dart`の`EditorMetrics`から取る。生の数字は`tool/motolii_lints`(analyzer plugin)がIDEで止め、`scripts/motolii-ui.sh test`の`bin/check.dart`が一式で止める。quick fixは同じ値のtokenへ置き換える。Dockの側面幅は`panel_catalog.dart`の`Extent`。
 
-Inspectorは部品版に一本化。[操作契約と検証](../../docs/stage5/inspector.md)。
+Classic shellのInspectorは部品版に一本化(New・live_hfはそれぞれ自分のInspectorを持つ — `docs/stage5/README.md` の起動入口)。[操作契約と検証](../../docs/stage5/inspector.md)。

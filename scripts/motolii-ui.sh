@@ -36,7 +36,7 @@ case "${1:-dev}" in
   test)
     "$repo/scripts/motolii-ui.sh" why-slow
     "$repo/scripts/motolii-ui.sh" test-window
-    cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-edit; cargo test -p motolii-jobs; cargo test -p motolii-ui --lib; cargo test -p motolii-render --lib
+    cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-edit; cargo test -p motolii-jobs; cargo test -p motolii-ui --lib; cargo test -p motolii-render --no-fail-fast --test '*'; cargo test -p motolii-render --lib
     dart_bin="$(dirname "$flutter_bin")/dart"
     (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
     cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;

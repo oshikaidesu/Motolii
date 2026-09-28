@@ -25,7 +25,7 @@
 | Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
 | WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
 
-**残る分離**: 配置・パス・解析などの組み込み効果は `motolii-doc/src/extensions` に分離したが、レイアウトと効果評価の組み立てはまだdoc内にある。`motolii-doc`全体が最小コアになったとは扱わない。保存形式の変更や、9月17日の未決定の「idと時刻だけ」案の採用は、この移動に含めない。
+**残る分離**: 配置・パス・解析などの組み込み効果は `motolii-render/src/extensions` にある(2026-09-20 `e4715ec29` でcoreから移動)。(2026-09-19時点の記述)レイアウトと効果評価の組み立てはまだdoc内にある。`motolii-doc`全体が最小コアになったとは扱わない。保存形式の変更や、9月17日の未決定の「idと時刻だけ」案の採用は、この移動に含めない。
 
 Recordingの検収: doc単体128件、編集transaction19件、Undoを呼べないcompile-fail testが成功し、jobsを含むbuild checkが成功。RRDからの同値読み込み、Undo後の確定位置、一時値を除く変換、workerへ移せるSendを確認した。新しい型を使った実窓でのexport/Freeze完走は未検収。型の権限分離であり、編集実装をビルド依存から外すcrate分離ではない。
 
