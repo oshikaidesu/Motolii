@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,8 +42,18 @@ void main() {
     await t.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
-        child: Center(
-          child: SizedBox(width: 320, height: 700, child: RightSeat(c: c)),
+        child: Localizations(
+          locale: const Locale('en'),
+          delegates: const [DefaultWidgetsLocalizations.delegate],
+          child: Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => Center(
+                child: SizedBox(width: 320, height: 700, child: RightSeat(c: c)),
+              ),
+            ),
+          ],
+        ),
         ),
       ),
     );
@@ -85,4 +96,30 @@ void main() {
       });
     },
   );
+  testWidgets('holding an effect card and dragging it below the next applies it later (moveEffect)', (t) async {
+    await seat(t, {
+      'id': 1,
+      'name': 'Box',
+      'kind': 'Shape',
+      'effects': [
+        {'id': 'e1', 'name': 'Blur', 'enabled': true, 'params': []},
+        {'id': 'e2', 'name': 'Glow', 'enabled': true, 'params': []},
+      ],
+    });
+    final first = find.byKey(const ValueKey('effect-card:e1'));
+    final second = find.byKey(const ValueKey('effect-card:e2'));
+    await t.ensureVisible(first);
+    final from = t.getRect(first).topCenter + const Offset(0, 12);
+    final g = await t.startGesture(from);
+    await t.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    final to = t.getRect(second).bottomCenter + const Offset(0, 10);
+    for (var k = 1; k <= 10; k++) {
+      await g.moveTo(Offset.lerp(from, to, k / 10)!);
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    await t.pump(const Duration(milliseconds: 300));
+    await g.up();
+    await t.pumpAndSettle();
+    expect(sent.where((m) => m['op'] == 'moveEffect').single, {'op': 'moveEffect', 'layer': 1, 'id': 'e1', 'to': 1});
+  });
 }
