@@ -23,7 +23,7 @@ import 'main_transform.dart' as tf;
 import 'ref.dart' show H, RF;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
-const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto_hf/data/things');
+const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/proto_hf/data/things');
 final _root = GlobalKey();
 const _w = int.fromEnvironment('PROTO_W', defaultValue: 1536), _h = int.fromEnvironment('PROTO_H', defaultValue: 1024);
 
@@ -55,7 +55,7 @@ Workspace buildWorkspace(EffectScene scene) {
 class _Stage extends StatelessWidget {
   const _Stage();
   @override
-  Widget build(BuildContext context) => Image.file(File('/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto/stage_hf.png'), fit: BoxFit.cover, alignment: Alignment.center);
+  Widget build(BuildContext context) => Image.file(File('lib/proto/stage_hf.png'), fit: BoxFit.cover, alignment: Alignment.center);
 }
 
 class _Timeline extends StatelessWidget {

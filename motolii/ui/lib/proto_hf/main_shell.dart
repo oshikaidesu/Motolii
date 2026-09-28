@@ -35,7 +35,7 @@ import 'main_camera.dart' as cam;
 import 'main_transform.dart' as tf;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
-const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto_hf/data/things');
+const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/proto_hf/data/things');
 const _browser = int.fromEnvironment('PROTO_BROWSER', defaultValue: 0);
 const _inspector = int.fromEnvironment('PROTO_INSPECTOR', defaultValue: 1);
 const _desk = int.fromEnvironment('PROTO_DESK', defaultValue: -1); // -1: the right seat shows an Inspector view

@@ -12,7 +12,7 @@ import '../hf/shell/timeline.dart' as shell_timeline show timeline;
 import '../hf/shell/timeline.dart' show TimelineModel, TlRow, TlKind, tlX0;
 
 Color shade(Color c, double t) => Color.lerp(c, const Color(0xFF000000), t)!;
-const _stageArt = String.fromEnvironment('PROTO_STAGE', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto/stage_hf.png');
+const _stageArt = String.fromEnvironment('PROTO_STAGE', defaultValue: 'lib/proto/stage_hf.png');
 
 List<RI> all() => [Rc(0, 0, 1536, 1024, fill: H.window), ...top(), ...browser(), ...stage(), ...inspector(), ...timeline()];
 

@@ -450,15 +450,6 @@ impl Engine {
         self.render(view, t, false)
     }
 
-    pub fn render_frame_with_view_camera(
-        &mut self,
-        view: &StoreView<'_>,
-        t: RationalTime,
-        observation: &ObservationCamera,
-    ) -> Result<Vec<u8>, EngineError> {
-        self.render_with_camera_override(view, t, true, Some(observation.as_resolved_camera()))
-    }
-
     fn render(
         &mut self,
         view: &StoreView<'_>,

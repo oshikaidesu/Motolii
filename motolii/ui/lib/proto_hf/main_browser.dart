@@ -16,7 +16,7 @@ import '../hf/bp/search.dart';
 import '../hf/bp/things.dart';
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
-const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto_hf/data/things');
+const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/proto_hf/data/things');
 final _root = GlobalKey();
 
 const tabs = [tabCreate, tabEffects, tabColors, tabFonts];

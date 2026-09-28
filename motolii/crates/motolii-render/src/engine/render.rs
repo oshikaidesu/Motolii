@@ -473,14 +473,6 @@ impl Engine {
             .render_to_texture(comp, camera, &layers, background)?)
     }
 
-    pub fn render_frame_to_texture(
-        &mut self,
-        view: &StoreView<'_>,
-        t: RationalTime,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        self.render_frame_graph_to_texture_output(view, t, true)
-    }
-
     pub fn render_frame_into(
         &mut self,
         view: &StoreView<'_>,

@@ -4,7 +4,7 @@ import 'icons.dart';
 import 'tokens.dart';
 
 // Reference image: the concept art's own stage, cropped. Not a renderer.
-const _refPath = String.fromEnvironment('PROTO_STAGE', defaultValue: '/Users/member_ottoto/rust_ae/Motolii/motolii/ui/lib/proto/stage_ref.png');
+const _refPath = String.fromEnvironment('PROTO_STAGE', defaultValue: 'lib/proto/stage_ref.png');
 
 // The lit surface. Chrome around it is thin and dark.
 class StagePanel extends StatelessWidget {
