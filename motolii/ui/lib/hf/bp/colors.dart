@@ -12,6 +12,9 @@ import 'native_visual_sample.dart';
 
 typedef Sw = (String, int, String); // name, argb, class
 
+String hexText(Color c) =>
+    '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
 const _pal = <String, List<(String, int)>>{
   'Used Here': [
     ('Pink', 0xFFF27AB6),
@@ -186,6 +189,7 @@ class ColorsPanel extends StatefulWidget {
     this.onSwatch,
     this.onGradient,
     this.editor,
+    this.current,
     this.controller,
   });
   final SearchCapability? search;
@@ -194,7 +198,11 @@ class ColorsPanel extends StatefulWidget {
   final List<Map<String, dynamic>>? gradients;
   final ValueChanged<Sw>? onSwatch;
   final ValueChanged<Map<String, dynamic>>? onGradient;
-  final Widget? editor;
+  /// The live colour editor at the wheel's side; without one the reference instrument is drawn.
+  final Widget Function(double wheel)? editor;
+
+  /// The colour being edited, for the compact readouts (filtering, narrow).
+  final Color? current;
   final EditorSession? controller;
   @override
   State<ColorsPanel> createState() => _ColorsPanelState();
@@ -277,9 +285,9 @@ class _ColorsPanelState extends State<ColorsPanel>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (full)
-            (widget.editor ?? _Instrument(wheel: wheel))
+            (widget.editor?.call(wheel) ?? _Instrument(wheel: wheel))
           else
-            _MiniInstrument(),
+            _MiniInstrument(color: widget.current),
           if (!wheelOnly && (n > 0 || gradients || !filtering))
             const SizedBox(height: 4),
           if (n == 0 && !gradients && !wheelOnly)
@@ -313,14 +321,14 @@ class _ColorsPanelState extends State<ColorsPanel>
           if (!filtering || wheelOnly)
             Center(
               child:
-                  widget.editor ??
+                  widget.editor?.call(wheel) ??
                   SizedBox(
                     width: wheel,
                     height: wheel,
                     child: CustomPaint(painter: WheelPainter()),
                   ),
             ),
-          if (!filtering || wheelOnly)
+          if ((!filtering || wheelOnly) && widget.editor == null)
             Padding(
               padding: const EdgeInsets.only(top: 6, bottom: 4),
               child: Center(
@@ -405,13 +413,13 @@ class _Instrument extends StatelessWidget {
             SizedBox(
               width: 11,
               height: wheel,
-              child: CustomPaint(painter: _Bar(0)),
+              child: CustomPaint(painter: ColorBar(0)),
             ),
             const SizedBox(width: 9),
             SizedBox(
               width: 11,
               height: wheel,
-              child: CustomPaint(painter: _Bar(1)),
+              child: CustomPaint(painter: ColorBar(1)),
             ),
           ],
         ),
@@ -421,32 +429,46 @@ class _Instrument extends StatelessWidget {
 }
 
 class _MiniInstrument extends StatelessWidget {
+  const _MiniInstrument({this.color});
+  final Color? color;
   @override
   Widget build(BuildContext context) => Row(
     children: [
       SizedBox(
         width: 54,
         height: 54,
-        child: CustomPaint(painter: WheelPainter()),
+        child: CustomPaint(
+          painter: WheelPainter(
+            color == null ? null : HSVColor.fromColor(color!),
+          ),
+        ),
       ),
       const SizedBox(width: 12),
       Container(
         width: 30,
         height: 30,
         decoration: BoxDecoration(
-          color: const Color(0xFFE8508F),
+          color: color ?? const Color(0xFFE8508F),
           borderRadius: BorderRadius.circular(3),
         ),
       ),
       const SizedBox(width: 10),
-      Text('#E8508F', style: mono(11, c: const Color(0xFFD0D1D3))),
+      Text(
+        color == null ? '#E8508F' : hexText(color!),
+        style: mono(11, c: const Color(0xFFD0D1D3)),
+      ),
     ],
   );
 }
 
-class _Bar extends CustomPainter {
-  _Bar(this.kind);
+/// A vertical bar: kind 0 runs from black up to the colour (its value), kind 1 from clear up to it over a checker
+/// (its alpha); the handle sits at [at] from the top.
+class ColorBar extends CustomPainter {
+  ColorBar(this.kind, [this.color = const Color(0xFFE8508F), double? at])
+    : at = at ?? (kind == 0 ? .1 : .22);
   final int kind;
+  final Color color;
+  final double at;
   @override
   void paint(Canvas c, Size s) {
     final r = RRect.fromRectAndRadius(
@@ -469,9 +491,10 @@ class _Bar extends CustomPainter {
       }
       c.restore();
     }
+    final opaque = color.withValues(alpha: 1);
     final colors = kind == 0
-        ? [const Color(0xFF000000), const Color(0xFFE8508F)]
-        : [const Color(0x00E8508F), const Color(0xFFE8508F)];
+        ? [const Color(0xFF000000), opaque]
+        : [opaque.withValues(alpha: 0), opaque];
     c.drawRRect(
       r,
       Paint()
@@ -481,7 +504,7 @@ class _Bar extends CustomPainter {
           colors: colors,
         ).createShader(Offset.zero & s),
     );
-    final o = Offset(s.width / 2, s.height * (kind == 0 ? .1 : .22));
+    final o = Offset(s.width / 2, s.height * at);
     c.drawCircle(o, 5.5, Paint()..color = const Color(0xFFF2F2F4));
     c.drawCircle(
       o,
@@ -494,12 +517,30 @@ class _Bar extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_Bar o) => false;
+  bool shouldRepaint(ColorBar o) =>
+      o.kind != kind || o.color != color || o.at != at;
 }
 
+/// Hue on the ring, saturation (left to right) and value (bottom to top) in the square; handles where [hsv] sits.
+/// Without a colour it draws the reference's #E8508F.
 class WheelPainter extends CustomPainter {
+  WheelPainter([this.hsv]);
+  final HSVColor? hsv;
+  static const reference = HSVColor.fromAHSV(1, 340, .65, .91);
+
+  /// The ring's inner radius and the square, for a wheel of [size]: what the paint uses and a press reads.
+  static (Offset centre, double rInner, double rOuter, Rect square) geometry(Size size) {
+    final s = size.shortestSide;
+    final ctr = Offset(size.width / 2, size.height / 2);
+    final ringW = s * .105;
+    final rOut = s / 2 - 1;
+    final side = (rOut - ringW) * 1.32;
+    return (ctr, rOut - ringW, rOut, Rect.fromCenter(center: ctr, width: side, height: side));
+  }
+
   @override
   void paint(Canvas c, Size sz) {
+    final h = hsv ?? reference;
     final s = sz.shortestSide;
     final ctr = Offset(sz.width / 2, sz.height / 2);
     final ringW = s * .105;
@@ -523,7 +564,7 @@ class WheelPainter extends CustomPainter {
     final side = (rOut - ringW) * 1.32;
     final sq = Rect.fromCenter(center: ctr, width: side, height: side);
     final rr = RRect.fromRectAndRadius(sq, Radius.circular(s * .02));
-    c.drawRRect(rr, Paint()..color = HSVColor.fromAHSV(1, 340, 1, 1).toColor());
+    c.drawRRect(rr, Paint()..color = HSVColor.fromAHSV(1, h.hue, 1, 1).toColor());
     c.drawRRect(
       rr,
       Paint()
@@ -540,16 +581,19 @@ class WheelPainter extends CustomPainter {
           colors: [Color(0x00000000), Color(0xFF000000)],
         ).createShader(sq),
     );
+    final fill = hsv == null
+        ? const Color(0xFFE8508F)
+        : h.toColor().withValues(alpha: 1);
     final hp =
         ctr +
-        Offset(math.cos(340 * math.pi / 180), math.sin(340 * math.pi / 180)) *
+        Offset(math.cos(h.hue * math.pi / 180), math.sin(h.hue * math.pi / 180)) *
             rMid;
-    _handle(c, hp, s * .04 + 3, const Color(0xFFE8508F));
+    _handle(c, hp, s * .04 + 3, fill);
     _handle(
       c,
-      Offset(sq.left + sq.width * .65, sq.top + sq.height * .09),
+      Offset(sq.left + sq.width * h.saturation, sq.top + sq.height * (1 - h.value)),
       s * .035 + 2.5,
-      const Color(0xFFE8508F),
+      fill,
     );
   }
 
@@ -566,7 +610,7 @@ class WheelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WheelPainter o) => false;
+  bool shouldRepaint(WheelPainter o) => o.hsv != hsv;
 }
 
 class _Swatches extends StatelessWidget {

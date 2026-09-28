@@ -1,0 +1,235 @@
+import 'dart:math' as math;
+
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+import '../../foundation/color_field.dart' show parseHex;
+import '../../hf/bp/colors.dart';
+import '../../hf/bp/common.dart';
+import '../../hf/bp/shell.dart' show GlyphBox;
+import '../../hf/glyphs.dart';
+import '../../session/color_edit.dart';
+import '../../session/editor_session.dart';
+
+/// The Colors instrument over the session: the reference's wheel, hex and two bars, editing the colour target (the
+/// Inspector's focused colour, else the selection's fill) through [ColorEdit] — the same preview, commit and cancel
+/// Classic's wheel uses. The glyph by the hex picks the next Stage click's colour; Esc cancels a drag or the pick.
+class LiveColorInstrument extends StatefulWidget {
+  const LiveColorInstrument({super.key, required this.c, required this.wheel});
+  final EditorSession c;
+  final double wheel;
+  @override
+  State<LiveColorInstrument> createState() => _LiveColorInstrumentState();
+}
+
+class _LiveColorInstrumentState extends State<LiveColorInstrument> {
+  static const _watched = ['colorTarget', 'layers', 'selectedIds', 'capabilities', 'documentRevision'];
+  EditorSession get c => widget.c;
+  late final ColorEdit edit = ColorEdit(c)..onPick = (rgba) => setState(() => edit.unbound = rgba);
+  final focus = FocusNode(debugLabel: 'colors');
+  final hex = TextEditingController();
+  final hexFocus = FocusNode(debugLabel: 'hex');
+  String? part; // 'hue', 'sv', 'value', 'alpha'
+
+  @override
+  void initState() {
+    super.initState();
+    _absorb();
+    c.slice('liveColors', _watched).addListener(_absorb);
+    c.eyedropper.addListener(_redraw);
+    edit.addListener(_redraw);
+    hexFocus.addListener(() {
+      if (!hexFocus.hasFocus) _typed(hex.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    c.slice('liveColors', _watched).removeListener(_absorb);
+    c.eyedropper.removeListener(_redraw);
+    edit.dispose();
+    focus.dispose();
+    hex.dispose();
+    hexFocus.dispose();
+    super.dispose();
+  }
+
+  void _redraw() {
+    if (!mounted) return;
+    setState(() {});
+    if (!hexFocus.hasFocus) hex.text = hexText(colorOf(edit.value));
+  }
+
+  void _absorb() {
+    edit
+      ..retarget(colorTarget(c))
+      ..enabled = c.supports('setColor');
+    _redraw();
+  }
+
+  void _typed(String text) {
+    final col = parseHex(text);
+    if (col == null) {
+      hex.text = hexText(colorOf(edit.value));
+      return;
+    }
+    edit.setNow([col.r, col.g, col.b, edit.value[3]]);
+  }
+
+  void _wheel(Offset p, {bool start = false}) {
+    final size = Size.square(widget.wheel);
+    final (centre, rInner, _, square) = WheelPainter.geometry(size);
+    final hsv = edit.hsv;
+    if (start) {
+      focus.requestFocus();
+      edit.begin();
+      part = square.contains(p) ? 'sv' : ((p - centre).distance >= rInner - 2 ? 'hue' : null);
+    }
+    if (part == 'sv') {
+      edit.previewHsv(
+        hsv
+            .withSaturation(((p.dx - square.left) / square.width).clamp(0.0, 1.0))
+            .withValue((1 - (p.dy - square.top) / square.height).clamp(0.0, 1.0)),
+      );
+    } else if (part == 'hue') {
+      final a = math.atan2(p.dy - centre.dy, p.dx - centre.dx) * 180 / math.pi;
+      edit.previewHsv(hsv.withHue((a + 360) % 360));
+    }
+  }
+
+  void _bar(String which, Offset p, {bool start = false}) {
+    if (start) {
+      focus.requestFocus();
+      edit.begin();
+      part = which;
+    }
+    final t = (1 - p.dy / widget.wheel).clamp(0.0, 1.0);
+    if (which == 'value') {
+      edit.previewHsv(edit.hsv.withValue(t));
+    } else if (edit.target?['alpha'] == true || edit.target == null) {
+      edit.previewAlpha(t);
+    }
+  }
+
+  void _end() {
+    part = null;
+    edit.commit();
+  }
+
+  void _cancel() {
+    part = null;
+    edit.cancel();
+  }
+
+  Widget _drag(Widget child, void Function(Offset, {bool start}) at) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onPanStart: (e) => at(e.localPosition, start: true),
+    onPanUpdate: (e) => at(e.localPosition),
+    onPanEnd: (_) => _end(),
+    onPanCancel: _cancel,
+    onTapDown: (e) => at(e.localPosition, start: true),
+    onTapUp: (_) => _end(),
+    child: child,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final wheel = widget.wheel;
+    final hsv = edit.hsv;
+    final color = colorOf(edit.value);
+    final picking = c.eyedropper.value;
+    final alpha = edit.target == null || edit.target?['alpha'] == true;
+    return Focus(
+      focusNode: focus,
+      onKeyEvent: (_, e) {
+        if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
+        c.eyedropper.value = false;
+        _cancel();
+        return KeyEventResult.handled;
+      },
+      child: Opacity(
+        opacity: edit.enabled || edit.target == null ? 1 : .5,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Column(
+              children: [
+                _drag(
+                  SizedBox(
+                    key: const ValueKey('hf-color-wheel'),
+                    width: wheel,
+                    height: wheel,
+                    child: CustomPaint(painter: WheelPainter(hsv)),
+                  ),
+                  _wheel,
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: wheel,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 64,
+                        child: EditableText(
+                          key: const ValueKey('hf-color-hex'),
+                          controller: hex,
+                          focusNode: hexFocus,
+                          style: mono(11, c: const Color(0xFFD0D1D3)),
+                          cursorColor: const Color(0xFFD0D1D3),
+                          backgroundCursorColor: const Color(0xFF000000),
+                          textAlign: TextAlign.center,
+                          onSubmitted: _typed,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        key: const ValueKey('hf-eyedropper'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          focus.requestFocus();
+                          edit.toggleEyedropper();
+                        },
+                        child: GlyphBox(HG.composite, size: 13, color: picking ? const Color(0xFFF2F2F4) : kMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: wheel,
+              child: Row(
+                children: [
+                  _drag(
+                    SizedBox(
+                      key: const ValueKey('hf-color-value'),
+                      width: 11,
+                      height: wheel,
+                      child: CustomPaint(painter: ColorBar(0, HSVColor.fromAHSV(1, hsv.hue, hsv.saturation, 1).toColor(), 1.0 - hsv.value)),
+                    ),
+                    (p, {start = false}) => _bar('value', p, start: start),
+                  ),
+                  const SizedBox(width: 9),
+                  Opacity(
+                    opacity: alpha ? 1 : .4,
+                    child: _drag(
+                      SizedBox(
+                        key: const ValueKey('hf-color-alpha'),
+                        width: 11,
+                        height: wheel,
+                        child: CustomPaint(painter: ColorBar(1, color, 1.0 - edit.value[3])),
+                      ),
+                      (p, {start = false}) => _bar('alpha', p, start: start),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

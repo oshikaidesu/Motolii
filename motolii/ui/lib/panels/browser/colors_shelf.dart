@@ -9,6 +9,7 @@ import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import 'color_palette.dart';
 import 'color_picker.dart';
+import '../../session/color_edit.dart' show colorTarget;
 import 'color_values.dart';
 import 'fill_definitions.dart';
 import 'parts.dart';
@@ -349,29 +350,5 @@ String _targetTitle(EditorSession controller, Map<String, dynamic> target) {
   return name.isEmpty ? what : '$name · $what';
 }
 
-Map<String, dynamic>? _colorTarget(EditorSession controller) {
-  if (controller.state['colorTarget'] is Map)
-    return Map<String, dynamic>.from(controller.state['colorTarget']);
-  final layer = controller.activeLayer;
-  if (layer == null) return null;
-  final fill = EditorSession.map(layer['fill']);
-  final stops = EditorSession.maps(fill['stops']);
-  if (stops.isNotEmpty) {
-    return {
-      'layer': layer['id'],
-      'slot': stops.first['slot'] ?? fill['slot'],
-      'rgba': stops.first['rgba'],
-      'label': 'Fill',
-    };
-  }
-  for (final row in EditorSession.maps(layer['properties'])) {
-    if (row['kind'] == 'color' && row['slot'] != null)
-      return {
-        'layer': layer['id'],
-        'slot': row['slot'],
-        'rgba': row['value'],
-        'label': row['label'],
-      };
-  }
-  return null;
-}
+Map<String, dynamic>? _colorTarget(EditorSession controller) =>
+    colorTarget(controller);

@@ -23,6 +23,7 @@ class BrowserModel {
     this.onColor,
     this.onGradient,
     this.colorEditor,
+    this.currentColor,
     this.fonts = fontsBase,
     this.fontGroups,
     this.selectedFont,
@@ -44,7 +45,8 @@ class BrowserModel {
   final List<Map<String, dynamic>>? gradients;
   final ValueChanged<Sw>? onColor;
   final ValueChanged<Map<String, dynamic>>? onGradient;
-  final Widget? colorEditor;
+  final Widget Function(double wheel)? colorEditor;
+  final Color? currentColor;
   final List<FontItem> fonts;
   final List<List<String>>? fontGroups;
   final String? selectedFont;
@@ -71,6 +73,7 @@ Widget _body(BrowserModel m) => KeyedSubtree(
         onSwatch: m.onColor,
         onGradient: m.onGradient,
         editor: m.colorEditor,
+        current: m.currentColor,
         controller: m.fontController,
       ),
       3 => FontsPanel(

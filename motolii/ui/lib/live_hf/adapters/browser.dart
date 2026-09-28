@@ -12,7 +12,9 @@ import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/things.dart';
 import '../../session/editor_session.dart';
+import '../../session/color_edit.dart';
 import 'browser_shelf.dart';
+import 'colors.dart';
 import 'browser_user.dart';
 
 /// The reference's own catalogue: every tile, its family, face and order. The Browser draws this; Live only says which
@@ -329,7 +331,11 @@ class _LiveBrowserState extends State<LiveBrowser> {
           ],
           onColor: (swatch) => _applyColor(swatch),
           onGradient: (gradient) => _applyGradient(gradient),
-          colorEditor: null,
+          colorEditor: (wheel) => LiveColorInstrument(c: c, wheel: wheel),
+          currentColor: () {
+            final target = colorTarget(c);
+            return target == null ? null : colorOf(rgbaOf(target['rgba']));
+          }(),
           fonts: fonts,
           fontGroups: fontGroups,
           selectedFont: _selectedFont,

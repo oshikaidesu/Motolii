@@ -10,7 +10,7 @@ import '../../foundation/metrics.dart';
 import '../../foundation/panel_controls.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
-import 'color_values.dart';
+import '../../session/color_edit.dart';
 import 'color_wheel.dart';
 
 /// The wheel: hue on the ring, saturation and value inside. It edits the
@@ -40,17 +40,24 @@ class ColorPicker extends StatefulWidget {
 }
 
 class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
-  List<double>? draft;
   String? dragPart;
-  double? rememberedHue;
-  bool previewUsed = false, ending = false, gestureCancelled = false;
   final pickerFocus = FocusNode();
-  late final queue = EditorPreviewQueue<Map<String, dynamic>>(
-    (patch) => widget.controller.command('previewColor', patch),
-  );
+  late final edit = ColorEdit(widget.controller)..addListener(_changed);
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  void _configure() => edit
+    ..retarget(widget.target)
+    ..enabled = widget.enabled
+    ..unbound = widget.unbound
+    ..onPick = widget.onPick;
+
   @override
   void initState() {
     super.initState();
+    _configure();
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -64,14 +71,10 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
     if (event.state == ui.ViewFocusState.unfocused) cancel();
   }
 
-  bool get canPreview =>
-      widget.controller.supports('previewColor') && widget.enabled;
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (previewUsed && !ending)
-      queue.finish(true, () => widget.controller.command('cancelPreview'));
+    edit.dispose();
     pickerFocus.dispose();
     super.dispose();
   }
@@ -79,15 +82,10 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant ColorPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!sameValue(oldWidget.target?['slot'], widget.target?['slot']) ||
-        oldWidget.target?['layer'] != widget.target?['layer']) {
-      cancel();
-    }
+    _configure();
   }
 
-  List<double> get value =>
-      draft ??
-      (widget.target == null ? widget.unbound : rgbaOf(widget.target!['rgba']));
+  List<double> get value => edit.value;
 
   /// Set by the last layout; sampling reads the same geometry the paint used.
   ColorWheel wheel = ColorWheel(EditorMetrics.thumb, 'square');
@@ -95,97 +93,28 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
       widget.controller.deskWork.value['colorShape'] as String? ?? 'square';
 
   void sample(Offset p) {
-    if (ending || gestureCancelled || !widget.enabled) return;
-    pickerFocus.requestFocus();
-    final v = value;
-    var hsv = HSVColor.fromColor(colorOf(v));
-    if (dragPart == null) {
-      if (hsv.saturation > 1 / 255) rememberedHue = hsv.hue;
-      hsv = hsv.withHue(rememberedHue ?? hsv.hue);
-      dragPart = wheel.hitsInner(p, hsv) ? 'sv' : 'hue';
-    } else if (dragPart == 'sv') {
-      // White and black have no hue. Keep the hue that this gesture began
-      // with instead of deriving 0° (red) from an achromatic RGB snapshot.
-      hsv = hsv.withHue(rememberedHue ?? hsv.hue);
-    }
-    final updated = dragPart == 'sv'
-        ? wheel.pickInner(p, hsv)
-        : hsv.withHue(wheel.hueAt(p));
-    rememberedHue = updated.hue;
-    final c = updated.toColor();
-    final next = [c.r, c.g, c.b, v[3]];
-    setState(() => draft = next);
-    if (widget.target == null) {
-      widget.onPick(next);
-    } else if (canPreview) {
-      previewUsed = true;
-      queue.add({
-        if (widget.target!['layer'] != null) 'layer': widget.target!['layer'],
-        'slot': widget.target!['slot'],
-        'rgba': next,
-      });
-    }
-  }
-
-  Future<void> commit() async {
-    final target = widget.target;
-    final next = draft;
-    draft = null;
-    dragPart = null;
-    final used = previewUsed;
-    previewUsed = false;
-    if (next == null) return;
-    if (target == null) {
-      setState(() {});
-      return;
-    }
     if (!widget.enabled) return;
-    ending = true;
-    try {
-      await queue.finish(
-        false,
-        () => used
-            ? widget.controller.command('commitPreview')
-            : widget.controller.command('setColor', {
-                if (target['layer'] != null) 'layer': target['layer'],
-                'slot': target['slot'],
-                'rgba': next,
-              }),
-      );
-    } finally {
-      ending = false;
-      if (mounted) setState(() {});
-    }
+    pickerFocus.requestFocus();
+    final hsv = edit.hsv;
+    dragPart ??= wheel.hitsInner(p, hsv) ? 'sv' : 'hue';
+    edit.previewHsv(
+      dragPart == 'sv' ? wheel.pickInner(p, hsv) : hsv.withHue(wheel.hueAt(p)),
+    );
   }
 
-  Future<void> cancel() async {
-    if (ending) return;
-    gestureCancelled = true;
-    final used = previewUsed;
-    previewUsed = false;
-    setState(() {
-      draft = null;
-      dragPart = null;
-    });
-    if (!used) return;
-    ending = true;
-    try {
-      await queue.finish(
-        true,
-        () => widget.controller.command('cancelPreview'),
-      );
-    } finally {
-      ending = false;
-    }
+  Future<void> commit() {
+    dragPart = null;
+    return edit.commit();
+  }
+
+  Future<void> cancel() {
+    dragPart = null;
+    return edit.cancel();
   }
 
   @override
   Widget build(BuildContext context) {
     final color = colorOf(value);
-    final hsv = HSVColor.fromColor(color);
-    if (dragPart == null && hsv.saturation > 1 / 255) {
-      rememberedHue = hsv.hue;
-    }
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () {
@@ -203,14 +132,14 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
               children: [
                 GestureDetector(
                   onPanStart: (e) {
-                    gestureCancelled = false;
+                    edit.begin();
                     sample(e.localPosition);
                   },
                   onPanUpdate: (e) => sample(e.localPosition),
                   onPanEnd: (_) => commit(),
                   onPanCancel: cancel,
                   onTapUp: (e) {
-                    gestureCancelled = false;
+                    edit.begin();
                     sample(e.localPosition);
                     commit();
                   },
@@ -222,7 +151,7 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
                         colors: EditorTheme.of(context),
                         color,
                         wheel,
-                        hue: rememberedHue,
+                        hue: edit.hsv.hue,
                       ),
                     ),
                   ),
@@ -255,17 +184,7 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
                               : null,
                           onCommit: (v) async {
                             final c = parseHex(v)!;
-                            final rgba = [c.r, c.g, c.b, value[3]];
-                            if (widget.target == null) {
-                              widget.onPick(rgba);
-                              return;
-                            }
-                            await widget.controller.command('setColor', {
-                              if (widget.target!['layer'] != null)
-                                'layer': widget.target!['layer'],
-                              'slot': widget.target!['slot'],
-                              'rgba': rgba,
-                            });
+                            await edit.setNow([c.r, c.g, c.b, value[3]]);
                           },
                         ),
                       ),
@@ -278,8 +197,7 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
                               : 'Pick a colour from the Stage',
                           child: EditorPress(
                             key: const ValueKey('browser:eyedropper'),
-                            onTap: () =>
-                                widget.controller.eyedropper.value = !on,
+                            onTap: edit.toggleEyedropper,
                             child: Container(
                               padding: const EdgeInsets.all(EditorMetrics.s3),
                               decoration: BoxDecoration(
@@ -366,18 +284,8 @@ class _ColorPickerState extends State<ColorPicker> with WidgetsBindingObserver {
                             onChanged: !widget.enabled
                                 ? null
                                 : (a) {
-                                    final v = value;
-                                    final next = [v[0], v[1], v[2], a];
-                                    setState(() => draft = next);
-                                    if (canPreview) {
-                                      previewUsed = true;
-                                      queue.add({
-                                        if (widget.target!['layer'] != null)
-                                          'layer': widget.target!['layer'],
-                                        'slot': widget.target!['slot'],
-                                        'rgba': next,
-                                      });
-                                    }
+                                    edit.begin();
+                                    edit.previewAlpha(a);
                                   },
                             onChangeEnd: (_) => commit(),
                           ),
