@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/common.dart';
-import '../../../hf/bp/shell.dart' show kTile;
-import '../../../hf/desk/common.dart' show kInk;
-import '../../../hf/glyphs.dart';
-import '../../../session/editor_session.dart';
+import '../../hf/bp/common.dart';
+import '../../hf/bp/shell.dart' show kTile;
+import '../../hf/desk/common.dart' show kInk;
+import '../../hf/glyphs.dart';
+import '../../session/editor_session.dart';
 
 /// The Web desk's New face: one URL, kept as the document's own desk setting (`storeDesk('webUrl', ...)`, the same
 /// operation Classic's WebPanel uses), and a button that asks the host to open it (`native('openWeb', ...)`).

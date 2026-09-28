@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 
 const kRed = Color(0xFFFF4D3D);
 const kInk2 = Color(0xFFC4C6CB);

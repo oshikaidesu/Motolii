@@ -14,8 +14,10 @@ import 'adapters/depth.dart';
 import 'adapters/ease.dart';
 import 'adapters/history.dart';
 import 'adapters/notes.dart';
+import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
+import 'adapters/web.dart';
 
 /// The product workspace for the hf client. Faces/tools own their content;
 /// this layer owns only placement, tabs, split/resize and reopening.
@@ -73,6 +75,9 @@ class LiveWorkspace {
         'Ease': PanelDef('Ease', 'Ease', () => LiveEase(c: c), glyph: HG.arrow, minSize: 240),
         'History': PanelDef('History', 'History', () => NewHistory(controller: c), glyph: HG.power, minSize: 220),
         'Notes': PanelDef('Notes', 'Notes', () => LiveNotes(c: c), glyph: HG.star, minSize: 240),
+        // Opened where they are asked for: Relations by a property's link in the Inspector, Web from the Dock menu.
+        'Relations': PanelDef('Relations', 'Relations', () => RelationsPanel(controller: c), glyph: HG.attach, minSize: 240),
+        'Web': PanelDef('Web', 'Web', () => NewWeb(controller: c), glyph: HG.search, minSize: 220),
       },
       // Weights are the REFERENCE frame's own rectangles (`proto_hf/shell_face.dart`'s 1536×1024 geometry),
       // not tuned by eye: Browser 324, the Stage/Inspector row 779+387, that row 632 tall against

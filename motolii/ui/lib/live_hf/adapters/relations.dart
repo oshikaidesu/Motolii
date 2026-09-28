@@ -2,10 +2,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/common.dart';
-import '../../../hf/desk/common.dart' show kInk, kWell;
-import '../../../session/editor_session.dart';
-import '../../../session/read_model.dart';
+import '../../hf/bp/common.dart';
+import '../../hf/desk/common.dart' show kInk, kWell;
+import '../../session/editor_session.dart';
+import '../../session/read_model.dart';
 import 'relations_model.dart';
 
 /// Relations v0: the place to pick the things a source drives. The things at the current time are dots where they are

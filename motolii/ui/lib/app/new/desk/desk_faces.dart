@@ -13,7 +13,7 @@ import '../timeline/new_timeline_bar.dart';
 import '../../../live_hf/adapters/blend.dart';
 import '../../../live_hf/adapters/depth.dart';
 import '../../../live_hf/adapters/history.dart';
-import 'new_web.dart';
+import '../../../live_hf/adapters/web.dart';
 
 /// The Desk's panels drawn by the finished Desk instruments over the session's own state. A name not here keeps the
 /// production panel, so a panel is promoted by adding one line.

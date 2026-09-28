@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/new_shell.dart';
-import '../lib/app/new/relations/relations_panel.dart';
+import '../lib/live_hf/adapters/relations.dart';
 import 'support/editor_test_theme.dart';
 import 'support/dock_test_utils.dart';
 import 'support/native_channel.dart';

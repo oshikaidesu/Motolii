@@ -21,7 +21,7 @@ import 'editor_actions.dart';
 import '../workspace/dock_workspace.dart';
 import 'new/browser/shelf_panel.dart';
 import 'new/console.dart';
-import 'new/relations/relations_panel.dart';
+import '../live_hf/adapters/relations.dart';
 import 'new/dock_theme.dart';
 import 'new/inspector/new_inspector_panel.dart';
 import 'new/shell_bar.dart';
