@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/hf/bp/common.dart' show sans;
 import '../lib/hf/bp/catalog_io.dart';
+import '../lib/hf/bp/classify.dart' show ClassStrip;
 import '../lib/hf/bp/create.dart';
 import '../lib/hf/bp/faces.dart';
 import '../lib/hf/bp/shelf_sections.dart';
@@ -58,13 +59,15 @@ void main() {
     for (final name in ['Images', 'Video', 'Audio']) {
       expect(find.text(name), findsWidgets, reason: name);
     }
-    // the quiet line: size / size and rate / rate and channels; lengths sit on the faces
-    expect(find.text('1600×900'), findsOneWidget);
-    expect(find.text('1280×720 · 30 fps'), findsOneWidget);
-    expect(find.text('48 kHz · stereo'), findsOneWidget);
+    // a contact sheet: names only; lengths sit on the faces of clips and sounds; size and rate are not always on show
+    for (final name in ['Dusk', 'Zoom', 'Pulse']) {
+      expect(find.text(name), findsOneWidget, reason: name);
+    }
     expect(find.text('0:06'), findsOneWidget);
     expect(find.text('0:08'), findsOneWidget);
-    // a sound is its waveform, not a generic glyph with the word "Audio" under it
+    expect(find.text('1600×900'), findsNothing);
+    // the classes run along the top, so the sheet keeps the seat's width
+    expect(find.byType(ClassStrip), findsOneWidget);
     expect(find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == '_Wave'), findsOneWidget);
 
     // keys walk the tiles in the order they are drawn: Images, then Video, then Audio
@@ -80,16 +83,18 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('Create: in the same footprint the face fills its tile, headings read, and a quick shelf holds what was taken last', (t) async {
+  testWidgets('Create: a cardless symbol board under a class strip, sentence headings, and a quick shelf of what was taken last', (t) async {
     final catalog = loadCatalog('lib/hf/data/things');
     final user = UserViews(recent: ['motolii.sphere']);
     await t.pumpWidget(host(t, CreatePanel(catalog: catalog, user: user), 420, 3000));
     await t.pump();
     expect(find.text('Primitives'), findsOneWidget, reason: 'PRIMITIVES reads as a heading, not tiny caps');
     expect(find.text('Recently used'), findsOneWidget);
-    // same footprint as before; the face takes the tile but for a thin margin (it had 9 px of padding on each side)
-    final tile = t.getSize(find.ancestor(of: find.byType(ThingFace).first, matching: find.byType(Container)).first);
-    expect(t.getSize(find.byType(ThingFace).first).width, greaterThanOrEqualTo(tile.width - 10.5));
-    expect(tile.height, 74, reason: 'the Product Home tile height is kept');
+    // a board, not cards: no ground under a key until the pointer is on it, and the whole box fits a Product Home seat
+    expect(find.byType(ClassStrip), findsOneWidget);
+    expect(t.getSize(find.byType(ThingFace).first).width, lessThanOrEqualTo(40));
+    for (final name in ['Text', 'Cube', 'Camera', 'Stage']) {
+      expect(find.text(name), findsWidgets, reason: name);
+    }
   });
 }

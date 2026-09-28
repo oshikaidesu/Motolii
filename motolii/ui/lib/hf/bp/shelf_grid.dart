@@ -28,6 +28,7 @@ class ShelfGridPanel extends StatefulWidget {
     this.captions = true,
     this.sections = false,
     this.body,
+    this.classStrip = false,
   });
   final String title, noun, panelId;
   final Widget icon;
@@ -45,6 +46,9 @@ class ShelfGridPanel extends StatefulWidget {
   /// A shelf that lays its own sections out (its faces differ by what they show); it tells the seat what it shows.
   /// The chassis — header, classes, search, empty state, strip — stays this panel's.
   final Widget Function(BuildContext context, Map<String, List<Thing>> sections, List<Thing> shown, Size size)? body;
+
+  /// Classes along the top instead of the column (see [PanelShell.classStrip]).
+  final bool classStrip;
   @override
   State<ShelfGridPanel> createState() => _ShelfGridPanelState();
 }
@@ -82,6 +86,7 @@ class _ShelfGridPanelState extends State<ShelfGridPanel> with WithDiscovery<Shel
             classify: classify,
             groups: views.groups(found),
             hint: 'Search ${widget.title.toLowerCase()}',
+            classStrip: widget.classStrip,
             count: n >= 1000 ? '${n ~/ 1000},${(n % 1000).toString().padLeft(3, '0')}' : '$n',
             wide: (c, s) => _body(sections, shown, editor, s, narrow: false, empty: 'No $noun matches "${search.query}".'),
             narrow: (c, s) => _body(sections, shown, editor, s, narrow: true, empty: 'No $noun matches.'),

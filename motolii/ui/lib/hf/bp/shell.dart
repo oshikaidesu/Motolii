@@ -150,6 +150,7 @@ class PanelShell extends StatelessWidget {
     // border/padding are taken out - measured ~260-290px live). Only drop to the narrow layout's bare
     // filter chip below that, and only as that fallback already does.
     this.columnMinWidth = 260,
+    this.classStrip = false,
   });
   final String title, hint;
   final Widget icon;
@@ -158,6 +159,9 @@ class PanelShell extends StatelessWidget {
   final List<List<String>> groups;
   final String? count;
   final double columnWidth, columnMinWidth;
+
+  /// Classes along the top (a [ClassStrip]) instead of the column: the body keeps the seat's whole width.
+  final bool classStrip;
   final Widget Function(BuildContext, Size) wide, narrow, strip;
   @override
   Widget build(BuildContext context) {
@@ -165,23 +169,26 @@ class PanelShell extends StatelessWidget {
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth, h = box.maxHeight;
       final isStrip = h < 170;
-      final isWide = !isStrip && w >= columnMinWidth;
-      final mode = stacked ? HeadMode.stacked : (isWide ? HeadMode.full : HeadMode.compact);
+      final isWide = !isStrip && !classStrip && w >= columnMinWidth;
+      final stripped = classStrip && !isStrip;
+      final mode = stacked ? HeadMode.stacked : (isWide || (stripped && w >= columnMinWidth) ? HeadMode.full : HeadMode.compact);
       final seat = BrowserSeatScope.of(context);
       final tools = seat?.tools(context);
       final header = PanelHeader(
         title: title, icon: icon, search: search, hint: hint, mode: mode, count: count,
-        extra: tools == null && isWide ? null : Row(mainAxisSize: MainAxisSize.min, children: [if (tools != null) tools, if (!isWide) ClassChip(classify)]),
+        extra: tools == null && (isWide || stripped) ? null : Row(mainAxisSize: MainAxisSize.min, children: [if (tools != null) tools, if (!isWide && !stripped) ClassChip(classify)]),
       );
       final under = seat?.header(context);
       final hh = switch (mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
-      final bodySize = Size(isWide ? w - columnWidth : w, h - hh);
+      final bodySize = Size(isWide ? w - columnWidth : w, h - hh - (stripped ? 28 : 0));
       final shell = search.keys(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
         if (under != null) under,
         Expanded(
           child: isStrip
               ? strip(context, bodySize)
+              : stripped
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [ClassStrip(classify, groups), Expanded(child: wide(context, bodySize))])
               : isWide
                   ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [ClassColumn(classify, groups, width: columnWidth), Expanded(child: wide(context, bodySize))])
                   : narrow(context, bodySize),

@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart' show kMuted, mono, sans;
+import '../../hf/bp/common.dart' show mono, sans;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/shell.dart' show GlyphBox, kTile;
 import '../../hf/bp/shelf_sections.dart';
@@ -23,23 +23,21 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // the Product Home footprint, as the shelf had it: one column when the seat is narrow, else 96 px columns; each
-    // tile's face is its column wide by 0.84 of it, with one caption line
-    const pad = 12.0, gap = 6.0;
+    // a contact sheet: small, many, the picture keeps most of each cell (4:3), the name a single short line
+    const pad = 10.0, gap = 6.0;
     final seat = BrowserSeatScope.of(context);
-    final column = width < 210 ? width - pad * 2 : 96.0 * (seat?.tileScale ?? 1);
-    final grid = shelfColumns(width, column, pad: pad, gap: gap);
+    final grid = shelfColumns(width, 76.0 * (seat?.tileScale ?? 1), pad: pad, gap: gap);
     // the keys walk the tiles in the order they are drawn (section by section), not the data's order
     seat?.shows([for (final e in sections.values) ...e], grid.columns);
     if (grid.width <= 0) return const SizedBox.shrink();
-    final extent = grid.width * .84 + _captionHeight;
+    final extent = grid.width * .75 + _captionHeight;
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
         for (final e in sections.entries) ...[
-          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: pad), child: ShelfHeading(e.key, count: e.value.length))),
+          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: pad + 1), child: ShelfHeading(e.key, count: e.value.length))),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 10 : 0, pad, 6),
+            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 8 : 0, pad, 2),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: grid.width / extent),
               delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], MaterialCard(item: items[e.value[i].id] ?? const {}, name: e.value[i].name)), childCount: e.value.length),
@@ -52,7 +50,7 @@ class MediaLibraryBody extends StatelessWidget {
   }
 }
 
-const _captionHeight = 18.0;
+const _captionHeight = 16.0;
 
 /// One piece of material: its face (landscape, never cropped to a postage stamp), its name, one quiet line of facts.
 class MaterialCard extends StatelessWidget {
@@ -65,21 +63,14 @@ class MaterialCard extends StatelessWidget {
     final missing = item['missing'] == true;
     Widget face = ClipRRect(borderRadius: BorderRadius.circular(3), child: materialFace(item));
     if (missing) face = Opacity(opacity: .4, child: face);
-    final facts = missing ? 'Missing' : materialFacts(item);
-    // one caption line, as before: the name leads; size or rate follows quietly when there is room
+    // one short line: the name. Size, rate and channels are in the tile's menu (and the Inspector), not always on show.
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Expanded(child: face),
       SizedBox(
         height: _captionHeight,
         child: Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-            Flexible(child: Text(name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10.5, c: const Color(0xFFE4E5E8), w: FontWeight.w500))),
-            if (facts.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              Flexible(child: Text(facts, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: mono(9.5, c: kMuted))),
-            ],
-          ]),
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: const Color(0xFFD6D7DA), w: FontWeight.w500)),
         ),
       ),
     ]);
@@ -93,23 +84,6 @@ Widget materialFace(Map<String, dynamic> item) => switch ('${item['family']}') {
       'Images' => Stack(fit: StackFit.expand, children: [const CustomPaint(painter: _Checker()), _picture(item) ?? _glyph(HG.image)]),
       _ => _picture(item) ?? _glyph(HG.image),
     };
-
-/// The quiet line: size for pictures, size and rate for clips, rate and channels for sounds.
-String materialFacts(Map<String, dynamic> item) {
-  final facts = item['facts'] is Map ? Map<String, dynamic>.from(item['facts']) : const <String, dynamic>{};
-  final size = facts['width'] is num && facts['height'] is num ? '${facts['width']}×${facts['height']}' : null;
-  return switch ('${item['family']}') {
-    'Video' => [if (size != null) size, if (facts['fps'] is num) '${_trim(facts['fps'] as num)} fps'].join(' · '),
-    'Audio' => [
-        if (facts['sampleRate'] is num) '${_trim((facts['sampleRate'] as num) / 1000)} kHz',
-        if (facts['channels'] is num) (facts['channels'] as num) == 1 ? 'mono' : (facts['channels'] as num) == 2 ? 'stereo' : '${facts['channels']} ch',
-      ].join(' · '),
-    'HDR' => '${item['detail'] ?? 'HDR'}',
-    _ => size ?? '${item['family'] ?? ''}',
-  };
-}
-
-String _trim(num v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
 double? _seconds(Map<String, dynamic> item) {
   final facts = item['facts'];
@@ -154,7 +128,7 @@ class _Badge extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
         decoration: BoxDecoration(color: const Color(0xC0101012), borderRadius: BorderRadius.circular(3)),
         child: child,
       );
@@ -168,8 +142,8 @@ class _MotionFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
         picture ?? _glyph(HG.image),
-        const Positioned(left: 6, bottom: 6, child: _Badge(SizedBox(width: 9, height: 10, child: CustomPaint(painter: _Play())))),
-        if (seconds != null) Positioned(right: 6, bottom: 6, child: _Badge(Text(_clock(seconds!), style: mono(10.5, c: const Color(0xFFF2F2F4))))),
+        const Center(child: _Badge(SizedBox(width: 8, height: 9, child: CustomPaint(painter: _Play())))),
+        if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: const Color(0xFFF2F2F4))))),
       ]);
 }
 
@@ -200,7 +174,7 @@ class _WaveFace extends StatelessWidget {
     return Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: _waveFloor),
       if (columns.isEmpty) const Center(child: GlyphBox(HG.headphones, size: 24)) else CustomPaint(painter: _Wave(columns)),
-      if (seconds != null) Positioned(right: 6, bottom: 6, child: _Badge(Text(_clock(seconds!), style: mono(10.5, c: const Color(0xFFF2F2F4))))),
+      if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: const Color(0xFFF2F2F4))))),
     ]);
   }
 }
@@ -231,7 +205,7 @@ class _Checker extends CustomPainter {
   const _Checker();
   @override
   void paint(Canvas cv, Size s) {
-    const cell = 8.0;
+    const cell = 6.0;
     cv.drawRect(Offset.zero & s, Paint()..color = const Color(0xFF2A2A2D));
     final light = Paint()..color = const Color(0xFF38383C);
     for (var y = 0; y * cell < s.height; y++) {

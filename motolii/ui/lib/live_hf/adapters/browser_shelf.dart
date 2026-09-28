@@ -202,6 +202,7 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
           search: search,
           classify: classify,
           sections: true,
+          classStrip: true,
           body: (context, sections, shown, size) => MediaLibraryBody(sections: sections, shown: shown, items: seat.itemsById, width: size.width),
         ),
       );

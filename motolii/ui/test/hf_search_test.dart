@@ -104,12 +104,15 @@ void main() {
       expect(find.text('Rectangle'), findsNothing);
     });
 
-    testWidgets('Create: narrow drops the column and keeps the chosen class visible as a chip', (t) async {
-      final c = ClassifyCapability(selected: '3D');
+    testWidgets('Create: narrow keeps its classes along the top, and the chosen one on screen', (t) async {
+      // Create lays its classes out as a strip (the board keeps the seat's width); a chosen class is never scrolled away
+      final c = ClassifyCapability(selected: 'Helpers');
       await t.pumpWidget(host(CreatePanel(catalog: catalog, classify: c), 150, 440));
+      await t.pump();
       expect(find.byType(ClassColumn), findsNothing);
-      expect(find.byType(ClassChip), findsOneWidget);
-      expect(find.textContaining('3D  ×'), findsOneWidget);
+      expect(find.byType(ClassStrip), findsOneWidget);
+      final chosen = t.getRect(find.descendant(of: find.byType(ClassStrip), matching: find.text('Helpers')));
+      expect(chosen.left >= 0 && chosen.right <= 150, isTrue, reason: 'the chosen class is in view: $chosen');
       await openSearch(t);
       await t.enterText(find.byType(EditableText), 'torus');
       await t.pump();

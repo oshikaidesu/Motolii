@@ -125,6 +125,64 @@ class _Row extends StatelessWidget {
       );
 }
 
+/// A horizontal class strip: the same capability as the column, laid along the top so the body keeps the seat's
+/// whole width (Create's board, Media's sheet). Groups are separated by space; the chosen class is underlined.
+class ClassStrip extends StatefulWidget {
+  const ClassStrip(this.classify, this.groups, {super.key});
+  final ClassifyCapability classify;
+  final List<List<String>> groups;
+  @override
+  State<ClassStrip> createState() => _ClassStripState();
+}
+
+class _ClassStripState extends State<ClassStrip> {
+  final _chosen = GlobalKey();
+  @override
+  void initState() {
+    super.initState();
+    widget.classify.addListener(_reveal);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
+  }
+
+  /// The chosen class is never scrolled out of sight (the column does the same).
+  void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final c = _chosen.currentContext;
+        if (mounted && c != null) Scrollable.ensureVisible(c, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+        if (mounted && c != null) Scrollable.ensureVisible(c, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart);
+      });
+
+  @override
+  void dispose() {
+    widget.classify.removeListener(_reveal);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: widget.classify,
+        builder: (_, __) => Container(
+          height: 28,
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(children: [
+              for (final (gi, g) in widget.groups.indexed) ...[
+                if (gi > 0) const SizedBox(width: 10),
+                for (final c in g)
+                  Padding(
+                    key: c == widget.classify.selected ? _chosen : null,
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
+                  ),
+              ],
+            ]),
+          ),
+        ),
+      );
+}
+
 /// The small chip a narrow panel shows instead of the column, so a chosen class is never invisible.
 class ClassChip extends StatelessWidget {
   const ClassChip(this.classify, {super.key});
