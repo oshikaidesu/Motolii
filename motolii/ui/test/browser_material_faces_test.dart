@@ -80,14 +80,16 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('Create: faces with short captions under sentence headings, and a quick shelf of what was taken last', (t) async {
+  testWidgets('Create: in the same footprint the face fills its tile, headings read, and a quick shelf holds what was taken last', (t) async {
     final catalog = loadCatalog('lib/hf/data/things');
     final user = UserViews(recent: ['motolii.sphere']);
     await t.pumpWidget(host(t, CreatePanel(catalog: catalog, user: user), 420, 3000));
     await t.pump();
     expect(find.text('Primitives'), findsOneWidget, reason: 'PRIMITIVES reads as a heading, not tiny caps');
     expect(find.text('Recently used'), findsOneWidget);
-    // a toy's face is big enough to tell a sphere from a cube when the shelf is small (the old tile drew it at ~38 px here)
-    expect(t.getSize(find.byType(ThingFace).first).width, greaterThan(55));
+    // same footprint as before; the face takes the tile but for a thin margin (it had 9 px of padding on each side)
+    final tile = t.getSize(find.ancestor(of: find.byType(ThingFace).first, matching: find.byType(Container)).first);
+    expect(t.getSize(find.byType(ThingFace).first).width, greaterThanOrEqualTo(tile.width - 10.5));
+    expect(tile.height, 74, reason: 'the Product Home tile height is kept');
   });
 }

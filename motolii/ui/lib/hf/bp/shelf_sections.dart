@@ -14,14 +14,15 @@ class ShelfHeading extends StatelessWidget {
   const ShelfHeading(this.text, {super.key, this.count});
   final String text;
   final int? count;
+  // the same height the tiny caps label took (14 above, 8 below); the weight and the light do the reading
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(0, 5 * kShelfUnit, 0, 2 * kShelfUnit),
+        padding: const EdgeInsets.fromLTRB(1, 12, 0, 6),
         child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(14, c: const Color(0xFFF2F2F4), w: FontWeight.w600))),
+          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(12, c: const Color(0xFFF2F2F4), w: FontWeight.w600))),
           if (count != null) ...[
-            const SizedBox(width: 2 * kShelfUnit),
-            Text('$count', style: mono(11, c: kMuted)),
+            const SizedBox(width: 6),
+            Text('$count', style: mono(10, c: kMuted)),
           ],
         ]),
       );

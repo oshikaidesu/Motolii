@@ -23,32 +23,36 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final grid = shelfColumns(width, 108);
+    // the Product Home footprint, as the shelf had it: one column when the seat is narrow, else 96 px columns; each
+    // tile's face is its column wide by 0.84 of it, with one caption line
+    const pad = 12.0, gap = 6.0;
+    final seat = BrowserSeatScope.of(context);
+    final column = width < 210 ? width - pad * 2 : 96.0 * (seat?.tileScale ?? 1);
+    final grid = shelfColumns(width, column, pad: pad, gap: gap);
     // the keys walk the tiles in the order they are drawn (section by section), not the data's order
-    BrowserSeatScope.of(context)?.shows([for (final e in sections.values) ...e], grid.columns);
+    seat?.shows([for (final e in sections.values) ...e], grid.columns);
     if (grid.width <= 0) return const SizedBox.shrink();
-    final extent = grid.width / _faceAspect + _captionHeight;
+    final extent = grid.width * .84 + _captionHeight;
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
         for (final e in sections.entries) ...[
-          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: kShelfPad), child: ShelfHeading(e.key, count: e.value.length))),
+          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: pad), child: ShelfHeading(e.key, count: e.value.length))),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(kShelfPad, e.key.isEmpty ? 3 * kShelfUnit : 0, kShelfPad, 0),
+            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 10 : 0, pad, 6),
             sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: kShelfGap + kShelfUnit, crossAxisSpacing: kShelfGap, childAspectRatio: grid.width / extent),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: grid.width / extent),
               delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], MaterialCard(item: items[e.value[i].id] ?? const {}, name: e.value[i].name)), childCount: e.value.length),
             ),
           ),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 4 * kShelfUnit)),
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
       ],
     );
   }
 }
 
-const _faceAspect = 16 / 10;
-const _captionHeight = 1.5 * kShelfUnit + 15 + 14;
+const _captionHeight = 18.0;
 
 /// One piece of material: its face (landscape, never cropped to a postage stamp), its name, one quiet line of facts.
 class MaterialCard extends StatelessWidget {
@@ -59,14 +63,25 @@ class MaterialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = item['missing'] == true;
-    Widget face = ClipRRect(borderRadius: BorderRadius.circular(3), child: AspectRatio(aspectRatio: _faceAspect, child: materialFace(item)));
+    Widget face = ClipRRect(borderRadius: BorderRadius.circular(3), child: materialFace(item));
     if (missing) face = Opacity(opacity: .4, child: face);
+    final facts = missing ? 'Missing' : materialFacts(item);
+    // one caption line, as before: the name leads; size or rate follows quietly when there is room
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      face,
-      const SizedBox(height: 1.5 * kShelfUnit),
-      Text(name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(12, c: const Color(0xFFE4E5E8), w: FontWeight.w500)),
-      const SizedBox(height: 3),
-      Text(missing ? 'Missing file' : materialFacts(item), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: mono(10, c: kMuted)),
+      Expanded(child: face),
+      SizedBox(
+        height: _captionHeight,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            Flexible(child: Text(name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10.5, c: const Color(0xFFE4E5E8), w: FontWeight.w500))),
+            if (facts.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Flexible(child: Text(facts, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: mono(9.5, c: kMuted))),
+            ],
+          ]),
+        ),
+      ),
     ]);
   }
 }

@@ -50,8 +50,8 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
             groups: views.groups(found),
             hint: 'Search create',
             count: _count(shown.length),
-            wide: (c, s) => shown.isEmpty ? emptyBody('No mark matches "${search.query}".') : _grid(sections, s.width, captions: true, minTile: 84, recent: !search.active),
-            narrow: (c, s) => shown.isEmpty ? emptyBody('No mark matches.') : _grid(sections, s.width, captions: s.width >= 200, minTile: s.width >= 200 ? 76 : 44, recent: !search.active && s.width >= 200),
+            wide: (c, s) => shown.isEmpty ? emptyBody('No mark matches "${search.query}".') : _grid(sections, s.width, captions: true, tileH: 74, minTile: 56, recent: !search.active),
+            narrow: (c, s) => shown.isEmpty ? emptyBody('No mark matches.') : _grid(sections, s.width, captions: s.width >= 200, tileH: s.width >= 200 ? 64 : 48, minTile: s.width >= 200 ? 56 : 44, recent: !search.active && s.width >= 200),
             strip: (c, s) => _strip(shown, s.height),
           );
         },
@@ -59,45 +59,45 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
 
   static String _count(int n) => n >= 1000 ? '${n ~/ 1000},${(n % 1000).toString().padLeft(3, '0')}' : '$n';
 
-  /// Toybox: sections of things whose faces are the objects themselves, big enough to tell apart when the shelf is
-  /// small; the name is a short caption under the face.
-  Widget _grid(Map<String, List<Thing>> sections, double w, {required bool captions, required double minTile, required bool recent}) {
+  /// Toybox: the object is the face. The Browser's footprint is the Product Home one (tile size and columns as before);
+  /// the face is made stronger inside it — less padding around it, a tighter caption, a heading that reads.
+  Widget _grid(Map<String, List<Thing>> sections, double w, {required bool captions, required double tileH, required double minTile, required bool recent}) {
+    const pad = 12.0, gap = 5.0;
     final scale = BrowserSeatScope.of(context)?.tileScale ?? 1;
-    final grid = shelfColumns(w, minTile * scale);
+    final grid = shelfColumns(w, minTile * scale, pad: pad, gap: gap);
     BrowserSeatScope.of(context)?.shows([for (final e in sections.values) ...e], grid.columns);
     if (grid.width <= 0) return const SizedBox.shrink(); // a seat squeezed to nothing (a Dock split) shows nothing, not an error
-    final tileH = captions ? grid.width + 5 * kShelfUnit : grid.width;
     final used = recent ? _recent() : const <Thing>[];
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
         for (final e in sections.entries) ...[
-          SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: kShelfPad), child: ShelfHeading(_sentence(e.key), count: e.value.length))),
+          SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: pad), child: ShelfHeading(_sentence(e.key), count: e.value.length))),
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: kShelfPad),
+            padding: const EdgeInsets.symmetric(horizontal: pad),
             sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: kShelfGap, crossAxisSpacing: kShelfGap, childAspectRatio: grid.width / tileH),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: grid.width / tileH),
               delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], _Tile(e.value[i], widget.scene, captions)), childCount: e.value.length),
             ),
           ),
         ],
         if (used.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: kShelfPad), child: ShelfHeading('Recently used'))),
+          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: ShelfHeading('Recently used'))),
           SliverToBoxAdapter(
             child: SizedBox(
-              height: 44,
+              height: 36,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const ClampingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: kShelfPad),
+                padding: const EdgeInsets.symmetric(horizontal: pad),
                 itemCount: used.length,
-                separatorBuilder: (_, __) => const SizedBox(width: kShelfGap),
-                itemBuilder: (c, i) => SizedBox(width: 44, child: seated(c, used[i], _Tile(used[i], widget.scene, false))),
+                separatorBuilder: (_, __) => const SizedBox(width: gap),
+                itemBuilder: (c, i) => SizedBox(width: 36, child: seated(c, used[i], _Tile(used[i], widget.scene, false))),
               ),
             ),
           ),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 4 * kShelfUnit)),
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
       ],
     );
   }
@@ -120,36 +120,34 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
       );
 }
 
-/// One toy: its face fills the square (the object itself, not an icon on a card); the name sits under it, left, small.
+/// One toy in the old footprint: the face takes the tile (padding 9 -> 5), the caption is a tight, brighter line.
 class _Tile extends StatelessWidget {
   const _Tile(this.thing, this.scene, this.caption);
   final Thing thing;
   final EffectScene? scene;
   final bool caption;
   @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-        final side = box.maxWidth;
-        final inset = side * (caption ? .17 : .16);
-        final face = Container(
-          width: side,
-          height: side,
-          decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(3)),
-          padding: EdgeInsets.all(inset),
-          child: ThingFace(thing, scene: scene),
-        );
-        if (!caption) return face;
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          face,
-          Padding(
-            padding: const EdgeInsets.only(top: 1.5 * kShelfUnit, left: 1),
-            child: Text(thing.name, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(12, c: const Color(0xFFE4E5E8), w: FontWeight.w500)),
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(3)),
+        child: Column(children: [
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(5, 5, 5, caption ? 1 : 5),
+              child: Center(child: AspectRatio(aspectRatio: 1, child: ThingFace(thing, scene: scene))),
+            ),
           ),
-        ]);
-      });
+          if (caption)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(3, 0, 3, 5),
+              child: Text(thing.name, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10.5, c: const Color(0xFFE4E5E8), w: FontWeight.w500)),
+            ),
+        ]),
+      );
 }
 
 class MarkPainter extends CustomPainter {
-  MarkPainter(this.mk, this.color);
+  /// The data's colour, lifted toward white: a silhouette reads against the tile at shelf size (the hue stays the object's).
+  MarkPainter(this.mk, Color color) : color = Color.lerp(color, const Color(0xFFFFFFFF), .1)!;
   final Mk mk;
   final Color color;
   @override
