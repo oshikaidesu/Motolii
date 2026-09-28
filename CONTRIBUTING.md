@@ -49,7 +49,7 @@ For a focused change, start with its owner's tests (use the README's native depe
 | Native window attachment lifecycle | `scripts/motolii-ui.sh test-window` |
 | Script execution without the editor or GPU | `cargo test -p motolii-script` |
 
-From `motolii/ui`, `flutter test test/window_attachment_test.dart test/session_reconnect_test.dart test/workspace_host_contract_test.dart` checks UI detach/reconnect and the dock's actual WidgetsApp host contract.
+The UI is tested two ways. `motolii/ui/test` keeps only the contracts between Flutter and the native host (snapshot deltas, document operation names, reconnect during playback, the theme file). Behaviour is tested on the real app with `integration_test`: `scripts/motolii-ui.sh it [document]` launches the live shell with its native host on a scratch copy and drives it like a person, finding controls by accessible name and reading the outcome from the work. Appearance is not asserted in tests; it is reviewed on screen.
 
 Add regression cases at the owning boundary. Do not require a full application or unrelated services to test a pure contract; use actual-window acceptance when behavior depends on window interaction.
 

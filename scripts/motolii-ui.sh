@@ -33,6 +33,21 @@ case "${1:-dev}" in
     xcrun swiftc "$ui/macos/Runner/WindowAttachment.swift" "$ui/tool/window_attachment_check.swift" -o "$window_check_dir/check"
     "$window_check_dir/check"
     ;;
+  # The real app driven like a person (integration_test): controls found by accessible name, outcomes read from the
+  # work. It opens a scratch copy of the document, never the document itself.
+  it)
+    [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
+    export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
+    [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then it.'; exit 1; }
+    it_defines=(--dart-define=MOTOLII_SHELL=live)
+    if [[ -n "${2:-}" ]]; then
+      it_dir=$(mktemp -d /tmp/motolii-it.XXXXXX)
+      trap 'rm -rf -- "$it_dir"' EXIT
+      cp -- "$2" "$it_dir/document.rrd"
+      it_defines+=(--dart-define="MOTOLII_DOCUMENT=$it_dir/document.rrd")
+    fi
+    cd "$ui"; "$flutter_bin" test integration_test -d macos "${it_defines[@]}"
+    ;;
   test)
     "$repo/scripts/motolii-ui.sh" why-slow
     "$repo/scripts/motolii-ui.sh" test-window
