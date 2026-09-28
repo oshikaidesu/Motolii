@@ -201,6 +201,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.activeLayer?['kind'], 'Text');
       expect(c.supports('setFont'), isTrue);
+      // what is being dressed, over the faces (Classic BR-117), and the families the document uses (BR-110)
+      expect(find.text('Title · Hello'), findsOneWidget);
+      expect(find.text('Used Here'), findsWidgets);
       await tester.tap(find.byKey(const ValueKey('hf-font:Test Sans')));
       await tester.pump(const Duration(milliseconds: 500));
       expect(
@@ -242,8 +245,8 @@ void main() {
       // right-click: the file's own actions (Classic's Media menu), then Favorites
       await tester.tap(asset, buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      for (final label in ['Replace selected layer', 'Copy path', 'Remove from library', 'Add to Favorites'])
-        expect(find.text(label), findsOneWidget, reason: label);
+      for (final label in ['Place', 'Replace selected layer', 'Copy path', 'Remove from library', 'Add to Favorites', 'Add to Purple', 'video/mp4'])
+        expect(find.textContaining(label), findsWidgets, reason: label);
       await tester.tap(find.text('Remove from library'));
       await tester.pumpAndSettle();
       expect(sent.last, {'op': 'removeAsset', 'id': 'asset-a'});
@@ -256,6 +259,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.map((m) => m['op']), isNot(contains('delete')));
       expect(sent.last, {'op': 'removeAsset', 'id': 'asset-a'});
+
+      // while files are carried over the window the shelf says where they go
+      c.dragging.value = true;
+      await tester.pumpAndSettle();
+      final hint = tester.widget<AnimatedOpacity>(find.ancestor(of: find.byKey(const ValueKey('media-drop-hint')), matching: find.byType(AnimatedOpacity)));
+      expect(hint.opacity, 1);
+      c.dragging.value = false;
+      await tester.pumpAndSettle();
 
       await tester.pumpWidget(const SizedBox());
       c.dispose();

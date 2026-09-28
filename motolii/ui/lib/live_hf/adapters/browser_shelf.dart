@@ -8,6 +8,7 @@ import '../../hf/bp/classify.dart';
 import '../../hf/bp/shell.dart' show GlyphBox;
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/bp/seat.dart';
+import '../../hf/bp/common.dart' show sans;
 import '../../hf/bp/search.dart';
 import '../../hf/bp/shelf_grid.dart';
 import '../../hf/bp/things.dart';
@@ -65,7 +66,21 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
         ])
         .addListener(_changed);
     widget.user.addListener(_changed);
+    widget.controller.importedAssets.addListener(_reveal);
+    widget.controller.dragging.addListener(_changed);
     _changed();
+  }
+
+  /// Files just imported are shown and picked: the search and the class are cleared (Classic BR-012).
+  void _reveal() {
+    final ids = widget.controller.importedAssets.value;
+    if (ids.isEmpty || !mounted) return;
+    search.clear();
+    classify.select('All');
+    seat.selected
+      ..clear()
+      ..addAll(ids);
+    seat.notify();
   }
 
   void _changed() {
@@ -158,6 +173,8 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
         ])
         .removeListener(_changed);
     widget.user.removeListener(_changed);
+    widget.controller.importedAssets.removeListener(_reveal);
+    widget.controller.dragging.removeListener(_changed);
     seat.dispose();
     search.dispose();
     classify.dispose();
@@ -170,7 +187,7 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
     builder: (context, _) {
       final items = _items();
       seat.update(items);
-      return BrowserSeatScope(
+      final shelf = BrowserSeatScope(
         seat: seat,
         child: ShelfGridPanel(
           title: 'Media',
@@ -184,9 +201,31 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
           sections: true,
         ),
       );
+      // while files are carried over the window, the shelf says where they go (Classic BR-084); it takes no pointer
+      return Stack(fit: StackFit.passthrough, children: [
+        shelf,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: widget.controller.dragging.value ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              child: Container(
+                key: const ValueKey('media-drop-hint'),
+                margin: const EdgeInsets.all(8),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: const Color(0xCC191919), border: Border.all(color: const Color(0xFFF2F2F4), width: 1.4), borderRadius: BorderRadius.circular(6)),
+                child: Text('Drop to import', style: sans(13, c: const Color(0xFFF2F2F4))),
+              ),
+            ),
+          ),
+        ),
+      ]);
     },
   );
 }
+
+/// The colours the collections 2–7 are named after (Orange, Yellow, Green, Blue, Purple, Gray).
+const _collectionColors = [Color(0xFFF69260), Color(0xFFF0D455), Color(0xFF7BCBA3), Color(0xFF5596E9), Color(0xFFA282E8), Color(0xFF9E9E9F)];
 
 class _Seat extends ChangeNotifier implements BrowserSeat {
   _Seat(this.c, this.name, this.userState);
@@ -257,6 +296,13 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
                   ),
                 ),
               ),
+            // state at a glance (Classic BR-059/096): a missing file, in use, and the collection it is kept in
+            if (item['missing'] == true)
+              const Positioned(left: 4, top: 4, child: IgnorePointer(child: Text('!', style: TextStyle(color: Color(0xFFF0699A), fontSize: 12, fontWeight: FontWeight.w800)))),
+            if (item['used'] == true)
+              Positioned(right: 4, bottom: 4, child: IgnorePointer(child: Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF7BCC9E), shape: BoxShape.circle)))),
+            if (userState.collectionOf(thing.id) case final n? when n > 1)
+              Positioned(left: 4, bottom: 4, child: IgnorePointer(child: Container(width: 7, height: 7, decoration: BoxDecoration(color: _collectionColors[n - 2], shape: BoxShape.circle)))),
             if (favorite)
               const Positioned(
                 right: 4,
@@ -427,26 +473,30 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
     if (selected.isEmpty) return;
     final id = selected.last;
     final item = itemsById[id];
-    final favorite = userState.views.favorites.contains(id);
-    // An imported file's own actions (Classic's Media menu, one owner), then the Browser's Favorites.
+    // Classic's Media menu: the file's name and facts (read only), Place, its own actions, then the collections
     final actions = item == null ? const <MediaAction>[] : mediaActions(c, item);
+    final facts = item == null || item['builtin'] == true ? const <String>[] : mediaFacts(item);
+    final picked = selected.toList();
     showHfMenu<String>(
       context,
-      Rect.fromLTWH(at.dx, at.dy, 220, 0),
+      Rect.fromLTWH(at.dx, at.dy, 240, 0),
       [
+        if (item != null) ('title', '${item['name'] ?? id}'),
+        for (final (i, f) in facts.indexed) ('fact:$i', f),
+        ('apply', 'Place'),
         for (final a in actions) ('media:${a.value}', a.label),
-        (
-          favorite ? 'remove' : 'favorite',
-          favorite ? 'Remove from Favorites' : 'Add to Favorites',
-        ),
+        ...userState.collectionLines(id),
       ],
       disabled: {
+        'title',
+        for (var i = 0; i < facts.length; i++) 'fact:$i',
         for (final a in actions)
           if (!a.enabled) 'media:${a.value}',
       },
+      dividers: {if (facts.isNotEmpty) 'fact:${facts.length - 1}' else if (item != null) 'title', 'apply', if (actions.isNotEmpty) 'media:${actions.last.value}'},
     ).then((action) {
-      if (action == 'remove') userState.collect([id], 0);
-      if (action == 'favorite') userState.collect([id], 1);
+      if (action == 'apply' && item != null) _apply(item);
+      if (action != null && action.startsWith('collect:')) userState.collect(action == 'collect:0' ? [id] : picked, int.parse(action.substring(8)));
       if (action != null && action.startsWith('media:') && item != null)
         mediaAct(
           c,
@@ -465,6 +515,8 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
   Listenable get changes => this;
   /// Classic's picking: a click picks one, Shift picks the run from the last single pick, Cmd adds or drops one.
   String? _anchor;
+  void notify() => notifyListeners();
+
   void select(Map<String, dynamic> item, {bool range = false, bool toggle = false}) {
     final id = '${item['id']}';
     final order = [for (final t in visible) t.id];

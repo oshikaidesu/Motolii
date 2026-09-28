@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/browser_face.dart';
+import '../../hf/bp/common.dart' show sans, kMuted;
 import '../../hf/bp/colors.dart' show Sw;
 import '../../hf/bp/fonts.dart' show FontItem;
 import '../../hf/bp/catalog_io.dart';
@@ -226,7 +227,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
       (
         '${swatch['hex'] ?? swatch['id'] ?? 'Color'}',
         _argb(swatch['rgba']),
-        swatch['used'] == true ? 'Used Here' : 'Saved',
+        swatch['used'] == true ? 'Used Here' : 'Starter',
       ),
     for (final (index, saved) in _savedSwatches().indexed)
       if ((saved['stops'] as List? ?? const []).length == 1)
@@ -293,9 +294,15 @@ class _LiveBrowserState extends State<LiveBrowser> {
         for (final group in order)
           if (available.contains(group)) group,
       ],
-      ['Favorites', 'Installed'],
+      ['Used Here', 'Favorites', 'Installed'],
     ];
   }
+
+  /// The families the document's text layers use.
+  Set<String> get _usedFonts => {
+        for (final l in c.layers)
+          if (EditorSession.map(l['text'])['fontFamily'] case final String f) f,
+      };
 
   String _sampleGlyph(Map<String, dynamic> facts) {
     final scripts = (facts['scripts'] as List? ?? const []).cast<String>();
@@ -314,6 +321,8 @@ class _LiveBrowserState extends State<LiveBrowser> {
     seat.userSource = user;
     seat.effectsTab = tab == 1;
     seat.colorsTab = tab == 2;
+    seat.fontsTab = tab == 3;
+    seat.dressing = _selectedText;
     seat.recentlyUsed = user.used;
     seat.collect = user.collect;
     final fonts = _fonts();
@@ -334,6 +343,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
           ],
           onColor: (swatch) => _applyColor(swatch),
           onColorMenu: (swatch, at) => _colorMenu(context, swatch, at),
+          usedFonts: _usedFonts,
           onGradient: (gradient) => _applyGradient(gradient),
           colorEditor: (wheel) => LiveColorInstrument(c: c, wheel: wheel),
           currentColor: () {
@@ -450,6 +460,10 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
 
   /// The seat is showing Colors: its menu also keeps the current colour and takes a palette from a picture.
   bool colorsTab = false;
+
+  /// The seat is showing Fonts, and the text layer it dresses (null: a double click makes one).
+  bool fontsTab = false;
+  Map<String, dynamic>? dressing;
   final _things = <Thing>[];
   String? _selectedId;
   void refresh() => notifyListeners();
@@ -528,7 +542,18 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
   @override
   Widget? tools(BuildContext context) => null;
   @override
-  Widget? header(BuildContext context) => null;
+  Widget? header(BuildContext context) {
+    if (!fontsTab) return null;
+    final t = dressing;
+    // Classic BR-117 / BR-116: what is being dressed, else how to start
+    final line = t == null
+        ? 'Double-click a face to add a text layer'
+        : '${t['name'] ?? 'Text'} · ${EditorSession.map(t['text'])['content'] ?? ''}'.trim();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+      child: Text(line, key: const ValueKey('fonts-header'), maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(11, c: kMuted)),
+    );
+  }
   @override
   Widget? editor(BuildContext context) => null;
   @override
@@ -545,13 +570,13 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
     final id = _userSource == null ? null : _selectedId;
     final reload = effectsTab && c.supports('reloadEffects');
     if (id == null && !reload && !colorsTab) return;
-    final selected = id != null && _userSource!.collectionOf(id) == 1;
-    showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 200, 0), [
-      if (id != null)
-        (
-          selected ? 'remove' : 'favorite',
-          selected ? 'Remove from Favorites' : 'Add to Favorites',
-        ),
+    final name = id == null ? null : _things.where((t) => t.id == id).map((t) => t.name).firstOrNull;
+    final binding = id == null ? null : bindings[id];
+    showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 220, 0), [
+      // Classic's tile menu: its name, Apply, then the collections (Favorites is the first)
+      if (name != null) ('title', name),
+      if (binding != null) ('apply', 'Apply'),
+      if (id != null) ..._userSource!.collectionLines(id),
       if (reload) ('reload', 'Reload effects'),
       if (colorsTab) ...[
         ('saveColor', 'Save current color'),
@@ -559,7 +584,11 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
         c.deskWork.value['colorShape'] == 'triangle' ? ('square', 'Square wheel') : ('triangle', 'Triangle wheel'),
       ],
     ], disabled: {
+      'title',
       if (colorsTab && colorTarget(c) == null && EditorSession.map(c.activeLayer?['fill']).isEmpty) 'saveColor',
+    }, dividers: {
+      if (name != null) 'title',
+      if (binding != null) 'apply',
     }).then((action) {
       if (action == 'square' || action == 'triangle') {
         c.storeDesk('colorShape', action);
@@ -569,8 +598,11 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
         paletteFromImages(c);
       } else if (action == 'reload') {
         c.command('reloadEffects');
-      } else if (action != null && id != null) {
-        collect?.call([id], action == 'remove' ? 0 : 1);
+      } else if (action == 'apply' && binding != null) {
+        recentlyUsed?.call(id!);
+        c.command(binding.$1, binding.$2);
+      } else if (action != null && action.startsWith('collect:') && id != null) {
+        collect?.call([id], int.parse(action.substring(8)));
       }
     });
   }

@@ -88,6 +88,7 @@ class FontsPanel extends StatefulWidget {
     this.onFavorite,
     this.controller,
     this.sampleLayer,
+    this.used = const {},
   });
   final SearchCapability? search;
   final ClassifyCapability? classify;
@@ -98,6 +99,8 @@ class FontsPanel extends StatefulWidget {
   final ValueChanged<FontItem>? onSelect, onCreate, onFavorite;
   final EditorSession? controller;
   final int? sampleLayer;
+  /// The families a text layer of the document uses (the Used Here view).
+  final Set<String> used;
   @override
   State<FontsPanel> createState() => _FontsPanelState();
 }
@@ -122,6 +125,8 @@ class _FontsPanelState extends State<FontsPanel>
                 .toList()
           : view == 'Installed'
           ? widget.items
+          : view == 'Used Here'
+          ? widget.items.where((f) => widget.used.contains(f.family)).toList()
           : classify.apply(widget.items, (f) => f.cls);
       final shown = search.apply(pool, (f) => [f.name, f.cls, ...f.facts]);
       final n = shown.length;

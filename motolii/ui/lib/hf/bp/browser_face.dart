@@ -25,6 +25,7 @@ class BrowserModel {
     this.colorEditor,
     this.currentColor,
     this.onColorMenu,
+    this.usedFonts = const {},
     this.fonts = fontsBase,
     this.fontGroups,
     this.selectedFont,
@@ -49,6 +50,7 @@ class BrowserModel {
   final Widget Function(double wheel)? colorEditor;
   final Color? currentColor;
   final void Function(Sw swatch, Offset at)? onColorMenu;
+  final Set<String> usedFonts;
   final List<FontItem> fonts;
   final List<List<String>>? fontGroups;
   final String? selectedFont;
@@ -88,6 +90,7 @@ Widget _body(BrowserModel m) => KeyedSubtree(
         onCreate: m.onFontCreate,
         onFavorite: m.onFontFavorite,
         controller: m.fontController,
+        used: m.usedFonts,
       ),
       _ => m.media ?? const SizedBox.shrink(),
     },

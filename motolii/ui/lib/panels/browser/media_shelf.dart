@@ -8,7 +8,8 @@ import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../../session/media_actions.dart';
 
-export '../../session/media_actions.dart' show filePath, revealLabel;
+export '../../session/media_actions.dart'
+    show filePath, revealLabel, mediaFamily, mediaFormat, fileFact, homely;
 import 'create_shelf.dart';
 import 'parts.dart';
 import 'shelf.dart';
@@ -148,21 +149,8 @@ class MediaShelf extends BrowserShelf {
   ];
 
   @override
-  List<String> facts(BrowserHost host, Map<String, dynamic> item) {
-    final path = filePath(item);
-    final missing = item['missing'] == true;
-    return [
-      [
-        if (mediaFormat(item).isNotEmpty) mediaFormat(item),
-        if (item['mime'] != null) '${item['mime']}',
-      ].join(' · '),
-      _mediaFact(item),
-      if (path != null && !missing) fileFact(path),
-      if (path != null) homely(File(path).parent.path),
-      if (missing) 'Missing file',
-      if (item['used'] == true) 'In use by a layer',
-    ];
-  }
+  List<String> facts(BrowserHost host, Map<String, dynamic> item) =>
+      mediaFacts(item);
 
   @override
   List<EditorMenuItem<String>> menu(
@@ -260,69 +248,9 @@ class MediaShelf extends BrowserShelf {
 
   /// Pick a file of the same family and point the asset at it. The layers
   /// keep the asset; only the file behind it changes.
-  /// Dimensions, rate and length, from what the file itself says.
-  static String _mediaFact(Map<String, dynamic> item) {
-    final facts = item['facts'];
-    final seconds =
-        (facts is Map ? facts['seconds'] : null) as num? ??
-        item['seconds'] as num?;
-    final parts = <String>[
-      if (facts is Map && facts['width'] != null)
-        '${facts['width']}×${facts['height']}',
-      if (facts is Map && facts['fps'] != null)
-        '${_trim((facts['fps'] as num).toDouble())} fps',
-      if (facts is Map && facts['sampleRate'] != null)
-        '${_trim((facts['sampleRate'] as num) / 1000)} kHz',
-      if (facts is Map && facts['channels'] != null) '${facts['channels']} ch',
-      if (seconds != null) _clock(seconds.toDouble()),
-    ];
-    return parts.join(' · ');
-  }
-
-  /// 29.97 stays 29.97; 30 stays 30.
-  static String _trim(double v) =>
-      v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(2);
-
-  /// Seconds as m:ss.s, or h:mm:ss past an hour.
-  static String _clock(double seconds) {
-    final whole = seconds.floor();
-    final h = whole ~/ 3600, m = (whole % 3600) ~/ 60;
-    final s = seconds - h * 3600 - m * 60;
-    if (h > 0)
-      return '$h:${m.toString().padLeft(2, '0')}:${s.floor().toString().padLeft(2, '0')}';
-    return '$m:${s.toStringAsFixed(1).padLeft(4, '0')}';
-  }
 }
 
-/// Video / Audio / 3D / HDR / 2D / Folder, from the MIME or the extension.
-String mediaFamily(Map<String, dynamic> item) {
-  if (item['folder'] == true) return 'Folder';
-  final mime = '${item['mime'] ?? ''}'.toLowerCase();
-  final path = '${item['path'] ?? ''}'.toLowerCase();
-  if (mime.contains('video') || RegExp(r'\.(mp4|mov|mkv|webm)$').hasMatch(path))
-    return 'Video';
-  if (mime.contains('audio') || RegExp(r'\.(wav|mp3|flac|aac)$').hasMatch(path))
-    return 'Audio';
-  if (RegExp(r'\.(obj|glb|gltf|ply)$').hasMatch(path)) return '3D';
-  // 空として置く画(1.0 超を持つ形式)。native の ENVIRONMENT_EXTENSIONS と同じ 2 つ。
-  if (mime.contains('/hdr') ||
-      mime.contains('/exr') ||
-      RegExp(r'\.(hdr|exr)$').hasMatch(path))
-    return 'HDR';
-  return '2D';
-}
 
-/// The badge: the file's extension, else the MIME's tail, else the family.
-String mediaFormat(Map<String, dynamic> item) {
-  if (item['folder'] == true) return '';
-  if (item['builtin'] == true) return 'HDR';
-  final filename = '${item['path'] ?? item['name'] ?? ''}'.split('/').last;
-  if (filename.contains('.')) return filename.split('.').last.toUpperCase();
-  final mime = '${item['mime'] ?? ''}';
-  return mime.contains('/')
-      ? mime.split('/').last.toUpperCase()
-      : mediaFamily(item);
-}
 
 final _dataUriCache = <String, Uint8List>{};
 
@@ -384,21 +312,6 @@ Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) => Builder(
   },
 );
 
-/// The file's size, for the menu's facts.
-String fileFact(String path) {
-  final file = File(path);
-  final bytes = file.existsSync() ? file.lengthSync() : 0;
-  return bytes >= 1 << 20
-      ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB'
-      : '${(bytes / (1 << 10)).round()} KB';
-}
 
-/// A path the way a person reads it: the home folder as ~.
-String homely(String path) {
-  final home = Platform.environment['HOME'];
-  return home != null && path.startsWith(home)
-      ? '~${path.substring(home.length)}'
-      : path;
-}
 
 

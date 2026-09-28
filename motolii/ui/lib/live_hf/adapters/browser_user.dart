@@ -69,6 +69,14 @@ class LiveBrowserUser extends ChangeNotifier {
     notifyListeners();
   }
 
+  String collectionName(int n) => '${EditorSession.map(_work['collectionNames'])['$n'] ?? _collectionNames[n - 1]}';
+
+  /// Classic's collection lines for a tile menu: add the pick to any of the seven, remove the clicked one from its own.
+  List<(String, String)> collectionLines(String clicked) => [
+        for (var n = 1; n <= 7; n++) ('collect:$n', 'Add to ${collectionName(n)}'),
+        if (collectionOf(clicked) case final n?) ('collect:0', 'Remove from ${collectionName(n)}'),
+      ];
+
   int? collectionOf(String id) =>
       (EditorSession.map(_work['collections'])[_key(shelf, id)] as num?)
           ?.toInt();
