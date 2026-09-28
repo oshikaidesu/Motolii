@@ -27,6 +27,7 @@ class ShelfGridPanel extends StatefulWidget {
     this.classify,
     this.captions = true,
     this.sections = false,
+    this.body,
   });
   final String title, noun, panelId;
   final Widget icon;
@@ -40,6 +41,10 @@ class ShelfGridPanel extends StatefulWidget {
 
   /// Tiles are grouped under their class when nothing narrows the list.
   final bool sections;
+
+  /// A shelf that lays its own sections out (its faces differ by what they show); it tells the seat what it shows.
+  /// The chassis — header, classes, search, empty state, strip — stays this panel's.
+  final Widget Function(BuildContext context, Map<String, List<Thing>> sections, List<Thing> shown, Size size)? body;
   @override
   State<ShelfGridPanel> createState() => _ShelfGridPanelState();
 }
@@ -92,6 +97,8 @@ class _ShelfGridPanelState extends State<ShelfGridPanel> with WithDiscovery<Shel
       );
 
   Widget _body(Map<String, List<Thing>> sections, List<Thing> shown, Widget? editor, Size s, {required bool narrow, required String empty}) {
+    final own = widget.body;
+    if (own != null) return shown.isEmpty ? emptyBody(empty) : own(context, sections, shown, s);
     final seat = BrowserSeatScope.of(context);
     final tiling = seat?.tiling(context, s.width);
     final pad = tiling?.padding ?? 12.0, gap = tiling?.gap ?? 6.0;

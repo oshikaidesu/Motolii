@@ -11,11 +11,13 @@ import '../../hf/bp/seat.dart';
 import '../../hf/bp/common.dart' show sans;
 import '../../hf/bp/search.dart';
 import '../../hf/bp/shelf_grid.dart';
+import '../../hf/bp/shelf_sections.dart' show PickedRing;
 import '../../hf/bp/things.dart';
 import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';
 import '../../session/media_actions.dart';
 import 'browser_user.dart';
+import 'media_library.dart';
 
 /// Live Media assets drawn through the existing hf shelf grammar.
 class LiveBrowserShelf extends StatefulWidget {
@@ -200,6 +202,7 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
           search: search,
           classify: classify,
           sections: true,
+          body: (context, sections, shown, size) => MediaLibraryBody(sections: sections, shown: shown, items: seat.itemsById, width: size.width),
         ),
       );
       // while files are carried over the window, the shelf says where they go (Classic BR-084); it takes no pointer
@@ -285,18 +288,7 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
           fit: StackFit.passthrough,
           children: [
             tile,
-            if (selected.contains(thing.id))
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.fromBorderSide(
-                        BorderSide(color: Color(0xFFEEEEF0)),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            if (selected.contains(thing.id)) const Positioned.fill(child: PickedRing()),
             // state at a glance (Classic BR-059/096): a missing file, in use, and the collection it is kept in
             if (item['missing'] == true)
               const Positioned(left: 4, top: 4, child: IgnorePointer(child: Text('!', style: TextStyle(color: Color(0xFFF0699A), fontSize: 12, fontWeight: FontWeight.w800)))),

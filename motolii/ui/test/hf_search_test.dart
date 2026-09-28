@@ -92,12 +92,16 @@ void main() {
     });
 
     testWidgets('Create: choosing a class in the column filters the body', (t) async {
+      // the class decides what the body holds, whichever way it is chosen (not what fits on the first screen)
       await t.pumpWidget(host(CreatePanel(catalog: catalog), 370, 640));
-      expect(find.text('Cube'), findsOneWidget);
       await t.tap(find.text('Shapes').first);
       await t.pump();
       expect(find.text('Rectangle'), findsOneWidget);
       expect(find.text('Cube'), findsNothing);
+      await t.tap(find.text('3D').first);
+      await t.pump();
+      expect(find.text('Cube'), findsOneWidget);
+      expect(find.text('Rectangle'), findsNothing);
     });
 
     testWidgets('Create: narrow drops the column and keeps the chosen class visible as a chip', (t) async {
