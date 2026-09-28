@@ -19,7 +19,7 @@ import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/leaves.dart';
-import 'status_notice.dart';
+import '../session/status_notice.dart';
 
 
 /// 窓の下の 1 行。文だけを受け取るので、文が同じ間は建て直らない。

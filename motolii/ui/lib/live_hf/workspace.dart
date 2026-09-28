@@ -9,6 +9,8 @@ import '../panels/stage.dart' show StagePanel;
 import '../session/editor_session.dart';
 import '../workspace/dock_workspace.dart';
 import 'adapters/browser.dart';
+import 'adapters/console.dart';
+import '../session/console_log.dart';
 import 'adapters/blend.dart';
 import 'adapters/depth.dart';
 import 'adapters/ease.dart';
@@ -22,7 +24,7 @@ import 'adapters/web.dart';
 /// The product workspace for the hf client. Faces/tools own their content;
 /// this layer owns only placement, tabs, split/resize and reopening.
 class LiveWorkspace {
-  LiveWorkspace({required this.c, required this.scene, this.onDetach}) {
+  LiveWorkspace({required this.c, required this.scene, required this.console, this.onDetach}) {
     dock = DockWorkspace(
       {
         for (final entry in const [
@@ -69,7 +71,7 @@ class LiveWorkspace {
         ),
         // Graph and Console are Timeline-seat panels (Product Home); what they show is not built yet.
         'Graph': PanelDef('Graph', 'Graph', () => const ColoredBox(color: kGround), glyph: HG.alongPath, minSize: 180),
-        'Console': PanelDef('Console', 'Console', () => const ColoredBox(color: kGround), glyph: HG.type, minSize: 180),
+        'Console': PanelDef('Console', 'Console', () => LiveConsole(log: console), glyph: HG.type, minSize: 180),
         'Blend': PanelDef('Blend', 'Blend', () => NewBlend(controller: c), glyph: HG.composite, minSize: 220),
         'Depth': PanelDef('Depth', 'Depth', () => NewDepth(controller: c), glyph: HG.diamond, minSize: 220),
         'Ease': PanelDef('Ease', 'Ease', () => LiveEase(c: c), glyph: HG.arrow, minSize: 240),
@@ -111,6 +113,9 @@ class LiveWorkspace {
 
   final EditorSession c;
   final EffectScene scene;
+
+  /// The session's messages, kept by the shell so closing the Console loses nothing.
+  final ConsoleLog console;
   final void Function(String id)? onDetach;
   late final DockWorkspace dock;
 

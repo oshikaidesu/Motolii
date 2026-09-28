@@ -8,7 +8,9 @@ import 'package:flutter/widgets.dart';
 
 import '../hf/bp/effects.dart' show EffectScene;
 import '../hf/shell/place.dart' show H;
+import '../session/console_log.dart';
 import '../session/editor_session.dart';
+import '../session/status_notice.dart';
 import 'adapters/document.dart';
 import 'adapters/top.dart';
 import 'keys.dart';
@@ -34,6 +36,11 @@ class _LiveShellState extends State<LiveShell> {
   final detached = <String, (String, String?)>{};
   late final keys = LiveKeys(c, () => context);
 
+  /// Every operation error and document notice, for the Console (freeze progress and effect catalogue notices, as
+  /// the Classic status line reads them).
+  late final notice = c.slice('notice', const [], derived: () => freezeNotice(c.state) ?? effectsNotice(c.state));
+  late final console = ConsoleLog(c, notice, (doc) => freezeNotice(doc) ?? effectsNotice(doc));
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +64,7 @@ class _LiveShellState extends State<LiveShell> {
     scene = await EffectScene.build();
     await c.initialize();
     if (!mounted) return;
-    workspace = LiveWorkspace(c: c, scene: scene, onDetach: _detach);
+    workspace = LiveWorkspace(c: c, scene: scene, console: console, onDetach: _detach);
     try {
       final settings = EditorSession.map(await c.native('readSettings'));
       workspace!.dock.restore(settings['hfWorkspace']);
@@ -109,6 +116,7 @@ class _LiveShellState extends State<LiveShell> {
   void dispose() {
     _dockSave?.cancel();
     workspace?.dock.layout.removeListener(_workspaceChanged);
+    console.dispose();
     c.dispose();
     super.dispose();
   }

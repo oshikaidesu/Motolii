@@ -25,7 +25,7 @@ import '../live_hf/adapters/relations.dart';
 import 'new/dock_theme.dart';
 import 'new/inspector/new_inspector_panel.dart';
 import 'new/shell_bar.dart';
-import 'status_notice.dart' show freezeNotice;
+import '../session/status_notice.dart' show freezeNotice;
 
 /// The New projection of the same session: one face whose panels sit in an
 /// off-the-shelf dock (Browser, Stage, Inspector, Timeline, Desk), and the

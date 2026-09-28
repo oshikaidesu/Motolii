@@ -9,7 +9,7 @@ import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../../panels/browser.dart' show BrowserSize;
 import '../editor_actions.dart';
-import '../status_notice.dart' show freezeNotice;
+import '../../session/status_notice.dart' show freezeNotice;
 
 /// The strip across the top, read left to right as an instrument: the name,
 /// the document menus, the transport and its readouts, the three sheets,
