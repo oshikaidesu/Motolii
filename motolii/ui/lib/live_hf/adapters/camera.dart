@@ -5,6 +5,7 @@ import '../../hf/insp/camera_model.dart';
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
 import 'key_menu.dart';
+import 'inspector_session.dart';
 
 /// The Camera instrument over the active camera layer: its `camera.*` rows read from the layer, written the way every
 /// value is (a drag previews and commits, a choice or a reset sets, a diamond keys); Target is a layer id, 0 for none.
@@ -120,39 +121,7 @@ class LiveCamera extends StatefulWidget {
 }
 
 class _LiveCameraState extends State<LiveCamera> {
-  static const _watched = ['layers', 'documentRevision'];
-  late SessionCameraStore store = SessionCameraStore(widget.c, widget.layer);
-
-  @override
-  void initState() {
-    super.initState();
-    widget.c.slice('liveCamera', _watched).addListener(store.absorb);
-    widget.c.rendered.addListener(store.absorb);
-  }
-
-  @override
-  void didUpdateWidget(LiveCamera old) {
-    super.didUpdateWidget(old);
-    if (old.layer != widget.layer) {
-      _unhook();
-      store.dispose();
-      store = SessionCameraStore(widget.c, widget.layer);
-      widget.c.slice('liveCamera', _watched).addListener(store.absorb);
-      widget.c.rendered.addListener(store.absorb);
-    }
-  }
-
-  void _unhook() {
-    widget.c.slice('liveCamera', _watched).removeListener(store.absorb);
-    widget.c.rendered.removeListener(store.absorb);
-  }
-
-  @override
-  void dispose() {
-    _unhook();
-    store.dispose();
-    super.dispose();
-  }
+  SessionCameraStore get store => InspectorSession.of(widget.c).camera(widget.layer);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(

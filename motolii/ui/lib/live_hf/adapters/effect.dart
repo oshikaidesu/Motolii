@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../hf/insp/panel.dart';
 import '../../session/editor_session.dart';
 import 'effect_store.dart';
+import 'inspector_session.dart';
 
 /// One effect's parameters for the Inspector's effect card: the generic Toys over the effect's declared rows.
 class NewEffectParams extends StatefulWidget {
@@ -16,35 +17,8 @@ class NewEffectParams extends StatefulWidget {
 }
 
 class _NewEffectParamsState extends State<NewEffectParams> {
-  static const _watched = ['layers', 'selectedId', 'selectedIds', 'capabilities', 'documentRevision'];
   EditorSession get c => widget.controller;
-  late SessionEffectStore store = SessionEffectStore(c, widget.layerId, widget.effectId);
-
-  @override
-  void initState() {
-    super.initState();
-    c.slice('newEffect', _watched).addListener(store.absorb);
-    c.rendered.addListener(store.absorb);
-  }
-
-  @override
-  void didUpdateWidget(NewEffectParams old) {
-    super.didUpdateWidget(old);
-    if (old.layerId != widget.layerId || old.effectId != widget.effectId) {
-      store.dispose();
-      store = SessionEffectStore(c, widget.layerId, widget.effectId);
-    } else {
-      store.absorb();
-    }
-  }
-
-  @override
-  void dispose() {
-    c.slice('newEffect', _watched).removeListener(store.absorb);
-    c.rendered.removeListener(store.absorb);
-    store.dispose();
-    super.dispose();
-  }
+  SessionEffectStore get store => InspectorSession.of(c).effect(widget.layerId, widget.effectId);
 
   @override
   Widget build(BuildContext context) => ParamSheet(store, thingId: '${widget.effectId}', advancedOpen: widget.advancedOpen);
@@ -61,35 +35,8 @@ class LayerRowsSheet extends StatefulWidget {
 }
 
 class _LayerRowsSheetState extends State<LayerRowsSheet> {
-  static const _watched = ['layers', 'selectedId', 'selectedIds', 'capabilities', 'documentRevision'];
   EditorSession get c => widget.controller;
-  late SessionEffectStore store = SessionEffectStore.layerRows(c, widget.layerId, widget.prefix);
-
-  @override
-  void initState() {
-    super.initState();
-    c.slice('layerRows', _watched).addListener(store.absorb);
-    c.rendered.addListener(store.absorb);
-  }
-
-  @override
-  void didUpdateWidget(LayerRowsSheet old) {
-    super.didUpdateWidget(old);
-    if (old.layerId != widget.layerId || old.prefix != widget.prefix) {
-      store.dispose();
-      store = SessionEffectStore.layerRows(c, widget.layerId, widget.prefix);
-    } else {
-      store.absorb();
-    }
-  }
-
-  @override
-  void dispose() {
-    c.slice('layerRows', _watched).removeListener(store.absorb);
-    c.rendered.removeListener(store.absorb);
-    store.dispose();
-    super.dispose();
-  }
+  SessionEffectStore get store => InspectorSession.of(c).layerRows(widget.layerId, widget.prefix);
 
   @override
   Widget build(BuildContext context) => ParamSheet(store, thingId: '${widget.layerId}:${widget.prefix}');

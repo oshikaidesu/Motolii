@@ -19,6 +19,8 @@ import 'adapters/notes.dart';
 import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
+import '../hf/shell/sheet.dart' show HfAction;
+import 'adapters/inspector_alt.dart';
 import 'adapters/web.dart';
 
 /// The product workspace for the hf client. Faces/tools own their content;
@@ -58,7 +60,9 @@ class LiveWorkspace {
         'Inspector': PanelDef(
           'Inspector',
           'Inspector',
-          () => RightSeat(c: c),
+          () => ValueListenableBuilder(valueListenable: altInspectorSkin, builder: (_, alt, __) => alt ? AltInspector(c: c) : RightSeat(c: c)),
+          // TEMPORARY: the Inspector's Skin Swap Proof switch
+          tools: () => HfAction('A/B', onTap: () => altInspectorSkin.value = !altInspectorSkin.value),
           glyph: HG.list,
           minSize: 240,
         ),
