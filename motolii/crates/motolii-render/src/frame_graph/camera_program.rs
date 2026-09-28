@@ -69,7 +69,8 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs, context: &EvaluationContext) -
     if let Some(Value::LayerId(target)) = evaluated(camera, 2, inputs) {
         if let Some(index) = recipe.worlds.get(target).copied() {
             if let Some(world) = inputs.at(index).and_then(|value| value.downcast_ref::<TransformValue>()) {
-                // the target's position in the world: its anchor, not its local origin (a text's origin is the comp corner)
+                // the target's position in the world: its anchor (the pivot the graph's transform places at its position),
+                // not its local origin (a text's origin is the comp corner)
                 let anchor = match recipe.anchors.get(target).and_then(|&index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()) {
                     Some(Value::Vec2(a)) => glam::vec3(a[0] as f32, a[1] as f32, 0.0),
                     _ => glam::Vec3::ZERO,
@@ -94,6 +95,30 @@ mod tests {
     impl NodeExecutor for Executor<'_> {
         type Error = SceneProgramError;
         fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> { self.0.execute(node, &inputs, &context) }
+    }
+
+    /// The graph camera aimed at a layer looks at where the layer stands (its anchor in the world), as the legacy resolver does.
+    #[test]
+    fn a_camera_aimed_at_an_anchored_layer_looks_at_its_position() {
+        let mut doc = Document::new();
+        let target = crate::doc::store::LayerId(1); let camera = crate::doc::store::LayerId(2);
+        let comp = CompSpec { width: 1920, height: 1080 };
+        doc.apply_all([
+            Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] }),
+            Intent::AddLayer(target), Intent::SetMeta { layer: target, meta: LayerMeta { source: LayerSource::Null, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetConstant { layer: target, property: PropertyId::new(property::ANCHOR).unwrap(), value: Value::Vec2([960.0, 540.0]) },
+            Intent::SetConstant { layer: target, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([700.0, 300.0]) },
+            Intent::AddLayer(camera), Intent::SetMeta { layer: camera, meta: LayerMeta { source: LayerSource::Camera, order: 1, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetConstant { layer: camera, property: PropertyId::new(property::CAMERA_TARGET).unwrap(), value: Value::LayerId(target.0) },
+        ]).unwrap();
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.camera();
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+        let frame = graph.evaluate(&mut executor, crate::doc::core::RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        let actual = frame.value(root).and_then(|value| value.downcast_ref::<ResolvedCamera>()).unwrap();
+        assert!(actual.target(comp).distance(glam::vec3(700.0, 300.0, 0.0)) < 1e-3, "{:?}", actual.target(comp));
     }
 
     #[test]

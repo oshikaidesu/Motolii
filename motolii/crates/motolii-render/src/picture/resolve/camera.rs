@@ -52,12 +52,10 @@ pub fn camera_of_layer(view: &StoreView<'_>, id: LayerId, t: RationalTime) -> Re
             let comp = comp.spec();
             let present = view.layers().into_iter().collect();
             if let Some(world) = crate::picture::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target) {
-                // the target's position in the world: its anchor, not its local origin (a text's origin is the comp corner)
-                let anchor = match view.value_at(target, &PropertyId::new(property::ANCHOR)?, t)? {
-                    Some(Value::Vec2(a)) => glam::vec3(a[0] as f32, a[1] as f32, 0.0),
-                    _ => glam::Vec3::ZERO,
-                };
-                camera = camera.aimed_at(comp, world.transform_point3(anchor));
+                // the target's position in the world: the pivot its transform places there, not its local origin (a text's
+                // origin is the comp corner)
+                let pivot = crate::picture::resolve::transform::layer_pivot(view, target, t)?;
+                camera = camera.aimed_at(comp, world.transform_point3(glam::vec3(pivot[0], pivot[1], 0.0)));
             }
         }
     }
