@@ -65,3 +65,21 @@ quiet; Fit wired to the Stage's Fit.
 5. **Toggle and choice styles.** The audit found four switch drawings and three "selected" looks across surfaces;
    unifying them is a visual decision on which one is Motolii's.
 6. **UI Scale surface.** Keys and a readout exist; a visible control needs the Settings route (queued).
+7. **Transform instrument's footprint.** The gizmo (~175 px square) and the 2D / 2.5D / 3D stack beside it are the
+   Inspector's largest block; the verifier counts them as legacy size. They are also the instrument's identity
+   (one body touched four ways). Options: keep; a collapsible gizmo; the space choice as one `HfChoice` track.
+8. **Stage bands.** The Stage seat keeps a view band (Front · Fit · zoom) and a status band (size · grid · Extend ·
+   frame) above and below the picture, ~24 px each. Options: keep; merge into one; overlay on the picture's margin.
+
+## Independent verification (read-only verifier, before / after at identical window sizes)
+
+| Criterion | Result | After the fixes |
+|---|---|---|
+| Hit targets | PASS | — |
+| Not a Rive copy | PASS | — |
+| Export grammar ("値・選択・状態・実行が初見で分かるか") | PASS | the range fact now says Frames |
+| Small window (1024 x 700) | PASS | nothing clipped by the top bar; values whole |
+| Information density | PARTIAL | Transform rows 35 -> 31 px |
+| Readability | PARTIAL | "10(" -> a well drops decimals, then shrinks (never to a wrong 0); track names plain with an ellipsis before M S L C; the class strip fades where more scrolls |
+| Stage area | PARTIAL | native window 1444x812 -> 1486x836 at 1280x796 (~6 %); the picture is width-limited, see 1 |
+| Legacy oversized | FAIL | what remains is 4, 7 and 8 above: decisions, not density slips |
