@@ -32,6 +32,9 @@ abstract class NotesHost implements Listenable {
   /// A new empty page after the last; its index once it exists.
   Future<int?> addPage();
   Future<void> deletePage(int page);
+
+  /// False for the chip an empty notebook still shows: there is no page there to delete.
+  bool hasPage(int page);
 }
 
 /// Notes is a free 2D workbench. Wide shows it at working scale; narrow shows the same canvas fitted small.
@@ -142,7 +145,7 @@ class _NotesDeskState extends State<NotesDesk> {
   /// A page chip's right-click: a new page after the last, or this page gone.
   Future<void> _pageMenu(int p, Offset at) async {
     final h = widget.host!;
-    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 160, 0), const [('new', 'New page'), ('delete', 'Delete page')]);
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 160, 0), const [('new', 'New page'), ('delete', 'Delete page')], disabled: {if (!h.hasPage(p)) 'delete'});
     if (!mounted || chosen == null) return;
     _endEdit();
     if (chosen == 'new') {
@@ -150,7 +153,8 @@ class _NotesDeskState extends State<NotesDesk> {
       if (mounted && added != null) setState(() { page = added; selected = null; editing = null; });
     } else {
       await h.deletePage(p);
-      if (mounted) setState(() { page = math.max(0, math.min(page, h.pageCount - 1)); selected = null; editing = null; });
+      // the page being looked at stays in view: one earlier when a page before it went
+      if (mounted) setState(() { page = math.max(0, math.min(p < page ? page - 1 : page, h.pageCount - 1)); selected = null; editing = null; });
     }
     _absorb();
   }

@@ -139,14 +139,19 @@ class LiveKeys {
               LogicalKeyboardKey.keyR ||
               LogicalKeyboardKey.keyT
           when !cmd:
-        c.placePanel('Inspector', 'show');
-        c.focusProperty.value = null;
-        c.focusProperty.value = {
+        final property = {
           LogicalKeyboardKey.keyP: 'position',
           LogicalKeyboardKey.keyS: 'scale',
           LogicalKeyboardKey.keyR: 'rotation',
           LogicalKeyboardKey.keyT: 'opacity',
         }[k];
+        // A hidden or closed Inspector is built by the frame after it is shown: ask for the field once it exists.
+        () async {
+          await c.placePanel('Inspector', 'show');
+          await WidgetsBinding.instance.endOfFrame;
+          c.focusProperty.value = null;
+          c.focusProperty.value = property;
+        }();
       default:
         return KeyEventResult.ignored;
     }

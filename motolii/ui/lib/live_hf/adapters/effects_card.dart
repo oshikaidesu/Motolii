@@ -13,12 +13,15 @@ import 'effect.dart';
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;
 /// only the head (Classic's `_effectMenu`/`_headGlyph`) is redrawn here, over the same operations.
 class NewEffectCard extends StatelessWidget {
-  const NewEffectCard({super.key, required this.controller, required this.layer, required this.effect, required this.index, required this.count});
+  const NewEffectCard({super.key, required this.controller, required this.layer, required this.effect, required this.index, required this.count, this.reorder = false});
   final EditorSession controller;
   final Map<String, dynamic> layer;
   final Map<String, dynamic> effect;
   final int index;
   final int count;
+
+  /// The card sits in a reorderable list: its header is the grip (drag it to apply the effect earlier or later).
+  final bool reorder;
   EditorSession get c => controller;
 
   Future<void> _menu(BuildContext context, Offset at) async {
@@ -50,6 +53,13 @@ class NewEffectCard extends StatelessWidget {
     }
   }
 
+  Widget _grip(Widget header) => !reorder
+      ? header
+      : MouseRegion(
+          cursor: SystemMouseCursors.grab,
+          child: ReorderableDragStartListener(key: ValueKey('effect-grip:${effect['id']}'), index: index, child: header),
+        );
+
   @override
   Widget build(BuildContext context) {
     final on = effect['enabled'] != false;
@@ -58,7 +68,7 @@ class NewEffectCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(6), border: Border.all(color: kRule)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Container(
+        _grip(Container(
           height: 30,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(border: Border(bottom: BorderSide(color: kRule2)), borderRadius: const BorderRadius.vertical(top: Radius.circular(6))),
@@ -82,7 +92,7 @@ class NewEffectCard extends StatelessWidget {
               child: Padding(padding: const EdgeInsets.all(4), child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(HG.kebab, kMuted, kRaised)))),
             )),
           ]),
-        ),
+        )),
         Padding(
           padding: const EdgeInsets.all(8),
           child: panelMap(effect['layout']).isEmpty

@@ -96,7 +96,7 @@ class _RightSeatState extends State<RightSeat> {
           if (effects.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
-              // Press and hold a card, then drag it to apply it earlier or later (Classic's reorder, `moveEffect`).
+              // Drag a card by its header to apply it earlier or later (Classic's reorder grip, `moveEffect`).
               child: ReorderableList(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -109,17 +109,14 @@ class _RightSeatState extends State<RightSeat> {
                       'to': to,
                     });
                 },
-                itemBuilder: (context, i) => ReorderableDelayedDragStartListener(
+                itemBuilder: (context, i) => NewEffectCard(
                   key: ValueKey('seat-effect:${layer['id']}:${effects[i]['id']}'),
+                  controller: c,
+                  layer: layer,
+                  effect: effects[i],
                   index: i,
-                  enabled: c.supports('moveEffect') && layer['frozen'] != true,
-                  child: NewEffectCard(
-                    controller: c,
-                    layer: layer,
-                    effect: effects[i],
-                    index: i,
-                    count: effects.length,
-                  ),
+                  count: effects.length,
+                  reorder: c.supports('moveEffect') && layer['frozen'] != true,
                 ),
               ),
             ),

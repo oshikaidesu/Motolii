@@ -90,8 +90,11 @@ class _LiveTimelineState extends State<LiveTimeline>
   double _x(num frame) => tlX0 + .5 + frame * pixelsPerFrame - offset;
   double _frameAt(double x) => (x - tlX0 - .5 + offset) / pixelsPerFrame;
 
+  // Rows scroll in whole rows, but the offset keeps the part of a row a small wheel step moved, so steps add up.
+  double _rowOffset = 0;
+
   @override
-  double get verticalOffset => rowStart * timelineGeometry.rowHeight;
+  double get verticalOffset => _rowOffset;
 
   @override
   void applyNavigation(double scale, double x, double y) {
@@ -99,7 +102,8 @@ class _LiveTimelineState extends State<LiveTimeline>
     setState(() {
       pixelsPerFrame = scale;
       _viewportOffset = x;
-      rowStart = (y / timelineGeometry.rowHeight).floor().clamp(0, maxRow);
+      _rowOffset = y.clamp(0.0, maxRow * timelineGeometry.rowHeight);
+      rowStart = (_rowOffset / timelineGeometry.rowHeight).floor();
       _shown = _rows();
     });
   }
@@ -125,7 +129,11 @@ class _LiveTimelineState extends State<LiveTimeline>
       for (final w in EditorSession.maps(c.state['waveforms']))
         w['layer']: EditorSession.maps(w['columns']),
     };
-    rowStart = rowStart.clamp(0, math.max(0, tracks.length - 8));
+    final maxRow = math.max(0, tracks.length - 8);
+    if (rowStart > maxRow) {
+      rowStart = maxRow;
+      _rowOffset = maxRow * timelineGeometry.rowHeight;
+    }
     final shown = tracks.skip(rowStart).take(8).toList();
     final out = <TlRow>[];
     for (final (n, row) in shown.indexed) {

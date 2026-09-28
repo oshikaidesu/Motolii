@@ -357,6 +357,14 @@ void main() {
     expect(sent.firstWhere((m) => m['op'] == 'select')['ids'], [2]);
     for (final label in ['Freeze', 'Show animated properties', 'Show all properties', 'Hide properties', 'Duplicate', 'Group'])
       expect(find.text(label), findsOneWidget, reason: label);
+    // Escape closes it without a choice, and the selection it was about stays
+    final sentBefore = sent.length;
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Freeze'), findsNothing);
+    expect(sent.length, sentBefore);
+    await tester.tapAt(Offset(tlX(1.5) - 344, tlTop + tlPitch + tlRowH / 2 - 703), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Freeze'));
     await tester.pumpAndSettle();
     expect(sent.last, {'op': 'freeze', 'layer': 2, 'enabled': true});
@@ -414,5 +422,18 @@ void main() {
     expect(place['target'], 2);
     expect((place['start'] as num).toDouble(), closeTo(60, 2));
     expect(drawn(tester).dropGuide, isNull);
+  });
+  testWidgets('small downward wheel steps add up to scrolling a row', (tester) async {
+    await mountRows(tester, 12);
+    expect(find.text('L0'), findsOneWidget);
+    final mouse = TestPointer(3, PointerDeviceKind.mouse);
+    final at = Offset(tlX(4) - 344, tlTop + tlPitch * 2 - 703);
+    await tester.sendEventToBinding(mouse.hover(at));
+    for (var k = 0; k < 3; k++) {
+      await tester.sendEventToBinding(mouse.scroll(const Offset(0, 10)));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('L0'), findsNothing, reason: '30 px of wheel is more than one 23 px row');
   });
 }

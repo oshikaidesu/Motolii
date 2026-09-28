@@ -1,14 +1,21 @@
 // A short list that drops from a bar box (the Stage's view box): the reference's dark box, one line per choice.
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'place.dart';
 
 Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items, {T? selected, Set<T> disabled = const {}}) {
   final done = Completer<T?>();
   late final OverlayEntry entry;
+  final back = FocusManager.instance.primaryFocus;
+  final keys = FocusNode(debugLabel: 'hf menu');
   void close(T? v) {
+    if (done.isCompleted) return;
     entry.remove();
-    if (!done.isCompleted) done.complete(v);
+    WidgetsBinding.instance.addPostFrameCallback((_) => keys.dispose());
+    done.complete(v);
+    // the keys go back where they were before the menu took them
+    if (back != null && back.context != null) back.requestFocus();
   }
 
   // Kept inside the window: it opens upward from the box when there is no room below, and slides left at the edge.
@@ -23,8 +30,18 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
       : (local.top - 2 - height).clamp(0.0, double.infinity);
   final left = local.left.clamp(0.0, (space.width - at.width).clamp(0.0, double.infinity));
   entry = OverlayEntry(
-    builder: (_) => Stack(children: [
-      Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => close(null))),
+    // Escape, or a press of either button outside, closes it without a choice (as the editor menu does).
+    builder: (_) => Focus(
+      focusNode: keys,
+      onKeyEvent: (_, e) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+          close(null);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Stack(children: [
+      Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => close(null), onSecondaryTap: () => close(null))),
       Positioned(
         left: left,
         top: top,
@@ -52,7 +69,11 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
         ),
       ),
     ]),
+    ),
   );
   overlay.insert(entry);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!done.isCompleted) keys.requestFocus();
+  });
   return done.future;
 }

@@ -385,11 +385,13 @@ class ChoiceToy extends StatelessWidget {
         ],
       ]);
     }
-    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(cur + d), child: SizedBox(width: 28, height: 30, child: Center(child: Text(t, style: sans(16, c: kMuted)))));
+    // the stepper always names one choice: an out-of-range value reads as the nearest, as before
+    final shown = raw.clamp(0, choices.length - 1);
+    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: 28, height: 30, child: Center(child: Text(t, style: sans(16, c: kMuted)))));
     return Container(
       height: 30,
       decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
-      child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(choices[cur], key: ValueKey('choice-$id-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(12, c: frozen ? const Color(0xFF55565C) : _readout, w: FontWeight.w500)))), arrow('next', '›', 1)]),
+      child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(choices[shown], key: ValueKey('choice-$id-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(12, c: frozen ? const Color(0xFF55565C) : _readout, w: FontWeight.w500)))), arrow('next', '›', 1)]),
     );
   }
 }

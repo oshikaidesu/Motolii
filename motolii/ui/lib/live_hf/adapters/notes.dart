@@ -61,6 +61,9 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
   }
 
   @override
+  bool hasPage(int page) => page < _pages.length;
+
+  @override
   Future<void> deletePage(int page) async {
     final pages = _pages;
     if (page >= pages.length) return;

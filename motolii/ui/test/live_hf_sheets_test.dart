@@ -39,8 +39,13 @@ void main() {
     s.set('background', 3);
     await tester.pump();
     expect(sent.last, {'op': 'composition', 'background': [1.0, 1.0, 1.0, 1.0]});
-    c.document.value = {'background': [0.5, 0.5, 0.5, 1.0]};
-    expect(CompositionStore(c).row('background')['value'], 2);
+    c.document.value = {'background': [0.5, 0.5, 0.5, 0.0]};
+    final t = CompositionStore(c);
+    expect(t.row('background')['value'], 2);
+    t.set('background', 0);
+    await tester.pump();
+    expect(sent.last, {'op': 'composition', 'background': [0.0, 0.0, 0.0, 0.0]}, reason: 'a transparent ground stays transparent');
+    t.dispose();
     s.dispose();
   });
 

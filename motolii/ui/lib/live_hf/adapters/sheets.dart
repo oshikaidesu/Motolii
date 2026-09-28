@@ -116,6 +116,8 @@ class CompositionStore extends ParamStore {
 
   static const _greys = [('Black', 0.0), ('Dark', 0.12), ('Grey', 0.5), ('White', 1.0)];
 
+  static double _alpha(Object? raw) => raw is List && raw.length >= 4 ? (raw[3] as num).toDouble() : 1.0;
+
   static int _grey(Object? raw) {
     final v = raw is List && raw.length >= 3 ? [for (final x in raw.take(3)) (x as num).toDouble()] : null;
     if (v == null) return -1;
@@ -126,7 +128,8 @@ class CompositionStore extends ParamStore {
     final v = row(id)['value'];
     final args = switch (id) {
       'fps' => {'fpsNum': _rates[(v as num).toInt()].$1, 'fpsDen': _rates[v.toInt()].$2},
-      'background' => {'background': [for (var i = 0; i < 3; i++) _greys[(v as num).toInt()].$2, 1.0]},
+      // a preset changes the grey and keeps the ground's alpha (a transparent ground stays transparent)
+      'background' => {'background': [for (var i = 0; i < 3; i++) _greys[(v as num).toInt()].$2, _alpha(c.state['background'])]},
       _ => {id: (v as num).round()},
     };
     c.command('composition', args);

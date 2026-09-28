@@ -96,7 +96,7 @@ void main() {
       });
     },
   );
-  testWidgets('holding an effect card and dragging it below the next applies it later (moveEffect)', (t) async {
+  testWidgets('dragging an effect card by its header below the next applies it later (moveEffect)', (t) async {
     await seat(t, {
       'id': 1,
       'name': 'Box',
@@ -111,7 +111,7 @@ void main() {
     await t.ensureVisible(first);
     final from = t.getRect(first).topCenter + const Offset(0, 12);
     final g = await t.startGesture(from);
-    await t.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await t.pump();
     final to = t.getRect(second).bottomCenter + const Offset(0, 10);
     for (var k = 1; k <= 10; k++) {
       await g.moveTo(Offset.lerp(from, to, k / 10)!);
