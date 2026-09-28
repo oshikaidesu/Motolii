@@ -9,7 +9,10 @@ import '../../hf/bp/colors.dart' show Sw;
 import '../../hf/bp/fonts.dart' show FontItem;
 import '../../hf/bp/things.dart';
 import '../../session/color_edit.dart';
+import '../../hf/bp/classify.dart' show ClassifyCapability;
+import '../../hf/bp/search.dart' show SearchCapability;
 import '../../session/editor_session.dart';
+import '../../session/media_actions.dart';
 import '../../session/swatches.dart';
 import 'browser_user.dart';
 
@@ -51,6 +54,7 @@ class BrowserSession extends ChangeNotifier {
     c.slice('browserCatalog', const ['createKinds', 'catalog']).addListener(_rebind);
     c.slice('browserSurface', const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'layers', 'selectedId', 'selectedIds', 'documentRevision', 'colorTarget']).addListener(notifyListeners);
     c.deskWork.addListener(notifyListeners);
+    c.importedAssets.addListener(_reveal);
     _loadFontFacts();
   }
   static final _all = Expando<BrowserSession>();
@@ -293,5 +297,143 @@ class BrowserSession extends ChangeNotifier {
       'family': font.family,
     });
     await user('Fonts').used('font:${font.family}');
+  }
+
+  // ---- search and classes, per shelf (they outlive a skin) -------------------------------------------------------
+  final _search = <String, SearchCapability>{}, _classify = <String, ClassifyCapability>{};
+  SearchCapability search(String shelf) => _search[shelf] ??= SearchCapability();
+  ClassifyCapability classify(String shelf) => _classify[shelf] ??= ClassifyCapability();
+
+  // ---- media -------------------------------------------------------------------------------------------------------
+  /// The library: the document's assets and the bundled environments, each with its family (mediaFamily, the one
+  /// rule the menus and facts use too).
+  List<Map<String, dynamic>> get mediaItems => [
+        for (final asset in EditorSession.maps(c.state['assets']))
+          {
+            ...asset,
+            'id': '${asset['id']}',
+            'assetId': '${asset['id']}',
+            'family': mediaFamily(asset),
+            'tags': [mediaFamily(asset).toLowerCase(), 'imported'],
+            'searchTerms': [if (asset['mime'] != null) '${asset['mime']}', if (asset['path'] != null) '${asset['path']}'],
+          },
+        for (final background in EditorSession.maps(c.state['backgrounds']))
+          {
+            ...background,
+            'id': 'background:${background['id']}',
+            'assetId': 'background:${background['id']}',
+            'builtin': true,
+            'mime': 'image/hdr',
+            'detail': 'HDR · bundled',
+            'family': 'HDR',
+            'tags': ['hdr', 'bundled'],
+            'searchTerms': [if (background['path'] != null) '${background['path']}'],
+          },
+      ];
+
+  /// The media picked, and the one a range starts from.
+  final mediaPicked = <String>{};
+  String? _mediaAnchor;
+
+  /// The media in the order a skin shows them (a range and the arrows walk this order).
+  List<String> mediaOrder = const [];
+
+  /// Classic's picking: a click picks one, [range] picks the run from the last single pick, [toggle] adds or drops one.
+  void pickMedia(String id, {bool range = false, bool toggle = false}) {
+    if (toggle) {
+      mediaPicked.contains(id) ? mediaPicked.remove(id) : mediaPicked.add(id);
+    } else if (range && _mediaAnchor != null && mediaOrder.contains(_mediaAnchor) && mediaOrder.contains(id)) {
+      final a = mediaOrder.indexOf(_mediaAnchor!), b = mediaOrder.indexOf(id);
+      mediaPicked
+        ..clear()
+        ..addAll(mediaOrder.sublist(a < b ? a : b, (a < b ? b : a) + 1));
+    } else {
+      mediaPicked
+        ..clear()
+        ..add(id);
+      _mediaAnchor = id;
+    }
+    notifyListeners();
+  }
+
+  /// Move the pick [by] places in the shown order (a skin turns rows into places: it knows its columns).
+  void stepMedia(int by) {
+    if (mediaOrder.isEmpty) return;
+    final at = mediaPicked.isEmpty ? -1 : mediaOrder.indexOf(mediaPicked.last);
+    pickMedia(mediaOrder[(at < 0 ? 0 : at + by).clamp(0, mediaOrder.length - 1)]);
+  }
+
+  void pickFirstMedia() => mediaOrder.isEmpty ? null : pickMedia(mediaOrder.first);
+  void pickLastMedia() => mediaOrder.isEmpty ? null : pickMedia(mediaOrder.last);
+  void pickAllMedia() {
+    mediaPicked
+      ..clear()
+      ..addAll(mediaOrder);
+    notifyListeners();
+  }
+
+  void clearMedia() {
+    mediaPicked.clear();
+    notifyListeners();
+  }
+
+  /// Files just imported are shown and picked: the search and the class are cleared (Classic BR-012).
+  void _reveal() {
+    final ids = c.importedAssets.value;
+    if (ids.isEmpty) return;
+    search('Media').clear();
+    classify('Media').select('All');
+    mediaPicked
+      ..clear()
+      ..addAll(ids);
+    notifyListeners();
+    c.placePanel('Media', 'show');
+  }
+
+  Map<String, dynamic>? mediaItem(String id) => mediaItems.where((i) => i['id'] == id).firstOrNull;
+
+  /// Place a media item: a bundled environment is created, a file is placed (and becomes recent).
+  Future<void> placeMedia(String id) async {
+    final item = mediaItem(id);
+    final asset = item?['assetId'];
+    if (item == null || asset is! String) return;
+    if (item['builtin'] == true && c.supports('create')) {
+      await user('Media').used(id);
+      await c.command('create', {'kind': asset});
+    } else if (c.supports('placeAsset')) {
+      await user('Media').used(id);
+      await c.command('placeAsset', {'id': asset});
+    }
+  }
+
+  /// What a media item can be carried as onto the Timeline (null: it cannot be placed that way).
+  Map<String, dynamic>? mediaCarry(String id) {
+    final item = mediaItem(id);
+    final asset = item?['assetId'];
+    return item == null || item['builtin'] == true || asset is! String || !c.supports('placeAsset') ? null : {'asset': asset, 'name': item['name']};
+  }
+
+  /// The picked files removed from the library (only those nothing uses; layers are never touched).
+  void removePickedMedia() {
+    for (final id in mediaPicked.toList()) {
+      final item = mediaItem(id);
+      if (item == null) continue;
+      final remove = mediaActions(c, item).where((a) => a.value == 'remove').firstOrNull;
+      if (remove != null && remove.enabled) mediaAct(c, 'remove', item, id: item['assetId']);
+    }
+  }
+
+  List<MediaAction> mediaActionsOf(String id) {
+    final item = mediaItem(id);
+    return item == null ? const [] : mediaActions(c, item);
+  }
+
+  List<String> mediaFactsOf(String id) {
+    final item = mediaItem(id);
+    return item == null || item['builtin'] == true ? const [] : mediaFacts(item);
+  }
+  void mediaAction(String id, String action) {
+    final item = mediaItem(id);
+    if (item != null) mediaAct(c, action, item, id: item['assetId'], paletteSaved: () => c.placePanel('Colors', 'show'));
   }
 }

@@ -150,7 +150,7 @@ String mediaFamily(Map<String, dynamic> item) {
     return 'Video';
   if (mime.contains('audio') || RegExp(r'\.(wav|mp3|flac|aac)$').hasMatch(path))
     return 'Audio';
-  if (RegExp(r'\.(obj|glb|gltf|ply)$').hasMatch(path)) return '3D';
+  if (RegExp(r'\.(obj|glb|gltf|ply)$').hasMatch(path) || mime.contains('mesh') || mime.contains('model')) return '3D';
   // 空として置く画(1.0 超を持つ形式)。native の ENVIRONMENT_EXTENSIONS と同じ 2 つ。
   if (mime.contains('/hdr') ||
       mime.contains('/exr') ||
