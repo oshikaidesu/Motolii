@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
+import '../shell/menu.dart' show showHfMenu;
 
 class NBlock {
   NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0, this.id, this.png]);
@@ -27,6 +28,10 @@ abstract class NotesHost implements Listenable {
   void put(int page, NBlock block);
   void patch(int page, NBlock block, Map<String, dynamic> changed);
   void remove(int page, NBlock block);
+
+  /// A new empty page after the last; its index once it exists.
+  Future<int?> addPage();
+  Future<void> deletePage(int page);
 }
 
 /// Notes is a free 2D workbench. Wide shows it at working scale; narrow shows the same canvas fitted small.
@@ -128,10 +133,27 @@ class _NotesDeskState extends State<NotesDesk> {
                 setState(() { page = p; selected = null; editing = null; });
                 _absorb();
               },
+              onSecondaryTapDown: widget.host == null ? null : (e) => _pageMenu(p, e.globalPosition),
               child: Container(width: 26, height: 26, margin: const EdgeInsets.only(left: 4), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : kRule2), borderRadius: BorderRadius.circular(3), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(11, c: p == page ? kInk : kMuted))),
             ),
         ]),
       );
+
+  /// A page chip's right-click: a new page after the last, or this page gone.
+  Future<void> _pageMenu(int p, Offset at) async {
+    final h = widget.host!;
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 160, 0), const [('new', 'New page'), ('delete', 'Delete page')]);
+    if (!mounted || chosen == null) return;
+    _endEdit();
+    if (chosen == 'new') {
+      final added = await h.addPage();
+      if (mounted && added != null) setState(() { page = added; selected = null; editing = null; });
+    } else {
+      await h.deletePage(p);
+      if (mounted) setState(() { page = math.max(0, math.min(page, h.pageCount - 1)); selected = null; editing = null; });
+    }
+    _absorb();
+  }
 
   void _add(String kind) {
     final h = widget.host;

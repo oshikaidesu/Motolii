@@ -49,6 +49,25 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
     return 'p1';
   }
 
+  @override
+  Future<int?> addPage() async {
+    final ids = {for (final p in _pages) '${p['id']}'};
+    var n = _pages.length + 1;
+    while (ids.contains('p$n')) n++;
+    await c.command('notes', {'page': 'p$n', 'action': 'addPage', 'title': 'Untitled page'});
+    if (c.error.value != null) return null;
+    final at = _pages.indexWhere((p) => p['id'] == 'p$n');
+    return at < 0 ? null : at;
+  }
+
+  @override
+  Future<void> deletePage(int page) async {
+    final pages = _pages;
+    if (page >= pages.length) return;
+    await c.flushEditors();
+    await c.command('notes', {'page': '${pages[page]['id']}', 'action': 'deletePage'});
+  }
+
   Map<String, dynamic> _frame(NBlock b) => {
         'x': math.max(0.0, b.pos.dx),
         'y': math.max(0.0, b.pos.dy),

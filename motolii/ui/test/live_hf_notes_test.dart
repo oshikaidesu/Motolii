@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/hf/desk/notes.dart';
@@ -61,6 +63,38 @@ void main() {
     c.document.value = {'notebook': {'pages': [{'id': 'p1', 'title': 'Page 1', 'blocks': []}]}};
     await host.patch(0, NBlock('note', const Offset(12, -3), const Size(80, 60), 'x', 0, 'b1'), {'x': 12, 'y': -3});
     expect(sent.single['patch'], {'x': 12.0, 'y': 0.0});
+    host.dispose();
+  });
+  testWidgets('a page chip\'s right-click adds a page after the last or deletes that page', (tester) async {
+    final c = EditorSession()
+      ..document.value = {
+        'notebook': {
+          'pages': [
+            {'id': 'p1', 'title': 'One', 'blocks': []},
+            {'id': 'p2', 'title': 'Two', 'blocks': []},
+          ],
+        },
+      };
+    final host = LiveNotesHost(c);
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Overlay(initialEntries: [
+        OverlayEntry(builder: (_) => SizedBox(width: 600, height: 420, child: NotesDesk(host: host))),
+      ]),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('2'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New page'));
+    await tester.pumpAndSettle();
+    expect(sent.last, containsPair('action', 'addPage'));
+    expect(sent.last['page'], 'p3');
+    await tester.tap(find.text('2'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete page'));
+    await tester.pumpAndSettle();
+    expect(sent.last, {'op': 'notes', 'page': 'p2', 'action': 'deletePage'});
+    await tester.pumpWidget(const SizedBox());
     host.dispose();
   });
 }
