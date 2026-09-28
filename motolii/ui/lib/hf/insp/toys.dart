@@ -325,12 +325,27 @@ class _ValueToyState extends State<ValueToy> {
                     Expanded(
                       child: editing
                           ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 14 : 13, c: kInk, w: FontWeight.w600), cursorColor: kInk, backgroundCursorColor: kMuted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
-                          : FittedBox(
-                              // a number is never cut mid-digit ("10(" for 100): a narrow well shows all of it, smaller
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(s.mixed ? '—' : s.format(s.value, decimals: widget.decimals), softWrap: false, style: sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500)),
-                            ),
+                          : LayoutBuilder(builder: (context, box) {
+                              // a number is never cut mid-digit ("10(" for 100): a narrow well first drops its decimals
+                              // (the value is unchanged, only its display), and only a number still too wide is drawn smaller
+                              final style = sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500);
+                              var text = s.mixed ? '—' : s.format(s.value, decimals: widget.decimals);
+                              bool fits(String t) {
+                                final p = TextPainter(text: TextSpan(text: t, style: style), textDirection: TextDirection.ltr, maxLines: 1)..layout();
+                                final w = p.width;
+                                p.dispose();
+                                return w <= box.maxWidth;
+                              }
+
+                              // fewer decimals until it fits, but never so few that a value that is not zero reads as 0
+                              for (var d = 2; !s.mixed && !fits(text) && d >= 0; d--) {
+                                final shorter = d == 0 ? s.format(s.value, decimals: 0) : (s.value * s.displayScale).toStringAsFixed(d);
+                                if (shorter.length >= text.length && d > 0) continue;
+                                if (s.value != 0 && double.tryParse(shorter) == 0) break;
+                                text = shorter;
+                              }
+                              return FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(text, softWrap: false, style: style));
+                            }),
                     ),
                     if (editing && _bad) Text('Number required', key: ValueKey('bad-${s.id}'), style: sans(10, c: kPink))
                     else if (unit != null) Text(unit, style: sans(10.5, c: kMuted)),
