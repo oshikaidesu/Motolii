@@ -101,6 +101,7 @@ class TimelineModel {
     this.markers = const [],
     this.onAddMarker,
     this.onSplit,
+    this.headerKeys = true,
     this.onMarkerContext,
     this.onMarkerDrag,
     this.onSeek,
@@ -158,6 +159,9 @@ class TimelineModel {
   final List<(double x, String id)> markers;
   final VoidCallback? onAddMarker;
   final VoidCallback? onSplit;
+
+  /// Split and Marker drawn at the reference's right end; a host that anchors them to its own edge turns this off.
+  final bool headerKeys;
   final void Function(String id, Offset globalPosition)? onMarkerContext;
 
   /// A marker dragged along the ruler: how far it moved since the last call, and whether the drag ended.
@@ -215,6 +219,7 @@ List<RI> timeline(TimelineModel m) {
     Ln(345, 742, 1176, 1, H.rule),
     Pt(_TlPaint(m)),
     Ln(558, 743, 1, 250, H.rule),
+    if (m.headerKeys) ...[
     Wd(
       1362,
       708,
@@ -241,6 +246,7 @@ List<RI> timeline(TimelineModel m) {
         ),
       ),
     ),
+    ],
   ];
   // ruler numerals: the same technical-readout family as the other numeric text
   for (var i = 0; i <= 10; i++) {

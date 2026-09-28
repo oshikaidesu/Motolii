@@ -11,6 +11,7 @@ import '../../timeline_core/frame.dart';
 import '../../timeline_core/geometry.dart';
 import '../../timeline_core/grip.dart';
 import '../../timeline_core/menu.dart';
+import '../../hf/shell/sheet.dart' show HfAction;
 import '../../timeline_core/view.dart';
 
 /// The Timeline face over the session: one row per layer (a group, a camera, an audio floor, or an item with its
@@ -383,11 +384,14 @@ class _LiveTimelineState extends State<LiveTimeline>
           onKeyEvent: key,
           // Trackpad pan, pinch and ruler scrub-zoom with momentum, and the wheel (pointer-anchored zoom with Cmd or
           // over the ruler): the core's own navigation, the same one Classic's Timeline uses.
-          child: navigation(
+          child: Stack(children: [
+            Positioned.fill(child: navigation(
             RF(
               timeline(
                 TimelineModel(
                   tabs: false,
+                  // Split and Marker ride the seat's own right edge (below), so a narrow window never clips them
+                  headerKeys: false,
                   rows: gripping ? _rows() : _shown,
                   marquee:
                       gesture == 'marquee' && start != null && current != null
@@ -490,7 +494,16 @@ class _LiveTimelineState extends State<LiveTimeline>
               ox: 344,
               oy: 703,
             ),
-          ),
+          )),
+            Positioned(
+              right: 8,
+              top: 6,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
+                HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
+              ]),
+            ),
+          ]),
         ),
       );
     },
