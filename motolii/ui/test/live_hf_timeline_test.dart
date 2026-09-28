@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/theme.dart';
+import '../lib/hf/shell/place.dart' show H;
 import '../lib/hf/shell/timeline.dart';
 import '../lib/live_hf/adapters/timeline.dart';
 import '../lib/session/editor_session.dart';
@@ -452,5 +453,64 @@ void main() {
     }
     await tester.pumpAndSettle();
     expect(find.text('L0'), findsNothing, reason: '30 px of wheel is more than one 23 px row');
+  });
+  testWidgets('a hidden layer is grey, a ghost shows past its bar, a lane draws its spans', (tester) async {
+    final c = await mountRows(tester, 2);
+    c.document.value = {
+      ...c.state,
+      'layers': [
+        {'id': 1, 'name': 'L0', 'kind': 'Shape', 'start': 0, 'duration': 30, 'hidden': true, 'ghost': 6, 'properties': []},
+        {
+          'id': 2,
+          'name': 'L1',
+          'kind': 'Shape',
+          'start': 0,
+          'duration': 90,
+          'properties': [
+            {
+              'id': 'opacity',
+              'label': 'Opacity',
+              'keys': [
+                {'frame': 0, 'interp': {'kind': 'Linear'}},
+                {'frame': 30, 'interp': {'kind': 'EasyEase'}},
+                {'frame': 60},
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    await tester.pump();
+    await tester.tapAt(const Offset(134, 106)); // the second row's properties toggle
+    await tester.pump();
+    final rows = drawn(tester).rows;
+    expect(rows, hasLength(3), reason: 'the opened lane is drawn at once');
+    expect(rows[0].body!.$3, H.raisedHi);
+    expect(rows[0].ghost, isNotNull);
+    expect(rows[0].ghost!.$1, closeTo(rows[0].body!.$2, .01));
+    final lane = rows.firstWhere((r) => r.lane);
+    expect(lane.spans.map((s) => s.$3), [true, false], reason: 'linear, then shaped');
+  });
+  testWidgets('a marker dragged along the ruler lands on the frame under it', (tester) async {
+    final c = await mountRows(tester, 1);
+    c.document.value = {
+      ...c.state,
+      'capabilities': ['seek', 'select', 'setMarker'],
+      'markers': [
+        {'id': '30/1', 'frame': 30},
+      ],
+    };
+    await tester.pump();
+    final at = Offset(tlX(1) - 344, 758 - 703); // the marker's handle at 1 s
+    final g = await tester.startGesture(at);
+    for (var k = 1; k <= 5; k++) {
+      await g.moveTo(at + Offset(tlUnit * k / 5, 0));
+      await tester.pump();
+    }
+    await g.up();
+    await tester.pump();
+    final set = sent.lastWhere((m) => m['op'] == 'setMarker');
+    expect(set['id'], '30/1');
+    expect((set['frame'] as num).toDouble(), closeTo(60, 2));
   });
 }

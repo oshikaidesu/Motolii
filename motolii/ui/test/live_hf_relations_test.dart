@@ -23,6 +23,9 @@ void main() {
       };
     final log = ConsoleLog(c, c.slice('notice', const [], derived: () => effectsNotice(c.state)), effectsNotice);
     final ws = LiveWorkspace(c: c, scene: scene, console: log);
+    // a panel opened on demand can be closed again; the Home panels stay
+    for (final id in ['Relations', 'Web', 'Notes', 'Ease']) expect(ws.dock.closable!(id), isTrue, reason: id);
+    for (final id in ['Stage', 'Inspector', 'Timeline', 'Console']) expect(ws.dock.closable!(id), isFalse, reason: id);
     for (final (name, type) in [('Relations', RelationsPanel), ('Web', NewWeb), ('Console', LiveConsole)]) {
       final def = ws.dock.defs[name];
       expect(def, isNotNull, reason: name);

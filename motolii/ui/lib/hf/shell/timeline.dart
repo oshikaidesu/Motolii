@@ -17,6 +17,8 @@ import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
 import 'place.dart';
 
+part 'timeline_paint.dart';
+
 const tlTop = 775.0, tlPitch = 23.0, tlRowH = 22.0, tlBarH = 18.0;
 const tlAudioTop = 959.0, tlAudioH = 34.0;
 const tlX0 = 559.0, tlUnit = 92.9, tlRight = 1521.0;
@@ -45,7 +47,16 @@ class TlRow {
     this.locked = false,
     this.clipToBelow = false,
     this.lane = false,
+    this.ghost,
+    this.spans = const [],
   });
+
+  /// Where only the layer's ghost plays (outside its own bar): from–to x, and whether it starts before frame 0
+  /// (then a notch at [notchX] says so).
+  final (double from, double to, double? notchX)? ghost;
+
+  /// A lane's spans between consecutive keys: dashed while linear, solid once shaped, lit when both ends are picked.
+  final List<(double from, double to, bool linear, bool chosen)> spans;
 
   /// A property lane under its layer: it has no layer switches; its ◆ adds or removes a key at the playhead.
   final bool lane;
@@ -91,6 +102,7 @@ class TimelineModel {
     this.onAddMarker,
     this.onSplit,
     this.onMarkerContext,
+    this.onMarkerDrag,
     this.onSeek,
     this.onRow,
     this.onFold,
@@ -143,6 +155,9 @@ class TimelineModel {
   final VoidCallback? onAddMarker;
   final VoidCallback? onSplit;
   final void Function(String id, Offset globalPosition)? onMarkerContext;
+
+  /// A marker dragged along the ruler: how far it moved since the last call, and whether the drag ended.
+  final void Function(String id, double dx, bool done)? onMarkerDrag;
 
   /// A press or drag on the ruler or the tracks, at that x.
   final ValueChanged<double>? onSeek;
@@ -341,6 +356,12 @@ List<RI> timeline(TimelineModel m) {
             onSecondaryTapDown: m.onMarkerContext == null
                 ? null
                 : (event) => m.onMarkerContext!(id, event.globalPosition),
+            onHorizontalDragUpdate: m.onMarkerDrag == null
+                ? null
+                : (e) => m.onMarkerDrag!(id, e.delta.dx, false),
+            onHorizontalDragEnd: m.onMarkerDrag == null
+                ? null
+                : (e) => m.onMarkerDrag!(id, 0, true),
             child: const SizedBox.expand(),
           ),
         ),
@@ -399,260 +420,6 @@ List<RI> timeline(TimelineModel m) {
   return items;
 }
 
-class _TlMarks extends CustomPainter {
-  _TlMarks(this.m);
-  final TimelineModel m;
-  @override
-  void paint(Canvas cv, Size s) {
-    final p = Paint()..color = H.text;
-    // disclosure triangles sit on c0, optically centred on the row
-    for (final (i, r) in m.rows.indexed) {
-      if (r.open == null) continue;
-      final g = _rowCy(i, r);
-      if (r.open!) {
-        cv.drawPath(
-          Path()
-            ..moveTo(358, g - 4)
-            ..lineTo(368.6, g - 4)
-            ..lineTo(363.3, g + 4)
-            ..close(),
-          p,
-        );
-      } else {
-        cv.drawPath(
-          Path()
-            ..moveTo(359, g - 5.6)
-            ..lineTo(368, g + .1)
-            ..lineTo(359, g + 5.8)
-            ..close(),
-          p,
-        );
-      }
-    }
-    for (final (i, r) in m.rows.indexed) {
-      if (r.propertiesOpen == null) continue;
-      final g = _rowCy(i, r);
-      if (r.propertiesOpen!) {
-        cv.drawPath(
-          Path()
-            ..moveTo(474, g - 3)
-            ..lineTo(482, g - 3)
-            ..lineTo(478, g + 3)
-            ..close(),
-          p,
-        );
-      } else {
-        cv.drawPath(
-          Path()
-            ..moveTo(476, g - 4)
-            ..lineTo(482, g)
-            ..lineTo(476, g + 4)
-            ..close(),
-          p,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TlMarks o) => o.m != m;
-}
-
-class _TlPaint extends CustomPainter {
-  _TlPaint(this.m);
-  final TimelineModel m;
-  @override
-  void paint(Canvas cv, Size s) {
-    // 1 panel ground is the window colour; 2 row ground alternates and runs continuously across both columns
-    cv.drawRect(
-      const Rect.fromLTRB(345, 743, 1521, 993),
-      Paint()..color = H.window,
-    );
-    cv.drawRect(
-      const Rect.fromLTRB(tlX0, 743, 1521, 774),
-      Paint()..color = H.raised,
-    );
-    cv.drawRect(
-      const Rect.fromLTRB(345, 743, 558, 774),
-      Paint()..color = H.raised,
-    );
-    for (var i = 0; i < 9; i++) {
-      final c = (i == 8) ? H.raised : (i.isEven ? H.raisedHi : H.raised);
-      final top = i < 8 ? tlTop + tlPitch * i : tlAudioTop;
-      cv.drawRect(
-        Rect.fromLTWH(345, top, 1521 - 345, i < 8 ? tlRowH : tlAudioH),
-        Paint()..color = c,
-      );
-    }
-    for (final (i, r) in m.rows.indexed) {
-      if (r.selected)
-        cv.drawRect(
-          Rect.fromLTWH(345, _rowTop(i, r), 1521 - 345, _rowH(r)),
-          Paint()..color = H.sel,
-        );
-    }
-    cv.drawRect(
-      const Rect.fromLTRB(345, 774, 1521, 775),
-      Paint()..color = H.rule,
-    );
-    // 3 time grid: major > minor > row gap. Major runs through the ruler as a tick.
-    final major = Paint()
-      ..color = const Color(0x17FFFFFF)
-      ..strokeWidth = 1;
-    final minor = Paint()
-      ..color = const Color(0x0AFFFFFF)
-      ..strokeWidth = 1;
-    final tMaj = Paint()
-      ..color = const Color(0x47FFFFFF)
-      ..strokeWidth = 1;
-    final tMin = Paint()
-      ..color = const Color(0x29FFFFFF)
-      ..strokeWidth = 1;
-    for (var i = 0; i <= 10; i++) {
-      final x = tlX(i.toDouble());
-      cv.drawLine(Offset(x, 766), Offset(x, 774), tMaj);
-      cv.drawLine(Offset(x, 775), Offset(x, 993), major);
-      for (var k = 1; k < 4; k++) {
-        final xm = x + tlUnit * k / 4;
-        cv.drawLine(Offset(xm, 770), Offset(xm, 774), tMin);
-        cv.drawLine(Offset(xm, 775), Offset(xm, 993), minor);
-      }
-    }
-    // 4 waveform: a quiet floor
-    for (final (i, r) in m.rows.indexed) {
-      final wave = r.wave;
-      if (wave == null) continue;
-      final cy = _rowCy(i, r);
-      cv.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(594, cy - 11, 1490, cy + 11),
-          const Radius.circular(2),
-        ),
-        Paint()..color = const Color(0xFF1E2622),
-      );
-      final wv = Paint()
-        ..color = const Color(0x803B6D5F)
-        ..strokeWidth = 1;
-      for (var k = 0; k < wave.length; k++) {
-        final x = 596.0 + 2 * k, a = wave[k];
-        cv.drawLine(Offset(x, cy - a), Offset(x, cy + a), wv);
-      }
-    }
-    // 5 temporal bodies: a flat body, one thin connector through the keys, small diamond keys on it.
-    // One rule for every relation; a body with a single key has no connector.
-    Color mixW(Color c, double t) => Color.lerp(c, const Color(0xFFFFFFFF), t)!;
-    void node(double x, double cy, Color body) {
-      cv.save();
-      cv.translate(x, cy);
-      cv.rotate(math.pi / 4);
-      final rr = Rect.fromCenter(center: Offset.zero, width: 4.8, height: 4.8);
-      cv.drawRect(rr, Paint()..color = mixW(body, .32));
-      cv.drawRect(
-        rr,
-        Paint()
-          ..color = mixW(body, .58)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-      cv.restore();
-    }
-
-    for (final (i, r) in m.rows.indexed) {
-      final cy = _rowCy(i, r);
-      final b = r.body;
-      if (b == null) {
-        // a key with no body (Camera): the same diamond on the neutral row
-        for (final k in r.keys) {
-          cv.save();
-          cv.translate(k, cy);
-          cv.rotate(math.pi / 4);
-          final kr = Rect.fromCenter(
-            center: Offset.zero,
-            width: 4.8,
-            height: 4.8,
-          );
-          cv.drawRect(kr, Paint()..color = mixW(H.raisedHi, .25));
-          cv.drawRect(
-            kr,
-            Paint()
-              ..color = mixW(H.raisedHi, .5)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1,
-          );
-          cv.restore();
-        }
-        continue;
-      }
-      final (a, e, c) = b;
-      final top = _rowTop(i, r) + (_rowH(r) - tlBarH) / 2;
-      final rc = Rect.fromLTRB(a, top, e, top + tlBarH);
-      final clipped = a <= tlX0;
-      RRect rrect(Rect q, double rad) => RRect.fromRectAndCorners(
-        q,
-        topLeft: Radius.circular(clipped ? 0 : rad),
-        bottomLeft: Radius.circular(clipped ? 0 : rad),
-        topRight: Radius.circular(rad),
-        bottomRight: Radius.circular(rad),
-      );
-      cv.drawRRect(rrect(rc, 4), Paint()..color = c);
-      cv.drawRRect(
-        rrect(rc.deflate(.5), 3.6),
-        Paint()
-          ..color = mixW(c, .13)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-      final ks = [...r.keys]..sort();
-      if (ks.length > 1)
-        cv.drawLine(
-          Offset(ks.first, cy),
-          Offset(ks.last, cy),
-          Paint()
-            ..color = const Color(0x5C000000)
-            ..strokeWidth = 1,
-        );
-      for (final k in ks) {
-        node(k, cy, r.pickedKeys.contains(k) ? mixW(c, .75) : c);
-      }
-    }
-    for (final (x, _) in m.markers) {
-      final markerPaint = Paint()..color = H.scatter.n;
-      cv.drawRect(Rect.fromLTWH(x - .5, 754, 1, 239), markerPaint);
-      cv.drawPath(
-        Path()
-          ..moveTo(x - 5, 748)
-          ..lineTo(x + 5, 748)
-          ..lineTo(x + 5, 755)
-          ..lineTo(x, 760)
-          ..lineTo(x - 5, 755)
-          ..close(),
-        markerPaint,
-      );
-    }
-    // 6 playhead: ruler marker + thin line, above bodies and keys
-    final ph = m.playhead;
-    cv.drawRect(
-      Rect.fromLTWH(ph - 0.35, 748, 1.3, 245),
-      Paint()..color = H.playhead,
-    );
-    cv.drawPath(
-      Path()
-        ..moveTo(ph - 5.75, 748)
-        ..lineTo(ph + 7.25, 748)
-        ..lineTo(ph + 7.25, 755)
-        ..lineTo(ph + 0.75, 762)
-        ..lineTo(ph - 5.75, 755)
-        ..close(),
-      Paint()..color = H.playhead,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_TlPaint o) => o.m != m;
-}
-
-/// The tracks' pointer: a press on a key picks it, a drag from a picked key moves the picked keys, a drag on a body
-/// or one of its ends retimes it, anything else scrubs; a scroll pans, with Cmd/Ctrl it zooms.
 class _Tracks extends StatefulWidget {
   const _Tracks(this.m);
   final TimelineModel m;

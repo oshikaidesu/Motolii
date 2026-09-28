@@ -123,7 +123,7 @@ class LiveKeys {
           );
           op('select', {
             'ids': [
-              ids[(ix + (k == LogicalKeyboardKey.arrowUp ? -1 : 1)).clamp(
+              ids[(ix + (k == LogicalKeyboardKey.arrowUp ? -1 : 1) * (shift ? 10 : 1)).clamp(
                 0,
                 ids.length - 1,
               )],

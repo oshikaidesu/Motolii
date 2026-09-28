@@ -96,6 +96,14 @@ class _LiveTimelineState extends State<LiveTimeline>
   @override
   double get verticalOffset => _rowOffset;
 
+  /// Whenever the core lays the rows out again (a lane or group opened from the rows, the document), the face's
+  /// rows follow at once.
+  @override
+  void relane() {
+    super.relane();
+    _shown = _rows();
+  }
+
   @override
   void applyNavigation(double scale, double x, double y) {
     final maxRow = math.max(0, tracks.length - 8);
@@ -202,7 +210,9 @@ class _LiveTimelineState extends State<LiveTimeline>
           ),
         );
       } else {
-        final (chip, bodyColor) = _families[(n + row.depth) % _families.length];
+        final (chip, family) = _families[(n + row.depth) % _families.length];
+        // a hidden (muted) layer's bar is grey (Classic TL-105)
+        final bodyColor = layer['hidden'] == true ? H.raisedHi : family;
         final t = timings[id] ?? layer;
         final body = row.property == null
             ? (
@@ -226,6 +236,8 @@ class _LiveTimelineState extends State<LiveTimeline>
             pickedKeys: pickedXs,
             propertiesOpen: row.property == null ? row.lanesOpen : null,
             lane: row.property != null,
+            ghost: row.property == null ? _ghost(layer, t) : null,
+            spans: row.property == null ? const [] : _spans(row.keys, keyX, pickedFrames),
             wave: wave,
             selected: selectedRow,
             hidden: layer['hidden'] == true,
@@ -237,6 +249,32 @@ class _LiveTimelineState extends State<LiveTimeline>
       }
     }
     return out;
+  }
+
+  /// Where only the ghost plays, as Classic draws it: past the bar's end for a delay, before its start (never before
+  /// frame 0, where a notch says it starts earlier) for an advance.
+  (double, double, double?)? _ghost(Map<String, dynamic> layer, Map<String, dynamic> t) {
+    final d = layer['ghost'];
+    if (d is! num || d == 0) return null;
+    final start = (t['start'] as num? ?? 0).toDouble(), end = start + (t['duration'] as num? ?? 0).toDouble();
+    final zero = _x(0);
+    if (d > 0) return (_x(end), _x(end + d), null);
+    final from = _x(start + d);
+    return (math.max(zero, from), _x(start), from < zero ? zero : null);
+  }
+
+  List<(double, double, bool, bool)> _spans(List<Map<String, dynamic>> keys, double Function(int) keyX, Set<int> picked) {
+    final ordered = [...keys]..sort((a, b) => (a['frame'] as num).compareTo(b['frame'] as num));
+    return [
+      for (var i = 0; i + 1 < ordered.length; i++)
+        if (keyX((ordered[i]['frame'] as num).round()) + 5 < keyX((ordered[i + 1]['frame'] as num).round()) - 5)
+          (
+            keyX((ordered[i]['frame'] as num).round()) + 5,
+            keyX((ordered[i + 1]['frame'] as num).round()) - 5,
+            EditorSession.map(ordered[i]['interp'])['kind'] == 'Linear',
+            picked.contains((ordered[i]['frame'] as num).round()) && picked.contains((ordered[i + 1]['frame'] as num).round()),
+          ),
+    ];
   }
 
   /// The floor's half-heights, one per 2 px from x 596, from the host's per-frame min/max columns.
@@ -300,6 +338,8 @@ class _LiveTimelineState extends State<LiveTimeline>
     });
   }
 
+  (String, double)? _markerDrag;
+
   Future<void> _markerContext(
     String id,
     Offset at,
@@ -360,8 +400,38 @@ class _LiveTimelineState extends State<LiveTimeline>
                   playhead: _x(frame),
                   markers: [
                     for (final marker in EditorSession.maps(c.state['markers']))
-                      (_x(marker['frame'] as num), '${marker['id']}'),
+                      (
+                        _markerDrag?.$1 == '${marker['id']}'
+                            ? _markerDrag!.$2
+                            : _x(marker['frame'] as num),
+                        '${marker['id']}',
+                      ),
                   ],
+                  // a marker dragged along the ruler lands on the frame under it (Classic TL-031, setMarker{frame})
+                  onMarkerDrag: c.supports('setMarker')
+                      ? (id, dx, done) {
+                          if (!done) {
+                            final from = _markerDrag?.$1 == id
+                                ? _markerDrag!.$2
+                                : _x(
+                                    EditorSession.maps(c.state['markers'])
+                                            .firstWhere((m) => '${m['id']}' == id)['frame']
+                                        as num,
+                                  );
+                            setState(() => _markerDrag = (id, from + dx));
+                            return;
+                          }
+                          final drag = _markerDrag;
+                          setState(() => _markerDrag = null);
+                          if (drag == null) return;
+                          c.command('setMarker', {
+                            'id': id,
+                            'frame': _frameAt(drag.$2)
+                                .round()
+                                .clamp(0, duration > 0 ? duration - 1 : 0),
+                          });
+                        }
+                      : null,
                   onAddMarker: c.supports('addMarker')
                       ? () => c.command('addMarker')
                       : null,

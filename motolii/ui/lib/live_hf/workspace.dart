@@ -107,6 +107,8 @@ class LiveWorkspace {
       ]),
       onDetach: onDetach,
       allowClose: false,
+      // the Home panels stay (Reset Layout brings them back anyway); a panel opened on demand closes (Classic WS-04/05)
+      closable: (id) => !const {'Create', 'Effects', 'Colors', 'Fonts', 'Media', 'Stage', 'Camera', 'Inspector', 'Timeline', 'Graph', 'Console'}.contains(id),
       seats: true,
     );
   }

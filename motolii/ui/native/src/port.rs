@@ -347,7 +347,7 @@ impl EditorRuntime{
     fn edit_marker(&mut self,op:&str,j:&J)->Result<(),String>{
         let mut markers=self.doc.view().markers().map_err(e)?;
         if op=="addMarker"{let at=self.time()?;if !markers.iter().any(|m|m.time==at){markers.push(Marker{name:format!("{}",self.viewer.frame),time:at,duration:RationalTime::ZERO,body:String::new()});}}
-        else{let id=string(j,"id")?;let index=markers.iter().position(|m|format!("{}/{}",m.time.num(),m.time.den())==id).ok_or("Marker no longer exists")?;if op=="deleteMarker"{markers.remove(index);}else{if let Some(s)=j["name"].as_str(){markers[index].name=s.into()}if let Some(s)=j["body"].as_str(){markers[index].body=s.into()}}}
+        else{let id=string(j,"id")?;let index=markers.iter().position(|m|format!("{}/{}",m.time.num(),m.time.den())==id).ok_or("Marker no longer exists")?;if op=="deleteMarker"{markers.remove(index);}else{if let Some(s)=j["name"].as_str(){markers[index].name=s.into()}if let Some(s)=j["body"].as_str(){markers[index].body=s.into()}if let Some(f)=j["frame"].as_i64(){let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let at=RationalTime::try_from_frame(f.max(0),comp.fps).map_err(e)?;if markers.iter().enumerate().any(|(i,m)|i!=index&&m.time==at){return Err("A marker is already at that frame".into())}markers[index].time=at;}}}
         markers.sort_by_key(|m|m.time);self.apply([Intent::SetMarkers{markers}])
     }
 }
@@ -404,6 +404,7 @@ mod freeze_op {
 mod sequence_preview;
 mod spread;
 mod blend_targets;
+mod markers;
 mod ease_intervals;
 pub(crate) mod relate;
 #[cfg(test)]

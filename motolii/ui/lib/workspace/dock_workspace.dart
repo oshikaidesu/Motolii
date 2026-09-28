@@ -21,13 +21,17 @@ class PanelDef {
 /// The New shell's workspace: the off-the-shelf `docking` layout plus what only Motolii knows around it,
 /// which is the panel registry, showing a panel by id, and where a panel is on screen.
 class DockWorkspace {
-  DockWorkspace(this.defs, this._preset, {this.onDetach, this.allowClose = true, this.seats = false}) {
+  DockWorkspace(this.defs, this._preset, {this.onDetach, this.allowClose = true, this.seats = false, this.closable}) {
     layout = DockingLayout(root: _preset(item));
   }
 
   /// Given, every tab gets a small menu with Detach (a panel of its own window) and Close.
   final void Function(String id)? onDetach;
   final bool allowClose;
+
+  /// When [allowClose] is off, the panels that may still be closed (opened on demand, not part of the default).
+  final bool Function(String id)? closable;
+  bool _canClose(String id) => allowClose || (closable?.call(id) ?? false);
 
   /// Every seat draws the Browser's seat strip and a tab is the panel's handle (drag to travel, right click for its
   /// menu); `docking`'s own strip must then be off (`hfDockTabs`). Off: `docking`'s own tabs with a Detach/Close menu —
@@ -105,7 +109,7 @@ class DockWorkspace {
     return DockingItem(
       id: id,
       name: def.title,
-      closable: allowClose,
+      closable: _canClose(id),
       // A panel that decides whether it is on screen with Visibility.of (the Stage does, to hand a native surface back)
       // needs the dock to say so: a hidden tab is offstage but stays mounted.
       widget: KeyedSubtree(
@@ -128,7 +132,7 @@ class DockWorkspace {
             toolTip: 'Panel',
             menuBuilder: (context) => [
               TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
-              if (allowClose) TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
+              if (_canClose(id)) TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
             ],
           ),
       ],
@@ -206,7 +210,7 @@ class DockWorkspace {
     final open = [for (final d in defs.keys) if (!isOpen(d)) d];
     final pick = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 0, 0), [
       if (onDetach != null) ('detach', 'Detach'),
-      if (allowClose) ('close', 'Close'),
+      if (_canClose(id)) ('close', 'Close'),
       for (final d in open) ('open:$d', 'Open ${defs[d]!.title}'),
       ('reset', 'Reset Layout'),
     ]);
