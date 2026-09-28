@@ -3,6 +3,47 @@
 > **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
 > 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
 
+## HEAD照合(2026-09-28、`5d8f27d94`時点)
+
+下の本文は2026-08-10までの記録のまま。各項目の**今の状態**はこの節で読む。判定はコードとproduction経路から(本文の「完了/未着手」表記は使っていない)。記号: CLOSED=実装済みでproduction経路から届く / PARTIAL=一部(何が無いかを書く) / OPEN=実装なし / SUPERSEDED=世界の切替で前提ごと消えた(decision-index :512 :519 :531 :558 :562) / DOC_STALE=本文の状態表記がコードと逆 / UNVERIFIED=読むだけでは決まらない。AUTONOMY: HIGH=意味の判断なしで完了できる。[M]=測定先行。
+
+| 項目 | 状態 | 根拠(HEAD) | 無いもの・注記 | AUTONOMY |
+|---|---|---|---|---|
+| GAP-12 パス演算 | CLOSED | `motolii-render/src/extensions/pathop.rs` 15種、`engine/render.rs`・Lottie書き出しで評価、UIから適用(`port.rs:454-461` テスト) | — | — |
+| GAP-1 文字 | CLOSED(別スタック) | cosmic-text+fontdb(`picture/shaping.rs`) | fontique/harfrustではない | — |
+| GAP-4 ドラッグ=1 Undo | CLOSED | `previewTimings`→`commitPreview`(`ui/native/src/port/timing_drag_tests.rs`) | — | — |
+| GAP-15 図形 | CLOSED | `vector.rs`(Ellipse/Fill/Stroke/LineCap/StarType)、`vector/geom.rs` polystar | — | — |
+| GAP-28 / AG-2 再生時計=音 | CLOSED(構造) | `Clock = PlaybackController`(`playback.rs:122`)が `AudioProgram` から `PlaybackSession`/`MixProducer` を作る | 10分ドリフトの実証はUNVERIFIED | — |
+| GAP-11 README hero | CLOSED | `docs/assets/rgb-trail.gif`、`examples/rgb_trail_demo.rs` | 1コマンド再生成はUNVERIFIED | — |
+| ANA-4 / SIM-2 / SIM-3 | CLOSED | overlay、lookbehind・feedback、Motion Blur(`extensions/motion.rs`) | — | — |
+| GAP-8 関係 | CLOSED(大半) | `frame_graph/relation_program.rs`、`auto_orient` | 汎用のlayer→layer look-atは未確認 | MEDIUM |
+| GAP-3 relink | PARTIAL | 指紋・Missing・relink UI→op→Intent は届く | relinkが指紋を照合しない・候補探索・一括relinkなし | MEDIUM |
+| GAP-16 マーカー | PARTIAL | `store/marker.rs`、add/set/delete op、Mキー | 安定ID無し(時刻文字列で識別)・timeline snap無し | MEDIUM(ID意味は判断要) |
+| GAP-19 速度 | PARTIAL | `SPEED`/`TIME_REMAP` とキー追従 | 速度編集UIが無い | MEDIUM |
+| GAP-26 ffmpeg信頼性 | PARTIAL | 一時ファイル→atomic rename、`-v error`、drop時kill | stderrを書き出し中に読まない・出力のffprobe照合なし・`media.rs` の `tools_available`/`verify_tool_versions` は呼び手0 | HIGH |
+| GAP-27 GPU障害 | PARTIAL | poisonの `expect` は解消(`engine.rs` `into_inner`) | 型付き分類・device-lost callbackなし | MEDIUM |
+| INF-6 保存と復旧 | PARTIAL / DOC_STALE | atomic `save` は `save` opから届く | journalは消滅。`Document::auto_save`(`persist.rs`)は呼び手0。kill→復旧の試験なし | HIGH(接続) / MEDIUM(復旧UX) |
+| INF-8 再読込 | PARTIAL | effectのhot reload(最後の成功を保持)、Flutter hot reload | 復旧時間はINF-6待ち | HIGH [M] |
+| INF-2 性能計測 | PARTIAL | `examples/frame_cost.rs`、`tests/staying_realtime.rs` | CIに閾値なし | MEDIUM [M] |
+| SCR-1 スクリプト | PARTIAL | rquickjsの口、失敗時rollback | 成功時に1 UndoでなくN Undo | HIGH |
+| AG-3 音量・パン | PARTIAL | `LEVEL`/`PAN`(`store.rs`)、live_hfのtimeline波形 | 音声分離なし | MEDIUM |
+| AG-4 音声書き出し | PARTIAL | ミックスPCMをaacで書き出し | stream copyの近道なし | HIGH |
+| AG-5 音声処理 | PARTIAL | pan・fade | bus・pitch・音声エフェクトなし | LOW |
+| SIM-5 / SIM-6 パーティクル・剛体 | PARTIAL | 閉形式パーティクル、Rapierのbox/wall | beat同期の発生、パーティクル↔図形衝突、SDF塗りなし | MEDIUM |
+| ANA-1..3 解析 | PARTIAL | Blob Track・revisionまでのcache・blob ID | 支配色、範囲限定の再解析、optical flowなし | MEDIUM/LOW |
+| V2-1 / V2-7 | PARTIAL | vism=shader+ISF manifest+hot reload / Freezeのディスクcache | container・ABI / 解析の永続化なし | LOW/MEDIUM |
+| FG-C6 | PARTIAL | `CompLookbehind` | `InstanceIndex` なし | HIGH |
+| GAP-17 FrameDesc | OPEN | `motolii-doc/src/core/frame.rs`: `expect`(:71,:96)、`validate() -> Result<(), String>`(:130)、`Deserialize` 派生 | 守っていたplugin APIは消えたが欠陥は残る | HIGH |
+| GAP-29 / GAP-30 / GAP-31 / GAP-32 / GAP-5 / INF-3 / V2-3 | OPEN | 書き出しは直列・毎コマ待ち、warmはdecoderのみ、色変換はffmpeg側 | — | [M]が多い |
+| GAP-7 / GAP-9 / GAP-20 / GAP-22 / INF-4 / INF-5 / SCR-3 / SIM-4 / MC-0..2 / V2-2 / V2-4..6 / V2-8..10 | OPEN | 実装なし(GAP-9は `motolii-cli` 自体が無い) | — | 各 |
+| GAP-14 共有エフェクト | DOC_STALE(本文「完了」) | Shared Effect・Unlink・Materialize は `store/`・`edit/` のどこにも無い | 世界の切替で失われた | LOW |
+| INF-7, 7a–7g plugin | DOC_STALE / SUPERSEDED | `crates/motolii-plugin` は2026-09-19退役(`7b1d926f7`)。`plugins/*`・`scripts/new-plugin*` はそれを前提にbuild不能 | 削除か vism への付け替えは判断待ち | HIGH(判断後) |
+| GAP-25 保護 | SUPERSEDED | `.github/CODEOWNERS` が存在しない `crates/motolii-testkit/**` を守っている | 何を守るかは判断待ち | — |
+| FG-1..1e, FG-C4, FG-2, INF-1, GAP-2(一部), GAP-6(前提), GAP-10, GAP-13, GAP-18, GAP-21, GAP-23, GAP-24, GAP-33, SCR-2 | SUPERSEDED | 対象のcrate・型・UIスタックが現行に無い | — | — |
+
+進捗の百分率は置かない(客観的な分母が無い)。
+
+
 
 最終更新: 2026-08-10
 
