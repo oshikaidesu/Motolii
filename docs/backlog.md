@@ -22,7 +22,7 @@
 | GAP-19 速度 | PARTIAL | `SPEED`/`TIME_REMAP` とキー追従 | 速度編集UIが無い | MEDIUM |
 | GAP-26 ffmpeg信頼性 | PARTIAL | 一時ファイル→atomic rename、`-v error`、drop時kill | stderrを書き出し中に読まない・出力のffprobe照合なし・`media.rs` の `tools_available`/`verify_tool_versions` は呼び手0 | HIGH |
 | GAP-27 GPU障害 | PARTIAL | poisonの `expect` は解消(`engine.rs` `into_inner`) | 型付き分類・device-lost callbackなし | MEDIUM |
-| INF-6 保存と復旧 | PARTIAL / DOC_STALE | atomic `save` は `save` opから届く | journalは消滅。`Document::auto_save`(`persist.rs`)は呼び手0。kill→復旧の試験なし | HIGH(接続) / MEDIUM(復旧UX) |
+| INF-6 保存と復旧 | PARTIAL | atomic `save` は `save` opから届く。kill→復旧の oracle `ui/extensions/edit/tests/kill_recovery.rs`(SIGKILL を 12 通りの時刻で、本体と最新 auto-save 世代が常に完結した以前の保存。書き込みを in-place に変える mutation で落ちることを確認) | `Document::auto_save` は製品から呼ばれない(周期・保存先・起動時の復旧提示は利用者の裁定待ち) | HIGH(接続) / MEDIUM(復旧UX) |
 | INF-8 再読込 | PARTIAL | effectのhot reload(最後の成功を保持)、Flutter hot reload | 復旧時間はINF-6待ち | HIGH [M] |
 | INF-2 性能計測 | PARTIAL | `examples/frame_cost.rs`、`tests/staying_realtime.rs` | CIに閾値なし | MEDIUM [M] |
 | SCR-1 スクリプト | PARTIAL | rquickjsの口、失敗時rollback | 成功時に1 UndoでなくN Undo | HIGH |
@@ -102,7 +102,7 @@ M1完了後、**実際に動いたインターフェースだけ**を凍結し�
 | INF-3 | 実GPUベンダ差の方針(golden=lavapipe固定、実機Final出力の許容/非再現を明文化) | 出荷Finalはユーザ実GPUで走る。lavapipe green、adapter検出、device-lost callbackは異機種Final再現性を証明しない | 現行fixtureを固定してvendor×backend×driverの差を実測し、同一機内再現／異機種許容／非公約範囲をdocs化。semantic goldenやplugin／Document契約を実機差へ合わせて変更しない | P1 | 未着手 | INF/color, [Unit 5F回収](reviews/2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md) |
 | INF-4 | device lost / VRAM OOM 復帰の系統設計 | K1a〜K1dで事前退避してもdriver reset/外部pressureは残る。最後の防衛線として全リソース再生成の契約が要る | device lost/OOM注入→preview停止→device再生成→同じDocument snapshotの再描画。復帰中もDocument/journalを変更せず、固定解像度設定を無視しない | P1 | 部分(R1でGPU復帰に言及。事前制御はM4-K1a〜K1dへ分離) | robustness, M4-K1d |
 | INF-5 | キャッシュ並行契約をloomで検証(参照カウント遅延解放/ロック1段) | **Natronの死因**(cache deadlock)の予防 | loomでデッドロック無しを確認 | P1 | 未着手 | F-2, M4-K1b |
-| INF-6 | 常時保存(コマンドジャーナル+定期スナップショット)の復元テスト | プロセスkillでも作業を失わない | kill→再起動→復元の統合テスト | P1 | 部分(fault系test多数実在: `crates/motolii-doc/tests/d1d_journal.rs`のkill/partial-write/crash-loop回復ほか、journal v3移行`4cad1fd9`済み。process kill→再起動のE2E統合testのみ未) | M2, B-1追記 |
+| INF-6 | 常時保存(コマンドジャーナル+定期スナップショット)の復元テスト | プロセスkillでも作業を失わない | kill→再起動→復元の統合テスト | P1 | 部分(fault系test多数実在: `crates/motolii-doc/tests/d1d_journal.rs`のkill/partial-write/crash-loop回復ほか、journal v3移行`4cad1fd9`済み。process kill→再起動の oracle は `kill_recovery.rs` で済(2026-09-28)。journal test の記述は古い — journal は現行に無い) | M2, B-1追記 |
 | INF-7 | **[Epic] plugin-authoringチェックリストの機械化** — 人間差し戻しをCIに移し、LLM委任の往復を「マージ前の最後の1回」にする | 目視チェックリストのままではLLMが検証を回せない。人間リターンが3回続くと貢献者が去る(D-2の裏返し) | 下表INF-7a〜7fが緑。`AGENTS.md`の提出前1コマンドで§7相当が機械判定される | **P1** | **a〜g完了**(Epic達成) | D-2, F-8, F-9, plugin-authoring §7 |
 | INF-7a | ベンダー/OS固有API deny(`cargo-deny` / 依存・ソースgrep) | CUDA/Metal/DX系crate・製品経路のベンダーAPI参照をCIで落とす | deny設定+違反負例がCI赤、参照プラグインは緑 | **P1**(容易・先) | **完了**(conformanceスキャナ。GPUベンダー系のみ。`windows*`は対象外=F-9本命に合わせる) | F-9, §3-1 |
 | INF-7b | 公開APIの`assert!`/panic禁止をCI化 | `motolii-plugin`公開面と参照実装でclippy/`unwrap`方針を機械判定 | lint設定+違反負例が赤。入力起因は`PluginError`経路のみ | **P1**(容易・先) | **完了**(`[lints.clippy]`+conformance。allowは`mod tests`のみ) | AGENTS実装規約, §3-7 |
