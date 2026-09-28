@@ -20,7 +20,7 @@
 | GAP-3 relink | PARTIAL | 指紋・Missing・relink UI→op→Intent は届く | relinkが指紋を照合しない・候補探索・一括relinkなし | MEDIUM |
 | GAP-16 マーカー | PARTIAL | `store/marker.rs`、add/set/delete op、Mキー | 安定ID無し(時刻文字列で識別)・timeline snap無し | MEDIUM(ID意味は判断要) |
 | GAP-19 速度 | PARTIAL | `SPEED`/`TIME_REMAP` とキー追従 | 速度編集UIが無い | MEDIUM |
-| GAP-26 ffmpeg信頼性 | PARTIAL | 一時ファイル→atomic rename、`-v error`、drop時kill | stderrを書き出し中に読まない・出力のffprobe照合なし・`media.rs` の `tools_available`/`verify_tool_versions` は呼び手0 | HIGH |
+| GAP-26 ffmpeg信頼性 | PARTIAL | 一時ファイル→atomic rename、`-v error`、drop時kill、encode の stderr 常時 drain(書き出し中も)、音の decode も同様、書き出しは ffprobe で照合してから install(frame 数・寸法・音)、ffmpeg の尾の flush 中も Cancel が効く | 起動時の tool probe は無い(書き出し時に「ffmpeg was not found」を出す)。flush の timeout 値は選ばない(長い flush は正当) | MEDIUM |
 | GAP-27 GPU障害 | PARTIAL | poisonの `expect` は解消(`engine.rs` `into_inner`) | 型付き分類・device-lost callbackなし | MEDIUM |
 | INF-6 保存と復旧 | PARTIAL | atomic `save` は `save` opから届く。kill→復旧の oracle `ui/extensions/edit/tests/kill_recovery.rs`(SIGKILL を 12 通りの時刻で、本体と最新 auto-save 世代が常に完結した以前の保存。書き込みを in-place に変える mutation で落ちることを確認) | `Document::auto_save` は製品から呼ばれない(周期・保存先・起動時の復旧提示は利用者の裁定待ち) | HIGH(接続) / MEDIUM(復旧UX) |
 | INF-8 再読込 | PARTIAL | effectのhot reload(最後の成功を保持)、Flutter hot reload | 復旧時間はINF-6待ち | HIGH [M] |

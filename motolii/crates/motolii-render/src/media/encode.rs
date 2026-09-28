@@ -133,9 +133,25 @@ impl Encoder {
         }
     }
 
-    pub fn finish(mut self) -> Result<()> {
+    pub fn finish(self) -> Result<()> {
+        self.finish_unless(|| false)
+    }
+
+    /// [finish], but [cancelled] is asked while ffmpeg flushes its tail: a cancel then kills it at once (no timeout is
+    /// guessed for how long a flush may take). A cancelled finish returns `MediaError::Cancelled`.
+    pub fn finish_unless(mut self, cancelled: impl Fn() -> bool) -> Result<()> {
         drop(self.stdin.take());
-        let status = self.child.wait()?;
+        let status = loop {
+            if let Some(status) = self.child.try_wait()? {
+                break status;
+            }
+            if cancelled() {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                return Err(MediaError::Cancelled);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
         let err = self.stderr.take().and_then(|reader| reader.join().ok()).unwrap_or_default();
         if !status.success() {
             return Err(MediaError::Ffmpeg(err));
@@ -191,6 +207,20 @@ mod tests {
         });
         let outcome = result.recv_timeout(Duration::from_secs(20)).expect("the frame writes stalled on an undrained stderr");
         outcome.unwrap();
+    }
+
+    /// An encoder that never finishes its tail (stdin closed, it keeps going) is stopped by a cancel, promptly.
+    #[test]
+    fn a_cancel_stops_an_encoder_that_will_not_finish() {
+        let dir = tempfile::tempdir().unwrap();
+        let tool = fake_tool(dir.path(), "stuck", "cat > /dev/null
+sleep 600");
+        let out = dir.path().join("out.mp4");
+        let encoder = Encoder::open_with_command(&tool, &out, &desc(), Fps::try_new(30, 1).unwrap(), false).unwrap();
+        let asked = std::time::Instant::now();
+        let result = encoder.finish_unless(|| asked.elapsed() > Duration::from_millis(150));
+        assert!(matches!(result, Err(MediaError::Cancelled)));
+        assert!(asked.elapsed() < Duration::from_secs(5), "the cancel waited for the stuck encoder");
     }
 
     /// When the encoder fails, its own words (from stderr) are what comes back, not a bare broken pipe.

@@ -167,7 +167,11 @@ pub fn export_range_with_progress(
         });
     }
 
-    encoder.finish()?;
+    // a cancel still stops ffmpeg while it flushes its tail
+    match encoder.finish_unless(|| cancel.is_cancelled()) {
+        Err(MediaError::Cancelled) => return Err(ExportError::Cancelled),
+        other => other?,
+    }
     // exit 0 does not prove the stream: the file must be the export before it replaces anything (GAP-26)
     verify_output(&output.path, &desc, fps, written, audio.is_some())?;
     output.commit()?;
