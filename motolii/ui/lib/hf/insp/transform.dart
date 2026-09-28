@@ -45,7 +45,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
   void _reveal() {
     final id = s.focusRequest.value;
     if (id == null) return;
-    setState(() => mode = id.startsWith('position') ? TMode.move : (id.startsWith('scale') ? TMode.scale : (id.startsWith('rotation') ? TMode.rotate : mode)));
+    setState(() => mode = id.startsWith('position') ? TMode.move : (id.startsWith('scale') ? TMode.scale : (id.startsWith('rotation') ? TMode.rotate : (id == 'anchor' ? TMode.anchor : mode))));
     final key = switch (id) { 'position' => 'position:0', 'scale' => 'scale:0', _ => id };
     WidgetsBinding.instance.addPostFrameCallback((_) => _nodes[key]?.requestFocus());
   }

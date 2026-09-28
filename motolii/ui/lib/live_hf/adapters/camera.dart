@@ -151,5 +151,14 @@ class _LiveCameraState extends State<LiveCamera> {
   }
 
   @override
-  Widget build(BuildContext context) => CameraInstrument(store);
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.c.slice('liveCameraHead', const ['layers', 'animate']),
+    builder: (context, _) => CameraInstrument(
+      store,
+      // the layer's own name, not the word "Camera" (Classic IN-002)
+      title: '${widget.c.layers.where((l) => l['id'] == widget.layer).firstOrNull?['name'] ?? 'Camera'}',
+      animating: widget.c.supports('animate') ? widget.c.animating : null,
+      onAnimate: () => widget.c.setAnimate(!widget.c.animating),
+    ),
+  );
 }

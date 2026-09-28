@@ -10,9 +10,13 @@ import 'rows.dart';
 import 'toys.dart';
 
 class CameraInstrument extends StatelessWidget {
-  const CameraInstrument(this.store, {super.key, this.title = 'Camera'});
+  const CameraInstrument(this.store, {super.key, this.title = 'Camera', this.animating, this.onAnimate});
   final CameraStore store;
   final String title;
+
+  /// Animate (auto-key), as the Transform header shows it; absent when the host has no such mode.
+  final bool? animating;
+  final VoidCallback? onAnimate;
   CameraStore get s => store;
 
   @override
@@ -64,6 +68,16 @@ class CameraInstrument extends StatelessWidget {
           Container(width: 3, height: 14, margin: const EdgeInsets.only(right: 7), decoration: BoxDecoration(color: orbitColor, borderRadius: BorderRadius.circular(1.5))),
           Expanded(child: Text(title, key: const ValueKey('camera-title'), softWrap: false, overflow: TextOverflow.clip, style: sans(13, c: kInk, w: FontWeight.w600))),
           if (s.frozen) Padding(padding: const EdgeInsets.only(right: 8), child: Text('Locked', style: sans(9.5, c: kMuted, w: FontWeight.w600))),
+          if (animating != null)
+            GestureDetector(
+              key: const ValueKey('camera-animate'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onAnimate,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: Text('Animate', style: sans(10.5, c: animating! ? kYellow : kMuted, w: FontWeight.w600)),
+              ),
+            ),
           GestureDetector(
             key: const ValueKey('route-depth'),
             behavior: HitTestBehavior.opaque,

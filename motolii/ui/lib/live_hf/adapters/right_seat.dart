@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../../hf/bp/common.dart' show sans, kMuted;
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
 import 'camera.dart';
@@ -75,14 +76,17 @@ class _RightSeatState extends State<RightSeat> {
         ? null
         : c.liveLayers().where((l) => l['id'] == active['id']).firstOrNull ??
               active;
-    if (layer == null) return transform;
+    // nothing picked: say why the panel is empty (Classic IN-001)
+    if (layer == null && c.layers.isEmpty) return const _Empty('No layers yet');
+    if (layer == null) return c.selectedIds.isEmpty ? const _Empty('Select a layer') : transform;
     final layout =
         c.selectedIds.length <= 1 &&
         (layer['kind'] == 'Group' || SessionLayoutStore.isChild(layer));
     final effects = panelRows(layer['effects']);
     if (!layout && effects.isEmpty) return transform;
     return SingleChildScrollView(
-      key: const ValueKey('seat-scroll'),
+      // another layer starts at the top (Classic IN-006)
+      key: ValueKey('seat-scroll:${layer['id']}'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -124,4 +128,13 @@ class _RightSeatState extends State<RightSeat> {
       ),
     );
   }
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Text(text, key: const ValueKey('seat-empty'), style: sans(12, c: kMuted)),
+  );
 }

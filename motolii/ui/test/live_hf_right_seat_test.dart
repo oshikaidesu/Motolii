@@ -140,4 +140,24 @@ void main() {
     expect(sent.where((m) => m['op'] == 'enableEffect'), isEmpty);
     expect(find.text('Remove effect'), findsNothing);
   });
+  testWidgets('nothing picked says so; a camera header names the layer and offers Animate', (t) async {
+    final c = await seat(t, {'id': 1, 'name': 'Box', 'kind': 'Shape'});
+    c.document.value = {...c.state, 'selectedId': null, 'selectedIds': <int>[]};
+    await t.pump();
+    expect(find.text('Select a layer'), findsOneWidget);
+    c.document.value = {
+      ...c.state,
+      'capabilities': [...(c.state['capabilities'] as List), 'animate'],
+      'layers': [
+        {'id': 5, 'name': 'Dolly', 'kind': 'Camera', 'properties': []},
+      ],
+      'selectedId': 5,
+      'selectedIds': [5],
+    };
+    await t.pump();
+    expect(find.text('Dolly'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('camera-animate')));
+    await t.pump();
+    expect(sent.where((m) => m['op'] == 'animate'), isNotEmpty);
+  });
 }

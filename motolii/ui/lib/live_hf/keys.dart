@@ -132,6 +132,14 @@ class LiveKeys {
         }
       case LogicalKeyboardKey.keyM when !cmd:
         op('addMarker');
+      case LogicalKeyboardKey.keyA when !cmd && shift:
+        // Shift+A reveals the Anchor, as P/S/R/T reveal theirs (Classic IN-007)
+        () async {
+          await c.placePanel('Inspector', 'show');
+          await WidgetsBinding.instance.endOfFrame;
+          c.focusProperty.value = null;
+          c.focusProperty.value = 'anchor';
+        }();
       case LogicalKeyboardKey.keyA when !cmd && !shift:
         if (c.supports('animate')) c.setAnimate(!c.animating);
       case LogicalKeyboardKey.keyP ||

@@ -94,6 +94,12 @@ void main() {
     // The host answers `placePanel` by calling back `placePanel` on the shell (session_native).
     expect(sent.where((m) => m['op'] == 'placePanel').map((m) => '${m['name']}:${m['placement']}'), contains('Inspector:show'));
     expect(c.focusProperty.value, 'position');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    await tester.pump();
+    expect(c.focusProperty.value, 'anchor', reason: 'Shift+A reveals the Anchor');
   });
 
 }
