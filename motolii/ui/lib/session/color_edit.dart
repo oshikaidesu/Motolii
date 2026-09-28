@@ -45,6 +45,20 @@ Map<String, dynamic>? colorTarget(EditorSession c) {
   return null;
 }
 
+/// What the wheel edits, in words: "Layer name · Fill" / "· Stroke" / "· Fill · stop", or the composition's ground.
+String colorTargetTitle(EditorSession c, Map<String, dynamic> target) {
+  if (target['slot'] == 'Background') return 'Composition · Background';
+  final layer = c.layers.where((l) => l['id'] == target['layer']).firstOrNull;
+  final slot = EditorSession.map(target['slot']);
+  final what = slot.containsKey('ShapeStroke')
+      ? 'Stroke'
+      : slot.keys.any((k) => k.startsWith('ShapeGradient'))
+      ? 'Fill · stop'
+      : 'Fill';
+  final name = '${layer?['name'] ?? ''}'.trim();
+  return name.isEmpty ? what : '$name · $what';
+}
+
 /// One colour being edited: a gesture previews (`previewColor`) while it lasts and writes once when it ends
 /// (`commitPreview`, or `setColor` when nothing was previewed); cancel returns the document to where it was. With no
 /// target it only keeps the colour for [onPick]. Every colour editor (Classic's wheel, the hf instrument) drives this.

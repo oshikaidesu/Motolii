@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
@@ -9,7 +8,8 @@ import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../../session/media_actions.dart' as media show savePalette;
 import 'color_picker.dart';
-import '../../session/color_edit.dart' show colorTarget;
+import '../../session/color_edit.dart' show colorTarget, colorTargetTitle;
+import '../../session/swatches.dart' as swatches;
 import 'color_values.dart';
 import 'fill_definitions.dart';
 import 'parts.dart';
@@ -251,29 +251,18 @@ class ColorsShelf extends BrowserShelf {
     Map<String, dynamic> item,
   ) async {
     if (action != 'forget') return;
-    final kept = saved(host.controller)
-      ..removeAt(int.parse('${item['id']}'.split(':').last));
-    await host.controller.storeDesk('swatches', kept);
+    await swatches.forgetSwatch(
+      host.controller,
+      int.parse('${item['id']}'.split(':').last),
+    );
   }
 
-  static const _imageExtensions = [
-    'png',
-    'jpg',
-    'jpeg',
-    'webp',
-    'bmp',
-    'gif',
-    'tif',
-    'tiff',
-  ];
+  static List<Map<String, dynamic>> saved(EditorSession c) =>
+      swatches.savedSwatches(c);
+
   Future<void> _paletteFromFile(BrowserHost host) async {
-    final picked = await host.controller.native('pickImport', {
-      'extensions': _imageExtensions,
-    });
-    if (picked is! List) return;
-    for (final path in picked.whereType<String>()) {
-      await savePalette(host, await File(path).readAsBytes());
-    }
+    if (await swatches.paletteFromImages(host.controller) && host.mounted)
+      host.showCategory('Colors', 'Saved');
   }
 
   /// The picture's main colours become saved solids, shown at once.
@@ -282,29 +271,9 @@ class ColorsShelf extends BrowserShelf {
       host.showCategory('Colors', 'Saved');
   }
 
-  static List<Map<String, dynamic>> saved(EditorSession c) =>
-      EditorSession.maps(c.deskWork.value['swatches']);
-
   Future<void> saveCurrent(BrowserHost host) async {
-    final fill = EditorSession.map(host.controller.activeLayer?['fill']);
-    final target = _colorTarget(host.controller);
-    final colors = fill.isNotEmpty
-        ? [
-            for (final stop in EditorSession.maps(fill['stops']))
-              rgbaOf(stop['rgba']),
-          ]
-        : target == null
-        ? <List<double>>[]
-        : [rgbaOf(target['rgba'])];
-    if (colors.isEmpty) return;
-    await host.controller.storeDesk('swatches', [
-      ...saved(host.controller),
-      {
-        'stops': colors,
-        if (colors.length > 1) 'blend': fill['blend'] ?? 'oklab',
-      },
-    ]);
-    if (host.mounted) host.showCategory('Colors', 'Saved');
+    if (await swatches.saveCurrentSwatch(host.controller) && host.mounted)
+      host.showCategory('Colors', 'Saved');
   }
 
   static List<List<double>> stopsOf(Map<String, dynamic> item) => [
@@ -325,19 +294,8 @@ Map<String, dynamic>? _targetLayer(
   return null;
 }
 
-/// "Layer name · Fill" / "· Stroke": what the wheel is editing.
-String _targetTitle(EditorSession controller, Map<String, dynamic> target) {
-  if (target['slot'] == 'Background') return 'Composition · Background';
-  final layer = _targetLayer(controller, target);
-  final slot = EditorSession.map(target['slot']);
-  final what = slot.containsKey('ShapeStroke')
-      ? 'Stroke'
-      : slot.keys.any((k) => k.startsWith('ShapeGradient'))
-      ? 'Fill · stop'
-      : 'Fill';
-  final name = '${layer?['name'] ?? ''}'.trim();
-  return name.isEmpty ? what : '$name · $what';
-}
+String _targetTitle(EditorSession controller, Map<String, dynamic> target) =>
+    colorTargetTitle(controller, target);
 
 Map<String, dynamic>? _colorTarget(EditorSession controller) =>
     colorTarget(controller);

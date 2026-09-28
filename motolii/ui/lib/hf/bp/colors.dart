@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui show Vertices, VertexMode;
 
 import 'package:flutter/widgets.dart';
 
+import '../../foundation/hsv_triangle.dart';
 import '../glyphs.dart';
 import 'classify.dart';
 import 'common.dart';
@@ -187,6 +189,7 @@ class ColorsPanel extends StatefulWidget {
     this.items,
     this.gradients,
     this.onSwatch,
+    this.onSwatchMenu,
     this.onGradient,
     this.editor,
     this.current,
@@ -197,6 +200,9 @@ class ColorsPanel extends StatefulWidget {
   final List<Sw>? items;
   final List<Map<String, dynamic>>? gradients;
   final ValueChanged<Sw>? onSwatch;
+
+  /// A swatch's right-click, at the pointer.
+  final void Function(Sw swatch, Offset at)? onSwatchMenu;
   final ValueChanged<Map<String, dynamic>>? onGradient;
   /// The live colour editor at the wheel's side; without one the reference instrument is drawn.
   final Widget Function(double wheel)? editor;
@@ -294,7 +300,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             emptyBody('No colour matches "${search.query}".'),
           for (final e in sections.entries) ...[
             SectionLabel(e.key),
-            _Swatches(e.value, 22, onTap: widget.onSwatch),
+            _Swatches(e.value, 22, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
           ],
           if (gradients && !hasGradients) emptyBody('No saved gradients.'),
           if (gradients || (!filtering && !wheelOnly && hasGradients)) ...[
@@ -342,7 +348,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             emptyBody('No colour matches.'),
           if (!wheelOnly) ...[
             const SizedBox(height: 4),
-            _Swatches(shown, 20, onTap: widget.onSwatch),
+            _Swatches(shown, 20, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
           ],
         ],
       ),
@@ -524,8 +530,20 @@ class ColorBar extends CustomPainter {
 /// Hue on the ring, saturation (left to right) and value (bottom to top) in the square; handles where [hsv] sits.
 /// Without a colour it draws the reference's #E8508F.
 class WheelPainter extends CustomPainter {
-  WheelPainter([this.hsv]);
+  WheelPainter([this.hsv, this.triangle = false]);
   final HSVColor? hsv;
+
+  /// The inner area is the colour triangle (hue, white and black corners) instead of the square.
+  final bool triangle;
+
+  /// The triangle's corners (hue, white, black) inside the ring, the hue corner toward the hue on the ring.
+  static List<Offset> triangleAt(Size size, double hue) {
+    final s = size.shortestSide;
+    final ctr = Offset(size.width / 2, size.height / 2);
+    final r = s / 2 - 1 - s * .105 - s * .02;
+    Offset corner(double degrees) => ctr + Offset(math.cos(degrees * math.pi / 180), math.sin(degrees * math.pi / 180)) * r;
+    return [corner(hue), corner(hue + 120), corner(hue + 240)];
+  }
   static const reference = HSVColor.fromAHSV(1, 340, .65, .91);
 
   /// The ring's inner radius and the square, for a wheel of [size]: what the paint uses and a press reads.
@@ -561,6 +579,24 @@ class WheelPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = ringW,
     );
+    final fill = hsv == null
+        ? const Color(0xFFE8508F)
+        : h.toColor().withValues(alpha: 1);
+    final hp =
+        ctr +
+        Offset(math.cos(h.hue * math.pi / 180), math.sin(h.hue * math.pi / 180)) *
+            rMid;
+    if (triangle) {
+      final t = triangleAt(sz, h.hue);
+      c.drawVertices(
+        ui.Vertices(ui.VertexMode.triangles, t, colors: [HSVColor.fromAHSV(1, h.hue, 1, 1).toColor(), const Color(0xFFFFFFFF), const Color(0xFF000000)]),
+        BlendMode.srcOver,
+        Paint(),
+      );
+      _handle(c, hp, s * .04 + 3, fill);
+      _handle(c, triangleHandle(t, h), s * .035 + 2.5, fill);
+      return;
+    }
     final side = (rOut - ringW) * 1.32;
     final sq = Rect.fromCenter(center: ctr, width: side, height: side);
     final rr = RRect.fromRectAndRadius(sq, Radius.circular(s * .02));
@@ -581,13 +617,6 @@ class WheelPainter extends CustomPainter {
           colors: [Color(0x00000000), Color(0xFF000000)],
         ).createShader(sq),
     );
-    final fill = hsv == null
-        ? const Color(0xFFE8508F)
-        : h.toColor().withValues(alpha: 1);
-    final hp =
-        ctr +
-        Offset(math.cos(h.hue * math.pi / 180), math.sin(h.hue * math.pi / 180)) *
-            rMid;
     _handle(c, hp, s * .04 + 3, fill);
     _handle(
       c,
@@ -610,14 +639,15 @@ class WheelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WheelPainter o) => o.hsv != hsv;
+  bool shouldRepaint(WheelPainter o) => o.hsv != hsv || o.triangle != triangle;
 }
 
 class _Swatches extends StatelessWidget {
-  const _Swatches(this.items, this.size, {this.onTap});
+  const _Swatches(this.items, this.size, {this.onTap, this.onMenu});
   final List<Sw> items;
   final double size;
   final ValueChanged<Sw>? onTap;
+  final void Function(Sw swatch, Offset at)? onMenu;
   @override
   Widget build(BuildContext context) => Wrap(
     spacing: 5,
@@ -628,6 +658,7 @@ class _Swatches extends StatelessWidget {
           key: ValueKey('hf-color:${v.$1}'),
           behavior: HitTestBehavior.opaque,
           onTap: onTap == null ? null : () => onTap!(v),
+          onSecondaryTapDown: onMenu == null ? null : (e) => onMenu!(v, e.globalPosition),
           child: Container(
             width: size,
             height: size,

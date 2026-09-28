@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -172,6 +173,29 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('hf-color:#FF0000')));
       await tester.pumpAndSettle();
       expect(sent.any((command) => command['op'] == 'applyPalette'), isTrue);
+
+      // the Colors header menu keeps colours (Classic's Save current color and From image)
+      c.deskWork.value = {
+        'swatches': [
+          {'stops': [[0.0, 0.0, 1.0, 1.0]]},
+        ],
+      };
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('browser-tab-2')),
+        matching: find.byWidgetPredicate((w) => w is HeaderKey && w.g == HG.kebab),
+      ).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Save current color'), findsOneWidget);
+      expect(find.text('Palette from image…'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      // a saved swatch's right-click forgets it
+      await tester.tap(find.byKey(const ValueKey('hf-color:saved:0')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget swatch'));
+      await tester.pumpAndSettle();
+      expect(c.deskWork.value['swatches'], isEmpty);
 
       await tester.tap(find.text('Fonts').last);
       await tester.pumpAndSettle();

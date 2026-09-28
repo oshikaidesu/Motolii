@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/hf/bp/colors.dart' show WheelPainter;
 import '../lib/live_hf/adapters/colors.dart';
 import '../lib/session/editor_session.dart';
 
@@ -90,5 +91,19 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(c.eyedropper.value, isFalse);
+  });
+  testWidgets('with the triangle wheel (the desk colorShape), a press at the white corner previews white', (tester) async {
+    final c = await mount(tester);
+    c.deskWork.value = {'colorShape': 'triangle'};
+    await tester.pump();
+    final wheel = tester.getRect(find.byKey(const ValueKey('hf-color-wheel')));
+    final corners = WheelPainter.triangleAt(wheel.size, 0); // the target is red: hue 0
+    final white = wheel.topLeft + Offset.lerp(wheel.size.center(Offset.zero), corners[1], .97)!;
+    final g = await tester.startGesture(white);
+    await tester.pump(const Duration(milliseconds: 150)); // the press lands (tap-down deadline)
+    final rgba = (sent.lastWhere((m) => m['op'] == 'previewColor')['rgba'] as List).cast<num>();
+    for (final v in rgba.take(3)) expect(v.toDouble(), greaterThan(.9));
+    await g.up();
+    await tester.pumpAndSettle();
   });
 }

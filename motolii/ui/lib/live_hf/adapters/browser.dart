@@ -13,6 +13,7 @@ import '../../hf/bp/seat.dart';
 import '../../hf/bp/things.dart';
 import '../../session/editor_session.dart';
 import '../../session/color_edit.dart';
+import '../../session/swatches.dart';
 import 'browser_shelf.dart';
 import 'colors.dart';
 import 'browser_user.dart';
@@ -312,6 +313,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
     final user = _user(name);
     seat.userSource = user;
     seat.effectsTab = tab == 1;
+    seat.colorsTab = tab == 2;
     seat.recentlyUsed = user.used;
     seat.collect = user.collect;
     final fonts = _fonts();
@@ -331,6 +333,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
               if ((item['stops'] as List? ?? const []).length > 1) item,
           ],
           onColor: (swatch) => _applyColor(swatch),
+          onColorMenu: (swatch, at) => _colorMenu(context, swatch, at),
           onGradient: (gradient) => _applyGradient(gradient),
           colorEditor: (wheel) => LiveColorInstrument(c: c, wheel: wheel),
           currentColor: () {
@@ -376,6 +379,17 @@ class _LiveBrowserState extends State<LiveBrowser> {
     await c.command('applyPalette', {
       'rgba': [color.r, color.g, color.b, color.a],
     });
+  }
+
+  /// A swatch's right-click: a saved one can be forgotten (Classic's Forget swatch).
+  Future<void> _colorMenu(BuildContext context, Sw swatch, Offset at) async {
+    final saved = swatch.$1.startsWith('saved:');
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 180, 0), [
+      ('apply', 'Apply'),
+      if (saved) ('forget', 'Forget swatch'),
+    ]);
+    if (chosen == 'apply') await _applyColor(swatch);
+    if (chosen == 'forget') await forgetSwatch(c, int.parse(swatch.$1.split(':').last));
   }
 
   Future<void> _applyGradient(Map<String, dynamic> item) async {
@@ -433,6 +447,9 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
 
   /// The seat is showing Effects: its menu also reads the effect shelf again (Classic's Reload).
   bool effectsTab = false;
+
+  /// The seat is showing Colors: its menu also keeps the current colour and takes a palette from a picture.
+  bool colorsTab = false;
   final _things = <Thing>[];
   String? _selectedId;
   void refresh() => notifyListeners();
@@ -527,7 +544,7 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
   void more(BuildContext context, Offset at) {
     final id = _userSource == null ? null : _selectedId;
     final reload = effectsTab && c.supports('reloadEffects');
-    if (id == null && !reload) return;
+    if (id == null && !reload && !colorsTab) return;
     final selected = id != null && _userSource!.collectionOf(id) == 1;
     showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 200, 0), [
       if (id != null)
@@ -536,8 +553,21 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
           selected ? 'Remove from Favorites' : 'Add to Favorites',
         ),
       if (reload) ('reload', 'Reload effects'),
-    ]).then((action) {
-      if (action == 'reload') {
+      if (colorsTab) ...[
+        ('saveColor', 'Save current color'),
+        ('palette', 'Palette from image…'),
+        c.deskWork.value['colorShape'] == 'triangle' ? ('square', 'Square wheel') : ('triangle', 'Triangle wheel'),
+      ],
+    ], disabled: {
+      if (colorsTab && colorTarget(c) == null && EditorSession.map(c.activeLayer?['fill']).isEmpty) 'saveColor',
+    }).then((action) {
+      if (action == 'square' || action == 'triangle') {
+        c.storeDesk('colorShape', action);
+      } else if (action == 'saveColor') {
+        saveCurrentSwatch(c);
+      } else if (action == 'palette') {
+        paletteFromImages(c);
+      } else if (action == 'reload') {
         c.command('reloadEffects');
       } else if (action != null && id != null) {
         collect?.call([id], action == 'remove' ? 0 : 1);

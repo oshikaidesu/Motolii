@@ -3,6 +3,7 @@ import 'dart:ui' as ui show Vertices, VertexMode;
 
 import 'package:flutter/widgets.dart';
 
+import '../../foundation/hsv_triangle.dart';
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 
@@ -36,59 +37,11 @@ class ColorWheel {
       (math.atan2(p.dy - center.dy, p.dx - center.dx) * 180 / math.pi + 90) %
       360;
 
-  /// Barycentric weights of p against the triangle (hue, white, black).
-  List<double> _weights(Offset p, List<Offset> t) {
-    final d =
-        (t[1].dy - t[2].dy) * (t[0].dx - t[2].dx) +
-        (t[2].dx - t[1].dx) * (t[0].dy - t[2].dy);
-    final a =
-        ((t[1].dy - t[2].dy) * (p.dx - t[2].dx) +
-            (t[2].dx - t[1].dx) * (p.dy - t[2].dy)) /
-        d;
-    final b =
-        ((t[2].dy - t[0].dy) * (p.dx - t[2].dx) +
-            (t[0].dx - t[2].dx) * (p.dy - t[2].dy)) /
-        d;
-    return [a, b, 1 - a - b];
-  }
-
-  Offset _closestOn(Offset p, Offset a, Offset b) {
-    final edge = b - a;
-    final length2 = edge.dx * edge.dx + edge.dy * edge.dy;
-    if (length2 == 0) return a;
-    final u = (((p - a).dx * edge.dx + (p - a).dy * edge.dy) / length2).clamp(
-      0.0,
-      1.0,
-    );
-    return a + edge * u;
-  }
-
-  Offset _insideTriangle(Offset p, List<Offset> t) {
-    if (_weights(p, t).every((weight) => weight >= 0)) return p;
-    final candidates = [
-      _closestOn(p, t[0], t[1]),
-      _closestOn(p, t[1], t[2]),
-      _closestOn(p, t[2], t[0]),
-    ];
-    candidates.sort(
-      (a, b) => (a - p).distanceSquared.compareTo((b - p).distanceSquared),
-    );
-    return candidates.first;
-  }
-
   bool hitsInner(Offset p, HSVColor hsv) => shape == 'triangle'
-      ? (_insideTriangle(p, triangle(hsv.hue)) - p).distance <= EditorMetrics.s4
+      ? (insideTriangle(p, triangle(hsv.hue)) - p).distance <= EditorMetrics.s4
       : square.inflate(EditorMetrics.s4).contains(p);
   HSVColor pickInner(Offset p, HSVColor hsv) {
-    if (shape == 'triangle') {
-      final triangle = this.triangle(hsv.hue);
-      final w = _weights(_insideTriangle(p, triangle), triangle);
-      final a = w[0].clamp(0.0, 1.0), b = w[1].clamp(0.0, 1.0);
-      final value = a + b;
-      return hsv
-          .withValue(value.clamp(0.0, 1.0))
-          .withSaturation(value == 0 ? 0 : (a / value).clamp(0.0, 1.0));
-    }
+    if (shape == 'triangle') return pickInTriangle(p, triangle(hsv.hue), hsv);
     final r = square;
     return hsv
         .withSaturation(((p.dx - r.left) / r.width).clamp(0.0, 1.0))
@@ -96,11 +49,7 @@ class ColorWheel {
   }
 
   Offset innerHandle(HSVColor hsv) {
-    if (shape == 'triangle') {
-      final t = triangle(hsv.hue);
-      final a = hsv.saturation * hsv.value, b = hsv.value - a;
-      return t[0] * a + t[1] * b + t[2] * (1 - a - b);
-    }
+    if (shape == 'triangle') return triangleHandle(triangle(hsv.hue), hsv);
     final r = square;
     return Offset(
       r.left + hsv.saturation * r.width,

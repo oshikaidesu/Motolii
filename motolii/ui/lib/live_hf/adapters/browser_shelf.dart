@@ -401,7 +401,14 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
       if (action == 'remove') userState.collect([id], 0);
       if (action == 'favorite') userState.collect([id], 1);
       if (action != null && action.startsWith('media:') && item != null)
-        mediaAct(c, action.substring(6), item, id: item['assetId']);
+        mediaAct(
+          c,
+          action.substring(6),
+          item,
+          id: item['assetId'],
+          // the kept colours are in Colors (Classic shows its Saved rail)
+          paletteSaved: () => c.placePanel('Colors', 'show'),
+        );
     });
   }
 
