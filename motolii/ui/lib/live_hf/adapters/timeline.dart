@@ -106,6 +106,7 @@ class _LiveTimelineState extends State<LiveTimeline>
       rowStart = (_rowOffset / timelineGeometry.rowHeight).floor();
       _shown = _rows();
     });
+    reportVisible(); // new layers take the span in view (the session's visible frames)
   }
 
   List<TlRow> _rows() {
@@ -224,6 +225,7 @@ class _LiveTimelineState extends State<LiveTimeline>
             keys: xs,
             pickedKeys: pickedXs,
             propertiesOpen: row.property == null ? row.lanesOpen : null,
+            lane: row.property != null,
             wave: wave,
             selected: selectedRow,
             hidden: layer['hidden'] == true,

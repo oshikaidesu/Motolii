@@ -44,7 +44,11 @@ class TlRow {
     this.solo = false,
     this.locked = false,
     this.clipToBelow = false,
+    this.lane = false,
   });
+
+  /// A property lane under its layer: it has no layer switches; its ◆ adds or removes a key at the playhead.
+  final bool lane;
   final String name;
   final TlKind kind;
 
@@ -267,6 +271,12 @@ List<RI> timeline(TimelineModel m) {
           w: r.nameW,
         ),
       );
+    }
+    if (r.lane) {
+      // keyed at the playhead: a solid mark; otherwise an outline one says a key can be added here
+      final keyed = r.keys.any((k) => (k - m.playhead).abs() < .5);
+      items.add(Hg(547, cy, 10, HG.diamond, keyed ? H.text : H.text3));
+      continue;
     }
     for (final (column, state) in [
       r.hidden,

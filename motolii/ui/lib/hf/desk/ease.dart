@@ -73,6 +73,15 @@ abstract class EaseHost implements Listenable {
   void preview(int? interval, Seg curve);
   void cancel();
 
+  /// The kept curves: the copied one first, then the saved presets.
+  List<Seg> get saved;
+  void copyCurve(Seg curve);
+  void savePreset(Seg curve);
+  void clearSaved();
+
+  /// New keys take this curve (and Animate, when on, keys with it from now).
+  void useForNewKeys(Seg curve);
+
   /// How many layers the curve spreads delays over (the Ease desk's ghost mode: several layers picked, no keys);
   /// 0 when it shapes key intervals.
   int get sequence;
@@ -290,7 +299,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     _write();
   }
 
-  Widget _savedRow() => Wrap(spacing: 5, runSpacing: 5, children: [
+  Widget _savedRow() => widget.host != null ? _keptRow(widget.host!) : Wrap(spacing: 5, runSpacing: 5, children: [
         for (final (i, v) in saved.indexed)
           GestureDetector(
             key: ValueKey('ease-saved-$i'),
@@ -302,6 +311,24 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           ),
         _chip('ease-copy', 'Copy curve', () => setState(() => saved.add(List.of(cur.values)))),
         if (saved.isNotEmpty) _chip('ease-clear', 'Clear', () => setState(saved.clear)),
+      ]);
+
+  /// Hosted: the host's kept curves (not the demo ones) and what can be done with the current one.
+  Widget _keptRow(EaseHost h) => Wrap(spacing: 5, runSpacing: 5, children: [
+        for (final (i, s) in h.saved.indexed)
+          GestureDetector(
+            key: ValueKey('ease-saved-$i'),
+            onTap: () {
+              void take(Seg to) { to.p = s.p; if (s.bez) to.setValues(s.values); }
+              setState(() { if (mixed) { for (final t in segs) { take(t); } } else { take(cur); } });
+              _write();
+            },
+            child: Container(width: 46, height: 34, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(4)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
+          ),
+        _chip('ease-copy', 'Copy curve', () => h.copyCurve(cur)),
+        _chip('ease-save', 'Save preset', () => h.savePreset(cur)),
+        _chip('ease-new-keys', 'Use for new keys', () => h.useForNewKeys(cur)),
+        if (h.saved.isNotEmpty) _chip('ease-clear', 'Clear', h.clearSaved),
       ]);
 
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(

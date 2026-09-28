@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -94,6 +95,31 @@ void main() {
     await tester.tap(find.text('Delete page'));
     await tester.pumpAndSettle();
     expect(sent.last, {'op': 'notes', 'page': 'p2', 'action': 'deletePage'});
+    await tester.pumpWidget(const SizedBox());
+    host.dispose();
+  });
+  testWidgets('Cmd+V on the desk pastes the clipboard text into a note, not layers into the document', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
+      if (call.method == 'noteClipboard') return <String, dynamic>{'text': 'hello'};
+      final args = call.arguments;
+      if (args is Map && args['command'] is String) sent.add(jsonDecode(args['command'] as String) as Map);
+      return <String, dynamic>{};
+    });
+    final c = EditorSession()..document.value = {'notebook': {'pages': [{'id': 'p1', 'title': 'One', 'blocks': []}]}};
+    final host = LiveNotesHost(c);
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Overlay(initialEntries: [OverlayEntry(builder: (_) => SizedBox(width: 600, height: 420, child: NotesDesk(host: host)))]),
+    ));
+    await tester.tapAt(const Offset(300, 250));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    expect(sent.map((m) => m['op']), isNot(contains('paste')));
+    final put = sent.lastWhere((m) => m['action'] == 'putBlock');
+    expect(put['block']['text'], 'hello');
     await tester.pumpWidget(const SizedBox());
     host.dispose();
   });

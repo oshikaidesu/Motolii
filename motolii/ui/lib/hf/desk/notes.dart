@@ -35,6 +35,9 @@ abstract class NotesHost implements Listenable {
 
   /// False for the chip an empty notebook still shows: there is no page there to delete.
   bool hasPage(int page);
+
+  /// Cmd+V on the desk: what the clipboard holds becomes a block at [at] (a picture, else its text).
+  Future<void> paste(int page, Offset at);
 }
 
 /// Notes is a free 2D workbench. Wide shows it at working scale; narrow shows the same canvas fitted small.
@@ -224,6 +227,12 @@ class _NotesDeskState extends State<NotesDesk> {
     return Focus(
       focusNode: _canvasFocus,
       onKeyEvent: (_, e) {
+        final cmd = HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed;
+        // Cmd+V on the desk pastes into the note, never into the document
+        if (e is KeyDownEvent && editing == null && cmd && e.logicalKey == LogicalKeyboardKey.keyV && widget.host != null) {
+          widget.host!.paste(page, (const Offset(140, 160) - pan) / zoom);
+          return KeyEventResult.handled;
+        }
         if (e is KeyDownEvent && editing == null && selected != null && (e.logicalKey == LogicalKeyboardKey.delete || e.logicalKey == LogicalKeyboardKey.backspace)) {
           final gone = blocks[selected!];
           if (widget.host == null) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/hf/desk/ease.dart';
 import '../lib/live_hf/adapters/ease.dart';
 import '../lib/session/editor_session.dart';
 
@@ -82,6 +83,28 @@ void main() {
     c.document.value = {...c.state, 'selectedKeys': [{'layer': 3, 'property': 'opacity', 'frame': 0}]};
     await Future<void>.delayed(Duration.zero);
     expect(host.sequence, 0);
+    host.dispose();
+  });
+  test('kept curves are the desk settings Classic keeps: copied curve, saved presets, new-key shape', () async {
+    final c = EditorSession()
+      ..document.value = {
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          {'kind': 'Bezier', 'x1': .42, 'y1': 0, 'x2': .58, 'y2': 1, 'samples': [[0, 0], [1, 1]]},
+        ],
+      };
+    final host = LiveEaseHost(c);
+    expect(host.saved, isEmpty, reason: 'no demo curves pretend to be saved');
+    final seg = Seg(1, 1, host.kinds)..setValues([.1, .2, .3, .4]);
+    host.copyCurve(seg);
+    host.savePreset(seg);
+    host.useForNewKeys(seg);
+    expect(c.deskWork.value['curveClip'], {'kind': 'Bezier', 'x1': .1, 'y1': .2, 'x2': .3, 'y2': .4});
+    expect(c.deskWork.value['easePresets'], hasLength(1));
+    expect(c.deskWork.value['newKeyShape'], {'kind': 'Bezier', 'x1': .1, 'y1': .2, 'x2': .3, 'y2': .4});
+    expect(host.saved, hasLength(2));
+    host.clearSaved();
+    expect(host.saved, hasLength(1), reason: 'the bin clears the saved presets, the copied curve stays');
     host.dispose();
   });
 }

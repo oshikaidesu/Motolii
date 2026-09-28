@@ -64,6 +64,19 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
   bool hasPage(int page) => page < _pages.length;
 
   @override
+  Future<void> paste(int page, Offset at) async {
+    final clip = EditorSession.map(await c.native('noteClipboard'));
+    final id = 'b${DateTime.now().microsecondsSinceEpoch}';
+    if (clip['png'] is String) {
+      final pageId = await _page(page);
+      await c.command('notes', {'page': pageId, 'action': 'image', 'png': clip['png'], 'block': {'id': id, ..._frame(NBlock('image', at, const Size(110, 80), '', 0))}});
+    } else if ('${clip['text'] ?? ''}'.isNotEmpty) {
+      final pageId = await _page(page);
+      await c.command('notes', {'page': pageId, 'action': 'putBlock', 'block': {'id': id, ..._frame(NBlock('note', at, const Size(110, 74), '', 0)), 'kind': 'text', 'text': '${clip['text']}'}});
+    }
+  }
+
+  @override
   Future<void> deletePage(int page) async {
     final pages = _pages;
     if (page >= pages.length) return;

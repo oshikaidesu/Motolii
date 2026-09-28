@@ -63,6 +63,38 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   @override
   int get sequence => _layers.length;
 
+  Seg _seg(Map<String, dynamic> shape) {
+    final i = kinds.indexWhere((k) => k.name == shape['kind']);
+    final seg = Seg(i < 0 ? 0 : i, 1, kinds);
+    if (shape['kind'] == 'Bezier') seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
+    return seg;
+  }
+
+  // Classic's Ease desk keeps these in the desk settings: the copied curve (`curveClip`), the saved presets
+  // (`easePresets`) and the shape new keys take (`newKeyShape`).
+  List<Map<String, dynamic>> get _presets => EditorSession.maps(c.deskWork.value['easePresets']);
+
+  @override
+  List<Seg> get saved => [
+        if (EditorSession.map(c.deskWork.value['curveClip']).isNotEmpty) _seg(EditorSession.map(c.deskWork.value['curveClip'])),
+        for (final p in _presets) _seg(p),
+      ];
+
+  @override
+  void copyCurve(Seg curve) => c.storeDesk('curveClip', _shape(curve));
+
+  @override
+  void savePreset(Seg curve) => c.storeDesk('easePresets', [..._presets, _shape(curve)]);
+
+  @override
+  void clearSaved() => c.storeDesk('easePresets', <Map<String, dynamic>>[]); // Classic's bin: the saved presets
+
+  @override
+  void useForNewKeys(Seg curve) {
+    c.storeDesk('newKeyShape', _shape(curve));
+    if (c.animating) c.setAnimate(true); // re-arm with the new shape
+  }
+
   bool get _canSequence => c.supports('sequence') && !_layers.any((l) => l['locked'] == true);
 
   /// The curve the ghost mode keeps between uses (the desk's own `ease` setting, as Classic keeps it).

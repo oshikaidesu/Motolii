@@ -174,6 +174,8 @@ void main() {
         state.tracks.map((row) => row.property?['id']).whereType<String>(),
         ['opacity', 'effect.4.param.radius'],
       );
+      // the lanes carry a key mark, not the layer's switches
+      expect(find.text('M'), findsOneWidget);
     },
   );
 
@@ -279,6 +281,11 @@ void main() {
     await tester.sendEventToBinding(mouse.scroll(const Offset(0, -200)));
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await tester.pump();
+    await tester.pump();
+    // the zoom tells the session how many frames are in view (new layers take that span)
+    final c = (tester.state(find.byType(LiveTimeline)) as dynamic).c as EditorSession;
+    final dynamic st = tester.state(find.byType(LiveTimeline));
+    expect(c.visibleFrames.value, ((1177 - 215) / (st.pixelsPerFrame as double)).round());
     // the frame under the pointer (1 s) stays under it: pressing there seeks to ~frame 30
     sent.clear();
     await tester.tapAt(Offset(tlX(1) - 344, 760 - 703));
