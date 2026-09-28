@@ -242,7 +242,7 @@ class _TransformGizmoState extends State<TransformGizmo> {
                   _commit();
                   setState(() {});
                 },
-                onPointerCancel: (_) { grab = _Grab.none; s.commit('position'); },
+                onPointerCancel: (_) => _abort(), // an interrupted drag is let go, whatever it was holding
                 child: CustomPaint(size: size, painter: _GizmoPainter(this, enabled)),
               ),
             ),

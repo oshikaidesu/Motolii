@@ -2,13 +2,12 @@ import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/common.dart' show sans, kMuted;
 import '../../session/editor_session.dart';
-import '../../session/read_model.dart';
 import 'camera.dart';
 import 'effect.dart';
 import 'effects_card.dart';
 import 'layout.dart';
-import 'layout_store.dart';
 import 'transform.dart';
+import 'inspector_session.dart';
 
 /// The Inspector seat. Specialist editing requests open the corresponding real Dock panel; the Inspector itself
 /// stays an Inspector instead of turning into a drawer.
@@ -66,29 +65,20 @@ class _RightSeatState extends State<RightSeat> {
   /// The Inspector for what is selected: a camera layer's own instrument, else Transform, followed by the Layout
   /// card of a group or laid-out child and the layer's effect cards, as the Classic Inspector lists them.
   Widget _inspector() {
-    final active = c.activeLayer;
-    if (active != null &&
-        active['kind'] == 'Camera' &&
-        c.selectedIds.length <= 1)
-      return LiveCamera(
-        key: ValueKey(active['id']),
-        c: c,
-        layer: active['id'] as int,
-      );
     final transform = NewTransform(controller: c, showHeader: true);
-    final layer = active == null
-        ? null
-        : c.liveLayers().where((l) => l['id'] == active['id']).firstOrNull ??
-              active;
-    // nothing picked: say why the panel is empty (Classic IN-001)
-    if (layer == null && c.layers.isEmpty) return const _Empty('No layers yet');
-    if (layer == null) return c.selectedIds.isEmpty ? const _Empty('Select a layer') : transform;
-    final layout =
-        c.selectedIds.length <= 1 &&
-        (layer['kind'] == 'Group' || SessionLayoutStore.isChild(layer));
-    final effects = panelRows(layer['effects']);
-    // a Stage layer's margins are its own rows (Classic IN-065)
-    final stage = c.selectedIds.length <= 1 && panelRows(layer['properties']).any((r) => '${r['id']}'.startsWith('stage.'));
+    final Map<String, dynamic> layer;
+    final bool stage, layout;
+    final List<Map<String, dynamic>> effects;
+    switch (InspectorSession.of(c).subject) {
+      case InspectorEmpty(:final why):
+        return _Empty(why);
+      case InspectorCamera(layer: final id):
+        return LiveCamera(key: ValueKey(id), c: c, layer: id);
+      case InspectorLayer(layer: null):
+        return transform;
+      case InspectorLayer(layer: final l?, stage: final st, layout: final lo, effects: final ef):
+        (layer, stage, layout, effects) = (l, st, lo, ef);
+    }
     if (!layout && !stage && effects.isEmpty) return transform;
     return SingleChildScrollView(
       // another layer starts at the top (Classic IN-006)
@@ -120,12 +110,7 @@ class _RightSeatState extends State<RightSeat> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: effects.length,
                 onReorderItem: (from, to) {
-                  if (from != to && c.supports('moveEffect'))
-                    c.command('moveEffect', {
-                      'layer': layer['id'],
-                      'id': effects[from]['id'],
-                      'to': to,
-                    });
+                  if (from != to) InspectorSession.of(c).moveEffect(layer['id'] as int, effects[from]['id'], to);
                 },
                 itemBuilder: (context, i) => NewEffectCard(
                   key: ValueKey('seat-effect:${layer['id']}:${effects[i]['id']}'),

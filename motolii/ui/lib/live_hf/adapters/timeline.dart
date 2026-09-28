@@ -94,15 +94,21 @@ class _LiveTimelineState extends State<LiveTimeline> {
       }
       return const TlEmpty();
     }
+    final start = (r.layer['start'] as num? ?? 0).toDouble(), end = start + (r.layer['duration'] as num? ?? 0).toDouble();
+    final left = xOf(start), right = xOf(end);
+    // an end is taken just outside the bar, so keys at its ends stay pickable; inside only when the bar is long enough
+    if (p.dx >= left - edgeSlop && p.dx < left) return TlBar(i, TlBarPart.start);
+    if (p.dx > right && p.dx <= right + edgeSlop) return TlBar(i, TlBarPart.end);
     if (!r.lanesOpen) {
       for (final f in r.summaryFrames) {
         if ((xOf(f) - p.dx).abs() <= keySlop) return TlLayerKey(i, f);
       }
     }
-    final start = (r.layer['start'] as num? ?? 0).toDouble(), end = start + (r.layer['duration'] as num? ?? 0).toDouble();
-    final left = xOf(start), right = xOf(end);
-    if (p.dx >= left - edgeSlop && p.dx <= right + edgeSlop) {
-      return TlBar(i, (p.dx - left).abs() <= edgeSlop ? TlBarPart.start : ((p.dx - right).abs() <= edgeSlop ? TlBarPart.end : TlBarPart.body));
+    if (p.dx >= left && p.dx <= right) {
+      final roomy = right - left > edgeSlop * 4;
+      if (roomy && p.dx - left <= edgeSlop) return TlBar(i, TlBarPart.start);
+      if (roomy && right - p.dx <= edgeSlop) return TlBar(i, TlBarPart.end);
+      return TlBar(i, TlBarPart.body);
     }
     return const TlEmpty();
   }

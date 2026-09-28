@@ -8,6 +8,7 @@ import '../../session/editor_session.dart';
 import '../../session/effect_actions.dart';
 import 'effect.dart';
 import '../../hf/neutral.dart';
+import 'inspector_session.dart';
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;
@@ -45,15 +46,15 @@ class NewEffectCard extends StatelessWidget {
     });
     switch (chosen) {
       case 'earlier' || 'later':
-        await c.command('moveEffect', {'layer': layer['id'], 'id': effect['id'], 'to': chosen == 'earlier' ? index - 1 : index + 1});
+        InspectorSession.of(c).moveEffect(layer['id'] as int, effect['id'], chosen == 'earlier' ? index - 1 : index + 1);
       case 'roll':
         await rollEffect(c, layer['id'] as int, effect);
       case 'rest':
         await restEffect(c, layer['id'] as int, effect);
       case 'expand':
-        await c.command('expandEffect', {'layer': layer['id'], 'id': effect['id']});
+        await InspectorSession.of(c).expandEffect(layer['id'] as int, effect['id']);
       case 'remove':
-        await c.command('removeEffect', {'layer': layer['id'], 'id': effect['id']});
+        await InspectorSession.of(c).removeEffect(layer['id'] as int, effect['id']);
     }
   }
 
@@ -86,7 +87,7 @@ class NewEffectCard extends StatelessWidget {
             GestureDetector(
               key: ValueKey('effect-toggle:${effect['id']}'),
               behavior: HitTestBehavior.opaque,
-              onTap: c.supports('enableEffect') && !_held ? () => c.command('enableEffect', {'layer': layer['id'], 'id': effect['id'], 'enabled': !on}) : null,
+              onTap: InspectorSession.of(c).canEnableEffects && !_held ? () => InspectorSession.of(c).enableEffect(layer['id'] as int, effect['id'], !on) : null,
               child: Padding(padding: const EdgeInsets.all(4), child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : kMuted, kRaised)))),
             ),
             Builder(builder: (context) => GestureDetector(
