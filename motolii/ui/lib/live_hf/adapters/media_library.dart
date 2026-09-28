@@ -21,16 +21,22 @@ class MediaLibraryBody extends StatelessWidget {
   final Map<String, Map<String, dynamic>> items;
   final double width;
 
+  /// Each family its own cell: a still or an HDR plate is a small square (56 px and up), a clip or a sound a wider
+  /// 4:3 face (64 px and up, where its motion mark, waveform and length fit). About five a row at the default seat.
+  static ({double column, double aspect}) cellOf(String family) => switch (family) {
+        'Video' || 'Audio' => (column: 64, aspect: 4 / 3),
+        _ => (column: 56, aspect: 1),
+      };
+
   @override
   Widget build(BuildContext context) {
-    // a contact sheet: small, many, the picture keeps most of each cell (4:3), the name a single short line
     const pad = 10.0, gap = 6.0;
     final seat = BrowserSeatScope.of(context);
-    final grid = shelfColumns(width, 76.0 * (seat?.tileScale ?? 1), pad: pad, gap: gap);
+    final scale = seat?.tileScale ?? 1;
+    final grids = {for (final key in sections.keys) key: shelfColumns(width, cellOf(key).column * scale, pad: pad, gap: gap)};
     // the keys walk the tiles in the order they are drawn (section by section), not the data's order
-    seat?.shows([for (final e in sections.values) ...e], grid.columns);
-    if (grid.width <= 0) return const SizedBox.shrink();
-    final extent = grid.width * .75 + _captionHeight;
+    seat?.shows([for (final e in sections.values) ...e], grids.values.isEmpty ? 1 : grids.values.first.columns);
+    if (grids.values.any((g) => g.width <= 0)) return const SizedBox.shrink();
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
@@ -39,7 +45,12 @@ class MediaLibraryBody extends StatelessWidget {
           SliverPadding(
             padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 8 : 0, pad, 2),
             sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: grid.width / extent),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: grids[e.key]!.columns,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+                childAspectRatio: grids[e.key]!.width / (grids[e.key]!.width / cellOf(e.key).aspect + _captionHeight),
+              ),
               delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], MaterialCard(item: items[e.value[i].id] ?? const {}, name: e.value[i].name)), childCount: e.value.length),
             ),
           ),
@@ -50,7 +61,7 @@ class MediaLibraryBody extends StatelessWidget {
   }
 }
 
-const _captionHeight = 16.0;
+const _captionHeight = 14.0;
 
 /// One piece of material: its face (landscape, never cropped to a postage stamp), its name, one quiet line of facts.
 class MaterialCard extends StatelessWidget {
@@ -69,7 +80,7 @@ class MaterialCard extends StatelessWidget {
       SizedBox(
         height: _captionHeight,
         child: Padding(
-          padding: const EdgeInsets.only(top: 3),
+          padding: const EdgeInsets.only(top: 2),
           child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: const Color(0xFFD6D7DA), w: FontWeight.w500)),
         ),
       ),
