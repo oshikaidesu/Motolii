@@ -19,6 +19,7 @@ import 'adapters/notes.dart';
 import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
+import 'adapters/timeline_alt.dart';
 import 'adapters/web.dart';
 
 /// The product workspace for the hf client. Faces/tools own their content;
@@ -65,7 +66,7 @@ class LiveWorkspace {
         'Timeline': PanelDef(
           'Timeline',
           'Timeline',
-          () => LiveTimeline(c: c),
+          () => ValueListenableBuilder(valueListenable: altTimelineSkin, builder: (_, alt, __) => alt ? AltTimeline(c: c) : LiveTimeline(c: c)),
           tools: () => LiveTimelineTools(c: c),
           glyph: HG.play,
           minSize: 180,

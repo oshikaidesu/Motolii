@@ -1,0 +1,66 @@
+// The Timeline's meaning, on the real app and its native host, with no skin in the way: what a person does is told to
+// the TimelineSession in rows and frames, and the document is read back. Any skin that says the same things gets the
+// same results.
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+
+import 'package:motolii_stage5/live_hf/adapters/timeline.dart';
+import 'package:motolii_stage5/live_hf/main.dart' as app;
+import 'package:motolii_stage5/session/editor_session.dart';
+import 'package:motolii_stage5/timeline_core/semantics.dart';
+import 'package:motolii_stage5/timeline_core/session.dart';
+
+Future<void> frames(WidgetTester t, [int n = 20]) async {
+  for (var i = 0; i < n; i++) {
+    await t.pump(const Duration(milliseconds: 50));
+  }
+}
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('a bar carried along time moves its layer; lanes open; the head seeks; a marquee picks', (t) async {
+    app.main();
+    await frames(t, 60);
+    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final s = TimelineSession.of(c);
+    expect(s.rows, isNotEmpty, reason: 'the document has layers');
+
+    // carry the first plain layer's bar 12 frames later
+    final i = s.rows.indexWhere((r) => r.property == null && !r.isGroup && r.layer['kind'] != 'Camera');
+    final id = s.rows[i].id;
+    int start() => (c.layers.firstWhere((l) => l['id'] == id)['start'] as num).toInt();
+    final before = start();
+    s.press(TlBar(i, TlBarPart.body), frame: 30, row: i + .5, mods: const TlMods());
+    s.drag(frame: 42, row: i + .5);
+    s.release();
+    await frames(t, 20);
+    expect(start(), before + 12);
+
+    // lanes open under a layer that has keys, and close again
+    final keyed = s.rows.indexWhere((r) => r.property == null && r.summaryFrames.isNotEmpty);
+    final count = s.rows.length;
+    s.toggleLanes(keyed);
+    expect(s.rows.length, greaterThan(count));
+    s.toggleLanes(keyed);
+    expect(s.rows.length, count);
+
+    // the head goes where it is asked
+    s.seek(45);
+    await frames(t, 20);
+    expect(c.frame.value, 45);
+
+    // a marquee over every row and all time picks every layer whose bar it touches
+    s.press(const TlEmpty(), frame: 0, row: 0, mods: const TlMods());
+    s.drag(frame: s.extent.toDouble(), row: s.rows.length.toDouble());
+    s.release();
+    await frames(t, 20);
+    final bars = s.rows.where((r) => r.property == null && r.layer['kind'] != 'Camera').map((r) => r.id).toSet();
+    expect(c.selectedIds.toSet().containsAll(bars), isTrue);
+
+    // the session outlives its skin: throw the panel away and it is the same one, where it was
+    expect(identical(TimelineSession.of(c), s), isTrue);
+    expect(EditorSession.maps(c.state['layers']), isNotEmpty);
+  });
+}

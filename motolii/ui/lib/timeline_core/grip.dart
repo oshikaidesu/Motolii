@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import 'frame.dart';
 import 'layout.dart';
+import 'semantics.dart';
 
 /// Timeline の掴み手 — 押す・選ぶ・動かす・詰める・滑らす・囲む、
 /// そして行と素材の落とし先。絵に出す途中の姿もここが持つ。
@@ -199,16 +200,7 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
       }
       if (frame != null) {
         final found = row.allKeys.where((k) => k['frame'] == frame).toList();
-        var chosen = selectedKeys.toList();
-        final already = found.every((f) => chosen.any((k) => sameKey(k, f)));
-        if (additive) {
-          already
-              ? chosen.removeWhere((k) => found.any((f) => sameKey(k, f)))
-              : chosen.addAll(
-                  found.where((f) => !chosen.any((k) => sameKey(k, f))),
-                );
-        } else if (!already)
-          chosen = found;
+        final chosen = tlPick(selectedKeys, found, additive: additive);
         timelineSession.command('select', {
           'ids': chosen.map((k) => k['layer']).toSet().toList(),
           'keys': chosen,
@@ -235,16 +227,7 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
       final span = found == null ? spanAt(row, p.dx) : null;
       if (found != null || span != null) {
         final picked = span ?? [found!];
-        var chosen = selectedKeys.toList();
-        final already = picked.every((f) => chosen.any((k) => sameKey(k, f)));
-        if (additive) {
-          already
-              ? chosen.removeWhere((k) => picked.any((f) => sameKey(k, f)))
-              : chosen.addAll(
-                  picked.where((f) => !chosen.any((k) => sameKey(k, f))),
-                );
-        } else if (!already)
-          chosen = picked;
+        final chosen = tlPick(selectedKeys, picked, additive: additive);
         timelineSession.command('select', {
           'ids': chosen.map((k) => k['layer']).toSet().toList(),
           'keys': chosen,
@@ -413,42 +396,11 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
     rowDropGuide = null;
   });
 
-  Map<String, dynamic> timing(TrackRow row) {
-    final s = (row.layer['start'] as num? ?? 0).toInt(),
-        d = (row.layer['duration'] as num? ?? 1).toInt(),
-        i = (row.layer['sourceIn'] as num? ?? 0).toInt();
-    switch (gesture) {
-      case 'trimIn':
-        final delta = deltaFrames.clamp(-math.min(s, i), d - 1);
-        return {
-          'layer': row.id,
-          'start': s + delta,
-          'duration': d - delta,
-          'sourceIn': i + delta,
-        };
-      case 'trimOut':
-        return {
-          'layer': row.id,
-          'start': s,
-          'duration': math.max(1, d + deltaFrames),
-          'sourceIn': i,
-        };
-      case 'slip':
-        return {
-          'layer': row.id,
-          'start': s,
-          'duration': d,
-          'sourceIn': math.max(0, i - deltaFrames),
-        };
-      default:
-        return {
-          'layer': row.id,
-          'start': math.max(0, s + deltaFrames),
-          'duration': d,
-          'sourceIn': i,
-        };
-    }
-  }
+  Map<String, dynamic> timing(TrackRow row) => tlTiming(row.id, row.layer, const {
+        'trimIn': TlGesture.trimIn,
+        'trimOut': TlGesture.trimOut,
+        'slip': TlGesture.slip,
+      }[gesture] ?? TlGesture.move, deltaFrames);
 
   void end(PointerUpEvent event) {
     endAt(event, event.localPosition);

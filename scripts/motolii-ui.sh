@@ -46,7 +46,13 @@ case "${1:-dev}" in
       cp -- "$2" "$it_dir/document.rrd"
       it_defines+=(--dart-define="MOTOLII_DOCUMENT=$it_dir/document.rrd")
     fi
-    cd "$ui"; "$flutter_bin" test integration_test -d macos "${it_defines[@]}"
+    # one launch per file: a second app launch inside one `flutter test` run loses its debug connection on macOS
+    cd "$ui"; it_failed=0
+    for it_file in integration_test/*_test.dart; do
+      [[ -n "${2:-}" ]] && cp -- "$2" "$it_dir/document.rrd"
+      "$flutter_bin" test "$it_file" -d macos "${it_defines[@]}" || it_failed=1
+    done
+    exit $it_failed
     ;;
   test)
     "$repo/scripts/motolii-ui.sh" why-slow

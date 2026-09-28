@@ -1,28 +1,22 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../hf/shell/place.dart';
-import '../../hf/shell/menu.dart' show showHfMenu;
-import '../../hf/shell/timeline.dart';
 import '../../foundation/theme.dart';
-import '../../session/editor_session.dart';
-import '../../timeline_core/frame.dart';
-import '../../timeline_core/geometry.dart';
-import '../../timeline_core/grip.dart';
-import '../../timeline_core/menu.dart';
+import '../../hf/bp/common.dart' show sans, mono;
+import '../../hf/glyphs.dart';
+import '../../hf/neutral.dart';
+import '../../hf/shell/menu.dart' show showHfMenu;
+import '../../hf/shell/place.dart' show H, Fam;
 import '../../hf/shell/sheet.dart' show HfAction;
-import '../../timeline_core/view.dart';
-
-/// The Timeline face over the session: one row per layer (a group, a camera, an audio floor, or an item with its
-/// body from `start` to `start + duration` and a diamond at every key), the playhead at `frame`.
-/// Pressing the tracks seeks; a name or a body selects its layer; a key picks the layer's keys at that frame (Shift
-/// adds); a picked key dragged moves the picked keys (`moveKeys`); a body or one of its ends dragged retimes the layer
-/// (`previewTimings`, then `setTimings`). Scrolling pans time and rows; with Cmd/Ctrl it changes the seconds a major
-/// tick spans.
-/// Where the live Timeline's face starts in the reference frame: under the reference's own tab row (703-742), which
-/// the Dock's seat strip is here.
-const liveFaceTop = 742.0;
+import '../../input/viewport_motion.dart';
+import '../../session/editor_session.dart';
+import '../../timeline_core/layout.dart' show TrackRow;
+import '../../timeline_core/semantics.dart';
+import '../../timeline_core/session.dart';
+import 'timeline_alt.dart' show altTimelineSkin;
 
 /// The Timeline's tools at its seat strip's right end (the Dock asks the front panel for them): Split and Marker.
 class LiveTimelineTools extends StatelessWidget {
@@ -30,14 +24,23 @@ class LiveTimelineTools extends StatelessWidget {
   final EditorSession c;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: c.document,
-    builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
-      HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
-      HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
-    ]),
-  );
+        listenable: c.document,
+        builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
+          HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
+          HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
+          // TEMPORARY: the Skin Swap Proof's switch
+          HfAction('A/B', onTap: () => altTimelineSkin.value = !altTimelineSkin.value),
+        ]),
+      );
 }
 
+/// A layer's colour, by its id so it stays with the layer wherever it scrolls.
+final _families = <Fam>[H.scatter, H.stagger, H.along, H.face, H.attach, H.follow];
+Fam _family(int id) => _families[id % _families.length];
+
+/// The live Timeline: a skin over [TimelineSession]. It lays rows out and draws them, decides what is under the
+/// pointer with its own geometry, and tells the session in rows and frames. Nothing of the Timeline's meaning or state
+/// lives here beyond the pointer's own gesture (slop, hover, momentum).
 class LiveTimeline extends StatefulWidget {
   const LiveTimeline({super.key, required this.c});
   final EditorSession c;
@@ -45,485 +48,561 @@ class LiveTimeline extends StatefulWidget {
   State<LiveTimeline> createState() => _LiveTimelineState();
 }
 
-/// Row identity colours, given out in layer order: presentation only, nothing is stored.
-final _families = [
-  (H.neutralN, H.neutralT),
-  (H.scatter.n, H.scatter.t),
-  (H.stagger.n, H.stagger.t),
-  (H.along.n, H.along.t),
-  (H.face.n, H.face.t),
-  (H.attach.n, H.attach.t),
-];
+class _LiveTimelineState extends State<LiveTimeline> {
+  // the skin's geometry: its own, told to nobody
+  static const rowH = 22.0, rulerH = 24.0, labelW = 236.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
 
-class _LiveTimelineState extends State<LiveTimeline>
-    with
-        TimelineFrame<LiveTimeline>,
-        TimelineGrip<LiveTimeline>,
-        TimelineView<LiveTimeline>,
-        TimelineMenu<LiveTimeline> {
-  static const _watched = [
-    'layers',
-    'fps',
-    'durationFrames',
-    'waveforms',
-    'selectedIds',
-    'selectedKeys',
-    'markers',
-  ];
   EditorSession get c => widget.c;
-  @override
-  EditorSession get timelineSession => c;
-  @override
-  double baseNameWidth = TimelineGeometry.hf.nameWidth;
-  @override
-  TimelineGeometry get timelineGeometry => TimelineGeometry.hf;
-  double fps = 30;
-  double _viewportOffset = 0;
-  int rowStart = 0;
-
-  @override
-  double get offset => _viewportOffset;
-
-  List<TlRow> _shown = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    viewportWidth = tlRight - 344;
-    fps = (c.state['fps'] as num? ?? 30).toDouble();
-    pixelsPerFrame = tlUnit / fps;
-    relane();
-    _shown = _rows();
-    c.slice('liveTimeline', _watched).addListener(_changed);
-  }
+  late final TimelineSession s = TimelineSession.of(c);
+  final focus = FocusNode();
+  late final motion = ViewportMotion((scale, x, y) => s.setView(pixelsPerFrame: scale, startFrame: x / scale, firstRow: y / rowH));
+  int? hover;
+  Offset? _down;
+  bool _dragging = false, _navigating = false;
+  Offset _navOrigin = Offset.zero;
 
   @override
   void dispose() {
-    c.slice('liveTimeline', _watched).removeListener(_changed);
+    motion.dispose();
+    focus.dispose();
     super.dispose();
   }
 
-  void _changed() => setState(() => _shown = _rows());
+  // ---- the skin's transforms -------------------------------------------------------------------------------------
+  double xOf(num frame) => labelW + (frame - s.startFrame) * s.pixelsPerFrame;
+  double frameAt(double x) => s.startFrame + (x - labelW) / s.pixelsPerFrame;
+  double yOf(int row) => rulerH + (row - s.firstRow) * rowH;
+  double rowAt(double y) => s.firstRow + (y - rulerH) / rowH;
 
-  double get _unit => tlUnit / (fps * pixelsPerFrame);
-  double _x(num frame) => tlX0 + .5 + frame * pixelsPerFrame - offset;
-  double _frameAt(double x) => (x - tlX0 - .5 + offset) / pixelsPerFrame;
-
-  // Rows scroll in whole rows, but the offset keeps the part of a row a small wheel step moved, so steps add up.
-  double _rowOffset = 0;
-
-  @override
-  double get verticalOffset => _rowOffset;
-
-  /// Whenever the core lays the rows out again (a lane or group opened from the rows, the document), the face's
-  /// rows follow at once.
-  @override
-  void relane() {
-    super.relane();
-    _shown = _rows();
+  TlMods get _mods {
+    final k = HardwareKeyboard.instance;
+    return TlMods(primary: k.isMetaPressed || k.isControlPressed, shift: k.isShiftPressed, alt: k.isAltPressed);
   }
 
-  @override
-  void applyNavigation(double scale, double x, double y) {
-    final maxRow = math.max(0, tracks.length - 8);
-    setState(() {
-      pixelsPerFrame = scale;
-      _viewportOffset = x;
-      _rowOffset = y.clamp(0.0, maxRow * timelineGeometry.rowHeight);
-      rowStart = (_rowOffset / timelineGeometry.rowHeight).floor();
-      _shown = _rows();
-    });
-    reportVisible(); // new layers take the span in view (the session's visible frames)
-  }
-
-  List<TlRow> _rows() {
-    final nextFps = (c.state['fps'] as num? ?? 30).toDouble();
-    if (fps != nextFps) {
-      final unit = _unit;
-      fps = nextFps;
-      pixelsPerFrame = tlUnit / (fps * unit);
-    }
-    final selected = c.selectedIds.toSet();
-    final selectedKeys = EditorSession.maps(c.state['selectedKeys']);
-    // A grip draws from its press-time keys and timings plus the delta, as Classic's does: the document's rows only
-    // catch up when the preview reply lands.
-    final gripped = gesture == 'keys' ? initialKeys : settlingKeys;
-    final keyShift = gesture == 'keys' ? deltaFrames : settlingDelta;
-    final timings =
-        const {'move', 'trimIn', 'trimOut', 'slip'}.contains(gesture)
-        ? {for (final r in timingRows) r.id: timing(r)}
-        : const <Object, Map<String, dynamic>>{};
-    final waves = {
-      for (final w in EditorSession.maps(c.state['waveforms']))
-        w['layer']: EditorSession.maps(w['columns']),
-    };
-    final maxRow = math.max(0, tracks.length - 8);
-    if (rowStart > maxRow) {
-      rowStart = maxRow;
-      _rowOffset = maxRow * timelineGeometry.rowHeight;
-    }
-    final shown = tracks.skip(rowStart).take(8).toList();
-    final out = <TlRow>[];
-    for (final (n, row) in shown.indexed) {
-      final layer = row.layer;
-      final id = row.id;
-      final name = row.property == null
-          ? '${layer['name'] ?? layer['kind']}'
-          : '${row.property!['label'] ?? row.property!['id']}';
-      final keyRows = row.property == null ? row.allKeys : row.keys;
-      final moving = {
-        for (final key in gripped)
-          if (key['layer'] == id &&
-              (row.property == null || key['property'] == row.property!['id']))
-            (key['frame'] as num).round(),
-      };
-      double keyX(int frame) =>
-          _x(moving.contains(frame) ? frame + keyShift : frame);
-      final frames =
-          keyRows.map((key) => (key['frame'] as num).round()).toSet().toList()
-            ..sort();
-      final xs = [for (final frame in frames) keyX(frame)];
-      final pickedFrames = {
-        for (final key in selectedKeys)
-          if (key['layer'] == id &&
-              (row.property == null || key['property'] == row.property!['id']))
-            (key['frame'] as num).round(),
-      };
-      final pickedXs = [
-        for (final frame in frames)
-          if (pickedFrames.contains(frame)) keyX(frame),
-      ];
-      final selectedRow = selected.contains(id);
-      final indent = row.depth;
-      if (row.property == null && row.isGroup) {
-        out.add(
-          TlRow(
-            name,
-            TlKind.group,
-            indent: indent,
-            nameW: 100,
-            open: row.groupOpen,
-            propertiesOpen: row.lanesOpen,
-            selected: selectedRow,
-            hidden: layer['hidden'] == true,
-            solo: layer['solo'] == true,
-            locked: layer['locked'] == true,
-            clipToBelow: layer['clipToBelow'] == true,
-          ),
-        );
-      } else if (row.property == null && layer['kind'] == 'Camera') {
-        out.add(
-          TlRow(
-            name,
-            TlKind.camera,
-            indent: indent,
-            nameW: 80,
-            propertiesOpen: row.lanesOpen,
-            keys: xs,
-            pickedKeys: pickedXs,
-            selected: selectedRow,
-            hidden: layer['hidden'] == true,
-            solo: layer['solo'] == true,
-            locked: layer['locked'] == true,
-            clipToBelow: layer['clipToBelow'] == true,
-          ),
-        );
-      } else {
-        final (chip, family) = _families[(n + row.depth) % _families.length];
-        // a hidden (muted) layer's bar is grey (Classic TL-105)
-        final bodyColor = layer['hidden'] == true ? H.raisedHi : family;
-        final t = timings[id] ?? layer;
-        final body = row.property == null
-            ? (
-                _x(t['start'] as num? ?? 0),
-                _x((t['start'] as num? ?? 0) + (t['duration'] as num? ?? 0)),
-                bodyColor,
-              )
-            : null;
-        final wave = layer['kind'] == 'Audio'
-            ? _wave(waves[id] ?? const [])
-            : null;
-        out.add(
-          TlRow(
-            name,
-            TlKind.item,
-            indent: indent,
-            nameW: 80,
-            chip: chip,
-            body: body,
-            keys: xs,
-            pickedKeys: pickedXs,
-            propertiesOpen: row.property == null ? row.lanesOpen : null,
-            lane: row.property != null,
-            ghost: row.property == null ? _ghost(layer, t) : null,
-            spans: row.property == null ? const [] : _spans(row.keys, keyX, pickedFrames),
-            wave: wave,
-            selected: selectedRow,
-            hidden: layer['hidden'] == true,
-            solo: layer['solo'] == true,
-            locked: layer['locked'] == true,
-            clipToBelow: layer['clipToBelow'] == true,
-          ),
-        );
+  /// What is under [p] on the lanes, as the session's terms.
+  TlTarget _hit(Offset p) {
+    final i = rowAt(p.dy).floor();
+    if (p.dy < rulerH || i < 0 || i >= s.rows.length) return const TlEmpty();
+    final r = s.rows[i];
+    if (r.property != null) {
+      final frames = [for (final k in r.keys) (k['frame'] as num).toInt()]..sort();
+      for (final f in frames) {
+        if ((xOf(f) - p.dx).abs() <= keySlop) return TlLaneKey(i, f);
       }
+      for (var n = 0; n + 1 < frames.length; n++) {
+        if (p.dx > xOf(frames[n]) + keySlop && p.dx < xOf(frames[n + 1]) - keySlop) return TlSpan(i, frames[n], frames[n + 1]);
+      }
+      return const TlEmpty();
+    }
+    if (!r.lanesOpen) {
+      for (final f in r.summaryFrames) {
+        if ((xOf(f) - p.dx).abs() <= keySlop) return TlLayerKey(i, f);
+      }
+    }
+    final start = (r.layer['start'] as num? ?? 0).toDouble(), end = start + (r.layer['duration'] as num? ?? 0).toDouble();
+    final left = xOf(start), right = xOf(end);
+    if (p.dx >= left - edgeSlop && p.dx <= right + edgeSlop) {
+      return TlBar(i, (p.dx - left).abs() <= edgeSlop ? TlBarPart.start : ((p.dx - right).abs() <= edgeSlop ? TlBarPart.end : TlBarPart.body));
+    }
+    return const TlEmpty();
+  }
+
+  // ---- pointer -----------------------------------------------------------------------------------------------------
+  /// [p] in the panel's coordinates.
+  void _press(PointerDownEvent e, TlTarget target, Offset p) {
+    focus.requestFocus();
+    motion.stop();
+    if (e.buttons != kPrimaryMouseButton) return;
+    _down = p;
+    _dragging = false;
+    s.press(target, frame: frameAt(p.dx), row: rowAt(p.dy), mods: _mods);
+  }
+
+  void _move(Offset p) {
+    if (_down == null) return;
+    if (!_dragging && (p - _down!).distance < dragSlop) return;
+    _dragging = true;
+    s.drag(frame: frameAt(p.dx), row: rowAt(p.dy));
+  }
+
+  void _up(PointerUpEvent e) {
+    if (_down == null) return;
+    _down = null;
+    s.release();
+  }
+
+  void _cancel() {
+    _down = null;
+    s.cancel();
+  }
+
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || _navigating) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      motion.stop();
+      final p = event.localPosition, d = event.scrollDelta;
+      final k = HardwareKeyboard.instance;
+      if (k.isMetaPressed || k.isControlPressed || (p.dy < rulerH && p.dx >= labelW)) {
+        s.zoomAt(math.exp(-d.dy * .002), frameAt(math.max(labelW, p.dx)));
+      } else if (k.isShiftPressed) {
+        s.setView(startFrame: s.startFrame + (d.dy + d.dx) / s.pixelsPerFrame);
+      } else {
+        s.setView(startFrame: s.startFrame + d.dx / s.pixelsPerFrame, firstRow: s.firstRow + d.dy / rowH);
+      }
+    });
+  }
+
+  Future<void> _menu(Offset p, Offset global) async {
+    final i = rowAt(p.dy).floor();
+    final row = p.dy >= rulerH && i >= 0 && i < s.rows.length ? i : null;
+    final lines = await s.menu(row);
+    if (!mounted) return;
+    final chosen = await showHfMenu<String>(
+      context,
+      Rect.fromLTWH(global.dx, global.dy, 220, 0),
+      [for (final l in lines) (l.value, l.label)],
+      disabled: {for (final l in lines) if (!l.enabled) l.value},
+      shortcuts: {for (final l in lines) if (l.shortcut.isNotEmpty) l.value: l.shortcut},
+      dividers: {for (final l in lines) if (l.groupEnd) l.value},
+    );
+    if (chosen != null) s.runMenu(row, chosen);
+  }
+
+  Future<void> _markerMenu(String id, Offset global) async {
+    if (!c.supports('deleteMarker')) return;
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(global.dx, global.dy, 180, 0), const [('delete', 'Delete marker')]);
+    if (chosen == 'delete') s.deleteMarker(id);
+  }
+
+  KeyEventResult _key(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    final k = e.logicalKey;
+    final handled = s.key(
+      left: k == LogicalKeyboardKey.arrowLeft && !HardwareKeyboard.instance.isAltPressed,
+      right: k == LogicalKeyboardKey.arrowRight && !HardwareKeyboard.instance.isAltPressed,
+      escape: k == LogicalKeyboardKey.escape,
+      shift: HardwareKeyboard.instance.isShiftPressed,
+    );
+    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  // ---- build -------------------------------------------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        final frames = math.max(1.0, (box.maxWidth - labelW) / s.pixelsPerFrame), rows = math.max(1.0, (box.maxHeight - rulerH) / rowH);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) s.viewport(frames: frames, rows: rows);
+        });
+        final theme = EditorTheme.of(context);
+        return DragTarget<Map<String, dynamic>>(
+          onWillAcceptWithDetails: (d) => d.data['asset'] != null && c.supports('placeAsset'),
+          onMove: (d) {
+            final p = (context.findRenderObject() as RenderBox).globalToLocal(d.offset);
+            s.aimAsset(row: rowAt(p.dy), frame: p.dx >= labelW ? frameAt(p.dx) : null);
+          },
+          onLeave: (_) => s.leaveAsset(),
+          onAcceptWithDetails: (d) => s.acceptAsset(d.data['asset']),
+          builder: (context, _, __) => Focus(
+            focusNode: focus,
+            onKeyEvent: _key,
+            child: GestureDetector(
+              supportedDevices: const {PointerDeviceKind.trackpad},
+              onScaleStart: (e) {
+                motion.stop();
+                _navigating = true;
+                _navOrigin = e.localFocalPoint;
+                final anchor = math.max(0.0, e.localFocalPoint.dx - labelW);
+                motion.begin(
+                  mode: e.localFocalPoint.dy < rulerH && e.localFocalPoint.dx >= labelW ? ViewportGestureMode.scrubZoom : ViewportGestureMode.pan,
+                  scale: s.pixelsPerFrame,
+                  frame: s.startFrame + anchor / s.pixelsPerFrame,
+                  anchor: anchor,
+                  y: s.firstRow * rowH,
+                );
+              },
+              onScaleUpdate: (e) => motion.update(e.localFocalPoint - _navOrigin, e.scale, e.sourceTimeStamp),
+              onScaleEnd: (_) {
+                _navigating = false;
+                motion.end();
+              },
+              child: Listener(
+                onPointerSignal: _wheel,
+                child: MouseRegion(
+                  onHover: (e) {
+                    final i = rowAt(e.localPosition.dy).floor();
+                    final next = e.localPosition.dy < rulerH || i >= s.rows.length ? null : i;
+                    if (next != hover) setState(() => hover = next);
+                  },
+                  onExit: (_) => setState(() => hover = null),
+                  child: ClipRect(
+                    child: Stack(children: [
+                      // rows, names, lanes: redrawn when the Timeline changes (not every frame of playback)
+                      Positioned.fill(
+                        child: ListenableBuilder(
+                          listenable: s,
+                          builder: (context, _) => Stack(children: [
+                            Positioned.fill(child: CustomPaint(painter: _RowsPainter(this, theme.accent))),
+                            ..._outline(),
+                            // the lanes: every press is hit-tested here and told to the session
+                            Positioned(
+                              left: labelW,
+                              top: rulerH,
+                              right: 0,
+                              bottom: 0,
+                              child: Listener(
+                                behavior: HitTestBehavior.opaque,
+                                onPointerDown: (e) => _press(e, _hit(e.localPosition + const Offset(labelW, rulerH)), e.localPosition + const Offset(labelW, rulerH)),
+                                onPointerMove: (e) => _move(e.localPosition + const Offset(labelW, rulerH)),
+                                onPointerUp: _up,
+                                onPointerCancel: (_) => _cancel(),
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onSecondaryTapDown: (e) => _menu(e.localPosition + const Offset(labelW, rulerH), e.globalPosition),
+                                  child: const SizedBox.expand(),
+                                ),
+                              ),
+                            ),
+                            // the ruler: press or drag to seek
+                            Positioned(
+                              left: labelW,
+                              top: 0,
+                              right: 0,
+                              height: rulerH,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapDown: (e) => s.seek(frameAt(labelW + e.localPosition.dx).round()),
+                                onHorizontalDragUpdate: (e) => s.seek(frameAt(labelW + e.localPosition.dx).round()),
+                                child: const SizedBox.expand(),
+                              ),
+                            ),
+                            for (final m in EditorSession.maps(c.state['markers'])) _marker(m),
+                          ]),
+                        ),
+                      ),
+                      // the playhead: its own layer, the only thing a frame of playback repaints
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: RepaintBoundary(child: CustomPaint(painter: _HeadPainter(this))),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      });
+
+  Widget _marker(Map<String, dynamic> m) {
+    final id = '${m['id']}';
+    final carried = s.markerDrag?.$1 == id ? s.markerDrag!.$2 : (m['frame'] as num).toDouble();
+    final x = xOf(carried);
+    if (x < labelW - 6) return const SizedBox.shrink();
+    return Positioned(
+      left: x - 6,
+      top: 0,
+      width: 12,
+      height: rulerH,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown: (e) => _markerMenu(id, e.globalPosition),
+        onHorizontalDragUpdate: c.supports('setMarker') ? (e) => s.dragMarker(id, (s.markerDrag?.$1 == id ? s.markerDrag!.$2 : carried) + e.delta.dx / s.pixelsPerFrame) : null,
+        onHorizontalDragEnd: c.supports('setMarker') ? (_) => s.dropMarker() : null,
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+
+  /// The name column: per row, switches and twirls that call the session directly, then the name, which picks and
+  /// carries the row.
+  List<Widget> _outline() {
+    final out = <Widget>[];
+    final first = s.firstRow.floor();
+    for (var i = first; i < s.rows.length; i++) {
+      final y = yOf(i);
+      if (y > 4000) break;
+      final r = s.rows[i];
+      final lane = r.property != null, group = r.isGroup && !lane;
+      final indent = r.depth * 12.0;
+      Widget mark(Widget child, VoidCallback? onTap, {double w = 16}) => SizedBox(
+            width: w,
+            height: rowH,
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: Center(child: child)),
+          );
+      Widget glyph(HG g, Color color, {bool on = false, double size = 11}) => Container(
+            width: 15,
+            height: 15,
+            decoration: on ? BoxDecoration(color: H.toggleOn, borderRadius: BorderRadius.circular(3)) : null,
+            alignment: Alignment.center,
+            child: SizedBox.square(dimension: size, child: CustomPaint(painter: HgPainter(g, on ? N.g100 : color, on ? H.toggleOn : N.g10))),
+          );
+      final quiet = hover == i || c.selectedIds.contains(r.id);
+      final name = Expanded(
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (e) => _press(e, TlRowName(i), Offset(labelW / 2, y + e.localPosition.dy)),
+          onPointerMove: (e) => _move(Offset(labelW / 2, y + e.localPosition.dy)),
+          onPointerUp: _up,
+          onPointerCancel: (_) => _cancel(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapDown: (e) => _menu(Offset(0, y + e.localPosition.dy), e.globalPosition),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                lane ? '${r.property!['label'] ?? r.property!['id']}' : '${r.layer['name'] ?? r.layer['kind']}',
+                softWrap: false,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: lane
+                    ? sans(11, c: N.g63)
+                    : sans(12, c: c.selectedIds.contains(r.id) ? N.g100 : N.g82, w: group || c.selectedIds.contains(r.id) ? FontWeight.w600 : FontWeight.w400),
+              ),
+            ),
+          ),
+        ),
+      );
+      out.add(Positioned(
+        left: 0,
+        top: y,
+        width: labelW,
+        height: rowH,
+        child: Row(children: [
+          const SizedBox(width: 6),
+          if (lane) ...[
+            SizedBox(width: 48 + 6 + indent + 18),
+            name,
+            mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 24),
+          ] else ...[
+            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g38 : N.g63, size: 12), () => s.toggleSwitch(i, 'hidden')),
+            mark(r.layer['solo'] == true || quiet ? glyph(HG.solo, N.g38, on: r.layer['solo'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'solo')),
+            mark(r.layer['locked'] == true || quiet ? glyph(HG.lock, N.g38, on: r.layer['locked'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'locked')),
+            SizedBox(width: 6 + indent),
+            mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 14),
+            SizedBox(width: 18, child: Center(child: _Chip(r))),
+            const SizedBox(width: 4),
+            name,
+            if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 14),
+            mark(r.layer['clipToBelow'] == true || quiet ? glyph(HG.crop, N.g38, on: r.layer['clipToBelow'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'clipToBelow'), w: 22),
+          ],
+          const SizedBox(width: 2),
+        ]),
+      ));
     }
     return out;
   }
+}
 
-  /// Where only the ghost plays, as Classic draws it: past the bar's end for a delay, before its start (never before
-  /// frame 0, where a notch says it starts earlier) for an advance.
-  (double, double, double?)? _ghost(Map<String, dynamic> layer, Map<String, dynamic> t) {
-    final d = layer['ghost'];
-    if (d is! num || d == 0) return null;
-    final start = (t['start'] as num? ?? 0).toDouble(), end = start + (t['duration'] as num? ?? 0).toDouble();
-    final zero = _x(0);
-    if (d > 0) return (_x(end), _x(end + d), null);
-    final from = _x(start + d);
-    return (math.max(zero, from), _x(start), from < zero ? zero : null);
-  }
+class _Twirl extends StatelessWidget {
+  const _Twirl({required this.open, required this.strong});
+  final bool open, strong;
+  @override
+  Widget build(BuildContext context) => SizedBox(width: 9, height: 9, child: CustomPaint(painter: _TriPainter(open, strong ? N.g69 : N.g51)));
+}
 
-  List<(double, double, bool, bool)> _spans(List<Map<String, dynamic>> keys, double Function(int) keyX, Set<int> picked) {
-    final ordered = [...keys]..sort((a, b) => (a['frame'] as num).compareTo(b['frame'] as num));
-    return [
-      for (var i = 0; i + 1 < ordered.length; i++)
-        if (keyX((ordered[i]['frame'] as num).round()) + 5 < keyX((ordered[i + 1]['frame'] as num).round()) - 5)
-          (
-            keyX((ordered[i]['frame'] as num).round()) + 5,
-            keyX((ordered[i + 1]['frame'] as num).round()) - 5,
-            EditorSession.map(ordered[i]['interp'])['kind'] == 'Linear',
-            picked.contains((ordered[i]['frame'] as num).round()) && picked.contains((ordered[i + 1]['frame'] as num).round()),
-          ),
-    ];
-  }
-
-  /// The floor's half-heights, one per 2 px from x 596, from the host's per-frame min/max columns.
-  List<double> _wave(List<Map<String, dynamic>> columns) {
-    if (columns.isEmpty) return const [];
-    final byFrame = {
-      for (final col in columns)
-        (col['frame'] as num).toInt():
-            ((col['max'] as num) - (col['min'] as num)).toDouble() / 2,
-    };
-    return [
-      for (var x = 596.0; x < 1488; x += 2)
-        (byFrame[_frameAt(x).round()] ?? 0) * 11,
-    ];
-  }
-
-  String _label(int i) {
-    // the frame under the tick (the half-pixel in _frameAt put a whole second just below itself), read as the top
-    // bar's timecode reads a frame
-    final rate = fps.round().clamp(1, 1000);
-    final f = math.max(0, _frameAt(tlX0 + i * tlUnit).round());
-    final m = f ~/ (rate * 60), sec = (f ~/ rate) % 60, ff = f % rate;
-    return _unit < 1
-        ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}'
-        : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-  }
-
-  Offset _corePosition(Offset p) =>
-      Offset(p.dx + tlX0 - 344, p.dy + rowStart * timelineGeometry.rowHeight);
-
-  Offset _coreLabelPosition(int visibleIndex, Offset p) {
-    final index = rowStart + visibleIndex;
-    // the eye is drawn at a layer row's left edge; the core keeps "seen" as the first of its end columns
-    final layer = index >= 0 && index < tracks.length && tracks[index].property == null;
-    final eye = layer && p.dx < 13;
-    // the core's first end column is drawn empty here (its eye moved left): a press there is on the row, not a switch
-    final emptied = layer && !eye && p.dx + 1 >= labelWidth - 65 && p.dx + 1 < labelWidth - 49;
-    return Offset(
-      eye ? labelWidth - 65 + 8 : (emptied ? labelWidth - 90 : p.dx + 1),
-      p.dy + index * timelineGeometry.rowHeight,
-    );
-  }
-
-  void _foldRow(int visibleIndex) {
-    final index = rowStart + visibleIndex;
-    if (index < 0 || index >= tracks.length) return;
-    final row = tracks[index];
-    if (!row.isGroup) return;
-    setState(() {
-      row.groupOpen
-          ? collapsedGroups.add(row.id)
-          : collapsedGroups.remove(row.id);
-      relane();
-      _shown = _rows();
-    });
-  }
-
-  void _togglePropertyRows(int visibleIndex) {
-    final index = rowStart + visibleIndex;
-    if (index < 0 || index >= tracks.length) return;
-    final row = tracks[index];
-    if (row.property != null) return;
-    setState(() {
-      allProperties.remove(row.id);
-      expanded.contains(row.id)
-          ? expanded.remove(row.id)
-          : expanded.add(row.id);
-      relane();
-      _shown = _rows();
-    });
-  }
-
-  (String, double)? _markerDrag;
-
-  Future<void> _markerContext(
-    String id,
-    Offset at,
-    BuildContext context,
-  ) async {
-    if (!c.supports('deleteMarker')) return;
-    final action = await showHfMenu<String>(
-      context,
-      Rect.fromLTWH(at.dx, at.dy, 180, 0),
-      const [('delete', 'Delete marker')],
-    );
-    if (action == 'delete') c.command('deleteMarker', {'id': id});
+class _TriPainter extends CustomPainter {
+  _TriPainter(this.open, this.color);
+  final bool open;
+  final Color color;
+  @override
+  void paint(Canvas cv, Size s) {
+    final w = s.width, h = s.height;
+    final p = open ? (Path()..moveTo(0, h * .2)..lineTo(w, h * .2)..lineTo(w / 2, h * .85)..close()) : (Path()..moveTo(w * .2, 0)..lineTo(w * .85, h / 2)..lineTo(w * .2, h)..close());
+    cv.drawPath(p, Paint()..color = color);
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([c.frame, scrubFrame]),
-    builder: (context, _) {
-      // A scrub draws the head where it was asked to be at once; the host's reply catches up (TimelineFrame).
-      final frame = scrubFrame.value ?? c.frame.value;
-      final gripping = gesture != null || settlingKeys.isNotEmpty;
-      final theme = EditorTheme.of(context);
-      // grip coordinates are the tracks' own: x from the panel's left edge, y from the first row, scrolled rows above
-      final toFace = Offset(344, tlTop - rowStart * timelineGeometry.rowHeight);
-      final duration = (c.state['durationFrames'] as num? ?? 1).toInt();
-      // A Media tile carried here lands before, after or inside the row under it, at the frame under it (the core's
-      // asset drop, the same as Classic's).
-      Offset core(Offset global, BuildContext box) =>
-          (box.findRenderObject() as RenderBox).globalToLocal(global) +
-          const Offset(344, liveFaceTop) -
-          toFace;
-      return DragTarget<Map<String, dynamic>>(
-        onWillAcceptWithDetails: (d) =>
-            d.data['asset'] != null && c.supports('placeAsset'),
-        onMove: (d) => aimAssetAt(core(d.offset, context)),
-        onLeave: (_) => leaveAsset(),
-        onAcceptWithDetails: acceptAsset,
-        builder: (context, _, __) => Focus(
-          focusNode: focus,
-          onKeyEvent: key,
-          // Trackpad pan, pinch and ruler scrub-zoom with momentum, and the wheel (pointer-anchored zoom with Cmd or
-          // over the ruler): the core's own navigation, the same one Classic's Timeline uses.
-          child: Stack(children: [
-            Positioned.fill(child: navigation(
-            RF(
-              timeline(
-                TimelineModel(
-                  tabs: false,
-                  // Split and Marker ride the seat's own right edge (below), so a narrow window never clips them
-                  headerKeys: false,
-                  rows: gripping ? _rows() : _shown,
-                  marquee:
-                      gesture == 'marquee' && start != null && current != null
-                      ? Rect.fromPoints(start!, current!).shift(toFace)
-                      : null,
-                  dropGuide: rowDropGuide?.shift(toFace),
-                  dropInside: rowDropInside,
-                  marqueeInk: theme.accent,
-                  guideInk: theme.select,
-                  ruler: [for (var i = 0; i <= 10; i++) _label(i)],
-                  playhead: _x(frame),
-                  markers: [
-                    for (final marker in EditorSession.maps(c.state['markers']))
-                      (
-                        _markerDrag?.$1 == '${marker['id']}'
-                            ? _markerDrag!.$2
-                            : _x(marker['frame'] as num),
-                        '${marker['id']}',
-                      ),
-                  ],
-                  // a marker dragged along the ruler lands on the frame under it (Classic TL-031, setMarker{frame})
-                  onMarkerDrag: c.supports('setMarker')
-                      ? (id, dx, done) {
-                          if (!done) {
-                            final from = _markerDrag?.$1 == id
-                                ? _markerDrag!.$2
-                                : _x(
-                                    EditorSession.maps(c.state['markers'])
-                                            .firstWhere((m) => '${m['id']}' == id)['frame']
-                                        as num,
-                                  );
-                            setState(() => _markerDrag = (id, from + dx));
-                            return;
-                          }
-                          final drag = _markerDrag;
-                          setState(() => _markerDrag = null);
-                          if (drag == null) return;
-                          c.command('setMarker', {
-                            'id': id,
-                            'frame': _frameAt(drag.$2)
-                                .round()
-                                .clamp(0, duration > 0 ? duration - 1 : 0),
-                          });
-                        }
-                      : null,
-                  onAddMarker: c.supports('addMarker')
-                      ? () => c.command('addMarker')
-                      : null,
-                  onSplit: c.supports('split')
-                      ? () => c.command('split')
-                      : null,
-                  onMarkerContext: (id, at) => _markerContext(id, at, context),
-                  frameWidth: pixelsPerFrame,
-                  onContext: (at, global) => menuAt(
-                    at - toFace,
-                    (items) => showHfMenu<String>(
-                      context,
-                      Rect.fromLTWH(global.dx, global.dy, 220, 0),
-                      [for (final item in items) (item.value, item.label)],
-                      disabled: {
-                        for (final item in items)
-                          if (!item.enabled) item.value,
-                      },
-                      shortcuts: {
-                        for (final item in items)
-                          if (item.shortcut.isNotEmpty)
-                            item.value: item.shortcut,
-                      },
-                      dividers: {
-                        for (final item in items)
-                          if (item.groupEnd) item.value,
-                      },
-                    ),
-                  ),
-                  onSeek: (x) => requestSeek(
-                    _frameAt(x)
-                        .round()
-                        .clamp(0, duration > 0 ? duration - 1 : 0),
-                  ),
-                  onRow: (i) {
-                    final index = rowStart + i;
-                    if (index >= 0 && index < tracks.length)
-                      chooseLayer(tracks[index].id);
-                  },
-                  onFold: _foldRow,
-                  onProperties: _togglePropertyRows,
-                  onCoreDown: (event, p) => beginAt(event, _corePosition(p)),
-                  onCoreMove: (event, p) => moveAt(event, _corePosition(p)),
-                  onCoreUp: (event, p) => endAt(event, _corePosition(p)),
-                  onCoreCancel: (_, __) => cancel(),
-                  onCoreLabelDown: (event, index, p) =>
-                      beginAt(event, _coreLabelPosition(index, p)),
-                  onCoreLabelMove: (event, index, p) =>
-                      moveAt(event, _coreLabelPosition(index, p)),
-                  onCoreLabelUp: (event, index, p) =>
-                      endAt(event, _coreLabelPosition(index, p)),
-                  onCoreLabelCancel: (_, __, ___) => cancel(),
-                ),
-              ),
-              ox: 344,
-              oy: liveFaceTop,
-            ),
-          )),
-          ]),
-        ),
-      );
-    },
-  );
+  bool shouldRepaint(_TriPainter o) => o.open != open || o.color != color;
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip(this.r);
+  final TrackRow r;
+  @override
+  Widget build(BuildContext context) {
+    final kind = r.layer['kind'];
+    if (kind == 'Camera' || r.isGroup) {
+      return SizedBox.square(dimension: 12, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, N.g69, N.g10)));
+    }
+    return Container(width: 10, height: 10, decoration: BoxDecoration(color: r.layer['hidden'] == true ? N.g33 : _family(r.id).n, borderRadius: BorderRadius.circular(2.5)));
+  }
+}
+
+class _Diamond extends StatelessWidget {
+  const _Diamond({required this.keyed});
+  final bool keyed;
+  @override
+  Widget build(BuildContext context) => SizedBox.square(dimension: 9, child: CustomPaint(painter: _DiamondPainter(keyed ? N.g95 : null, N.g56)));
+}
+
+class _DiamondPainter extends CustomPainter {
+  _DiamondPainter(this.fill, this.edge);
+  final Color? fill, edge;
+  @override
+  void paint(Canvas cv, Size s) => _diamond(cv, s.center(Offset.zero), s.width / 2, fill, edge);
+  @override
+  bool shouldRepaint(_DiamondPainter o) => o.fill != fill || o.edge != edge;
+}
+
+void _diamond(Canvas cv, Offset c, double r, Color? fill, Color? edge) {
+  final p = Path()..moveTo(c.dx, c.dy - r)..lineTo(c.dx + r, c.dy)..lineTo(c.dx, c.dy + r)..lineTo(c.dx - r, c.dy)..close();
+  if (fill != null) cv.drawPath(p, Paint()..color = fill);
+  if (edge != null) cv.drawPath(p, Paint()..style = PaintingStyle.stroke..strokeWidth = 1..color = edge);
+}
+
+/// Everything but the playhead: ruler, row grounds, bars, keys, spans, ghosts, waveforms, markers, marquee, drop guide.
+class _RowsPainter extends CustomPainter {
+  _RowsPainter(this.t, this.accent);
+  final _LiveTimelineState t;
+  final Color accent;
+
+  @override
+  void paint(Canvas cv, Size size) {
+    final s = t.s, c = t.c;
+    const L = _LiveTimelineState.labelW, top = _LiveTimelineState.rulerH, rh = _LiveTimelineState.rowH;
+    final fill = Paint();
+    cv.drawRect(Offset.zero & size, fill..color = N.g10);
+    // the ruler: the finest step whose labels keep ~70 px apart, minor ticks between; frames when close
+    cv.drawRect(Rect.fromLTWH(0, 0, size.width, top), fill..color = N.g07);
+    final rate = s.fps;
+    final steps = {1, 2, 5, 10, rate ~/ 2, rate, 2 * rate, 5 * rate, 10 * rate, 30 * rate, 60 * rate, 300 * rate}.where((f) => f > 0).toList()..sort();
+    final major = steps.firstWhere((f) => f * s.pixelsPerFrame >= 70, orElse: () => steps.last);
+    final minor = steps.lastWhere((f) => f < major && major % f == 0 && f * s.pixelsPerFrame >= 8, orElse: () => major);
+    final last = t.frameAt(size.width).ceil();
+    for (var f = math.max(0, s.startFrame.floor() ~/ minor * minor); f <= last; f += minor) {
+      final x = t.xOf(f);
+      if (x < L) continue;
+      final isMajor = f % major == 0;
+      cv.drawRect(Rect.fromLTWH(x.roundToDouble(), isMajor ? top - 8 : top - 4, 1, isMajor ? 8 : 4), fill..color = isMajor ? N.g44 : N.g26);
+      if (isMajor) {
+        final m = f ~/ (rate * 60), sec = (f ~/ rate) % 60, ff = f % rate;
+        final label = major < rate ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+        final tp = TextPainter(text: TextSpan(text: label, style: mono(10, c: N.g63)), textDirection: TextDirection.ltr)..layout();
+        tp.paint(cv, Offset(x + 4, 4));
+        tp.dispose();
+      }
+    }
+    final picked = s.selectedKeys;
+    final held = s.heldTimings;
+    final moving = s.gesture == TlGesture.keys ? s.initialKeys : s.settlingKeys;
+    final shift = s.gesture == TlGesture.keys ? s.deltaFrames : s.settlingDelta;
+    final waves = {for (final w in EditorSession.maps(c.state['waveforms'])) w['layer']: EditorSession.maps(w['columns'])};
+    for (var i = s.firstRow.floor(); i < s.rows.length; i++) {
+      final y = t.yOf(i);
+      if (y > size.height) break;
+      final r = s.rows[i];
+      final cy = y + rh / 2;
+      final selected = c.selectedIds.contains(r.id) && r.property == null;
+      cv.drawRect(Rect.fromLTWH(0, y, size.width, rh), fill..color = selected ? N.g15 : (t.hover == i ? N.g13 : (r.property != null ? N.g07 : N.g10)));
+      cv.drawRect(Rect.fromLTWH(0, y + rh - 1, size.width, 1), fill..color = N.g13);
+      cv.save();
+      cv.clipRect(Rect.fromLTWH(L, y, size.width - L, rh));
+      double keyX(Map<String, dynamic> k) {
+        final f = (k['frame'] as num).toInt();
+        final carried = moving.any((m) => tlSameKey(m, k) || (m['layer'] == k['layer'] && m['frame'] == k['frame'] && r.property == null));
+        return t.xOf(carried ? f + shift : f);
+      }
+
+      bool isPicked(Map<String, dynamic> k) => picked.any((p) => tlSameKey(p, k));
+      if (r.property == null) {
+        final timing = held[r.id] ?? r.layer;
+        final start = (timing['start'] as num? ?? 0).toDouble(), end = start + (timing['duration'] as num? ?? 0).toDouble();
+        final colour = r.layer['hidden'] == true ? N.g26 : (r.isGroup ? N.g33 : _family(r.id).t);
+        final ghost = r.layer['ghost'];
+        if (ghost is num && ghost != 0) {
+          final a = ghost > 0 ? end : math.max(0.0, start + ghost), b = ghost > 0 ? end + ghost : start;
+          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 6, t.xOf(b), cy + 6), const Radius.circular(3)), fill..color = colour.withValues(alpha: .28));
+        }
+        if (r.layer['kind'] != 'Camera') {
+          final bar = Rect.fromLTRB(t.xOf(start), cy - 8, t.xOf(end), cy + 8);
+          cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(4)), fill..color = colour);
+          if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), const Radius.circular(4)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .7));
+        }
+        final wave = waves[r.id];
+        if (wave != null && wave.isNotEmpty) {
+          final p = Path();
+          for (final col in wave) {
+            final x = t.xOf((col['frame'] as num).toDouble());
+            if (x < L || x > size.width) continue;
+            final h = math.min(rh / 2 - 2, ((col['max'] as num) - (col['min'] as num)).toDouble() / 2 * 9);
+            if (h > .3) p.addRect(Rect.fromLTRB(x, cy - h, x + math.max(1.0, s.pixelsPerFrame * .7), cy + h));
+          }
+          cv.drawPath(p, fill..color = Color.lerp(H.wave, N.g100, .38)!);
+        }
+        if (!r.lanesOpen) {
+          final byFrame = <int, Map<String, dynamic>>{for (final k in r.allKeys) (k['frame'] as num).toInt(): k};
+          for (final k in byFrame.values) {
+            final on = r.allKeys.where((a) => a['frame'] == k['frame']).any(isPicked);
+            final onBar = r.layer['kind'] != 'Camera';
+            _diamond(cv, Offset(keyX(k), cy), on ? 4.6 : 4, on ? accent : (onBar ? N.g100 : N.g86), on ? N.g100 : (onBar ? N.shade40 : null));
+          }
+        }
+      } else {
+        final keys = [...r.keys]..sort((a, b) => (a['frame'] as num).compareTo(b['frame'] as num));
+        for (var n = 0; n + 1 < keys.length; n++) {
+          final a = keyX(tlKeyOf(r, keys[n])) + 5, b = keyX(tlKeyOf(r, keys[n + 1])) - 5;
+          if (b <= a) continue;
+          final chosen = isPicked(tlKeyOf(r, keys[n])) && isPicked(tlKeyOf(r, keys[n + 1]));
+          final linear = EditorSession.map(keys[n]['interp'])['kind'] == 'Linear';
+          final line = Paint()..strokeWidth = chosen ? 1.6 : 1..color = chosen ? accent : N.g51;
+          if (linear) {
+            for (var x = a; x < b; x += 6) {
+              cv.drawLine(Offset(x, cy), Offset(math.min(x + 3, b), cy), line);
+            }
+          } else {
+            cv.drawLine(Offset(a, cy), Offset(b, cy), line);
+          }
+        }
+        for (final k in keys) {
+          final key = tlKeyOf(r, k), on = isPicked(key);
+          _diamond(cv, Offset(keyX(key), cy), on ? 4.6 : 4, on ? accent : N.g86, on ? N.g100 : null);
+        }
+      }
+      cv.restore();
+    }
+    // markers
+    for (final m in EditorSession.maps(c.state['markers'])) {
+      final id = '${m['id']}';
+      final x = t.xOf(s.markerDrag?.$1 == id ? s.markerDrag!.$2 : (m['frame'] as num).toDouble());
+      if (x < L - 6) continue;
+      cv.drawRect(Rect.fromLTWH(x - .5, top, 1, size.height - top), fill..color = H.record.withValues(alpha: .45));
+      cv.drawPath(Path()..moveTo(x - 4, top - 10)..lineTo(x + 4, top - 10)..lineTo(x + 4, top - 4)..lineTo(x, top)..lineTo(x - 4, top - 4)..close(), fill..color = H.record);
+    }
+    cv.drawRect(Rect.fromLTWH(L - 1, 0, 1, size.height), fill..color = N.g15);
+    if (s.marquee case final m?) {
+      final rect = Rect.fromPoints(Offset(t.xOf(m.f0), top + (m.r0 - s.firstRow) * rh), Offset(t.xOf(m.f1), top + (m.r1 - s.firstRow) * rh));
+      cv.drawRect(rect, fill..color = accent.withValues(alpha: .12));
+      cv.drawRect(rect, Paint()..style = PaintingStyle.stroke..color = accent);
+    }
+    if (s.drop case final d?) {
+      final y = top + (d.at - s.firstRow) * rh;
+      final guide = Paint()..color = H.guide..strokeWidth = 2..style = PaintingStyle.stroke;
+      if (d.inside) {
+        cv.drawRect(Rect.fromLTWH(1, y + 1, size.width - 2, rh - 2), guide);
+      } else {
+        cv.drawLine(Offset(d.depth * 12.0 + 60, y), Offset(size.width, y), guide);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RowsPainter o) => true;
+}
+
+/// The playhead alone, repainted by the frame (and a scrub) without rebuilding anything.
+class _HeadPainter extends CustomPainter {
+  _HeadPainter(this.t) : super(repaint: Listenable.merge([t.c.frame, t.s.scrub, t.s]));
+  final _LiveTimelineState t;
+  @override
+  void paint(Canvas cv, Size size) {
+    final x = t.xOf(t.s.scrub.value ?? t.c.frame.value);
+    if (x < _LiveTimelineState.labelW - 1) return;
+    final fill = Paint()..color = H.playhead;
+    cv.drawRect(Rect.fromLTWH(x - .5, 0, 1, size.height), fill);
+    cv.drawPath(Path()..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - 5, 2, 10, 11), const Radius.circular(2)))..moveTo(x - 5, 12)..lineTo(x, 17)..lineTo(x + 5, 12), fill);
+  }
+
+  @override
+  bool shouldRepaint(_HeadPainter o) => false;
 }
