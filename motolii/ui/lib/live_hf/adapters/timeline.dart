@@ -47,7 +47,10 @@ class LiveTimeline extends StatefulWidget {
 
 class _LiveTimelineState extends State<LiveTimeline> {
   // the skin's geometry: its own, told to nobody
-  static const rowH = 22.0, rulerH = 24.0, labelW = 236.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
+  static const rowH = 22.0, rulerH = 24.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
+
+  /// The name column: a share of the seat, so a narrow window keeps its time.
+  double labelW = 236;
 
   EditorSession get c => widget.c;
   late final TimelineSession s = TimelineSession.of(c);
@@ -186,6 +189,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
   // ---- build -------------------------------------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        labelW = (box.maxWidth * .26).clamp(168.0, 236.0);
         final frames = math.max(1.0, (box.maxWidth - labelW) / s.pixelsPerFrame), rows = math.max(1.0, (box.maxHeight - rulerH) / rowH);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) s.viewport(frames: frames, rows: rows);
@@ -248,13 +252,13 @@ class _LiveTimelineState extends State<LiveTimeline> {
                               bottom: 0,
                               child: Listener(
                                 behavior: HitTestBehavior.opaque,
-                                onPointerDown: (e) => _press(e, _hit(e.localPosition + const Offset(labelW, rulerH)), e.localPosition + const Offset(labelW, rulerH)),
-                                onPointerMove: (e) => _move(e.localPosition + const Offset(labelW, rulerH)),
+                                onPointerDown: (e) => _press(e, _hit(e.localPosition + Offset(labelW, rulerH)), e.localPosition + Offset(labelW, rulerH)),
+                                onPointerMove: (e) => _move(e.localPosition + Offset(labelW, rulerH)),
                                 onPointerUp: _up,
                                 onPointerCancel: (_) => _cancel(),
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onSecondaryTapDown: (e) => _menu(e.localPosition + const Offset(labelW, rulerH), e.globalPosition),
+                                  onSecondaryTapDown: (e) => _menu(e.localPosition + Offset(labelW, rulerH), e.globalPosition),
                                   child: const SizedBox.expand(),
                                 ),
                               ),
@@ -457,7 +461,8 @@ class _RowsPainter extends CustomPainter {
   @override
   void paint(Canvas cv, Size size) {
     final s = t.s, c = t.c;
-    const L = _LiveTimelineState.labelW, top = _LiveTimelineState.rulerH, rh = _LiveTimelineState.rowH;
+    final L = t.labelW;
+    const top = _LiveTimelineState.rulerH, rh = _LiveTimelineState.rowH;
     final fill = Paint();
     cv.drawRect(Offset.zero & size, fill..color = N.g10);
     // the ruler: the finest step whose labels keep ~70 px apart, minor ticks between; frames when close
@@ -505,16 +510,17 @@ class _RowsPainter extends CustomPainter {
       if (r.property == null) {
         final timing = held[r.id] ?? r.layer;
         final start = (timing['start'] as num? ?? 0).toDouble(), end = start + (timing['duration'] as num? ?? 0).toDouble();
-        final colour = r.layer['hidden'] == true ? N.g26 : (r.isGroup ? N.g33 : _family(r.id).t);
+        // quiet until chosen: a wall of full-colour bars out-shouts the work; the chosen layer takes its full colour
+        final tone = r.isGroup ? N.g38 : _family(r.id).t;
+        final colour = r.layer['hidden'] == true ? N.g20 : (selected ? tone : Color.lerp(N.g10, tone, t.hover == i ? .62 : .5)!);
         final ghost = r.layer['ghost'];
         if (ghost is num && ghost != 0) {
           final a = ghost > 0 ? end : math.max(0.0, start + ghost), b = ghost > 0 ? end + ghost : start;
           cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 6, t.xOf(b), cy + 6), const Radius.circular(3)), fill..color = colour.withValues(alpha: .28));
         }
         if (r.layer['kind'] != 'Camera') {
-          final bar = Rect.fromLTRB(t.xOf(start), cy - 8, t.xOf(end), cy + 8);
-          cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(4)), fill..color = colour);
-          if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), const Radius.circular(4)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .7));
+          final bar = Rect.fromLTRB(t.xOf(start), cy - 6, t.xOf(end), cy + 6);
+          cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(3)), fill..color = colour);
         }
         final wave = waves[r.id];
         if (wave != null && wave.isNotEmpty) {
@@ -532,7 +538,7 @@ class _RowsPainter extends CustomPainter {
           for (final k in byFrame.values) {
             final on = r.allKeys.where((a) => a['frame'] == k['frame']).any(isPicked);
             final onBar = r.layer['kind'] != 'Camera';
-            _diamond(cv, Offset(keyX(k), cy), on ? 4.6 : 4, on ? accent : (onBar ? N.g100 : N.g86), on ? N.g100 : (onBar ? N.shade40 : null));
+            _diamond(cv, Offset(keyX(k), cy), on ? 4.6 : 3.6, on ? accent : (onBar && selected ? N.g10 : N.g86), on ? N.g100 : null);
           }
         }
       } else {
@@ -594,7 +600,7 @@ class _HeadPainter extends CustomPainter {
   @override
   void paint(Canvas cv, Size size) {
     final x = t.xOf(t.s.scrub.value ?? t.c.frame.value);
-    if (x < _LiveTimelineState.labelW - 1) return;
+    if (x < t.labelW - 1) return;
     final fill = Paint()..color = H.playhead;
     cv.drawRect(Rect.fromLTWH(x - .5, 0, 1, size.height), fill);
     cv.drawPath(Path()..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - 5, 2, 10, 11), const Radius.circular(2)))..moveTo(x - 5, 12)..lineTo(x, 17)..lineTo(x + 5, 12), fill);
