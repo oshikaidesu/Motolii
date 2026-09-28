@@ -107,4 +107,37 @@ void main() {
     expect(host.saved, hasLength(1), reason: 'the bin clears the saved presets, the copied curve stays');
     host.dispose();
   });
+  test('the desk says what it edits, follows the playhead, and keeps a workspace curve without applying it', () async {
+    final c = EditorSession()
+      ..document.value = {
+        'capabilities': ['ease'],
+        'layers': [
+          {'id': 3, 'name': 'Title'},
+        ],
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          {'kind': 'Bezier', 'x1': .42, 'y1': 0, 'x2': .58, 'y2': 1, 'samples': [[0, 0], [1, 1]]},
+        ],
+        'easeIntervals': [
+          {'layer': 3, 'property': 'opacity', 'frame': 0, 'end': 10, 'shape': {'kind': 'Linear'}},
+          {'layer': 3, 'property': 'opacity', 'frame': 10, 'end': 20, 'shape': {'kind': 'Bezier'}},
+        ],
+      };
+    final host = LiveEaseHost(c);
+    expect(host.target, 'Title · opacity · 0–10 · 2 intervals · Mixed');
+    c.frame.value = 15;
+    expect(host.current, 1);
+    expect(host.playhead(1), closeTo(.5, 1e-9));
+
+    c.document.value = {...c.state, 'easeIntervals': []};
+    await Future<void>.delayed(Duration.zero);
+    expect(host.target, 'No interval · Workspace');
+    expect(host.caption, 'Workspace');
+    final seg = host.intervals.single..setValues([.3, 0, .7, 1]);
+    sent.clear();
+    await host.apply(0, seg);
+    expect(sent.where((m) => m['op'] == 'ease'), isEmpty, reason: 'the workspace curve is kept, not applied');
+    expect(c.deskWork.value['ease'], {'kind': 'Bezier', 'x1': .3, 'y1': 0, 'x2': .7, 'y2': 1});
+    host.dispose();
+  });
 }

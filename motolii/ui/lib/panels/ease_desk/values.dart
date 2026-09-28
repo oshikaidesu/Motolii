@@ -62,18 +62,7 @@ class _EaseIconState extends State<_EaseIcon> {
   );
 }
 
-String _curveMeaning(String kind) => switch (kind) {
-  'Hold' => 'Wait, then change in one jump.',
-  'Linear' => 'Move at a constant pace.',
-  'Bezier' => 'Shape the start and finish.',
-  'Bounce' => 'Reach the end, then rebound.',
-  'Elastic' => 'Pass the end and spring back.',
-  'Cyclic' => 'Repeat a wave as time advances.',
-  'Random' => 'Vary the pace irregularly.',
-  'Steps' => 'Move through distinct levels.',
-  'ElasticSteps' => 'Spring into each new level.',
-  _ => 'Preview the change from start to finish.',
-};
+String _curveMeaning(String kind) => curveMeaning(kind);
 
 double easeValueAt(Map<String, dynamic> shape, double x) {
   if (shape['kind'] == 'Hold') return x < 1 ? 0 : 1;

@@ -10,6 +10,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   LiveEaseHost(this.c) {
     c.slice('liveEase', _watched).addListener(_read);
     c.deskWork.addListener(_read);
+    c.frame.addListener(_frame);
     _read();
   }
   static const _watched = ['easeKinds', 'easeIntervals', 'selectedIds', 'selectedKeys', 'layers'];
@@ -62,6 +63,53 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
 
   @override
   int get sequence => _layers.length;
+
+  // The playhead moves the graph's line and the interval shown (Classic DK-012/015): heard only when either changes.
+  (int?, double?) _head = (null, null);
+  void _frame() {
+    final next = (current, playhead(current));
+    if (next != _head) {
+      _head = next;
+      notifyListeners();
+    }
+  }
+
+  /// The interval under the playhead, else the last one before it (Classic DK-012).
+  @override
+  int? get current {
+    if (_layers.isNotEmpty || _rows.isEmpty) return null;
+    final f = c.frame.value;
+    final under = _rows.indexWhere((r) => (r['frame'] as num) <= f && f < (r['end'] as num));
+    if (under >= 0) return under;
+    final before = [for (final (i, r) in _rows.indexed) if ((r['frame'] as num) <= f) i];
+    return before.isEmpty ? 0 : before.last;
+  }
+
+  @override
+  double? playhead(int? interval) {
+    if (interval == null || interval >= _rows.length) return null;
+    final r = _rows[interval];
+    final from = (r['frame'] as num).toDouble(), to = (r['end'] as num).toDouble();
+    if (to <= from) return null;
+    final t = (c.frame.value - from) / (to - from);
+    return t < 0 || t > 1 ? null : t;
+  }
+
+  /// What the desk edits, in Classic's words (DK-010/027/032).
+  @override
+  String get target {
+    if (_layers.isNotEmpty) return 'Sequence · ${_layers.length} layers · ghosts${_canSequence ? '' : ' · Read only'}';
+    if (_rows.isEmpty) return 'No interval · Workspace';
+    final r = _rows.first;
+    final name = c.layers.where((l) => l['id'] == r['layer']).firstOrNull?['name'] ?? r['layer'];
+    final kinds = {for (final row in _rows) EditorSession.map(row['shape'])['kind']};
+    final locked = _rows.any((row) => c.layers.where((l) => l['id'] == row['layer']).firstOrNull?['locked'] == true);
+    return '$name · ${r['property']} · ${r['frame']}–${r['end']}'
+        '${_rows.length > 1 ? ' · ${_rows.length} intervals' : ''}${kinds.length > 1 ? ' · Mixed' : ''}${locked || !c.supports('ease') ? ' · Read only' : ''}';
+  }
+
+  @override
+  String? get caption => _layers.isNotEmpty ? '${_layers.length} layers' : (_rows.isEmpty ? 'Workspace' : null);
 
   Seg _seg(Map<String, dynamic> shape) {
     final i = kinds.indexWhere((k) => k.name == shape['kind']);
@@ -143,7 +191,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   List<Preset> get kinds => _kinds.isEmpty ? const [Preset('Linear', [0, 0, 1, 1], null)] : _kinds;
 
   @override
-  List<Seg> get intervals => _layers.isNotEmpty
+  List<Seg> get intervals => _layers.isNotEmpty || _rows.isEmpty
       ? [
           () {
             final shape = _stored;
@@ -166,6 +214,11 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
 
   @override
   Future<void> apply(int? interval, Seg curve) async {
+    if (_layers.isEmpty && _rows.isEmpty) {
+      // no interval and no sequence: the workspace curve, kept, not applied (Classic DK-030)
+      await c.storeDesk('ease', _shape(curve));
+      return;
+    }
     if (_layers.isNotEmpty) {
       // One step on release (one undo); the preview in flight lands first.
       _pending = null;
@@ -199,6 +252,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   void dispose() {
     c.slice('liveEase', _watched).removeListener(_read);
     c.deskWork.removeListener(_read);
+    c.frame.removeListener(_frame);
     super.dispose();
   }
 }

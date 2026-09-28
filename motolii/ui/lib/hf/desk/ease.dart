@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
+import '../../foundation/ease_meaning.dart';
 
 typedef Shape = double Function(double t);
 
@@ -82,6 +83,16 @@ abstract class EaseHost implements Listenable {
   /// New keys take this curve (and Animate, when on, keys with it from now).
   void useForNewKeys(Seg curve);
 
+  /// What the desk edits, in words (a layer's property and frames, a sequence, or the workspace curve).
+  String get target;
+
+  /// The graph's corner label when it is not an interval's frames (a sequence's layers, "Workspace").
+  String? get caption;
+
+  /// The interval the playhead is in or last passed, and where in [interval] (0–1) it stands; null when outside.
+  int? get current;
+  double? playhead(int? interval);
+
   /// How many layers the curve spreads delays over (the Ease desk's ghost mode: several layers picked, no keys);
   /// 0 when it shapes key intervals.
   int get sequence;
@@ -122,6 +133,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     setState(() {
       _held = h.intervals;
       if (sel >= _held.length) sel = _held.isEmpty ? 0 : _held.length - 1;
+      // the interval shown is the one the playhead is in (or last passed), as Classic's desk follows it
+      final now = h.current;
+      if (now != null && sel >= 0 && now < _held.length) sel = now;
     });
   }
 
@@ -141,6 +155,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     widget.host?.removeListener(_absorb);
     _play.dispose();
     _presetFocus.dispose();
+    _plotKeys.dispose();
     super.dispose();
   }
 
@@ -152,7 +167,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) => DeskShell(
         kind: DeskKind.ease,
         title: 'Ease',
-        subtitle: 'KEYFRAMES · MOTION',
+        subtitle: widget.host?.target ?? 'KEYFRAMES · MOTION',
         full: (c, s) => _body(s.height, s.width),
         strip: (c, s) => _body(s.height, s.width),
         tall: (c, s) => _body(s.height, s.width),
@@ -395,8 +410,12 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         final painter = _PlotP(
           shown, mixed && peek == null ? segs.map((e) => e.shape).toList() : const [], cur.x1, cur.y1, cur.x2, cur.y2,
           peek == null && !mixed && cur.bez, labels, peek == null ? presets[cur.p].name : '${presets[peek!].name}  ·  peek', mixed && peek == null, startFrame,
-          mixed ? segs.fold<int>(0, (a, b) => a + b.frames) : cur.frames, widget.host == null && ghost, _play.isAnimating || _play.value > 0 ? _play.value : .5,
+          mixed ? segs.fold<int>(0, (a, b) => a + b.frames) : cur.frames, widget.host == null && ghost,
+          // the preview's motion while it plays; otherwise, hosted, where the document playhead stands in the interval
+          _play.isAnimating || _play.value > 0 ? _play.value : (widget.host?.playhead(mixed ? null : sel) ?? .5),
           layers: widget.host?.sequence ?? 0,
+          caption: widget.host?.caption,
+          meaning: widget.host == null || peek != null ? null : curveMeaning(presets[cur.p].name),
         );
         void pick(Offset p) {
           if (mixed || !cur.bez || peek != null) return;
@@ -407,7 +426,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             final dd = (h[i] - p).distance;
             if (dd < bd) { bd = dd; best = i; }
           }
-          if (best >= 0) setState(() => drag = best);
+          if (best >= 0) {
+            _before = (cur.p, List.of(cur.values));
+            _plotKeys.requestFocus();
+            setState(() => drag = best);
+          }
         }
         void move(Offset p) {
           if (drag == null) return;
@@ -421,8 +444,21 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           });
           widget.host?.preview(mixed ? null : sel, cur);
         }
-        // Raw pointers: a handle drag must not lose to the panel's own vertical scroll.
-        return Listener(
+        // Raw pointers: a handle drag must not lose to the panel's own vertical scroll. Esc puts the curve back.
+        return Focus(
+          focusNode: _plotKeys,
+          onKeyEvent: (_, e) {
+            if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape || drag == null) return KeyEventResult.ignored;
+            final b = _before;
+            setState(() {
+              if (b != null) { cur.setValues(b.$2); cur.p = b.$1; }
+              drag = null;
+              _moved = false;
+            });
+            widget.host?.cancel();
+            return KeyEventResult.handled;
+          },
+          child: Listener(
           key: const ValueKey('ease-plot'),
           onPointerDown: (e) => pick(e.localPosition),
           onPointerMove: (e) => move(e.localPosition),
@@ -438,8 +474,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             setState(() => drag = null);
           },
           child: CustomPaint(size: size, painter: painter),
-        );
+        ));
       });
+
+  final _plotKeys = FocusNode(debugLabel: 'ease plot');
+  (int, List<double>)? _before;
 }
 
 class _PlayP extends CustomPainter {
@@ -481,7 +520,10 @@ class _Icon extends CustomPainter {
 }
 
 class _PlotP extends CustomPainter {
-  _PlotP(this.f, this.all, this.x1, this.y1, this.x2, this.y2, this.editable, this.labels, this.name, this.mixed, this.f0, this.frames, this.ghost, this.head, {this.layers = 0});
+  _PlotP(this.f, this.all, this.x1, this.y1, this.x2, this.y2, this.editable, this.labels, this.name, this.mixed, this.f0, this.frames, this.ghost, this.head, {this.layers = 0, this.caption, this.meaning});
+
+  /// The corner label when it is not the frames (a sequence's layers, the workspace); the curve's one-line meaning.
+  final String? caption, meaning;
 
   /// Layers the curve spreads delays over: a mark where each one's delay falls (i / (n - 1) through the curve).
   final int layers;
@@ -573,7 +615,8 @@ class _PlotP extends CustomPainter {
     if (!mixed) { c.drawCircle(pt, 6, Paint()..color = kMint); c.drawCircle(pt, 6, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2); }
     if (labels) {
       _text(c, mixed ? 'Mixed' : name, Offset(r.left, 9), sans(15, c: kInk, w: FontWeight.w600));
-      _text(c, layers > 1 ? '$layers layers' : (mixed ? '3 intervals · $frames f' : '$frames f'), Offset(s.width - 14, 12), sans(11.5, c: const Color(0xFFB4B6BB)), right: true);
+      _text(c, caption ?? (layers > 1 ? '$layers layers' : (mixed ? '3 intervals · $frames f' : '$frames f')), Offset(s.width - 14, 12), sans(11.5, c: const Color(0xFFB4B6BB)), right: true);
+      if (meaning != null) _text(c, meaning!, Offset(r.left, 28), sans(10.5, c: const Color(0xFFB4B6BB)));
       _text(c, 'f$f0', Offset(r.left, s.height - 17), mono(9.5));
       _text(c, 'f${f0 + frames}', Offset(r.right, s.height - 17), mono(9.5), right: true);
     }
