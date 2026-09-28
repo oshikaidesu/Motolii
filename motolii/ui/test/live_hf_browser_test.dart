@@ -248,6 +248,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.last, {'op': 'removeAsset', 'id': 'asset-a'});
 
+      // Delete on a picked file removes it from the library; it never deletes the selected layer
+      sent.clear();
+      await tester.tap(asset);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pumpAndSettle();
+      expect(sent.map((m) => m['op']), isNot(contains('delete')));
+      expect(sent.last, {'op': 'removeAsset', 'id': 'asset-a'});
+
       await tester.pumpWidget(const SizedBox());
       c.dispose();
     },

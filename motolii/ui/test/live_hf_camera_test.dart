@@ -41,6 +41,7 @@ void main() {
     expect(s.distance, 2);
     expect(s.animated, contains('camera.orbit'));
     expect(s.targetLayer, isNull);
+    expect(s.frozen, isFalse);
 
     s.set('camera.target', 1);
     for (var i = 0; i < 5; i++) {
@@ -49,5 +50,14 @@ void main() {
     expect(sent.single, {'op': 'setProperty', 'layer': 9, 'property': 'camera.target', 'value': 2});
     expect(s.targetLocked, isTrue);
     s.dispose();
+  });
+  test('a locked camera refuses changes', () {
+    final c = EditorSession()
+      ..document.value = {
+        'layers': [
+          {'id': 9, 'name': 'Camera', 'kind': 'Camera', 'locked': true, 'properties': [{'id': 'camera.distance', 'value': 2}]},
+        ],
+      };
+    expect(SessionCameraStore(c, 9).frozen, isTrue);
   });
 }

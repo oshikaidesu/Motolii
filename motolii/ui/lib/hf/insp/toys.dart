@@ -167,13 +167,17 @@ class _ValueToyState extends State<ValueToy> {
     ctl.text = widget.slot.whole ? '${shown.round()}' : (shown == shown.roundToDouble() ? shown.toStringAsFixed(1) : '$shown');
     ctl.selection = TextSelection(baseOffset: 0, extentOffset: ctl.text.length);
     _cancel = false;
+    _subject = widget.slot.store.subject;
     setState(() => editing = true);
   }
+
+  Object? _subject;
 
   void _submit(String t) {
     if (_cancel) { _cancel = false; return; }
     final v = double.tryParse(t.trim());
     if (mounted) setState(() => editing = false);
+    if (widget.slot.store.subject != _subject) return; // typed for a layer that is no longer the one shown
     if (v != null && !frozen) {
       widget.slot.typed(v / widget.slot.displayScale);
     }

@@ -92,6 +92,9 @@ class SessionTransformStore extends TransformStore {
 
   bool _gesture = false;
 
+  @override
+  Object? get subject => activeId;
+
   /// The document changed under the Instrument (another edit, undo, a new selection). While a gesture is running the
   /// Instrument owns its values, and the last commit reads the document again.
   void absorb() {

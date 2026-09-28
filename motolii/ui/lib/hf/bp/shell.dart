@@ -1,5 +1,6 @@
 // Panel chrome shared by the four panels: header row, class column placement, and the three
 // morphologies (wide / narrow / strip). Bodies are the panels' own; this only places them.
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
 import 'classify.dart';
@@ -190,6 +191,11 @@ class PanelShell extends StatelessWidget {
       // The panel's keyboard, when a host gives one; a key typed into a field stays that field's.
       return Focus(
         onKeyEvent: (n, e) {
+          // Escape clears a search before it drops the pick (Classic's order); other keys are the seat's first.
+          if (e.logicalKey == LogicalKeyboardKey.escape) {
+            final r = search.onKey(n, e);
+            return r == KeyEventResult.ignored ? seat.key(n, e) : r;
+          }
           final r = seat.key(n, e);
           return r == KeyEventResult.ignored ? search.onKey(n, e) : r;
         },

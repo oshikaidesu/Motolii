@@ -28,6 +28,8 @@ class SessionCameraStore extends CameraStore {
 
   void absorb() {
     if (_gesture) return;
+    // a locked camera shows its values and refuses changes, as every locked layer does
+    frozen = c.layers.where((l) => l['id'] == layer).firstOrNull?['locked'] == true;
     final rows = _rows;
     animated.clear();
     keyedNow.clear();

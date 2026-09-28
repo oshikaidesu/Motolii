@@ -33,7 +33,8 @@ class SessionEffectStore extends ParamStore {
               if (r['default'] == null) ...const {},
             },
       ]);
-    frozen = layer?['locked'] == true || !c.supports('previewProperties') || !c.supports('commitPreview');
+    // a frozen layer's effects are baked: shown, not editable (Classic IN-141)
+    frozen = layer?['locked'] == true || layer?['frozen'] == true || !c.supports('previewProperties') || !c.supports('commitPreview');
   }
 
   /// The document changed under the sheet (undo, another edit). A running gesture keeps its own values.

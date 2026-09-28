@@ -232,10 +232,13 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
     return carry(
       GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => select(item),
+        onTap: () {
+          final k = HardwareKeyboard.instance;
+          select(item, range: k.isShiftPressed, toggle: k.isMetaPressed || k.isControlPressed);
+        },
         onDoubleTap: () => _apply(item),
         onSecondaryTapDown: (event) {
-          select(item);
+          if (!selected.contains('${item['id']}')) select(item);
           more(context, event.globalPosition);
         },
         child: Stack(
@@ -366,6 +369,50 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
       if (item != null) _apply(item);
       return KeyEventResult.handled;
     }
+    final k = event.logicalKey;
+    final cmd = HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed;
+    // Delete removes the picked files from the library (the ones nothing uses); it never reaches the layers.
+    if ((k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) && selected.isNotEmpty) {
+      for (final id in selected.toList()) {
+        final item = itemsById[id];
+        if (item == null) continue;
+        final remove = mediaActions(c, item).where((a) => a.value == 'remove').firstOrNull;
+        if (remove != null && remove.enabled) mediaAct(c, 'remove', item, id: item['assetId']);
+      }
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.escape && selected.isNotEmpty) {
+      selected.clear();
+      notifyListeners();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.keyA && cmd) {
+      selected
+        ..clear()
+        ..addAll([for (final t in visible) t.id]);
+      notifyListeners();
+      return KeyEventResult.handled;
+    }
+    final at = selected.isEmpty ? -1 : [for (final t in visible) t.id].indexOf(selected.last);
+    final step = switch (k) {
+      LogicalKeyboardKey.arrowLeft => -1,
+      LogicalKeyboardKey.arrowRight => 1,
+      LogicalKeyboardKey.arrowUp => -columns,
+      LogicalKeyboardKey.arrowDown => columns,
+      _ => null,
+    };
+    if (step != null && visible.isNotEmpty) {
+      _pickAt(at < 0 ? 0 : at + step);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.home && visible.isNotEmpty) {
+      _pickAt(0);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.end && visible.isNotEmpty) {
+      _pickAt(visible.length - 1);
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
@@ -416,10 +463,34 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
   UserViews? get user => userState.views;
   @override
   Listenable get changes => this;
-  void select(Map<String, dynamic> item) {
+  /// Classic's picking: a click picks one, Shift picks the run from the last single pick, Cmd adds or drops one.
+  String? _anchor;
+  void select(Map<String, dynamic> item, {bool range = false, bool toggle = false}) {
+    final id = '${item['id']}';
+    final order = [for (final t in visible) t.id];
+    if (toggle) {
+      selected.contains(id) ? selected.remove(id) : selected.add(id);
+    } else if (range && _anchor != null && order.contains(_anchor) && order.contains(id)) {
+      final a = order.indexOf(_anchor!), b = order.indexOf(id);
+      selected
+        ..clear()
+        ..addAll(order.sublist(a < b ? a : b, (a < b ? b : a) + 1));
+    } else {
+      selected
+        ..clear()
+        ..add(id);
+      _anchor = id;
+    }
+    notifyListeners();
+  }
+
+  void _pickAt(int index) {
+    if (visible.isEmpty) return;
+    final id = visible[index.clamp(0, visible.length - 1)].id;
     selected
       ..clear()
-      ..add('${item['id']}');
+      ..add(id);
+    _anchor = id;
     notifyListeners();
   }
 

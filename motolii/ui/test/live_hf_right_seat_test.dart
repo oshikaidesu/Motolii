@@ -122,4 +122,22 @@ void main() {
     await t.pumpAndSettle();
     expect(sent.where((m) => m['op'] == 'moveEffect').single, {'op': 'moveEffect', 'layer': 1, 'id': 'e1', 'to': 1});
   });
+  testWidgets('a frozen layer shows its effects baked: no toggle, no menu, the reason said', (t) async {
+    await seat(t, {
+      'id': 1,
+      'name': 'Box',
+      'kind': 'Shape',
+      'frozen': true,
+      'effects': [
+        {'id': 'e1', 'name': 'Blur', 'enabled': true, 'params': []},
+      ],
+    });
+    expect(find.byKey(const ValueKey('effect-frozen:e1')), findsOneWidget);
+    await t.ensureVisible(find.byKey(const ValueKey('effect-toggle:e1')));
+    await t.tap(find.byKey(const ValueKey('effect-toggle:e1')));
+    await t.tap(find.byKey(const ValueKey('effect-menu:e1')));
+    await t.pumpAndSettle();
+    expect(sent.where((m) => m['op'] == 'enableEffect'), isEmpty);
+    expect(find.text('Remove effect'), findsNothing);
+  });
 }

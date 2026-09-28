@@ -6,7 +6,6 @@ import '../../hf/desk/common.dart' show kAccent;
 import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';
 import '../../session/effect_actions.dart';
-import '../../session/read_model.dart';
 import 'effect.dart';
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for
@@ -60,6 +59,9 @@ class NewEffectCard extends StatelessWidget {
           child: ReorderableDragStartListener(key: ValueKey('effect-grip:${effect['id']}'), index: index, child: header),
         );
 
+  /// A frozen layer's effects are baked, a locked layer's untouchable: shown, not changed (Classic IN-141).
+  bool get _held => layer['frozen'] == true || layer['locked'] == true;
+
   @override
   Widget build(BuildContext context) {
     final on = effect['enabled'] != false;
@@ -79,25 +81,31 @@ class NewEffectCard extends StatelessWidget {
             GestureDetector(
               key: ValueKey('effect-toggle:${effect['id']}'),
               behavior: HitTestBehavior.opaque,
-              onTap: c.supports('enableEffect') ? () => c.command('enableEffect', {'layer': layer['id'], 'id': effect['id'], 'enabled': !on}) : null,
+              onTap: c.supports('enableEffect') && !_held ? () => c.command('enableEffect', {'layer': layer['id'], 'id': effect['id'], 'enabled': !on}) : null,
               child: Padding(padding: const EdgeInsets.all(4), child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : kMuted, kRaised)))),
             ),
             Builder(builder: (context) => GestureDetector(
               key: ValueKey('effect-menu:${effect['id']}'),
               behavior: HitTestBehavior.opaque,
-              onTap: () {
-                final box = context.findRenderObject() as RenderBox?;
-                _menu(context, box == null ? Offset.zero : box.localToGlobal(box.size.bottomLeft(Offset.zero)));
-              },
+              onTap: _held
+                  ? null
+                  : () {
+                      final box = context.findRenderObject() as RenderBox?;
+                      _menu(context, box == null ? Offset.zero : box.localToGlobal(box.size.bottomLeft(Offset.zero)));
+                    },
               child: Padding(padding: const EdgeInsets.all(4), child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(HG.kebab, kMuted, kRaised)))),
             )),
           ]),
         )),
+        if (layer['frozen'] == true)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Text('Frozen — effects are baked. Unfreeze to edit.', key: ValueKey('effect-frozen:${effect['id']}'), style: sans(10.5, c: kMuted)),
+          ),
+        // a placement effect's parameters are its params like any other (its grid view is not drawn here yet)
         Padding(
           padding: const EdgeInsets.all(8),
-          child: panelMap(effect['layout']).isEmpty
-              ? NewEffectParams(key: ValueKey('new-effect-params:${layer['id']}:${effect['id']}'), controller: c, layerId: layer['id'] as int, effectId: effect['id'] as Object)
-              : Text('This effect lays out its copies on a grid; that view is still the Inspector\'s own.', style: sans(10, c: kMuted)),
+          child: NewEffectParams(key: ValueKey('new-effect-params:${layer['id']}:${effect['id']}'), controller: c, layerId: layer['id'] as int, effectId: effect['id'] as Object),
         ),
       ]),
     );

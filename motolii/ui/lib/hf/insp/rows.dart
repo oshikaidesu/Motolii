@@ -55,6 +55,10 @@ class ParamStore extends ChangeNotifier {
   bool mixed(String id, int? axis) => false; // does another selected target disagree on this number?
   final _start = <String, Object?>{};
 
+  /// What the rows are about (a store that follows the selection names the layer): a number typed for one subject is
+  /// dropped, not written, when the subject changed before the typing ended.
+  Object? get subject => null;
+
   /// A store over a document can key a value at the current frame; the in-memory store cannot.
   bool get keyable => false;
   void toggleKey(String id) {}
