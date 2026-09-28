@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 use std::process::{Child, ChildStdin, Stdio};
+use std::thread::JoinHandle;
 
 use crate::doc::core::{Fps, FrameDesc, PixelFormat};
 
@@ -10,6 +11,9 @@ pub struct Encoder {
     child: Child,
     stdin: Option<ChildStdin>,
     frame_size: usize,
+    /// ffmpeg's stderr, read from the moment it starts: a pipe nobody drains can fill and stall ffmpeg, and with
+    /// it our writes. Joined where the text is needed (a broken pipe, `finish`).
+    stderr: Option<JoinHandle<String>>,
 }
 
 impl Encoder {
@@ -89,10 +93,15 @@ impl Encoder {
             _ => MediaError::Io(e),
         })?;
         let stdin = child.stdin.take();
+        let stderr = child
+            .stderr
+            .take()
+            .map(|mut pipe| std::thread::spawn(move || read_child_stderr(&mut pipe).unwrap_or_default()));
         Ok(Self {
             child,
             stdin,
             frame_size: desc.data_size(),
+            stderr,
         })
     }
 
@@ -112,10 +121,8 @@ impl Encoder {
             Ok(()) => Ok(()),
             // ffmpeg が落ちると stdin が EPIPE で返る。本当の理由(No space left 等)は stderr に在る。
             Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
-                let mut err = String::new();
-                if let Some(stderr) = self.child.stderr.as_mut() {
-                    err = read_child_stderr(stderr).unwrap_or_default();
-                }
+                let _ = self.child.wait();
+                let err = self.stderr.take().and_then(|reader| reader.join().ok()).unwrap_or_default();
                 if err.trim().is_empty() {
                     Err(MediaError::Io(error))
                 } else {
@@ -128,11 +135,8 @@ impl Encoder {
 
     pub fn finish(mut self) -> Result<()> {
         drop(self.stdin.take());
-        let mut err = String::new();
-        if let Some(stderr) = self.child.stderr.as_mut() {
-            err = read_child_stderr(stderr)?;
-        }
         let status = self.child.wait()?;
+        let err = self.stderr.take().and_then(|reader| reader.join().ok()).unwrap_or_default();
         if !status.success() {
             return Err(MediaError::Ffmpeg(err));
         }
@@ -144,5 +148,70 @@ impl Drop for Encoder {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(unix)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::doc::core::ColorSpace;
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn fake_tool(dir: &Path, name: &str, script: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn desc() -> FrameDesc {
+        FrameDesc::packed(256, 256, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false)
+    }
+
+    /// An encoder that talks a lot on stderr before it reads a frame: if nobody drains stderr, its pipe fills,
+    /// the encoder blocks on it and never reads stdin, and our frame write never returns.
+    #[test]
+    fn a_chatty_encoder_does_not_stall_the_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        let tool = fake_tool(dir.path(), "chatty", "head -c 1048576 /dev/zero | tr '\\0' e >&2\ncat > /dev/null\nexit 0");
+        let out = dir.path().join("out.mp4");
+        let (done, result) = mpsc::channel();
+        std::thread::spawn(move || {
+            let run = || -> Result<()> {
+                let mut encoder = Encoder::open_with_command(&tool, &out, &desc(), Fps::try_new(30, 1).unwrap(), false)?;
+                for _ in 0..8 {
+                    encoder.write_frame(&vec![0u8; desc().data_size()])?;
+                }
+                encoder.finish()
+            };
+            let _ = done.send(run());
+        });
+        let outcome = result.recv_timeout(Duration::from_secs(20)).expect("the frame writes stalled on an undrained stderr");
+        outcome.unwrap();
+    }
+
+    /// When the encoder fails, its own words (from stderr) are what comes back, not a bare broken pipe.
+    #[test]
+    fn a_failing_encoder_reports_what_it_said() {
+        let dir = tempfile::tempdir().unwrap();
+        let tool = fake_tool(dir.path(), "full", "echo 'No space left on device' >&2\nexit 1");
+        let out = dir.path().join("out.mp4");
+        let mut encoder = Encoder::open_with_command(&tool, &out, &desc(), Fps::try_new(30, 1).unwrap(), false).unwrap();
+        let frame = vec![0u8; desc().data_size()];
+        let mut failure = None;
+        for _ in 0..64 {
+            if let Err(error) = encoder.write_frame(&frame) {
+                failure = Some(error);
+                break;
+            }
+        }
+        let error = match failure {
+            Some(error) => error,
+            None => encoder.finish().unwrap_err(),
+        };
+        assert!(format!("{error}").contains("No space left"), "got {error}");
     }
 }
