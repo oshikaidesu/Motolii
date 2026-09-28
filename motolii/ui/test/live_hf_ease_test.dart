@@ -50,4 +50,38 @@ void main() {
     expect(sent[2]['keys'], hasLength(2));
     host.dispose();
   });
+  test('ghost mode: several picked layers and no keys spread delays by the curve (previewSequence, then sequence)', () async {
+    final c = EditorSession()
+      ..document.value = {
+        'capabilities': ['sequence', 'previewSequence', 'cancelPreview'],
+        'selectedIds': [5, 3, 9],
+        'selectedKeys': [],
+        'layers': [
+          {'id': 3, 'ghostable': true},
+          {'id': 5, 'ghostable': true},
+          {'id': 9, 'ghostable': false},
+        ],
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          {'kind': 'Bezier', 'x1': .42, 'y1': 0, 'x2': .58, 'y2': 1, 'samples': [[0, 0], [1, 1]]},
+        ],
+        'easeIntervals': [],
+      };
+    final host = LiveEaseHost(c);
+    expect(host.sequence, 2, reason: 'the layer that cannot carry a ghost is left out');
+    final seg = host.intervals.single;
+    seg.setValues([.2, .1, .8, .9]);
+    host.preview(0, seg);
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.last, {'op': 'previewSequence', 'layers': [5, 3], 'shape': {'kind': 'Bezier', 'x1': .2, 'y1': .1, 'x2': .8, 'y2': .9}});
+    await host.apply(0, seg);
+    expect(sent.last, {'op': 'sequence', 'layers': [5, 3], 'shape': {'kind': 'Bezier', 'x1': .2, 'y1': .1, 'x2': .8, 'y2': .9}});
+    expect(sent.where((m) => m['op'] == 'ease'), isEmpty);
+
+    // keys picked: back to shaping their intervals
+    c.document.value = {...c.state, 'selectedKeys': [{'layer': 3, 'property': 'opacity', 'frame': 0}]};
+    await Future<void>.delayed(Duration.zero);
+    expect(host.sequence, 0);
+    host.dispose();
+  });
 }

@@ -68,6 +68,14 @@ abstract class EaseHost implements Listenable {
   List<Preset> get kinds;
   List<Seg> get intervals;
   void apply(int? interval, Seg curve);
+
+  /// The curve while a handle is held (the host may show it before [apply]); [cancel] drops it.
+  void preview(int? interval, Seg curve);
+  void cancel();
+
+  /// How many layers the curve spreads delays over (the Ease desk's ghost mode: several layers picked, no keys);
+  /// 0 when it shapes key intervals.
+  int get sequence;
 }
 
 Rect easePlotBox(Size s) => Rect.fromLTRB(14, 34, s.width - 34, s.height - 22);
@@ -302,13 +310,16 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         child: Container(height: 34, padding: const EdgeInsets.symmetric(horizontal: 12), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: const Color(0xFF3A3B40)), borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(11, c: const Color(0xFFC4C6CB)))),
       );
 
+  /// Hosted, the switch says whether the desk is in its ghost mode (set by what is picked); unhosted it is a toy.
+  bool get _ghost => widget.host == null ? ghost : widget.host!.sequence > 1;
+
   Widget _options() => Row(children: [
         Expanded(child: GestureDetector(
           key: const ValueKey('ease-seq'),
           behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => ghost = !ghost),
+          onTap: widget.host == null ? () => setState(() => ghost = !ghost) : null,
           child: Row(children: [
-            Container(width: 34, height: 20, padding: const EdgeInsets.all(2), alignment: ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: ghost ? kBlue : const Color(0xFF34353A), borderRadius: BorderRadius.circular(10)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+            Container(width: 34, height: 20, padding: const EdgeInsets.all(2), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : const Color(0xFF34353A), borderRadius: BorderRadius.circular(10)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
             const SizedBox(width: 10),
             Flexible(child: Text('Sequence ghosts', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: const Color(0xFFC4C6CB)))),
           ]),
@@ -357,7 +368,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         final painter = _PlotP(
           shown, mixed && peek == null ? segs.map((e) => e.shape).toList() : const [], cur.x1, cur.y1, cur.x2, cur.y2,
           peek == null && !mixed && cur.bez, labels, peek == null ? presets[cur.p].name : '${presets[peek!].name}  ·  peek', mixed && peek == null, startFrame,
-          mixed ? segs.fold<int>(0, (a, b) => a + b.frames) : cur.frames, ghost, _play.isAnimating || _play.value > 0 ? _play.value : .5,
+          mixed ? segs.fold<int>(0, (a, b) => a + b.frames) : cur.frames, widget.host == null && ghost, _play.isAnimating || _play.value > 0 ? _play.value : .5,
+          layers: widget.host?.sequence ?? 0,
         );
         void pick(Offset p) {
           if (mixed || !cur.bez || peek != null) return;
@@ -380,6 +392,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             cur.p = presets.indexWhere((k) => k.name == 'Bezier').clamp(0, presets.length - 1);
             if (drag == 0) { cur.x1 = x; cur.y1 = y; } else { cur.x2 = x; cur.y2 = y; }
           });
+          widget.host?.preview(mixed ? null : sel, cur);
         }
         // Raw pointers: a handle drag must not lose to the panel's own vertical scroll.
         return Listener(
@@ -392,7 +405,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             setState(() => drag = null);
             if (wrote) _write();
           },
-          onPointerCancel: (_) => setState(() => drag = null),
+          onPointerCancel: (_) {
+            if (drag != null && _moved) widget.host?.cancel();
+            _moved = false;
+            setState(() => drag = null);
+          },
           child: CustomPaint(size: size, painter: painter),
         );
       });
@@ -437,7 +454,10 @@ class _Icon extends CustomPainter {
 }
 
 class _PlotP extends CustomPainter {
-  _PlotP(this.f, this.all, this.x1, this.y1, this.x2, this.y2, this.editable, this.labels, this.name, this.mixed, this.f0, this.frames, this.ghost, this.head);
+  _PlotP(this.f, this.all, this.x1, this.y1, this.x2, this.y2, this.editable, this.labels, this.name, this.mixed, this.f0, this.frames, this.ghost, this.head, {this.layers = 0});
+
+  /// Layers the curve spreads delays over: a mark where each one's delay falls (i / (n - 1) through the curve).
+  final int layers;
   final Shape f;
   final List<Shape> all;
   final double x1, y1, x2, y2, head;
@@ -478,6 +498,12 @@ class _PlotP extends CustomPainter {
     if (!mixed) {
       final area = _curve(s, f)..lineTo(at(s, 1, 0).dx, base)..lineTo(at(s, 0, 0).dx, base)..close();
       c.drawPath(area, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: const [kPink, kViolet, kBlue], stops: const [0, .5, 1]).createShader(Rect.fromLTRB(r.left, top, r.right, base)));
+    }
+    if (layers > 1 && !mixed) {
+      for (var i = 0; i < layers; i++) {
+        final x = i / (layers - 1);
+        c.drawCircle(at(s, x, f(x)), 4, Paint()..color = kInk);
+      }
     }
     if (ghost && !mixed) {
       for (var k = 3; k >= 1; k--) {
@@ -520,7 +546,7 @@ class _PlotP extends CustomPainter {
     if (!mixed) { c.drawCircle(pt, 6, Paint()..color = kMint); c.drawCircle(pt, 6, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2); }
     if (labels) {
       _text(c, mixed ? 'Mixed' : name, Offset(r.left, 9), sans(15, c: kInk, w: FontWeight.w600));
-      _text(c, mixed ? '3 intervals · $frames f' : '$frames f', Offset(s.width - 14, 12), sans(11.5, c: const Color(0xFFB4B6BB)), right: true);
+      _text(c, layers > 1 ? '$layers layers' : (mixed ? '3 intervals · $frames f' : '$frames f'), Offset(s.width - 14, 12), sans(11.5, c: const Color(0xFFB4B6BB)), right: true);
       _text(c, 'f$f0', Offset(r.left, s.height - 17), mono(9.5));
       _text(c, 'f${f0 + frames}', Offset(r.right, s.height - 17), mono(9.5), right: true);
     }
