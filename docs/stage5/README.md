@@ -2,11 +2,19 @@
 
 現在の入口はこの文書と `workspace.json`。2026-09-06の利用者承認によりFlutterを本格採用し、通常のUI・開発・検証の経路をここへ統一した。これは製品の全機能・配布品質の完成宣言ではない。
 
-進行中の引き継ぎ作業は[2026-09-11作業表](claude-handoff-2026-09-11.md)に記録する。
+UIの方向(何を完成と呼ぶか・seatの意味・Dock)の正本は [Product Direction](product-direction.md) と [Product Home](product-home.png)(`motolii/AGENTS.md` の PRODUCT ORACLE から参照)。[UI rebaseline](ui-rebaseline/README.md) は2026-09-25のshell移行計画で、Classic/Newの境界の説明として読む(そこに書かれた `ClassicShell`・`SessionHost` はまだ存在しない)。
 
-UIの移行(2026-09-25〜)は[UI rebaseline](ui-rebaseline/README.md)が正本。現行UIは能力の正本であって配置の正本ではない。Classic UIを残し、同じDocumentに新しいUI shellを足す。
+記録(その日付時点の状態。現在地として読まない): [2026-09-11作業表](claude-handoff-2026-09-11.md)、[2026-09-19最小コア進捗](minimal-core-progress-2026-09-19.md)。
 
-最小コア化の到達点・検証・残件は[2026-09-19進捗・引き継ぎ](minimal-core-progress-2026-09-19.md)を参照。
+## 起動入口(現在)
+
+同じnative host(`motolii/ui/native` → `motolii_ui` dylib)に、Flutterの入口が3つある。
+
+| 入口 | Dartのmain | 画面 |
+|---|---|---|
+| `scripts/motolii-ui.sh dev` / `profile`(既定) | `lib/main.dart` → `app/editor_app.dart` | `MOTOLII_SHELL` 未指定・`classic` → Classic(`app/editor_window.dart`)。`MOTOLII_SHELL=new` → New shell(`app/new_shell.dart`) |
+| `scripts/motolii-ui.sh live` | `lib/live_hf/main.dart` | hf GUI(`live_hf/shell.dart`)。Product Home / Product Direction に沿ったUI作業はここに入る。`MOTOLII_SHELL` は読まない |
+| `flutter run -t lib/proto_hf/main_*.dart` など | `lib/proto_hf/`、`lib/proto/` | 試作・fixture。製品の経路ではない(何も製品側から読まない)。`lib/hf/` のうち `shell/shell_face.dart`・`shell/stage.dart`・`insp/fixtures.dart`・`bp/future.dart` はproto_hfだけが使う |
 
 ## コンセプトと採用事項
 
@@ -16,7 +24,9 @@ UIの移行(2026-09-25〜)は[UI rebaseline](ui-rebaseline/README.md)が正本�
 
 | 責任 | 場所 |
 |---|---|
-| 作品・親子・キー・Undo | `motolii/crates/motolii-doc` |
+| 作品の読み取りモデル(`StoreView`・`Recording`)・値・時刻 | `motolii/crates/motolii-doc` |
+| 作品の書き込み・親子・キー・Undo(`Document`・`Intent`・保存) | `motolii/ui/extensions/edit`(crate `motolii-edit`) |
+| 書き出しjob・スクリプト | `motolii/ui/extensions/jobs`(`motolii-jobs`)・`motolii/ui/extensions/script`(`motolii-script`) |
 | 評価・GPU描画・書き出し | `motolii/crates/motolii-render` |
 | Flutter UI | `motolii/ui/lib` |
 | 編集命令・スナップショットの接続 | `motolii/ui/native` |

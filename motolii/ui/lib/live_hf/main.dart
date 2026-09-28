@@ -1,4 +1,5 @@
-// The hf GUI as its own client of Motolii Live: proto_hf's faces over the session, nothing from the older shells.
+// The hf GUI as its own client of Motolii Live: the hf faces (lib/hf) over the session. From the older shells it takes
+// only what live_hf_contract_test allows: the preserved production Stage (panels/stage) and the foundation it needs.
 //   MOTOLII_NATIVE_LIBRARY=.../libmotolii_ui.dylib flutter run -d macos -t lib/live_hf/main.dart \
 //     --dart-define=MOTOLII_DOCUMENT=/path.rrd [--dart-define=MOTOLII_SHOT=/path.png]
 import 'package:flutter/widgets.dart';

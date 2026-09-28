@@ -1,5 +1,5 @@
-// 家: 意味と保存。編集状態(Document)と、その直列化。
-// 書き込みは Intent 経由のみ。export は独立した工程ではなく doc の保存関数。
+// 家: 作品の意味を読む側 — 値・時刻・評価の型と、読み取りモデル(StoreView・Recording)。
+// 書き込み(Document・Intent・Undo・保存)は motolii-edit(ui/extensions/edit)、書き出しは motolii-render::export と motolii-jobs。
 pub mod core;
 pub mod eval;
 pub mod store;

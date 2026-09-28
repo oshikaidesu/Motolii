@@ -5,6 +5,12 @@
   "ui": "motolii/ui",
   "native": "motolii/ui/native",
   "document": "motolii/crates/motolii-doc",
+  "documentEditing": "motolii/ui/extensions/edit",
+  "entries": {
+    "dev": "motolii/ui/lib/main.dart (MOTOLII_SHELL=classic default | new)",
+    "live": "motolii/ui/lib/live_hf/main.dart",
+    "prototype": "motolii/ui/lib/proto_hf, motolii/ui/lib/proto (not a product path)"
+  },
   "renderer": "motolii/crates/motolii-render",
   "history": "docs/stage5/history/retired-source.md",
   "checkpoint": {

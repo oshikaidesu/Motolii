@@ -1,5 +1,7 @@
 # プラグイン作者向け規約(LLM / 人間共通)
 
+> **記録(現行ではない)**: この文書が型紙とする `crates/motolii-plugin`・`motolii-testkit` は2026-09-19(`7b1d926f7`)に退役し、root `Cargo.toml` にも無い。`plugins/*` と `scripts/new_plugin_crate.py`・`scripts/new-plugin.sh` はこの契約を前提にしたままでbuildできない。現在の効果の拡張口はvism(`motolii/crates/motolii-render/vism/`、`compositor/effects/vism.rs`)と `motolii-render/src/extensions/`。以下は2026-07時点の契約の記録。
+
 作成日: 2026-07-10
 
 並列エージェントやLLMがプラグインを量産するときの**唯一の契約書**。  
