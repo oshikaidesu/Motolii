@@ -117,7 +117,8 @@ class _LiveTimelineState extends State<LiveTimeline>
     // catch up when the preview reply lands.
     final gripped = gesture == 'keys' ? initialKeys : settlingKeys;
     final keyShift = gesture == 'keys' ? deltaFrames : settlingDelta;
-    final timings = const {'move', 'trimIn', 'trimOut', 'slip'}.contains(gesture)
+    final timings =
+        const {'move', 'trimIn', 'trimOut', 'slip'}.contains(gesture)
         ? {for (final r in timingRows) r.id: timing(r)}
         : const <Object, Map<String, dynamic>>{};
     final waves = {
@@ -314,72 +315,92 @@ class _LiveTimelineState extends State<LiveTimeline>
       // grip coordinates are the tracks' own: x from the panel's left edge, y from the first row, scrolled rows above
       final toFace = Offset(344, tlTop - rowStart * timelineGeometry.rowHeight);
       final duration = (c.state['durationFrames'] as num? ?? 1).toInt();
-      return Focus(
-        focusNode: focus,
-        onKeyEvent: key,
-        // Trackpad pan, pinch and ruler scrub-zoom with momentum, and the wheel (pointer-anchored zoom with Cmd or
-        // over the ruler): the core's own navigation, the same one Classic's Timeline uses.
-        child: navigation(RF(
-          timeline(
-            TimelineModel(
-            tabs: false,
-              rows: gripping ? _rows() : _shown,
-              marquee: gesture == 'marquee' && start != null && current != null
-                  ? Rect.fromPoints(start!, current!).shift(toFace)
-                  : null,
-              dropGuide: rowDropGuide?.shift(toFace),
-              dropInside: rowDropInside,
-              marqueeInk: theme.accent,
-              guideInk: theme.select,
-              ruler: [for (var i = 0; i <= 10; i++) _label(i)],
-              playhead: _x(frame),
-              markers: [
-                for (final marker in EditorSession.maps(c.state['markers']))
-                  (_x(marker['frame'] as num), '${marker['id']}'),
-              ],
-              onAddMarker: c.supports('addMarker')
-                  ? () => c.command('addMarker')
-                  : null,
-              onSplit: c.supports('split') ? () => c.command('split') : null,
-              onMarkerContext: (id, at) => _markerContext(id, at, context),
-              onContext: (at, global) => menuAt(
-                at - toFace,
-                (items) => showHfMenu<String>(
-                  context,
-                  Rect.fromLTWH(global.dx, global.dy, 220, 0),
-                  [for (final item in items) (item.value, item.label)],
-                  disabled: {
-                    for (final item in items)
-                      if (!item.enabled) item.value,
+      // A Media tile carried here lands before, after or inside the row under it, at the frame under it (the core's
+      // asset drop, the same as Classic's).
+      Offset core(Offset global, BuildContext box) =>
+          (box.findRenderObject() as RenderBox).globalToLocal(global) +
+          const Offset(344, 703) -
+          toFace;
+      return DragTarget<Map<String, dynamic>>(
+        onWillAcceptWithDetails: (d) =>
+            d.data['asset'] != null && c.supports('placeAsset'),
+        onMove: (d) => aimAssetAt(core(d.offset, context)),
+        onLeave: (_) => leaveAsset(),
+        onAcceptWithDetails: acceptAsset,
+        builder: (context, _, __) => Focus(
+          focusNode: focus,
+          onKeyEvent: key,
+          // Trackpad pan, pinch and ruler scrub-zoom with momentum, and the wheel (pointer-anchored zoom with Cmd or
+          // over the ruler): the core's own navigation, the same one Classic's Timeline uses.
+          child: navigation(
+            RF(
+              timeline(
+                TimelineModel(
+                  tabs: false,
+                  rows: gripping ? _rows() : _shown,
+                  marquee:
+                      gesture == 'marquee' && start != null && current != null
+                      ? Rect.fromPoints(start!, current!).shift(toFace)
+                      : null,
+                  dropGuide: rowDropGuide?.shift(toFace),
+                  dropInside: rowDropInside,
+                  marqueeInk: theme.accent,
+                  guideInk: theme.select,
+                  ruler: [for (var i = 0; i <= 10; i++) _label(i)],
+                  playhead: _x(frame),
+                  markers: [
+                    for (final marker in EditorSession.maps(c.state['markers']))
+                      (_x(marker['frame'] as num), '${marker['id']}'),
+                  ],
+                  onAddMarker: c.supports('addMarker')
+                      ? () => c.command('addMarker')
+                      : null,
+                  onSplit: c.supports('split')
+                      ? () => c.command('split')
+                      : null,
+                  onMarkerContext: (id, at) => _markerContext(id, at, context),
+                  onContext: (at, global) => menuAt(
+                    at - toFace,
+                    (items) => showHfMenu<String>(
+                      context,
+                      Rect.fromLTWH(global.dx, global.dy, 220, 0),
+                      [for (final item in items) (item.value, item.label)],
+                      disabled: {
+                        for (final item in items)
+                          if (!item.enabled) item.value,
+                      },
+                    ),
+                  ),
+                  onSeek: (x) => requestSeek(
+                    _frameAt(x)
+                        .round()
+                        .clamp(0, duration > 0 ? duration - 1 : 0),
+                  ),
+                  onRow: (i) {
+                    final index = rowStart + i;
+                    if (index >= 0 && index < tracks.length)
+                      chooseLayer(tracks[index].id);
                   },
+                  onFold: _foldRow,
+                  onProperties: _togglePropertyRows,
+                  onCoreDown: (event, p) => beginAt(event, _corePosition(p)),
+                  onCoreMove: (event, p) => moveAt(event, _corePosition(p)),
+                  onCoreUp: (event, p) => endAt(event, _corePosition(p)),
+                  onCoreCancel: (_, __) => cancel(),
+                  onCoreLabelDown: (event, index, p) =>
+                      beginAt(event, _coreLabelPosition(index, p)),
+                  onCoreLabelMove: (event, index, p) =>
+                      moveAt(event, _coreLabelPosition(index, p)),
+                  onCoreLabelUp: (event, index, p) =>
+                      endAt(event, _coreLabelPosition(index, p)),
+                  onCoreLabelCancel: (_, __, ___) => cancel(),
                 ),
               ),
-              onSeek: (x) => requestSeek(
-                _frameAt(x).round().clamp(0, duration > 0 ? duration - 1 : 0),
-              ),
-              onRow: (i) {
-                final index = rowStart + i;
-                if (index >= 0 && index < tracks.length)
-                  chooseLayer(tracks[index].id);
-              },
-              onFold: _foldRow,
-              onProperties: _togglePropertyRows,
-              onCoreDown: (event, p) => beginAt(event, _corePosition(p)),
-              onCoreMove: (event, p) => moveAt(event, _corePosition(p)),
-              onCoreUp: (event, p) => endAt(event, _corePosition(p)),
-              onCoreCancel: (_, __) => cancel(),
-              onCoreLabelDown: (event, index, p) =>
-                  beginAt(event, _coreLabelPosition(index, p)),
-              onCoreLabelMove: (event, index, p) =>
-                  moveAt(event, _coreLabelPosition(index, p)),
-              onCoreLabelUp: (event, index, p) =>
-                  endAt(event, _coreLabelPosition(index, p)),
-              onCoreLabelCancel: (_, __, ___) => cancel(),
+              ox: 344,
+              oy: 703,
             ),
           ),
-          ox: 344,
-          oy: 703,
-        )),
+        ),
       );
     },
   );

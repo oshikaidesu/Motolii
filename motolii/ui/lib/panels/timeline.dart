@@ -168,11 +168,7 @@ class _TimelinePanelState extends State<TimelinePanel>
                           onWillAcceptWithDetails: (d) =>
                               d.data['asset'] != null && has('placeAsset'),
                           onMove: aimAsset,
-                          onLeave: (_) => setState(() {
-                            assetDrop = null;
-                            rowDrop = null;
-                            rowDropGuide = null;
-                          }),
+                          onLeave: (_) => leaveAsset(),
                           onAcceptWithDetails: acceptAsset,
                           builder: (_, __, ___) => GestureDetector(
                             onSecondaryTapDown: menu,

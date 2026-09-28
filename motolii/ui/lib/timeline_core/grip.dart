@@ -398,11 +398,20 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
   void aimAsset(DragTargetDetails<Map<String, dynamic>> details) {
     final box = rowsKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
-    setState(() {
-      assetDrop = box.globalToLocal(details.offset);
-      aimRowDrop(assetDrop!, const []);
-    });
+    aimAssetAt(box.globalToLocal(details.offset));
   }
+
+  /// [at] in the tracks' own coordinates, for presentations that place the rows themselves.
+  void aimAssetAt(Offset at) => setState(() {
+    assetDrop = at;
+    aimRowDrop(at, const []);
+  });
+
+  void leaveAsset() => setState(() {
+    assetDrop = null;
+    rowDrop = null;
+    rowDropGuide = null;
+  });
 
   Map<String, dynamic> timing(TrackRow row) {
     final s = (row.layer['start'] as num? ?? 0).toInt(),

@@ -368,4 +368,51 @@ void main() {
     await tester.pump();
     expect(sent.length, before);
   });
+  testWidgets('a Media asset carried onto a row is placed there, at the frame under the pointer', (tester) async {
+    final c = await mountRows(tester, 3);
+    c.document.value = {...c.state, 'capabilities': ['seek', 'select', 'placeAsset']};
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Overlay(
+          key: const ValueKey('drop'),
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => Stack(children: [
+                Align(alignment: Alignment.topLeft, child: SizedBox(width: 1178, height: 291, child: LiveTimeline(c: c))),
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                  child: Draggable<Map<String, dynamic>>(
+                    data: const {'asset': '12', 'name': 'clip'},
+                    dragAnchorStrategy: pointerDragAnchorStrategy,
+                    feedback: const SizedBox(width: 8, height: 8),
+                    child: const ColoredBox(color: Color(0xFF000000)),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+    sent.clear();
+    final g = await tester.startGesture(const Offset(10, 10));
+    await tester.pump();
+    final target = Offset(tlX(2) - 344, tlTop + tlPitch + tlRowH / 2 - 703); // the second row's bar, 2 s in
+    await g.moveTo(target - const Offset(40, 0));
+    await tester.pump();
+    await g.moveTo(target);
+    await tester.pump();
+    expect(drawn(tester).dropGuide, isNotNull);
+    await g.up();
+    await tester.pump();
+    final place = sent.lastWhere((m) => m['op'] == 'placeAsset');
+    expect(place['id'], '12');
+    expect(place['target'], 2);
+    expect((place['start'] as num).toDouble(), closeTo(60, 2));
+    expect(drawn(tester).dropGuide, isNull);
+  });
 }

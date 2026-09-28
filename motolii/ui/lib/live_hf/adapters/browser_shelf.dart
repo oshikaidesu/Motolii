@@ -212,42 +212,60 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
     final item = itemsById[thing.id];
     if (item == null) return Opacity(opacity: .5, child: tile);
     final favorite = userState.views.favorites.contains(thing.id);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => select(item),
-      onDoubleTap: () => _apply(item),
-      onSecondaryTapDown: (event) {
-        select(item);
-        more(context, event.globalPosition);
-      },
-      child: Stack(
-        fit: StackFit.passthrough,
-        children: [
-          tile,
-          if (selected.contains(thing.id))
-            const Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.fromBorderSide(
-                      BorderSide(color: Color(0xFFEEEEF0)),
+    final asset = item['assetId'];
+    // A media tile carried to the Timeline is placed where it lands (Classic's Media drag, the same data).
+    Widget carry(Widget child) =>
+        item['builtin'] == true || asset is! String || !c.supports('placeAsset')
+        ? child
+        : Draggable<Map<String, dynamic>>(
+            data: {'asset': asset, 'name': item['name']},
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: IgnorePointer(
+              child: Opacity(
+                opacity: .85,
+                child: SizedBox(width: 72, height: 72, child: tile),
+              ),
+            ),
+            child: child,
+          );
+    return carry(
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => select(item),
+        onDoubleTap: () => _apply(item),
+        onSecondaryTapDown: (event) {
+          select(item);
+          more(context, event.globalPosition);
+        },
+        child: Stack(
+          fit: StackFit.passthrough,
+          children: [
+            tile,
+            if (selected.contains(thing.id))
+              const Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.fromBorderSide(
+                        BorderSide(color: Color(0xFFEEEEF0)),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          if (favorite)
-            const Positioned(
-              right: 4,
-              top: 4,
-              child: IgnorePointer(
-                child: Text(
-                  '★',
-                  style: TextStyle(color: Color(0xFFFFD166), fontSize: 11),
+            if (favorite)
+              const Positioned(
+                right: 4,
+                top: 4,
+                child: IgnorePointer(
+                  child: Text(
+                    '★',
+                    style: TextStyle(color: Color(0xFFFFD166), fontSize: 11),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

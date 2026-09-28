@@ -115,10 +115,16 @@ void main() {
           textDirection: TextDirection.ltr,
           child: DefaultTextStyle(
             style: H.s(12),
-            child: SizedBox(
-              width: 760,
-              height: 640,
-              child: LiveBrowser(c: c, scene: scene),
+            child: Overlay(
+              initialEntries: [
+                OverlayEntry(
+                  builder: (_) => SizedBox(
+                    width: 760,
+                    height: 640,
+                    child: LiveBrowser(c: c, scene: scene),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -187,6 +193,11 @@ void main() {
         ),
         isTrue,
       );
+      // the same tile can be carried to the Timeline (its drop target takes this data)
+      final carried = tester.widget<Draggable<Map<String, dynamic>>>(
+        find.ancestor(of: asset, matching: find.byType(Draggable<Map<String, dynamic>>)),
+      );
+      expect(carried.data, {'asset': 'asset-a', 'name': 'clip.mov'});
 
       await tester.pumpWidget(const SizedBox());
       c.dispose();
