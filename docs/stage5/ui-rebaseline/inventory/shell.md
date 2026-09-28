@@ -88,7 +88,7 @@ Panel-local shortcuts (owned by other audit areas, listed so the shell inventory
 | KB-P1 | Hold P/R/S while dragging on Stage = move/rotate/scale mode | hold P/R/S | `panels/stage/touch.dart:12-16` |
 | KB-P2 | Space+drag / middle-drag pans Stage | Space held | `panels/stage/touch.dart:288-292` |
 | KB-P3 | Esc cancels camera drag | Esc | `panels/stage/chrome.dart:172-180` |
-| KB-P4 | Timeline focus: Esc cancel gesture; ←/→ move keys or seek | Esc, ←/→ | `panels/timeline/view.dart:20-37` |
+| KB-P4 | Timeline focus: Esc cancel gesture; ←/→ move keys or seek | Esc, ←/→ | `timeline_core/view.dart:21-38` |
 | KB-P5 | Browser shelves: Cmd+F search, Esc clear, Cmd+E quick-add, 1..N add to collection, Cmd+A select all, Enter apply, arrows/Home/End move, Delete remove | various | `panels/browser/frame_keys.dart:12-73` |
 | KB-P6 | Notes: Cmd+V paste (system pasteboard via `noteClipboard`), Delete block | Cmd+V, Delete | `panels/notes_desk.dart:222-235` |
 | KB-P7 | Ease desk: Esc cancel; arrows/Enter/Home/End on preset grid | various | `panels/ease_desk.dart:68-76`, `:225-255` |
@@ -169,7 +169,7 @@ Domain / product logic currently in Dart (a second shell would have to share, no
 8. `app/editor_window.dart:273-328` — the entire panel placement state machine (tab/window/drawer/hidden) is a widget method.
 9. `panels/export_controls.dart:32-46` — marker-to-marker export range derived from markers and playhead; `:93-100` export progress polling owned by the sheet widget.
 10. `panels/composition_controls.dart:35-40`, `~:110-120` — composition size and fps presets hard-coded in the widget.
-11. `panels/timeline/grip.dart:400-435` — trim-in / trim-out / slip / move timing arithmetic (`start`, `duration`, `sourceIn`) computed in Dart before `setTiming(s)`/`previewTimings`.
+11. `timeline_core/grip.dart:407-442` — trim-in / trim-out / slip / move timing arithmetic (`start`, `duration`, `sourceIn`) computed in Dart before `setTiming(s)`/`previewTimings`.
 12. `panels/desk.dart:48-56` — selection → drawer rule (keys or multi-layer → Ease; Camera → Depth).
 13. `session/editor_session.dart:36-42` + `session_core.dart:25-28` — default new-key shape (Easy Ease bezier) lives in Dart.
 14. `session/session_commands.dart:65-69` — `visibleFrames` injected into `create`/`placeAsset` (default duration input).

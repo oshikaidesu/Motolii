@@ -78,7 +78,7 @@ New UI が同じ事をするなら、**写さず、振る舞いを変えずに w
 
 1. menu → 命令の対応と、保存確認の順序(`app/editor_window.dart:347-432`)
 2. panel 配置の状態機械 tab/window/drawer/hidden(`editor_window.dart:273-328`)
-3. trim・slip・move の時間計算(`panels/timeline/grip.dart:400-435`)
+3. trim・slip・move の時間計算(`timeline_core/grip.dart:407-442`)
 4. marker-to-marker の書き出し範囲と進捗の poll(`panels/export_controls.dart:32-100`)
 5. 選択 → Desk の引き出しの規則(`panels/desk.dart:48-56`)
 6. composition の寸法・fps の preset(`panels/composition_controls.dart`)
