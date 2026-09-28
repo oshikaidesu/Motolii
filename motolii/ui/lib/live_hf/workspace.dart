@@ -19,6 +19,8 @@ import 'adapters/notes.dart';
 import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
+import 'adapters/browser_alt.dart';
+import '../hf/shell/sheet.dart' show HfAction;
 import 'adapters/web.dart';
 
 /// The product workspace for the hf client. Faces/tools own their content;
@@ -37,7 +39,9 @@ class LiveWorkspace {
           entry.$1: PanelDef(
             entry.$1,
             entry.$1,
-            () => LiveBrowser(c: c, scene: scene, fixedTab: entry.$2),
+            () => ValueListenableBuilder(valueListenable: altBrowserSkin, builder: (_, alt, __) => alt && entry.$2 < 4 ? AltBrowser(c: c, shelf: entry.$1) : LiveBrowser(c: c, scene: scene, fixedTab: entry.$2)),
+            // TEMPORARY: the Browser's Skin Swap Proof switch
+            tools: () => HfAction('A/B', onTap: () => altBrowserSkin.value = !altBrowserSkin.value),
             glyph: entry.$3,
             minSize: 220,
           ),
