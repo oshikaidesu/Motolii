@@ -31,6 +31,8 @@ pub enum ExportError {
     NoComposition,
     #[error("Could not export the still image. {0}")]
     Still(String),
+    #[error("The encoder finished but its file is not the export: {0}. Nothing was written.")]
+    Unverified(String),
 }
 
 pub struct ExportJob {
@@ -166,6 +168,8 @@ pub fn export_range_with_progress(
     }
 
     encoder.finish()?;
+    // exit 0 does not prove the stream: the file must be the export before it replaces anything (GAP-26)
+    verify_output(&output.path, &desc, fps, written, audio.is_some())?;
     output.commit()?;
 
     Ok(ExportReport {
@@ -204,6 +208,26 @@ pub fn export_still(
         out_path: out_path.to_path_buf(),
         frames_written: 1,
     })
+}
+
+/// The encoded file is the export: one video stream at the frame size, an audio stream when audio was muxed, and as
+/// long as the frames written (within a frame). Checked with ffprobe on the temporary file, before it is installed.
+pub(crate) fn verify_output(path: &Path, desc: &FrameDesc, fps: crate::doc::core::Fps, frames: i64, audio: bool) -> Result<(), ExportError> {
+    let info = crate::render::media::probe_container(path).map_err(|e| ExportError::Unverified(e.to_string()))?;
+    let video = info.video_streams.first().ok_or_else(|| ExportError::Unverified("no video stream".into()))?;
+    if (video.width, video.height) != (desc.width, desc.height) {
+        return Err(ExportError::Unverified(format!("{}×{} instead of {}×{}", video.width, video.height, desc.width, desc.height)));
+    }
+    if audio && info.audio_streams.is_empty() {
+        return Err(ExportError::Unverified("the audio stream is missing".into()));
+    }
+    if let Some(duration) = video.duration.or(info.duration) {
+        let got = duration.try_to_frame_round(fps).map_err(|e| ExportError::Unverified(e.to_string()))?;
+        if (got - frames).abs() > 1 {
+            return Err(ExportError::Unverified(format!("{got} frames instead of {frames}")));
+        }
+    }
+    Ok(())
 }
 
 fn composition_duration_frames(view: &StoreView<'_>) -> Result<i64, ExportError> {
@@ -359,4 +383,44 @@ fn reserve_audio_temp() -> Result<(std::fs::File, PathBuf), ExportError> {
     Err(ExportError::Write(
         "Could not create the temporary audio file. Check free space in the system temporary folder.".to_owned(),
     ))
+}
+
+#[cfg(test)]
+mod verify_tests {
+    use super::*;
+    use crate::doc::core::{ColorSpace, Fps};
+
+    fn scratch(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("motolii-verify-{}-{name}", std::process::id()))
+    }
+
+    /// An encoded file passes only as the export it should be; a file an encoder left behind with exit 0 but the
+    /// wrong frames, size or nothing at all does not (and so is never installed over the user's file).
+    #[test]
+    fn only_the_export_that_was_asked_for_is_accepted() {
+        if !crate::render::media::tools_available() {
+            eprintln!("skip: ffmpeg/ffprobe not available");
+            return;
+        }
+        let desc = FrameDesc::try_packed(64, 32, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false).unwrap();
+        let fps = Fps::try_new(30, 1).unwrap();
+        let path = scratch("ok.mp4");
+        let mut encoder = Encoder::open(&path, &desc, fps, false).unwrap();
+        for i in 0..12u8 {
+            encoder.write_frame(&vec![i * 20; desc.data_size()]).unwrap();
+        }
+        encoder.finish().unwrap();
+
+        assert!(verify_output(&path, &desc, fps, 12, false).is_ok());
+        assert!(matches!(verify_output(&path, &desc, fps, 40, false), Err(ExportError::Unverified(_))), "frames");
+        let other = FrameDesc::try_packed(32, 32, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false).unwrap();
+        assert!(matches!(verify_output(&path, &other, fps, 12, false), Err(ExportError::Unverified(_))), "size");
+        assert!(matches!(verify_output(&path, &desc, fps, 12, true), Err(ExportError::Unverified(_))), "audio");
+
+        let junk = scratch("junk.mp4");
+        std::fs::write(&junk, b"not a movie").unwrap();
+        assert!(matches!(verify_output(&junk, &desc, fps, 12, false), Err(ExportError::Unverified(_))), "junk");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&junk);
+    }
 }
