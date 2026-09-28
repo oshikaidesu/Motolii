@@ -188,3 +188,13 @@ fn enlarging_a_path_matches_drawing_the_large_contour_even_at_an_image_effect_bo
         assert!(bad < 300, "magnifying a contour introduced {bad} differing pixels (image effect={pass})");
     }
 }
+
+/// 描かれる形は `shapes_at`: 色の輪が書く `shape.fill_color` は書類の筆より勝つ。frame graph も同じ形を描く。
+#[test]
+fn the_fill_colour_property_is_the_colour_drawn() {
+    let mut doc = circle(320.0, 1.0, false);
+    doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::SHAPE_FILL_COLOR).unwrap(), value: Value::Color([0.0, 1.0, 0.0, 1.0]) }).unwrap();
+    let pixels = Engine::new().unwrap().render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    let c = &pixels[(256*512+256)*4..(256*512+256)*4+3];
+    assert!(c[1] > 150 && c[0] < 8 && c[2] < 8, "the circle is drawn in the property's green, not the document's black: {c:?}");
+}

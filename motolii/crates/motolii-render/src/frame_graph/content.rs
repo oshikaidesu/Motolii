@@ -32,7 +32,8 @@ pub struct ContentBinding {
 #[derive(Clone)]
 enum Recipe {
     Text(TextDocument),
-    Shape(Vec<ShapeNode>),
+    /// The document's shapes and, per input, the `shape.*` / `fill.*` property it carries (as `shapes_at` reads them).
+    Shape(Vec<ShapeNode>, Vec<String>),
     MediaExtent(MediaSourceValue),
     Mesh(MediaSourceValue),
     MediaFrame {
@@ -74,8 +75,14 @@ impl ContentProgram {
                 },
                 LayerSource::Shape => {
                     let shapes = view.shapes(layer)?;
-                    let parameters = serde_json::to_vec(&shapes)?;
-                    binding.content = Some(program.intern(NodeKind::ShapeGeometry, vec![], parameters, false, Recipe::Shape(shapes)));
+                    // The drawn shape is `shapes_at`: the document's shapes with their `shape.*` / `fill.*` values.
+                    let (names, inputs): (Vec<String>, Vec<NodeKey>) = view.properties(layer).into_iter()
+                        .filter(|p| p.name().starts_with(property::SHAPE_PREFIX) || p.name().starts_with("fill."))
+                        .filter_map(|p| properties.node_for(layer, &p).map(|key| (p.name().to_owned(), key)))
+                        .unzip();
+                    let parameters = serde_json::to_vec(&(&shapes, &names))?;
+                    let timed = !inputs.is_empty();
+                    binding.content = Some(program.intern(NodeKind::ShapeGeometry, inputs, parameters, timed, Recipe::Shape(shapes, names)));
                 }
                 LayerSource::File { path, fingerprint } => {
                     let version = resource_version(&path, fingerprint.as_deref());
@@ -146,7 +153,12 @@ impl ContentProgram {
         let recipe = self.recipes.get(&node.key())?;
         Some(match recipe {
             Recipe::Text(value) => Ok(NodeValue::new(value.clone())),
-            Recipe::Shape(value) => Ok(NodeValue::new(value.clone())),
+            Recipe::Shape(value, names) if names.is_empty() => Ok(NodeValue::new(value.clone())),
+            Recipe::Shape(value, names) => {
+                let get = |name: &str| names.iter().position(|n| n == name)
+                    .and_then(|index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()).cloned();
+                Ok(NodeValue::new(crate::picture::shape_props::apply(value, &get)))
+            }
             Recipe::MediaExtent(value) => Ok(NodeValue::new(MediaExtentValue { source: value.clone(), size: [0.0; 3] })),
             Recipe::Mesh(value) => Ok(NodeValue::new(value.clone())),
             Recipe::MediaFrame { source, timing, fps, speed_track, remap } => {
