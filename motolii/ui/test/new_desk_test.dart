@@ -87,6 +87,19 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('Blend: the keys walk the modes, each previewed, and Enter applies one', (tester) async {
+    final c = await mountBlend(tester, [layer(1, 'Normal')], [1]);
+    await tester.tap(find.text('Layer 1'));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 150)); // the preview waits out its debounce
+    expect(c.ops, contains('previewBlend'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(c.commands.where((e) => e.$1 == 'applyBlend'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('Blend: pointing at a mode previews it on the last target, leaving cancels, the specimen shows', (tester) async {
     final c = await mountBlend(tester, [layer(1, 'Normal')], [1]);
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);

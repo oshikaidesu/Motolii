@@ -4,6 +4,7 @@ import '../../hf/bp/common.dart' show sans, kMuted;
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
 import 'camera.dart';
+import 'effect.dart';
 import 'effects_card.dart';
 import 'layout.dart';
 import 'layout_store.dart';
@@ -86,7 +87,9 @@ class _RightSeatState extends State<RightSeat> {
         c.selectedIds.length <= 1 &&
         (layer['kind'] == 'Group' || SessionLayoutStore.isChild(layer));
     final effects = panelRows(layer['effects']);
-    if (!layout && effects.isEmpty) return transform;
+    // a Stage layer's margins are its own rows (Classic IN-065)
+    final stage = c.selectedIds.length <= 1 && panelRows(layer['properties']).any((r) => '${r['id']}'.startsWith('stage.'));
+    if (!layout && !stage && effects.isEmpty) return transform;
     return SingleChildScrollView(
       // another layer starts at the top (Classic IN-006)
       key: ValueKey('seat-scroll:${layer['id']}'),
@@ -94,6 +97,14 @@ class _RightSeatState extends State<RightSeat> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           transform,
+          if (stage)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Stage', key: const ValueKey('seat-stage'), style: sans(11.5, c: kMuted))),
+                LayerRowsSheet(key: ValueKey('seat-stage:${layer['id']}'), controller: c, layerId: layer['id'] as int, prefix: 'stage.'),
+              ]),
+            ),
           if (layout)
             NewLayout(
               key: ValueKey('seat-layout:${layer['id']}'),

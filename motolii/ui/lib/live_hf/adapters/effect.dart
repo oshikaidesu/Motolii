@@ -49,3 +49,48 @@ class _NewEffectParamsState extends State<NewEffectParams> {
   @override
   Widget build(BuildContext context) => ParamSheet(store, thingId: '${widget.effectId}', advancedOpen: widget.advancedOpen);
 }
+
+/// A layer's own rows under a prefix (a Stage layer's `stage.` margins) as the same sheet, written the same way.
+class LayerRowsSheet extends StatefulWidget {
+  const LayerRowsSheet({super.key, required this.controller, required this.layerId, required this.prefix});
+  final EditorSession controller;
+  final int layerId;
+  final String prefix;
+  @override
+  State<LayerRowsSheet> createState() => _LayerRowsSheetState();
+}
+
+class _LayerRowsSheetState extends State<LayerRowsSheet> {
+  static const _watched = ['layers', 'selectedId', 'selectedIds', 'capabilities', 'documentRevision'];
+  EditorSession get c => widget.controller;
+  late SessionEffectStore store = SessionEffectStore.layerRows(c, widget.layerId, widget.prefix);
+
+  @override
+  void initState() {
+    super.initState();
+    c.slice('layerRows', _watched).addListener(store.absorb);
+    c.rendered.addListener(store.absorb);
+  }
+
+  @override
+  void didUpdateWidget(LayerRowsSheet old) {
+    super.didUpdateWidget(old);
+    if (old.layerId != widget.layerId || old.prefix != widget.prefix) {
+      store.dispose();
+      store = SessionEffectStore.layerRows(c, widget.layerId, widget.prefix);
+    } else {
+      store.absorb();
+    }
+  }
+
+  @override
+  void dispose() {
+    c.slice('layerRows', _watched).removeListener(store.absorb);
+    c.rendered.removeListener(store.absorb);
+    store.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ParamSheet(store, thingId: '${widget.layerId}:${widget.prefix}');
+}

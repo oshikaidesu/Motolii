@@ -200,4 +200,17 @@ void main() {
     await t.pump();
     expect(params, findsOneWidget);
   });
+  testWidgets('a Stage layer shows its margins as its own rows', (t) async {
+    await seat(t, {
+      'id': 1,
+      'name': 'Stage',
+      'kind': 'Stage',
+      'properties': [
+        for (final side in ['left', 'top', 'right', 'bottom'])
+          {'id': 'stage.$side', 'label': side[0].toUpperCase() + side.substring(1), 'kind': 'f64', 'value': 0.0},
+      ],
+    });
+    expect(find.byKey(const ValueKey('seat-stage')), findsOneWidget);
+    for (final label in ['Left', 'Top', 'Right', 'Bottom']) expect(find.text(label), findsWidgets, reason: label);
+  });
 }

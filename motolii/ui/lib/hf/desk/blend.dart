@@ -118,18 +118,48 @@ class _BlendDeskState extends State<BlendDesk> {
   Widget build(BuildContext context) => host == null
       ? _shell()
       : Focus(
+          focusNode: _keys,
           onKeyEvent: (_, e) {
             if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape && host!.live) {
               host!.leave();
               return KeyEventResult.handled;
+            }
+            // the keys walk the modes (each shown on the Stage as the pointer shows it) and Enter applies one
+            if (e is KeyDownEvent || e is KeyRepeatEvent) {
+              final k = e.logicalKey;
+              final step = k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.arrowDown
+                  ? 1
+                  : (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.arrowUp ? -1 : 0);
+              if (step != 0) {
+                final from = hover ?? (sel < 0 ? -1 : sel);
+                final i = ((from < 0 ? (step > 0 ? -1 : 0) : from) + step) % blendModes.length;
+                setState(() => hover = i < 0 ? blendModes.length - 1 : i);
+                if (previewOnStage) host!.aim(blendModes[hover!].key);
+                return KeyEventResult.handled;
+              }
+              if ((k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) && hover != null) {
+                _pick(hover!);
+                return KeyEventResult.handled;
+              }
             }
             return KeyEventResult.ignored;
           },
           onFocusChange: (focused) {
             if (!focused) host!.leave();
           },
-          child: ListenableBuilder(listenable: host!, builder: (_, __) => Opacity(opacity: host!.names.isEmpty ? .45 : 1, child: _shell())),
+          child: Listener(
+            onPointerDown: (_) => _keys.requestFocus(),
+            child: ListenableBuilder(listenable: host!, builder: (_, __) => Opacity(opacity: host!.names.isEmpty ? .45 : 1, child: _shell())),
+          ),
         );
+
+  final _keys = FocusNode(debugLabel: 'blend');
+
+  @override
+  void dispose() {
+    _keys.dispose();
+    super.dispose();
+  }
 
   Widget _shell() => DeskShell(
         kind: DeskKind.blend,
