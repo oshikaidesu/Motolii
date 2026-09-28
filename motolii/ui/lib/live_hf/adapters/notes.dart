@@ -64,6 +64,32 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
   bool hasPage(int page) => page < _pages.length;
 
   @override
+  void follow(int page, NBlock block) {
+    if (page >= _pages.length) return;
+    final b = EditorSession.maps(_pages[page]['blocks']).where((x) => '${x['id']}' == block.id).firstOrNull;
+    if (b == null) return;
+    if (b['layer'] != null) c.command('select', {'ids': [b['layer']]});
+    if (b['start'] is num) c.seek((b['start'] as num).toInt());
+  }
+
+  int _shown = 0;
+  @override
+  void showing(int page) => _shown = page;
+
+  /// Pictures dropped on the desk become image cards on the page shown (Classic DK-062), one after another.
+  Future<void> dropImages(List<String> paths) async {
+    final pageId = await _page(_shown);
+    for (var i = 0; i < paths.length; i++) {
+      await c.command('notes', {
+        'page': pageId,
+        'action': 'image',
+        'path': paths[i],
+        'block': {'id': 'b${DateTime.now().microsecondsSinceEpoch}$i', ..._frame(NBlock('image', Offset(40.0 + i * 24, 40.0 + i * 24), const Size(110, 80), '', 0))},
+      });
+    }
+  }
+
+  @override
   Future<void> paste(int page, Offset at) async {
     final clip = EditorSession.map(await c.native('noteClipboard'));
     final id = 'b${DateTime.now().microsecondsSinceEpoch}';
@@ -103,12 +129,14 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
         if (clip['png'] is! String) return;
         await c.command('notes', {'page': pageId, 'action': 'image', 'png': clip['png'], 'block': {'id': id, ..._frame(b)}});
       case 'ref':
+        // Classic's link: the active layer, from the picked keys' first to last frame, else the playhead
         final layer = c.activeLayer;
-        final start = (layer?['start'] as num? ?? c.frame.value).round();
+        final frames = [for (final k in EditorSession.maps(c.state['selectedKeys'])) (k['frame'] as num).toInt()]..sort();
+        final start = frames.firstOrNull ?? c.frame.value, end = frames.lastOrNull ?? c.frame.value;
         await c.command('notes', {
           'page': pageId,
           'action': 'putBlock',
-          'block': {'id': id, ..._frame(b), 'kind': 'reference', 'label': '${layer?['name'] ?? 'Frame ${c.frame.value}'}', 'layer': layer?['id'], 'start': start, 'end': (start + (layer?['duration'] as num? ?? 0)).round()},
+          'block': {'id': id, ..._frame(b), 'height': 64.0, 'kind': 'reference', 'label': '${layer?['name'] ?? 'Timeline'} · $start–$end', 'layer': layer?['id'], 'start': start, 'end': end},
         });
     }
   }
@@ -148,12 +176,32 @@ class LiveNotes extends StatefulWidget {
 
 class _LiveNotesState extends State<LiveNotes> {
   late final host = LiveNotesHost(widget.c);
+  final _desk = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.c.fileDropTarget = _drop;
+  }
+
+  /// Files dropped over the desk are pictures for the page, not imports (Classic DK-062); elsewhere they import.
+  bool _drop(Map<String, dynamic> event) {
+    final box = _desk.currentContext?.findRenderObject();
+    final point = event['point'];
+    if (box is! RenderBox || !box.attached || point is! List) return false;
+    final local = box.globalToLocal(Offset((point[0] as num).toDouble(), (point[1] as num).toDouble()));
+    if (!(Offset.zero & box.size).contains(local)) return false;
+    host.dropImages([for (final p in event['paths'] as List? ?? const []) if (p is String) p]);
+    return true;
+  }
+
   @override
   void dispose() {
+    if (widget.c.fileDropTarget == _drop) widget.c.fileDropTarget = null;
     host.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => NotesDesk(host: host);
+  Widget build(BuildContext context) => KeyedSubtree(key: _desk, child: NotesDesk(host: host));
 }

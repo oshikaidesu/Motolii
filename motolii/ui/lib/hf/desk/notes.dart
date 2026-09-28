@@ -38,6 +38,12 @@ abstract class NotesHost implements Listenable {
 
   /// Cmd+V on the desk: what the clipboard holds becomes a block at [at] (a picture, else its text).
   Future<void> paste(int page, Offset at);
+
+  /// A double click on a reference card: go where it points (its layer, its first frame).
+  void follow(int page, NBlock block);
+
+  /// The page the desk shows (where dropped pictures land).
+  void showing(int page);
 }
 
 /// Notes is a free 2D workbench. Wide shows it at working scale; narrow shows the same canvas fitted small.
@@ -112,8 +118,21 @@ class _NotesDeskState extends State<NotesDesk> {
     return r;
   }
 
+  int? _told;
+  void _tell() {
+    if (widget.host != null && _told != page) {
+      _told = page;
+      widget.host!.showing(page);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => DeskShell(
+  Widget build(BuildContext context) {
+    _tell();
+    return _build(context);
+  }
+
+  Widget _build(BuildContext context) => DeskShell(
         kind: DeskKind.notes,
         title: 'Notes',
         subtitle: 'PAGES · REFERENCES',
@@ -284,7 +303,7 @@ class _NotesDeskState extends State<NotesDesk> {
           onTap: () { if (editing != i) { _endEdit(); _canvasFocus.requestFocus(); } setState(() { selected = i; if (editing != i) editing = null; }); },
           onDoubleTap: b.kind == 'note' || b.kind == 'hand'
               ? () => setState(() { selected = i; editing = i; _ctl.text = b.text; _focus.requestFocus(); })
-              : null,
+              : (b.kind == 'ref' && widget.host != null ? () => widget.host!.follow(page, b) : null),
           onPanStart: (d) => setState(() => selected = i),
           // delta arrives in the block's own (canvas) units: the transform's scale is already undone
           onPanUpdate: (d) {

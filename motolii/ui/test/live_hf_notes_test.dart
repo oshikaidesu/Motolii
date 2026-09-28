@@ -123,4 +123,34 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     host.dispose();
   });
+  test('a reference links the picked keys span (else the playhead), and following it selects and seeks', () async {
+    final c = EditorSession()
+      ..document.value = {
+        'layers': [{'id': 4, 'name': 'Title', 'start': 0, 'duration': 90}],
+        'selectedId': 4,
+        'selectedIds': [4],
+        'selectedKeys': [
+          {'layer': 4, 'property': 'opacity', 'frame': 30},
+          {'layer': 4, 'property': 'opacity', 'frame': 12},
+        ],
+        'notebook': {
+          'pages': [
+            {'id': 'p1', 'title': 'One', 'blocks': [
+              {'id': 'r1', 'x': 0, 'y': 0, 'width': 100, 'height': 64, 'kind': 'reference', 'label': 'Title · 12–30', 'layer': 4, 'start': 12, 'end': 30},
+            ]},
+          ],
+        },
+      };
+    final host = LiveNotesHost(c);
+    await host.put(0, NBlock('ref', Offset.zero, const Size(100, 28), '', 0));
+    final put = sent.lastWhere((m) => m['action'] == 'putBlock');
+    expect(put['block']['label'], 'Title · 12–30');
+    expect([put['block']['start'], put['block']['end']], [12, 30]);
+    sent.clear();
+    host.follow(0, host.blocks(0).single);
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.firstWhere((m) => m['op'] == 'select')['ids'], [4]);
+    expect(sent.any((m) => m['op'] == 'seek' && m['frame'] == 12), isTrue);
+    host.dispose();
+  });
 }
