@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/glyphs.dart' as legacy;
 import '../hf/bp/common.dart' as tab;
 import '../hf/glyphs.dart' show HG;
 import '../hf/shell/menu.dart' show showHfMenu;
@@ -20,13 +21,18 @@ class PanelDef {
 /// The New shell's workspace: the off-the-shelf `docking` layout plus what only Motolii knows around it,
 /// which is the panel registry, showing a panel by id, and where a panel is on screen.
 class DockWorkspace {
-  DockWorkspace(this.defs, this._preset, {this.onDetach, this.allowClose = true}) {
+  DockWorkspace(this.defs, this._preset, {this.onDetach, this.allowClose = true, this.seats = false}) {
     layout = DockingLayout(root: _preset(item));
   }
 
   /// Given, every tab gets a small menu with Detach (a panel of its own window) and Close.
   final void Function(String id)? onDetach;
   final bool allowClose;
+
+  /// Every seat draws the Browser's seat strip and a tab is the panel's handle (drag to travel, right click for its
+  /// menu); `docking`'s own strip must then be off (`hfDockTabs`). Off: `docking`'s own tabs with a Detach/Close menu —
+  /// the New shell, whose theme (`shellTabs`) keeps that strip.
+  final bool seats;
 
   /// The default workspace: the arrangement the design started from.
   final DockingArea Function(DockingItem Function(String id, {double? weight}) item) _preset;
@@ -39,7 +45,15 @@ class DockWorkspace {
   final ValueNotifier<int> _picked = ValueNotifier(0);
 
   /// The dock itself, wired so a panel can tell whether it is in front. Use this, not a bare `Docking`.
-  Widget view() => Stack(
+  Widget view() => !seats
+      ? Docking(
+          layout: layout,
+          onItemSelection: (_) => _picked.value++,
+          maximizableItem: false,
+          maximizableTab: false,
+          maximizableTabsArea: false,
+        )
+      : Stack(
     key: _viewKey,
     fit: StackFit.expand,
     children: [
@@ -99,7 +113,7 @@ class DockWorkspace {
         child: Builder(
           builder: (_) => ListenableBuilder(
             listenable: Listenable.merge([layout, _picked]),
-            builder: (context, child) => Visibility(visible: isShown(id), maintainState: true, child: _seat(id, child!)),
+            builder: (context, child) => Visibility(visible: isShown(id), maintainState: true, child: seats ? _seat(id, child!) : child!),
             child: def.build(),
           ),
         ),
@@ -107,6 +121,17 @@ class DockWorkspace {
       weight: weight,
       minimalSize: def.minSize,
       keepAlive: true,
+      buttons: [
+        if (!seats && onDetach != null)
+          TabButton(
+            icon: IconProvider.data(legacy.Glyph.more_horiz),
+            toolTip: 'Panel',
+            menuBuilder: (context) => [
+              TabbedViewMenuItem(text: 'Detach', onSelection: () => onDetach!(id)),
+              if (allowClose) TabbedViewMenuItem(text: 'Close', onSelection: () => close(id)),
+            ],
+          ),
+      ],
     );
   }
 

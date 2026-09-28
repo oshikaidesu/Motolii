@@ -100,6 +100,7 @@ class LiveWorkspace {
       ]),
       onDetach: onDetach,
       allowClose: false,
+      seats: true,
     );
   }
 
