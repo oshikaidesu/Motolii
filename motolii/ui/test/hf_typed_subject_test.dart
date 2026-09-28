@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,5 +69,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(s.row('t')['value'], 'one');
     expect(find.text('one'), findsOneWidget);
+  });
+  testWidgets('a sideways wheel steps the value and writes it once the wheel rests', (tester) async {
+    final s = _Store();
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(child: SizedBox(width: 260, height: 40, child: ValueToy(Slot(s, 'x')))),
+    ));
+    final at = tester.getCenter(find.byType(ValueToy));
+    final mouse = TestPointer(4, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(mouse.hover(at));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(30, 0)));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(30, 0)));
+    await tester.pump();
+    expect(s.row('x')['value'], greaterThan(10.0));
+    final commits = s.commits;
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(s.commits, commits + 1);
   });
 }

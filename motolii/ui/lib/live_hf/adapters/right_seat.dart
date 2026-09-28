@@ -45,6 +45,9 @@ class _RightSeatState extends State<RightSeat> {
 
   void _changed() => setState(() {});
 
+  /// Effect cards folded to their header, per layer and effect (not kept with the document, as in Classic).
+  final _folded = <String>{};
+
   void _focus() {
     final focus = c.editingFocus.value;
     final layer = c.layers.where((l) => l['id'] == focus['layer']).firstOrNull;
@@ -121,6 +124,11 @@ class _RightSeatState extends State<RightSeat> {
                   index: i,
                   count: effects.length,
                   reorder: c.supports('moveEffect') && layer['frozen'] != true,
+                  folded: _folded.contains('${layer['id']}:${effects[i]['id']}'),
+                  onFold: () => setState(() {
+                    final k = '${layer['id']}:${effects[i]['id']}';
+                    _folded.contains(k) ? _folded.remove(k) : _folded.add(k);
+                  }),
                 ),
               ),
             ),

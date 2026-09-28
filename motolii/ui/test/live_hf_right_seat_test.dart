@@ -181,4 +181,23 @@ void main() {
     expect(key['layer'], 1);
     expect('${key['property']}', startsWith('layout.'));
   });
+  testWidgets('a tap on an effect header folds the card to its header, and back', (t) async {
+    await seat(t, {
+      'id': 1,
+      'name': 'Box',
+      'kind': 'Shape',
+      'effects': [
+        {'id': 'e1', 'name': 'Blur', 'enabled': true, 'params': []},
+      ],
+    });
+    final params = find.byKey(const ValueKey('new-effect-params:1:e1'));
+    expect(params, findsOneWidget);
+    await t.ensureVisible(find.byKey(const ValueKey('effect-head:e1')));
+    await t.tap(find.text('Blur'));
+    await t.pump();
+    expect(params, findsNothing);
+    await t.tap(find.text('Blur'));
+    await t.pump();
+    expect(params, findsOneWidget);
+  });
 }

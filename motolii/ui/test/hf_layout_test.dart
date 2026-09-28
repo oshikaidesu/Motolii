@@ -54,6 +54,13 @@ void main() {
     }
   });
 
+  testWidgets('a laid-out child reaches its other layout rows behind Advanced', (t) async {
+    final s = LayoutStore(child: true);
+    s.rows.add({'id': 'layout.margin', 'label': 'Margin', 'kind': 'f64', 'value': 0.0, 'advanced': true});
+    await open(t, store: s, w: 310, h: 520);
+    expect(k('layout-advanced'), findsOneWidget);
+  });
+
   group('Grid gates everything but Columns and Rows, as in Classic', () {
     testWidgets('with Grid off only the arrangement values remain; turning it on brings the rest back', (t) async {
       final s = await open(t, store: LayoutStore()..set('layout.display', 0));

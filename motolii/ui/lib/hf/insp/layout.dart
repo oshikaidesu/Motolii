@@ -100,6 +100,14 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         const SizedBox(height: 8),
         if (narrow) ...[Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', whole: false)]), const SizedBox(height: 3), ChoiceToy(s, 'layout.transition_easing', tone: alignColor)]
         else Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', units: true, whole: false), const SizedBox(width: 6), Expanded(flex: 2, child: ChoiceToy(s, 'layout.transition_easing', tone: alignColor))]),
+        ..._advanced(adv),
+      ],
+    ];
+  }
+
+  /// Every other layout row the document declares, behind one fold (Classic IN-091): for a group while Grid is on
+  /// (Grid gates it, as in Classic), and for a laid-out child.
+  List<Widget> _advanced(List<Map<String, dynamic>> adv) => [
         if (adv.isNotEmpty) ...[
           GestureDetector(
             key: const ValueKey('layout-advanced'),
@@ -109,9 +117,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
           ),
           if (advancedOpen) for (final r in adv) Padding(padding: const EdgeInsets.only(bottom: 6), child: ParamCell(s, r, tone: kMutedTone)),
         ],
-      ],
-    ];
-  }
+      ];
 
   static const kMutedTone = Color(0xFF8E8F92);
 
@@ -147,6 +153,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
           const SizedBox(height: 4),
           Row(children: [_val('layout.column_span', arrangeColor, tag: 'Cols'), const SizedBox(width: 3), _val('layout.row_span', arrangeColor, tag: 'Rows')]),
         ],
+        ..._advanced([for (final r in s.rows) if (r['advanced'] == true) r]),
       ];
 }
 

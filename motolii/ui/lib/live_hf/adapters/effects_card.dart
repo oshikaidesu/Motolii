@@ -12,7 +12,7 @@ import 'effect.dart';
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;
 /// only the head (Classic's `_effectMenu`/`_headGlyph`) is redrawn here, over the same operations.
 class NewEffectCard extends StatelessWidget {
-  const NewEffectCard({super.key, required this.controller, required this.layer, required this.effect, required this.index, required this.count, this.reorder = false});
+  const NewEffectCard({super.key, required this.controller, required this.layer, required this.effect, required this.index, required this.count, this.reorder = false, this.folded = false, this.onFold});
   final EditorSession controller;
   final Map<String, dynamic> layer;
   final Map<String, dynamic> effect;
@@ -21,6 +21,10 @@ class NewEffectCard extends StatelessWidget {
 
   /// The card sits in a reorderable list: its header is the grip (drag it to apply the effect earlier or later).
   final bool reorder;
+
+  /// A tap on the header folds the card to its header (Classic IN-014); the host keeps which are folded.
+  final bool folded;
+  final VoidCallback? onFold;
   EditorSession get c => controller;
 
   Future<void> _menu(BuildContext context, Offset at) async {
@@ -70,7 +74,7 @@ class NewEffectCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(6), border: Border.all(color: kRule)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _grip(Container(
+        _grip(GestureDetector(key: ValueKey('effect-head:${effect['id']}'), behavior: HitTestBehavior.opaque, onTap: onFold, child: Container(
           height: 30,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(border: Border(bottom: BorderSide(color: kRule2)), borderRadius: const BorderRadius.vertical(top: Radius.circular(6))),
@@ -96,13 +100,14 @@ class NewEffectCard extends StatelessWidget {
               child: Padding(padding: const EdgeInsets.all(4), child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(HG.kebab, kMuted, kRaised)))),
             )),
           ]),
-        )),
-        if (layer['frozen'] == true)
+        ))),
+        if (!folded && layer['frozen'] == true)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: Text('Frozen — effects are baked. Unfreeze to edit.', key: ValueKey('effect-frozen:${effect['id']}'), style: sans(10.5, c: kMuted)),
           ),
         // a placement effect's parameters are its params like any other (its grid view is not drawn here yet)
+        if (!folded)
         Padding(
           padding: const EdgeInsets.all(8),
           child: NewEffectParams(key: ValueKey('new-effect-params:${layer['id']}:${effect['id']}'), controller: c, layerId: layer['id'] as int, effectId: effect['id'] as Object),

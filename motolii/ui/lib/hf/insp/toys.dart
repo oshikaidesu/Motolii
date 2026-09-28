@@ -1,6 +1,7 @@
 // The generic Toys. A handful of primitives; meaning composes them, it does not add widgets.
 // Shared grammar: drag = manipulate, Shift = fine, click = exact input, double click = default,
 // arrow keys nudge, Delete resets. Hard min/max clamp silently and never draw a finite bar.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
@@ -156,6 +157,7 @@ class _ValueToyState extends State<ValueToy> {
     if (widget.focusNode == null) focus.dispose();
     editFocus.dispose();
     ctl.dispose();
+    _settle?.cancel();
     super.dispose();
   }
 
@@ -190,6 +192,25 @@ class _ValueToyState extends State<ValueToy> {
       widget.slot.typed(v / widget.slot.displayScale);
     }
   }
+
+  // A wheel step shows at once and is written when the wheel rests (one undo for a run of steps).
+  Timer? _settle;
+  bool _stepping = false;
+  void _wheelStep(int dir) {
+    final s = widget.slot;
+    if (!_stepping) { _v = s.value; _stepping = true; }
+    final by = s.step * (_shift ? .1 : 1);
+    _v += dir * (s.whole ? math.max(1, by.roundToDouble()) : by);
+    s.preview(s.quantize(_v, fine: _shift));
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 300), () {
+      _stepping = false;
+      if (mounted) s.commit();
+    });
+  }
+
+  // A sideways two-finger pan scrubs like a drag; a mostly vertical one is left to the panel's scroll.
+  bool? _panning;
 
   void _nudge(int dir) {
     final s = widget.slot;
@@ -233,6 +254,29 @@ class _ValueToyState extends State<ValueToy> {
         onEnter: (_) => setState(() => hover = true),
         onExit: (_) => setState(() => hover = false),
         child: Listener(
+        onPointerSignal: (e) {
+          if (e is! PointerScrollEvent || frozen || editing) return;
+          final dx = e.scrollDelta.dx, dy = e.scrollDelta.dy;
+          // a sideways wheel steps the value; a wheel turned with the button held steps it too (Classic IN-019/020)
+          final dir = dx.abs() > dy.abs() && dx != 0
+              ? (dx > 0 ? 1 : -1)
+              : ((e.buttons & kPrimaryButton) != 0 && dy != 0 ? (dy < 0 ? 1 : -1) : 0);
+          if (dir == 0) return;
+          GestureBinding.instance.pointerSignalResolver.register(e, (_) => _wheelStep(dir));
+        },
+        onPointerPanZoomStart: frozen ? null : (_) => _panning = null,
+        onPointerPanZoomUpdate: frozen ? null : (e) {
+          final d = e.panDelta;
+          _panning ??= d.distance < 2 ? null : d.dx.abs() > d.dy.abs();
+          if (_panning != true || editing) return;
+          if (!dragging) { _v = widget.slot.value; setState(() => dragging = true); }
+          _v += d.dx * widget.slot.rate * (_shift ? .1 : 1);
+          widget.slot.preview(widget.slot.quantize(_v, fine: _shift));
+        },
+        onPointerPanZoomEnd: frozen ? null : (_) {
+          if (_panning == true && dragging) { widget.slot.commit(); setState(() => dragging = false); }
+          _panning = null;
+        },
         // clicks are told from drags by distance, so a click acts at once and a quick second click is a double
         onPointerDown: (e) { if (e.buttons == kSecondaryButton) { s.store.menu(context, s.id, s.axis, e.position); return; } _down = e.position; _moved = false; if (!frozen && !editing) focus.requestFocus(); },
         onPointerMove: (e) { if ((e.position - _down).distance > 4) _moved = true; },
