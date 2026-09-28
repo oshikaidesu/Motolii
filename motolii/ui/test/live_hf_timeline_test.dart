@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -218,4 +220,75 @@ void main() {
       });
     },
   );
+
+  Future<EditorSession> mountRows(WidgetTester tester, int count, {int frames = 300}) async {
+    tester.view.physicalSize = const Size(1178, 291);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = EditorSession()
+      ..document.value = {
+        'fps': 30,
+        'durationFrames': frames,
+        'capabilities': ['seek', 'select'],
+        'layers': [
+          for (var n = 0; n < count; n++)
+            {'id': n + 1, 'name': 'L$n', 'kind': 'Shape', 'start': 0, 'duration': 90, 'properties': []},
+        ],
+      };
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: 1178, height: 291, child: LiveTimeline(c: c))),
+      ),
+    );
+    return c;
+  }
+
+  String firstRuler(WidgetTester tester) =>
+      tester.widgetList<Text>(find.byType(Text)).map((t) => t.data ?? '').firstWhere((t) => RegExp(r'^\d\d:\d\d$').hasMatch(t));
+
+  testWidgets('a trackpad pan moves time the way Classic does (core navigation)', (tester) async {
+    await mountRows(tester, 3, frames: 3000); // 100 s: far more than the visible span
+    final before = firstRuler(tester);
+    final pad = TestPointer(1, PointerDeviceKind.trackpad);
+    final at = Offset(tlX(4) - 344, tlTop + tlPitch - 703);
+    await tester.sendEventToBinding(pad.panZoomStart(at));
+    for (var i = 1; i <= 8; i++) {
+      await tester.sendEventToBinding(pad.panZoomUpdate(at, pan: Offset(-40.0 * i, 0)));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.sendEventToBinding(pad.panZoomEnd());
+    await tester.pumpAndSettle();
+    expect(firstRuler(tester), isNot(before), reason: 'dragging two fingers left must move later time into view');
+  });
+
+  testWidgets('Cmd+wheel zooms around the pointer, not the middle', (tester) async {
+    await mountRows(tester, 3);
+    final at = Offset(tlX(1) - 344, tlTop + tlPitch - 703);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    final mouse = TestPointer(2, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(mouse.hover(at));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -200)));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    // the frame under the pointer (1 s) stays under it: pressing there seeks to ~frame 30
+    sent.clear();
+    await tester.tapAt(Offset(tlX(1) - 344, 760 - 703));
+    await tester.pump(const Duration(milliseconds: 50));
+    final seek = sent.lastWhere((m) => m['op'] == 'seek');
+    expect((seek['frame'] as num).toDouble(), closeTo(30, 3));
+  });
+
+  testWidgets('rows below the first are hit where they are drawn (row pitch 23)', (tester) async {
+    await mountRows(tester, 8);
+    sent.clear();
+    // the 8th row's bar, 2 px above the row's bottom edge: with the old 22 px hit pitch the lanes drifted a pixel per
+    // row and this landed below the last row
+    final y = tlTop + tlPitch * 7 + tlRowH - 2 - 703;
+    await tester.tapAt(Offset(tlX(1.5) - 344, y));
+    await tester.pump();
+    final select = sent.lastWhere((m) => m['op'] == 'select');
+    expect(select['ids'], [8]);
+  });
+
 }

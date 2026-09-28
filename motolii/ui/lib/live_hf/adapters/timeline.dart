@@ -288,14 +288,18 @@ class _LiveTimelineState extends State<LiveTimeline>
   }
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<int>(
-    valueListenable: c.frame,
-    builder: (context, frame, _) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([c.frame, scrubFrame]),
+    builder: (context, _) {
+      // A scrub draws the head where it was asked to be at once; the host's reply catches up (TimelineFrame).
+      final frame = scrubFrame.value ?? c.frame.value;
       final duration = (c.state['durationFrames'] as num? ?? 1).toInt();
       return Focus(
         focusNode: focus,
         onKeyEvent: key,
-        child: RF(
+        // Trackpad pan, pinch and ruler scrub-zoom with momentum, and the wheel (pointer-anchored zoom with Cmd or
+        // over the ruler): the core's own navigation, the same one Classic's Timeline uses.
+        child: navigation(RF(
           timeline(
             TimelineModel(
             tabs: false,
@@ -311,7 +315,7 @@ class _LiveTimelineState extends State<LiveTimeline>
                   : null,
               onSplit: c.supports('split') ? () => c.command('split') : null,
               onMarkerContext: (id, at) => _markerContext(id, at, context),
-              onSeek: (x) => c.seek(
+              onSeek: (x) => requestSeek(
                 _frameAt(x).round().clamp(0, duration > 0 ? duration - 1 : 0),
               ),
               onRow: (i) {
@@ -332,31 +336,11 @@ class _LiveTimelineState extends State<LiveTimeline>
               onCoreLabelUp: (event, index, p) =>
                   endAt(event, _coreLabelPosition(index, p)),
               onCoreLabelCancel: (_, __, ___) => cancel(),
-              onScroll: (dx, dy, zoom) {
-                if (zoom) {
-                  zoomAt(
-                    math.exp(-dy / 500),
-                    labelWidth + (viewportWidth - labelWidth) / 2,
-                  );
-                } else if (dy.abs() > dx.abs() && tracks.length > 8) {
-                  navigateView(
-                    pixelsPerFrame,
-                    offset,
-                    math.max(0, verticalOffset + dy),
-                  );
-                } else {
-                  navigateView(
-                    pixelsPerFrame,
-                    math.max(0, offset + (dx == 0 ? dy : dx)),
-                    0,
-                  );
-                }
-              },
             ),
           ),
           ox: 344,
           oy: 703,
-        ),
+        )),
       );
     },
   );

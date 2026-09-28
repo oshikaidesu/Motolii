@@ -2,6 +2,7 @@
 class TimelineGeometry {
   static const classicRowHeight = 20.0;
   static const classicRulerHeight = 32.0;
+  static const classicRulerTop = 22.0;
   static const classicIndentStep = 8.0;
   static const classicDisclosureWidth = 20.0;
   static const classicNameWidth = 138.0;
@@ -10,6 +11,7 @@ class TimelineGeometry {
   const TimelineGeometry({
     required this.rowHeight,
     required this.rulerHeight,
+    this.rulerTop = classicRulerTop,
     required this.indentStep,
     required this.disclosureWidth,
     required this.nameWidth,
@@ -28,8 +30,9 @@ class TimelineGeometry {
   );
 
   static const hf = TimelineGeometry(
-    rowHeight: 22,
+    rowHeight: 23, // the hf row pitch (`tlPitch`): rows are hit-tested where they are drawn
     rulerHeight: 31,
+    rulerTop: 40, // hf's ruler band, y 743-775 in the reference frame, 703 at the seat top
     indentStep: 14,
     disclosureWidth: 20,
     nameWidth: 133,
@@ -39,6 +42,10 @@ class TimelineGeometry {
 
   final double rowHeight;
   final double rulerHeight;
+
+  /// Where the time ruler starts, from the top of the face: the band where a wheel or a pinch zooms instead of
+  /// panning.
+  final double rulerTop;
   final double indentStep;
   final double disclosureWidth;
   final double nameWidth;

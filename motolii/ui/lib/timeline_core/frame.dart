@@ -23,8 +23,8 @@ mixin TimelineFrame<T extends StatefulWidget> on State<T> {
   double viewportWidth = 1;
   bool overTimeRuler(Offset p) =>
       p.dx >= labelWidth &&
-      p.dy >= 22 &&
-      p.dy < 22 + timelineGeometry.rulerHeight;
+      p.dy >= timelineGeometry.rulerTop &&
+      p.dy < timelineGeometry.rulerTop + timelineGeometry.rulerHeight;
   double baseNameWidth = 138;
   double resizeStart = 138;
   double resizePointerStart = 0;
