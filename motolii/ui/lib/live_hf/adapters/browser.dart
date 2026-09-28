@@ -604,8 +604,7 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
         ('palette', 'Palette from image…'),
         c.deskWork.value['colorShape'] == 'triangle' ? ('square', 'Square wheel') : ('triangle', 'Triangle wheel'),
       ],
-    ], disabled: {
-      'title',
+    ], info: {'title'}, disabled: {
       if (colorsTab && colorTarget(c) == null && EditorSession.map(c.activeLayer?['fill']).isEmpty) 'saveColor',
     }, dividers: {
       if (name != null) 'title',

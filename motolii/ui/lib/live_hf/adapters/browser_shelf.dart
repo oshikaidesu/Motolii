@@ -486,9 +486,8 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
         for (final a in actions) ('media:${a.value}', a.label),
         ...userState.collectionLines(id),
       ],
+      info: {'title', for (var i = 0; i < facts.length; i++) 'fact:$i'},
       disabled: {
-        'title',
-        for (var i = 0; i < facts.length; i++) 'fact:$i',
         for (final a in actions)
           if (!a.enabled) 'media:${a.value}',
       },

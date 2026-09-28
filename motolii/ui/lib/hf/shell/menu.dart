@@ -7,7 +7,10 @@ import '../metrics.dart';
 import 'place.dart';
 
 /// [shortcuts] names the key for a line (shown at its right, as menus do); [dividers] ends a group after a line.
-Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items, {T? selected, Set<T> disabled = const {}, Map<T, String> shortcuts = const {}, Set<T> dividers = const {}}) {
+/// [info] lines tell rather than do (a title, a fact): drawn as information, never lit, never greyed like an action
+/// that cannot run now ([disabled]). The line under the pointer is lit as the keys light it; [selected] (the current
+/// value) carries a check, so "current" and "under the pointer" never look alike.
+Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items, {T? selected, Set<T> disabled = const {}, Map<T, String> shortcuts = const {}, Set<T> dividers = const {}, Set<T> info = const {}}) {
   final done = Completer<T?>();
   late final OverlayEntry entry;
   final back = FocusManager.instance.primaryFocus;
@@ -37,7 +40,9 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
   final top = local.bottom + 2 + height <= space.height
       ? local.bottom + 2
       : (local.top - 2 - height).clamp(0.0, double.infinity);
-  final left = local.left.clamp(0.0, (space.width - at.width).clamp(0.0, double.infinity));
+  // a menu is never narrower than a line can be read in (a caller may only know a point)
+  final width = math.max(at.width, 180.0);
+  final left = local.left.clamp(0.0, (space.width - width).clamp(0.0, double.infinity));
   hot.addListener(() {
     if (!done.isCompleted) entry.markNeedsBuild();
   });
@@ -54,7 +59,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
         }
         // ↑/↓ walk the lines that can be chosen, Enter takes the one walked to (the editor menu's keys)
         if (k == LogicalKeyboardKey.arrowDown || k == LogicalKeyboardKey.arrowUp) {
-          final open = [for (final (i, it) in items.indexed) if (!disabled.contains(it.$1)) i];
+          final open = [for (final (i, it) in items.indexed) if (!disabled.contains(it.$1) && !info.contains(it.$1)) i];
           if (open.isEmpty) return KeyEventResult.handled;
           final at = open.indexOf(hot.value);
           hot.value = k == LogicalKeyboardKey.arrowDown
@@ -73,26 +78,41 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
       Positioned(
         left: left,
         top: top,
-        width: at.width,
+        width: width,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 3),
           decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
           constraints: BoxConstraints(maxHeight: height),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final (i, (v, label)) in items.indexed) ...[
+              if (info.contains(v))
+                Container(
+                  height: UiMetrics.menuRow - 4,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  alignment: Alignment.centerLeft,
+                  child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: i == 0 ? H.s(12, w: FontWeight.w600, color: H.text2) : H.m(11, color: H.text3)),
+                )
+              else
               MouseRegion(
                 cursor: disabled.contains(v) ? SystemMouseCursors.basic : SystemMouseCursors.click,
+                onEnter: (_) {
+                  if (!disabled.contains(v) && !done.isCompleted) hot.value = i;
+                },
+                onExit: (_) {
+                  if (!done.isCompleted && hot.value == i) hot.value = -1;
+                },
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: disabled.contains(v) ? null : () => close(v),
                   child: Container(
                     height: UiMetrics.menuRow,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.only(left: 4, right: 10),
                     alignment: Alignment.centerLeft,
-                    color: v == selected || hot.value == i ? H.selHi : null,
+                    color: hot.value == i ? H.selHi : null,
                     child: Row(children: [
-                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(13, color: disabled.contains(v) ? H.text3 : H.text))),
-                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 16), child: Text(key, style: H.s(12, color: H.text3))),
+                      SizedBox(width: 16, child: v == selected ? Text('✓', textAlign: TextAlign.center, style: H.s(11, color: H.text2)) : null),
+                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(12.5, color: disabled.contains(v) ? const Color(0xFF6A6A6C) : H.text))),
+                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 16), child: Text(key, style: H.s(11.5, color: H.text3))),
                     ]),
                   ),
                 ),
