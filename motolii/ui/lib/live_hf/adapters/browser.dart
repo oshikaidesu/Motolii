@@ -539,10 +539,14 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
                 ? CustomPaint(
                     painter: FxPainter('${thing.face['base']}', scene),
                   )
-                : const Center(
+                // an effect that ships no snapshot keeps its name as its tile (the native contract)
+                : Center(
                     child: Text(
-                      'Preview unavailable',
-                      style: TextStyle(color: Color(0xFFB0B0B2), fontSize: 10),
+                      thing.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFFB0B0B2), fontSize: 10),
                     ),
                   )
           : Image.memory(s.data!, fit: BoxFit.cover, gaplessPlayback: true),

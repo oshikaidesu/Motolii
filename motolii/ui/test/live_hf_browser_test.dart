@@ -158,6 +158,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.last['op'], 'reloadEffects');
       expect(find.text('Motion Blur'), findsWidgets);
+      // an effect with no snapshot keeps its name as its tile (the native contract), never a placeholder
+      expect(find.text('Preview unavailable'), findsNothing);
       await tester.tap(find.text('Motion Blur').last);
       await tester.pumpAndSettle();
       expect(

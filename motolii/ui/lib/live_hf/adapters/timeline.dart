@@ -292,10 +292,11 @@ class _LiveTimelineState extends State<LiveTimeline>
   }
 
   String _label(int i) {
-    final t = (_frameAt(tlX0 + i * tlUnit) / fps).clamp(0, double.infinity);
-    final m = t ~/ 60,
-        sec = (t % 60).floor(),
-        ff = ((t - t.floorToDouble()) * fps).round();
+    // the frame under the tick (the half-pixel in _frameAt put a whole second just below itself), read as the top
+    // bar's timecode reads a frame
+    final rate = fps.round().clamp(1, 1000);
+    final f = math.max(0, _frameAt(tlX0 + i * tlUnit).round());
+    final m = f ~/ (rate * 60), sec = (f ~/ rate) % 60, ff = f % rate;
     return _unit < 1
         ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}'
         : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';

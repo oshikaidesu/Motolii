@@ -258,6 +258,12 @@ void main() {
   String firstRuler(WidgetTester tester) =>
       tester.widgetList<Text>(find.byType(Text)).map((t) => t.data ?? '').firstWhere((t) => RegExp(r'^\d\d:\d\d$').hasMatch(t));
 
+  testWidgets('the ruler names the second each tick stands on', (tester) async {
+    await mountRows(tester, 1);
+    final ruler = [for (final t in tester.widgetList<Text>(find.byType(Text))) if (RegExp(r'^\d\d:\d\d$').hasMatch(t.data ?? '')) t.data];
+    expect(ruler.take(4), ['00:00', '00:01', '00:02', '00:03']);
+  });
+
   testWidgets('a trackpad pan moves time the way Classic does (core navigation)', (tester) async {
     await mountRows(tester, 3, frames: 3000); // 100 s: far more than the visible span
     final before = firstRuler(tester);
