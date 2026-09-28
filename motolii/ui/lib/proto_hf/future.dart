@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import 'common.dart';
-import 'shell.dart';
+import '../hf/bp/common.dart';
+import '../hf/bp/shell.dart';
 
 /// Identity tiles for panels that do not exist yet. They only test that the same shell can hold them.
 const futureNames = ['Media', 'Audio', 'Music', 'Physics', 'Materials', 'Environments', 'AI', 'Templates', 'Plugins'];

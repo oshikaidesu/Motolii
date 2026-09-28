@@ -6,7 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import '../hf/bp/common.dart';
 import '../hf/bp/search.dart';
-import '../hf/insp/fixtures.dart';
+import 'fixtures.dart';
 import '../hf/insp/panel.dart';
 import '../hf/insp/rows.dart';
 

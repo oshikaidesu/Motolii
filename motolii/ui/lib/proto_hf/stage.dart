@@ -1,8 +1,8 @@
 // The Stage seat of the reference, at its own coordinates: the seat's edges and the composition tab row. What sits
 // under the tab row (the work area and its controls) is the Stage itself, handed in as [StageModel.body].
 import 'package:flutter/widgets.dart';
-import '../glyphs.dart';
-import 'place.dart';
+import '../hf/glyphs.dart';
+import '../hf/shell/place.dart';
 
 class StageModel {
   const StageModel({required this.body, this.title = 'Composition 1'});

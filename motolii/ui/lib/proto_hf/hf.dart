@@ -6,8 +6,8 @@ import 'hg_item.dart';
 import 'ref.dart';
 import '../hf/shell/top.dart' as shell_top show top;
 import '../hf/shell/top.dart' show TopModel;
-import '../hf/shell/stage.dart' as shell_stage show stage;
-import '../hf/shell/stage.dart' show StageModel, StageBodyModel, stageBody;
+import 'stage.dart' as shell_stage show stage;
+import 'stage.dart' show StageModel, StageBodyModel, stageBody;
 import '../hf/shell/timeline.dart' as shell_timeline show timeline;
 import '../hf/shell/timeline.dart' show TimelineModel, TlRow, TlKind, tlX0;
 

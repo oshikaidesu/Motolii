@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../bp/common.dart' show kGround, kRule;
+import '../hf/bp/common.dart' show kGround, kRule;
 
 /// The Shell's own visible tree — the same one `proto_hf/main_shell.dart::Shell` draws, pulled out so both proto_hf
 /// (fixtures in every slot) and production (Motolii Live in every slot) build the identical widget tree. This is

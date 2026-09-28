@@ -74,7 +74,7 @@ class LiveWorkspace {
         'History': PanelDef('History', 'History', () => NewHistory(controller: c), glyph: HG.power, minSize: 220),
         'Notes': PanelDef('Notes', 'Notes', () => LiveNotes(c: c), glyph: HG.star, minSize: 240),
       },
-      // Weights are the REFERENCE frame's own rectangles (`hf/shell/shell_face.dart`'s 1536×1024 geometry),
+      // Weights are the REFERENCE frame's own rectangles (`proto_hf/shell_face.dart`'s 1536×1024 geometry),
       // not tuned by eye: Browser 324, the Stage/Inspector row 779+387, that row 632 tall against
       // Timeline's 291 — Dock adds move/resize/split/detach/persist over this shape, it does not redraw
       // it. The desks (Blend/Depth/Ease/History/Notes) have no seat of their own in the reference: they

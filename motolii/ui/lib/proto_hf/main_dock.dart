@@ -14,7 +14,7 @@ import '../hf/desk/blend.dart';
 import '../hf/desk/ease.dart';
 import 'hf.dart' as hf;
 import '../hf/insp/panel.dart';
-import '../hf/insp/fixtures.dart';
+import 'fixtures.dart';
 import '../hf/insp/rows.dart';
 import '../hf/insp/transform.dart';
 import '../hf/insp/transform_model.dart';

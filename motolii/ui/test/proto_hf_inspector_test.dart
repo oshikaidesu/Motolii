@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/hf/bp/search.dart';
-import 'package:motolii_stage5/hf/insp/fixtures.dart';
+import 'package:motolii_stage5/proto_hf/fixtures.dart';
 import 'package:motolii_stage5/hf/insp/panel.dart';
 import 'package:motolii_stage5/hf/insp/rows.dart';
 import 'package:motolii_stage5/hf/insp/tones.dart';
