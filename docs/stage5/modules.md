@@ -12,7 +12,7 @@
 |---|---|---|
 | 再生時計・音声transport | `motolii-render/src/playback.rs` | `StoreView`の読み取りだけ。編集Document/Intent、Flutter、パネルを受け取らない |
 | 作品の保存・編集 | `motolii/ui/extensions/edit`(`motolii-edit`: `document.rs`・`Intent`・`persist.rs`) | Document/Intent、共通の値・効果宣言型 |
-| 保存作品・処理用の読み取り所有 | `motolii-doc/src/store/recording.rs` | `Recording::load`と`view`。編集・Undoを公開せず、RRD decoderはDocumentと共有。Documentからの変換は確定した編集位置を保持し、一時編集を含めない |
+| 保存作品・処理用の読み取り所有 | `motolii-doc/src/store/recording.rs` | `Recording::load`と`view`(実行中の製品は`Document::view()`の`StoreView`で読む。`Recording::load`の呼び手は今は試験 `ui/extensions/edit/tests/recording_read.rs` だけ)。編集・Undoを公開せず、RRD decoderはDocumentと共有。Documentからの変換は確定した編集位置を保持し、一時編集を含めない |
 | 作品の読み取り・読取cache | `motolii-doc/src/store/view.rs`、`read.rs` | 編集命令を解釈せず、記録と読み取り用のプレビュー値を参照する。命令から値への変換・検証は編集側の責任 |
 | 共通ID・版情報 | `motolii-doc/src/store/ids.rs`、`read.rs` | 読む側と書く側が共有する値の型。編集実装の子モジュールには置かない |
 | 閲覧状態 | `ui/native/src/viewer.rs` | 選択・閲覧時刻・再生時計・観測カメラ・表示範囲・ポインタなど。作品を所有せず、読み取りViewから初期化する。主選択は一覧の末尾から導出し二重保存しない |

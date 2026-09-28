@@ -2,7 +2,7 @@
 
 [開発入口](../../docs/stage5/README.md) · [モジュール責任](../../docs/stage5/modules.md)
 
-`lib/main.dart`は起動、`app`は窓のライフサイクル、`workspace`はDock、`input`は共通操作、`foundation`は部品、`panels`は各面、`session`はEditorSession、`bridge`は通信。作品は本体doc/renderが持つ。
+`lib/main.dart`は起動、`app`は窓のライフサイクル、`workspace`はDock、`input`は共通操作、`foundation`は部品、`panels`はClassic/New shellの各面(Stageは3つのshellが共用)、`live_hf`と`hf`はlive GUIの面、`proto_hf`・`proto`は試作、`session`はEditorSession、`bridge`は通信。作品は本体doc/renderが持つ。
 
 Rust編集層は`native/src/editor`。旧実装は[Git履歴](../../docs/stage5/history/retired-source.md)へ退役済み。内部runtimeはEditorRuntime。既存のC symbolと`motolii/probe`通信名はwire互換で残しており、別の検証用入口を意味しない。
 
