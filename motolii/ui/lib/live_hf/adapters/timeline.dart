@@ -57,6 +57,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
   final focus = FocusNode();
   late final motion = ViewportMotion((scale, x, y) => s.setView(pixelsPerFrame: scale, startFrame: x / scale, firstRow: y / rowH));
   int? hover;
+  MouseCursor _cursor = MouseCursor.defer;
   Offset? _down;
   bool _dragging = false, _navigating = false;
   Offset _navOrigin = Offset.zero;
@@ -73,6 +74,22 @@ class _LiveTimelineState extends State<LiveTimeline> {
   double frameAt(double x) => s.startFrame + (x - labelW) / s.pixelsPerFrame;
   double yOf(int row) => rulerH + (row - s.firstRow) * rowH;
   double rowAt(double y) => s.firstRow + (y - rulerH) / rowH;
+
+  /// A bar's interaction geometry, the one place that says what a press takes (hit-testing and the cursor both ask):
+  /// [dx] from the bar's drawn left edge, for a bar [w] wide on screen. A thin bar is at least [minHit] to the pointer
+  /// (visual size is not hit size); its ends take at most a third each, so there is always a middle to carry it by;
+  /// an end is also taken from just outside the bar.
+  static const minHit = 12.0;
+  TlBarPart? barGrab(double dx, double w) {
+    final pad = math.max(0.0, (minHit - w) / 2);
+    if (dx < -pad - edgeSlop || dx > w + pad + edgeSlop) return null;
+    if (dx < -pad) return TlBarPart.start;
+    if (dx > w + pad) return TlBarPart.end;
+    final edge = math.min(edgeSlop, (w + 2 * pad) / 3);
+    if (dx + pad < edge) return TlBarPart.start;
+    if (w + pad - dx < edge) return TlBarPart.end;
+    return TlBarPart.body;
+  }
 
   TlMods get _mods {
     final k = HardwareKeyboard.instance;
@@ -95,21 +112,16 @@ class _LiveTimelineState extends State<LiveTimeline> {
       return const TlEmpty();
     }
     final start = (r.layer['start'] as num? ?? 0).toDouble(), end = start + (r.layer['duration'] as num? ?? 0).toDouble();
-    final left = xOf(start), right = xOf(end);
-    // an end is taken just outside the bar, so keys at its ends stay pickable; inside only when the bar is long enough
-    if (p.dx >= left - edgeSlop && p.dx < left) return TlBar(i, TlBarPart.start);
-    if (p.dx > right && p.dx <= right + edgeSlop) return TlBar(i, TlBarPart.end);
-    if (!r.lanesOpen) {
+    final part = barGrab(p.dx - xOf(start), xOf(end) - xOf(start));
+    // keys win inside a bar with room for them; a bar too short to hold its keys apart from its middle is carried,
+    // and its keys are picked on its opened lanes (a bar always has a middle to carry it by)
+    final roomy = xOf(end) - xOf(start) >= minHit * 2;
+    if (!r.lanesOpen && (roomy || part == null) && (part == TlBarPart.body || part == null || (p.dx > xOf(start) && p.dx < xOf(end)))) {
       for (final f in r.summaryFrames) {
         if ((xOf(f) - p.dx).abs() <= keySlop) return TlLayerKey(i, f);
       }
     }
-    if (p.dx >= left && p.dx <= right) {
-      final roomy = right - left > edgeSlop * 4;
-      if (roomy && p.dx - left <= edgeSlop) return TlBar(i, TlBarPart.start);
-      if (roomy && right - p.dx <= edgeSlop) return TlBar(i, TlBarPart.end);
-      return TlBar(i, TlBarPart.body);
-    }
+    if (part != null) return TlBar(i, part);
     return const TlEmpty();
   }
 
@@ -235,7 +247,14 @@ class _LiveTimelineState extends State<LiveTimeline> {
               child: Listener(
                 onPointerSignal: _wheel,
                 child: MouseRegion(
+                  cursor: _cursor,
                   onHover: (e) {
+                    final c = e.localPosition.dx < labelW ? MouseCursor.defer : switch (_hit(e.localPosition)) {
+                      TlBar(part: TlBarPart.start || TlBarPart.end) => SystemMouseCursors.resizeLeftRight,
+                      TlBar() || TlLayerKey() || TlLaneKey() => SystemMouseCursors.click,
+                      _ => MouseCursor.defer,
+                    };
+                    if (c != _cursor) setState(() => _cursor = c);
                     final i = rowAt(e.localPosition.dy).floor();
                     final next = e.localPosition.dy < rulerH || i >= s.rows.length ? null : i;
                     if (next != hover) setState(() => hover = next);
@@ -525,7 +544,8 @@ class _RowsPainter extends CustomPainter {
           cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 6, t.xOf(b), cy + 6), const Radius.circular(3)), fill..color = colour.withValues(alpha: .28));
         }
         if (r.layer['kind'] != 'Camera') {
-          final bar = Rect.fromLTRB(t.xOf(start), cy - 6, t.xOf(end), cy + 6);
+          // however short in time, a bar is drawn at least 3 px, so it can be seen where it is grabbed
+          final bar = Rect.fromLTRB(t.xOf(start), cy - 6, math.max(t.xOf(end), t.xOf(start) + 3), cy + 6);
           cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(3)), fill..color = colour);
         }
         final wave = waves[r.id];
