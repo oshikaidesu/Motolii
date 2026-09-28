@@ -168,7 +168,7 @@ mod tests {
     }
 
     fn desc() -> FrameDesc {
-        FrameDesc::packed(256, 256, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false)
+        FrameDesc::try_packed(256, 256, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false).unwrap()
     }
 
     /// An encoder that talks a lot on stderr before it reads a frame: if nobody drains stderr, its pipe fills,

@@ -33,7 +33,7 @@
 | ANA-1..3 解析 | PARTIAL | Blob Track・revisionまでのcache・blob ID | 支配色、範囲限定の再解析、optical flowなし | MEDIUM/LOW |
 | V2-1 / V2-7 | PARTIAL | vism=shader+ISF manifest+hot reload / Freezeのディスクcache | container・ABI / 解析の永続化なし | LOW/MEDIUM |
 | FG-C6 | PARTIAL | `CompLookbehind` | `InstanceIndex` なし | HIGH |
-| GAP-17 FrameDesc | OPEN | `motolii-doc/src/core/frame.rs`: `expect`(:71,:96)、`validate() -> Result<(), String>`(:130)、`Deserialize` 派生 | 守っていたplugin APIは消えたが欠陥は残る | HIGH |
+| GAP-17 FrameDesc | CLOSED 2026-09-28 | `packed/yuv`(expect)削除、`try_packed`は zero/overflow を型付き拒否、`validate() -> Result<(), FrameDescError>`、`Deserialize`は`try_from`で`validate`を通す。6意味不変(凍結ゲート#1は constructor/serde/error 形を凍結しない) | `frame_desc_tests` 4本(overflow/zero/format-stride/odd 4:2:0/serde bypass、正当descriptor roundtrip) | — |
 | GAP-29 / GAP-30 / GAP-31 / GAP-32 / GAP-5 / INF-3 / V2-3 | OPEN | 書き出しは直列・毎コマ待ち、warmはdecoderのみ、色変換はffmpeg側 | — | [M]が多い |
 | GAP-7 / GAP-9 / GAP-20 / GAP-22 / INF-4 / INF-5 / SCR-3 / SIM-4 / MC-0..2 / V2-2 / V2-4..6 / V2-8..10 | OPEN | 実装なし(GAP-9は `motolii-cli` 自体が無い) | — | 各 |
 | GAP-14 共有エフェクト | DOC_STALE(本文「完了」) | Shared Effect・Unlink・Materialize は `store/`・`edit/` のどこにも無い | 世界の切替で失われた | LOW |
