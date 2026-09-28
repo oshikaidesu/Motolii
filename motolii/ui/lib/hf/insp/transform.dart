@@ -4,6 +4,7 @@
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import '../desk/common.dart' show kYellow, kInk, kBlue, kPink, kViolet;
+import '../metrics.dart';
 import 'rows.dart';
 import 'toys.dart';
 import 'transform_gizmo.dart';
@@ -248,7 +249,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         key: const ValueKey('link-scale'),
         behavior: HitTestBehavior.opaque,
         onTap: s.canEdit ? () => s.toggleLink('scale') : null,
-        child: Container(width: 26, height: 30, margin: const EdgeInsets.only(left: 4), decoration: BoxDecoration(color: s.linked.contains('scale') ? kBlue : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _LinkP(s.linked.contains('scale') ? const Color(0xFF1B1B1D) : kMuted, s.linked.contains('scale')))))),
+        child: Container(width: 26, height: UiMetrics.control, margin: const EdgeInsets.only(left: 4), decoration: BoxDecoration(color: s.linked.contains('scale') ? kBlue : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _LinkP(s.linked.contains('scale') ? const Color(0xFF1B1B1D) : kMuted, s.linked.contains('scale')))))),
       );
 
   bool _modified(List<String> ids) => ids.any((i) => s.rows.any((r) => r['id'] == i) && modified(s.row(i)));
@@ -268,13 +269,13 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     final tone = m == null ? kViolet : modeColor[m]!;
     return Container(
       key: ValueKey('row-$id'),
-      margin: const EdgeInsets.only(bottom: 5),
+      margin: const EdgeInsets.only(bottom: UiMetrics.cellGap),
       child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         GestureDetector(
           key: ValueKey('glyph-$id'),
           behavior: HitTestBehavior.opaque,
           onTap: m == null ? null : () => setState(() => mode = m),
-          child: Container(width: 22, height: 30, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: active ? tone : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: glyph ?? CustomPaint(painter: RoleGlyph(m!, active ? const Color(0xFF1B1B1D) : tone)))),
+          child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: active ? tone : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: glyph ?? CustomPaint(painter: RoleGlyph(m!, active ? const Color(0xFF1B1B1D) : tone)))),
         ),
         Expanded(child: values),
         if (extra != null) extra,
@@ -314,9 +315,9 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     final name = ax < 0 || ay < 0 ? 'Custom' : _anchorNames[ay][ax];
     return Container(
       key: const ValueKey('row-anchor'),
-      margin: const EdgeInsets.only(bottom: 5),
+      margin: const EdgeInsets.only(bottom: UiMetrics.cellGap),
       child: Row(children: [
-        GestureDetector(key: const ValueKey('glyph-anchor'), behavior: HitTestBehavior.opaque, onTap: () => setState(() => mode = TMode.anchor), child: Container(width: 22, height: 30, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: mode == TMode.anchor ? kViolet : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: RoleGlyph(TMode.anchor, mode == TMode.anchor ? const Color(0xFF1B1B1D) : kViolet))))),
+        GestureDetector(key: const ValueKey('glyph-anchor'), behavior: HitTestBehavior.opaque, onTap: () => setState(() => mode = TMode.anchor), child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: mode == TMode.anchor ? kViolet : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: RoleGlyph(TMode.anchor, mode == TMode.anchor ? const Color(0xFF1B1B1D) : kViolet))))),
         // the nine places, always at hand: one click chooses, hovering shows the pivot on the Stage
         MouseRegion(
           onExit: (_) => s.anchorPreview.value = null,

@@ -292,8 +292,10 @@ List<RI> timeline(TimelineModel m) {
           c2 + r.indent * 14,
           base,
           r.name,
-          H.s(12.5, color: H.text2),
-          w: r.nameW,
+          H.s(12, color: H.text2),
+          // the name ends before the row's own keys (the disclosure, then M S L C): a long one ellipsises, never runs under them
+          w: math.min(r.nameW ?? 80, 470 - (c2 + r.indent * 14)),
+          fit: false,
         ),
       );
     }

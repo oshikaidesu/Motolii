@@ -110,14 +110,24 @@ enum Al { left, center, right }
 
 // Text placed by alphabetic baseline; width-fitted by letter-spacing when [w] is given.
 class Tx extends RI {
-  Tx(this.x, this.base, this.text, this.style, {this.w, this.al = Al.left});
+  Tx(this.x, this.base, this.text, this.style, {this.w, this.al = Al.left, this.fit = true});
   final double x, base;
   final String text;
   final TextStyle style;
   final double? w;
   final Al al;
+
+  /// Fit the reference's own words to [w] (shrink, then tune tracking). A name that comes from data (a layer's)
+  /// is not fitted: it keeps its natural spacing and ends in an ellipsis at [w].
+  final bool fit;
   @override
   Widget build(double ox, double oy) {
+    if (!fit && w != null) {
+      return Positioned(
+        left: x - 1 - ox, top: 0, width: w! + 1.5,
+        child: Baseline(baseline: base - oy, baselineType: TextBaseline.alphabetic, child: Text(text, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: style)),
+      );
+    }
     var st = style;
     var tp = TextPainter(text: TextSpan(text: text, style: st), textDirection: TextDirection.ltr)..layout();
     if (w != null && text.length > 1) {

@@ -154,6 +154,17 @@ class _ClassStripState extends State<ClassStrip> {
         if (mounted && c != null) Scrollable.ensureVisible(c, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart);
       });
 
+  var _before = false, _after = false;
+  bool _edges(ScrollMetrics m) {
+    final before = m.pixels > m.minScrollExtent + .5, after = m.pixels < m.maxScrollExtent - .5;
+    if (before != _before || after != _after) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() { _before = before; _after = after; });
+      });
+    }
+    return false;
+  }
+
   @override
   void dispose() {
     widget.classify.removeListener(_reveal);
@@ -166,21 +177,35 @@ class _ClassStripState extends State<ClassStrip> {
         builder: (_, __) => Container(
           height: 28,
           decoration: widget.bare ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(children: [
-              for (final (gi, g) in widget.groups.indexed) ...[
-                if (gi > 0) const SizedBox(width: 10),
-                for (final c in g)
-                  Padding(
-                    key: c == widget.classify.selected ? _chosen : null,
-                    padding: const EdgeInsets.only(right: 10),
-                    child: _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
-                  ),
-              ],
-            ]),
+          // an edge fades where more classes scroll that way: a cut-off name reads as "more", not as a clipped label
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (n) => _edges(n.metrics),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (n) => _edges(n.metrics),
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (r) => LinearGradient(
+                  colors: [_before ? const Color(0x00000000) : const Color(0xFF000000), const Color(0xFF000000), const Color(0xFF000000), _after ? const Color(0x00000000) : const Color(0xFF000000)],
+                  stops: [0, 18 / r.width, 1 - 18 / r.width, 1],
+                ).createShader(r),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const ClampingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(children: [
+                    for (final (gi, g) in widget.groups.indexed) ...[
+                      if (gi > 0) const SizedBox(width: 10),
+                      for (final c in g)
+                        Padding(
+                          key: c == widget.classify.selected ? _chosen : null,
+                          padding: const EdgeInsets.only(right: 10),
+                          child: _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
+                        ),
+                    ],
+                  ]),
+                ),
+              ),
+            ),
           ),
         ),
       );

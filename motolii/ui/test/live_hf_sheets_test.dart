@@ -78,6 +78,7 @@ void main() {
     expect(find.text('1920 × 1080 · 30 fps · MP4'), findsOneWidget);
     expect(find.text('Whole'), findsOneWidget);
     expect(find.text('0 – 90 · 3.00 s'), findsOneWidget);
+    expect(find.text('Frames'), findsOneWidget, reason: 'the range fact says what it counts');
     expect(find.text('Writing 12 / 90'), findsOneWidget);
     // it opens as a task under its control, not over the Stage's middle, and dims nothing
     expect(find.byKey(const ValueKey('hf-popover')), findsOneWidget);

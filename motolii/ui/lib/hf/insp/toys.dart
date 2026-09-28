@@ -325,7 +325,12 @@ class _ValueToyState extends State<ValueToy> {
                     Expanded(
                       child: editing
                           ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 14 : 13, c: kInk, w: FontWeight.w600), cursorColor: kInk, backgroundCursorColor: kMuted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
-                          : Text(s.mixed ? '—' : s.format(s.value, decimals: widget.decimals), softWrap: false, overflow: TextOverflow.clip, style: sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500)),
+                          : FittedBox(
+                              // a number is never cut mid-digit ("10(" for 100): a narrow well shows all of it, smaller
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(s.mixed ? '—' : s.format(s.value, decimals: widget.decimals), softWrap: false, style: sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500)),
+                            ),
                     ),
                     if (editing && _bad) Text('Number required', key: ValueKey('bad-${s.id}'), style: sans(10, c: kPink))
                     else if (unit != null) Text(unit, style: sans(10.5, c: kMuted)),

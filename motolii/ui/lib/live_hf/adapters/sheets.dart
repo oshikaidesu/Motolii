@@ -91,7 +91,7 @@ class _ExportState extends State<_Export> {
             onChanged: running ? null : (v) => setState(() => markers = v),
           ),
         ),
-        HfFormRow('', HfFact('$start – $end · ${((end - start) / fps).toStringAsFixed(2)} s', color: H.text3)),
+        HfFormRow('Frames', HfFact('$start – $end · ${((end - start) / fps).toStringAsFixed(2)} s', color: H.text3)),
         if (phase != null && phase != 'idle')
           HfFormRow(
             'Status',
