@@ -91,7 +91,7 @@ class _ExportState extends State<_Export> {
 /// through `composition`.
 Future<void> showCompositionSheet(BuildContext context, EditorSession c) {
   final store = CompositionStore(c);
-  return showHfSheet(context, title: 'Composition', width: 360, body: (_, close) => SizedBox(height: 300, child: InspectorBody(store: store, subject: 'Composition'))).whenComplete(store.dispose);
+  return showHfSheet(context, title: 'Composition', width: 360, body: (_, close) => SizedBox(height: 380, child: InspectorBody(store: store, subject: 'Composition'))).whenComplete(store.dispose);
 }
 
 const _rates = [(24000, 1001), (24, 1), (25, 1), (30000, 1001), (30, 1), (50, 1), (60000, 1001), (60, 1)];
@@ -105,13 +105,30 @@ class CompositionStore extends ParamStore {
     final rate = (s['fpsNum'] as num? ?? 30, s['fpsDen'] as num? ?? 1);
     final i = _rates.indexWhere((r) => r.$1 == rate.$1 && r.$2 == rate.$2);
     return [
+      // Classic's size presets; a size none names highlights none
+      {'id': 'size', 'label': 'Size', 'kind': 'enum', 'choices': [for (final p in _sizes) p.$1], 'value': _sizes.indexWhere((p) => p.$2 == s['width'] && p.$3 == s['height'])},
       {'id': 'width', 'label': 'Width', 'kind': 'u32', 'value': s['width'] ?? 1920, 'min': 16, 'max': 8192, 'unit': 'px', 'hero': true},
       {'id': 'height', 'label': 'Height', 'kind': 'u32', 'value': s['height'] ?? 1080, 'min': 16, 'max': 8192, 'unit': 'px', 'hero': true},
       {'id': 'fps', 'label': 'Frame rate', 'kind': 'enum', 'choices': [for (final r in _rates) (r.$1 / r.$2).toStringAsFixed(r.$2 == 1 ? 0 : 3)], 'value': i < 0 ? 4 : i},
       {'id': 'durationFrames', 'label': 'Length', 'kind': 'u32', 'value': s['durationFrames'] ?? 300, 'min': 1, 'unit': 'f'},
       // AE's Composition Settings > Background Color: the ground where no environment layer is (Classic's presets)
       {'id': 'background', 'label': 'Background', 'kind': 'enum', 'choices': [for (final g in _greys) g.$1], 'value': _grey(s['background'])},
+      // any colour: the Colors wheel edits the ground (Classic's swatch, focusColor Background)
+      {'id': 'backgroundColor', 'label': 'Background colour', 'kind': 'color', 'route': 'Colors', 'value': _hex(s['background'])},
     ];
+  }
+
+  static const _sizes = [('16:9', 1920, 1080), ('9:16', 1080, 1920), ('1:1', 1080, 1080), ('4K', 3840, 2160)];
+
+  static String _hex(Object? raw) {
+    final v = raw is List && raw.length >= 3 ? [for (final x in raw.take(3)) ((x as num).toDouble().clamp(0, 1) * 255).round()] : [0, 0, 0];
+    return '#${v.map((c) => c.toRadixString(16).padLeft(2, '0')).join().toUpperCase()}';
+  }
+
+  @override
+  void route(String to, [String? from]) {
+    super.route(to, from);
+    if (from == 'backgroundColor' && c.supports('focusColor')) c.focusColor({'slot': 'Background'});
   }
 
   static const _greys = [('Black', 0.0), ('Dark', 0.12), ('Grey', 0.5), ('White', 1.0)];
@@ -128,6 +145,7 @@ class CompositionStore extends ParamStore {
     final v = row(id)['value'];
     final args = switch (id) {
       'fps' => {'fpsNum': _rates[(v as num).toInt()].$1, 'fpsDen': _rates[v.toInt()].$2},
+      'size' => {'width': _sizes[(v as num).toInt()].$2, 'height': _sizes[v.toInt()].$3},
       // a preset changes the grey and keeps the ground's alpha (a transparent ground stays transparent)
       'background' => {'background': [for (var i = 0; i < 3; i++) _greys[(v as num).toInt()].$2, _alpha(c.state['background'])]},
       _ => {id: (v as num).round()},

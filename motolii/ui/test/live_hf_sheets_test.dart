@@ -81,4 +81,17 @@ void main() {
     await tester.pump();
     expect(sent.last, {'op': 'cancelExport'});
   });
+  testWidgets('Size offers Classic presets; Background colour hands the ground to the Colors wheel', (tester) async {
+    final c = EditorSession()..document.value = {'width': 1080, 'height': 1920, 'capabilities': ['focusColor'], 'background': [1.0, 0.0, 0.0, 1.0]};
+    final s = CompositionStore(c);
+    expect(s.row('size')['value'], 1);
+    s.set('size', 3);
+    await tester.pump();
+    expect(sent.last, {'op': 'composition', 'width': 3840, 'height': 2160});
+    expect(s.row('backgroundColor')['value'], '#FF0000');
+    s.route('Colors', 'backgroundColor');
+    await tester.pump();
+    expect(sent.last, {'op': 'focusColor', 'slot': 'Background'});
+    s.dispose();
+  });
 }
