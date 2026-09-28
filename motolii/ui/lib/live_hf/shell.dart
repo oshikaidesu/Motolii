@@ -146,7 +146,7 @@ class _LiveShellState extends State<LiveShell> {
               key: _face,
               child: Column(
                 children: [
-                  SizedBox(height: 62, child: SessionTop(c: c)),
+                  SessionTop(c: c),
                   Expanded(child: workspace!.build()),
                 ],
               ),

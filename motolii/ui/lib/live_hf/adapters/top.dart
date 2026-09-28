@@ -1,8 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/shell/place.dart' show RF;
+import '../../hf/shell/top_bar.dart';
 import '../../hf/shell/top.dart';
 import '../../session/editor_session.dart';
+import '../../session/stage_actions.dart';
 import 'document.dart';
 import 'sheets.dart';
 
@@ -57,31 +58,36 @@ class _SessionTopState extends State<SessionTop> {
         listenable: Listenable.merge([c.playing, c.slice('sessionTop', _watched)]),
         builder: (context, _) {
           final playing = c.playing.value;
-          return RF(top(TopModel(
-            readouts: readouts,
-            mode: exporting ? 2 : (playing ? 1 : 0),
-            onPlay: c.togglePlayback,
-            onStop: () {
-              c.stopPlayback();
-              c.seek(0);
-            },
-            onAnimate: c.supports('animate') ? () => c.setAnimate(!c.animating) : null,
-            onMarker: c.supports('addMarker') ? () => c.command('addMarker') : null,
-            onMode: (i) async {
-              if ((i == 0 && playing) || (i == 1 && !playing)) c.togglePlayback();
-              if (i == 2) {
-                setState(() => exporting = true);
-                // under the EXPORT key (the mode tabs' third, reference x 1006-1094, y 14-51 of the bar)
-                final box = context.findRenderObject() as RenderBox?;
-                final at = box?.localToGlobal(const Offset(1006, 14));
-                await showExportSheet(context, c, anchor: at == null ? null : at & const Size(88, 37));
-                if (mounted) setState(() => exporting = false);
-              }
-            },
-            onKey: (i) async {
-              if (i == 2 && await mayReplace(context, c)) await c.chooseOpen();
-            },
-          )));
+          Future<void> mode(int i, [Rect? key]) async {
+            if ((i == 0 && playing) || (i == 1 && !playing)) c.togglePlayback();
+            if (i == 2) {
+              setState(() => exporting = true);
+              await showExportSheet(context, c, anchor: key);
+              if (mounted) setState(() => exporting = false);
+            }
+          }
+
+          return TopBar(
+            TopModel(
+              readouts: readouts,
+              mode: exporting ? 2 : (playing ? 1 : 0),
+              onPlay: c.togglePlayback,
+              onStop: () {
+                c.stopPlayback();
+                c.seek(0);
+              },
+              onAnimate: c.supports('animate') ? () => c.setAnimate(!c.animating) : null,
+              onMarker: c.supports('addMarker') ? () => c.command('addMarker') : null,
+              onMode: mode,
+              onKey: (i) async {
+                // Fit frames the Stage (the same operation as Cmd+0); Open replaces the document; Pin has no operation
+                if (i == 0) stageView(c, 'Fit');
+                if (i == 2 && await mayReplace(context, c)) await c.chooseOpen();
+              },
+            ),
+            onModeAt: mode,
+            keyEnabled: [c.supports('stageView'), false, true],
+          );
         },
       );
 }
