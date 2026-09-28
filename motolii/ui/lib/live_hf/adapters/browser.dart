@@ -19,7 +19,7 @@ import 'browser_user.dart';
 /// tile does what.
 const _thingsDir = String.fromEnvironment(
   'MOTOLII_THINGS',
-  defaultValue: 'lib/proto_hf/data/things',
+  defaultValue: 'lib/hf/data/things',
 );
 
 /// Reference tile -> the host's create kind.

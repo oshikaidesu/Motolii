@@ -23,7 +23,7 @@ import 'main_transform.dart' as tf;
 import 'ref.dart' show H, RF;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
-const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/proto_hf/data/things');
+const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/hf/data/things');
 final _root = GlobalKey();
 const _w = int.fromEnvironment('PROTO_W', defaultValue: 1536), _h = int.fromEnvironment('PROTO_H', defaultValue: 1024);
 

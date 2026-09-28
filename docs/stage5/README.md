@@ -14,7 +14,7 @@ UIの方向(何を完成と呼ぶか・seatの意味・Dock)の正本は [Produc
 |---|---|---|
 | `scripts/motolii-ui.sh dev` / `profile` / `live`、窓のapp(既定) | `lib/main.dart` → `lib/live_hf/main.dart` | **製品UI**: live_hf(`live_hf/shell.dart`)。Product Home / Product Direction の正本(2026-09-28 D1) |
 | `MOTOLII_SHELL=classic` または `new` を付けた `dev` / `profile` | `lib/main.dart` → `app/editor_app.dart` | 移行元: Classic(`app/editor_window.dart`)・New(`app/new_shell.dart`)。能力を回収し終えるまで残す(Product Direction の legacy deletion gate) |
-| `flutter run -t lib/proto_hf/main_*.dart` など | `lib/proto_hf/`、`lib/proto/` | 試作・fixture。製品の経路ではない(製品側はここを何もimportしない — 例外は live_hf が読むカタログ `lib/proto_hf/data/things`)。`lib/hf/` は製品のface、proto専用だった shell_face・stage・fixtures・future は `lib/proto_hf/` にある |
+| `flutter run -t lib/proto_hf/main_*.dart` など | `lib/proto_hf/`、`lib/proto/` | 試作・fixture。製品の経路ではない(製品側はここを何も読まない。カタログは `lib/hf/data/things` — `builtin` が製品、`stress` は試験・試作用)。`lib/hf/` は製品のface、proto専用だった shell_face・stage・fixtures・future は `lib/proto_hf/` にある |
 
 ## コンセプトと採用事項
 

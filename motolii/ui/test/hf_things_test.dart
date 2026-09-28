@@ -12,7 +12,7 @@ import 'package:motolii_stage5/hf/bp/faces.dart';
 import 'package:motolii_stage5/hf/bp/shell.dart';
 import 'package:motolii_stage5/hf/bp/things.dart';
 
-const dir = 'lib/proto_hf/data/things';
+const dir = 'lib/hf/data/things';
 
 Map<String, dynamic> good() => {
       'id': 'acme.demo_thing',

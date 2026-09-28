@@ -26,7 +26,7 @@ Future<void> openSearch(WidgetTester t) async {
   await t.pump();
 }
 
-final catalog = loadCatalog('lib/proto_hf/data/things');
+final catalog = loadCatalog('lib/hf/data/things');
 
 void main() {
   // Layout in tests needs the real UI face: the default test font is far wider and would overflow.
