@@ -107,7 +107,6 @@ class DeskShell extends StatelessWidget {
                 ]),
               ),
               if (trailing != null && showSub) trailing!,
-              const Dots3(),
             ]),
           ),
           Expanded(child: ClipRect(child: isStrip ? strip(context, body) : (isTall ? tall(context, body) : full(context, body)))),

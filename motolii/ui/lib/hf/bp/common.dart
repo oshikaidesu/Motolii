@@ -143,17 +143,7 @@ class Leaf extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (c.maxWidth > 220)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CustomPaint(
-                              painter: HfTabGlyph(HG.cross, kMuted),
-                            ),
-                          ),
-                        ),
+                      // (no ✕ here: it was painted with no gesture; a seat's panel is closed from its tab's menu)
                     ],
                   ),
                 );

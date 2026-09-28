@@ -128,7 +128,6 @@ class _PanelHeaderState extends State<PanelHeader> {
                     setState(() => open = true);
                     WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
                   }),
-                  if (widget.mode != HeadMode.compact && widget.lead == null) const HeaderKey(HG.grid4),
                   Builder(builder: (context) => HeaderKey(HG.kebab, onTap: () {
                     final seat = BrowserSeatScope.of(context);
                     final box = context.findRenderObject() as RenderBox?;
