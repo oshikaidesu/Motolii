@@ -113,11 +113,15 @@ class _ExportState extends State<_Export> {
   }
 }
 
-/// The Composition sheet: the frame's size, rate and length as the Inspector's own rows, each change written
-/// through `composition`.
-Future<void> showCompositionSheet(BuildContext context, EditorSession c) {
+/// The Composition settings as a short task under the top bar's right side: the frame's size, rate and length as the
+/// Inspector's own rows (no second title, count or filter), each change written through `composition`. The Stage stays
+/// in view (the settings change what it shows) and Colors, where Background colour hands the ground, is not dimmed.
+Future<void> showCompositionSheet(BuildContext context, EditorSession c, {Rect? anchor}) {
   final store = CompositionStore(c);
-  return showHfSheet(context, title: 'Composition', width: 360, body: (_, close) => SizedBox(height: 380, child: InspectorBody(store: store, subject: 'Composition'))).whenComplete(store.dispose);
+  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Composition', width: 300, body: (_, close) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+        child: ParamSheet(store, thingId: 'composition'),
+      )).whenComplete(store.dispose);
 }
 
 const _rates = [(24000, 1001), (24, 1), (25, 1), (30000, 1001), (30, 1), (50, 1), (60000, 1001), (60, 1)];

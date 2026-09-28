@@ -86,6 +86,28 @@ void main() {
     await tester.pump();
     expect(sent.last, {'op': 'cancelExport'});
   });
+  testWidgets('Composition opens as a short task: its rows, no second title, no dimmed backdrop', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = EditorSession()..document.value = {'width': 1920, 'height': 1080, 'fpsNum': 30, 'fpsDen': 1, 'durationFrames': 300, 'capabilities': ['composition']};
+    late BuildContext ctx;
+    await tester.pumpWidget(WidgetsApp(
+      color: const Color(0xFF000000),
+      pageRouteBuilder: <T>(s, b) => PageRouteBuilder<T>(settings: s, pageBuilder: (context, _, __) => b(context)),
+      home: Builder(builder: (context) {
+        ctx = context;
+        return const SizedBox.expand();
+      }),
+    ));
+    showCompositionSheet(ctx, c);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hf-popover')), findsOneWidget);
+    expect(find.text('Composition'), findsOneWidget, reason: 'named once, by its title bar');
+    expect(find.text('Frame rate'), findsOneWidget);
+    expect(find.text('Filter'), findsNothing, reason: 'no Inspector header inside it');
+    expect(find.byWidgetPredicate((w) => w is ColoredBox && w.color == const Color(0x88000000)), findsNothing);
+  });
   testWidgets('Size offers Classic presets; Background colour hands the ground to the Colors wheel', (tester) async {
     final c = EditorSession()..document.value = {'width': 1080, 'height': 1920, 'capabilities': ['focusColor'], 'background': [1.0, 0.0, 0.0, 1.0]};
     final s = CompositionStore(c);
