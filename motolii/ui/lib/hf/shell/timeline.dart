@@ -309,12 +309,14 @@ List<RI> timeline(TimelineModel m) {
       r.locked,
       r.clipToBelow,
     ].indexed) {
+      // on is a lit key (the palette's toggle colour), off a dim letter: the two states read apart at a glance
+      if (state) items.add(Rc(492.5 + 16 * column, cy - 7, 13, 14, fill: H.toggleOn, r: 2));
       items.add(
         Tx(
           495.0 + 16 * column,
           base,
           ['M', 'S', 'L', 'C'][column],
-          H.s(9, color: state ? H.text : H.text2, w: FontWeight.w600),
+          H.s(9, color: state ? const Color(0xFFFCFCFE) : H.text3, w: FontWeight.w600),
           w: 10,
         ),
       );
