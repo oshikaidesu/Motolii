@@ -14,7 +14,6 @@
   "readOnlyDocumentConsumers": ["motolii/crates/motolii-render", "motolii/ui/extensions/jobs"],
   "readOnlyModels": [
     "motolii/crates/motolii-doc/src/store/view.rs",
-    "motolii/crates/motolii-doc/src/store/view",
     "motolii/crates/motolii-doc/src/store/layout.rs",
     "motolii/crates/motolii-doc/src/store/read.rs",
     "motolii/crates/motolii-doc/src/store/recording.rs",
