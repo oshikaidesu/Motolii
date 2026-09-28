@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
+import '../session/stage_actions.dart';
 import 'adapters/document.dart';
 import 'adapters/sheets.dart';
 
@@ -85,6 +86,14 @@ class LiveKeys {
         _replace(c.chooseOpen);
       case LogicalKeyboardKey.keyI when cmd:
         c.importFiles();
+      case LogicalKeyboardKey.digit0 when cmd:
+        stageView(c, 'Fit');
+      case LogicalKeyboardKey.digit1 when cmd:
+        stageView(c, 'Actual');
+      case LogicalKeyboardKey.equal when cmd:
+        stageView(c, 'In');
+      case LogicalKeyboardKey.minus when cmd:
+        stageView(c, 'Out');
       case LogicalKeyboardKey.delete || LogicalKeyboardKey.backspace when !cmd:
         op('delete');
       case LogicalKeyboardKey.home:
@@ -97,9 +106,14 @@ class LiveKeys {
             (k == LogicalKeyboardKey.arrowLeft ? -1 : 1) * (shift ? 10 : 1);
         if (alt && (c.state['selectedKeys'] as List? ?? const []).isNotEmpty) {
           op('moveKeys', {'deltaFrames': d});
+        } else if (alt) {
+          nudgeSelection(c, d.toDouble(), 0);
         } else {
           _seek(c.frame.value + d);
         }
+      case LogicalKeyboardKey.arrowUp || LogicalKeyboardKey.arrowDown
+          when !cmd && alt:
+        nudgeSelection(c, 0, (k == LogicalKeyboardKey.arrowUp ? -1.0 : 1.0) * (shift ? 10 : 1));
       case LogicalKeyboardKey.arrowUp || LogicalKeyboardKey.arrowDown
           when !cmd && !alt:
         final ids = [for (final l in c.layers) (l['id'] as num).toInt()];
@@ -125,6 +139,7 @@ class LiveKeys {
               LogicalKeyboardKey.keyR ||
               LogicalKeyboardKey.keyT
           when !cmd:
+        c.placePanel('Inspector', 'show');
         c.focusProperty.value = null;
         c.focusProperty.value = {
           LogicalKeyboardKey.keyP: 'position',

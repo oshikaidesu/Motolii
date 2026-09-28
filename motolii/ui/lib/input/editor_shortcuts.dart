@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
+import '../session/stage_actions.dart';
 
 class EditorShortcuts {
   EditorShortcuts(
@@ -95,23 +96,19 @@ class EditorShortcuts {
           op = 'split';
       }
       if (k == LogicalKeyboardKey.digit0) {
-        c.viewCommand.value = null;
-        c.viewCommand.value = 'Fit';
+        stageView(c, 'Fit');
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.digit1) {
-        c.viewCommand.value = null;
-        c.viewCommand.value = 'Actual';
+        stageView(c, 'Actual');
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.equal) {
-        c.viewCommand.value = null;
-        c.viewCommand.value = 'In';
+        stageView(c, 'In');
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.minus) {
-        c.viewCommand.value = null;
-        c.viewCommand.value = 'Out';
+        stageView(c, 'Out');
         return KeyEventResult.handled;
       }
     } else {
@@ -133,7 +130,7 @@ class EditorShortcuts {
           if ((c.state['selectedKeys'] as List? ?? []).isNotEmpty)
             c.command('moveKeys', {'deltaFrames': d});
           else
-            _nudge(d.toDouble(), 0);
+            nudgeSelection(c, d.toDouble(), 0);
         } else
           c.seek(c.frame.value + d);
         return KeyEventResult.handled;
@@ -142,7 +139,7 @@ class EditorShortcuts {
           k == LogicalKeyboardKey.arrowDown) {
         final d = (k == LogicalKeyboardKey.arrowUp ? -1 : 1) * (shift ? 10 : 1);
         if (alt)
-          _nudge(0, d.toDouble());
+          nudgeSelection(c, 0, d.toDouble());
         else {
           final ids = c.layers.map((l) => (l['id'] as num).toInt()).toList();
           final ix = ids.indexOf(
@@ -183,26 +180,5 @@ class EditorShortcuts {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
-  }
-
-  Future<void> _nudge(double x, double y) async {
-    final corners = c.activeLayer?['corners'] as List?;
-    if (corners == null || corners.isEmpty) return;
-    final p = (corners.first as List)
-        .map((v) => (v as num).toDouble())
-        .toList();
-    await c.command('stageGesture', {
-      'phase': 'begin',
-      'mode': 'move',
-      'ids': c.selectedIds,
-      'start': p,
-      'point': p,
-      'handle': 'body',
-    });
-    await c.command('stageGesture', {
-      'phase': 'update',
-      'point': [p[0] + x, p[1] + y],
-    });
-    await c.command('stageGesture', {'phase': 'commit'});
   }
 }
