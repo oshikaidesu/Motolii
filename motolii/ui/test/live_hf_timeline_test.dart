@@ -357,6 +357,8 @@ void main() {
     expect(sent.firstWhere((m) => m['op'] == 'select')['ids'], [2]);
     for (final label in ['Freeze', 'Show animated properties', 'Show all properties', 'Hide properties', 'Duplicate', 'Group'])
       expect(find.text(label), findsOneWidget, reason: label);
+    // each edit line names its key, as the editor menu does
+    for (final key in ['⌘D', '⌘G', '⇧⌘G', '⌘K']) expect(find.text(key), findsOneWidget, reason: key);
     // Escape closes it without a choice, and the selection it was about stays
     final sentBefore = sent.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);

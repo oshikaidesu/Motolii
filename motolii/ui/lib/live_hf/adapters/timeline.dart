@@ -377,6 +377,15 @@ class _LiveTimelineState extends State<LiveTimeline>
                         for (final item in items)
                           if (!item.enabled) item.value,
                       },
+                      shortcuts: {
+                        for (final item in items)
+                          if (item.shortcut.isNotEmpty)
+                            item.value: item.shortcut,
+                      },
+                      dividers: {
+                        for (final item in items)
+                          if (item.groupEnd) item.value,
+                      },
                     ),
                   ),
                   onSeek: (x) => requestSeek(

@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'place.dart';
 
-Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items, {T? selected, Set<T> disabled = const {}}) {
+/// [shortcuts] names the key for a line (shown at its right, as menus do); [dividers] ends a group after a line.
+Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items, {T? selected, Set<T> disabled = const {}, Map<T, String> shortcuts = const {}, Set<T> dividers = const {}}) {
   final done = Completer<T?>();
   late final OverlayEntry entry;
   final back = FocusManager.instance.primaryFocus;
@@ -24,7 +25,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
   final space = box?.size ?? Size.infinite;
   final origin = box == null ? Offset.zero : box.globalToLocal(Offset.zero);
   final local = at.shift(origin);
-  final height = items.length * 28.0 + 8;
+  final height = items.length * 28.0 + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
   final top = local.bottom + 2 + height <= space.height
       ? local.bottom + 2
       : (local.top - 2 - height).clamp(0.0, double.infinity);
@@ -50,7 +51,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
           padding: const EdgeInsets.symmetric(vertical: 3),
           decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            for (final (v, label) in items)
+            for (final (v, label) in items) ...[
               MouseRegion(
                 cursor: disabled.contains(v) ? SystemMouseCursors.basic : SystemMouseCursors.click,
                 child: GestureDetector(
@@ -61,10 +62,15 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     alignment: Alignment.centerLeft,
                     color: v == selected ? H.selHi : null,
-                    child: Text(label, softWrap: false, style: H.s(13, color: disabled.contains(v) ? H.text3 : H.text)),
+                    child: Row(children: [
+                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(13, color: disabled.contains(v) ? H.text3 : H.text))),
+                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 16), child: Text(key, style: H.s(12, color: H.text3))),
+                    ]),
                   ),
                 ),
               ),
+              if (dividers.contains(v) && v != items.last.$1) Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 4), color: H.rule),
+            ],
           ]),
         ),
       ),
