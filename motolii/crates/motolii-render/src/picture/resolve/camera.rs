@@ -52,8 +52,12 @@ pub fn camera_of_layer(view: &StoreView<'_>, id: LayerId, t: RationalTime) -> Re
             let comp = comp.spec();
             let present = view.layers().into_iter().collect();
             if let Some(world) = crate::picture::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target) {
-                let point = world.transform_point3(glam::Vec3::ZERO);
-                camera = camera.aimed_at(comp, point);
+                // the target's position in the world: its anchor, not its local origin (a text's origin is the comp corner)
+                let anchor = match view.value_at(target, &PropertyId::new(property::ANCHOR)?, t)? {
+                    Some(Value::Vec2(a)) => glam::vec3(a[0] as f32, a[1] as f32, 0.0),
+                    _ => glam::Vec3::ZERO,
+                };
+                camera = camera.aimed_at(comp, world.transform_point3(anchor));
             }
         }
     }
@@ -273,6 +277,20 @@ mod camera_target_contract {
         let front = camera_projection(comp, ResolvedCamera { orbit_degrees: [0.0; 2], ..resolved }).eye;
         assert!((eye.distance(target) - front.distance(target)).abs() < 0.01, "orbit keeps the distance");
         assert!(eye.distance(front) > 1.0, "orbit moves the eye");
+    }
+
+    /// 層ターゲットの注視点は層の位置(anchor が世界で居る所)。文字のように anchor が内容の中にある層でも、局所の原点(comp の角)を見ない。
+    #[test]
+    fn a_target_with_an_anchor_is_looked_at_where_it_stands() {
+        let mut doc = blank_project();
+        let comp = doc.view().composition().unwrap().unwrap().spec();
+        let camera = add(&mut doc, 1, LayerSource::Camera);
+        let card = add(&mut doc, 2, LayerSource::Null);
+        put(&mut doc, card, property::ANCHOR, Value::Vec2([960.0, 540.0]));
+        put(&mut doc, card, property::POSITION, Value::Vec2([700.0, 300.0]));
+        put(&mut doc, camera, property::CAMERA_TARGET, Value::LayerId(card.0));
+        let resolved = crate::picture::resolve::camera::resolve_camera(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(resolved.target(comp).distance(glam::vec3(700.0, 300.0, 0.0)) < 1e-3, "{:?}", resolved.target(comp));
     }
 
     /// 層ターゲット: null を動かせば注視点が追う。無い層・0・自分自身は無視して center に戻る。

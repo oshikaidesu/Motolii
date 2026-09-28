@@ -12,7 +12,7 @@ const ROWS: [&str; 9] = [property::CAMERA_CENTER, property::CAMERA_TARGET_Z, pro
 struct CameraPlan { order: i16, timing: LayerTiming, hidden: bool, solo: bool, props: [Option<usize>; 9] }
 
 #[derive(Clone)]
-struct Recipe { cameras: Vec<CameraPlan>, worlds: BTreeMap<u64, usize>, fps: Fps, comp: CompSpec }
+struct Recipe { cameras: Vec<CameraPlan>, worlds: BTreeMap<u64, usize>, anchors: BTreeMap<u64, usize>, fps: Fps, comp: CompSpec }
 
 #[derive(Debug)]
 pub enum CameraProgramError { Store(StoreError), InvalidInput(NodeKind) }
@@ -38,12 +38,16 @@ impl CameraProgram {
             for (row, name) in ROWS.iter().enumerate() { props[row] = properties.node_for(layer, &PropertyId::new(name).expect("known camera property")).map(&mut input); }
             cameras.push(CameraPlan { order: meta.order, timing: meta.timing, hidden: attrs.hidden, solo: attrs.solo, props });
         }
-        let mut worlds = BTreeMap::new();
-        for binding in transforms.bindings() { worlds.insert(binding.layer.0, input(binding.world)); }
+        let (mut worlds, mut anchors) = (BTreeMap::new(), BTreeMap::new());
+        let anchor = PropertyId::new(property::ANCHOR).expect("known property");
+        for binding in transforms.bindings() {
+            worlds.insert(binding.layer.0, input(binding.world));
+            if let Some(key) = properties.node_for(binding.layer, &anchor) { anchors.insert(binding.layer.0, input(key)); }
+        }
         let mut identity = NodeIdentity::new(NodeKind::Camera, inputs);
         identity.parameters = cameras.iter().flat_map(|camera| camera.order.to_be_bytes().into_iter().chain(camera.timing.start.to_be_bytes()).chain(camera.timing.duration.to_be_bytes()).chain([u8::from(camera.hidden), u8::from(camera.solo)])).collect();
         identity.time_dependency = TimeDependency::Exact;
-        Ok(Self { node: GraphNode::new(identity), recipe: Recipe { cameras, worlds, fps, comp } })
+        Ok(Self { node: GraphNode::new(identity), recipe: Recipe { cameras, worlds, anchors, fps, comp } })
     }
 
     pub fn node(&self) -> GraphNode { self.node.clone() }
@@ -65,7 +69,12 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs, context: &EvaluationContext) -
     if let Some(Value::LayerId(target)) = evaluated(camera, 2, inputs) {
         if let Some(index) = recipe.worlds.get(target).copied() {
             if let Some(world) = inputs.at(index).and_then(|value| value.downcast_ref::<TransformValue>()) {
-                let point = world.spatial.transform_point3(glam::Vec3::ZERO);
+                // the target's position in the world: its anchor, not its local origin (a text's origin is the comp corner)
+                let anchor = match recipe.anchors.get(target).and_then(|&index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()) {
+                    Some(Value::Vec2(a)) => glam::vec3(a[0] as f32, a[1] as f32, 0.0),
+                    _ => glam::Vec3::ZERO,
+                };
+                let point = world.spatial.transform_point3(anchor);
                 resolved = resolved.aimed_at(recipe.comp, point);
             }
         }
