@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
 
 import '../../hf/desk/ease.dart';
@@ -125,17 +127,24 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
     } else if (shape['samples'] is List) {
       seg.model = shape; // the host's full description, with this curve's own parameters
     } else if (seg.model != null && shape.keys.any((k) => k != 'kind')) {
-      // a kept curve carries its parameters, not its samples: those parameters, drawn once the host describes them
-      seg.model = {...seg.model!, ...shape};
-      model(seg, null, null).then((m) {
-        if (m != null) {
-          seg.model = m;
+      // a kept curve carries its parameters, not its samples: those parameters now, and the host's description of
+      // them once it answers — asked once per shape and kept, so reading the desk again does not ask again
+      final key = jsonEncode(shape);
+      seg.model = _described[key] ?? {...seg.model!, ...shape};
+      if (!_described.containsKey(key) && _asking.add(key)) {
+        model(seg, null, null).then((m) {
+          _asking.remove(key);
+          if (m == null) return;
+          _described[key] = m;
           notifyListeners();
-        }
-      });
+        });
+      }
     }
     return seg;
   }
+
+  final _described = <String, Map<String, dynamic>>{};
+  final _asking = <String>{};
 
   @override
   bool get canClear => _presets.isNotEmpty;

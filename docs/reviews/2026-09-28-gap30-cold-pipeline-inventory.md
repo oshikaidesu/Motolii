@@ -33,11 +33,12 @@ Threads: the editor's `Engine` lives on Swift's serial `motolii.render` queue (`
 
 Reading:
 - The very first run after a build pays the driver's shader compile (Metal keeps it across processes): up to 1.3 s.
-- Every new process pays 50–200 ms on its first frame, 8–17× a warm frame: the pipelines are compiled per
-  `RenderContext` even when the driver has the binaries.
-- `Engine::new()` is ~0.7 ms after the first (the device is shared), but a second `Engine` pays the first-frame cost
-  again (46–187 ms): export and freeze each re-create every pipeline the editor already has.
-- The glass document is dominated by pipeline creation per context (200 ms process-cold vs 187 ms second engine).
+- Every new process pays 50–200 ms on its first frame, 8–17× a warm frame.
+- Each `Engine::new()` makes its own instance and device (`compositor/headless.rs`); after the first in a process it
+  takes ~0.7 ms. A second `Engine` pays the first-frame cost again (46–187 ms) — what export and freeze pay.
+- **Not isolated here:** how much of a first frame is pipeline creation versus other first-use work on a fresh
+  context (glyph atlases, image and media uploads, buffer allocation). The next step is to time pipeline creation
+  itself (around the pools' create calls) before choosing a prewarm or a shared context.
 
 ## Open (decisions, not taken here)
 

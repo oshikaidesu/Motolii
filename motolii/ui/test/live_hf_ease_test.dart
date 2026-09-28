@@ -254,4 +254,36 @@ void main() {
     expect(c.deskWork.value['ease'], {'kind': 'Bounce', 'bounces': 5.0});
     host.dispose();
   });
+  test('a kept curve is described by the host once, however often the desk reads it', () async {
+    var asked = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
+      if (call.method == 'easeModel') {
+        asked++;
+        return <String, dynamic>{'kind': 'Bounce', 'bounces': 5.0, 'handles': [[.5, .5]], 'samples': [[0, 0], [.5, .9], [1, 1]]};
+      }
+      return <String, dynamic>{};
+    });
+    final c = EditorSession()
+      ..document.value = {
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          {'kind': 'Bounce', 'bounces': 3.0, 'handles': [[.5, .5]], 'samples': [[0, 0], [1, 1]]},
+        ],
+      };
+    c.deskWork.value = {'easePresets': [{'kind': 'Bounce', 'bounces': 5.0}]};
+    final host = LiveEaseHost(c);
+    var notified = 0;
+    host.addListener(() {
+      notified++;
+      host.saved; // the desk reads it again on every notify
+    });
+    for (var i = 0; i < 5; i++) {
+      host.saved;
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(asked, 1);
+    expect(notified, lessThanOrEqualTo(1));
+    expect((host.saved.single.model!['samples'] as List).length, 3, reason: 'the host description is shown');
+    host.dispose();
+  });
 }

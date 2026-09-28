@@ -194,7 +194,14 @@ class _LiveNotesState extends State<LiveNotes> {
     // only where the desk is actually hit (a hidden tab stays mounted but is not under the pointer), as Classic does
     final hits = HitTestResult();
     WidgetsBinding.instance.hitTestInView(hits, global, View.of(context).viewId);
-    if (!hits.path.any((h) => identical(h.target, box))) return false;
+    // anywhere inside the desk counts, an empty part of it too
+    bool inside(Object target) {
+      for (RenderObject? o = target is RenderObject ? target : null; o != null; o = o.parent) {
+        if (identical(o, box)) return true;
+      }
+      return false;
+    }
+    if (!hits.path.any((h) => inside(h.target))) return false;
     host.dropImages([for (final p in event['paths'] as List? ?? const []) if (p is String) p]);
     return true;
   }

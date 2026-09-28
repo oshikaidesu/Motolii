@@ -395,19 +395,21 @@ class _LiveBrowserState extends State<LiveBrowser> {
   /// A swatch's right-click: a saved one can be forgotten (Classic's Forget swatch).
   Future<void> _colorMenu(BuildContext context, Sw swatch, Offset at) async {
     final saved = swatch.$1.startsWith('saved:');
+    // the swatch as it is now, before the menu waits (the list may change while it is open)
+    final item = saved ? _savedSwatches().elementAtOrNull(int.parse(swatch.$1.split(':').last)) : null;
     final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 180, 0), [
       ('apply', 'Apply'),
       if (saved) ('forget', 'Forget swatch'),
     ]);
     if (chosen == 'apply') await _applyColor(swatch);
-    if (chosen == 'forget') await _forget(_savedSwatches()[int.parse(swatch.$1.split(':').last)]);
+    if (chosen == 'forget' && item != null) await _forget(item);
   }
 
   /// Forget the saved swatch that is this one when the choice is made (the list may have changed while the menu was
   /// open), not the one at the index it had.
   Future<void> _forget(Map<String, dynamic> item) async {
-    final key = jsonEncode(item['stops']);
-    final at = _savedSwatches().indexWhere((s) => jsonEncode(s['stops']) == key);
+    final key = jsonEncode(item);
+    final at = _savedSwatches().indexWhere((s) => jsonEncode(s) == key);
     if (at >= 0) await forgetSwatch(c, at);
   }
 

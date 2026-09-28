@@ -595,6 +595,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           onKeyEvent: (_, e) {
             if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape || drag == null) return KeyEventResult.ignored;
             final b = _before;
+            _asks++; // an answer still on its way is for the drag that was put back
+            _pending = null;
             setState(() {
               if (b != null) { cur.setValues(b.$2); cur.p = b.$1; cur.model = _beforeModel; }
               drag = null;
@@ -614,9 +616,13 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             // a quick flick of another kind's handle is written once the host has described the curve it made
             final pending = _pending;
             _pending = null;
-            if (wrote) pending == null ? _write() : pending.then((_) { if (mounted) _write(); });
+            // the interval and curve the drag was on, even if another chip is picked before the answer lands
+            final at = mixed ? null : sel, seg = cur;
+            if (wrote) pending == null ? _write() : pending.then((_) { if (mounted) widget.host?.apply(at, seg); });
           },
           onPointerCancel: (_) {
+            _asks++;
+            _pending = null;
             if (drag != null && _moved) widget.host?.cancel();
             _moved = false;
             setState(() => drag = null);

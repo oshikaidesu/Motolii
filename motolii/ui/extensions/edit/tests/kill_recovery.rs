@@ -81,7 +81,9 @@ fn a_killed_process_leaves_a_complete_earlier_save() {
         let newest = kept.last().expect("an auto-save generation");
         let auto = width(newest) - 64;
         assert!(auto + 1 >= last && auto <= reported + 1, "round {round}: the newest auto-save is save {auto}, saved {last}..={reported}");
-        assert!(kept.len() <= 3, "round {round}: {} generations kept", kept.len());
+        // auto_save installs the new generation before it prunes the oldest: a kill between leaves one extra, which the
+        // next auto_save prunes. Never more than that.
+        assert!(kept.len() <= 3 + 1, "round {round}: {} generations kept", kept.len());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
