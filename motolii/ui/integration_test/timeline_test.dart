@@ -34,9 +34,20 @@ void main() {
     final before = start();
     s.press(TlBar(i, TlBarPart.body), frame: 30, row: i + .5, mods: const TlMods());
     s.drag(frame: 42, row: i + .5);
+    await frames(t, 20);
+    // held, not yet released: the host's preview already carries the move (the Timeline and the Stage draw it)
+    expect(start(), before + 12);
     s.release();
     await frames(t, 20);
     expect(start(), before + 12);
+
+    // a trim is told as its kind and frames; the host keeps the bar at least a frame long
+    final duration = (c.layers.firstWhere((l) => l['id'] == id)['duration'] as num).toInt();
+    s.press(TlBar(i, TlBarPart.end), frame: 100, row: i + .5, mods: const TlMods());
+    s.drag(frame: 100.0 - duration - 50, row: i + .5);
+    s.release();
+    await frames(t, 20);
+    expect((c.layers.firstWhere((l) => l['id'] == id)['duration'] as num).toInt(), 1);
 
     // lanes open under a layer that has keys, and close again
     final keyed = s.rows.indexWhere((r) => r.property == null && r.summaryFrames.isNotEmpty);

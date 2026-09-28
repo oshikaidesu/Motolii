@@ -296,13 +296,11 @@ class TimelineSession extends ChangeNotifier {
         deltaFrames = (frame - _fromFrame).round();
         if (initialKeys.isNotEmpty) deltaFrames = math.max(deltaFrames, -initialKeys.map((k) => (k['frame'] as num).toInt()).reduce(math.min));
       case TlGesture.move || TlGesture.trimIn || TlGesture.trimOut || TlGesture.slip:
+        // what the gesture did and by how many frames; the host works out the timings and their limits, once, and
+        // the Timeline and the Stage both show its preview while the bar is held
         deltaFrames = (frame - _fromFrame).round();
-        if (gesture == TlGesture.move && _timingRows.isNotEmpty) {
-          deltaFrames = math.max(deltaFrames, -_timingRows.map((r) => (r.layer['start'] as num? ?? 0).toInt()).reduce(math.min));
-        }
-        // the Stage shows the moved layers while they move: the host renders the timings it is given
         if (has('previewTimings')) {
-          _queued = [for (final r in _timingRows) tlTiming(r.id, r.layer, gesture!, deltaFrames)];
+          _queued = _retime(gesture!);
           _previewUsed = true;
           _previewFlight ??= _pumpPreview();
         }
@@ -310,10 +308,10 @@ class TimelineSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The timings a bar grip shows while held (by layer id).
-  Map<int, Map<String, dynamic>> get heldTimings => const {TlGesture.move, TlGesture.trimIn, TlGesture.trimOut, TlGesture.slip}.contains(gesture)
-      ? {for (final r in _timingRows) r.id: tlTiming(r.id, r.layer, gesture!, deltaFrames)}
-      : const {};
+  List<Map<String, dynamic>> _retime(TlGesture g) => [
+        for (final r in _timingRows)
+          {'layer': r.id, 'mode': const {TlGesture.trimIn: 'trimStart', TlGesture.trimOut: 'trimEnd', TlGesture.slip: 'slip'}[g] ?? 'move', 'delta': deltaFrames},
+      ];
 
   void release() {
     final g = gesture;
@@ -332,7 +330,7 @@ class TimelineSession extends ChangeNotifier {
           notifyListeners();
         });
       case TlGesture.move || TlGesture.trimIn || TlGesture.trimOut || TlGesture.slip when deltaFrames != 0:
-        _finishTiming([for (final r in _timingRows) tlTiming(r.id, r.layer, g, deltaFrames)]);
+        _finishTiming(_retime(g));
       case TlGesture.marquee:
         final m = marquee!;
         final picked = tlMarquee(rows, frames: (math.min(m.f0, m.f1), math.max(m.f0, m.f1)), rows_: (math.min(m.r0, m.r1), math.max(m.r0, m.r1)), keys: _additive ? initialKeys : const [], ids: _additive ? _initialIds : const []);
@@ -392,8 +390,6 @@ class TimelineSession extends ChangeNotifier {
       await c.command('commitPreview');
     } else if (has('setTimings')) {
       await c.command('setTimings', {'changes': changes});
-    } else if (changes.length == 1) {
-      await c.command('setTiming', changes.single);
     }
   }
 

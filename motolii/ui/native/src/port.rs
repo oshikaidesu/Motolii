@@ -296,6 +296,14 @@ impl EditorRuntime{
     }
     fn timing_edits(&self,j:&J)->Result<Vec<Intent>,String>{
         let id=layer(j)?;let old=self.doc.view().without_transients().meta(id).map_err(e)?.ok_or("Layer metadata missing")?.timing;
+        // A gesture says what it did (move, trim either end, slip) and by how many frames: the timing and its limits
+        // are worked out here, once, and whether the keys go with the layer is the gesture's kind, not a guess.
+        if let Some(mode)=j["mode"].as_str(){
+            use editor::functions::verb::TimingMode;
+            let mode=match mode{"move"=>TimingMode::Move,"trimStart"=>TimingMode::TrimStart,"trimEnd"=>TimingMode::TrimEnd,"slip"=>TimingMode::Slip,other=>return Err(format!("Unknown timing mode {other}"))};
+            let next=editor::functions::verb::timing_delta(old,mode,integer(j,"delta")?).map_err(e)?;
+            return editor::functions::verb::retime_layer(&self.doc,id,old,next,mode==TimingMode::Move).map_err(e);
+        }
         let mut next=old;next.start=integer(j,"start")?;next.duration=integer(j,"duration")?;next.source_in=integer(j,"sourceIn")?;
         editor::functions::verb::retime_layer(&self.doc,id,old,next,next.duration==old.duration&&next.source_in==old.source_in).map_err(e)
     }

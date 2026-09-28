@@ -511,7 +511,6 @@ class _RowsPainter extends CustomPainter {
       }
     }
     final picked = s.selectedKeys;
-    final held = s.heldTimings;
     final moving = s.gesture == TlGesture.keys ? s.initialKeys : s.settlingKeys;
     final shift = s.gesture == TlGesture.keys ? s.deltaFrames : s.settlingDelta;
     final waves = {for (final w in EditorSession.maps(c.state['waveforms'])) w['layer']: EditorSession.maps(w['columns'])};
@@ -533,7 +532,8 @@ class _RowsPainter extends CustomPainter {
 
       bool isPicked(Map<String, dynamic> k) => picked.any((p) => tlSameKey(p, k));
       if (r.property == null) {
-        final timing = held[r.id] ?? r.layer;
+        // while a bar is held the host's preview is already in the layer (the Stage shows the same)
+        final timing = r.layer;
         final start = (timing['start'] as num? ?? 0).toDouble(), end = start + (timing['duration'] as num? ?? 0).toDouble();
         // quiet until chosen: a wall of full-colour bars out-shouts the work; the chosen layer takes its full colour
         final tone = r.isGroup ? N.g38 : _family(r.id).t;
