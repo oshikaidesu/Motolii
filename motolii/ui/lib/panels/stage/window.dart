@@ -114,7 +114,9 @@ mixin _StageWindow on State<StagePanel>, _StageView {
     if (!_userStage || !_shown || !mounted || !c.supports('stageWindow'))
       return;
     if (_viewport.isEmpty) return;
-    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
+    // the window is asked for in device pixels: the screen's ratio times the UI's own scale (a scaled UI draws this
+    // box at that factor, so the picture keeps one texel per device pixel whatever the UI's size)
+    final ratio = (MediaQuery.maybeDevicePixelRatioOf(context) ?? 1) * (EditorScale.of(context)?.value ?? 1);
     final origin = _origin, scale = _scale;
     final box = _coverBox();
     final window = {

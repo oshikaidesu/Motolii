@@ -5,6 +5,7 @@ import '../session/editor_session.dart';
 import '../session/stage_actions.dart';
 import 'adapters/document.dart';
 import 'adapters/sheets.dart';
+import 'ui_scale.dart';
 
 /// The window's keys, each one an existing host operation. A key typed into a text field is the field's.
 class LiveKeys {
@@ -86,6 +87,13 @@ class LiveKeys {
         _replace(c.chooseOpen);
       case LogicalKeyboardKey.keyI when cmd:
         c.importFiles();
+      // the UI's size, a percent at a time (Option with the Stage's own zoom keys); the work is not scaled
+      case LogicalKeyboardKey.equal when cmd && alt:
+        if (LiveUiScale.instance.bigger()) c.storeSetting(LiveUiScale.settingsKey, LiveUiScale.instance.percent.value);
+      case LogicalKeyboardKey.minus when cmd && alt:
+        if (LiveUiScale.instance.smaller()) c.storeSetting(LiveUiScale.settingsKey, LiveUiScale.instance.percent.value);
+      case LogicalKeyboardKey.digit0 when cmd && alt:
+        if (LiveUiScale.instance.reset()) c.storeSetting(LiveUiScale.settingsKey, LiveUiScale.instance.percent.value);
       case LogicalKeyboardKey.digit0 when cmd:
         stageView(c, 'Fit');
       case LogicalKeyboardKey.digit1 when cmd:

@@ -14,6 +14,7 @@ import '../session/status_notice.dart';
 import 'adapters/document.dart';
 import 'adapters/top.dart';
 import 'keys.dart';
+import 'ui_scale.dart';
 import 'workspace.dart';
 
 /// A path: once the document is open, the 1536x1024 default workspace is written there as a PNG for review.
@@ -69,6 +70,7 @@ class _LiveShellState extends State<LiveShell> {
     try {
       final settings = EditorSession.map(await c.native('readSettings'));
       workspace!.dock.restore(settings['hfWorkspace']);
+      LiveUiScale.instance.restore(settings[LiveUiScale.settingsKey]);
     } catch (_) {}
     workspace!.dock.layout.addListener(_workspaceChanged);
     setState(() => ready = true);
