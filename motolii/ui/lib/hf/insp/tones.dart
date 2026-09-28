@@ -3,6 +3,7 @@
 // so the same effect opens with the same colours and neighbouring groups never share one.
 import 'package:flutter/painting.dart';
 import '../desk/common.dart' show kYellow, kMint, kBlue, kPink, kViolet;
+import '../neutral.dart';
 
 const kOrange = Color(0xFFF08A3C);
 const kTonePalette = [kYellow, kMint, kBlue, kPink, kViolet, kOrange];
@@ -30,4 +31,4 @@ class Tones {
 }
 
 /// A tone that has been asked to step back (frozen): still recognisable, no longer a colour to touch.
-Color dimTone(Color c) => Color.lerp(c, const Color(0xFF3A3B40), .72)!;
+Color dimTone(Color c) => Color.lerp(c, N.g26, .72)!;

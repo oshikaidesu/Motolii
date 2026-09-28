@@ -20,6 +20,24 @@ import '../../timeline_core/view.dart';
 /// adds); a picked key dragged moves the picked keys (`moveKeys`); a body or one of its ends dragged retimes the layer
 /// (`previewTimings`, then `setTimings`). Scrolling pans time and rows; with Cmd/Ctrl it changes the seconds a major
 /// tick spans.
+/// Where the live Timeline's face starts in the reference frame: under the reference's own tab row (703-742), which
+/// the Dock's seat strip is here.
+const liveFaceTop = 742.0;
+
+/// The Timeline's tools at its seat strip's right end (the Dock asks the front panel for them): Split and Marker.
+class LiveTimelineTools extends StatelessWidget {
+  const LiveTimelineTools({super.key, required this.c});
+  final EditorSession c;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: c.document,
+    builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
+      HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
+      HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
+    ]),
+  );
+}
+
 class LiveTimeline extends StatefulWidget {
   const LiveTimeline({super.key, required this.c});
   final EditorSession c;
@@ -306,10 +324,18 @@ class _LiveTimelineState extends State<LiveTimeline>
   Offset _corePosition(Offset p) =>
       Offset(p.dx + tlX0 - 344, p.dy + rowStart * timelineGeometry.rowHeight);
 
-  Offset _coreLabelPosition(int visibleIndex, Offset p) => Offset(
-    p.dx + 1,
-    p.dy + (rowStart + visibleIndex) * timelineGeometry.rowHeight,
-  );
+  Offset _coreLabelPosition(int visibleIndex, Offset p) {
+    final index = rowStart + visibleIndex;
+    // the eye is drawn at a layer row's left edge; the core keeps "seen" as the first of its end columns
+    final layer = index >= 0 && index < tracks.length && tracks[index].property == null;
+    final eye = layer && p.dx < 13;
+    // the core's first end column is drawn empty here (its eye moved left): a press there is on the row, not a switch
+    final emptied = layer && !eye && p.dx + 1 >= labelWidth - 65 && p.dx + 1 < labelWidth - 49;
+    return Offset(
+      eye ? labelWidth - 65 + 8 : (emptied ? labelWidth - 90 : p.dx + 1),
+      p.dy + index * timelineGeometry.rowHeight,
+    );
+  }
 
   void _foldRow(int visibleIndex) {
     final index = rowStart + visibleIndex;
@@ -371,7 +397,7 @@ class _LiveTimelineState extends State<LiveTimeline>
       // asset drop, the same as Classic's).
       Offset core(Offset global, BuildContext box) =>
           (box.findRenderObject() as RenderBox).globalToLocal(global) +
-          const Offset(344, 703) -
+          const Offset(344, liveFaceTop) -
           toFace;
       return DragTarget<Map<String, dynamic>>(
         onWillAcceptWithDetails: (d) =>
@@ -492,17 +518,9 @@ class _LiveTimelineState extends State<LiveTimeline>
                 ),
               ),
               ox: 344,
-              oy: 703,
+              oy: liveFaceTop,
             ),
           )),
-            Positioned(
-              right: 8,
-              top: 6,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
-                HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
-              ]),
-            ),
           ]),
         ),
       );

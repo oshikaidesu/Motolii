@@ -7,6 +7,7 @@ import 'search.dart';
 import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
+import '../neutral.dart';
 
 /// How a host's shelf sets its tiles when it has its own idea of the size: one column's width and a row's height.
 typedef Tiling = ({double column, double extent, double gap, double padding});
@@ -136,6 +137,6 @@ class _ShelfGridPanelState extends State<ShelfGridPanel> with WithDiscovery<Shel
 
   Widget _tile(Thing t, bool caption) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(child: ThingFace(t)),
-        if (caption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(t.name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: const Color(0xFFC4C5C8)))),
+        if (caption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(t.name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: N.g76))),
       ]);
 }

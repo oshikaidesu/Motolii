@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
 import '../../foundation/ease_meaning.dart';
+import '../neutral.dart';
 
 typedef Shape = double Function(double t);
 
@@ -349,7 +350,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           },
           onHorizontalDragEnd: mixed ? null : (_) => _write(),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(l, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: mixed ? kMuted : const Color(0xB31B1B1D), w: FontWeight.w700, ls: .6)),
+            Text(l, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: mixed ? kMuted : N.inkSoft, w: FontWeight.w700, ls: .6)),
             const SizedBox(height: 3),
             typing
                 ? Focus(
@@ -363,8 +364,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                     child: EditableText(
                       controller: _typed,
                       focusNode: _typedFocus,
-                      style: sans(22, c: const Color(0xFF1B1B1D), w: FontWeight.w600, ls: -.4),
-                      cursorColor: const Color(0xFF1B1B1D),
+                      style: sans(22, c: N.g10, w: FontWeight.w600, ls: -.4),
+                      cursorColor: N.g10,
                       backgroundCursorColor: kMuted,
                       onSubmitted: (t) {
                         final next = double.tryParse(t.trim());
@@ -376,7 +377,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                       },
                     ),
                   )
-                : Text(_n(v), softWrap: false, style: sans(22, c: mixed ? kMuted : const Color(0xFF1B1B1D), w: FontWeight.w600, ls: -.4)),
+                : Text(_n(v), softWrap: false, style: sans(22, c: mixed ? kMuted : N.g10, w: FontWeight.w600, ls: -.4)),
           ]),
         ),
       );
@@ -429,7 +430,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                     margin: EdgeInsets.only(right: i == presets.length - 1 ? 0 : 5),
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(color: _presetColors[i % _presetColors.length], borderRadius: BorderRadius.circular(5), border: !mixed && cur.p == i ? Border.all(color: kInk, width: 2.4) : null),
-                    child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape, const Color(0xFF1B1B1D), 2.4)),
+                    child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape, N.g10, 2.4)),
                   ),
                 ),
               ),
@@ -478,7 +479,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
         key: ValueKey(key),
         onTap: f,
-        child: Container(height: 34, padding: const EdgeInsets.symmetric(horizontal: 12), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: const Color(0xFF3A3B40)), borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(11, c: const Color(0xFFC4C6CB)))),
+        child: Container(height: 34, padding: const EdgeInsets.symmetric(horizontal: 12), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(11, c: N.g76))),
       );
 
   /// Hosted, the switch says whether the desk is in its ghost mode (set by what is picked); unhosted it is a toy.
@@ -490,9 +491,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           behavior: HitTestBehavior.opaque,
           onTap: widget.host == null ? () => setState(() => ghost = !ghost) : null,
           child: Row(children: [
-            Container(width: 34, height: 20, padding: const EdgeInsets.all(2), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : const Color(0xFF34353A), borderRadius: BorderRadius.circular(10)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+            Container(width: 34, height: 20, padding: const EdgeInsets.all(2), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : N.g20, borderRadius: BorderRadius.circular(10)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
             const SizedBox(width: 10),
-            Flexible(child: Text('Sequence ghosts', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: const Color(0xFFC4C6CB)))),
+            Flexible(child: Text('Sequence ghosts', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: N.g76))),
           ]),
         )),
       ]);
@@ -508,7 +509,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             margin: const EdgeInsets.only(right: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(color: mixed ? kYellow : kRaised, borderRadius: BorderRadius.circular(5)),
-            child: Text(compact ? '≠' : 'All', style: sans(10.5, c: mixed ? const Color(0xFF1B1B1D) : kMuted, w: FontWeight.w600)),
+            child: Text(compact ? '≠' : 'All', style: sans(10.5, c: mixed ? N.g10 : kMuted, w: FontWeight.w600)),
           ),
         ),
         for (final (i, sg) in segs.indexed)
@@ -523,9 +524,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                 padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 5, vertical: 6),
                 decoration: BoxDecoration(color: _segColors[i % _segColors.length], borderRadius: BorderRadius.circular(5), border: sel == i ? Border.all(color: kInk, width: 2.4) : null),
                 child: Row(children: [
-                  if (!compact && sg.frames >= 8) Text('${sg.frames}f', style: sans(10, c: const Color(0xFF1B1B1D), w: FontWeight.w700)),
+                  if (!compact && sg.frames >= 8) Text('${sg.frames}f', style: sans(10, c: N.g10, w: FontWeight.w700)),
                   if (!compact && sg.frames >= 8) const SizedBox(width: 4),
-                  Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, const Color(0xFF1B1B1D), 1.8))),
+                  Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, N.g10, 1.8))),
                 ]),
               ),
             ),
@@ -644,7 +645,7 @@ class _PlayP extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final m = s.center(Offset.zero);
-    final p = Paint()..color = const Color(0xFF1B1B1D);
+    final p = Paint()..color = N.g10;
     if (playing) {
       c.drawRect(Rect.fromCenter(center: m + const Offset(-3.5, 0), width: 3.4, height: 11), p);
       c.drawRect(Rect.fromCenter(center: m + const Offset(3.5, 0), width: 3.4, height: 11), p);
@@ -718,11 +719,11 @@ class _PlotP extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final r = box(s);
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(6)), Paint()..color = const Color(0xFF131316));
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(6)), Paint()..color = N.g07);
     final base = at(s, 0, 0).dy, top = at(s, 0, 1).dy;
     // only the two rails the curve travels between; no grid
-    c.drawLine(Offset(r.left, base), Offset(r.right, base), Paint()..color = const Color(0xFF2C2D32)..strokeWidth = 1.2);
-    c.drawLine(Offset(r.left, top), Offset(r.right, top), Paint()..color = const Color(0xFF2C2D32)..strokeWidth = 1.2);
+    c.drawLine(Offset(r.left, base), Offset(r.right, base), Paint()..color = N.g20..strokeWidth = 1.2);
+    c.drawLine(Offset(r.left, top), Offset(r.right, top), Paint()..color = N.g20..strokeWidth = 1.2);
     // the silhouette of the curve is the object: a flat colour field under it
     if (!mixed) {
       final area = _curve(s, f)..lineTo(at(s, 1, 0).dx, base)..lineTo(at(s, 0, 0).dx, base)..close();
@@ -758,14 +759,14 @@ class _PlotP extends CustomPainter {
       for (final o in [at(s, x1, y1), at(s, x2, y2)]) {
         c.drawCircle(o, 12, Paint()..color = kYellow.withValues(alpha: .22));
         c.drawCircle(o, 7, Paint()..color = kYellow);
-        c.drawCircle(o, 7, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2);
+        c.drawCircle(o, 7, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2);
       }
     }
     if (!mixed) c.drawPath(_curve(s, f), Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
     for (final o in [for (final q in points) at(s, q.dx, q.dy)]) {
       c.drawCircle(o, 12, Paint()..color = kYellow.withValues(alpha: .22));
       c.drawCircle(o, 7, Paint()..color = kYellow);
-      c.drawCircle(o, 7, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2);
+      c.drawCircle(o, 7, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2);
     }
     for (final o in [at(s, 0, 0), at(s, 1, 1)]) {
       c.drawCircle(o, 7, Paint()..color = kInk);
@@ -777,11 +778,11 @@ class _PlotP extends CustomPainter {
     for (var i = 0; i <= 8; i++) { c.drawCircle(Offset(cx, at(s, 0, f(i / 8)).dy), 2.8, Paint()..color = kInk.withValues(alpha: .55)); }
     c.drawLine(pt, Offset(cx, pt.dy), Paint()..color = kMint..strokeWidth = 1.6);
     c.drawCircle(Offset(cx, pt.dy), 5.4, Paint()..color = kMint);
-    if (!mixed) { c.drawCircle(pt, 6, Paint()..color = kMint); c.drawCircle(pt, 6, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2); }
+    if (!mixed) { c.drawCircle(pt, 6, Paint()..color = kMint); c.drawCircle(pt, 6, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2); }
     if (labels) {
       _text(c, mixed ? 'Mixed' : name, Offset(r.left, 9), sans(15, c: kInk, w: FontWeight.w600));
-      _text(c, caption ?? (layers > 1 ? '$layers layers' : (mixed ? '3 intervals · $frames f' : '$frames f')), Offset(s.width - 14, 12), sans(11.5, c: const Color(0xFFB4B6BB)), right: true);
-      if (meaning != null) _text(c, meaning!, Offset(r.left, 28), sans(10.5, c: const Color(0xFFB4B6BB)));
+      _text(c, caption ?? (layers > 1 ? '$layers layers' : (mixed ? '3 intervals · $frames f' : '$frames f')), Offset(s.width - 14, 12), sans(11.5, c: N.g69), right: true);
+      if (meaning != null) _text(c, meaning!, Offset(r.left, 28), sans(10.5, c: N.g69));
       _text(c, 'f$f0', Offset(r.left, s.height - 17), mono(9.5));
       _text(c, 'f${f0 + frames}', Offset(r.right, s.height - 17), mono(9.5), right: true);
     }

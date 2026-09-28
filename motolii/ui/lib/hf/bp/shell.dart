@@ -8,12 +8,13 @@ import 'common.dart';
 import 'search.dart';
 import '../metrics.dart';
 import 'seat.dart';
+import '../neutral.dart';
 
-const kTile = Color(0xFF212124);
+const kTile = N.g13;
 const kLabel = Color(0xFF7481C4);
 
 class GlyphBox extends StatelessWidget {
-  const GlyphBox(this.g, {super.key, this.size = 17, this.color = const Color(0xFFCFD0D3)});
+  const GlyphBox(this.g, {super.key, this.size = 17, this.color = N.g82});
   final HG g;
   final double size;
   final Color color;
@@ -30,7 +31,7 @@ class HeaderKey extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: SizedBox(width: 30, height: 30, child: Center(child: GlyphBox(g, size: 16, color: on ? const Color(0xFFF2F2F4) : const Color(0xFFB4B6BB)))),
+        child: SizedBox(width: 30, height: 30, child: Center(child: GlyphBox(g, size: 16, color: on ? N.g95 : N.g69))),
       );
 }
 
@@ -119,7 +120,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                   else if (widget.mode != HeadMode.stacked) ...[
                     widget.icon,
                     SizedBox(width: widget.mode == HeadMode.full ? 12 : 8),
-                    Expanded(child: Text(widget.title, softWrap: false, overflow: TextOverflow.clip, style: sans(widget.mode == HeadMode.full ? 14 : 12.5, c: const Color(0xFFF2F2F4), w: FontWeight.w600, ls: -0.2))),
+                    Expanded(child: Text(widget.title, softWrap: false, overflow: TextOverflow.clip, style: sans(widget.mode == HeadMode.full ? 14 : 12.5, c: N.g95, w: FontWeight.w600, ls: -0.2))),
                   ] else
                     const Spacer(),
                   if (widget.extra != null) widget.extra!,

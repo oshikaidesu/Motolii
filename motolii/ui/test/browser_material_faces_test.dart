@@ -88,24 +88,27 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('Create: a Swiss symbol matrix — identifiers, uncaptioned marks, one header row, a Recent row', (t) async {
+  testWidgets('Create: named tiles — identifiers, a small mark over its name, one header row, a Recent row', (t) async {
     final catalog = loadCatalog('lib/hf/data/things');
     final user = UserViews(recent: ['motolii.sphere']);
     await t.pumpWidget(host(t, CreatePanel(catalog: catalog, user: user), 420, 3000));
     await t.pump();
-    // a symbol matrix: section identifiers, keys without captions (the name is the key's label), marks of 24-30 px
     expect(find.text('PRIMITIVES'), findsOneWidget);
     expect(find.text('RECENT'), findsOneWidget, reason: 'what was taken last is the last row');
-    expect(find.text('Sphere'), findsNothing, reason: 'no caption under every mark');
     for (final name in ['Text', 'Cube', 'Camera', 'Stage', 'Sphere']) {
       expect(mark(name), findsWidgets, reason: name);
     }
+    // the name is on the tile, under a small mark (dense: the mark is not the tile)
+    expect(find.text('Cube'), findsWidgets);
     final face = t.getSize(find.byType(ThingFace).first);
-    expect(face.width, inInclusiveRange(24, 30));
+    expect(face.width, inInclusiveRange(18, 22));
     // one compact header row: the classes share it with search and the menu
     expect(find.byType(ClassStrip), findsOneWidget);
     expect(t.getSize(find.ancestor(of: find.byType(ClassStrip), matching: find.byType(PanelHeader))).height, lessThanOrEqualTo(32));
-    // at the default seat width a row holds at least six marks
-    expect(SymbolMatrix.columns(324 - 0), greaterThanOrEqualTo(6));
+    // at the Browser's seat widths a row holds five tiles, and the tiles fill the row
+    expect(CreateTiles.columns(288), 5);
+    expect(CreateTiles.columns(324), greaterThanOrEqualTo(5));
+    final w = CreateTiles.tileWidth(288);
+    expect(CreateTiles.pad * 2 + w * 5 + CreateTiles.gap * 4, closeTo(288, 5));
   });
 }

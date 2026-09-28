@@ -12,10 +12,13 @@ import '../hf/shell/menu.dart' show showHfMenu;
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
 /// (the same glyph a Browser tab would use), and how to build its body.
 class PanelDef {
-  const PanelDef(this.id, this.title, this.build, {this.glyph, this.minSize = 160});
+  const PanelDef(this.id, this.title, this.build, {this.glyph, this.minSize = 160, this.tools});
   final String id, title;
   final HG? glyph;
   final Widget Function() build;
+
+  /// The panel's tools, drawn at its seat strip's right end while it is the front panel.
+  final Widget Function()? tools;
   final double minSize;
 }
 
@@ -159,6 +162,7 @@ class DockWorkspace {
               _picked.value++;
             },
       tabWrap: (i, t) => _handle(ids[i], t),
+      trailing: defs[ids[tabs == null ? 0 : math.min(tabs.selectedIndex, ids.length - 1)]]!.tools?.call(),
       body: body,
     );
   }

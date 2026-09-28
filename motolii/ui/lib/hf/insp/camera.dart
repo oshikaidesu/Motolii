@@ -8,6 +8,7 @@ import 'camera_face.dart';
 import 'camera_model.dart';
 import 'rows.dart';
 import 'toys.dart';
+import '../neutral.dart';
 
 class CameraInstrument extends StatelessWidget {
   const CameraInstrument(this.store, {super.key, this.title = 'Camera', this.animating, this.onAnimate});
@@ -96,10 +97,10 @@ class CameraInstrument extends StatelessWidget {
       padding: const EdgeInsets.only(top: 12, bottom: 5),
       child: Row(children: [
         Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(1.5))),
-        Text(t, style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3)),
-        Expanded(child: note == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(left: 8), child: Text(note, softWrap: false, overflow: TextOverflow.clip, style: sans(9, c: const Color(0xFF5E5F66))))),
-        GestureDetector(key: ValueKey('key-$name'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { s.toggleKey(i); } }, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: SizedBox(width: 9, height: 9, child: CustomPaint(painter: _DiamondP(keyed, keyed || animated ? tone : const Color(0xFF45464C)))))),
-        if (_modified(ids) && !s.frozen) GestureDetector(key: ValueKey('reset-$name'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { s.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 3), child: Text('↺', style: sans(11, c: const Color(0xFF66676E))))) else const SizedBox(width: 14),
+        Text(t, style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3)),
+        Expanded(child: note == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(left: 8), child: Text(note, softWrap: false, overflow: TextOverflow.clip, style: sans(9, c: N.g38)))),
+        GestureDetector(key: ValueKey('key-$name'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { s.toggleKey(i); } }, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: SizedBox(width: 9, height: 9, child: CustomPaint(painter: _DiamondP(keyed, keyed || animated ? tone : N.g26))))),
+        if (_modified(ids) && !s.frozen) GestureDetector(key: ValueKey('reset-$name'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { s.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 3), child: Text('↺', style: sans(11, c: N.g38)))) else const SizedBox(width: 14),
       ]),
     );
   }

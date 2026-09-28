@@ -18,6 +18,9 @@ import '../../session/editor_session.dart';
 import '../../session/media_actions.dart';
 import 'browser_user.dart';
 import 'media_library.dart';
+import '../../hf/neutral.dart';
+import '../../hf/shell/place.dart' show H;
+import '../../hf/desk/common.dart' show kPink;
 
 /// Live Media assets drawn through the existing hf shelf grammar.
 class LiveBrowserShelf extends StatefulWidget {
@@ -218,8 +221,8 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
                 key: const ValueKey('media-drop-hint'),
                 margin: const EdgeInsets.all(8),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: const Color(0xCC191919), border: Border.all(color: const Color(0xFFF2F2F4), width: 1.4), borderRadius: BorderRadius.circular(6)),
-                child: Text('Drop to import', style: sans(13, c: const Color(0xFFF2F2F4))),
+                decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(6)),
+                child: Text('Drop to import', style: sans(13, c: N.g95)),
               ),
             ),
           ),
@@ -230,7 +233,9 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
 }
 
 /// The colours the collections 2–7 are named after (Orange, Yellow, Green, Blue, Purple, Gray).
-const _collectionColors = [Color(0xFFF69260), Color(0xFFF0D455), Color(0xFF7BCBA3), Color(0xFF5596E9), Color(0xFFA282E8), Color(0xFF9E9E9F)];
+/// a warning mark on a tile (a missing file)
+const _warn = Color(0xFFFFD166);
+final _collectionColors = [H.follow.b, H.face.b, H.along.b, H.stagger.b, H.attach.b, N.g63];
 
 class _Seat extends ChangeNotifier implements BrowserSeat {
   _Seat(this.c, this.name, this.userState);
@@ -292,9 +297,9 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
             if (selected.contains(thing.id)) const Positioned.fill(child: PickedRing()),
             // state at a glance (Classic BR-059/096): a missing file, in use, and the collection it is kept in
             if (item['missing'] == true)
-              const Positioned(left: 4, top: 4, child: IgnorePointer(child: Text('!', style: TextStyle(color: Color(0xFFF0699A), fontSize: 12, fontWeight: FontWeight.w800)))),
+              const Positioned(left: 4, top: 4, child: IgnorePointer(child: Text('!', style: TextStyle(color: kPink, fontSize: 12, fontWeight: FontWeight.w800)))),
             if (item['used'] == true)
-              Positioned(right: 4, bottom: 4, child: IgnorePointer(child: Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF7BCC9E), shape: BoxShape.circle)))),
+              Positioned(right: 4, bottom: 4, child: IgnorePointer(child: Container(width: 6, height: 6, decoration: const BoxDecoration(color: H.play, shape: BoxShape.circle)))),
             if (userState.collectionOf(thing.id) case final n? when n > 1)
               Positioned(left: 4, bottom: 4, child: IgnorePointer(child: Container(width: 7, height: 7, decoration: BoxDecoration(color: _collectionColors[n - 2], shape: BoxShape.circle)))),
             if (favorite)
@@ -304,7 +309,7 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
                 child: IgnorePointer(
                   child: Text(
                     '★',
-                    style: TextStyle(color: Color(0xFFFFD166), fontSize: 11),
+                    style: TextStyle(color: _warn, fontSize: 11),
                   ),
                 ),
               ),
@@ -357,7 +362,7 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
             family,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFFB8B9BD), fontSize: 9),
+            style: const TextStyle(color: N.g76, fontSize: 9),
           ),
         ],
       ),
@@ -389,7 +394,7 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
     onTap: c.importFiles,
     child: const Padding(
       padding: EdgeInsets.all(6),
-      child: Text('Import', style: TextStyle(color: Color(0xFFD6D7DB))),
+      child: Text('Import', style: TextStyle(color: N.g86)),
     ),
   );
   @override

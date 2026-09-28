@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'common.dart';
+import '../neutral.dart';
 
 /// The housing Create and Media share (Swiss: one grid, a few sizes, hierarchy from type and space). What sits in a
 /// tile is each shelf's own face; only the section rhythm, the column rule and the picked ring live here.
@@ -19,7 +20,7 @@ class ShelfHeading extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(0, 10, 0, 4),
         child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: const Color(0xFFF2F2F4), w: FontWeight.w600, ls: .2))),
+          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: N.g95, w: FontWeight.w600, ls: .2))),
           if (count != null) ...[
             const SizedBox(width: 6),
             Text('$count', style: mono(10, c: kMuted)),
@@ -42,7 +43,7 @@ class PickedRing extends StatelessWidget {
   Widget build(BuildContext context) => IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFF2F2F4), width: 2),
+            border: Border.all(color: N.g95, width: 2),
             borderRadius: BorderRadius.circular(radius),
           ),
         ),

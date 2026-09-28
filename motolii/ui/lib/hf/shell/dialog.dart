@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'place.dart';
 import 'sheet.dart' show HfAction, HfActionKind;
+import '../neutral.dart';
 
 /// [destructive] answers (discarding work) are drawn in the record red and set apart on the left; the last answer is
 /// the primary (and Enter's).
@@ -38,12 +39,12 @@ Future<T?> showHfDialog<T>(BuildContext context, {required String title, require
         return KeyEventResult.ignored;
       },
       child: Stack(children: [
-        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => close(null), child: const ColoredBox(color: Color(0x88000000)))),
+        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => close(null), child: const ColoredBox(color: N.shade55))),
         Center(
           child: Container(
             width: 380,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Text(title, style: H.s(13, w: FontWeight.w600, color: H.text)),
               const SizedBox(height: 8),

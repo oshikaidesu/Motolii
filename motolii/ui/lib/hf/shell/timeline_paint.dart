@@ -100,16 +100,16 @@ class _TlPaint extends CustomPainter {
     );
     // 3 time grid: major > minor > row gap. Major runs through the ruler as a tick.
     final major = Paint()
-      ..color = const Color(0x17FFFFFF)
+      ..color = N.glaze9
       ..strokeWidth = 1;
     final minor = Paint()
-      ..color = const Color(0x0AFFFFFF)
+      ..color = N.glaze4
       ..strokeWidth = 1;
     final tMaj = Paint()
-      ..color = const Color(0x47FFFFFF)
+      ..color = N.glaze28
       ..strokeWidth = 1;
     final tMin = Paint()
-      ..color = const Color(0x29FFFFFF)
+      ..color = N.glaze15
       ..strokeWidth = 1;
     for (var i = 0; i <= 10; i++) {
       final x = tlX(i.toDouble());
@@ -131,10 +131,10 @@ class _TlPaint extends CustomPainter {
           Rect.fromLTRB(594, cy - 11, 1490, cy + 11),
           const Radius.circular(2),
         ),
-        Paint()..color = const Color(0xFF1E2622),
+        Paint()..color = N.g13,
       );
       final wv = Paint()
-        ..color = const Color(0x803B6D5F)
+        ..color = H.wave.withAlpha(0x80)
         ..strokeWidth = 1;
       for (var k = 0; k < wave.length; k++) {
         final x = 596.0 + 2 * k, a = wave[k];
@@ -143,7 +143,7 @@ class _TlPaint extends CustomPainter {
     }
     // 5 temporal bodies: a flat body, one thin connector through the keys, small diamond keys on it.
     // One rule for every relation; a body with a single key has no connector.
-    Color mixW(Color c, double t) => Color.lerp(c, const Color(0xFFFFFFFF), t)!;
+    Color mixW(Color c, double t) => Color.lerp(c, N.g100, t)!;
     void node(double x, double cy, Color body) {
       cv.save();
       cv.translate(x, cy);
@@ -237,7 +237,7 @@ class _TlPaint extends CustomPainter {
           Offset(ks.first, cy),
           Offset(ks.last, cy),
           Paint()
-            ..color = const Color(0x5C000000)
+            ..color = N.shade40
             ..strokeWidth = 1,
         );
       for (final k in ks) {

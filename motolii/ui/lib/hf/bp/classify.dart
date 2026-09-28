@@ -3,6 +3,7 @@
 import 'package:flutter/widgets.dart';
 import 'common.dart';
 import 'search.dart';
+import '../neutral.dart';
 
 class ClassifyCapability extends ChangeNotifier {
   ClassifyCapability({this.all = 'All', String? selected}) : _selected = selected ?? all;
@@ -117,8 +118,8 @@ class _Row extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Container(
               padding: const EdgeInsets.only(bottom: 2),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: on ? const Color(0xFFE8E8EA) : const Color(0x00000000), width: 1.5))),
-              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? const Color(0xFFF2F2F4) : const Color(0xFF9EA0A6), w: on ? FontWeight.w600 : FontWeight.w400, ls: -0.1)),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: on ? N.g91 : N.clear, width: 1.5))),
+              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? N.g95 : N.g63, w: on ? FontWeight.w600 : FontWeight.w400, ls: -0.1)),
             ),
           ),
         ),
@@ -185,7 +186,7 @@ class _ClassStripState extends State<ClassStrip> {
               child: ShaderMask(
                 blendMode: BlendMode.dstIn,
                 shaderCallback: (r) => LinearGradient(
-                  colors: [_before ? const Color(0x00000000) : const Color(0xFF000000), const Color(0xFF000000), const Color(0xFF000000), _after ? const Color(0x00000000) : const Color(0xFF000000)],
+                  colors: [_before ? N.clear : N.g00, N.g00, N.g00, _after ? N.clear : N.g00],
                   stops: [0, 18 / r.width, 1 - 18 / r.width, 1],
                 ).createShader(r),
                 child: SingleChildScrollView(
@@ -225,7 +226,7 @@ class ClassChip extends StatelessWidget {
                   height: 20,
                   padding: const EdgeInsets.symmetric(horizontal: 7),
                   decoration: BoxDecoration(color: kSel, borderRadius: BorderRadius.circular(3)),
-                  child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(10.5, c: const Color(0xFFE6E6E8)))),
+                  child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(10.5, c: N.g91))),
                 ),
               )
             : const SizedBox.shrink(),

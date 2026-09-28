@@ -7,6 +7,7 @@ import '../glyphs.dart';
 import '../metrics.dart';
 import 'place.dart';
 import 'top.dart';
+import '../neutral.dart';
 
 class TopBar extends StatelessWidget {
   const TopBar(this.m, {super.key, this.onModeAt, this.keyEnabled = const [true, true, true]});
@@ -32,25 +33,25 @@ class TopBar extends StatelessWidget {
             if (tagline) ...[
               const SizedBox(width: 12),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Motion', style: H.s(10.5, color: const Color(0xFFBDBEC0))),
-                Text('for More Relations.', style: H.s(10.5, color: const Color(0xFFBDBEC0))),
+                Text('Motion', style: H.s(10.5, color: N.g76)),
+                Text('for More Relations.', style: H.s(10.5, color: N.g76)),
               ]),
             ],
             const Spacer(flex: 2),
             _Key(onTap: m.onPlay, fill: H.play, edge: H.play, child: const _Play()),
-            _Key(onTap: m.onStop, fill: const Color(0xFF1C1C1C), edge: const Color(0xFF363636), child: Container(width: 9, height: 9, color: const Color(0xFF969697))),
-            _Key(onTap: m.onAnimate, fill: const Color(0xFF1F1F1F), edge: const Color(0xFF3C3C3C), child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: H.record, shape: BoxShape.circle))),
+            _Key(onTap: m.onStop, fill: N.g10, edge: N.g20, child: Container(width: 9, height: 9, color: N.g56)),
+            _Key(onTap: m.onAnimate, fill: N.g13, edge: N.g26, child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: H.record, shape: BoxShape.circle))),
             const SizedBox(width: 14),
             ValueListenableBuilder<List<String>>(
               valueListenable: m.readouts,
               builder: (_, r, __) => Row(children: [
-                Text(r[0], style: H.m(12, color: const Color(0xFFD8D9D8))),
+                Text(r[0], style: H.m(12, color: N.g86)),
                 if (duration) ...[
-                  Container(width: 1, height: 12, margin: const EdgeInsets.symmetric(horizontal: 10), color: const Color(0xFF6A6A6A)),
-                  Text(r[1], style: H.m(12, color: const Color(0xFFD8D9D8))),
+                  Container(width: 1, height: 12, margin: const EdgeInsets.symmetric(horizontal: 10), color: N.g44),
+                  Text(r[1], style: H.m(12, color: N.g86)),
                 ],
                 const SizedBox(width: 14),
-                Text(r[2], style: H.m(12, color: const Color(0xFFD8D9D8))),
+                Text(r[2], style: H.m(12, color: N.g86)),
               ]),
             ),
             _Glyph(HG.plus, size: 13, onTap: m.onMarker),
@@ -58,7 +59,7 @@ class TopBar extends StatelessWidget {
             _Modes(m, onModeAt),
             const Spacer(),
             for (final (i, g) in const [HG.fit, HG.pin, HG.folder].indexed)
-              _Key(onTap: keyEnabled[i] && m.onKey != null ? () => m.onKey!(i) : null, fill: H.raised, edge: H.rule, child: SizedBox(width: 16, height: 16, child: CustomPaint(painter: HgPainter(g, keyEnabled[i] ? const Color(0xFFD6D8D8) : const Color(0xFF6A6A6C), H.raised)))),
+              _Key(onTap: keyEnabled[i] && m.onKey != null ? () => m.onKey!(i) : null, fill: H.raised, edge: H.rule, child: SizedBox(width: 16, height: 16, child: CustomPaint(painter: HgPainter(g, keyEnabled[i] ? N.g86 : N.g44, H.raised)))),
             if (motto) ...[
               const SizedBox(width: 16),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -104,7 +105,7 @@ class _Play extends StatelessWidget {
 
 class _PlayPainter extends CustomPainter {
   @override
-  void paint(Canvas cv, Size s) => cv.drawPath(Path()..moveTo(0, 0)..lineTo(s.width, s.height / 2)..lineTo(0, s.height)..close(), Paint()..color = const Color(0xFF040709));
+  void paint(Canvas cv, Size s) => cv.drawPath(Path()..moveTo(0, 0)..lineTo(s.width, s.height / 2)..lineTo(0, s.height)..close(), Paint()..color = N.g00);
   @override
   bool shouldRepaint(_PlayPainter o) => false;
 }
@@ -120,7 +121,7 @@ class _Glyph extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: SizedBox(width: UiMetrics.hit + 4, height: UiMetrics.hit + 4, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, const Color(0xFFCFCFCF), H.window))))),
+          child: SizedBox(width: UiMetrics.hit + 4, height: UiMetrics.hit + 4, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, H.window))))),
         ),
       );
 }
@@ -153,7 +154,7 @@ class _Modes extends StatelessWidget {
                     width: 70,
                     alignment: Alignment.center,
                     color: m.mode == i ? H.mode : null,
-                    child: Text(label, style: H.s(11, w: FontWeight.w600, ls: .8, color: m.mode == i ? const Color(0xFFFCFCFE) : H.text2)),
+                    child: Text(label, style: H.s(11, w: FontWeight.w600, ls: .8, color: m.mode == i ? N.g100 : H.text2)),
                   ),
                 ),
               ),

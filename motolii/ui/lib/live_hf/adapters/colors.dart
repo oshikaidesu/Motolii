@@ -11,6 +11,7 @@ import '../../hf/bp/shell.dart' show GlyphBox;
 import '../../hf/glyphs.dart';
 import '../../session/color_edit.dart';
 import '../../session/editor_session.dart';
+import '../../hf/neutral.dart';
 
 /// The Colors instrument over the session: the reference's wheel, hex and two bars, editing the colour target (the
 /// Inspector's focused colour, else the selection's fill) through [ColorEdit] — the same preview, commit and cancel
@@ -218,9 +219,9 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                               key: const ValueKey('hf-color-hex'),
                               controller: hex,
                               focusNode: hexFocus,
-                              style: mono(11, c: const Color(0xFFD0D1D3)),
-                              cursorColor: const Color(0xFFD0D1D3),
-                              backgroundCursorColor: const Color(0xFF000000),
+                              style: mono(11, c: N.g82),
+                              cursorColor: N.g82,
+                              backgroundCursorColor: N.g00,
                               textAlign: TextAlign.center,
                               onSubmitted: _typed,
                             ),
@@ -236,7 +237,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                             child: GlyphBox(
                               HG.composite,
                               size: 13,
-                              color: picking ? const Color(0xFFF2F2F4) : kMuted,
+                              color: picking ? N.g95 : kMuted,
                             ),
                           ),
                         ],

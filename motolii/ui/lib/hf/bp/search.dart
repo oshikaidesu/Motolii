@@ -3,6 +3,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'common.dart';
+import '../neutral.dart';
+import '../shell/place.dart' show H;
 
 class SearchCapability extends ChangeNotifier {
   SearchCapability({String query = ''}) : controller = TextEditingController(text: query) {
@@ -101,7 +103,7 @@ class SearchField extends StatelessWidget {
         builder: (_, __) => Container(
           height: height,
           padding: const EdgeInsets.only(left: 8, right: 6),
-          decoration: BoxDecoration(color: kRaised, border: Border.all(color: search.focus.hasFocus ? const Color(0xFF6A6C72) : kRule2), borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: kRaised, border: Border.all(color: search.focus.hasFocus ? N.g44 : kRule2), borderRadius: BorderRadius.circular(3)),
           child: Row(children: [
             SizedBox(width: 13, height: 13, child: CustomPaint(painter: magnifier(kMuted))),
             const SizedBox(width: 7),
@@ -111,10 +113,10 @@ class SearchField extends StatelessWidget {
                 EditableText(
                   controller: search.controller,
                   focusNode: search.focus,
-                  style: sans(11.5, c: const Color(0xFFE8E8EA)),
-                  cursorColor: const Color(0xFFE8E8EA),
+                  style: sans(11.5, c: N.g91),
+                  cursorColor: N.g91,
                   backgroundCursorColor: kMuted,
-                  selectionColor: const Color(0x552F6BFF),
+                  selectionColor: H.textSelection,
                   maxLines: 1,
                 ),
               ]),

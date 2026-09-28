@@ -7,6 +7,7 @@ import '../../hf/desk/common.dart' show kInk, kWell;
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
 import 'relations_model.dart';
+import '../../hf/neutral.dart';
 
 /// Relations v0: the place to pick the things a source drives. The things at the current time are dots where they are
 /// on the Stage; a click, a Shift click or a lasso makes the member set. The relation itself is the links the document
@@ -271,7 +272,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(color: dest == p ? kRed : kRaised, borderRadius: BorderRadius.circular(4), border: Border.all(color: dest == p ? kRed : kRule2)),
-                child: Text(labelOf(p), style: sans(11.5, c: dest == p ? const Color(0xFF1B1B1D) : (n == 0 ? kMuted : kInk), w: FontWeight.w600)),
+                child: Text(labelOf(p), style: sans(11.5, c: dest == p ? N.g10 : (n == 0 ? kMuted : kInk), w: FontWeight.w600)),
               ),
             ),
         ]),
@@ -286,7 +287,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
           GestureDetector(
             key: const ValueKey('relations-create'),
             onTap: n > 0 && dest != null ? _create : null,
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: n > 0 && dest != null ? kRed : kRaised, borderRadius: BorderRadius.circular(4)), child: Text('Create', style: sans(11.5, c: n > 0 && dest != null ? const Color(0xFF1B1B1D) : kMuted, w: FontWeight.w700))),
+            child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: n > 0 && dest != null ? kRed : kRaised, borderRadius: BorderRadius.circular(4)), child: Text('Create', style: sans(11.5, c: n > 0 && dest != null ? N.g10 : kMuted, w: FontWeight.w700))),
           ),
         ]),
       ]),
@@ -323,7 +324,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
               }
               setState(() => picking = null);
             },
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: editing ? kRed : kRaised, borderRadius: BorderRadius.circular(4)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(11, c: editing ? const Color(0xFF1B1B1D) : kInk, w: FontWeight.w600))),
+            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: editing ? kRed : kRaised, borderRadius: BorderRadius.circular(4)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(11, c: editing ? N.g10 : kInk, w: FontWeight.w600))),
           ),
         ]),
         _label('MAPPINGS'),
@@ -427,7 +428,7 @@ class _RangePainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final y = s.height / 2;
-    c.drawLine(Offset(0, y), Offset(s.width, y), Paint()..color = const Color(0xFF3A3B40)..strokeWidth = 2);
+    c.drawLine(Offset(0, y), Offset(s.width, y), Paint()..color = N.g26..strokeWidth = 2);
     for (final x in [0.0, s.width]) c.drawLine(Offset(x, y - 5), Offset(x, y + 5), Paint()..color = kMuted..strokeWidth = 2);
     if (at != null) c.drawCircle(Offset(at! * s.width, y), 4, Paint()..color = kRed);
   }
@@ -447,7 +448,7 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    final grid = Paint()..color = const Color(0xFF1A1A1D);
+    final grid = Paint()..color = N.g10;
     for (var x = 0.0; x < s.width; x += 32) c.drawLine(Offset(x, 0), Offset(x, s.height), grid);
     for (var y = 0.0; y < s.height; y += 32) c.drawLine(Offset(0, y), Offset(s.width, y), grid);
     // the bundle: source to the member set, one line, the count of mappings written on it
@@ -470,11 +471,11 @@ class _GraphPainter extends CustomPainter {
     for (final l in things) {
       final id = l['id'] as int; final p = dots[id]!;
       final isSrc = id == source, isMem = members.contains(id);
-      final color = isSrc ? kRed : (isMem ? kInk : const Color(0xFF6C6D74));
+      final color = isSrc ? kRed : (isMem ? kInk : N.g44);
       if (isSrc) c.drawCircle(p, 13, Paint()..color = kRed.withValues(alpha: .25));
       c.drawCircle(p, isSrc ? 7 : 6, Paint()..color = color);
       if (isMem && !isSrc) c.drawCircle(p, 10, Paint()..color = kRed..style = PaintingStyle.stroke..strokeWidth = 1.6);
-      if (picking && !isSrc && !isMem) c.drawCircle(p, 10, Paint()..color = const Color(0xFF45464C)..style = PaintingStyle.stroke..strokeWidth = 1);
+      if (picking && !isSrc && !isMem) c.drawCircle(p, 10, Paint()..color = N.g26..style = PaintingStyle.stroke..strokeWidth = 1);
       final tp = TextPainter(text: TextSpan(text: '${l['name']}', style: sans(10, c: isSrc || isMem ? kInk : kMuted)), textDirection: TextDirection.ltr)..layout(maxWidth: 90);
       tp.paint(c, p + Offset(-tp.width / 2, 12));
     }

@@ -10,10 +10,18 @@ import 'search.dart';
 import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
+import '../neutral.dart';
 
 const _sw = 240, _sh = 150;
 
 /// The picture every effect is applied to. Built once; each tile shows the effect's own result.
+
+/// The effect faces' sample picture (a dusk over hills) that every effect is shown applied to: its own palette.
+abstract final class _Scene {
+  static const sky = [Color(0xFF2C4DB0), Color(0xFF9B6FD0), Color(0xFFFF9C7A), Color(0xFFFFE2A8)];
+  static const sun = Color(0xFFFFF6D0), spark = Color(0xFFFFE7A8), night = Color(0xFF0B0A18);
+  static const ridges = [Color(0xFF7C6BC4), Color(0xFF4A3F96), Color(0xFF1E1A54)];
+}
 class EffectScene {
   EffectScene._(this.image, this.small, this.bytes);
   final ui.Image image, small;
@@ -35,11 +43,11 @@ class EffectScene {
 
   static void _paintScene(Canvas c, Size s) {
     final r = Offset.zero & s;
-    c.drawRect(r, Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF2C4DB0), Color(0xFF9B6FD0), Color(0xFFFF9C7A), Color(0xFFFFE2A8)], stops: [0, .42, .76, 1]).createShader(r));
-    c.drawCircle(Offset(s.width * .68, s.height * .52), 22, Paint()..color = const Color(0xFFFFF6D0));
+    c.drawRect(r, Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: _Scene.sky, stops: [0, .42, .76, 1]).createShader(r));
+    c.drawCircle(Offset(s.width * .68, s.height * .52), 22, Paint()..color = _Scene.sun);
     final rnd = math.Random(3);
     for (var i = 0; i < 40; i++) {
-      c.drawCircle(Offset(rnd.nextDouble() * s.width, rnd.nextDouble() * s.height * .4), .5 + rnd.nextDouble() * .8, Paint()..color = const Color(0xCCFFFFFF));
+      c.drawCircle(Offset(rnd.nextDouble() * s.width, rnd.nextDouble() * s.height * .4), .5 + rnd.nextDouble() * .8, Paint()..color = N.glaze80);
     }
     Path ridge(double base, double amp, int seed, double freq) {
       final p = Path()..moveTo(0, s.height);
@@ -50,10 +58,10 @@ class EffectScene {
       }
       return p..lineTo(s.width, s.height)..close();
     }
-    c.drawPath(ridge(s.height * .68, 42, 1, .028), Paint()..color = const Color(0xFF7C6BC4));
-    c.drawPath(ridge(s.height * .78, 36, 2, .036), Paint()..color = const Color(0xFF4A3F96));
-    c.drawPath(ridge(s.height * .92, 26, 3, .05), Paint()..color = const Color(0xFF1E1A54));
-    c.drawCircle(Offset(s.width * .3, s.height * .64), 3, Paint()..color = const Color(0xFFFFE7A8));
+    c.drawPath(ridge(s.height * .68, 42, 1, .028), Paint()..color = _Scene.ridges[0]);
+    c.drawPath(ridge(s.height * .78, 36, 2, .036), Paint()..color = _Scene.ridges[1]);
+    c.drawPath(ridge(s.height * .92, 26, 3, .05), Paint()..color = _Scene.ridges[2]);
+    c.drawCircle(Offset(s.width * .3, s.height * .64), 3, Paint()..color = _Scene.spark);
   }
 }
 
@@ -105,7 +113,7 @@ class FxPainter extends CustomPainter {
         cv.restore();
       case 'Vignette':
         cv.drawImageRect(scene.image, src, dst, plain);
-        cv.drawRect(dst, Paint()..shader = const RadialGradient(radius: .85, colors: [Color(0x00000000), Color(0xE6000000)], stops: [.45, 1]).createShader(dst));
+        cv.drawRect(dst, Paint()..shader = const RadialGradient(radius: .85, colors: [N.clear, N.shade90], stops: [.45, 1]).createShader(dst));
       case 'Color Shift':
         cv.drawImageRect(scene.image, src, dst, Paint()..filterQuality = FilterQuality.medium..colorFilter = hueFilter(140));
       case 'Duotone':
@@ -115,7 +123,7 @@ class FxPainter extends CustomPainter {
       case 'Invert':
         cv.drawImageRect(scene.image, src, dst, Paint()..filterQuality = FilterQuality.medium..colorFilter = const ColorFilter.matrix([-1, 0, 0, 0, 255, 0, -1, 0, 0, 255, 0, 0, -1, 0, 255, 0, 0, 0, 1, 0]));
       case 'Chromatic':
-        cv.drawRect(dst, Paint()..color = const Color(0xFF000000));
+        cv.drawRect(dst, Paint()..color = N.g00);
         final off = 5 * k * 2;
         final chans = [
           (const [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0], -off),
@@ -136,7 +144,7 @@ class FxPainter extends CustomPainter {
       case 'Pixelate':
         cv.drawImageRect(scene.small, Rect.fromLTWH(0, 0, 24, 15), dst, Paint()..filterQuality = FilterQuality.none);
       case 'Halftone':
-        cv.drawRect(dst, Paint()..color = const Color(0xFF0B0A18));
+        cv.drawRect(dst, Paint()..color = _Scene.night);
         final step = 6.5 * k * 2;
         for (var y = step / 2; y < s.height; y += step) {
           for (var x = step / 2; x < s.width; x += step) {
@@ -206,7 +214,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
           final n = shown.length;
           return PanelShell(
             title: 'Effects',
-            icon: const GlyphBox(HG.pie, size: 22, color: Color(0xFFF2F2F4)),
+            icon: const GlyphBox(HG.pie, size: 22, color: N.g95),
             search: search,
             classify: classify,
             groups: views.groups(found),
@@ -238,7 +246,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
       itemCount: shown.length,
       itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
-        if (showCaption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(shown[i].name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: const Color(0xFFC4C5C8)))),
+        if (showCaption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(shown[i].name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: N.g76))),
       ])),
     );
   }

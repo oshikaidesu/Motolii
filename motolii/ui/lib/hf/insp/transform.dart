@@ -3,12 +3,14 @@
 // Space, Parent and Depth sit around it. Precision is the Phase 1 Value; the instrument adds gesture, not a second system.
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
-import '../desk/common.dart' show kYellow, kInk, kBlue, kPink, kViolet;
+import '../desk/common.dart' show kYellow, kInk, kBlue, kPink, kViolet, kAccentDim;
 import '../metrics.dart';
 import 'rows.dart';
 import 'toys.dart';
 import 'transform_gizmo.dart';
 import 'transform_model.dart';
+import '../neutral.dart';
+import '../shell/place.dart' show H;
 
 class TransformInstrument extends StatefulWidget {
   const TransformInstrument(this.store, {super.key, this.initialMode = TMode.move, this.showHeader = true});
@@ -65,7 +67,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             if (mode == TMode.rotate && l.projection != '2D')
               Positioned(right: 6, bottom: 6, child: Row(children: [
                 for (final (i, t) in ['Z', 'X', 'Y'].indexed)
-                  GestureDetector(key: ValueKey('rot-axis-$i'), onTap: () => setState(() => rotAxis = i), child: Container(margin: const EdgeInsets.only(left: 3), width: 20, height: 18, alignment: Alignment.center, decoration: BoxDecoration(color: rotAxis == i ? kPink : const Color(0xFF2A2A2D), borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(9.5, c: rotAxis == i ? const Color(0xFF1B1B1D) : kMuted, w: FontWeight.w700)))),
+                  GestureDetector(key: ValueKey('rot-axis-$i'), onTap: () => setState(() => rotAxis = i), child: Container(margin: const EdgeInsets.only(left: 3), width: 20, height: 18, alignment: Alignment.center, decoration: BoxDecoration(color: rotAxis == i ? kPink : N.g15, borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(9.5, c: rotAxis == i ? N.g10 : kMuted, w: FontWeight.w700)))),
               ])),
           ]);
           final strip = _modeStrip(narrow);
@@ -121,8 +123,8 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             width: narrow ? null : 28,
             height: narrow ? 26 : 32,
             margin: EdgeInsets.only(bottom: narrow ? 0 : 4, right: narrow ? 4 : 0),
-            decoration: BoxDecoration(color: mode == m ? modeColor[m] : const Color(0xFF232326), borderRadius: BorderRadius.circular(5)),
-            child: Center(child: SizedBox(width: 15, height: 15, child: CustomPaint(painter: RoleGlyph(m, mode == m ? const Color(0xFF1B1B1D) : modeColor[m]!)))),
+            decoration: BoxDecoration(color: mode == m ? modeColor[m] : N.g15, borderRadius: BorderRadius.circular(5)),
+            child: Center(child: SizedBox(width: 15, height: 15, child: CustomPaint(painter: RoleGlyph(m, mode == m ? N.g10 : modeColor[m]!)))),
           ),
         );
     return narrow ? Row(children: [for (final m in TMode.values) Expanded(child: b(m))]) : Column(children: [for (final m in TMode.values) b(m)]);
@@ -133,11 +135,11 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         key: ValueKey(key),
         behavior: HitTestBehavior.opaque,
         onTap: s.canEdit ? f : null,
-        child: Container(height: h, margin: const EdgeInsets.only(bottom: 3), alignment: Alignment.center, decoration: BoxDecoration(color: on ? (s.canEdit ? kYellow : const Color(0xFF5A4E24)) : kTile, borderRadius: BorderRadius.circular(5)), child: Text(t, style: sans(11, c: on ? const Color(0xFF1B1B1D) : (s.canEdit ? const Color(0xFFB4B6BB) : const Color(0xFF55565C)), w: on ? FontWeight.w700 : FontWeight.w500))),
+        child: Container(height: h, margin: const EdgeInsets.only(bottom: 3), alignment: Alignment.center, decoration: BoxDecoration(color: on ? (s.canEdit ? kYellow : kAccentDim) : kTile, borderRadius: BorderRadius.circular(5)), child: Text(t, style: sans(11, c: on ? N.g10 : (s.canEdit ? N.g69 : N.g33), w: on ? FontWeight.w700 : FontWeight.w500))),
       );
 
   Widget _spaceCol() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('SPACE', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
+        Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('SPACE', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
         for (final p in ['2D', '2.5D', '3D']) _chip('space-$p', p, s.active.projection == p, () => s.setProjection(p)),
       ]);
 
@@ -154,8 +156,8 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     }
     Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('parent-$k'), behavior: HitTestBehavior.opaque, onTap: s.canEdit ? () => pick(idx + d) : null, child: SizedBox(width: 20, height: 26, child: Center(child: Text(t, style: sans(15, c: kMuted)))));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('PARENT', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
-      Container(height: 26, decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(names[idx], key: const ValueKey('parent-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: s.canEdit ? const Color(0xFFD0D1D5) : const Color(0xFF55565C), w: FontWeight.w500)))), arrow('next', '›', 1)])),
+      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('PARENT', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
+      Container(height: 26, decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(names[idx], key: const ValueKey('parent-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: s.canEdit ? N.g82 : N.g33, w: FontWeight.w500)))), arrow('next', '›', 1)])),
     ]);
   }
 
@@ -170,9 +172,9 @@ class _TransformInstrumentState extends State<TransformInstrument> {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
           child: Row(children: [
-            Container(width: 26, height: 15, padding: const EdgeInsets.all(2), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? kYellow : const Color(0xFF3A3B40), borderRadius: BorderRadius.circular(8)), child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+            Container(width: 26, height: 15, padding: const EdgeInsets.all(2), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? kYellow : N.g26, borderRadius: BorderRadius.circular(8)), child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
             const SizedBox(width: 7),
-            Expanded(child: Text(label, style: sans(11, c: tap == null ? const Color(0xFF55565C) : const Color(0xFFD0D1D5)))),
+            Expanded(child: Text(label, style: sans(11, c: tap == null ? N.g33 : N.g82))),
           ]),
         ),
       );
@@ -182,12 +184,12 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     if (l.kind == 'Camera') return const SizedBox.shrink();
     final edit = s.canEdit;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WORLD', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
+      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WORLD', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
       GestureDetector(
         key: const ValueKey('world-blend'),
         behavior: HitTestBehavior.opaque,
         onTap: edit ? s.openBlend : null,
-        child: Container(height: 26, margin: const EdgeInsets.only(bottom: 4), alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Text(l.blendMode, key: const ValueKey('world-blend-name'), style: sans(11, c: edit ? const Color(0xFFD0D1D5) : const Color(0xFF55565C), w: FontWeight.w500))),
+        child: Container(height: 26, margin: const EdgeInsets.only(bottom: 4), alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Text(l.blendMode, key: const ValueKey('world-blend-name'), style: sans(11, c: edit ? N.g82 : N.g33, w: FontWeight.w500))),
       ),
       if (l.kind == 'Image') _flag('environment', 'Environment: this image lights and surrounds the scene', l.environment, edit ? () => s.setWorldFlag('environment', !l.environment) : null),
       if (l.ghostable) _flag('ghost', 'Ghost: the same layer seen later by a delay', l.ghost != null, edit && s.worldCan('ghost') ? () => s.setWorldFlag('ghost', l.ghost == null) : null),
@@ -200,7 +202,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     final l = s.active;
     final out2D = l.projection != '2D';
     Slot slot(String id, [int? axis, String? link]) => Slot(s, id, axis, link);
-    Widget val(Slot sl, TMode? m, {String? tag, String? nodeKey, bool units = true}) => Expanded(child: ValueToy(sl, tag: tag, tone: m == null ? const Color(0xFF8E8F92) : modeColor[m]!, showUnit: units && !narrow, decimals: narrow ? 0 : null, focusNode: node(nodeKey ?? '${sl.id}${sl.axis == null ? '' : ':${sl.axis}'}')));
+    Widget val(Slot sl, TMode? m, {String? tag, String? nodeKey, bool units = true}) => Expanded(child: ValueToy(sl, tag: tag, tone: m == null ? N.g56 : modeColor[m]!, showUnit: units && !narrow, decimals: narrow ? 0 : null, focusNode: node(nodeKey ?? '${sl.id}${sl.axis == null ? '' : ':${sl.axis}'}')));
     Widget gap() => const SizedBox(width: 3);
 
     // Position: X, Y, and Z outside 2D
@@ -220,12 +222,12 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     final one = s.linked.contains('scale') && s.scaleEven;
     Widget scaleValues() {
       if (one && !out2D) return Row(children: [val(sx, TMode.scale, tag: 'S')]);
-      if (out2D) return three(val(sx, TMode.scale, tag: one ? 'S' : 'X', units: false), val(sy, TMode.scale, tag: 'Y', units: false), val(slot('scale.z'), TMode.scale, tag: 'Z', units: false));
+      if (out2D) return three(val(sx, TMode.scale, tag: 'X', units: false), val(sy, TMode.scale, tag: 'Y', units: false), val(slot('scale.z'), TMode.scale, tag: 'Z', units: false));
       return Row(children: [val(sx, TMode.scale, tag: 'X'), gap(), val(sy, TMode.scale, tag: 'Y')]);
     }
 
     Widget rotationValues() => out2D
-        ? three(val(slot('rotation'), TMode.rotate, tag: 'Z', units: false), val(slot('rotation.x'), TMode.rotate, tag: 'X', units: false), val(slot('rotation.y'), TMode.rotate, tag: 'Y', units: false))
+        ? three(val(slot('rotation.x'), TMode.rotate, tag: 'X', units: false), val(slot('rotation.y'), TMode.rotate, tag: 'Y', units: false), val(slot('rotation'), TMode.rotate, tag: 'Z', units: false))
         : Row(children: [val(slot('rotation'), TMode.rotate)]);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -249,7 +251,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         key: const ValueKey('link-scale'),
         behavior: HitTestBehavior.opaque,
         onTap: s.canEdit ? () => s.toggleLink('scale') : null,
-        child: Container(width: 26, height: UiMetrics.control, margin: const EdgeInsets.only(left: 4), decoration: BoxDecoration(color: s.linked.contains('scale') ? kBlue : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _LinkP(s.linked.contains('scale') ? const Color(0xFF1B1B1D) : kMuted, s.linked.contains('scale')))))),
+        child: Container(width: 26, height: UiMetrics.control, decoration: BoxDecoration(color: s.linked.contains('scale') ? kBlue : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _LinkP(s.linked.contains('scale') ? N.g10 : kMuted, s.linked.contains('scale')))))),
       );
 
   bool _modified(List<String> ids) => ids.any((i) => s.rows.any((r) => r['id'] == i) && modified(s.row(i)));
@@ -259,8 +261,8 @@ class _TransformInstrumentState extends State<TransformInstrument> {
   Widget _marks(TMode? m, String id, List<String> ids) {
     final tone = m == null ? kViolet : modeColor[m]!;
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      GestureDetector(key: ValueKey('key-$id'), behavior: HitTestBehavior.opaque, onTap: () => s.toggleKey(id), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: _DiamondP(_keyed(id), _animated(id) || _keyed(id) ? tone : const Color(0xFF45464C)))))),
-      if (_modified(ids)) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { if (s.rows.any((r) => r['id'] == i)) s.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 2), child: Text('↺', style: sans(11, c: const Color(0xFF66676E))))) else const SizedBox(width: 12),
+      GestureDetector(key: ValueKey('key-$id'), behavior: HitTestBehavior.opaque, onTap: () => s.toggleKey(id), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: _DiamondP(_keyed(id), _animated(id) || _keyed(id) ? tone : N.g26))))),
+      if (_modified(ids)) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { if (s.rows.any((r) => r['id'] == i)) s.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 2), child: Text('↺', style: sans(11, c: N.g38)))) else const SizedBox(width: 12),
     ]);
   }
 
@@ -275,10 +277,11 @@ class _TransformInstrumentState extends State<TransformInstrument> {
           key: ValueKey('glyph-$id'),
           behavior: HitTestBehavior.opaque,
           onTap: m == null ? null : () => setState(() => mode = m),
-          child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: active ? tone : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: glyph ?? CustomPaint(painter: RoleGlyph(m!, active ? const Color(0xFF1B1B1D) : tone)))),
+          child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: active ? tone : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: glyph ?? CustomPaint(painter: RoleGlyph(m!, active ? N.g10 : tone)))),
         ),
         Expanded(child: values),
-        if (extra != null) extra,
+        // every line keeps the same end column (the scale line's link chip, empty elsewhere): the X · Y · Z columns line up
+        SizedBox(width: 30, child: Align(alignment: Alignment.centerRight, child: extra)),
         ..._relationBadge(id, ids),
         if (!narrow) _marks(m, id, ids),
       ]),
@@ -300,8 +303,8 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         child: Container(
           margin: const EdgeInsets.only(left: 6),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(color: const Color(0xFFFF4D3D), borderRadius: BorderRadius.circular(6)),
-          child: Text(driven != null ? '◉ ${(driven['link'] as Map)['name'] ?? 'Relation'}' : '◉ $drives', style: sans(8.5, c: const Color(0xFF1B1B1D), w: FontWeight.w700)),
+          decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(6)),
+          child: Text(driven != null ? '◉ ${(driven['link'] as Map)['name'] ?? 'Relation'}' : '◉ $drives', style: sans(8.5, c: N.g10, w: FontWeight.w700)),
         ),
       ),
     ];
@@ -317,7 +320,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
       key: const ValueKey('row-anchor'),
       margin: const EdgeInsets.only(bottom: UiMetrics.cellGap),
       child: Row(children: [
-        GestureDetector(key: const ValueKey('glyph-anchor'), behavior: HitTestBehavior.opaque, onTap: () => setState(() => mode = TMode.anchor), child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: mode == TMode.anchor ? kViolet : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: RoleGlyph(TMode.anchor, mode == TMode.anchor ? const Color(0xFF1B1B1D) : kViolet))))),
+        GestureDetector(key: const ValueKey('glyph-anchor'), behavior: HitTestBehavior.opaque, onTap: () => setState(() => mode = TMode.anchor), child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: mode == TMode.anchor ? kViolet : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: RoleGlyph(TMode.anchor, mode == TMode.anchor ? N.g10 : kViolet))))),
         // the nine places, always at hand: one click chooses, hovering shows the pivot on the Stage
         MouseRegion(
           onExit: (_) => s.anchorPreview.value = null,
@@ -332,7 +335,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
                     key: ValueKey('anchor-cell-$ix$iy'),
                     behavior: HitTestBehavior.opaque,
                     onTap: s.canEdit ? () => s.setAnchor([0.0, .5, 1.0][ix], [0.0, .5, 1.0][iy]) : null,
-                    child: SizedBox(width: 12, height: 8, child: Center(child: Container(width: ix == ax && iy == ay ? 6 : 3, height: ix == ax && iy == ay ? 6 : 3, decoration: BoxDecoration(color: ix == ax && iy == ay ? (s.canEdit ? kViolet : const Color(0xFF55565C)) : const Color(0xFF6E6F76), shape: BoxShape.circle)))),
+                    child: SizedBox(width: 12, height: 8, child: Center(child: Container(width: ix == ax && iy == ay ? 6 : 3, height: ix == ax && iy == ay ? 6 : 3, decoration: BoxDecoration(color: ix == ax && iy == ay ? (s.canEdit ? kViolet : N.g33) : N.g44, shape: BoxShape.circle)))),
                   ),
                 ),
               ]),
@@ -340,7 +343,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Text(name, key: const ValueKey('anchor-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: s.canEdit ? const Color(0xFFB4B6BB) : const Color(0xFF55565C), w: FontWeight.w500))),
+        Expanded(child: Text(name, key: const ValueKey('anchor-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: s.canEdit ? N.g69 : N.g33, w: FontWeight.w500))),
       ]),
     );
   }

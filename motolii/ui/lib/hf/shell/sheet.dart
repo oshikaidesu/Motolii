@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
 import '../metrics.dart';
 import 'place.dart';
+import '../neutral.dart';
 
 /// A key of a dialog or sheet. [main] is the one primary action (the mode colour); [on] marks the chosen one of a
 /// set — drawn as a selection (a lighter ground and edge), never in the action's colour; no [onTap] draws it quiet.
@@ -41,13 +42,13 @@ class _HfActionState extends State<HfAction> {
     final live = widget.onTap != null;
     final primary = widget.kind == HfActionKind.primary && live;
     final ground = primary
-        ? (_over ? Color.lerp(H.mode, const Color(0xFFFFFFFF), .1)! : H.mode)
+        ? (_over ? Color.lerp(H.mode, N.g100, .1)! : H.mode)
         : (widget.chosen ? H.selHi : (_over && live ? H.raisedHi : H.raised));
-    final edge = primary ? H.mode : (widget.chosen ? const Color(0xFF6B6E76) : H.rule);
+    final edge = primary ? H.mode : (widget.chosen ? N.g44 : H.rule);
     final ink = !live
         ? H.text3
         : primary
-            ? const Color(0xFFFCFCFE)
+            ? N.g100
             : widget.kind == HfActionKind.destructive
                 ? H.record
                 : H.text2;
@@ -87,7 +88,7 @@ class HfChoice<T> extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: UiMetrics.control,
         padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(color: const Color(0xFF151515), border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: N.g07, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(4)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (v, label, enabled) in options)
             _Segment(label, on: v == value, onTap: enabled && onChanged != null && v != value ? () => onChanged!(v) : null, enabled: enabled),
@@ -122,7 +123,7 @@ class _SegmentState extends State<_Segment> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             alignment: Alignment.center,
             decoration: BoxDecoration(color: widget.on ? H.selHi : (_over && widget.onTap != null ? H.raised : null), borderRadius: BorderRadius.circular(3)),
-            child: Text(widget.label, softWrap: false, style: H.s(12, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? const Color(0xFF6A6A6C) : (widget.on ? H.text : H.text2))),
+            child: Text(widget.label, softWrap: false, style: H.s(12, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? N.g44 : (widget.on ? H.text : H.text2))),
           ),
         ),
       );
@@ -203,10 +204,10 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
               child: Container(
               key: const ValueKey('hf-popover'),
               decoration: BoxDecoration(
-                color: const Color(0xFF1D1D1D),
-                border: Border.all(color: const Color(0xFF3E3E3D)),
+                color: N.g13,
+                border: Border.all(color: N.g26),
                 borderRadius: BorderRadius.circular(4),
-                boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 6))],
+                boxShadow: const [BoxShadow(color: N.shade40, blurRadius: 16, offset: Offset(0, 6))],
               ),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Container(
@@ -218,7 +219,7 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: close,
-                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: UiMetrics.hit, height: UiMetrics.hit, child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: HgPainter(HG.cross, H.text3, const Color(0xFF1D1D1D))))))),
+                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: UiMetrics.hit, height: UiMetrics.hit, child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: HgPainter(HG.cross, H.text3, N.g13)))))),
                     ),
                   ]),
                 ),
@@ -258,11 +259,11 @@ Future<void> showHfSheet(BuildContext context, {required String title, required 
         return KeyEventResult.ignored;
       },
       child: Stack(children: [
-        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: close, child: const ColoredBox(color: Color(0x88000000)))),
+        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: close, child: const ColoredBox(color: N.shade55))),
         Center(
           child: Container(
             width: width,
-            decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Container(
                 height: UiMetrics.chromeRow + 4,
@@ -273,7 +274,7 @@ Future<void> showHfSheet(BuildContext context, {required String title, required 
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: close,
-                    child: SizedBox(width: 28, height: 28, child: Center(child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: HgPainter(HG.cross, H.text2, const Color(0xFF1D1D1D)))))),
+                    child: SizedBox(width: 28, height: 28, child: Center(child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: HgPainter(HG.cross, H.text2, N.g13))))),
                   ),
                 ]),
               ),

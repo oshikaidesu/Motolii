@@ -5,6 +5,7 @@ import '../../hf/bp/shell.dart' show kTile;
 import '../../hf/desk/common.dart' show kInk;
 import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';
+import '../../hf/neutral.dart';
 
 /// The Web desk's New face: one URL, kept as the document's own desk setting (`storeDesk('webUrl', ...)`, the same
 /// operation Classic's WebPanel uses), and a button that asks the host to open it (`native('openWeb', ...)`).
@@ -33,7 +34,7 @@ class _NewWebState extends State<NewWeb> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(width: 40, height: 40, child: CustomPaint(painter: HgPainter(HG.search, kMuted, kGround))),
           const SizedBox(height: 12),
-          Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WEBSITE', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
+          Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WEBSITE', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
           Container(
             decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
             padding: const EdgeInsets.symmetric(horizontal: 8),

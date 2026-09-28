@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import '../hf/neutral.dart';
 
 /// The live UI's size: one number scales every piece of chrome together (menus and sheets too, because the root
 /// viewport scales the overlay they live in), and nothing of the work: the document, the Stage's picture (its native
@@ -88,8 +89,8 @@ class _UiScaleReadoutState extends State<UiScaleReadout> {
             child: Container(
               key: const ValueKey('ui-scale-readout'),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(color: const Color(0xE6202022), borderRadius: BorderRadius.circular(5), border: Border.all(color: const Color(0xFF3A3A3E))),
-              child: Text('UI ${(ui.percent.value * 100).round()}%', style: const TextStyle(fontFamily: 'Menlo', fontSize: 12, color: Color(0xFFF2F2F4), decoration: TextDecoration.none)),
+              decoration: BoxDecoration(color: N.veilHi, borderRadius: BorderRadius.circular(5), border: Border.all(color: N.g26)),
+              child: Text('UI ${(ui.percent.value * 100).round()}%', style: const TextStyle(fontFamily: 'Menlo', fontSize: 12, color: N.g95, decoration: TextDecoration.none)),
             ),
           ),
         ),

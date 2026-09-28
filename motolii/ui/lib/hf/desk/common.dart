@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import '../metrics.dart';
 import '../bp/common.dart';
+import '../neutral.dart';
 
 // Housing is quiet and dark; the instruments inside are flat colour. Colour separates roles, it names nothing.
 const kYellow = Color(0xFFF5C94A);
@@ -13,8 +14,8 @@ const kViolet = Color(0xFF9A7BEA);
 const kAccent = kYellow; // the current thing: selected, being touched
 const kAccentDim = Color(0xFF4A3E1C);
 const kPalette = [kYellow, kBlue, kPink, kMint, kViolet];
-const kInk = Color(0xFFF2F2F4);
-const kWell = Color(0xFF141416);
+const kInk = N.g95;
+const kWell = N.g07;
 
 enum DeskKind { ease, depth, blend, history, notes }
 
@@ -69,7 +70,7 @@ class Dots3 extends StatelessWidget {
 class _D3 extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
-    final p = Paint()..color = const Color(0xFFB4B6BB);
+    final p = Paint()..color = N.g69;
     for (final x in [-6.0, 0.0, 6.0]) { c.drawCircle(Offset(s.width / 2 + x, s.height / 2), 1.6, p); }
   }
   @override
@@ -144,7 +145,7 @@ class SliderRow extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         height: 28,
         child: Row(children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: const Color(0xFFD0D1D5)))),
+          SizedBox(width: labelWidth, child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: N.g82))),
           Expanded(
             child: LayoutBuilder(builder: (context, b) {
               void at(double x) => onChanged?.call(clampD((x - 6) / (b.maxWidth - 12), 0, 1));
@@ -157,7 +158,7 @@ class SliderRow extends StatelessWidget {
             }),
           ),
           const SizedBox(width: 10),
-          SizedBox(width: 38, child: Text(value, textAlign: TextAlign.right, softWrap: false, style: sans(11.5, c: const Color(0xFFD0D1D5)))),
+          SizedBox(width: 38, child: Text(value, textAlign: TextAlign.right, softWrap: false, style: sans(11.5, c: N.g82))),
         ]),
       );
 }
@@ -168,11 +169,11 @@ class _Track extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final y = s.height / 2;
-    c.drawLine(Offset(0, y), Offset(s.width, y), Paint()..color = const Color(0xFF3A3B40)..strokeWidth = 2..strokeCap = StrokeCap.round);
+    c.drawLine(Offset(0, y), Offset(s.width, y), Paint()..color = N.g26..strokeWidth = 2..strokeCap = StrokeCap.round);
     final x = 6 + (s.width - 12) * t;
     c.drawLine(Offset(0, y), Offset(x, y), Paint()..color = kAccent..strokeWidth = 2..strokeCap = StrokeCap.round);
     c.drawCircle(Offset(x, y), 5.5, Paint()..color = kInk);
-    c.drawCircle(Offset(x, y), 5.5, Paint()..color = const Color(0xFF141416)..style = PaintingStyle.stroke..strokeWidth = 1.2);
+    c.drawCircle(Offset(x, y), 5.5, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.2);
   }
   @override
   bool shouldRepaint(_Track o) => o.t != t;
@@ -195,7 +196,7 @@ class Segmented extends StatelessWidget {
               height: height,
               margin: EdgeInsets.only(right: i == items.length - 1 ? 0 : 6),
               decoration: BoxDecoration(color: i == active ? kAccentDim.withValues(alpha: .45) : kWell, border: Border.all(color: i == active ? kAccent : kRule2), borderRadius: BorderRadius.circular(3)),
-              child: Center(child: Text(items[i], softWrap: false, style: sans(12, c: i == active ? kInk : const Color(0xFFB4B6BB)))),
+              child: Center(child: Text(items[i], softWrap: false, style: sans(12, c: i == active ? kInk : N.g69))),
             ),
             ),
           ),
@@ -211,7 +212,7 @@ class DropRow extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         height: 34,
         child: Row(children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: sans(11.5, c: const Color(0xFFD0D1D5)))),
+          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: sans(11.5, c: N.g82))),
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -230,7 +231,7 @@ class DropRow extends StatelessWidget {
 
 class _Chev extends CustomPainter {
   @override
-  void paint(Canvas c, Size s) => c.drawPath(Path()..moveTo(1, 1.5)..lineTo(s.width / 2, s.height - 1.5)..lineTo(s.width - 1, 1.5), Paint()..color = const Color(0xFFB4B6BB)..style = PaintingStyle.stroke..strokeWidth = 1.5..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+  void paint(Canvas c, Size s) => c.drawPath(Path()..moveTo(1, 1.5)..lineTo(s.width / 2, s.height - 1.5)..lineTo(s.width - 1, 1.5), Paint()..color = N.g69..style = PaintingStyle.stroke..strokeWidth = 1.5..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
   @override
   bool shouldRepaint(_Chev o) => false;
 }

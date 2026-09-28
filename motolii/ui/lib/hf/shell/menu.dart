@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../metrics.dart';
 import 'place.dart';
+import '../neutral.dart';
 
 /// [shortcuts] names the key for a line (shown at its right, as menus do); [dividers] ends a group after a line.
 /// [info] lines tell rather than do (a title, a fact): drawn as information, never lit, never greyed like an action
@@ -81,7 +82,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
         width: width,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 3),
-          decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)),
           constraints: BoxConstraints(maxHeight: height),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final (i, (v, label)) in items.indexed) ...[
@@ -111,7 +112,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
                     color: hot.value == i ? H.selHi : null,
                     child: Row(children: [
                       SizedBox(width: 16, child: v == selected ? Text('✓', textAlign: TextAlign.center, style: H.s(11, color: H.text2)) : null),
-                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(12.5, color: disabled.contains(v) ? const Color(0xFF6A6A6C) : H.text))),
+                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(12.5, color: disabled.contains(v) ? N.g44 : H.text))),
                       if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 16), child: Text(key, style: H.s(11.5, color: H.text3))),
                     ]),
                   ),

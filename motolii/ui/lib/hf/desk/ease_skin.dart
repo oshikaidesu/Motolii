@@ -4,10 +4,11 @@ import '../../foundation/ease_view.dart';
 import '../../foundation/panel_controls.dart' show EditorNumericField;
 import '../bp/common.dart';
 import 'common.dart';
+import '../neutral.dart';
 
 const _tileColors = [kBlue, kViolet, kPink, kMint, kYellow];
 const _segColors = [kViolet, kMint, kPink];
-const _dark = Color(0xFF1B1B1D);
+const _dark = N.g10;
 
 /// The finished Ease desk drawn from what the desk knows ([EaseView]): the curve the runtime models (its samples and
 /// handles), the shelf of curves it offers, the intervals or the layers it is for, and the actions it takes.
@@ -178,7 +179,7 @@ class _EaseSkinState extends State<EaseSkin> {
             padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
             decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(6)),
             child: Row(children: [
-              Expanded(child: Text(p.name.replaceAll('_', ' ').toUpperCase(), softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: const Color(0xB31B1B1D), w: FontWeight.w700, ls: .6))),
+              Expanded(child: Text(p.name.replaceAll('_', ' ').toUpperCase(), softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: N.inkSoft, w: FontWeight.w700, ls: .6))),
               SizedBox(
                 width: 52,
                 child: EditorNumericField(value: p.value, label: p.name, enabled: v.canApply || true, speed: .005, onPreview: p.preview, onCommit: p.commit, onFinish: p.finish, onCancel: p.cancel),
@@ -190,7 +191,7 @@ class _EaseSkinState extends State<EaseSkin> {
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
         key: ValueKey(key),
         onTap: f,
-        child: Container(height: 34, padding: const EdgeInsets.symmetric(horizontal: 12), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: const Color(0xFF3A3B40)), borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(11, c: const Color(0xFFC4C6CB)))),
+        child: Container(height: 34, padding: const EdgeInsets.symmetric(horizontal: 12), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(4)), child: Text(t, style: sans(11, c: N.g76))),
       );
 
   Widget _keep() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -210,9 +211,9 @@ class _EaseSkinState extends State<EaseSkin> {
             behavior: HitTestBehavior.opaque,
             onTap: () => v.setFree(!v.free),
             child: Row(children: [
-              Container(width: 34, height: 20, padding: const EdgeInsets.all(2), alignment: v.free ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: v.free ? kBlue : const Color(0xFF34353A), borderRadius: BorderRadius.circular(10)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+              Container(width: 34, height: 20, padding: const EdgeInsets.all(2), alignment: v.free ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: v.free ? kBlue : N.g20, borderRadius: BorderRadius.circular(10)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
               const SizedBox(width: 10),
-              Flexible(child: Text('Overshoot', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: const Color(0xFFC4C6CB)))),
+              Flexible(child: Text('Overshoot', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: N.g76))),
             ]),
           ),
         ),
@@ -324,9 +325,9 @@ class _PlotP extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(6)), Paint()..color = const Color(0xFF131316));
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(6)), Paint()..color = N.g07);
     Offset p(double x, double y) => toPixel(Offset(x, y), s);
-    final rail = Paint()..color = const Color(0xFF2C2D32)..strokeWidth = 1.2;
+    final rail = Paint()..color = N.g20..strokeWidth = 1.2;
     c.drawLine(p(0, 0), p(1, 0), rail);
     c.drawLine(p(0, 1), p(1, 1), rail);
     Path curve(Map<String, dynamic> shape) {
@@ -341,7 +342,7 @@ class _PlotP extends CustomPainter {
     c.save();
     c.clipRect(Offset.zero & s);
     // the silhouette of the curve is the object: a flat colour field under it
-    c.drawPath(Path.from(shown)..lineTo(p(1, 0).dx, p(0, 0).dy)..lineTo(p(0, 0).dx, p(0, 0).dy)..close(), Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x66F0699A), Color(0x669A7BEA), Color(0x664C7DF0)]).createShader(Offset.zero & s));
+    c.drawPath(Path.from(shown)..lineTo(p(1, 0).dx, p(0, 0).dy)..lineTo(p(0, 0).dx, p(0, 0).dy)..close(), Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [kPink.withAlpha(0x66), kViolet.withAlpha(0x66), kBlue.withAlpha(0x66)]).createShader(Offset.zero & s));
     c.drawPath(shown, Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
     if (v.sequence > 1) {
       for (var i = 0; i < v.sequence; i++) {
@@ -357,7 +358,7 @@ class _PlotP extends CustomPainter {
       if (inside) {
         final o = p(x, _valueAt(v.shown, x));
         c.drawCircle(o, 6, Paint()..color = kMint);
-        c.drawCircle(o, 6, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2);
+        c.drawCircle(o, 6, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2);
       }
     }
     // the audition: where the value lands as the motion runs
@@ -376,7 +377,7 @@ class _PlotP extends CustomPainter {
         if (i < 2) c.drawLine(ends[i], o, h);
         c.drawCircle(o, 12, Paint()..color = kYellow.withValues(alpha: .22));
         c.drawCircle(o, 7, Paint()..color = kYellow);
-        c.drawCircle(o, 7, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2);
+        c.drawCircle(o, 7, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2);
       }
     }
     for (final o in [p(0, 0), p(1, 1)]) {

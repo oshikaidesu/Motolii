@@ -10,6 +10,7 @@ import 'shell.dart';
 import 'things.dart' show UserViews;
 import '../../session/editor_session.dart';
 import 'native_visual_sample.dart';
+import '../neutral.dart';
 
 class FontItem {
   const FontItem(
@@ -132,7 +133,7 @@ class _FontsPanelState extends State<FontsPanel>
       final n = shown.length;
       return PanelShell(
         title: 'Fonts',
-        icon: const GlyphBox(HG.text, size: 22, color: Color(0xFFF2F2F4)),
+        icon: const GlyphBox(HG.text, size: 22, color: N.g95),
         search: search,
         classify: classify,
         groups: widget.groups ?? fontGroups(),
@@ -196,7 +197,7 @@ class _FontsPanelState extends State<FontsPanel>
       style: TextStyle(
         fontFamily: font.family,
         fontSize: size,
-        color: const Color(0xFFF2F2F4),
+        color: N.g95,
         height: 1,
       ),
     );
@@ -250,7 +251,7 @@ class _Row extends StatelessWidget {
           color: chosen ? kRaisedHi : null,
           border: Border(
             left: BorderSide(
-              color: chosen ? const Color(0xFFE8E8EA) : const Color(0x00000000),
+              color: chosen ? N.g91 : N.clear,
               width: 2,
             ),
             bottom: const BorderSide(color: kRule2),
@@ -267,7 +268,7 @@ class _Row extends StatelessWidget {
                       style: TextStyle(
                         fontFamily: f.family,
                         fontSize: 22,
-                        color: const Color(0xFFF2F2F4),
+                        color: N.g95,
                         height: 1,
                       ),
                     ),
@@ -284,7 +285,7 @@ class _Row extends StatelessWidget {
                           style: TextStyle(
                             fontFamily: f.family,
                             fontSize: big ? 36 : 24,
-                            color: const Color(0xFFF2F2F4),
+                            color: N.g95,
                             height: 1,
                           ),
                         ),
@@ -301,7 +302,7 @@ class _Row extends StatelessWidget {
                           style: TextStyle(
                             fontFamily: f.family,
                             fontSize: big ? 14.5 : 13,
-                            color: const Color(0xFFE6E6E8),
+                            color: N.g91,
                             height: 1.1,
                           ),
                         ),
@@ -350,7 +351,7 @@ class _Star extends CustomPainter {
     c.drawPath(
       p,
       on
-          ? (Paint()..color = const Color(0xFFE8E8EA))
+          ? (Paint()..color = N.g91)
           : (Paint()
               ..color = kMuted
               ..style = PaintingStyle.stroke

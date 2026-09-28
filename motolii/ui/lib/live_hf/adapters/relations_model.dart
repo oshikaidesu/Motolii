@@ -2,9 +2,10 @@ import 'package:flutter/widgets.dart';
 
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
+import '../../hf/neutral.dart';
 
 const kRed = Color(0xFFFF4D3D);
-const kInk2 = Color(0xFFC4C6CB);
+const kInk2 = N.g76;
 
 /// The source of a relation: one component of one property of one thing.
 class RelationSource {

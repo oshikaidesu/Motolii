@@ -8,6 +8,8 @@ import 'rows.dart';
 import 'toys.dart';
 import '../metrics.dart';
 import 'tones.dart';
+import '../neutral.dart';
+import '../shell/place.dart' show H;
 
 /// Heroes: the declared ones, else the first four that are not advanced (four in front, the rest behind).
 /// A front projection, not a limit: everything else is reached through sections, the fold and the filter.
@@ -98,7 +100,7 @@ class _InspectorBodyState extends State<InspectorBody> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(children: [
                   Expanded(child: Text(widget.subject, softWrap: false, overflow: TextOverflow.clip, style: sans(13.5, c: kInk, w: FontWeight.w600))),
-                  if (widget.store.frozen) Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(border: Border.all(color: const Color(0xFF45464C)), borderRadius: BorderRadius.circular(10)), child: Text('Frozen', style: sans(9.5, c: kMuted, w: FontWeight.w600))),
+                  if (widget.store.frozen) Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(10)), child: Text('Frozen', style: sans(9.5, c: kMuted, w: FontWeight.w600))),
                   Text('${widget.store.rows.length}', key: const ValueKey('insp-count'), style: mono(10, c: kMuted)),
                 ]),
                 const SizedBox(height: 6),
@@ -124,12 +126,12 @@ class _InspectorBodyState extends State<InspectorBody> {
 }
 
 Widget paramEntry(PEntry e, ParamStore store, Tones tones, VoidCallback toggleAdvanced) => switch (e) {
-        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3))])),
+        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3))])),
         PFold(:final count, :final open) => GestureDetector(
             key: const ValueKey('advanced-fold'),
             behavior: HitTestBehavior.opaque,
             onTap: () => toggleAdvanced(),
-            child: Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('$count', style: mono(9.5, c: const Color(0xFF6E6F76)))])),
+            child: Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('$count', style: mono(9.5, c: N.g44))])),
           ),
         PCells(:final rows, :final hero) => Padding(
             padding: const EdgeInsets.only(bottom: UiMetrics.cellGap),
@@ -219,7 +221,7 @@ class ParamCell extends StatelessWidget {
               ),
             ),
           Expanded(child: Row(children: [
-            Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(hero ? 11.5 : 11, c: hero ? kInk : const Color(0xFFB4B6BB), w: hero ? FontWeight.w600 : FontWeight.w500))),
+            Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(hero ? 11.5 : 11, c: hero ? kInk : N.g69, w: hero ? FontWeight.w600 : FontWeight.w500))),
             if (mod) Padding(padding: const EdgeInsets.only(left: 5), child: Container(key: ValueKey('mod-$id'), width: 4, height: 4, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
           ])),
           // a relation: this value is driven by another (◉ its source), or drives others (◉ how many)
@@ -231,13 +233,13 @@ class ParamCell extends StatelessWidget {
               child: Container(
                 margin: const EdgeInsets.only(left: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(color: const Color(0xFFFF4D3D), borderRadius: BorderRadius.circular(6)),
-                child: Text(row['link'] is Map ? '◉ ${(row['link'] as Map)['name'] ?? 'Relation'}' : '◉ ${row['drives']}', style: sans(8.5, c: const Color(0xFF1B1B1D), w: FontWeight.w700)),
+                decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(6)),
+                child: Text(row['link'] is Map ? '◉ ${(row['link'] as Map)['name'] ?? 'Relation'}' : '◉ ${row['drives']}', style: sans(8.5, c: N.g10, w: FontWeight.w700)),
               ),
             ),
-          if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: const Color(0xFF45464C)), borderRadius: BorderRadius.circular(6)), child: Text('Link', style: sans(8.5, c: linked ? const Color(0xFF1B1B1D) : kMuted, w: FontWeight.w700)))),
+          if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(6)), child: Text('Link', style: sans(8.5, c: linked ? N.g10 : kMuted, w: FontWeight.w700)))),
           if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(6)), child: Text('$accessory →', style: sans(8.5, c: t, w: FontWeight.w700)))),
-          if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { store.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: const Color(0xFF55565C))))),
+          if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { store.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: N.g33)))),
         ]),
       ),
       const SizedBox(height: UiMetrics.labelGap),

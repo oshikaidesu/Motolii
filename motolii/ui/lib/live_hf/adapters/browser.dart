@@ -18,6 +18,7 @@ import '../../session/swatches.dart';
 import 'browser_shelf.dart';
 import 'colors.dart';
 import 'browser_user.dart';
+import '../../hf/neutral.dart';
 
 /// The reference's own catalogue: every tile, its family, face and order. The Browser draws this; Live only says which
 /// tile does what.
@@ -546,7 +547,7 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
                       textAlign: TextAlign.center,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFFB0B0B2), fontSize: 10),
+                      style: const TextStyle(color: N.g69, fontSize: 10),
                     ),
                   )
           : Image.memory(s.data!, fit: BoxFit.cover, gaplessPlayback: true),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
+import '../neutral.dart';
 
 /// A blend mode is shown as what it does to one fixed pair of flat shapes: A (base, yellow) and B (top, blue).
 /// Every symbol is the same two shapes through a different operator, so what differs is the overlap, nothing else.
@@ -185,9 +186,9 @@ class _BlendDeskState extends State<BlendDesk> {
                     behavior: HitTestBehavior.opaque,
                     onTap: () => setState(() => previewOnStage = !previewOnStage),
                     child: Row(children: [
-                      Container(width: 18, height: 18, decoration: BoxDecoration(color: previewOnStage ? kBlue : null, border: previewOnStage ? null : Border.all(color: const Color(0xFF5A5B62), width: 1.6), borderRadius: BorderRadius.circular(3)), child: previewOnStage ? CustomPaint(painter: _TickP()) : null),
+                      Container(width: 18, height: 18, decoration: BoxDecoration(color: previewOnStage ? kBlue : null, border: previewOnStage ? null : Border.all(color: N.g38, width: 1.6), borderRadius: BorderRadius.circular(3)), child: previewOnStage ? CustomPaint(painter: _TickP()) : null),
                       const SizedBox(width: 10),
-                      Text('Preview on Stage', style: sans(11.5, c: const Color(0xFFC4C6CB))),
+                      Text('Preview on Stage', style: sans(11.5, c: N.g76)),
                     ]),
                   ),
                 ]),
@@ -240,7 +241,7 @@ class _BlendDeskState extends State<BlendDesk> {
         const SizedBox(width: 12),
         // With a host the selection decides the targets; the chips only say who they are.
         if (host != null) ...[
-          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 6), child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(13)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: const Color(0xFF1B1B1D), w: FontWeight.w600)))),
+          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 6), child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(13)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g10, w: FontWeight.w600)))),
           if (host!.names.length > 2) Text('+${host!.names.length - 2}', style: sans(11, c: kMuted)),
         ] else
         for (final i in [0, 1]) Padding(
@@ -248,7 +249,7 @@ class _BlendDeskState extends State<BlendDesk> {
           child: GestureDetector(
             key: ValueKey('blend-target-$i'),
             onTap: () => setState(() { if (targeted.contains(i)) { if (targeted.length > 1) targeted.remove(i); } else { targeted.add(i); } }),
-            child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: const Color(0xFF3A3B40)), borderRadius: BorderRadius.circular(13)), child: Text('Layer ${i + 2}', style: sans(11, c: targeted.contains(i) ? const Color(0xFF1B1B1D) : const Color(0xFFC4C6CB), w: FontWeight.w600))),
+            child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(13)), child: Text('Layer ${i + 2}', style: sans(11, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
           ),
         ),
       ]);
@@ -280,7 +281,7 @@ class _BlendDeskState extends State<BlendDesk> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           _mark(i, w, 40),
           const SizedBox(height: 4),
-          Text(blendModes[i].name, softWrap: false, overflow: TextOverflow.clip, textAlign: TextAlign.center, style: sans(9.5, c: i == sel ? kInk : const Color(0xFF9EA0A6), w: i == sel ? FontWeight.w600 : FontWeight.w400)),
+          Text(blendModes[i].name, softWrap: false, overflow: TextOverflow.clip, textAlign: TextAlign.center, style: sans(9.5, c: i == sel ? kInk : N.g63, w: i == sel ? FontWeight.w600 : FontWeight.w400)),
         ]),
       );
 }

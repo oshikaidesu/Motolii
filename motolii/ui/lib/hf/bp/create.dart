@@ -10,6 +10,7 @@ import 'search.dart';
 import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
+import '../neutral.dart';
 
 enum Mk { text, rect, rounded, ellipse, star, polygon, line, arrow, path, blob, pen, pencil, spray, eraser, nul, camera, light, particles, stage, cube, sphere, torus, cylinder, cone, pyramid, plane }
 
@@ -44,15 +45,15 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
           }
           return PanelShell(
             title: 'Create',
-            icon: const GlyphBox(HG.plus, size: 22, color: Color(0xFFF2F2F4)),
+            icon: const GlyphBox(HG.plus, size: 22, color: N.g95),
             search: search,
             classify: classify,
             groups: views.groups(found),
             hint: 'Search create',
             count: _count(shown.length),
             classStrip: true,
-            wide: (c, s) => shown.isEmpty ? emptyBody('No mark matches "${search.query}".') : SymbolMatrix(sections: sections, recent: search.active ? const [] : _recent(), width: s.width, scene: widget.scene),
-            narrow: (c, s) => shown.isEmpty ? emptyBody('No mark matches.') : SymbolMatrix(sections: sections, recent: search.active ? const [] : _recent(), width: s.width, scene: widget.scene),
+            wide: (c, s) => shown.isEmpty ? emptyBody('No mark matches "${search.query}".') : CreateTiles(sections: sections, recent: search.active ? const [] : _recent(), width: s.width, scene: widget.scene),
+            narrow: (c, s) => shown.isEmpty ? emptyBody('No mark matches.') : CreateTiles(sections: sections, recent: search.active ? const [] : _recent(), width: s.width, scene: widget.scene),
             strip: (c, s) => _strip(shown, s.height),
           );
         },
@@ -100,7 +101,7 @@ class _TileState extends State<_Tile> {
               if (widget.caption)
                 Padding(
                   padding: const EdgeInsets.only(top: 3),
-                  child: Text(widget.thing.name, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, textAlign: TextAlign.center, style: sans(9.5, c: const Color(0xFFD6D7DA), w: FontWeight.w500)),
+                  child: Text(widget.thing.name, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, textAlign: TextAlign.center, style: sans(9.5, c: N.g86, w: FontWeight.w500)),
                 ),
             ]);
           }),
@@ -116,7 +117,7 @@ class MarkPainter extends CustomPainter {
   void paint(Canvas cv, Size sz) {
     final s = sz.shortestSide;
     final c = Offset(sz.width / 2, sz.height / 2);
-    Color tone(double t) => Color.lerp(color, t > 0 ? const Color(0xFFFFFFFF) : const Color(0xFF000000), t.abs())!;
+    Color tone(double t) => Color.lerp(color, t > 0 ? N.g100 : N.g00, t.abs())!;
     final fill = Paint()..color = color;
     Paint stroke([double w = 1.7, Color? k]) => Paint()..color = k ?? color..style = PaintingStyle.stroke..strokeWidth = w..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
     Rect box(double f, [double dy = 0]) => Rect.fromCenter(center: c.translate(0, dy * s), width: s * f, height: s * f);

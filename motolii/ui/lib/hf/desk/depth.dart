@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
+import '../neutral.dart';
 
 /// A layer in the scene: centre and size in world units. The target is the origin.
 class DLayer {
@@ -197,7 +198,7 @@ class _DepthDeskState extends State<DepthDesk> {
         ),
       );
 
-  Widget _key(Color c, String t) => Row(children: [Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)), const SizedBox(width: 6), Text(t, style: sans(10.5, c: const Color(0xFFB4B6BB)))]);
+  Widget _key(Color c, String t) => Row(children: [Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)), const SizedBox(width: 6), Text(t, style: sans(10.5, c: N.g69))]);
 
   Widget _diagram(DView v, bool detail) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
@@ -282,7 +283,7 @@ class DepthPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final rr = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(6));
-    c.drawRRect(rr, Paint()..color = const Color(0xFF131316));
+    c.drawRRect(rr, Paint()..color = N.g07);
     c.save();
     c.clipRRect(rr);
     final v = g.view;
@@ -294,7 +295,7 @@ class DepthPainter extends CustomPainter {
     final fd = sel.z - g.cam.z;
     final sp = g.px(sel.x, sel.y, sel.z);
     // a single ground line through the target keeps the drawing anchored; nothing else is a ruler
-    final ground = Paint()..color = const Color(0xFF24252A)..strokeWidth = 1.2;
+    final ground = Paint()..color = N.g15..strokeWidth = 1.2;
     c.drawLine(Offset(0, o.dy), Offset(s.width, o.dy), ground);
     c.drawLine(Offset(o.dx, 0), Offset(o.dx, s.height), ground);
 
@@ -308,10 +309,10 @@ class DepthPainter extends CustomPainter {
         final r = Rect.fromCenter(center: g.px(l.x, l.y, l.z), width: l.w * g.k, height: l.h * g.k);
         c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(3)), Paint()..color = depthLayerColor(i, selected).withValues(alpha: .92));
         if (i == selected) c.drawRRect(RRect.fromRectAndRadius(r.inflate(3), const Radius.circular(5)), Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 2);
-        if (detail) _text(c, '${i + 1}', r.center, sans(12, c: const Color(0xFF1B1B1D), w: FontWeight.w700), centre: true);
+        if (detail) _text(c, '${i + 1}', r.center, sans(12, c: N.g10, w: FontWeight.w700), centre: true);
       }
       c.drawCircle(cp, 9, Paint()..color = kInk);
-      c.drawCircle(cp, 4, Paint()..color = const Color(0xFF131316));
+      c.drawCircle(cp, 4, Paint()..color = N.g07);
     } else {
       final fwdU = g.fwdIsU;
       final half2 = v == DView.side ? vhalf : half;
@@ -338,7 +339,7 @@ class DepthPainter extends CustomPainter {
         final thick = hot ? 16.0 : 12.0;
         if (hot) c.drawLine(a, b, Paint()..color = kInk..strokeWidth = thick + 4..strokeCap = StrokeCap.round);
         c.drawLine(a, b, Paint()..color = depthLayerColor(i, selected)..strokeWidth = thick..strokeCap = StrokeCap.round);
-        if (detail) _text(c, '${i + 1}', fwdU ? Offset(p.dx + 14, p.dy - ext - 8) : Offset(p.dx + ext + 14, p.dy), sans(11, c: hot ? kInk : const Color(0xFFB4B6BB), w: hot ? FontWeight.w700 : FontWeight.w400), centre: true);
+        if (detail) _text(c, '${i + 1}', fwdU ? Offset(p.dx + 14, p.dy - ext - 8) : Offset(p.dx + ext + 14, p.dy), sans(11, c: hot ? kInk : N.g69, w: hot ? FontWeight.w700 : FontWeight.w400), centre: true);
       }
       // camera: a big white body with its lens toward the view
       c.save();

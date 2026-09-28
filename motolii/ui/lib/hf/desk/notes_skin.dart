@@ -3,14 +3,15 @@ import '../../foundation/notes_view.dart';
 import '../../foundation/panel_controls.dart' show EditorDraftField;
 import '../bp/common.dart';
 import 'common.dart';
+import '../neutral.dart';
 
 /// The cards' look in the finished Notes: flat colour, a violet pill for a reference, a dotted ground.
 const hfNoteLook = NoteLook(
   ground: kGround,
-  dots: Color(0xFF2A2A2A),
+  dots: N.g15,
   tints: [kYellow, kPink, kBlue, kMint],
   reference: kViolet,
-  ink: Color(0xFF1B1B1D),
+  ink: N.g10,
   accent: kAccent,
   raised: kInk,
 );
@@ -107,14 +108,14 @@ class NotesSkin extends StatelessWidget {
         valueListenable: view.transform,
         builder: (_, m, __) {
           final z = m.getMaxScaleOnAxis();
-          Widget step(String key, String t, double to) => GestureDetector(key: ValueKey(key), onTap: () => view.setZoom(to.clamp(.25, 2.0)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text(t, style: sans(18, c: const Color(0xFFD0D1D5)))));
+          Widget step(String key, String t, double to) => GestureDetector(key: ValueKey(key), onTap: () => view.setZoom(to.clamp(.25, 2.0)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text(t, style: sans(18, c: N.g82))));
           return Container(
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
               Expanded(child: Text('${view.blocks} blocks', softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: kMuted))),
               step('zoom-out', '−', z - .25),
-              SizedBox(width: 48, child: Text('${(z * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: const Color(0xFFD0D1D5)))),
+              SizedBox(width: 48, child: Text('${(z * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: N.g82))),
               step('zoom-in', '+', z + .25),
               const SizedBox(width: 10),
               GestureDetector(key: const ValueKey('zoom-fit'), onTap: view.resetView, child: Text('Reset', style: sans(11, c: kAccent))),
@@ -129,7 +130,7 @@ class _ToolP extends CustomPainter {
   final int i;
   @override
   void paint(Canvas c, Size s) {
-    final p = Paint()..color = const Color(0xFFD0D1D5)..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    final p = Paint()..color = N.g82..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
     final m = s.center(Offset.zero);
     switch (i) {
       case 1:

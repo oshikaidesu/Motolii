@@ -10,6 +10,8 @@ import '../../hf/bp/shell.dart' show GlyphBox, kTile;
 import '../../hf/bp/shelf_sections.dart';
 import '../../hf/bp/things.dart';
 import '../../hf/glyphs.dart';
+import '../../hf/neutral.dart';
+import '../../hf/shell/place.dart' show H;
 
 /// Media as material: each family is shown by what it is — a still by its picture (over a checker, so a cut-out reads
 /// as one), a clip by its picture with its motion and length, a sound by its own waveform. The name is always readable;
@@ -81,7 +83,7 @@ class MaterialCard extends StatelessWidget {
         height: _captionHeight,
         child: Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: const Color(0xFFD6D7DA), w: FontWeight.w500)),
+          child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g86, w: FontWeight.w500)),
         ),
       ),
     ]);
@@ -140,7 +142,7 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-        decoration: BoxDecoration(color: const Color(0xC0101012), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(3)),
         child: child,
       );
 }
@@ -154,21 +156,21 @@ class _MotionFace extends StatelessWidget {
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
         picture ?? _glyph(HG.image),
         const Center(child: _Badge(SizedBox(width: 8, height: 9, child: CustomPaint(painter: _Play())))),
-        if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: const Color(0xFFF2F2F4))))),
+        if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
       ]);
 }
 
 class _Play extends CustomPainter {
   const _Play();
   @override
-  void paint(Canvas cv, Size s) => cv.drawPath(Path()..moveTo(0, 0)..lineTo(s.width, s.height / 2)..lineTo(0, s.height)..close(), Paint()..color = const Color(0xFFF2F2F4));
+  void paint(Canvas cv, Size s) => cv.drawPath(Path()..moveTo(0, 0)..lineTo(s.width, s.height / 2)..lineTo(0, s.height)..close(), Paint()..color = N.g95);
   @override
   bool shouldRepaint(_Play o) => false;
 }
 
 /// The Timeline's waveform hue (its quiet floor and its trace), lifted so a sound reads at shelf size.
-const _waveFloor = Color(0xFF1E2622);
-final _waveTrace = Color.lerp(const Color(0xFF3B6D5F), const Color(0xFFFFFFFF), .38)!;
+const _waveFloor = N.g13;
+final _waveTrace = Color.lerp(H.wave, N.g100, .38)!;
 
 /// A sound: its own envelope across its length, and its length.
 class _WaveFace extends StatelessWidget {
@@ -185,7 +187,7 @@ class _WaveFace extends StatelessWidget {
     return Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: _waveFloor),
       if (columns.isEmpty) const Center(child: GlyphBox(HG.headphones, size: 24)) else CustomPaint(painter: _Wave(columns)),
-      if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: const Color(0xFFF2F2F4))))),
+      if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
     ]);
   }
 }
@@ -217,8 +219,8 @@ class _Checker extends CustomPainter {
   @override
   void paint(Canvas cv, Size s) {
     const cell = 6.0;
-    cv.drawRect(Offset.zero & s, Paint()..color = const Color(0xFF2A2A2D));
-    final light = Paint()..color = const Color(0xFF38383C);
+    cv.drawRect(Offset.zero & s, Paint()..color = N.g15);
+    final light = Paint()..color = N.g20;
     for (var y = 0; y * cell < s.height; y++) {
       for (var x = (y.isEven ? 0 : 1); x * cell < s.width; x += 2) {
         cv.drawRect(Rect.fromLTWH(x * cell, y * cell, cell, cell), light);

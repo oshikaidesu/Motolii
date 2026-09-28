@@ -8,7 +8,7 @@ enum HG {
   scatter, alongPath, stagger, face, follow, attach,
   blur, glow, color, composite, distort, stylize,
   arrow, move, rect, ellipse, pen, type, crop,
-  pie, kebab, grid4, list, search, fit, corners, play, pin, folder, lock, plus, star, chevronDown, cross, triangle, headphones, diamond, power, preset,
+  pie, kebab, grid4, list, search, fit, corners, play, pin, folder, lock, plus, star, chevronDown, cross, triangle, headphones, diamond, power, preset, eye, eyeOff, solo,
 }
 
 class HgPainter extends CustomPainter {
@@ -170,6 +170,18 @@ class HgPainter extends CustomPainter {
         cv.drawRRect(rr(-5.6, -5.6, 11.2, 11.2, 1.2), line(1.6)); cv.restore();
       case HG.power:
         cv.drawCircle(o(12, 12.4), 6.4, line(1.5)); cv.drawLine(o(12, 6.8), o(12, 12.4), line(1.5));
+      case HG.eye || HG.eyeOff:
+        // an almond with its pupil; off is the same eye struck through
+        cv.drawPath(Path()..moveTo(2.5, 12)..quadraticBezierTo(12, 3, 21.5, 12)..quadraticBezierTo(12, 21, 2.5, 12)..close(), line(1.7));
+        cv.drawCircle(o(12, 12), 3, fill());
+        if (g == HG.eyeOff) {
+          cv.drawLine(o(4.5, 20), o(19.5, 4), line(3.4, bg));
+          cv.drawLine(o(4.5, 20), o(19.5, 4), line(1.7));
+        }
+      case HG.solo:
+        // a target: the one heard/seen alone
+        cv.drawCircle(o(12, 12), 7.4, line(1.7));
+        cv.drawCircle(o(12, 12), 3, fill());
       case HG.preset:
         cv.drawRRect(rr(2.5, 5, 19, 14, 3.4), fill());
         cv.drawCircle(o(8.6, 11.4), 1.5, fill(bg)); cv.drawCircle(o(15.4, 11.4), 1.5, fill(bg)); cv.drawLine(o(9, 15), o(15, 15), line(1.2, bg));

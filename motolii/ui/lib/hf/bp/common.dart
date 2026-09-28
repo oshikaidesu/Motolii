@@ -4,18 +4,19 @@ import 'package:flutter/widgets.dart';
 
 import '../metrics.dart';
 import '../glyphs.dart';
+import '../neutral.dart';
 
-const kRule = Color(0xFF343434);
-const kRule2 = Color(0xFF2A2A2A);
-const kGround = Color(0xFF191919);
-const kRaised = Color(0xFF202020);
-const kRaisedHi = Color(0xFF282828);
-const kSel = Color(0xFF2F3034);
-const kMuted = Color(0xFF8E8F92);
+const kRule = N.g20;
+const kRule2 = N.g15;
+const kGround = N.g10;
+const kRaised = N.g13;
+const kRaisedHi = N.g15;
+const kSel = N.g20;
+const kMuted = N.g56;
 
 TextStyle sans(
   double s, {
-  Color c = const Color(0xFFDADBDC),
+  Color c = N.g86,
   FontWeight w = FontWeight.w400,
   double ls = 0,
 }) => TextStyle(
@@ -78,8 +79,13 @@ class Leaf extends StatelessWidget {
     required this.body,
     this.onTab,
     this.tabWrap,
+    this.trailing,
   });
   final List<TabSpec> tabs;
+
+  /// The front panel's own tools at the strip's right end (the Timeline's Split and Marker), where every editor puts
+  /// them, instead of a band of the panel's own.
+  final Widget? trailing;
   final int active;
   final Widget body;
 
@@ -101,7 +107,7 @@ class Leaf extends StatelessWidget {
       ),
       child: Column(
         children: [
-          if (stacked)
+          if (stacked || trailing != null)
             LayoutBuilder(
               builder: (_, c) {
                 final need = tabs.fold<double>(
@@ -143,6 +149,7 @@ class Leaf extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (trailing != null) Padding(padding: const EdgeInsets.only(right: UiMetrics.tight), child: trailing),
                       // (no ✕ here: it was painted with no gesture; a seat's panel is closed from its tab's menu)
                     ],
                   ),
@@ -188,7 +195,7 @@ class _Tab extends StatelessWidget {
           child: CustomPaint(
             painter: HfTabGlyph(
               t.glyph,
-              selected ? const Color(0xFFF0F0F0) : kMuted,
+              selected ? N.g95 : kMuted,
             ),
           ),
         ),
@@ -199,7 +206,7 @@ class _Tab extends StatelessWidget {
             softWrap: false,
             style: sans(
               12,
-              c: selected ? const Color(0xFFF2F2F2) : kMuted,
+              c: selected ? N.g95 : kMuted,
               w: FontWeight.w500,
             ),
           ),
@@ -290,8 +297,8 @@ class Chips extends StatelessWidget {
               border: Border(
                 bottom: BorderSide(
                   color: i == active
-                      ? const Color(0xFFE8E8E8)
-                      : const Color(0x00000000),
+                      ? N.g91
+                      : N.clear,
                   width: 1.5,
                 ),
               ),
@@ -302,7 +309,7 @@ class Chips extends StatelessWidget {
                 softWrap: false,
                 style: caps(
                   10.5,
-                  c: i == active ? const Color(0xFFF0F0F0) : kMuted,
+                  c: i == active ? N.g95 : kMuted,
                 ),
               ),
             ),

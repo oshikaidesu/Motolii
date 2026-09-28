@@ -11,6 +11,7 @@ import 'search.dart';
 import 'shell.dart';
 import '../../session/editor_session.dart';
 import 'native_visual_sample.dart';
+import '../neutral.dart';
 
 typedef Sw = (String, int, String); // name, argb, class
 
@@ -181,6 +182,9 @@ List<List<String>> colorGroups(List<Sw> items) {
   ];
 }
 
+
+/// the colour a new swatch or bar starts from
+const _firstSwatch = Color(0xFFE8508F);
 class ColorsPanel extends StatefulWidget {
   const ColorsPanel({
     super.key,
@@ -246,7 +250,7 @@ class _ColorsPanelState extends State<ColorsPanel>
           : widget.gradients!.isNotEmpty;
       return PanelShell(
         title: 'Colors',
-        icon: const GlyphBox(HG.color, size: 22, color: Color(0xFFF2F2F4)),
+        icon: const GlyphBox(HG.color, size: 22, color: N.g95),
         search: search,
         classify: classify,
         groups: groups,
@@ -343,7 +347,7 @@ class _ColorsPanelState extends State<ColorsPanel>
               child: Center(
                 child: Text(
                   '#E8508F',
-                  style: mono(10.5, c: const Color(0xFFC0C1C3)),
+                  style: mono(10.5, c: N.g76),
                 ),
               ),
             ),
@@ -406,7 +410,7 @@ class _Instrument extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('#E8508F', style: mono(11, c: const Color(0xFFD0D1D3))),
+                Text('#E8508F', style: mono(11, c: N.g82)),
                 const SizedBox(width: 8),
                 const GlyphBox(HG.composite, size: 13, color: kMuted),
               ],
@@ -457,14 +461,14 @@ class _MiniInstrument extends StatelessWidget {
         width: 30,
         height: 30,
         decoration: BoxDecoration(
-          color: color ?? const Color(0xFFE8508F),
+          color: color ?? _firstSwatch,
           borderRadius: BorderRadius.circular(3),
         ),
       ),
       const SizedBox(width: 10),
       Text(
         color == null ? '#E8508F' : hexText(color!),
-        style: mono(11, c: const Color(0xFFD0D1D3)),
+        style: mono(11, c: N.g82),
       ),
     ],
   );
@@ -473,7 +477,7 @@ class _MiniInstrument extends StatelessWidget {
 /// A vertical bar: kind 0 runs from black up to the colour (its value), kind 1 from clear up to it over a checker
 /// (its alpha); the handle sits at [at] from the top.
 class ColorBar extends CustomPainter {
-  ColorBar(this.kind, [this.color = const Color(0xFFE8508F), double? at])
+  ColorBar(this.kind, [this.color = _firstSwatch, double? at])
     : at = at ?? (kind == 0 ? .1 : .22);
   final int kind;
   final Color color;
@@ -493,8 +497,8 @@ class ColorBar extends CustomPainter {
             Rect.fromLTWH(x, y, 4, 4),
             Paint()
               ..color = ((x + y) / 4).floor().isEven
-                  ? const Color(0xFF3A3A3D)
-                  : const Color(0xFF2A2A2D),
+                  ? N.g20
+                  : N.g15,
           );
         }
       }
@@ -502,7 +506,7 @@ class ColorBar extends CustomPainter {
     }
     final opaque = color.withValues(alpha: 1);
     final colors = kind == 0
-        ? [const Color(0xFF000000), opaque]
+        ? [N.g00, opaque]
         : [opaque.withValues(alpha: 0), opaque];
     c.drawRRect(
       r,
@@ -514,12 +518,12 @@ class ColorBar extends CustomPainter {
         ).createShader(Offset.zero & s),
     );
     final o = Offset(s.width / 2, s.height * at);
-    c.drawCircle(o, 5.5, Paint()..color = const Color(0xFFF2F2F4));
+    c.drawCircle(o, 5.5, Paint()..color = N.g95);
     c.drawCircle(
       o,
       5.5,
       Paint()
-        ..color = const Color(0xFF101012)
+        ..color = N.g07
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4,
     );
@@ -583,7 +587,7 @@ class WheelPainter extends CustomPainter {
         ..strokeWidth = ringW,
     );
     final fill = hsv == null
-        ? const Color(0xFFE8508F)
+        ? _firstSwatch
         : h.toColor().withValues(alpha: 1);
     final hp =
         ctr +
@@ -592,7 +596,7 @@ class WheelPainter extends CustomPainter {
     if (triangle) {
       final t = triangleAt(sz, h.hue);
       c.drawVertices(
-        ui.Vertices(ui.VertexMode.triangles, t, colors: [HSVColor.fromAHSV(1, h.hue, 1, 1).toColor(), const Color(0xFFFFFFFF), const Color(0xFF000000)]),
+        ui.Vertices(ui.VertexMode.triangles, t, colors: [HSVColor.fromAHSV(1, h.hue, 1, 1).toColor(), N.g100, N.g00]),
         BlendMode.srcOver,
         Paint(),
       );
@@ -608,7 +612,7 @@ class WheelPainter extends CustomPainter {
       rr,
       Paint()
         ..shader = const LinearGradient(
-          colors: [Color(0xFFFFFFFF), Color(0x00FFFFFF)],
+          colors: [N.g100, N.glaze0],
         ).createShader(sq),
     );
     c.drawRRect(
@@ -617,7 +621,7 @@ class WheelPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0x00000000), Color(0xFF000000)],
+          colors: [N.clear, N.g00],
         ).createShader(sq),
     );
     _handle(c, hp, s * .04 + 3, fill);
@@ -635,7 +639,7 @@ class WheelPainter extends CustomPainter {
       o,
       r,
       Paint()
-        ..color = const Color(0xFFF6F6F8)
+        ..color = N.g95
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );

@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import '../desk/common.dart' show kMint, kBlue, kViolet, kPink;
 import 'camera_model.dart';
+import '../neutral.dart';
 
 const targetColor = kMint, orbitColor = kViolet, distanceColor = kBlue, rollColor = kPink;
 
@@ -142,7 +143,7 @@ class _Painter extends CustomPainter {
     final off = s.frozen;
     final a = off ? .45 : 1.0;
     final ctr = g.c;
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = const Color(0xFF131316));
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
     // the roll ring: a twist about the ray, turns kept
     c.drawCircle(ctr, CameraGeom.ringR, Paint()..color = rollColor.withValues(alpha: .28 * a)..style = PaintingStyle.stroke..strokeWidth = 1.3);
     for (var i = 0; i < 12; i++) {
@@ -163,7 +164,7 @@ class _Painter extends CustomPainter {
     c.rotate(g.rayDir.direction + math.pi / 2);
     final bar = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 16, height: 6), const Radius.circular(3));
     c.drawRRect(bar, Paint()..color = distanceColor.withValues(alpha: a));
-    c.drawRRect(bar, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 1.2);
+    c.drawRRect(bar, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.2);
     c.restore();
     // the camera: a body with its lens toward the target; hollow when it is on the far side
     c.save();
@@ -171,7 +172,7 @@ class _Painter extends CustomPainter {
     c.rotate((ctr - eye).direction);
     final body = RRect.fromRectAndRadius(const Rect.fromLTRB(-9, -6, 5, 6), const Radius.circular(2.5));
     final lens = Path()..moveTo(5, -3.5)..lineTo(11, -6.5)..lineTo(11, 6.5)..lineTo(5, 3.5)..close();
-    final fill = g.behind ? const Color(0xFF131316) : orbitColor.withValues(alpha: a);
+    final fill = g.behind ? N.g07 : orbitColor.withValues(alpha: a);
     c.drawRRect(body, Paint()..color = fill);
     c.drawPath(lens, Paint()..color = fill);
     c.drawRRect(body, Paint()..color = orbitColor.withValues(alpha: a)..style = PaintingStyle.stroke..strokeWidth = 1.5);
@@ -180,7 +181,7 @@ class _Painter extends CustomPainter {
     // the target: a point; hollow with a link mark when a layer decides it
     final locked = s.targetLocked;
     c.drawCircle(ctr, 8, Paint()..color = targetColor.withValues(alpha: .18 * a));
-    c.drawCircle(ctr, 5, Paint()..color = locked ? const Color(0xFF131316) : targetColor.withValues(alpha: a));
+    c.drawCircle(ctr, 5, Paint()..color = locked ? N.g07 : targetColor.withValues(alpha: a));
     c.drawCircle(ctr, 5, Paint()..color = targetColor.withValues(alpha: a)..style = PaintingStyle.stroke..strokeWidth = 1.6);
     final cross = Paint()..color = targetColor.withValues(alpha: .8 * a)..strokeWidth = 1.2;
     c.drawLine(ctr + const Offset(-11, 0), ctr + const Offset(-7, 0), cross);
@@ -191,9 +192,9 @@ class _Painter extends CustomPainter {
     final rh = g.rollHandle;
     c.drawCircle(rh, 7, Paint()..color = rollColor.withValues(alpha: .2 * a));
     c.drawCircle(rh, 4.6, Paint()..color = rollColor.withValues(alpha: a));
-    c.drawCircle(rh, 4.6, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 1.3);
+    c.drawCircle(rh, 4.6, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.3);
     final t = 'pitch ${s.pitch.toStringAsFixed(0)}°  yaw ${s.yaw.toStringAsFixed(0)}°   ×${s.distance.toStringAsFixed(2)}   roll ${s.roll.toStringAsFixed(0)}°';
-    final tp = TextPainter(text: TextSpan(text: t, style: mono(8.5, c: const Color(0xFF7E7F86))), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 16);
+    final tp = TextPainter(text: TextSpan(text: t, style: mono(8.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 16);
     tp.paint(c, const Offset(8, 7));
     if (locked) {
       final lp = TextPainter(text: TextSpan(text: 'TARGET LAYER', style: sans(8, c: targetColor, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();

@@ -7,6 +7,7 @@ import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';
 import '../../session/effect_actions.dart';
 import 'effect.dart';
+import '../../hf/neutral.dart';
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;
@@ -81,7 +82,7 @@ class NewEffectCard extends StatelessWidget {
           child: Row(children: [
             SizedBox(width: 12, height: 12, child: CustomPaint(painter: HgPainter(HG.list, kMuted, kRaised))),
             const SizedBox(width: 6),
-            Expanded(child: Text('${effect['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(11.5, c: on ? const Color(0xFFDADBDC) : kMuted, w: FontWeight.w600))),
+            Expanded(child: Text('${effect['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(11.5, c: on ? N.g86 : kMuted, w: FontWeight.w600))),
             GestureDetector(
               key: ValueKey('effect-toggle:${effect['id']}'),
               behavior: HitTestBehavior.opaque,

@@ -16,6 +16,7 @@ import 'package:flutter/widgets.dart';
 
 import '../glyphs.dart';
 import 'place.dart';
+import '../neutral.dart';
 
 part 'timeline_paint.dart';
 
@@ -126,8 +127,8 @@ class TimelineModel {
     this.marquee,
     this.dropGuide,
     this.dropInside = false,
-    this.marqueeInk = const Color(0xFFFFBC53),
-    this.guideInk = const Color(0xFFB0E3EF),
+    this.marqueeInk = H.marquee,
+    this.guideInk = H.guide,
   });
 
   /// How wide one frame is drawn (a key at the playhead is within half of it).
@@ -255,7 +256,7 @@ List<RI> timeline(TimelineModel m) {
         tlX(i.toDouble()) + 3,
         762,
         m.ruler[i],
-        H.m(11, color: const Color(0xFFB0B0B2)),
+        H.m(11, color: N.g69),
         w: 33,
       ),
     );
@@ -279,7 +280,7 @@ List<RI> timeline(TimelineModel m) {
         break;
       case TlKind.item:
         items.add(Rc(c1 - 8, cy - 8, 16, 16, fill: r.chip, r: 3));
-        items.add(Hg(c1, cy, 10, HG.diamond, const Color(0xFFF2F2F2)));
+        items.add(Hg(c1, cy, 10, HG.diamond, N.g95));
       case TlKind.camera:
         items.add(Hg(c1, cy, 15, HG.power, H.text2));
       case TlKind.audio:
@@ -305,23 +306,16 @@ List<RI> timeline(TimelineModel m) {
       items.add(Hg(547, cy, 10, HG.diamond, keyed ? H.text : H.text3));
       continue;
     }
-    for (final (column, state) in [
-      r.hidden,
-      r.solo,
-      r.locked,
-      r.clipToBelow,
-    ].indexed) {
-      // on is a lit key (the palette's toggle colour), off a dim letter: the two states read apart at a glance
+    // seen or not: an eye at the row's left edge, where the eye goes in every editor (open when seen, struck when hidden)
+    items.add(Hg(352, cy, 12, r.hidden ? HG.eyeOff : HG.eye, r.hidden ? H.text3 : H.text2, bg: H.window));
+    // solo · lock · clip at the row's end: a glyph each, lit when on (the palette's toggle colour), dim when off
+    for (final (column, state, glyph) in [
+      (1, r.solo, HG.solo),
+      (2, r.locked, HG.lock),
+      (3, r.clipToBelow, HG.crop),
+    ]) {
       if (state) items.add(Rc(492.5 + 16 * column, cy - 7, 13, 14, fill: H.toggleOn, r: 2));
-      items.add(
-        Tx(
-          495.0 + 16 * column,
-          base,
-          ['M', 'S', 'L', 'C'][column],
-          H.s(9, color: state ? const Color(0xFFFCFCFE) : H.text3, w: FontWeight.w600),
-          w: 10,
-        ),
-      );
+      items.add(Hg(499.0 + 16 * column, cy, 12, glyph, state ? N.g100 : H.text3, bg: state ? H.toggleOn : H.window));
     }
   }
   items.add(Pt(_TlMarks(m)));

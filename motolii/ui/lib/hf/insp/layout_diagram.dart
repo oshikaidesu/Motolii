@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import '../desk/common.dart' show kMint, kBlue, kViolet, kPink;
 import 'layout_model.dart';
+import '../neutral.dart';
 
 const arrangeColor = kMint, spaceColor = kBlue, alignColor = kViolet, sizeColor = kPink;
 
@@ -233,15 +234,15 @@ class _Painter extends CustomPainter {
   void paint(Canvas c, Size sz) {
     final on = s.gridOn, off = s.frozen;
     final a = off ? .5 : 1.0;
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = const Color(0xFF131316));
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
     // the space the container is offered
-    final dash = Paint()..color = const Color(0xFF34353A)..strokeWidth = 1;
+    final dash = Paint()..color = N.g20..strokeWidth = 1;
     final av = g.avail;
     for (var x = av.left; x < av.right; x += 8) { c.drawLine(Offset(x, av.top), Offset(math.min(x + 4, av.right), av.top), dash); c.drawLine(Offset(x, av.bottom), Offset(math.min(x + 4, av.right), av.bottom), dash); }
     for (var y = av.top; y < av.bottom; y += 8) { c.drawLine(Offset(av.left, y), Offset(av.left, math.min(y + 4, av.bottom)), dash); c.drawLine(Offset(av.right, y), Offset(av.right, math.min(y + 4, av.bottom)), dash); }
     final dim = on ? 1.0 : .45;
     final p = g.parent, inn = g.inner;
-    c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(4)), Paint()..color = const Color(0xFF1C1D22));
+    c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(4)), Paint()..color = N.g13);
     c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(4)), Paint()..color = sizeColor.withValues(alpha: .8 * dim * a)..style = PaintingStyle.stroke..strokeWidth = 1.6);
     // padding: the wall's thickness, shown by the line it holds the children off with
     final pd = Paint()..color = spaceColor.withValues(alpha: .7 * dim * a)..strokeWidth = 1.2;
@@ -253,17 +254,17 @@ class _Painter extends CustomPainter {
     // children
     for (final b in g.boxes) {
       final rr = RRect.fromRectAndRadius(b, const Radius.circular(3));
-      c.drawRRect(rr, Paint()..color = (on ? const Color(0xFF2D3140) : const Color(0xFF25262B)));
+      c.drawRRect(rr, Paint()..color = (on ? N.g20 : N.g15));
       c.drawRRect(rr, Paint()..color = arrangeColor.withValues(alpha: .75 * dim * a)..style = PaintingStyle.stroke..strokeWidth = 1.3);
     }
     void bar(Offset o, bool vertical, Color col, {bool hollow = false}) {
       final r = RRect.fromRectAndRadius(Rect.fromCenter(center: o, width: vertical ? 6 : 16, height: vertical ? 16 : 6), const Radius.circular(3));
-      c.drawRRect(r, Paint()..color = hollow ? const Color(0xFF131316) : col.withValues(alpha: a));
+      c.drawRRect(r, Paint()..color = hollow ? N.g07 : col.withValues(alpha: a));
       c.drawRRect(r, Paint()..color = col.withValues(alpha: a)..style = PaintingStyle.stroke..strokeWidth = 1.4);
     }
     void dot(Offset o, Color col, {bool hollow = false, double r = 4.6}) {
       c.drawCircle(o, r + 3, Paint()..color = col.withValues(alpha: .18 * a));
-      c.drawCircle(o, r, Paint()..color = hollow ? const Color(0xFF131316) : col.withValues(alpha: a));
+      c.drawCircle(o, r, Paint()..color = hollow ? N.g07 : col.withValues(alpha: a));
       c.drawCircle(o, r, Paint()..color = col.withValues(alpha: a)..style = PaintingStyle.stroke..strokeWidth = 1.4);
     }
     // arrangement handles: they work even with Grid off, as Classic's Columns and Rows wells do
@@ -281,7 +282,7 @@ class _Painter extends CustomPainter {
     final t = on
         ? '${g.cols} × ${s.gi('layout.grid_rows') == 0 ? 'auto' : s.gi('layout.grid_rows')}   gap ${s.gd('layout.gap').round()}   pad ${s.padX.round()}·${s.padY.round()}   ${justifyNames[s.gi('layout.justify_content').clamp(0, 5)]} / ${alignNames[s.gi('layout.align_items').clamp(0, 3)]}'
         : 'Grid off';
-    final tp = TextPainter(text: TextSpan(text: t, style: mono(8.5, c: const Color(0xFF7E7F86))), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 20);
+    final tp = TextPainter(text: TextSpan(text: t, style: mono(8.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 20);
     tp.paint(c, const Offset(10, 7));
   }
 

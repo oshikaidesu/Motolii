@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import '../desk/common.dart' show kInk, kMint, kBlue, kPink, kViolet;
 import 'transform_model.dart';
+import '../neutral.dart';
 
 enum TMode { move, scale, rotate, anchor }
 
@@ -258,11 +259,11 @@ class _GizmoPainter extends CustomPainter {
   @override
   void paint(Canvas cv, Size sz) {
     final s = g.s, l = s.active, mode = g.widget.mode;
-    final role = enabled ? modeColor[mode]! : const Color(0xFF55565C);
+    final role = enabled ? modeColor[mode]! : N.g33;
     final c = g.c;
-    cv.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = const Color(0xFF131316));
+    cv.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
     // a quiet field that slides under the body as Position changes: the world moves, the body stays
-    final dot = Paint()..color = const Color(0xFF26272B);
+    final dot = Paint()..color = N.g15;
     const step = 16.0;
     final ox = (-l.position[0]) % step, oy = (-l.position[1]) % step;
     for (var x = ox; x < sz.width; x += step) { for (var y = oy; y < sz.height; y += step) { cv.drawCircle(Offset(x, y), 1, dot); } }
@@ -278,20 +279,20 @@ class _GizmoPainter extends CustomPainter {
     // body: flat, at the layer's own scale and turn
     final cs = g.corners.map(g.toScreen).toList();
     final body = Path()..addPolygon(cs, true);
-    cv.drawPath(body, Paint()..color = enabled ? const Color(0xFF2B2E3C) : const Color(0xFF232326));
+    cv.drawPath(body, Paint()..color = enabled ? N.g20 : N.g15);
     cv.drawPath(body, Paint()..color = role.withValues(alpha: .9)..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeJoin = StrokeJoin.round);
     // a notch on the top edge so a turn can be read
     final notch = Path()..moveTo(g.toScreen(Offset(-6, -g.half.dy)).dx, g.toScreen(Offset(-6, -g.half.dy)).dy)..lineTo(g.toScreen(Offset(0, -g.half.dy - 6)).dx, g.toScreen(Offset(0, -g.half.dy - 6)).dy)..lineTo(g.toScreen(Offset(6, -g.half.dy)).dx, g.toScreen(Offset(6, -g.half.dy)).dy);
     cv.drawPath(notch, Paint()..color = role..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeCap = StrokeCap.round);
     // the pivot, always
     final pv = g.anchorPoint(l.anchor[0], l.anchor[1]);
-    cv.drawCircle(pv, mode == TMode.anchor ? 5.5 : 4, Paint()..color = enabled ? kViolet : const Color(0xFF55565C));
-    cv.drawCircle(pv, mode == TMode.anchor ? 5.5 : 4, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 1.4);
+    cv.drawCircle(pv, mode == TMode.anchor ? 5.5 : 4, Paint()..color = enabled ? kViolet : N.g33);
+    cv.drawCircle(pv, mode == TMode.anchor ? 5.5 : 4, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.4);
 
     void handle(Offset o, {double r = 5.5, Color? col}) {
       cv.drawCircle(o, r + 3, Paint()..color = (col ?? role).withValues(alpha: .22));
       cv.drawCircle(o, r, Paint()..color = col ?? role);
-      cv.drawCircle(o, r, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 1.4);
+      cv.drawCircle(o, r, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.4);
     }
 
     switch (mode) {
@@ -299,7 +300,7 @@ class _GizmoPainter extends CustomPainter {
         void arrow(Offset to, String t) {
           cv.drawLine(c, to, Paint()..color = role..strokeWidth = 2);
           handle(to, r: 5);
-          final tp = TextPainter(text: TextSpan(text: t, style: sans(8, c: const Color(0xFF131316), w: FontWeight.w800)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: t, style: sans(8, c: N.g07, w: FontWeight.w800)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, to - Offset(tp.width / 2, tp.height / 2));
         }
         arrow(c + Offset(g.ringR, 0), 'X');
@@ -330,7 +331,7 @@ class _GizmoPainter extends CustomPainter {
             final o = g.anchorPoint(fx, fy);
             final cur = (l.anchor[0] - fx).abs() < .01 && (l.anchor[1] - fy).abs() < .01;
             final hov = g.hoverCell == iy * 3 + ix;
-            cv.drawCircle(o, cur ? 6.5 : (hov ? 6 : 4), Paint()..color = cur ? kViolet : (hov ? kViolet.withValues(alpha: .7) : const Color(0xFF7C7D86)));
+            cv.drawCircle(o, cur ? 6.5 : (hov ? 6 : 4), Paint()..color = cur ? kViolet : (hov ? kViolet.withValues(alpha: .7) : N.g51));
             if (cur) cv.drawCircle(o, 6.5, Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 1.5);
           }
         }
@@ -342,7 +343,7 @@ class _GizmoPainter extends CustomPainter {
       TMode.rotate => '${(g.widget.rotAxis == 1 ? l.rotX : (g.widget.rotAxis == 2 ? l.rotY : l.rotation)).toStringAsFixed(1)}°',
       TMode.anchor => '${l.anchor[0]}, ${l.anchor[1]}',
     };
-    final tp = TextPainter(text: TextSpan(text: mode == TMode.anchor ? '' : t, style: mono(9, c: const Color(0xFF9EA0A6))), textDirection: TextDirection.ltr)..layout();
+    final tp = TextPainter(text: TextSpan(text: mode == TMode.anchor ? '' : t, style: mono(9, c: N.g63)), textDirection: TextDirection.ltr)..layout();
     tp.paint(cv, const Offset(8, 8));
   }
 

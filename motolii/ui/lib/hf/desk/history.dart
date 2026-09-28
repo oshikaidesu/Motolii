@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import '../bp/shell.dart' show emptyBody;
 import 'common.dart';
+import '../neutral.dart';
 
 enum Mark { none, save, open, warn, error, end }
 
@@ -27,8 +28,8 @@ const historyEntries = <Entry>[
   Entry('Delete Layer 4', '10:28'),
 ];
 
-const _bright = Color(0xFFD6D8DD);
-const _redo = Color(0xFF3B3C42);
+const _bright = N.g86;
+const _redo = N.g26;
 const _amber = Color(0xFFF08A3C);
 const _red = Color(0xFFE2554F);
 
@@ -138,7 +139,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
           height: 36,
           decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(children: [Text(l, style: sans(12.5, c: on ? kInk : const Color(0xFF5C5D64))), const Spacer(), Text(k, style: sans(11, c: kMuted))]),
+          child: Row(children: [Text(l, style: sans(12.5, c: on ? kInk : N.g38)), const Spacer(), Text(k, style: sans(11, c: kMuted))]),
         ),
       );
 
@@ -147,7 +148,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
     final cur = i == at, reached = i <= at;
     final marked = e.mark != Mark.none;
     // Text is annotation: quiet by default; the current step and marked records speak.
-    final ink = cur ? kInk : (reached ? (marked ? const Color(0xFFC4C6CB) : const Color(0xFF8A8C93)) : const Color(0xFF4E4F56));
+    final ink = cur ? kInk : (reached ? (marked ? N.g76 : N.g56) : N.g33);
     return Container(
       height: h,
       color: cur ? kYellow.withValues(alpha: .10) : null,
@@ -155,7 +156,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
         SizedBox(width: labels ? 58 : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
         if (labels) ...[
           Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? 13.5 : 12, c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
-          Padding(padding: const EdgeInsets.only(right: 16), child: Text(e.time, style: mono(9.5, c: reached ? const Color(0xFF6C6D74) : const Color(0xFF3F4046)))),
+          Padding(padding: const EdgeInsets.only(right: 16), child: Text(e.time, style: mono(9.5, c: reached ? N.g44 : N.g26))),
         ],
       ]),
     );
@@ -199,7 +200,7 @@ void _dot(Canvas c, Offset o, Mark mark, bool cur, bool reached, double r) {
     c.drawCircle(o, 5.4, Paint()..color = kBlue);
   } else {
     c.drawCircle(o, 3.4, Paint()..color = kWell);
-    c.drawCircle(o, 3.4, Paint()..color = const Color(0xFF4A4B52)..style = PaintingStyle.stroke..strokeWidth = 1.3);
+    c.drawCircle(o, 3.4, Paint()..color = N.g33..style = PaintingStyle.stroke..strokeWidth = 1.3);
   }
 }
 

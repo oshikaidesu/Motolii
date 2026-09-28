@@ -66,6 +66,7 @@ class LiveWorkspace {
           'Timeline',
           'Timeline',
           () => LiveTimeline(c: c),
+          tools: () => LiveTimelineTools(c: c),
           glyph: HG.play,
           minSize: 180,
         ),

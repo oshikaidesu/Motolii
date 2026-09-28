@@ -8,6 +8,7 @@ import 'layout_diagram.dart';
 import 'layout_model.dart';
 import 'panel.dart' show ParamCell;
 import 'toys.dart';
+import '../neutral.dart';
 
 class LayoutInstrument extends StatefulWidget {
   const LayoutInstrument(this.store, {super.key, this.title = 'Group', this.advancedOpen = false, this.embedded = false});
@@ -63,11 +64,11 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         child: Row(children: [
           Text(label, style: sans(10.5, c: on ? tone : kMuted, w: FontWeight.w600)),
           const SizedBox(width: 7),
-          Container(width: 30, height: 17, padding: const EdgeInsets.all(2), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? (s.frozen ? dim(tone) : tone) : const Color(0xFF3A3B40), borderRadius: BorderRadius.circular(9)), child: Container(width: 13, height: 13, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+          Container(width: 30, height: 17, padding: const EdgeInsets.all(2), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? (s.frozen ? dim(tone) : tone) : N.g26, borderRadius: BorderRadius.circular(9)), child: Container(width: 13, height: 13, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
         ]),
       );
 
-  Color dim(Color c) => Color.lerp(c, const Color(0xFF3A3B40), .7)!;
+  Color dim(Color c) => Color.lerp(c, N.g26, .7)!;
 
   Widget _val(String id, Color tone, {String? tag, int? axis, bool gated = true, bool units = false, bool whole = true}) => Expanded(
         child: Opacity(
@@ -113,13 +114,13 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
             key: const ValueKey('layout-advanced'),
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => advancedOpen = !advancedOpen),
-            child: Padding(padding: const EdgeInsets.only(top: 14, bottom: 6), child: Row(children: [Text(advancedOpen ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('${adv.length}', style: mono(9.5, c: const Color(0xFF7E7F86)))])),
+            child: Padding(padding: const EdgeInsets.only(top: 14, bottom: 6), child: Row(children: [Text(advancedOpen ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('${adv.length}', style: mono(9.5, c: N.g51))])),
           ),
           if (advancedOpen) for (final r in adv) Padding(padding: const EdgeInsets.only(bottom: 6), child: ParamCell(s, r, tone: kMutedTone)),
         ],
       ];
 
-  static const kMutedTone = Color(0xFF8E8F92);
+  static const kMutedTone = N.g56;
 
   // Hug / Fill / Fixed are three different relationships to the space offered; the number counts under Fixed alone
   Widget _sizeLine(String axis) {
@@ -133,7 +134,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
             key: ValueKey('size-$axis-$i'),
             behavior: HitTestBehavior.opaque,
             onTap: s.frozen ? null : () => s.setSizing(axis, i),
-            child: Container(width: 26, height: 26, margin: const EdgeInsets.only(right: 3), decoration: BoxDecoration(color: cur == i ? (s.frozen ? dim(sizeColor) : sizeColor) : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 12, child: CustomPaint(painter: SizingGlyph(i, cur == i ? const Color(0xFF1B1B1D) : kMuted))))),
+            child: Container(width: 26, height: 26, margin: const EdgeInsets.only(right: 3), decoration: BoxDecoration(color: cur == i ? (s.frozen ? dim(sizeColor) : sizeColor) : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 12, child: CustomPaint(painter: SizingGlyph(i, cur == i ? N.g10 : kMuted))))),
           ),
     ];
     final value = _val('layout.${axis == 'w' ? 'width' : 'height'}', sizeColor, gated: fixed, units: true);
@@ -148,7 +149,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         const SizedBox(height: 4),
         _sizeLine('h'),
         if (s.rows.any((r) => r['id'] == 'layout.column_start')) ...[
-          Padding(padding: const EdgeInsets.only(top: 14, bottom: 6), child: Text('GRID AREA', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.3))),
+          Padding(padding: const EdgeInsets.only(top: 14, bottom: 6), child: Text('GRID AREA', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3))),
           Row(children: [_val('layout.column_start', arrangeColor, tag: 'Col'), const SizedBox(width: 3), _val('layout.row_start', arrangeColor, tag: 'Row')]),
           const SizedBox(height: 4),
           Row(children: [_val('layout.column_span', arrangeColor, tag: 'Cols'), const SizedBox(width: 3), _val('layout.row_span', arrangeColor, tag: 'Rows')]),

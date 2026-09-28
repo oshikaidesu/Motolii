@@ -2,35 +2,37 @@
 // proto_hf draws fixtures with them; the production faces draw Motolii Live with the same ones.
 import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
+import '../neutral.dart';
 
 abstract final class H {
   // ---- Neutral palette: normalised from the reference (see handoff section 15).
-  static const window = Color(0xFF191919); // ground: window, panels, gutters
-  static const raised = Color(0xFF202020); // tiles, keys, inputs, rows, cards, row ground A
-  static const raisedHi = Color(0xFF262626); // hover, value wells, row ground B
-  static const sel = Color(0xFF2F3034); // selected tab / preset / open tab
-  static const selHi = Color(0xFF3B3D42); // selected inside a bar (subtab, tool)
-  static const rule = Color(0xFF343434); // outlines: panel edges, control borders
-  static const rule2 = Color(0xFF2A2A2A); // inner dividers
-  static const track = Color(0xFF2C2C2C); // slider track
-  static const text = Color(0xFFF5F5F5); // primary: names, active labels
-  static const text2 = Color(0xFFD2D2D2); // secondary: items, inactive tabs
-  static const text3 = Color(0xFF9E9E9F); // tertiary: annotation, sub-labels
-  static const ink = Color(0xFF14171A); // glyph and label on identity surfaces
+  static const window = N.g10; // ground: window, panels, gutters
+  static const raised = N.g13; // tiles, keys, inputs, rows, cards, row ground A
+  static const raisedHi = N.g15; // hover, value wells, row ground B
+  static const sel = N.g20; // selected tab / preset / open tab
+  static const selHi = N.g26; // selected inside a bar (subtab, tool)
+  static const rule = N.g20; // outlines: panel edges, control borders
+  static const rule2 = N.g15; // inner dividers
+  static const track = N.g15; // slider track
+  static const text = N.g95; // primary: names, active labels
+  static const text2 = N.g82; // secondary: items, inactive tabs
+  static const text3 = N.g63; // tertiary: annotation, sub-labels
+  static const ink = N.g10; // glyph and label on identity surfaces
   static const gutter = window;
   static Color selAt() => sel;
 
   // ---- Semantic families: one hue, area-dependent variants.
-  static const scatter = Fam(Color(0xFFF27AB6), t: Color(0xFFE274AA), n: Color(0xFFC76295));
-  static const stagger = Fam(Color(0xFF5596E9), t: Color(0xFF4C7AAC), n: Color(0xFF477FBD));
-  static const along = Fam(Color(0xFF7BCBA3), t: Color(0xFF77B68C), n: Color(0xFF517F68));
-  static const face = Fam(Color(0xFFF0D455), t: Color(0xFFCEBA54), n: Color(0xFFE3C748));
+  static const scatter = Fam(Color(0xFFF27AB6), t: Color(0xFFE974AB), n: Color(0xFFDD6F9F));
+  static const stagger = Fam(Color(0xFF5596E9), t: Color(0xFF4781E5), n: Color(0xFF4880E5));
+  static const along = Fam(Color(0xFF7BCBA3), t: Color(0xFF7DD5B1), n: Color(0xFF73CEAB));
+  static const face = Fam(Color(0xFFF0D455), t: Color(0xFFEFCB4E), n: Color(0xFFE3C748));
   static const follow = Fam(Color(0xFFF69260));
   static const attach = Fam(Color(0xFFA282E8), t: Color(0xFFA889E9), n: Color(0xFFA086E2));
   // Transform is a sibling operation with a neutral, subdued identity (not a property, not pink).
   static const neutralT = Color(0xFF8C7A88), neutralN = Color(0xFF77717C);
   // Operational
-  static const play = Color(0xFF7BCC9E), record = Color(0xFFF03C8A), mode = Color(0xFF7A87E3), toggleOn = Color(0xFF6982D1), toggleOff = Color(0xFF999BA0), playhead = Color(0xFF6EA6DB);
+  static const relation = Color(0xFFFF4D3D), wave = Color(0xFF3B6D5F), textSelection = Color(0x552F6BFF), marquee = Color(0xFFFFBC53), guide = Color(0xFFB0E3EF);
+  static const play = Color(0xFF7BCC9E), record = Color(0xFFF03C8A), mode = Color(0xFF7A87E3), toggleOn = Color(0xFF6982D1), toggleOff = N.g63, playhead = Color(0xFF6EA6DB);
 
   static const sans = 'Inter';
   static const mono = 'Menlo';
@@ -151,7 +153,7 @@ class Tx extends RI {
 
 /// A glyph centred on a reference point.
 class Hg extends RI {
-  Hg(this.cx, this.cy, this.size, this.g, this.color, {this.bg = const Color(0xFF202020), this.a = 1});
+  Hg(this.cx, this.cy, this.size, this.g, this.color, {this.bg = N.g13, this.a = 1});
   final double cx, cy, size, a;
   final HG g;
   final Color color, bg;

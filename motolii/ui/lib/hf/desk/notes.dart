@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
 import '../shell/menu.dart' show showHfMenu;
+import '../neutral.dart';
 
 class NBlock {
   NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0, this.id, this.png]);
@@ -226,9 +227,9 @@ class _NotesDeskState extends State<NotesDesk> {
         child: Row(children: [
           Text('Page ${page + 1}  ·  ${blocks.length} blocks', style: sans(11, c: kMuted)),
           const Spacer(),
-          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('−', style: sans(18, c: const Color(0xFFD0D1D5))))),
-          SizedBox(width: 48, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: const Color(0xFFD0D1D5)))),
-          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('+', style: sans(18, c: const Color(0xFFD0D1D5))))),
+          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('−', style: sans(18, c: N.g82)))),
+          SizedBox(width: 48, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: N.g82))),
+          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('+', style: sans(18, c: N.g82)))),
           const SizedBox(width: 10),
           GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(const Size(310, 490))), child: Text('Fit', style: sans(11, c: kAccent))),
         ]),
@@ -339,7 +340,7 @@ class _NotesDeskState extends State<NotesDesk> {
     switch (b.kind) {
       case 'note':
         final col = const [kYellow, kPink, kBlue, kMint][b.tint % 4];
-        final ink = const Color(0xFF1B1B1D);
+        final ink = N.g10;
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(3)),
@@ -355,13 +356,13 @@ class _NotesDeskState extends State<NotesDesk> {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(14)),
           child: Row(children: [
-            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF1B1B1D), shape: BoxShape.circle)),
+            Container(width: 8, height: 8, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
             const SizedBox(width: 8),
-            Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(12, c: const Color(0xFF1B1B1D), w: FontWeight.w600))),
+            Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(12, c: N.g10, w: FontWeight.w600))),
           ]),
         );
       default:
-        return Align(alignment: Alignment.centerLeft, child: Text(b.text, softWrap: false, style: const TextStyle(fontFamily: 'Snell Roundhand', fontSize: 26, color: Color(0xFFF2F2F4))));
+        return Align(alignment: Alignment.centerLeft, child: Text(b.text, softWrap: false, style: const TextStyle(fontFamily: 'Snell Roundhand', fontSize: 26, color: N.g95)));
     }
   }
 }
@@ -385,7 +386,7 @@ class _DotsP extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     c.drawRect(Offset.zero & s, Paint()..color = kGround);
-    final p = Paint()..color = const Color(0xFF2A2A2A);
+    final p = Paint()..color = N.g15;
     final step = 16 * z;
     if (step < 5) return;
     final ox = pan.dx % step, oy = pan.dy % step;
@@ -402,7 +403,7 @@ class _ToolP extends CustomPainter {
   final int i;
   @override
   void paint(Canvas c, Size s) {
-    final p = Paint()..color = const Color(0xFFD0D1D5)..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    final p = Paint()..color = N.g82..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
     final m = s.center(Offset.zero);
     switch (i) {
       case 0:
