@@ -74,10 +74,15 @@ void main() {
     ));
     showExportSheet(ctx, c);
     await tester.pump();
-    expect(find.text('1920 × 1080 · 30.00 fps · MP4'), findsOneWidget);
-    expect(find.text('Frames 0 – 90  (3.00 s)'), findsOneWidget);
+    // what will be written is a fact, the range a choice with its frames and seconds, then the job
+    expect(find.text('1920 × 1080 · 30 fps · MP4'), findsOneWidget);
+    expect(find.text('Whole'), findsOneWidget);
+    expect(find.text('0 – 90 · 3.00 s'), findsOneWidget);
     expect(find.text('Writing 12 / 90'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    // it opens as a task under its control, not over the Stage's middle, and dims nothing
+    expect(find.byKey(const ValueKey('hf-popover')), findsOneWidget);
+    // while a job runs the secondary action stops it
+    await tester.tap(find.text('Stop'));
     await tester.pump();
     expect(sent.last, {'op': 'cancelExport'});
   });

@@ -9,13 +9,28 @@ import '../../hf/shell/sheet.dart';
 import '../../session/editor_session.dart';
 import '../../session/export_actions.dart';
 
-/// The Export sheet: what will be written, which range (the whole document, or marker to marker around the
-/// playhead), Export (a save panel, then the host's export job), its progress and Cancel while it runs.
-Future<void> showExportSheet(BuildContext context, EditorSession c) => showHfSheet(context, title: 'Export', body: (_, close) => _Export(c: c));
+/// Export as a short task under its control: what will be written (read-only facts: the composition's size, rate and
+/// the format), which range (a choice: the whole document, or marker to marker around the playhead, with the frames
+/// and seconds that makes), then one action — Export… (a save panel, then the host's export job) — with Cancel beside
+/// it (it stops a running job, else closes). Enter exports, Esc closes. [anchor] is the asking control, in global
+/// coordinates; the task opens under it and leaves the Stage in view.
+Future<void> showExportSheet(BuildContext context, EditorSession c, {Rect? anchor}) {
+  final a = anchor ?? _topRight(context);
+  final key = GlobalKey<_ExportState>();
+  return showHfPopover(context, anchor: a, title: 'Export', width: 320, primary: () => key.currentState?.exportAction, body: (_, close) => _Export(key: key, c: c, close: close));
+}
+
+Rect _topRight(BuildContext context) {
+  final box = context.findRenderObject() as RenderBox?;
+  final size = box?.size ?? const Size(1280, 44);
+  final at = box?.localToGlobal(Offset(size.width - 12, 0)) ?? Offset.zero;
+  return Rect.fromLTWH(at.dx - 88, at.dy, 88, 40);
+}
 
 class _Export extends StatefulWidget {
-  const _Export({required this.c});
+  const _Export({super.key, required this.c, required this.close});
   final EditorSession c;
+  final VoidCallback close;
   @override
   State<_Export> createState() => _ExportState();
 }
@@ -40,47 +55,58 @@ class _ExportState extends State<_Export> {
 
   void _changed() => setState(() {});
 
+  bool get _running => const ['running', 'cancelling'].contains(EditorSession.map(c.state['export'])['phase']);
+
+  /// The primary action while it can run (Enter uses it too).
+  VoidCallback? get exportAction {
+    if (_running || !c.supports('export')) return null;
+    final (start, end) = exportRange(c, c.state, markers: markers);
+    return () async {
+      if (await startExport(c, start, end)) {
+        poll?.cancel();
+        poll = pollExport(c);
+      }
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = c.state, job = EditorSession.map(s['export']);
-    final running = const ['running', 'cancelling'].contains(job['phase']);
+    final running = _running;
     final (start, end) = exportRange(c, s, markers: markers);
     final fps = (s['fps'] as num? ?? 30).toDouble();
-    Widget line(String t, {Color color = H.text2}) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(t, style: H.m(12, color: color)));
+    final rate = fps == fps.roundToDouble() ? fps.toStringAsFixed(0) : fps.toStringAsFixed(2);
+    final hasMarkers = EditorSession.maps(s['markers']).isNotEmpty;
+    final phase = job['phase'];
+    final failed = phase == 'failed' || phase == 'error';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        line('${s['width']} × ${s['height']} · ${fps.toStringAsFixed(2)} fps · MP4'),
-        line('Frames $start – $end  (${((end - start) / fps).toStringAsFixed(2)} s)'),
-        const SizedBox(height: 4),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(padding: const EdgeInsets.only(top: 9), child: Text('RANGE', style: H.s(10, w: FontWeight.w600, ls: 1.2, color: H.text3))),
-          Expanded(
-            child: Wrap(alignment: WrapAlignment.end, runSpacing: 6, children: [
-              HfKey('Whole', on: !markers, onTap: running ? null : () => setState(() => markers = false)),
-              HfKey('Marker to marker', on: markers, onTap: running || EditorSession.maps(s['markers']).isEmpty ? null : () => setState(() => markers = true)),
-            ]),
+        HfFormRow('Output', HfFact('${s['width']} × ${s['height']} · $rate fps · MP4')),
+        HfFormRow(
+          'Range',
+          HfChoice<bool>(
+            options: [(false, 'Whole', true), (true, 'Markers', hasMarkers)],
+            value: markers,
+            onChanged: running ? null : (v) => setState(() => markers = v),
           ),
-        ]),
-        const SizedBox(height: 14),
-        if (job['phase'] != null && job['phase'] != 'idle')
-          line(switch (job['phase']) {
-            'running' => 'Writing ${job['done'] ?? 0} / ${job['total'] ?? end - start}',
-            'cancelling' => 'Stopping…',
-            'done' => 'Written ${job['path'] ?? ''}',
-            'failed' || 'error' => 'Failed: ${job['error'] ?? ''}',
-            _ => '${job['phase']}',
-          }, color: job['phase'] == 'failed' || job['phase'] == 'error' ? H.record : H.text2),
-        Wrap(alignment: WrapAlignment.end, runSpacing: 6, children: [
-          if (running) HfKey('Cancel', onTap: c.supports('cancelExport') ? () => c.command('cancelExport') : null),
-          HfKey('Export…', main: !running, onTap: running || !c.supports('export')
-              ? null
-              : () async {
-                  if (await startExport(c, start, end)) {
-                    poll?.cancel();
-                    poll = pollExport(c);
-                  }
-                }),
+        ),
+        HfFormRow('', HfFact('$start – $end · ${((end - start) / fps).toStringAsFixed(2)} s', color: H.text3)),
+        if (phase != null && phase != 'idle')
+          HfFormRow(
+            'Status',
+            HfFact(switch (phase) {
+              'running' => 'Writing ${job['done'] ?? 0} / ${job['total'] ?? end - start}',
+              'cancelling' => 'Stopping…',
+              'done' || 'complete' => 'Written ${job['path'] ?? ''}',
+              _ when failed => 'Failed: ${job['error'] ?? ''}',
+              _ => '$phase',
+            }, color: failed ? H.record : H.text2),
+          ),
+        const SizedBox(height: 4),
+        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          HfAction(running ? 'Stop' : 'Cancel', onTap: running ? (c.supports('cancelExport') ? () => c.command('cancelExport') : null) : widget.close),
+          HfAction('Export…', kind: HfActionKind.primary, onTap: exportAction),
         ]),
       ]),
     );

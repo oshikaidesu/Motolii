@@ -95,6 +95,7 @@ class _Key extends StatefulWidget {
 class _KeyState extends State<_Key> {
   bool _over = false;
   void _set(bool over) {
+    if (!mounted) return;
     setState(() => _over = over);
     if (over) {
       widget.hovered.value = widget.thing;

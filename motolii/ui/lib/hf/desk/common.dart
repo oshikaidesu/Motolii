@@ -1,6 +1,7 @@
 // Desk panels: contextual instruments. A phenomenon first, precision second. Prototype only.
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
+import '../metrics.dart';
 import '../bp/common.dart';
 
 // Housing is quiet and dark; the instruments inside are flat colour. Colour separates roles, it names nothing.
@@ -89,7 +90,7 @@ class DeskShell extends StatelessWidget {
         final isTall = !isStrip && w < 230;
         final showSub = !isStrip && !isTall;
         final docked = DockedPanel.of(context);
-        final hh = docked ? 40.0 : (showSub ? 58.0 : 44.0);
+        final hh = docked ? UiMetrics.chromeRow : (showSub ? UiMetrics.namedHeader + 8 : UiMetrics.namedHeader);
         final body = Size(w, h - hh);
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Container(
@@ -97,12 +98,12 @@ class DeskShell extends StatelessWidget {
             padding: EdgeInsets.only(left: showSub ? 16 : 12, right: 6),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
             child: Row(children: [
-              if (!docked) ...[DeskIcon(kind, size: showSub ? 26 : 22), SizedBox(width: showSub ? 14 : 10)],
+              if (!docked) ...[DeskIcon(kind, size: showSub ? 20 : 18), SizedBox(width: showSub ? 10 : 8)],
               // In a dock tab the tab names the desk; what stays is the line that says what it edits.
               if (docked) Expanded(child: Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.1))) else Expanded(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, softWrap: false, overflow: TextOverflow.clip, style: sans(showSub ? 16 : 14, c: kInk, w: FontWeight.w600, ls: -0.2)),
-                  if (showSub) ...[const SizedBox(height: 5), Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.1))],
+                  Text(title, softWrap: false, overflow: TextOverflow.clip, style: sans(showSub ? 14 : 13, c: kInk, w: FontWeight.w600, ls: -0.2)),
+                  if (showSub) ...[const SizedBox(height: 2), Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.1))],
                 ]),
               ),
               if (trailing != null && showSub) trailing!,

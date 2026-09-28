@@ -6,6 +6,7 @@ import '../glyphs.dart';
 import 'classify.dart';
 import 'common.dart';
 import 'search.dart';
+import '../metrics.dart';
 import 'seat.dart';
 
 const kTile = Color(0xFF212124);
@@ -50,6 +51,9 @@ class PanelHeader extends StatefulWidget {
 
   /// A row lower than the mode's own (the compact one-row header of Create and Media).
   final double? height;
+
+  /// A header's height by its mode: one chrome row, a little more when it names its panel.
+  static double heightOf(HeadMode mode) => mode == HeadMode.full ? UiMetrics.namedHeader : UiMetrics.chromeRow;
   @override
   State<PanelHeader> createState() => _PanelHeaderState();
 }
@@ -82,7 +86,7 @@ class _PanelHeaderState extends State<PanelHeader> {
 
   @override
   Widget build(BuildContext context) {
-    final h = widget.height ?? switch (widget.mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
+    final h = widget.height ?? PanelHeader.heightOf(widget.mode);
     return ListenableBuilder(
       listenable: widget.search,
       builder: (_, __) {
@@ -115,7 +119,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                   else if (widget.mode != HeadMode.stacked) ...[
                     widget.icon,
                     SizedBox(width: widget.mode == HeadMode.full ? 12 : 8),
-                    Expanded(child: Text(widget.title, softWrap: false, overflow: TextOverflow.clip, style: sans(widget.mode == HeadMode.full ? 17 : 13, c: const Color(0xFFF2F2F4), w: FontWeight.w600, ls: -0.2))),
+                    Expanded(child: Text(widget.title, softWrap: false, overflow: TextOverflow.clip, style: sans(widget.mode == HeadMode.full ? 14 : 12.5, c: const Color(0xFFF2F2F4), w: FontWeight.w600, ls: -0.2))),
                   ] else
                     const Spacer(),
                   if (widget.extra != null) widget.extra!,
@@ -184,12 +188,12 @@ class PanelShell extends StatelessWidget {
       final header = PanelHeader(
         title: title, icon: icon, search: search, hint: hint, mode: mode, count: count,
         lead: stripped ? ClassStrip(classify, groups, bare: true) : null,
-        height: stripped ? 30 : null,
+        height: stripped ? UiMetrics.chromeRow : null,
         extra: tools == null && (isWide || stripped) ? null : Row(mainAxisSize: MainAxisSize.min, children: [if (tools != null) tools, if (!isWide && !stripped) ClassChip(classify)]),
       );
       final under = seat?.header(context);
-      final hh = switch (mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
-      final bodySize = Size(isWide ? w - columnWidth : w, h - (stripped ? 30 : hh));
+      final hh = PanelHeader.heightOf(mode);
+      final bodySize = Size(isWide ? w - columnWidth : w, h - (stripped ? UiMetrics.chromeRow : hh));
       final shell = search.keys(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
         if (under != null) under,

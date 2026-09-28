@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import '../metrics.dart';
 import 'place.dart';
 
 /// [shortcuts] names the key for a line (shown at its right, as menus do); [dividers] ends a group after a line.
@@ -30,7 +31,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
   final space = box?.size ?? Size.infinite;
   final origin = box == null ? Offset.zero : box.globalToLocal(Offset.zero);
   final local = at.shift(origin);
-  final full = items.length * 28.0 + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
+  final full = items.length * UiMetrics.menuRow + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
   // a menu taller than the window scrolls inside it
   final height = math.min(full, math.max(40.0, space.height - 8));
   final top = local.bottom + 2 + height <= space.height
@@ -85,7 +86,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
                   behavior: HitTestBehavior.opaque,
                   onTap: disabled.contains(v) ? null : () => close(v),
                   child: Container(
-                    height: 28,
+                    height: UiMetrics.menuRow,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     alignment: Alignment.centerLeft,
                     color: v == selected || hot.value == i ? H.selHi : null,

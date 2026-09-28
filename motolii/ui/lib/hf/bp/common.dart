@@ -2,6 +2,7 @@
 // Only the dock's tab strip and two tiny controls are shared; every body decides its own folding.
 import 'package:flutter/widgets.dart';
 
+import '../metrics.dart';
 import '../glyphs.dart';
 
 const kRule = Color(0xFF343434);
@@ -109,7 +110,7 @@ class Leaf extends StatelessWidget {
                 );
                 final fits = need <= c.maxWidth - 30 && c.maxWidth >= 110;
                 return Container(
-                  height: 30,
+                  height: UiMetrics.chromeRow,
                   decoration: const BoxDecoration(
                     border: Border(bottom: BorderSide(color: kRule)),
                   ),

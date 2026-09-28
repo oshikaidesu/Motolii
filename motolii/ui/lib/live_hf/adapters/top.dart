@@ -71,7 +71,10 @@ class _SessionTopState extends State<SessionTop> {
               if ((i == 0 && playing) || (i == 1 && !playing)) c.togglePlayback();
               if (i == 2) {
                 setState(() => exporting = true);
-                await showExportSheet(context, c);
+                // under the EXPORT key (the mode tabs' third, reference x 1006-1094, y 14-51 of the bar)
+                final box = context.findRenderObject() as RenderBox?;
+                final at = box?.localToGlobal(const Offset(1006, 14));
+                await showExportSheet(context, c, anchor: at == null ? null : at & const Size(88, 37));
                 if (mounted) setState(() => exporting = false);
               }
             },

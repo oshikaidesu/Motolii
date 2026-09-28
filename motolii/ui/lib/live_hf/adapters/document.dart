@@ -14,6 +14,7 @@ Future<bool> mayReplace(BuildContext context, EditorSession c) async {
     title: 'Save changes?',
     body: 'Save the current document before closing it.',
     answers: const [('cancel', 'Cancel'), ('discard', "Don't Save"), ('save', 'Save')],
+    destructive: const {'discard'},
   );
   switch (answer) {
     case 'discard':

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../foundation/glyphs.dart' as legacy;
 import '../hf/bp/common.dart' as tab;
 import '../hf/glyphs.dart' show HG;
+import '../hf/metrics.dart';
 import '../hf/shell/menu.dart' show showHfMenu;
 
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
@@ -92,7 +93,7 @@ class DockWorkspace {
               left: r.left - origin.dx,
               top: r.top - origin.dy,
               width: r.width,
-              height: 30,
+              height: UiMetrics.chromeRow,
               child: DragTarget<DraggableData>(
                 onWillAcceptWithDetails: (d) => d.data.tabData.value is DockingItem && (d.data.tabData.value as DockingItem).id != id,
                 onAcceptWithDetails: (d) => _join(d.data.tabData.value as DockingItem, id),
