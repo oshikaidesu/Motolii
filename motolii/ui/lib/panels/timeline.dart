@@ -53,7 +53,8 @@ class _TimelinePanelState extends State<TimelinePanel>
         TimelineFrame<TimelinePanel>,
         TimelineGrip<TimelinePanel>,
         TimelineView<TimelinePanel>,
-        TimelineMenu<TimelinePanel>
+        TimelineMenu<TimelinePanel>,
+        TimelineEditorMenu<TimelinePanel>
     implements TimelineToolbarApi {
   @override
   EditorSession get timelineSession => widget.controller;

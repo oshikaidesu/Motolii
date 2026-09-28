@@ -239,7 +239,14 @@ void main() {
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
-        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: 1178, height: 291, child: LiveTimeline(c: c))),
+        child: Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) =>
+                  Align(alignment: Alignment.topLeft, child: SizedBox(width: 1178, height: 291, child: LiveTimeline(c: c))),
+            ),
+          ],
+        ),
       ),
     );
     return c;
@@ -338,5 +345,27 @@ void main() {
     expect(drawn(tester).rows.first.body!.$1, closeTo(before + tlUnit, 4));
     await g.up();
     await tester.pump(const Duration(milliseconds: 50));
+  });
+  testWidgets('right-click on a row picks it and offers the Timeline menu (Freeze, lanes, edit)', (tester) async {
+    final c = await mountRows(tester, 3);
+    c.document.value = {...c.state, 'capabilities': ['seek', 'select', 'freeze', 'duplicate']};
+    await tester.pump();
+    // the second row's bar
+    sent.clear();
+    await tester.tapAt(Offset(tlX(1.5) - 344, tlTop + tlPitch + tlRowH / 2 - 703), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    expect(sent.firstWhere((m) => m['op'] == 'select')['ids'], [2]);
+    for (final label in ['Freeze', 'Show animated properties', 'Show all properties', 'Hide properties', 'Duplicate', 'Group'])
+      expect(find.text(label), findsOneWidget, reason: label);
+    await tester.tap(find.text('Freeze'));
+    await tester.pumpAndSettle();
+    expect(sent.last, {'op': 'freeze', 'layer': 2, 'enabled': true});
+    // a disabled line does nothing
+    await tester.tapAt(Offset(150, tlTop + tlPitch + tlRowH / 2 - 703), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    final before = sent.length;
+    await tester.tap(find.text('Group'));
+    await tester.pump();
+    expect(sent.length, before);
   });
 }

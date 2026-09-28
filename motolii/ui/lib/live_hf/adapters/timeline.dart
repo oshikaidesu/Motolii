@@ -10,6 +10,7 @@ import '../../session/editor_session.dart';
 import '../../timeline_core/frame.dart';
 import '../../timeline_core/geometry.dart';
 import '../../timeline_core/grip.dart';
+import '../../timeline_core/menu.dart';
 import '../../timeline_core/view.dart';
 
 /// The Timeline face over the session: one row per layer (a group, a camera, an audio floor, or an item with its
@@ -39,7 +40,8 @@ class _LiveTimelineState extends State<LiveTimeline>
     with
         TimelineFrame<LiveTimeline>,
         TimelineGrip<LiveTimeline>,
-        TimelineView<LiveTimeline> {
+        TimelineView<LiveTimeline>,
+        TimelineMenu<LiveTimeline> {
   static const _watched = [
     'layers',
     'fps',
@@ -340,6 +342,18 @@ class _LiveTimelineState extends State<LiveTimeline>
                   : null,
               onSplit: c.supports('split') ? () => c.command('split') : null,
               onMarkerContext: (id, at) => _markerContext(id, at, context),
+              onContext: (at, global) => menuAt(
+                at - toFace,
+                (items) => showHfMenu<String>(
+                  context,
+                  Rect.fromLTWH(global.dx, global.dy, 220, 0),
+                  [for (final item in items) (item.value, item.label)],
+                  disabled: {
+                    for (final item in items)
+                      if (!item.enabled) item.value,
+                  },
+                ),
+              ),
               onSeek: (x) => requestSeek(
                 _frameAt(x).round().clamp(0, duration > 0 ? duration - 1 : 0),
               ),

@@ -104,12 +104,16 @@ class TimelineModel {
     this.onCoreLabelUp,
     this.onCoreLabelCancel,
     this.tabs = true,
+    this.onContext,
     this.marquee,
     this.dropGuide,
     this.dropInside = false,
     this.marqueeInk = const Color(0xFFFFBC53),
     this.guideInk = const Color(0xFFB0E3EF),
   });
+
+  /// A right press at [at] (the frame's coordinates) over a row's label or the tracks.
+  final void Function(Offset at, Offset global)? onContext;
 
   /// A box being dragged over empty tracks to pick keys, in the frame's coordinates.
   final Rect? marquee;
@@ -357,6 +361,12 @@ List<RI> timeline(TimelineModel m) {
               : (e) => m.onCoreLabelCancel!(e, i, e.localPosition),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onSecondaryTapDown: m.onContext == null
+                ? null
+                : (e) => m.onContext!(
+                    e.localPosition + Offset(345, _rowTop(i, r)),
+                    e.globalPosition,
+                  ),
             onTapDown: row == null || m.onCoreLabelDown != null
                 ? null
                 : (e) {
@@ -753,6 +763,15 @@ class _TracksState extends State<_Tracks> {
         );
       }
     },
-    child: const SizedBox.expand(),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: m.onContext == null
+          ? null
+          : (e) => m.onContext!(
+              e.localPosition + const Offset(tlX0, tlTop),
+              e.globalPosition,
+            ),
+      child: const SizedBox.expand(),
+    ),
   );
 }

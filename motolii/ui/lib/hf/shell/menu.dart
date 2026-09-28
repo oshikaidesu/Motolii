@@ -11,12 +11,23 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
     if (!done.isCompleted) done.complete(v);
   }
 
+  // Kept inside the window: it opens upward from the box when there is no room below, and slides left at the edge.
+  final overlay = Overlay.of(context);
+  final box = overlay.context.findRenderObject() as RenderBox?;
+  final space = box?.size ?? Size.infinite;
+  final origin = box == null ? Offset.zero : box.globalToLocal(Offset.zero);
+  final local = at.shift(origin);
+  final height = items.length * 28.0 + 8;
+  final top = local.bottom + 2 + height <= space.height
+      ? local.bottom + 2
+      : (local.top - 2 - height).clamp(0.0, double.infinity);
+  final left = local.left.clamp(0.0, (space.width - at.width).clamp(0.0, double.infinity));
   entry = OverlayEntry(
     builder: (_) => Stack(children: [
       Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => close(null))),
       Positioned(
-        left: at.left,
-        top: at.bottom + 2,
+        left: left,
+        top: top,
         width: at.width,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 3),
@@ -42,6 +53,6 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
       ),
     ]),
   );
-  Overlay.of(context).insert(entry);
+  overlay.insert(entry);
   return done.future;
 }
