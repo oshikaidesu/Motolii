@@ -1,5 +1,7 @@
 # Browser rebuild — Phase 4
 
+> **Record, not the current Browser.** This plan was rejected and its code removed (see the status line below). Current Browser owners: Classic `panels/browser.dart`, New `app/new/browser/shelf_panel.dart`, live_hf `live_hf/adapters/browser.dart` over `hf/bp/`.
+
 User request: reproduce AEViewer as a working desktop media browser; replace the prior incremental card restyling. Official reference: https://aescripts.com/aeviewer-pro/ and its preview-modes.mp4, tabs-nav.mp4, instant-search.mp4, collections.mp4 demos. Keep compact image-first tile silhouettes; do not invent placeholders for unavailable capabilities.
 
 Execution order:

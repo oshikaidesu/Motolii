@@ -190,7 +190,7 @@ Stage 5: a Flutter editor over a shared Rust core (document, evaluation, renderi
 | Decode / encode | libavcodec through Rerun's video path; ffmpeg for export |
 | Project model | serde data, stable IDs, typed validation, command edits |
 | Verification | Rust tests, property tests, semantic and image goldens |
-| Structure | Cargo workspace (`motolii/crates/motolii-*`) |
+| Structure | Cargo workspace: `motolii/crates/motolii-{doc,render}`, `motolii/ui/native`, `motolii/ui/extensions/{edit,jobs,script}` |
 
 See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
 

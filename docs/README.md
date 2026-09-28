@@ -3,7 +3,7 @@
 [コンセプト](concept.md)、[UIと操作](stage5/product-contract.md)、[Stage 5](stage5/README.md)を読む。根拠の対応は[救出・照合表](stage5/document-map.md)、構成は[workspace.json](stage5/workspace.json)。以下は過去世代の索引で、現行の技術選定・起動手順を上書きしない。
 
 <details>
-<summary>過去世代の資料索引</summary>
+<summary>過去世代の資料索引(この中の「現行」「現在地」「正本」はすべて当時の表記。iced shell・CANON.md・RN・M3/M4の地図は現行ではない)</summary>
 
 # docs/ 読み方ガイド
 
@@ -47,7 +47,7 @@
 | ファイル | 役割 | 状態 |
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
-| [CANON.md](CANON.md) | 「今どれが正本か」の1枚索引(視覚/Timeline実装/token/製品shell/撮影器具、各行に最終更新日) | 現行(2026-08-19新設。正本が動いたら追記する索引で、新しい設計判断は書かない) |
+| [CANON.md](CANON.md) | 「今どれが正本か」の1枚索引(視覚/Timeline実装/token/製品shell/撮影器具、各行に最終更新日) | 退役(現在の正本は motolii/AGENTS.md から辿る) |
 | [reviews/2026-08-09-unified-parallel-start-baseline-decision.md](reviews/2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、候補状態を固定する | **決定／candidate branch収束済み・main統合とcampaign未実施** |
 | [reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md) | 一つのtop seat、cold replacement、下位seatの権限上限、停止・復旧・採用gateとfailure injectionを固定する | **決定／failure injectionとfresh closure review待ち** |
 | [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **確定運用／非凍結の横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図確定。反証と実測で改訂可) |

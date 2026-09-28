@@ -11,7 +11,7 @@
 | 所有者 | 実装 | 接続する口 |
 |---|---|---|
 | 再生時計・音声transport | `motolii-render/src/playback.rs` | `StoreView`の読み取りだけ。編集Document/Intent、Flutter、パネルを受け取らない |
-| 作品の保存・編集 | `motolii-doc/src/store/document.rs`、`Intent`、`persist.rs` | Document/Intent、共通の値・効果宣言型 |
+| 作品の保存・編集 | `motolii/ui/extensions/edit`(`motolii-edit`: `document.rs`・`Intent`・`persist.rs`) | Document/Intent、共通の値・効果宣言型 |
 | 保存作品・処理用の読み取り所有 | `motolii-doc/src/store/recording.rs` | `Recording::load`と`view`。編集・Undoを公開せず、RRD decoderはDocumentと共有。Documentからの変換は確定した編集位置を保持し、一時編集を含めない |
 | 作品の読み取り・読取cache | `motolii-doc/src/store/view.rs`、`read.rs` | 編集命令を解釈せず、記録と読み取り用のプレビュー値を参照する。命令から値への変換・検証は編集側の責任 |
 | 共通ID・版情報 | `motolii-doc/src/store/ids.rs`、`read.rs` | 読む側と書く側が共有する値の型。編集実装の子モジュールには置かない |
