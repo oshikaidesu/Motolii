@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/foundation/theme.dart';
 import '../lib/hf/shell/timeline.dart';
 import '../lib/live_hf/adapters/timeline.dart';
 import '../lib/session/editor_session.dart';
@@ -304,5 +305,38 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 50));
     expect(sent.where((m) => m['op'] == 'seek'), isNotEmpty);
+  });
+  TimelineModel drawn(WidgetTester tester) => (tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((p) => p.painter)
+          .firstWhere((p) => p.runtimeType.toString() == '_TlPaint') as dynamic)
+      .m as TimelineModel;
+
+  testWidgets('a drag over empty tracks shows the marquee while it lasts', (tester) async {
+    await mountRows(tester, 1);
+    final boxes = find.byWidgetPredicate((w) =>
+        w is DecoratedBox &&
+        (w.decoration as BoxDecoration).color == EditorTheme.of(tester.element(find.byType(LiveTimeline))).accent.withValues(alpha: .12));
+    final g = await tester.startGesture(Offset(tlX(4) - 344, tlTop + tlPitch * 3 - 703));
+    await g.moveBy(const Offset(60, 20));
+    await tester.pump();
+    expect(drawn(tester).marquee, isNotNull);
+    expect(boxes, findsOneWidget);
+    await g.up();
+    await tester.pump();
+    expect(boxes, findsNothing);
+  });
+
+  testWidgets('a dragged bar is drawn where the pointer took it before the host replies', (tester) async {
+    final c = await mountRows(tester, 1);
+    c.document.value = {...c.state, 'capabilities': ['seek', 'select', 'setTiming', 'previewTimings']};
+    await tester.pump();
+    final before = drawn(tester).rows.first.body!.$1;
+    final g = await tester.startGesture(Offset(tlX(1.5) - 344, tlTop + tlRowH / 2 - 703));
+    await g.moveBy(Offset(tlUnit, 0)); // one second later
+    await tester.pump();
+    expect(drawn(tester).rows.first.body!.$1, closeTo(before + tlUnit, 4));
+    await g.up();
+    await tester.pump(const Duration(milliseconds: 50));
   });
 }

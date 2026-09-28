@@ -104,7 +104,22 @@ class TimelineModel {
     this.onCoreLabelUp,
     this.onCoreLabelCancel,
     this.tabs = true,
+    this.marquee,
+    this.dropGuide,
+    this.dropInside = false,
+    this.marqueeInk = const Color(0xFFFFBC53),
+    this.guideInk = const Color(0xFFB0E3EF),
   });
+
+  /// A box being dragged over empty tracks to pick keys, in the frame's coordinates.
+  final Rect? marquee;
+
+  /// Where dragged rows would land: a line at the rect's top from its left, or the rect itself when they go inside.
+  final Rect? dropGuide;
+  final bool dropInside;
+
+  /// The window's selection feedback colours (the Stage's marquee and drop guide use the same).
+  final Color marqueeInk, guideInk;
 
   /// The seat's Timeline / Graph / Console labels, drawn here in proto_hf's fixed frame. Off in the Dock, where the
   /// seat strip (the shared tab primitive) names them.
@@ -267,6 +282,19 @@ List<RI> timeline(TimelineModel m) {
     }
   }
   items.add(Pt(_TlMarks(m)));
+  if (m.marquee case final Rect box) {
+    final r = box.intersect(const Rect.fromLTRB(345, 775, tlRight, 993));
+    if (r.width > 0 && r.height > 0)
+      items.add(Rc(r.left, r.top, r.width, r.height, fill: m.marqueeInk.withValues(alpha: .12), border: m.marqueeInk));
+  }
+  if (m.dropGuide case final Rect g) {
+    if (m.dropInside) {
+      items.add(Rc(g.left + 1, g.top + 1, tlRight - g.left - 2, g.height - 2, border: m.guideInk, bw: 2));
+    } else {
+      items.add(Ln(g.left, g.top - 1, tlRight - g.left, 2, m.guideInk));
+      items.add(Rc(g.left, g.top - 3, 6, 6, border: m.guideInk, bw: 2, r: 3));
+    }
+  }
   // hit areas over what is drawn above; with no operation they do nothing
   items.add(Wd(tlX0, 775, tlRight - tlX0, 218, _Tracks(m)));
   final seek = m.onSeek;

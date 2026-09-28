@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../hf/shell/place.dart';
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/shell/timeline.dart';
+import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
 import '../../timeline_core/frame.dart';
 import '../../timeline_core/geometry.dart';
@@ -110,6 +111,13 @@ class _LiveTimelineState extends State<LiveTimeline>
     }
     final selected = c.selectedIds.toSet();
     final selectedKeys = EditorSession.maps(c.state['selectedKeys']);
+    // A grip draws from its press-time keys and timings plus the delta, as Classic's does: the document's rows only
+    // catch up when the preview reply lands.
+    final gripped = gesture == 'keys' ? initialKeys : settlingKeys;
+    final keyShift = gesture == 'keys' ? deltaFrames : settlingDelta;
+    final timings = const {'move', 'trimIn', 'trimOut', 'slip'}.contains(gesture)
+        ? {for (final r in timingRows) r.id: timing(r)}
+        : const <Object, Map<String, dynamic>>{};
     final waves = {
       for (final w in EditorSession.maps(c.state['waveforms']))
         w['layer']: EditorSession.maps(w['columns']),
@@ -124,10 +132,18 @@ class _LiveTimelineState extends State<LiveTimeline>
           ? '${layer['name'] ?? layer['kind']}'
           : '${row.property!['label'] ?? row.property!['id']}';
       final keyRows = row.property == null ? row.allKeys : row.keys;
+      final moving = {
+        for (final key in gripped)
+          if (key['layer'] == id &&
+              (row.property == null || key['property'] == row.property!['id']))
+            (key['frame'] as num).round(),
+      };
+      double keyX(int frame) =>
+          _x(moving.contains(frame) ? frame + keyShift : frame);
       final frames =
           keyRows.map((key) => (key['frame'] as num).round()).toSet().toList()
             ..sort();
-      final xs = [for (final frame in frames) _x(frame)];
+      final xs = [for (final frame in frames) keyX(frame)];
       final pickedFrames = {
         for (final key in selectedKeys)
           if (key['layer'] == id &&
@@ -136,7 +152,7 @@ class _LiveTimelineState extends State<LiveTimeline>
       };
       final pickedXs = [
         for (final frame in frames)
-          if (pickedFrames.contains(frame)) _x(frame),
+          if (pickedFrames.contains(frame)) keyX(frame),
       ];
       final selectedRow = selected.contains(id);
       final indent = row.depth;
@@ -175,13 +191,11 @@ class _LiveTimelineState extends State<LiveTimeline>
         );
       } else {
         final (chip, bodyColor) = _families[(n + row.depth) % _families.length];
+        final t = timings[id] ?? layer;
         final body = row.property == null
             ? (
-                _x(layer['start'] as num? ?? 0),
-                _x(
-                  (layer['start'] as num? ?? 0) +
-                      (layer['duration'] as num? ?? 0),
-                ),
+                _x(t['start'] as num? ?? 0),
+                _x((t['start'] as num? ?? 0) + (t['duration'] as num? ?? 0)),
                 bodyColor,
               )
             : null;
@@ -293,6 +307,10 @@ class _LiveTimelineState extends State<LiveTimeline>
     builder: (context, _) {
       // A scrub draws the head where it was asked to be at once; the host's reply catches up (TimelineFrame).
       final frame = scrubFrame.value ?? c.frame.value;
+      final gripping = gesture != null || settlingKeys.isNotEmpty;
+      final theme = EditorTheme.of(context);
+      // grip coordinates are the tracks' own: x from the panel's left edge, y from the first row, scrolled rows above
+      final toFace = Offset(344, tlTop - rowStart * timelineGeometry.rowHeight);
       final duration = (c.state['durationFrames'] as num? ?? 1).toInt();
       return Focus(
         focusNode: focus,
@@ -303,7 +321,14 @@ class _LiveTimelineState extends State<LiveTimeline>
           timeline(
             TimelineModel(
             tabs: false,
-              rows: _shown,
+              rows: gripping ? _rows() : _shown,
+              marquee: gesture == 'marquee' && start != null && current != null
+                  ? Rect.fromPoints(start!, current!).shift(toFace)
+                  : null,
+              dropGuide: rowDropGuide?.shift(toFace),
+              dropInside: rowDropInside,
+              marqueeInk: theme.accent,
+              guideInk: theme.select,
               ruler: [for (var i = 0; i <= 10; i++) _label(i)],
               playhead: _x(frame),
               markers: [
