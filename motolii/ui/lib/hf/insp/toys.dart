@@ -147,7 +147,7 @@ class _ValueToyState extends State<ValueToy> {
     super.initState();
     focus.addListener(() => setState(() {}));
     editFocus.addListener(() {
-      if (!editFocus.hasFocus && editing) _submit(ctl.text);
+      if (!editFocus.hasFocus && editing) _submit(ctl.text, blur: true);
     });
   }
 
@@ -172,10 +172,18 @@ class _ValueToyState extends State<ValueToy> {
   }
 
   Object? _subject;
+  bool _bad = false; // the typed text is not a number
 
-  void _submit(String t) {
+  void _submit(String t, {bool blur = false}) {
     if (_cancel) { _cancel = false; return; }
     final v = double.tryParse(t.trim());
+    // Enter on something that is not a number keeps the field open and says so (Classic IN-022); leaving drops it
+    if (v == null && !blur) {
+      if (mounted) setState(() => _bad = true);
+      editFocus.requestFocus();
+      return;
+    }
+    _bad = false;
     if (mounted) setState(() => editing = false);
     if (widget.slot.store.subject != _subject) return; // typed for a layer that is no longer the one shown
     if (v != null && !frozen) {
@@ -256,7 +264,7 @@ class _ValueToyState extends State<ValueToy> {
             decoration: BoxDecoration(
               color: dragging || (hover && !frozen) ? kTileHi : kTile,
               borderRadius: BorderRadius.circular(5),
-              border: focus.hasFocus || editing ? Border.all(color: kInk.withValues(alpha: .85), width: 1.4) : null,
+              border: editing && _bad ? Border.all(color: kPink, width: 1.4) : (focus.hasFocus || editing ? Border.all(color: kInk.withValues(alpha: .85), width: 1.4) : null),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(5),
@@ -273,7 +281,8 @@ class _ValueToyState extends State<ValueToy> {
                           ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 17 : 15, c: kInk, w: FontWeight.w600), cursorColor: kInk, backgroundCursorColor: kMuted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
                           : Text(s.mixed ? '—' : s.format(s.value, decimals: widget.decimals), softWrap: false, overflow: TextOverflow.clip, style: sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500)),
                     ),
-                    if (unit != null) Text(unit, style: sans(10.5, c: kMuted)),
+                    if (editing && _bad) Text('Number required', key: ValueKey('bad-${s.id}'), style: sans(10, c: kPink))
+                    else if (unit != null) Text(unit, style: sans(10.5, c: kMuted)),
                     // the way to grab it, shown when the pointer is near
                     if (unit == null && hover && !editing && !frozen && !dragging) Text('‹ ›', style: sans(12, c: const Color(0xFF6A6B72), w: FontWeight.w600)),
                   ]),
@@ -448,7 +457,18 @@ class _TextToyState extends State<TextToy> {
       padding: const EdgeInsets.symmetric(horizontal: 9),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5), border: focus.hasFocus ? Border.all(color: kYellow, width: 1.6) : null),
-      child: EditableText(key: ValueKey('text-${widget.id}'), controller: ctl, focusNode: focus, readOnly: frozen, maxLines: 1, style: widget.rawJson ? mono(11, c: frozen ? const Color(0xFF55565C) : _readout) : sans(12, c: frozen ? const Color(0xFF55565C) : _readout), cursorColor: kYellow, backgroundCursorColor: kMuted, onSubmitted: (_) => _apply()),
+      // Esc puts the value back and leaves (Classic IN-098)
+      child: Focus(
+        onKeyEvent: (_, e) {
+          if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape && focus.hasFocus) {
+            ctl.text = _text;
+            focus.unfocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: EditableText(key: ValueKey('text-${widget.id}'), controller: ctl, focusNode: focus, readOnly: frozen, maxLines: 1, style: widget.rawJson ? mono(11, c: frozen ? const Color(0xFF55565C) : _readout) : sans(12, c: frozen ? const Color(0xFF55565C) : _readout), cursorColor: kYellow, backgroundCursorColor: kMuted, onSubmitted: (_) => _apply()),
+      ),
     );
   }
 }

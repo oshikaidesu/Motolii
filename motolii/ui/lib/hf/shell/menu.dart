@@ -10,10 +10,14 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
   late final OverlayEntry entry;
   final back = FocusManager.instance.primaryFocus;
   final keys = FocusNode(debugLabel: 'hf menu');
+  final hot = ValueNotifier(-1); // the line the keys walked to
   void close(T? v) {
     if (done.isCompleted) return;
     entry.remove();
-    WidgetsBinding.instance.addPostFrameCallback((_) => keys.dispose());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      keys.dispose();
+      hot.dispose();
+    });
     done.complete(v);
     // the keys go back where they were before the menu took them
     if (back != null && back.context != null) back.requestFocus();
@@ -30,13 +34,32 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
       ? local.bottom + 2
       : (local.top - 2 - height).clamp(0.0, double.infinity);
   final left = local.left.clamp(0.0, (space.width - at.width).clamp(0.0, double.infinity));
+  hot.addListener(() {
+    if (!done.isCompleted) entry.markNeedsBuild();
+  });
   entry = OverlayEntry(
     // Escape, or a press of either button outside, closes it without a choice (as the editor menu does).
     builder: (_) => Focus(
       focusNode: keys,
       onKeyEvent: (_, e) {
-        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+        if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+        final k = e.logicalKey;
+        if (k == LogicalKeyboardKey.escape) {
           close(null);
+          return KeyEventResult.handled;
+        }
+        // ↑/↓ walk the lines that can be chosen, Enter takes the one walked to (the editor menu's keys)
+        if (k == LogicalKeyboardKey.arrowDown || k == LogicalKeyboardKey.arrowUp) {
+          final open = [for (final (i, it) in items.indexed) if (!disabled.contains(it.$1)) i];
+          if (open.isEmpty) return KeyEventResult.handled;
+          final at = open.indexOf(hot.value);
+          hot.value = k == LogicalKeyboardKey.arrowDown
+              ? open[at < 0 ? 0 : (at + 1) % open.length]
+              : open[at < 0 ? open.length - 1 : (at - 1 + open.length) % open.length];
+          return KeyEventResult.handled;
+        }
+        if ((k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) && hot.value >= 0) {
+          close(items[hot.value].$1);
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -51,7 +74,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
           padding: const EdgeInsets.symmetric(vertical: 3),
           decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            for (final (v, label) in items) ...[
+            for (final (i, (v, label)) in items.indexed) ...[
               MouseRegion(
                 cursor: disabled.contains(v) ? SystemMouseCursors.basic : SystemMouseCursors.click,
                 child: GestureDetector(
@@ -61,7 +84,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
                     height: 28,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     alignment: Alignment.centerLeft,
-                    color: v == selected ? H.selHi : null,
+                    color: v == selected || hot.value == i ? H.selHi : null,
                     child: Row(children: [
                       Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(13, color: disabled.contains(v) ? H.text3 : H.text))),
                       if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 16), child: Text(key, style: H.s(12, color: H.text3))),

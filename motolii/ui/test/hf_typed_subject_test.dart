@@ -39,4 +39,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(s.row('x')['value'], 10.0);
   });
+  testWidgets('Enter on something that is not a number keeps the field open and says so', (tester) async {
+    final s = _Store();
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(child: SizedBox(width: 260, height: 40, child: ValueToy(Slot(s, 'x')))),
+    ));
+    await tester.tap(find.byType(ValueToy));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText), 'abc');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Number required'), findsOneWidget);
+    expect(find.byType(EditableText), findsOneWidget);
+    expect(s.row('x')['value'], 10.0);
+  });
+
+  testWidgets('Esc in a text value puts it back', (tester) async {
+    final s = ParamStore([{'id': 't', 'label': 'T', 'kind': 'text', 'value': 'one'}]);
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(child: SizedBox(width: 260, height: 40, child: TextToy(s, 't'))),
+    ));
+    await tester.tap(find.byType(EditableText));
+    await tester.pump();
+    await tester.enterText(find.byType(EditableText), 'two');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(s.row('t')['value'], 'one');
+    expect(find.text('one'), findsOneWidget);
+  });
 }

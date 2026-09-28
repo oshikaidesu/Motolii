@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/hf/insp/toys.dart' show ValueToy;
 import '../lib/live_hf/adapters/right_seat.dart';
 import '../lib/session/editor_session.dart';
 
@@ -159,5 +160,25 @@ void main() {
     await t.tap(find.byKey(const ValueKey('camera-animate')));
     await t.pump();
     expect(sent.where((m) => m['op'] == 'animate'), isNotEmpty);
+  });
+  testWidgets('a Layout value keys from its right-click, like every value (Key this frame)', (t) async {
+    await seat(t, {
+      'id': 1,
+      'name': 'Row',
+      'kind': 'Group',
+      'properties': [
+        {'id': 'layout.gap', 'label': 'Gap', 'kind': 'f64', 'value': 4},
+      ],
+    });
+    final cell = find.byType(ValueToy);
+    expect(cell, findsWidgets);
+    await t.ensureVisible(cell.last);
+    await t.tap(cell.last, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Key this frame'));
+    await t.pumpAndSettle();
+    final key = sent.where((m) => m['op'] == 'toggleKey').single;
+    expect(key['layer'], 1);
+    expect('${key['property']}', startsWith('layout.'));
   });
 }

@@ -367,6 +367,14 @@ void main() {
     // each edit line names its key, as the editor menu does
     for (final key in ['⌘D', '⌘G', '⇧⌘G', '⌘K']) expect(find.text(key), findsOneWidget, reason: key);
     // Escape closes it without a choice, and the selection it was about stays
+    // the keys alone choose: ↓ walks to the first line, Enter takes it
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(sent.last, {'op': 'freeze', 'layer': 2, 'enabled': true});
+    await tester.tapAt(Offset(tlX(1.5) - 344, tlTop + tlPitch + tlRowH / 2 - 703), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
     final sentBefore = sent.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();

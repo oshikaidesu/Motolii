@@ -1,6 +1,9 @@
+import 'package:flutter/widgets.dart';
+
 import '../../hf/insp/layout_model.dart';
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
+import 'key_menu.dart';
 
 /// The Layout Instrument's store over one real layer: its `layout.*` rows are the layer's own, and an edit goes
 /// through previewProperties / commitPreview exactly as the Classic Layout card sends it. What the Instrument
@@ -47,6 +50,19 @@ class SessionLayoutStore extends LayoutStore {
     if (real == null) return Map.of(shape);
     return {...shape, ..._plain(real), if (shape['choices'] != null) 'choices': shape['choices']};
   }
+
+  // Layout values key like every other value (Classic's wells: key lamp and "Key this frame").
+  @override
+  bool get keyable => c.supports('toggleKey');
+
+  @override
+  void toggleKey(String id) {
+    if (frozen || !keyable) return;
+    c.command('toggleKey', {'layer': layerId, 'property': id});
+  }
+
+  @override
+  void menu(BuildContext context, String id, int? axis, Offset at) => keyMenu(context, this, id, at);
 
   /// The document changed under the Instrument (undo, another edit). A running gesture keeps its own values.
   void absorb() {

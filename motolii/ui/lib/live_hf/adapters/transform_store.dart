@@ -1,10 +1,10 @@
 
 import 'package:flutter/widgets.dart';
 
-import '../../hf/shell/menu.dart';
 import '../../hf/insp/transform_model.dart';
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
+import 'key_menu.dart';
 
 /// The Transform Instrument's store over the real session: it reads the layers' rows the way the Classic Inspector
 /// does and writes through the same operations (previewProperties, commitPreview, toggleKey, anchor, setAttrs).
@@ -188,7 +188,7 @@ class SessionTransformStore extends TransformStore {
     final row = this.row(id);
     final driven = row['link'] is Map;
     final canRelate = c.supports('relate') && !frozen, canUnrelate = c.supports('unrelate') && !frozen;
-    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 180, 0), [
+    final chosen = await keyMenu(context, this, id, at, extra: [
       ('relate', 'Relation…'),
       if (driven || (row['drives'] ?? 0) > 0) ('focus', 'Show relation'),
       if (driven) ('unrelate', 'Remove relation'),

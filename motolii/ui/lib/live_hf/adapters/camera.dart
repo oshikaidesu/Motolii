@@ -4,6 +4,7 @@ import '../../hf/insp/camera.dart';
 import '../../hf/insp/camera_model.dart';
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
+import 'key_menu.dart';
 
 /// The Camera instrument over the active camera layer: its `camera.*` rows read from the layer, written the way every
 /// value is (a drag previews and commits, a choice or a reset sets, a diamond keys); Target is a layer id, 0 for none.
@@ -92,8 +93,11 @@ class SessionCameraStore extends CameraStore {
   }
 
   @override
+  void menu(BuildContext context, String id, int? axis, Offset at) => keyMenu(context, this, id, at);
+
+  @override
   void toggleKey(String id) {
-    if (!keyable) return;
+    if (!keyable || frozen) return;
     c.command('toggleKey', {'layer': layer, 'property': id});
   }
 
