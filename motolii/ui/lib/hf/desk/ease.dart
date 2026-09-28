@@ -27,11 +27,30 @@ double _bounce(double x) {
   return 7.5625 * y * y + .984375;
 }
 
+/// A curve read off its samples ([u, value] pairs, u rising 0–1), straight between them.
+Shape sampledShape(List samples) {
+  final pts = [for (final p in samples) if (p is List && p.length >= 2) ((p[0] as num).toDouble(), (p[1] as num).toDouble())];
+  if (pts.length < 2) return (t) => t;
+  return (t) {
+    for (var i = 1; i < pts.length; i++) {
+      final (u1, v1) = pts[i];
+      if (t <= u1) {
+        final (u0, v0) = pts[i - 1];
+        return u1 == u0 ? v1 : v0 + (v1 - v0) * (t - u0) / (u1 - u0);
+      }
+    }
+    return pts.last.$2;
+  };
+}
+
 class Preset {
-  const Preset(this.name, this.bez, this.fn);
+  const Preset(this.name, this.bez, this.fn, {this.model});
   final String name;
   final List<double>? bez;
   final Shape? fn;
+
+  /// A hosted kind's own description (its parameters, samples and handle points), for kinds other than Bezier.
+  final Map<String, dynamic>? model;
   Shape get shape => bez != null ? bezierShape(bez![0], bez![1], bez![2], bez![3]) : fn!;
 }
 
@@ -52,11 +71,20 @@ class Seg {
   final int frames;
   final List<Preset> kinds;
   double x1 = .25, y1 = .1, x2 = .78, y2 = .92;
+
+  /// The host's description of this curve when it is not a Bezier (parameters, samples, handle points).
+  late Map<String, dynamic>? model = kinds[p].model;
   bool get bez => kinds[p].bez != null;
-  Shape get shape => bez ? bezierShape(x1, y1, x2, y2) : kinds[p].fn!;
+  Shape get shape => bez ? bezierShape(x1, y1, x2, y2) : (model?['samples'] is List ? sampledShape(model!['samples'] as List) : kinds[p].fn!);
   List<double> get values => [x1, y1, x2, y2];
+
+  /// Where the curve can be grabbed: a Bezier's two handles, else the points the host names (none for Hold, Linear).
+  List<Offset> get handles => bez
+      ? [Offset(x1, y1), Offset(x2, y2)]
+      : [for (final h in (model?['handles'] as List? ?? const [])) if (h is List && h.length >= 2) Offset((h[0] as num).toDouble(), (h[1] as num).toDouble())];
   void choose(int i) {
     p = i;
+    model = kinds[i].model;
     final b = kinds[i].bez;
     if (b != null) { x1 = b[0]; y1 = b[1]; x2 = b[2]; y2 = b[3]; }
   }
@@ -69,6 +97,10 @@ abstract class EaseHost implements Listenable {
   List<Preset> get kinds;
   List<Seg> get intervals;
   void apply(int? interval, Seg curve);
+
+  /// A non-Bezier curve with [handle] moved to [point] (or, with none, its parameters as they are now): the host's new
+  /// description of it (Classic's easeModel), or null when it refuses.
+  Future<Map<String, dynamic>?> model(Seg curve, int? handle, Offset? point);
 
   /// The curve while a handle is held (the host may show it before [apply]); [cancel] drops it.
   void preview(int? interval, Seg curve);
@@ -156,6 +188,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     _play.dispose();
     _presetFocus.dispose();
     _plotKeys.dispose();
+    _typed.dispose();
+    _typedFocus.dispose();
     super.dispose();
   }
 
@@ -252,21 +286,107 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     );
   }
 
+  /// The curve's numbers (Classic DK-018): a Bezier's four, another kind's own parameters (re-described by the host).
+  List<(String, double, void Function(double))> _params() {
+    if (cur.bez || widget.host == null) {
+      return [
+        ('X1', cur.x1, (v) => cur.x1 = clampD(v, 0, 1)),
+        ('Y1', cur.y1, (v) => cur.y1 = v),
+        ('X2', cur.x2, (v) => cur.x2 = clampD(v, 0, 1)),
+        ('Y2', cur.y2, (v) => cur.y2 = v),
+      ].map((e) => (e.$1, e.$2, (double v) { e.$3(v); cur.p = cur.kinds.indexWhere((k) => k.bez != null && k.name == 'Bezier').clamp(0, cur.kinds.length - 1); })).toList();
+    }
+    final m = cur.model ?? const <String, dynamic>{};
+    return [
+      for (final e in m.entries)
+        if (e.value is num && e.key != 'overshoots')
+          (
+            e.key.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (x) => '${x[1]} ${x[2]}').toUpperCase(),
+            (e.value as num).toDouble(),
+            (double v) {
+              final seg = cur, ask = ++_asks;
+              seg.model = {...m, e.key: v};
+              widget.host?.model(seg, null, null).then((next) {
+                if (next == null || !mounted || ask != _asks) return;
+                setState(() => seg.model = next);
+              });
+            },
+          ),
+    ];
+  }
+
+  String? _typing; // the number being typed
+  final _typed = TextEditingController();
+  final _typedFocus = FocusNode(debugLabel: 'ease number');
+
   Widget _values(double w) {
-    Widget cell(String l, double v) => Expanded(
+    final params = _params();
+    if (params.isEmpty) return Text('This curve has no numbers.', style: sans(11, c: kMuted));
+    Widget cell((String, double, void Function(double)) p) {
+      final (l, v, set) = p;
+      final typing = _typing == l;
+      return Expanded(
+        child: GestureDetector(
+          key: ValueKey('ease-value-$l'),
+          behavior: HitTestBehavior.opaque,
+          onTap: mixed ? null : () => setState(() {
+            _typing = l;
+            _typed.text = v.toStringAsFixed(2);
+            _typedFocus.requestFocus();
+          }),
+          onHorizontalDragUpdate: mixed ? null : (d) {
+            setState(() => set(v + d.delta.dx * .005));
+            widget.host?.preview(sel, cur);
+          },
+          onHorizontalDragEnd: mixed ? null : (_) => _write(),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(l, style: sans(9.5, c: mixed ? kMuted : const Color(0xB31B1B1D), w: FontWeight.w700, ls: .6)),
+            Text(l, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: mixed ? kMuted : const Color(0xB31B1B1D), w: FontWeight.w700, ls: .6)),
             const SizedBox(height: 3),
-            Text(_n(v), softWrap: false, style: sans(22, c: mixed ? kMuted : const Color(0xFF1B1B1D), w: FontWeight.w600, ls: -.4)),
+            typing
+                ? Focus(
+                    onKeyEvent: (_, e) {
+                      if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
+                        setState(() => _typing = null);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: EditableText(
+                      controller: _typed,
+                      focusNode: _typedFocus,
+                      style: sans(22, c: const Color(0xFF1B1B1D), w: FontWeight.w600, ls: -.4),
+                      cursorColor: const Color(0xFF1B1B1D),
+                      backgroundCursorColor: kMuted,
+                      onSubmitted: (t) {
+                        final next = double.tryParse(t.trim());
+                        setState(() {
+                          _typing = null;
+                          if (next != null) set(next);
+                        });
+                        if (next != null) _write();
+                      },
+                    ),
+                  )
+                : Text(_n(v), softWrap: false, style: sans(22, c: mixed ? kMuted : const Color(0xFF1B1B1D), w: FontWeight.w600, ls: -.4)),
           ]),
-        );
-    Widget block(String a, double va, String b, double vb) => Container(
+        ),
+      );
+    }
+    Widget block(List<(String, double, void Function(double))> two) => Container(
           padding: const EdgeInsets.fromLTRB(12, 9, 8, 10),
           decoration: BoxDecoration(color: mixed ? kRaised : kYellow, borderRadius: BorderRadius.circular(6)),
-          child: Row(children: [cell(a, va), cell(b, vb)]),
+          child: Row(children: [for (final p in two) cell(p), if (two.length == 1) const Expanded(child: SizedBox())]),
         );
-    final b1 = block('X1', cur.x1, 'Y1', cur.y1), b2 = block('X2', cur.x2, 'Y2', cur.y2);
-    return w >= 230 ? Row(children: [Expanded(child: b1), const SizedBox(width: 6), Expanded(child: b2)]) : Column(children: [b1, const SizedBox(height: 6), b2]);
+    final blocks = [for (var i = 0; i < params.length; i += 2) block(params.sublist(i, math.min(i + 2, params.length)))];
+    if (w >= 230) {
+      return Column(children: [
+        for (var i = 0; i < blocks.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: 6),
+          Row(children: [Expanded(child: blocks[i]), const SizedBox(width: 6), Expanded(child: i + 1 < blocks.length ? blocks[i + 1] : const SizedBox())]),
+        ],
+      ]);
+    }
+    return Column(children: [for (final (i, b) in blocks.indexed) ...[if (i > 0) const SizedBox(height: 6), b]]);
   }
 
   // Presets: shape only. Hover or arrow keys peek the shape on the plot; Enter or click applies.
@@ -416,18 +536,20 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           layers: widget.host?.sequence ?? 0,
           caption: widget.host?.caption,
           meaning: widget.host == null || peek != null ? null : curveMeaning(presets[cur.p].name),
+          points: peek == null && !mixed && !cur.bez ? cur.handles : const [],
         );
         void pick(Offset p) {
-          if (mixed || !cur.bez || peek != null) return;
-          final h = [easeAt(size, cur.x1, cur.y1), easeAt(size, cur.x2, cur.y2)];
+          if (mixed || peek != null || (!cur.bez && widget.host == null)) return;
+          final h = [for (final o in cur.handles) easeAt(size, o.dx, o.dy)];
           var best = -1;
           var bd = 28.0;
-          for (var i = 0; i < 2; i++) {
+          for (var i = 0; i < h.length; i++) {
             final dd = (h[i] - p).distance;
             if (dd < bd) { bd = dd; best = i; }
           }
           if (best >= 0) {
             _before = (cur.p, List.of(cur.values));
+            _beforeModel = cur.model;
             _plotKeys.requestFocus();
             setState(() => drag = best);
           }
@@ -437,6 +559,16 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           final r = easePlotBox(size);
           final x = clampD((p.dx - r.left) / r.width, 0, 1);
           final y = clampD((r.bottom - p.dy) / r.height * 1.3 - .15, -.3, 1.3);
+          if (!cur.bez) {
+            // another kind: the host moves its handle and describes the curve again (latest answer wins)
+            final seg = cur, handle = drag!, ask = ++_asks;
+            widget.host?.model(seg, handle, Offset(x, y)).then((m) {
+              if (m == null || !mounted || ask != _asks || drag == null) return;
+              setState(() { _moved = true; seg.model = m; });
+              widget.host?.preview(mixed ? null : sel, seg);
+            });
+            return;
+          }
           setState(() {
             _moved = true;
             cur.p = presets.indexWhere((k) => k.name == 'Bezier').clamp(0, presets.length - 1);
@@ -451,7 +583,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape || drag == null) return KeyEventResult.ignored;
             final b = _before;
             setState(() {
-              if (b != null) { cur.setValues(b.$2); cur.p = b.$1; }
+              if (b != null) { cur.setValues(b.$2); cur.p = b.$1; cur.model = _beforeModel; }
               drag = null;
               _moved = false;
             });
@@ -479,6 +611,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
 
   final _plotKeys = FocusNode(debugLabel: 'ease plot');
   (int, List<double>)? _before;
+  Map<String, dynamic>? _beforeModel;
+  int _asks = 0;
 }
 
 class _PlayP extends CustomPainter {
@@ -520,7 +654,10 @@ class _Icon extends CustomPainter {
 }
 
 class _PlotP extends CustomPainter {
-  _PlotP(this.f, this.all, this.x1, this.y1, this.x2, this.y2, this.editable, this.labels, this.name, this.mixed, this.f0, this.frames, this.ghost, this.head, {this.layers = 0, this.caption, this.meaning});
+  _PlotP(this.f, this.all, this.x1, this.y1, this.x2, this.y2, this.editable, this.labels, this.name, this.mixed, this.f0, this.frames, this.ghost, this.head, {this.layers = 0, this.caption, this.meaning, this.points = const []});
+
+  /// Handle points of a kind other than Bezier (0–1 space), drawn as the Bezier handles are.
+  final List<Offset> points;
 
   /// The corner label when it is not the frames (a sequence's layers, the workspace); the curve's one-line meaning.
   final String? caption, meaning;
@@ -602,6 +739,11 @@ class _PlotP extends CustomPainter {
       }
     }
     if (!mixed) c.drawPath(_curve(s, f), Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    for (final o in [for (final q in points) at(s, q.dx, q.dy)]) {
+      c.drawCircle(o, 12, Paint()..color = kYellow.withValues(alpha: .22));
+      c.drawCircle(o, 7, Paint()..color = kYellow);
+      c.drawCircle(o, 7, Paint()..color = const Color(0xFF131316)..style = PaintingStyle.stroke..strokeWidth = 2);
+    }
     for (final o in [at(s, 0, 0), at(s, 1, 1)]) {
       c.drawCircle(o, 7, Paint()..color = kInk);
     }

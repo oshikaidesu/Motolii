@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/hf/desk/ease.dart';
@@ -139,5 +141,89 @@ void main() {
     expect(sent.where((m) => m['op'] == 'ease'), isEmpty, reason: 'the workspace curve is kept, not applied');
     expect(c.deskWork.value['ease'], {'kind': 'Bezier', 'x1': .3, 'y1': 0, 'x2': .7, 'y2': 1});
     host.dispose();
+  });
+  testWidgets('a kind other than Bezier is grabbed by its own handles: the host remodels it, release writes it', (tester) async {
+    final asked = <Map>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
+      final args = call.arguments;
+      if (call.method == 'easeModel') {
+        asked.add(args as Map);
+        return <String, dynamic>{'kind': 'Bounce', 'bounces': 5.0, 'handles': [[.5, .9]], 'samples': [[0, 0], [1, 1]]};
+      }
+      if (args is Map && args['command'] is String) sent.add(jsonDecode(args['command'] as String) as Map);
+      return <String, dynamic>{};
+    });
+    final bounce = {'kind': 'Bounce', 'bounces': 3.0, 'handles': [[.5, .5]], 'samples': [[0, 0], [1, 1]]};
+    final c = EditorSession()
+      ..document.value = {
+        'capabilities': ['ease', 'select'],
+        'selectedIds': [3],
+        'layers': [{'id': 3, 'name': 'Title'}],
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          {'kind': 'Bezier', 'x1': .42, 'y1': 0, 'x2': .58, 'y2': 1, 'samples': [[0, 0], [1, 1]]},
+          bounce,
+        ],
+        'easeIntervals': [
+          {'layer': 3, 'property': 'opacity', 'frame': 0, 'end': 10, 'shape': bounce},
+        ],
+      };
+    tester.view.physicalSize = const Size(420, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr, child: LiveEase(c: c)));
+    await tester.pumpAndSettle();
+    final plot = find.byKey(const ValueKey('ease-plot'));
+    final box = tester.getRect(plot);
+    final handle = box.topLeft + easeAt(box.size, .5, .5);
+    final g = await tester.startGesture(handle);
+    await g.moveBy(const Offset(0, -20));
+    await tester.pump();
+    await tester.pump();
+    expect(asked, isNotEmpty);
+    expect(asked.last['handle'], 0);
+    expect((asked.last['shape'] as Map)['kind'], 'Bounce');
+    await g.up();
+    await tester.pumpAndSettle();
+    final ease = sent.lastWhere((m) => m['op'] == 'ease');
+    expect(ease['kind'], 'Bounce');
+    expect(ease['bounces'], 5.0);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('a curve number is typed (or scrubbed) and written as the curve', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(EditorSession.channel, (call) async {
+      final args = call.arguments;
+      if (args is Map && args['command'] is String) sent.add(jsonDecode(args['command'] as String) as Map);
+      return <String, dynamic>{};
+    });
+    final c = EditorSession()
+      ..document.value = {
+        'capabilities': ['ease', 'select'],
+        'selectedIds': [3],
+        'layers': [{'id': 3, 'name': 'Title'}],
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          {'kind': 'Bezier', 'x1': .42, 'y1': 0, 'x2': .58, 'y2': 1, 'samples': [[0, 0], [1, 1]]},
+        ],
+        'easeIntervals': [
+          {'layer': 3, 'property': 'opacity', 'frame': 0, 'end': 10, 'shape': {'kind': 'Bezier', 'x1': .42, 'y1': 0, 'x2': .58, 'y2': 1}},
+        ],
+      };
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr, child: LiveEase(c: c)));
+    await tester.pumpAndSettle();
+    final x1 = find.byKey(const ValueKey('ease-value-X1'));
+    await tester.ensureVisible(x1);
+    await tester.tap(x1);
+    await tester.pump();
+    await tester.enterText(find.descendant(of: x1, matching: find.byType(EditableText)), '0.3');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    final ease = sent.lastWhere((m) => m['op'] == 'ease');
+    expect(ease['kind'], 'Bezier');
+    expect(ease['x1'], closeTo(.3, 1e-9));
+    await tester.pumpWidget(const SizedBox());
   });
 }

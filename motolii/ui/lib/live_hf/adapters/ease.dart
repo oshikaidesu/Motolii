@@ -37,7 +37,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   static Preset _preset(Map<String, dynamic> k) {
     final name = '${k['kind']}';
     final bez = name == 'Bezier' ? [for (final n in ['x1', 'y1', 'x2', 'y2']) (k[n] as num? ?? 0).toDouble()] : null;
-    return Preset(name, bez, bez == null ? _sampled(k['samples'] as List? ?? const []) : null);
+    return Preset(name, bez, bez == null ? _sampled(k['samples'] as List? ?? const []) : null, model: bez == null ? k : null);
   }
 
   void _read() {
@@ -111,10 +111,14 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   @override
   String? get caption => _layers.isNotEmpty ? '${_layers.length} layers' : (_rows.isEmpty ? 'Workspace' : null);
 
-  Seg _seg(Map<String, dynamic> shape) {
+  Seg _seg(Map<String, dynamic> shape, {int frames = 1}) {
     final i = kinds.indexWhere((k) => k.name == shape['kind']);
-    final seg = Seg(i < 0 ? 0 : i, 1, kinds);
-    if (shape['kind'] == 'Bezier') seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
+    final seg = Seg(i < 0 ? 0 : i, frames, kinds);
+    if (shape['kind'] == 'Bezier') {
+      seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
+    } else if (shape['samples'] is List) {
+      seg.model = shape; // the host's full description, with this curve's own parameters
+    }
     return seg;
   }
 
@@ -148,10 +152,32 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   /// The curve the ghost mode keeps between uses (the desk's own `ease` setting, as Classic keeps it).
   Map<String, dynamic> get _stored => EditorSession.map(c.deskWork.value['ease']);
 
+  /// A curve as the host takes it: its kind and numeric parameters (a Bezier's four, another kind's own).
   Map<String, dynamic> _shape(Seg curve) => {
         'kind': kinds[curve.p].name,
-        if (curve.bez) ...{'x1': curve.x1, 'y1': curve.y1, 'x2': curve.x2, 'y2': curve.y2},
+        if (curve.bez) ...{'x1': curve.x1, 'y1': curve.y1, 'x2': curve.x2, 'y2': curve.y2}
+        else if (curve.model != null)
+          for (final e in curve.model!.entries)
+            if (e.value is num && !const {'overshoots'}.contains(e.key)) e.key: e.value,
       };
+
+  @override
+  Future<Map<String, dynamic>?> model(Seg curve, int? handle, Offset? point) async {
+    try {
+      final reply = EditorSession.map(await c.native('easeModel', {
+        'shape': _shape(curve),
+        if (handle != null && point != null) ...{'handle': handle, 'point': [point.dx, point.dy]},
+      }));
+      if (reply['error'] != null) {
+        c.error.value = '${reply['error']}';
+        return null;
+      }
+      return reply;
+    } catch (e) {
+      c.error.value = '$e';
+      return null;
+    }
+  }
 
   Map<String, dynamic> _payload(Seg curve) => {
         'layers': [for (final l in _layers) l['id']],
@@ -192,25 +218,11 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
 
   @override
   List<Seg> get intervals => _layers.isNotEmpty || _rows.isEmpty
-      ? [
-          () {
-            final shape = _stored;
-            final i = kinds.indexWhere((k) => k.name == shape['kind']);
-            final seg = Seg(i < 0 ? 0 : i, 1, kinds);
-            if (shape['kind'] == 'Bezier') seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
-            return seg;
-          }(),
-        ]
+      ? [_seg(_stored)]
       : [
-        for (final r in _rows)
-          () {
-            final shape = EditorSession.map(r['shape']);
-            final i = kinds.indexWhere((k) => k.name == shape['kind']);
-            final seg = Seg(i < 0 ? 0 : i, ((r['end'] as num? ?? 1) - (r['frame'] as num? ?? 0)).round().clamp(1, 1 << 30), kinds);
-            if (shape['kind'] == 'Bezier') seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
-            return seg;
-          }(),
-      ];
+          for (final r in _rows)
+            _seg(EditorSession.map(r['shape']), frames: ((r['end'] as num? ?? 1) - (r['frame'] as num? ?? 0)).round().clamp(1, 1 << 30)),
+        ];
 
   @override
   Future<void> apply(int? interval, Seg curve) async {
@@ -240,11 +252,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
         ],
       });
     }
-    final kind = kinds[curve.p].name;
-    await c.command('ease', {
-      'kind': kind,
-      if (curve.bez) ...{'x1': curve.x1, 'y1': curve.y1, 'x2': curve.x2, 'y2': curve.y2},
-    });
+    await c.command('ease', _shape(curve));
     if (narrowed) await c.command('select', picked);
   }
 
