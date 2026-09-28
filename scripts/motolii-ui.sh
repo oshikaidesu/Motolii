@@ -63,21 +63,23 @@ case "${1:-dev}" in
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/release/libmotolii_ui.dylib"
     cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}" --dart-define="MOTOLII_DOCUMENT=$2"
+      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}" --dart-define="MOTOLII_DOCUMENT=$2"
     fi
-    exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
+    exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}"
     ;;
   dev)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
     [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then dev.'; exit 1; }
-    cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}" --dart-define="MOTOLII_DOCUMENT=$2"
+      document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+      cd "$ui"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
+    cd "$ui"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}"
     ;;
-  # The hf GUI, its own client of Motolii Live (lib/live_hf).
+  # Same as dev (the product UI, live_hf), kept for scripts that name it.
   live)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
@@ -90,5 +92,5 @@ case "${1:-dev}" in
     cd "$ui"
     exec "$flutter_bin" run -d macos -t lib/live_hf/main.dart --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}  (MOTOLII_SHELL=classic|new dev: the migration-source shells)'; exit 1 ;;
 esac

@@ -74,3 +74,14 @@ Once a decision is made, the rest is autonomous:
 4. **Later fixes go to the owner**, never to one instance ("inactive fold looks wrong" is one edit that changes Browser, Timeline and Dock together).
 
 Asking happens once, when the meaning is decided; consolidation, migration and the full check that follow are not questions.
+
+## Product UI authority (decided 2026-09-28, D1)
+
+- **live_hf** (`lib/live_hf`, `scripts/motolii-ui.sh dev`) is the product UI and the presentation authority, with Product Home.
+- **Classic and New** (`MOTOLII_SHELL=classic|new`) are **capability migration sources**, not candidates. What is recovered from them is capability, input vocabulary, semantic behaviour and proven mechanisms — never their presentation.
+- **proto_hf** (and `lib/proto`) is prototype / reference. Nothing in production depends on it.
+- Authority flows forward: Classic/New capability → shared semantic/mechanism owner → live_hf presentation. No dependency points backwards (live_hf never imports Classic/New; New does not import live_hf; production does not import proto).
+
+Migration status per capability: PRESENT · LIVE_BETTER · MISSING_IN_LIVE · PARTIAL_IN_LIVE · OBSOLETE · DECISION_REQUIRED. A widget that exists is not PRESENT; a user trajectory that works is. A Classic widget absent from live_hf is not MISSING if the same user capability works there another way.
+
+**Legacy deletion gate**: a Classic/New file, widget or adapter may be deleted only when every capability it provided is PRESENT, LIVE_BETTER or OBSOLETE — verified in live_hf, not asserted. Any MISSING, PARTIAL, UNVERIFIED or DECISION_REQUIRED keeps it.
