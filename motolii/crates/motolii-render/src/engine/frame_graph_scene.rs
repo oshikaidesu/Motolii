@@ -183,6 +183,15 @@ impl Engine {
                 SceneContentValue::Text(text) if force_picture => self.shape_texture_from_shapes(&text.shapes(), key, false, 0.05, comp, None, true)?,
                 SceneContentValue::Text(text) => self.text_texture_from_shapes(&text.shapes(), key, comp)?,
                 SceneContentValue::Shape(shapes) => {
+                    // path operations (Rounded Corners, Trim Paths…) reshape the outline before it is drawn, as the
+                    // legacy path's shown_shapes does
+                    let shaped;
+                    let shapes = if source.effects.is_empty() && source.after_effects.is_empty() {
+                        shapes
+                    } else {
+                        shaped = crate::render::engine::render::shown_shapes_of(shapes, &source.effects, &source.after_effects);
+                        &shaped
+                    };
                     let stretched;
                     let shapes = if source.shape_stretch != [1.0, 1.0] {
                         stretched = crate::picture::shapes_ops::stretch_outline(shapes, source.shape_stretch);

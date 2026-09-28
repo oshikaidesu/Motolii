@@ -570,7 +570,12 @@ pub(super) fn collect_shape_documents(view: &StoreView<'_>, resolved: &[Resolved
 }
 
 pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
-    let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
+    shown_shapes_of(shapes, &layer.effects, &layer.after_effects)
+}
+
+/// The outline as drawn: the layer's path operations applied in stack order.
+pub(crate) fn shown_shapes_of(shapes: &[ShapeNode], effects: &[crate::picture::resolved::ResolvedEffect], after: &[crate::picture::resolved::ResolvedEffect]) -> Vec<ShapeNode> {
+    let effects: Vec<_> = effects.iter().chain(after).cloned().collect();
     crate::extensions::pathop::with_effects(shapes, &effects)
 }
 
